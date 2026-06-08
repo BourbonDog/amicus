@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { safeSessionDir, TASK_ID_PATTERN } = require('../utils/validators');
+const { SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('../session-manager');
 
 /**
  * Format a timestamp as relative age
@@ -40,33 +41,37 @@ function formatAge(dateStr) {
 async function listSidecars(options) {
   const { status, json, project = process.cwd() } = options;
 
-  const sessionsDir = path.join(project, '.claude', 'sidecar_sessions');
+  // Scan BOTH roots: canonical amicus first, then legacy sidecar (shim).
+  const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
+    .map(d => path.join(project, '.claude', d))
+    .filter(fs.existsSync);
 
-  if (!fs.existsSync(sessionsDir)) {
-    console.log('No sidecar sessions found.');
+  if (roots.length === 0) {
+    console.log('No amicus sessions found.');
     return;
   }
 
-  let sessions = fs.readdirSync(sessionsDir)
-    .filter(d => TASK_ID_PATTERN.test(d))
-    .filter(d => {
-      const metaPath = path.join(sessionsDir, d, 'metadata.json');
-      return fs.existsSync(metaPath);
-    })
-    .map(d => {
+  // Dedup by task id — amicus (first root) wins over legacy.
+  const byId = new Map();
+  for (const root of roots) {
+    for (const d of fs.readdirSync(root)) {
+      if (!TASK_ID_PATTERN.test(d)) { continue; }
+      if (byId.has(d)) { continue; }
+      const metaPath = path.join(root, d, 'metadata.json');
+      if (!fs.existsSync(metaPath)) { continue; }
       try {
-        const meta = JSON.parse(
-          fs.readFileSync(path.join(sessionsDir, d, 'metadata.json'), 'utf-8')
-        );
-        return {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        byId.set(d, {
           id: d, model: meta.model, status: meta.status, agent: meta.agent,
           briefing: meta.briefing, createdAt: meta.createdAt,
-        };
+        });
       } catch {
-        return null;
+        // Skip unreadable metadata
       }
-    })
-    .filter(Boolean)
+    }
+  }
+
+  let sessions = Array.from(byId.values())
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   // Filter by status if specified
@@ -75,7 +80,7 @@ async function listSidecars(options) {
   }
 
   if (sessions.length === 0) {
-    console.log('No sidecar sessions found.');
+    console.log('No amicus sessions found.');
     return;
   }
 

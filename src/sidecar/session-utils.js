@@ -8,20 +8,34 @@ const path = require('path');
 
 const { detectConflicts, formatConflictWarning } = require('../conflict');
 const { logger } = require('../utils/logger');
+const {
+  SESSIONS_DIR,
+  getSessionDir,
+  resolveExistingSessionDir
+} = require('../session-manager');
 
 /** Standard heartbeat interval in milliseconds */
 const HEARTBEAT_INTERVAL = 15000;
 
 /** Session path utilities - eliminates magic strings across modules */
 const SessionPaths = {
-  /** Get root sidecar sessions directory */
+  /** Get canonical root sessions directory (amicus) — used for WRITES. */
   rootDir(project) {
-    return path.join(project, '.claude', 'sidecar_sessions');
+    return path.join(project, '.claude', SESSIONS_DIR);
   },
 
-  /** Get session directory for a specific task */
+  /** Get canonical session directory for a specific task — used for WRITES. */
   sessionDir(project, taskId) {
-    return path.join(this.rootDir(project), taskId);
+    return getSessionDir(project, taskId);
+  },
+
+  /**
+   * Resolve an EXISTING session directory for READS: prefer amicus, fall back
+   * to legacy `sidecar_sessions` (backward-compat shim). Use this when
+   * resuming/continuing an existing session so pre-rebrand sessions are found.
+   */
+  resolveSessionDir(project, taskId) {
+    return resolveExistingSessionDir(project, taskId);
   },
 
   /** Get metadata.json path */

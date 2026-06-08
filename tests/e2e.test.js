@@ -169,8 +169,8 @@ ${FOLD_MARKER}`;
       // 5a. SDK startServer was called (no CLI spawning)
       expect(startServer).toHaveBeenCalled();
 
-      // 5b. Session was created in sidecar_sessions directory
-      const sessionsDir = path.join(tmpDir, '.claude', 'sidecar_sessions');
+      // 5b. Session was created in amicus_sessions directory
+      const sessionsDir = path.join(tmpDir, '.claude', 'amicus_sessions');
       expect(fs.existsSync(sessionsDir)).toBe(true);
       const sessions = fs.readdirSync(sessionsDir);
       expect(sessions.length).toBe(1);
@@ -240,7 +240,7 @@ ${FOLD_MARKER}`;
       });
 
       // Get the task ID
-      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'sidecar_sessions'));
+      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'amicus_sessions'));
       const taskId = sessions[0];
 
       // Read the summary
@@ -304,11 +304,11 @@ ${FOLD_MARKER}`;
       });
 
       // Should still create a session but mark it as error (not complete)
-      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'sidecar_sessions'));
+      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'amicus_sessions'));
       expect(sessions.length).toBe(1);
 
       const metadata = JSON.parse(fs.readFileSync(
-        path.join(tmpDir, '.claude', 'sidecar_sessions', sessions[0], 'metadata.json'),
+        path.join(tmpDir, '.claude', 'amicus_sessions', sessions[0], 'metadata.json'),
         'utf-8'
       ));
       expect(metadata.status).toBe('error');
@@ -379,10 +379,10 @@ ${FOLD_MARKER}`;
         timeout: 5
       });
 
-      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'sidecar_sessions'));
+      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'amicus_sessions'));
       expect(sessions.length).toBe(1);
       const metadata = JSON.parse(fs.readFileSync(
-        path.join(tmpDir, '.claude', 'sidecar_sessions', sessions[0], 'metadata.json'), 'utf-8'
+        path.join(tmpDir, '.claude', 'amicus_sessions', sessions[0], 'metadata.json'), 'utf-8'
       ));
       expect(metadata.briefing).toContain('Debug the auth issue');
       expect(metadata.status).toBe('complete');
@@ -412,11 +412,11 @@ ${FOLD_MARKER}`;
         timeout: 5
       });
 
-      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'sidecar_sessions'));
+      const sessions = fs.readdirSync(path.join(tmpDir, '.claude', 'amicus_sessions'));
       expect(sessions.length).toBe(1);
 
       // Verify the context was built using the web session dir
-      const contextPath = path.join(tmpDir, '.claude', 'sidecar_sessions', sessions[0], 'initial_context.md');
+      const contextPath = path.join(tmpDir, '.claude', 'amicus_sessions', sessions[0], 'initial_context.md');
       const context = fs.readFileSync(contextPath, 'utf-8');
       expect(context).toContain('Test code-web client');
 

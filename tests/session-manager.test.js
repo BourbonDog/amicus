@@ -47,7 +47,7 @@ describe('Session Manager', () => {
       const taskId = 'abc123';
       const result = getSessionDir(projectDir, taskId);
 
-      expect(result).toBe(path.join(projectDir, '.claude', 'sidecar_sessions', taskId));
+      expect(result).toBe(path.join(projectDir, '.claude', 'amicus_sessions', taskId));
     });
   });
 
@@ -63,7 +63,7 @@ describe('Session Manager', () => {
       createSession(projectDir, taskId, metadata);
 
       // Check directory exists
-      const sessionDir = path.join(projectDir, '.claude', 'sidecar_sessions', taskId);
+      const sessionDir = path.join(projectDir, '.claude', 'amicus_sessions', taskId);
       expect(fs.existsSync(sessionDir)).toBe(true);
     });
 
@@ -77,7 +77,7 @@ describe('Session Manager', () => {
 
       createSession(projectDir, taskId, metadata);
 
-      const metaPath = path.join(projectDir, '.claude', 'sidecar_sessions', taskId, 'metadata.json');
+      const metaPath = path.join(projectDir, '.claude', 'amicus_sessions', taskId, 'metadata.json');
       expect(fs.existsSync(metaPath)).toBe(true);
 
       const savedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
@@ -95,7 +95,7 @@ describe('Session Manager', () => {
       const taskId = 'abc123';
       createSession(projectDir, taskId, { model: 'test/model', project: projectDir });
 
-      const metaPath = path.join(projectDir, '.claude', 'sidecar_sessions', taskId, 'metadata.json');
+      const metaPath = path.join(projectDir, '.claude', 'amicus_sessions', taskId, 'metadata.json');
       const savedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
       expect(savedMeta.filesRead).toEqual([]);
@@ -107,7 +107,7 @@ describe('Session Manager', () => {
       const taskId = 'abc123';
       createSession(projectDir, taskId, { model: 'test/model', project: projectDir });
 
-      const convPath = path.join(projectDir, '.claude', 'sidecar_sessions', taskId, 'conversation.jsonl');
+      const convPath = path.join(projectDir, '.claude', 'amicus_sessions', taskId, 'conversation.jsonl');
       expect(fs.existsSync(convPath)).toBe(true);
       expect(fs.readFileSync(convPath, 'utf-8')).toBe('');
     });
@@ -129,7 +129,7 @@ describe('Session Manager', () => {
         thinking: 'low'
       });
 
-      const metaPath = path.join(projectDir, '.claude', 'sidecar_sessions', taskId, 'metadata.json');
+      const metaPath = path.join(projectDir, '.claude', 'amicus_sessions', taskId, 'metadata.json');
       const savedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
       expect(savedMeta.thinking).toBe('low');
@@ -142,7 +142,7 @@ describe('Session Manager', () => {
         project: projectDir
       });
 
-      const metaPath = path.join(projectDir, '.claude', 'sidecar_sessions', taskId, 'metadata.json');
+      const metaPath = path.join(projectDir, '.claude', 'amicus_sessions', taskId, 'metadata.json');
       const savedMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
       expect(savedMeta.thinking).toBe('medium');
@@ -275,7 +275,7 @@ describe('Session Manager', () => {
 
       saveConversation(projectDir, 'abc123', message);
 
-      const convPath = path.join(projectDir, '.claude', 'sidecar_sessions', 'abc123', 'conversation.jsonl');
+      const convPath = path.join(projectDir, '.claude', 'amicus_sessions', 'abc123', 'conversation.jsonl');
       const content = fs.readFileSync(convPath, 'utf-8');
       const lines = content.trim().split('\n');
 
@@ -290,7 +290,7 @@ describe('Session Manager', () => {
       saveConversation(projectDir, 'abc123', { role: 'assistant', content: 'Response 1', timestamp: new Date().toISOString() });
       saveConversation(projectDir, 'abc123', { role: 'user', content: 'Message 2', timestamp: new Date().toISOString() });
 
-      const convPath = path.join(projectDir, '.claude', 'sidecar_sessions', 'abc123', 'conversation.jsonl');
+      const convPath = path.join(projectDir, '.claude', 'amicus_sessions', 'abc123', 'conversation.jsonl');
       const content = fs.readFileSync(convPath, 'utf-8');
       const lines = content.trim().split('\n');
 
@@ -300,7 +300,7 @@ describe('Session Manager', () => {
     it('should add timestamp if not provided', () => {
       saveConversation(projectDir, 'abc123', { role: 'user', content: 'No timestamp' });
 
-      const convPath = path.join(projectDir, '.claude', 'sidecar_sessions', 'abc123', 'conversation.jsonl');
+      const convPath = path.join(projectDir, '.claude', 'amicus_sessions', 'abc123', 'conversation.jsonl');
       const content = fs.readFileSync(convPath, 'utf-8');
       const parsed = JSON.parse(content.trim());
 
@@ -333,7 +333,7 @@ describe('Session Manager', () => {
 
       saveSummary(projectDir, 'abc123', summary);
 
-      const summaryPath = path.join(projectDir, '.claude', 'sidecar_sessions', 'abc123', 'summary.md');
+      const summaryPath = path.join(projectDir, '.claude', 'amicus_sessions', 'abc123', 'summary.md');
       expect(fs.existsSync(summaryPath)).toBe(true);
 
       const content = fs.readFileSync(summaryPath, 'utf-8');
@@ -362,7 +362,7 @@ describe('Session Manager', () => {
       saveSummary(projectDir, 'abc123', 'First summary');
       saveSummary(projectDir, 'abc123', 'Updated summary');
 
-      const summaryPath = path.join(projectDir, '.claude', 'sidecar_sessions', 'abc123', 'summary.md');
+      const summaryPath = path.join(projectDir, '.claude', 'amicus_sessions', 'abc123', 'summary.md');
       const content = fs.readFileSync(summaryPath, 'utf-8');
       expect(content).toBe('Updated summary');
     });
@@ -398,7 +398,7 @@ describe('Session Manager', () => {
 
       createSession(nestedProjectDir, 'abc123', { model: 'test/model', project: nestedProjectDir });
 
-      const sessionDir = path.join(nestedProjectDir, '.claude', 'sidecar_sessions', 'abc123');
+      const sessionDir = path.join(nestedProjectDir, '.claude', 'amicus_sessions', 'abc123');
       expect(fs.existsSync(sessionDir)).toBe(true);
     });
   });
@@ -419,7 +419,7 @@ describe('Session Manager', () => {
       it('should return the sub-agent directory path', () => {
         const result = getSubagentDir(projectDir, parentTaskId, 'subagent-xyz');
         expect(result).toBe(path.join(
-          projectDir, '.claude', 'sidecar_sessions', parentTaskId, 'subagents', 'subagent-xyz'
+          projectDir, '.claude', 'amicus_sessions', parentTaskId, 'subagents', 'subagent-xyz'
         ));
       });
     });

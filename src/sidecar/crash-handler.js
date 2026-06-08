@@ -20,7 +20,8 @@ const { SessionPaths } = require('./session-utils');
 function installCrashHandler(taskId, project) {
   return function handleCrash(err) {
     try {
-      const sessionDir = SessionPaths.sessionDir(project, taskId);
+      // Operates on an EXISTING (possibly legacy) session — resolve dual-dir.
+      const sessionDir = SessionPaths.resolveSessionDir(project, taskId);
       const metaPath = SessionPaths.metadataFile(sessionDir);
 
       if (!fs.existsSync(metaPath)) {

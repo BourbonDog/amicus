@@ -18,8 +18,14 @@ const SESSION_STATUS = {
   TIMEOUT: 'timeout'
 };
 
+/** Canonical session dir name — new sessions are written here. */
+const SESSIONS_DIR = 'amicus_sessions';
+// DEPRECATED(amicus-shim): legacy session dir read for pre-rebrand sessions.
+// Remove in a future revision — see docs/SHIMS.md.
+const LEGACY_SESSIONS_DIR = 'sidecar_sessions';
+
 /**
- * Get the session directory path for a task
+ * Get the canonical session directory path for a task (used for WRITES).
  * Spec Reference: §8.1 Session directory structure
  *
  * @param {string} projectDir - Project directory path
@@ -28,10 +34,26 @@ const SESSION_STATUS = {
  *
  * @example
  * getSessionDir('/path/to/project', 'abc123')
- * // Returns: '/path/to/project/.claude/sidecar_sessions/abc123'
+ * // Returns: '/path/to/project/.claude/amicus_sessions/abc123'
  */
 function getSessionDir(projectDir, taskId) {
-  return path.join(projectDir, '.claude', 'sidecar_sessions', taskId);
+  return path.join(projectDir, '.claude', SESSIONS_DIR, taskId);
+}
+
+/**
+ * Resolve an EXISTING session dir for reads: prefer amicus, fall back to legacy.
+ * Backward-compat shim so pre-rebrand `.claude/sidecar_sessions/` stay visible.
+ *
+ * @param {string} projectDir - Project directory path
+ * @param {string} taskId - Sidecar task ID
+ * @returns {string} Path to the resolved session directory (defaults to the new path)
+ */
+function resolveExistingSessionDir(projectDir, taskId) {
+  const current = getSessionDir(projectDir, taskId);
+  if (fs.existsSync(current)) { return current; }
+  const legacy = path.join(projectDir, '.claude', LEGACY_SESSIONS_DIR, taskId);
+  if (fs.existsSync(legacy)) { return legacy; }
+  return current; // default to the new path
 }
 
 /**
@@ -39,7 +61,7 @@ function getSessionDir(projectDir, taskId) {
  * Spec Reference: §8.1 What Gets Persisted
  *
  * Creates the session directory structure:
- * .claude/sidecar_sessions/<taskId>/
+ * .claude/amicus_sessions/<taskId>/
  * ├── metadata.json
  * └── conversation.jsonl
  *
@@ -221,7 +243,7 @@ function saveSummary(projectDir, taskId, summary) {
  *
  * @example
  * getSubagentDir('/path/to/project', 'abc123', 'subagent-xyz')
- * // Returns: '/path/to/project/.claude/sidecar_sessions/abc123/subagents/subagent-xyz'
+ * // Returns: '/path/to/project/.claude/amicus_sessions/abc123/subagents/subagent-xyz'
  */
 function getSubagentDir(projectDir, parentTaskId, subagentId) {
   return path.join(getSessionDir(projectDir, parentTaskId), 'subagents', subagentId);
@@ -231,7 +253,7 @@ function getSubagentDir(projectDir, parentTaskId, subagentId) {
  * Create a sub-agent session
  *
  * Creates the sub-agent directory structure:
- * .claude/sidecar_sessions/<parentTaskId>/subagents/<subagentId>/
+ * .claude/amicus_sessions/<parentTaskId>/subagents/<subagentId>/
  * ├── metadata.json
  * └── conversation.jsonl
  *
@@ -378,6 +400,9 @@ module.exports = {
   saveConversation,
   saveSummary,
   getSessionDir,
+  resolveExistingSessionDir,
+  SESSIONS_DIR,
+  LEGACY_SESSIONS_DIR,
   SESSION_STATUS,
   // Sub-agent functions
   getSubagentDir,

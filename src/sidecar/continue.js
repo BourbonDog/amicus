@@ -20,7 +20,8 @@ const { logger } = require('../utils/logger');
 
 /** Load previous session data (metadata, summary, conversation) */
 function loadPreviousSession(taskId, project) {
-  const sessionDir = SessionPaths.sessionDir(project, taskId);
+  // Reads an EXISTING session — resolve dual-dir (amicus, then legacy).
+  const sessionDir = SessionPaths.resolveSessionDir(project, taskId);
 
   if (!fs.existsSync(sessionDir)) {
     throw new Error(`Session ${taskId} not found`);
@@ -124,8 +125,9 @@ async function continueSidecar(options) {
   const { metadata: oldMetadata, summary: previousSummary, conversation: previousConversation } =
     loadPreviousSession(oldTaskId, project);
 
-  // Lock the previous session directory to prevent concurrent continue operations from the same source
-  const prevSessionDir = SessionPaths.sessionDir(project, oldTaskId);
+  // Lock the previous (EXISTING) session directory to prevent concurrent
+  // continue operations — resolve dual-dir so a legacy session is locked too.
+  const prevSessionDir = SessionPaths.resolveSessionDir(project, oldTaskId);
   acquireLock(prevSessionDir, headless ? 'headless' : 'interactive');
 
   const model = options.model || oldMetadata.model;

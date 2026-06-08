@@ -214,7 +214,7 @@ describe('MCP Server Handlers', () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       try {
         const result = await handlers.sidecar_list({}, tmpDir);
-        expect(result.content[0].text).toContain('No sidecar sessions found');
+        expect(result.content[0].text).toContain('No amicus sessions found');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
       }
@@ -226,7 +226,7 @@ describe('MCP Server Handlers', () => {
       fs.mkdirSync(sessionsDir, { recursive: true });
       try {
         const result = await handlers.sidecar_list({}, tmpDir);
-        expect(result.content[0].text).toContain('No sidecar sessions found');
+        expect(result.content[0].text).toContain('No amicus sessions found');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
       }

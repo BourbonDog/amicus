@@ -45,20 +45,30 @@ function validateTaskId(taskId) {
   return { valid: true };
 }
 
-/**
- * Resolve and validate a session path, preventing path traversal.
- * @param {string} project - Project root directory
- * @param {string} taskId - Task ID (should be pre-validated with validateTaskId)
- * @returns {string} Absolute path to the session directory
- * @throws {Error} If resolved path escapes the sessions directory
- */
-function safeSessionDir(project, taskId) {
-  const sessionsDir = path.join(project, '.claude', 'sidecar_sessions');
+const { SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('../session-manager');
+
+/** Resolve a session path under a single root, throwing on path traversal. */
+function safeSessionDirUnder(project, root, taskId) {
+  const sessionsDir = path.join(project, '.claude', root);
   const resolved = path.resolve(sessionsDir, taskId);
   if (!resolved.startsWith(sessionsDir + path.sep)) {
     throw new Error('Invalid task ID: path traversal detected');
   }
   return resolved;
+}
+
+/**
+ * Resolve an EXISTING session path: prefer canonical amicus, fall back to the
+ * legacy sidecar_sessions dir (shim). The traversal guard runs against BOTH
+ * roots, so a malicious taskId is rejected regardless of root.
+ * @throws {Error} If resolved path escapes the sessions directory
+ */
+function safeSessionDir(project, taskId) {
+  const canonical = safeSessionDirUnder(project, SESSIONS_DIR, taskId);
+  if (fs.existsSync(canonical)) { return canonical; }
+  const legacy = safeSessionDirUnder(project, LEGACY_SESSIONS_DIR, taskId);
+  if (fs.existsSync(legacy)) { return legacy; }
+  return canonical;
 }
 
 /**

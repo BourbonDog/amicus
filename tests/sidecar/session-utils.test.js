@@ -47,13 +47,13 @@ describe('Session Utils', () => {
 
     it('should return root sidecar sessions directory', () => {
       expect(SessionPaths.rootDir(project)).toBe(
-        path.join('/test/project', '.claude', 'sidecar_sessions')
+        path.join('/test/project', '.claude', 'amicus_sessions')
       );
     });
 
     it('should return session directory for a task', () => {
       expect(SessionPaths.sessionDir(project, taskId)).toBe(
-        path.join('/test/project', '.claude', 'sidecar_sessions', 'task-123')
+        path.join('/test/project', '.claude', 'amicus_sessions', 'task-123')
       );
     });
 

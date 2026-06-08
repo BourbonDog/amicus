@@ -306,8 +306,10 @@ describe('MCP Headless Lifecycle Integration', () => {
       const { createSessionMetadata } = require('../src/sidecar/start');
       const taskId = 'pid-preserve-001';
 
-      // First, write metadata with a PID (simulating what MCP handler does)
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', taskId);
+      // First, write metadata with a PID (simulating what MCP handler does).
+      // createSessionMetadata now writes to the canonical amicus dir, so the
+      // pre-seeded fixture and read-back must live there too.
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(
         path.join(sessDir, 'metadata.json'),

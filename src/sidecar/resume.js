@@ -117,7 +117,8 @@ async function resumeSidecar(options) {
     mcp, mcpConfig, client, noMcp, excludeMcp
   } = options;
 
-  const sessionDir = SessionPaths.sessionDir(project, taskId);
+  // Resume operates on an EXISTING session — resolve dual-dir (amicus, then legacy).
+  const sessionDir = SessionPaths.resolveSessionDir(project, taskId);
   if (!fs.existsSync(sessionDir)) {
     throw new Error(`Session ${taskId} not found`);
   }

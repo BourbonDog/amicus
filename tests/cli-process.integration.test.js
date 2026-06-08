@@ -88,10 +88,38 @@ describe('CLI Process: list with empty project', () => {
     try {
       const { stdout, code } = await runCli(['list', '--cwd', tmpDir]);
       expect(code).toBe(0);
-      expect(stdout).toContain('No sidecar sessions');
+      expect(stdout).toContain('No amicus sessions');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('CLI Process: list finds amicus_sessions (canonical write dir)', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-cli-int-'));
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'amicus-test-001');
+    fs.mkdirSync(sessDir, { recursive: true });
+    fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+      taskId: 'amicus-test-001',
+      model: 'google/gemini-2.5-flash',
+      status: 'complete',
+      briefing: 'Amicus canonical-dir task',
+      createdAt: '2026-03-05T00:00:00Z',
+    }));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('lists a session written under the canonical amicus_sessions dir', async () => {
+    const { stdout, code } = await runCli(['list', '--cwd', tmpDir]);
+    expect(code).toBe(0);
+    expect(stdout).toContain('amicus-test-001');
+    expect(stdout).toContain('complete');
   });
 });
 

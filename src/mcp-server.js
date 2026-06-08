@@ -7,6 +7,7 @@ const { tryResolveModel } = require('./utils/config');
 const os = require('os');
 const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
+const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
 const { readProgress } = require('./sidecar/progress');
 const { SharedServerManager } = require('./utils/shared-server');
 
@@ -105,7 +106,8 @@ const handlers = {
     if (input.windowPosition)   { args.push('--position', input.windowPosition); }
     args.push('--cwd', cwd);
 
-    const sessionDir = path.join(cwd, '.claude', 'sidecar_sessions', taskId);
+    // New session → canonical amicus dir (writes).
+    const sessionDir = getSessionDir(cwd, taskId);
 
     if (sharedServer.enabled && input.noUi) {
       // Shared server path: headless only, delegates to runHeadless()
@@ -331,31 +333,40 @@ const handlers = {
 
   async sidecar_list(input, project) {
     const cwd = project || getProjectDir(input.project);
-    const sessionsDir = path.join(cwd, '.claude', 'sidecar_sessions');
-    if (!fs.existsSync(sessionsDir)) { return textResult('No sidecar sessions found.'); }
+    // Scan BOTH roots: canonical amicus first, then legacy sidecar (shim).
+    const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
+      .map(d => path.join(cwd, '.claude', d))
+      .filter(fs.existsSync);
+    if (roots.length === 0) { return textResult('No amicus sessions found.'); }
 
-    let sessions = fs.readdirSync(sessionsDir)
-      .filter(d => /^[a-zA-Z0-9_-]{1,64}$/.test(d))
-      .filter(d => fs.existsSync(path.join(sessionsDir, d, 'metadata.json')))
-      .map(d => {
+    // Dedup by task id — amicus (first root) wins over legacy.
+    const byId = new Map();
+    for (const root of roots) {
+      for (const d of fs.readdirSync(root)) {
+        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
+        if (byId.has(d)) { continue; }
+        const metaPath = path.join(root, d, 'metadata.json');
+        if (!fs.existsSync(metaPath)) { continue; }
         try {
-          const meta = JSON.parse(fs.readFileSync(path.join(sessionsDir, d, 'metadata.json'), 'utf-8'));
-          return {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          byId.set(d, {
             id: d, model: meta.model, status: meta.status, agent: meta.agent,
             briefing: (String(meta.briefing || '')).slice(0, 80),
             createdAt: meta.createdAt,
-          };
+          });
         } catch {
-          return null;
+          // Skip unreadable metadata
         }
-      })
-      .filter(Boolean)
+      }
+    }
+
+    let sessions = Array.from(byId.values())
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     if (input.status && input.status !== 'all') {
       sessions = sessions.filter(s => s.status === input.status);
     }
-    if (sessions.length === 0) { return textResult('No sidecar sessions found.'); }
+    if (sessions.length === 0) { return textResult('No amicus sessions found.'); }
 
     return textResult(JSON.stringify(sessions, null, 2));
   },
@@ -386,7 +397,8 @@ const handlers = {
     const cwd = project || getProjectDir(input.project);
     const { generateTaskId } = require('./sidecar/start');
     const newTaskId = generateTaskId();
-    const sessionDir = path.join(cwd, '.claude', 'sidecar_sessions', newTaskId);
+    // New continuation session → canonical amicus dir (writes).
+    const sessionDir = getSessionDir(cwd, newTaskId);
 
     const args = ['continue', input.taskId, '--prompt', input.prompt,
       '--task-id', newTaskId, '--client', 'cowork', '--cwd', cwd];

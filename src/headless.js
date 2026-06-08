@@ -72,7 +72,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   } = require('./opencode-client');
 
   const { reasoning } = options;
-  const sessionDir = path.join(project, '.claude', 'sidecar_sessions', taskId);
+  const { getSessionDir } = require('./session-manager');
+  const sessionDir = getSessionDir(project, taskId);
   const conversationPath = path.join(sessionDir, 'conversation.jsonl');
 
   // Ensure session directory exists
