@@ -48,7 +48,7 @@ describe('Config change detection on start', () => {
 
     if (configCheck.changed) {
       process.stderr.write(
-        `\n[SIDECAR_CONFIG_UPDATE] Model configuration has changed.\nUpdate your project doc file with:\n\n${configCheck.updateData}\n\n`
+        `\n[AMICUS_CONFIG_UPDATE] Model configuration has changed.\nUpdate your project doc file with:\n\n${configCheck.updateData}\n\n`
       );
     }
 
@@ -58,7 +58,7 @@ describe('Config change detection on start', () => {
     expect(stderrSpy).toHaveBeenCalled();
 
     const output = stderrSpy.mock.calls[0][0];
-    expect(output).toContain('[SIDECAR_CONFIG_UPDATE]');
+    expect(output).toContain('[AMICUS_CONFIG_UPDATE]');
 
     stderrSpy.mockRestore();
   });
@@ -71,7 +71,7 @@ describe('Config change detection on start', () => {
     const configCheck = checkConfigChanged(currentHash);
 
     if (configCheck.changed) {
-      process.stderr.write('[SIDECAR_CONFIG_UPDATE] ...');
+      process.stderr.write('[AMICUS_CONFIG_UPDATE] ...');
     }
 
     expect(configCheck.changed).toBe(false);
@@ -82,14 +82,14 @@ describe('Config change detection on start', () => {
 
   it('should extract hash from CLAUDE.md content when present', () => {
     const content = '# CLAUDE.md\n<!-- sidecar-config-hash: abcd1234 -->\nSome content';
-    const match = content.match(/<!-- sidecar-config-hash: ([0-9a-f]+) -->/);
+    const match = content.match(/<!-- (?:amicus|sidecar)-config-hash: ([0-9a-f]+) -->/);
     expect(match).not.toBeNull();
     expect(match[1]).toBe('abcd1234');
   });
 
   it('should return null hash when CLAUDE.md has no hash comment', () => {
     const content = '# CLAUDE.md\nSome content without hash';
-    const match = content.match(/<!-- sidecar-config-hash: ([0-9a-f]+) -->/);
+    const match = content.match(/<!-- (?:amicus|sidecar)-config-hash: ([0-9a-f]+) -->/);
     expect(match).toBeNull();
   });
 });

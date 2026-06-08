@@ -47,7 +47,7 @@ describe('Config change detection flow', () => {
       return null;
     }
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
-    const match = content.match(/<!-- sidecar-config-hash: ([0-9a-f]+) -->/);
+    const match = content.match(/<!-- (?:amicus|sidecar)-config-hash: ([0-9a-f]+) -->/);
     return match ? match[1] : null;
   }
 
@@ -62,7 +62,7 @@ describe('Config change detection flow', () => {
 
     let output = null;
     if (configCheck.changed) {
-      output = `\n[SIDECAR_CONFIG_UPDATE] Model configuration has changed.\nAction: Replace the "Model Aliases" section in CLAUDE.md (near the top, after the title) with the content below.\nIf no "Model Aliases" section exists, add it after the title line.\nThe hash comment tracks config changes — do not remove it.\n\n${configCheck.updateData}\n\n`;
+      output = `\n[AMICUS_CONFIG_UPDATE] Model configuration has changed.\nAction: Replace the "Model Aliases" section in CLAUDE.md (near the top, after the title) with the content below.\nIf no "Model Aliases" section exists, add it after the title line.\nThe hash comment tracks config changes — do not remove it.\n\n${configCheck.updateData}\n\n`;
     }
     return { emitted: configCheck.changed, output, configCheck };
   }
@@ -72,7 +72,7 @@ describe('Config change detection flow', () => {
    * Simulates what the LLM would do after receiving update instructions.
    */
   function writeClaudeMdWithHash(hash) {
-    const content = `# CLAUDE.md\n<!-- sidecar-config-hash: ${hash} -->\nProject docs here.`;
+    const content = `# CLAUDE.md\n<!-- amicus-config-hash: ${hash} -->\nProject docs here.`;
     fs.writeFileSync(path.join(projectDir, 'CLAUDE.md'), content);
   }
 
@@ -100,7 +100,7 @@ describe('Config change detection flow', () => {
       const { emitted, output } = simulateConfigCheck();
 
       expect(emitted).toBe(true);
-      expect(output).toContain('[SIDECAR_CONFIG_UPDATE]');
+      expect(output).toContain('[AMICUS_CONFIG_UPDATE]');
       expect(output).toContain('gemini');
     });
 
@@ -127,7 +127,7 @@ describe('Config change detection flow', () => {
       expect(emitted).toBe(false);
     });
 
-    it('should not emit [SIDECAR_CONFIG_UPDATE] to stderr', () => {
+    it('should not emit [AMICUS_CONFIG_UPDATE] to stderr', () => {
       const configData = {
         default: 'gpt',
         aliases: {
@@ -170,7 +170,7 @@ describe('Config change detection flow', () => {
       const { emitted, output } = simulateConfigCheck();
 
       expect(emitted).toBe(true);
-      expect(output).toContain('[SIDECAR_CONFIG_UPDATE]');
+      expect(output).toContain('[AMICUS_CONFIG_UPDATE]');
       expect(output).toContain('gpt');
       expect(output).toContain('gemini');
     });
@@ -195,7 +195,7 @@ describe('Config change detection flow', () => {
       const { configCheck } = simulateConfigCheck();
 
       expect(configCheck.newHash).toBe(newHash);
-      expect(configCheck.updateData).toContain(`<!-- sidecar-config-hash: ${newHash} -->`);
+      expect(configCheck.updateData).toContain(`<!-- amicus-config-hash: ${newHash} -->`);
     });
   });
 
@@ -224,7 +224,7 @@ describe('Config change detection flow', () => {
       const { emitted, output } = simulateConfigCheck();
 
       expect(emitted).toBe(true);
-      expect(output).toContain('[SIDECAR_CONFIG_UPDATE]');
+      expect(output).toContain('[AMICUS_CONFIG_UPDATE]');
     });
 
     it('should mark the new default in the alias table', () => {
@@ -358,7 +358,7 @@ describe('Config change detection flow', () => {
   // ─── Scenario 7: Update data format validation ──────────────────
 
   describe('update data format', () => {
-    it('should contain a sidecar-config-hash HTML comment', () => {
+    it('should contain an amicus-config-hash HTML comment', () => {
       const configData = {
         default: 'gemini',
         aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' }
@@ -368,7 +368,7 @@ describe('Config change detection flow', () => {
 
       const { configCheck } = simulateConfigCheck();
 
-      expect(configCheck.updateData).toMatch(/<!-- sidecar-config-hash: [0-9a-f]{8} -->/);
+      expect(configCheck.updateData).toMatch(/<!-- amicus-config-hash: [0-9a-f]{8} -->/);
     });
 
     it('should contain a markdown alias table with header row', () => {
@@ -473,7 +473,7 @@ describe('Config change detection flow', () => {
   // ─── Scenario 9: stderr output format ────────────────────────────
 
   describe('stderr output format', () => {
-    it('should format [SIDECAR_CONFIG_UPDATE] message correctly', () => {
+    it('should format [AMICUS_CONFIG_UPDATE] message correctly', () => {
       const configData = {
         default: 'gemini',
         aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' }
@@ -483,7 +483,7 @@ describe('Config change detection flow', () => {
 
       const { output } = simulateConfigCheck();
 
-      expect(output).toMatch(/^\n\[SIDECAR_CONFIG_UPDATE\]/);
+      expect(output).toMatch(/^\n\[AMICUS_CONFIG_UPDATE\]/);
       expect(output).toContain('Model configuration has changed.');
       expect(output).toContain('Action: Replace the "Model Aliases" section in CLAUDE.md');
     });
