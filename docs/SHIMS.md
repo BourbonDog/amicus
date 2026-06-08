@@ -9,3 +9,4 @@ rebrand plan: `docs/superpowers/plans/2026-06-08-amicus-rebrand.md`.
 | --- | --- | --- | --- |
 | Env var prefix | src/utils/env-compat.js | SIDECAR_* env vars | next major |
 | CLI bins | package.json bin | sidecar, claude-sidecar commands | next major |
+| Config dir | src/utils/config.js getConfigDir | ~/.config/sidecar fallback | next major |

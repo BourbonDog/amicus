@@ -2,7 +2,7 @@
  * Credential Loader
  *
  * Loads API keys from multiple sources into process.env at CLI bootstrap.
- * Priority: process.env (already set) > sidecar .env > auth.json
+ * Priority: process.env (already set) > amicus .env > auth.json
  * Never overwrites existing process.env values.
  */
 const { logger } = require('./logger');
@@ -15,7 +15,8 @@ const { readAuthJsonKeys } = require('./auth-json');
  *
  * Sources (in priority order):
  * 1. process.env - already set, never overwritten
- * 2. ~/.config/sidecar/.env - user-configured via `sidecar setup`
+ * 2. ~/.config/amicus/.env - user-configured via `amicus setup`
+ *    (DEPRECATED(amicus-shim): falls back to ~/.config/sidecar/.env if amicus dir absent)
  * 3. ~/.local/share/opencode/auth.json - OpenCode SDK fallback
  */
 function loadCredentials() {

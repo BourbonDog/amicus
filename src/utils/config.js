@@ -1,5 +1,5 @@
 /**
- * Sidecar Config Module
+ * Amicus Config Module
  *
  * Config directory resolution, file I/O, model alias resolution,
  * config hashing, and alias table formatting.
@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { applyDirectApiFallback, autoRepairAlias } = require('./alias-resolver');
+const { getCompatEnv } = require('./env-compat');
 
 /** Default model alias map — short names to full OpenRouter model identifiers */
 const DEFAULT_ALIASES = {
@@ -36,15 +37,26 @@ const DEFAULT_ALIASES = {
 
 /** @returns {string} Config directory path */
 function getConfigDir() {
-  if (process.env.SIDECAR_CONFIG_DIR) {
-    const resolved = path.resolve(process.env.SIDECAR_CONFIG_DIR);
+  const override = getCompatEnv('CONFIG_DIR');
+  if (override) {
+    const resolved = path.resolve(override);
     if (resolved.includes('\0')) {
-      throw new Error('Invalid SIDECAR_CONFIG_DIR: null bytes not allowed');
+      throw new Error('Invalid AMICUS_CONFIG_DIR: null bytes not allowed');
     }
     return resolved;
   }
   const homeDir = process.env.HOME || process.env.USERPROFILE;
-  return path.join(homeDir, '.config', 'sidecar');
+  const amicusDir = path.join(homeDir, '.config', 'amicus');
+  // DEPRECATED(amicus-shim): fall back to the legacy ~/.config/sidecar dir if it
+  // exists and the new one does not, so pre-rebrand credentials keep working.
+  // Remove in a future revision — see docs/SHIMS.md.
+  if (!fs.existsSync(amicusDir)) {
+    const legacyDir = path.join(homeDir, '.config', 'sidecar');
+    if (fs.existsSync(legacyDir)) {
+      return legacyDir;
+    }
+  }
+  return amicusDir;
 }
 
 /** @returns {string} Full path to config.json */
