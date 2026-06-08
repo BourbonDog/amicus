@@ -70,11 +70,18 @@ AI-roundtable repos exist, including a Claude Code skill). `amicus` is free on n
 - **Council bundled** at `skills/second-opinion/`; the `sidecar` ad-hoc chat skill ships at `skill/`.
 - README banner establishing Amicus.
 
-**Not yet done (this is v1):**
-- **Code rebrand:** `package.json` is still `name: claude-sidecar` v0.5.2 with bin
-  `sidecar`/`claude-sidecar`. Rename to `amicus` (+ `am`) across package.json, README,
-  skill launch commands, and CI workflows.
-- F1–F5 engine/feature work and F6 one-step install (below).
+**Done — F6 code rebrand (branch `rebrand/amicus`, 2026-06-08):** `package.json` renamed to
+`amicus` v0.5.2 with bins `amicus`/`am` (+ `sidecar`/`claude-sidecar` deprecated shims); the bin
+entry is now `bin/amicus.js`. Deep rename of internals (env `AMICUS_*`, `~/.config/amicus`,
+`.claude/amicus_sessions`, `amicus_*` MCP tools, `[AMICUS_CONFIG_UPDATE]`/`amicus-config-hash`,
+`*Amicus()` exports) and user-facing surfaces (CLI text, Electron, README/site/docs, skill launch
+commands, postinstall/updater). Every legacy `sidecar*` form kept working as a **backward-compat
+shim** (tracked in `docs/SHIMS.md`, to be removed in a future revision). Executed subagent-driven
+per the rebrand plan; the suite holds at its pre-rebrand baseline (only 8 pre-existing
+electron/Windows failures, unrelated to the rebrand) and lint dropped 21→3.
+
+**Not yet done (rest of v1):**
+- F1–F5 engine/feature work and the F6 one-step install / `setup` bring-up (below).
 
 ## 5. Architecture
 
@@ -154,11 +161,13 @@ current workarounds.
 ### F6 — Bundle + one-step install + rebrand *(Installer)*
 - **One-step install.** From a clean machine, one documented sequence (install → `setup`) yields
   working councils, the GUI, the MCP, both skills, and a seeded model catalog.
-- **Rebrand (in progress).** License preserved + `NOTICE` added and the council is already bundled
-  (see §4). Remaining: rename the package to `amicus` (bins `amicus` / `am`), and purge
-  `sidecar`/`claude-sidecar` from README, skill launch commands, and CI workflows.
-  - *Acceptance:* the product installs and runs end-to-end under `amicus`/`am` with no reference that
-    implies it is upstream `claude-sidecar`.
+- **Rebrand (DONE 2026-06-08, branch `rebrand/amicus`).** Package renamed to `amicus` (bins
+  `amicus` / `am`, + `sidecar`/`claude-sidecar` deprecated shims); internals deep-renamed and
+  user-facing surfaces (CLI, Electron, README/site/docs, skills, postinstall/updater) purged of
+  `sidecar`/`claude-sidecar` except deliberate upstream attribution. Backward-compat shims tracked
+  in `docs/SHIMS.md`. See the rebrand plan (`docs/superpowers/plans/2026-06-08-amicus-rebrand.md`) + §4.
+  - *Acceptance — met:* `amicus`/`am` run end-to-end (`amicus --version` → `amicus v0.5.2`); no
+    user-facing reference implies upstream `claude-sidecar`; the legacy `sidecar*` forms still work.
 
 ## 7. Scope boundaries / backlog
 
@@ -168,6 +177,9 @@ Deferred to backlog (not dropped):
 - Publishing to the npm registry / a plugin marketplace listing — "share a repo" is the v1 bar.
 - Council skill rewrite to *use* F4 (fan-out / JSON) — follow-on once the engine features land.
 - Broader "improve sidecar" feature ideas beyond the five v1 bundles.
+- **Remove the Amicus backward-compat shims** (see `docs/SHIMS.md`: env-var prefix, CLI bins, config
+  dir, session dir, config token, MCP tool names, public API, MCP registration) in a future revision
+  once users have migrated off the legacy `sidecar*` names.
 
 ## 8. Risks & open questions
 
