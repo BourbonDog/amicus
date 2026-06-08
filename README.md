@@ -1,3 +1,11 @@
+> ### ⚠️ This is **Amicus** — a work-in-progress rebrand
+>
+> **Amicus** is an independent fork of [Claude Sidecar](https://github.com/jrenaldi79/sidecar) (MIT, © John Renaldi) that bundles the Sidecar engine with a multi-model **LLM Council** (`skills/second-opinion/`) and an ad-hoc multi-model **chat** skill (`skill/`) — installable as one system, with Claude as the orchestrator. See [`NOTICE`](./NOTICE) for attribution.
+>
+> The documentation below is still upstream Sidecar's, pending the rebrand.
+
+---
+
 <div align="center">
 
 # Claude Sidecar
