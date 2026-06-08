@@ -30,7 +30,7 @@ run_test() {
 
     # Run sidecar in headless mode
     local output
-    if output=$(node "$PROJECT_DIR/bin/sidecar.js" start \
+    if output=$(node "$PROJECT_DIR/bin/amicus.js" start \
         --model "$MODEL" \
         --briefing "$briefing" \
         --headless \

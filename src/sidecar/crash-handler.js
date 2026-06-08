@@ -1,7 +1,7 @@
 /**
  * Crash Handler - Updates metadata to 'error' on uncaught exceptions
  *
- * Installed by bin/sidecar.js for MCP-spawned processes that have a --task-id.
+ * Installed by bin/amicus.js for MCP-spawned processes that have a --task-id.
  * When the process crashes, the handler marks the session as failed so the
  * MCP client can detect the error instead of seeing a stuck 'running' status.
  */

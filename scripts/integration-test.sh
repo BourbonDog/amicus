@@ -42,7 +42,7 @@ fi
 
 if ! command -v sidecar &> /dev/null; then
     echo -e "${YELLOW}Warning: sidecar not in PATH, using local bin${NC}"
-    SIDECAR="node $(pwd)/bin/sidecar.js"
+    SIDECAR="node $(pwd)/bin/amicus.js"
 else
     SIDECAR="sidecar"
 fi

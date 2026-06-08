@@ -52,7 +52,7 @@ const HEADLESS_STATUS_REMINDER = '<system-reminder>IMPORTANT: This sidecar is st
 
 /** Spawn a sidecar CLI process (fire-and-forget) */
 function spawnSidecarProcess(args, sessionDir) {
-  const sidecarBin = path.join(__dirname, '..', 'bin', 'sidecar.js');
+  const sidecarBin = path.join(__dirname, '..', 'bin', 'amicus.js');
   let stderrFd = 'ignore';
   if (sessionDir) {
     try {

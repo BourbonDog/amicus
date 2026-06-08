@@ -1,5 +1,5 @@
 {
-  "name": "claude-sidecar",
+  "name": "amicus",
   "version": "0.5.2",
   "description": "A parallel AI window for Claude Code. Fork conversations to Gemini, GPT, DeepSeek, or any model via OpenRouter, then fold results back.",
   "keywords": [
@@ -21,8 +21,10 @@
     "url": "https://github.com/jrenaldi79/sidecar"
   },
   "bin": {
-    "sidecar": "./bin/sidecar.js",
-    "claude-sidecar": "./bin/sidecar.js"
+    "amicus": "./bin/amicus.js",
+    "am": "./bin/amicus.js",
+    "sidecar": "./bin/amicus.js",
+    "claude-sidecar": "./bin/amicus.js"
   },
   "main": "src/index.js",
   "exports": {
@@ -36,7 +38,7 @@
     "scripts/postinstall.js"
   ],
   "scripts": {
-    "start": "node --experimental-top-level-await --experimental-vm-modules bin/sidecar.js",
+    "start": "node --experimental-top-level-await --experimental-vm-modules bin/amicus.js",
     "test": "jest",
     "test:integration": "jest --testPathIgnorePatterns='\\.worktrees/' --testMatch='**/tests/**/*.integration.test.js'",
     "test:all": "jest --testPathIgnorePatterns='/node_modules/' --testPathIgnorePatterns='\\.worktrees/' && git rev-parse HEAD > .test-passed 2>/dev/null || true",

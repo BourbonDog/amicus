@@ -1,7 +1,7 @@
 /**
  * CLI Process Integration Tests
  *
- * Spawns the actual `node bin/sidecar.js` binary and asserts on
+ * Spawns the actual `node bin/amicus.js` binary and asserts on
  * exit codes, stdout, and stderr. No mocks — tests the real CLI entry point.
  */
 
@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'sidecar.js');
+const AMICUS_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 const VERSION = require('../package.json').version;
 
@@ -19,7 +19,7 @@ function runCli(args, opts = {}) {
   return new Promise((resolve) => {
     const { env: extraEnv, ...execOpts } = opts;
     const env = { ...process.env, ...extraEnv };
-    execFile(NODE, [SIDECAR_BIN, ...args], { env, timeout: 10000, ...execOpts }, (err, stdout, stderr) => {
+    execFile(NODE, [AMICUS_BIN, ...args], { env, timeout: 10000, ...execOpts }, (err, stdout, stderr) => {
       resolve({
         stdout: stdout || '',
         stderr: stderr || '',
