@@ -33,7 +33,7 @@ describe('CLI Process: --version', () => {
   it('prints version and exits 0', async () => {
     const { stdout, code } = await runCli(['--version']);
     expect(code).toBe(0);
-    expect(stdout.trim()).toContain(`claude-sidecar v${VERSION}`);
+    expect(stdout.trim()).toContain(`amicus v${VERSION}`);
   });
 });
 

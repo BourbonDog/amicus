@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Sidecar CLI Entry Point
+ * Amicus CLI Entry Point
  *
  * Spec Reference: §4 CLI Interface
  * Routes commands to appropriate handlers.
@@ -45,11 +45,11 @@ async function main() {
     // because update-notifier deletes the cache entry after reading it.
     const cliUpdateInfo = getUpdateInfo();
     if (cliUpdateInfo) {
-      process.env.SIDECAR_UPDATE_INFO = JSON.stringify(cliUpdateInfo);
+      process.env.AMICUS_UPDATE_INFO = JSON.stringify(cliUpdateInfo);
       process.on('exit', () => {
         process.stderr.write(
           `\n  Update available: v${cliUpdateInfo.current} → v${cliUpdateInfo.latest}\n` +
-          '  Run `npm install -g claude-sidecar` to upgrade.\n\n'
+          '  Run `npm install -g amicus` to upgrade.\n\n'
         );
       });
     }
@@ -57,7 +57,7 @@ async function main() {
 
   // Handle --version
   if (args.version) {
-    console.log(`claude-sidecar v${VERSION}`);
+    console.log(`amicus v${VERSION}`);
     process.exit(0);
   }
 

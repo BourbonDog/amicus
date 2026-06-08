@@ -287,15 +287,15 @@ function isValidDurationFormat(duration) {
  */
 function getUsage() {
   return `
-Usage: sidecar <command> [options]
+Usage: amicus <command> [options]
 
 Commands:
-  start       Launch a new sidecar
-  list        Show previous sidecars
-  resume      Reopen a previous sidecar
-  continue    New sidecar building on previous
-  read        Output sidecar summary/conversation
-  abort       Abort a running sidecar session
+  start       Launch a new amicus session
+  list        Show previous sessions
+  resume      Reopen a previous session
+  continue    New session building on previous
+  read        Output session summary/conversation
+  abort       Abort a running session
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
   update      Update to latest version
@@ -303,7 +303,7 @@ Commands:
 
 Options for 'start':
   --model <model>              Optional (uses config default). Model to use:
-                               - Short aliases: gemini, opus, gpt (see 'sidecar setup')
+                               - Short aliases: gemini, opus, gpt (see 'amicus setup')
                                - Direct API: google/gemini-2.5-flash
                                - OpenRouter: openrouter/google/gemini-2.5-flash
   --prompt <text>              Required. Task description
@@ -352,12 +352,12 @@ Custom agents defined in ~/.config/opencode/agents/ or
 .opencode/agents/ are also supported.
 
 Examples:
-  sidecar start --model google/gemini-2.5 --prompt "Debug auth issue"
-  sidecar start --model openai/o3 --prompt "Generate tests" --no-ui
-  sidecar start --model gemini --prompt "Review code" --agent Plan
-  sidecar list
-  sidecar resume abc123
-  sidecar read abc123 --conversation
+  amicus start --model google/gemini-2.5 --prompt "Debug auth issue"
+  amicus start --model openai/o3 --prompt "Generate tests" --no-ui
+  amicus start --model gemini --prompt "Review code" --agent Plan
+  amicus list
+  amicus resume abc123
+  amicus read abc123 --conversation
 `;
 }
 

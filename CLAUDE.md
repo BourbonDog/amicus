@@ -82,7 +82,7 @@ For detailed data flow, fold mechanism, and Electron BrowserView architecture, s
 <!-- AUTO:tree -->
 bin/
 ├── amicus
-└── amicus.js  # Sidecar CLI Entry Point
+└── amicus.js  # Amicus CLI Entry Point
 src/
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
