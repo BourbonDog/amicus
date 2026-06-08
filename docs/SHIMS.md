@@ -7,4 +7,4 @@ rebrand plan: `docs/superpowers/plans/2026-06-08-amicus-rebrand.md`.
 
 | Shim | Location | Legacy form kept working | Remove by |
 | --- | --- | --- | --- |
-| (filled in as tasks land) | | | |
+| Env var prefix | src/utils/env-compat.js | SIDECAR_* env vars | next major |
