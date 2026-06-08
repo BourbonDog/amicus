@@ -1,11 +1,11 @@
 /**
  * Updater Module
  *
- * Self-update functionality for claude-sidecar.
+ * Self-update functionality for amicus.
  * Checks for new versions via update-notifier and performs
  * updates via npm install -g.
  *
- * Supports SIDECAR_MOCK_UPDATE env var for testing:
+ * Supports AMICUS_MOCK_UPDATE (or legacy SIDECAR_MOCK_UPDATE) env var for testing:
  *   "available" — getUpdateInfo returns fake update
  *   "updating"  — getUpdateInfo returns fake update
  *   "success"   — performUpdate resolves immediately
@@ -15,6 +15,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { logger } = require('./logger');
+const { getCompatEnv } = require('./env-compat');
 
 const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
 
@@ -29,7 +30,7 @@ let notifier = null;
  * @returns {string|null} The mock mode or null
  */
 function getMockMode() {
-  const mode = process.env.SIDECAR_MOCK_UPDATE;
+  const mode = getCompatEnv('MOCK_UPDATE');
   if (mode && MOCK_MODES.includes(mode)) {
     return mode;
   }
@@ -85,7 +86,7 @@ function getUpdateInfo() {
 
 /**
  * Display update notification via update-notifier's built-in notify.
- * Mentions `sidecar update` as the upgrade command.
+ * Mentions `amicus update` as the upgrade command.
  */
 function notifyUpdate() {
   if (!notifier) {
@@ -94,7 +95,7 @@ function notifyUpdate() {
 
   notifier.notify({
     message: 'Update available: {currentVersion} -> {latestVersion}\n' +
-      'Run `sidecar update` to upgrade'
+      'Run `amicus update` to upgrade'
   });
 }
 
@@ -119,7 +120,7 @@ function performUpdate() {
   return new Promise((resolve) => {
     let stderr = '';
 
-    const proc = spawn('npm', ['install', '-g', 'claude-sidecar@latest'], {
+    const proc = spawn('npm', ['install', '-g', 'amicus@latest'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true
     });

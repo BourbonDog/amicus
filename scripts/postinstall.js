@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Post-install script for claude-sidecar
+ * Post-install script for amicus
  *
  * 1. Copies SKILL.md to ~/.claude/skills/sidecar/
  * 2. Registers MCP server in Claude Code (~/.claude.json)
@@ -17,7 +17,7 @@ const SKILL_SOURCE = path.join(__dirname, '..', 'skill', 'SKILL.md');
 const SKILL_DEST_DIR = path.join(os.homedir(), '.claude', 'skills', 'sidecar');
 const SKILL_DEST = path.join(SKILL_DEST_DIR, 'SKILL.md');
 
-const MCP_CONFIG = { command: 'npx', args: ['-y', 'claude-sidecar@latest', 'mcp'] };
+const MCP_CONFIG = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
 
 /**
  * Add or update an MCP server in a JSON config file.
@@ -55,9 +55,9 @@ function installSkill() {
   try {
     fs.mkdirSync(SKILL_DEST_DIR, { recursive: true });
     fs.copyFileSync(SKILL_SOURCE, SKILL_DEST);
-    console.log('[claude-sidecar] Skill installed to ~/.claude/skills/sidecar/');
+    console.log('[amicus] Skill installed to ~/.claude/skills/sidecar/');
   } catch (err) {
-    console.error(`[claude-sidecar] Warning: Could not install skill: ${err.message}`);
+    console.error(`[amicus] Warning: Could not install skill: ${err.message}`);
   }
 }
 
@@ -66,11 +66,23 @@ function registerClaudeCode() {
   // Try the CLI first
   try {
     const mcpJson = JSON.stringify(MCP_CONFIG);
-    execFileSync('claude', ['mcp', 'add-json', 'sidecar', mcpJson, '--scope', 'user'], {
+    execFileSync('claude', ['mcp', 'add-json', 'amicus', mcpJson, '--scope', 'user'], {
       stdio: 'pipe',
       timeout: 10000,
     });
-    console.log('[claude-sidecar] MCP registered in Claude Code (via CLI).');
+    console.log('[amicus] MCP registered in Claude Code (via CLI).');
+
+    // DEPRECATED(amicus-shim): also register 'sidecar' so existing clients that
+    // reference the old server name keep resolving. Remove in next major.
+    try {
+      execFileSync('claude', ['mcp', 'add-json', 'sidecar', mcpJson, '--scope', 'user'], {
+        stdio: 'pipe',
+        timeout: 10000,
+      });
+    } catch {
+      // Best-effort; ignore failures for the shim registration
+    }
+
     return;
   } catch {
     // CLI not available or failed — fall back to file edit
@@ -78,14 +90,18 @@ function registerClaudeCode() {
 
   // Fallback: direct file edit
   const claudeConfigPath = path.join(os.homedir(), '.claude.json');
-  const status = addMcpToConfigFile(claudeConfigPath, 'sidecar', MCP_CONFIG);
+  const status = addMcpToConfigFile(claudeConfigPath, 'amicus', MCP_CONFIG);
   if (status === 'added') {
-    console.log('[claude-sidecar] MCP registered in Claude Code (~/.claude.json).');
+    console.log('[amicus] MCP registered in Claude Code (~/.claude.json).');
   } else if (status === 'updated') {
-    console.log('[claude-sidecar] MCP config updated in Claude Code (~/.claude.json).');
+    console.log('[amicus] MCP config updated in Claude Code (~/.claude.json).');
   } else {
-    console.log('[claude-sidecar] MCP already registered in Claude Code.');
+    console.log('[amicus] MCP already registered in Claude Code.');
   }
+
+  // DEPRECATED(amicus-shim): also register 'sidecar' entry so existing clients
+  // that reference the old server name keep resolving. Remove in next major.
+  addMcpToConfigFile(claudeConfigPath, 'sidecar', MCP_CONFIG);
 }
 
 /** Register MCP server in Claude Desktop / Cowork config */
@@ -100,25 +116,29 @@ function registerClaudeDesktop() {
   }
 
   const configPath = path.join(configDir, 'claude_desktop_config.json');
-  const status = addMcpToConfigFile(configPath, 'sidecar', MCP_CONFIG);
+  const status = addMcpToConfigFile(configPath, 'amicus', MCP_CONFIG);
   if (status === 'added') {
-    console.log('[claude-sidecar] MCP registered in Claude Desktop.');
+    console.log('[amicus] MCP registered in Claude Desktop.');
   } else if (status === 'updated') {
-    console.log('[claude-sidecar] MCP config updated in Claude Desktop.');
+    console.log('[amicus] MCP config updated in Claude Desktop.');
   } else {
-    console.log('[claude-sidecar] MCP already registered in Claude Desktop.');
+    console.log('[amicus] MCP already registered in Claude Desktop.');
   }
+
+  // DEPRECATED(amicus-shim): also register 'sidecar' entry so existing clients
+  // that reference the old server name keep resolving. Remove in next major.
+  addMcpToConfigFile(configPath, 'sidecar', MCP_CONFIG);
 }
 
 function main() {
-  console.log('[claude-sidecar] Installing...');
+  console.log('[amicus] Installing...');
   installSkill();
   registerClaudeCode();
   registerClaudeDesktop();
 
   console.log('');
-  console.log('[claude-sidecar] Setup:');
-  console.log('  - Configure API: Run `sidecar setup` or set API keys directly');
+  console.log('[amicus] Setup:');
+  console.log('  - Configure API: Run `amicus setup` or set API keys directly');
   console.log('  - API keys: OPENROUTER_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, OPENAI_API_KEY, etc.');
 }
 
