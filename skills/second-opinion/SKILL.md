@@ -72,7 +72,7 @@ When off, Claude does not contribute a review and does not appear in the bundle.
 Each council model reviews **the artifact** independently. Launch all council models **in parallel** as background sidecars, following the operating rules in `MODEL-NOTES.md`. The canonical sidecar launch command is:
 
 ```
-sidecar start --model <alias> --agent Plan --no-context --no-ui \
+amicus start --model <alias> --agent Plan --no-context --no-ui \
   --summary-length verbose --timeout <min> --prompt "<briefing>"
 ```
 

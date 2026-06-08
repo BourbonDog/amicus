@@ -31,7 +31,7 @@ non-Claude chairman + per-model inspectable artifacts.
   own answers; here the "answers" are the reviews.)
 - **This is an executed skill, not an app.** All of LLM Council's `council.py` logic
   (anonymize → rank → aggregate → chair) becomes **prose workflow Claude performs by hand**
-  while driving the `sidecar` CLI. No backend, no parsing code, no API server. Claude relabels
+  while driving the `amicus` CLI. No backend, no parsing code, no API server. Claude relabels
   reviews in the briefings it writes, tallies rankings in its head/notes, and reads structured
   model output directly.
 

@@ -1,4 +1,4 @@
-# MODEL-NOTES — Operating Lessons for Sidecar Models
+# MODEL-NOTES — Operating Lessons for Amicus Models
 
 This file is the `second-opinion` skill's evolving memory of **how to actually drive each model well**. Read it before Stage 0 (council selection and launch); update it, with the user's approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append endlessly.
 
@@ -11,7 +11,7 @@ _Last updated: 2026-06-04 (messaging-framework council: GPT first use; absolute-
 - **`--summary-length verbose`** — the analysis IS the deliverable; don't let it get summarized away.
 - **Run in the background (`run_in_background: true`) and launch models in parallel.** You're notified on completion; read the output file then. Don't poll.
 - **Credentials:** Google + OpenRouter keys live in `~/.config/sidecar/.env` (no env vars needed). Other providers need their own keys configured there.
-- **Always use ABSOLUTE paths in launch commands (Windows/git-bash).** A `cd` in an earlier Bash call *persists* the working dir for later calls; a later relative `--prompt "$(cat briefing)"` then resolves to nothing (→ empty prompt) and the `> log` redirect fails (no parent dir), so the sidecar silently never runs — but the trailing `echo "...exit $?"` still reports exit 0, so it *looks* like it ran. Never rely on cwd; never `cd` in a compound launch command. Assign `B=/c/abs/path` and reference `"$B/file"` for both the cat and the redirect.
+- **Always use ABSOLUTE paths in launch commands (Windows/git-bash).** A `cd` in an earlier Bash call *persists* the working dir for later calls; a later relative `--prompt "$(cat briefing)"` then resolves to nothing (→ empty prompt) and the `> log` redirect fails (no parent dir), so amicus silently never runs — but the trailing `echo "...exit $?"` still reports exit 0, so it *looks* like it ran. Never rely on cwd; never `cd` in a compound launch command. Assign `B=/c/abs/path` and reference `"$B/file"` for both the cat and the redirect.
 
 ## The headless poller trap (read this — it's the #1 cause of failed runs)
 Headless sidecar polls the run and **exits early if streamed output looks "stable" for ~8 s**. During a quiet tool-call gap it wrongly concludes "done," kills the process (exit code 0 but `completed:false`), and you get a half-written or empty result that looks like an answer. Mitigations, in order of preference:
@@ -43,7 +43,7 @@ Headless sidecar polls the run and **exits early if streamed output looks "stabl
 - **Quirks:** verbose — peers dinged it for volume-over-judgment (good coverage, lower discrimination); **self-ranked its own review #1** in cross-review → discount self-votes. Logged the poller "exited" false alarm but completed fully.
 
 ### (others — add as used)
-- Opus / o-series etc. are reachable via sidecar **if their API keys are configured**. Add notes here the first time each is used.
+- Opus / o-series etc. are reachable via amicus **if their API keys are configured**. Add notes here the first time each is used.
 
 ## Reviewer-reliability table
 
