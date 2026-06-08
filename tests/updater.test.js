@@ -98,7 +98,7 @@ describe('Updater Module', () => {
       expect(mockConstructor).toHaveBeenCalledWith(
         expect.objectContaining({
           pkg: expect.objectContaining({
-            name: 'claude-sidecar',
+            name: 'amicus',
             version: expect.any(String)
           })
         })
