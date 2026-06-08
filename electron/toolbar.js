@@ -1,5 +1,5 @@
 /**
- * Sidecar Toolbar HTML Builder
+ * Amicus Toolbar HTML Builder
  *
  * Generates the toolbar HTML for the bottom bar of the Electron window.
  * Supports two modes: 'sidecar' (default) and 'setup'.
@@ -13,7 +13,7 @@ const TOOLBAR_H = 40;
  * @returns {string} Brand name to display
  */
 function getBrandName(client) {
-  return client === 'cowork' ? 'Openwork Sidecar' : 'Claude Sidecar';
+  return client === 'cowork' ? 'Openwork Amicus' : 'Amicus';
 }
 
 /**
@@ -168,7 +168,7 @@ function buildToolbarHTML(options = {}) {
     ${logoSvg}
     <span class="brand">${brandName}</span>
     <span class="sep">|</span>
-    <span class="detail" title="Task ID — use with: sidecar resume ${taskId}">task: ${taskId}</span>
+    <span class="detail" title="Task ID — use with: amicus resume ${taskId}">task: ${taskId}</span>
     <span class="sep">|</span>
     <span class="timer" id="timer">0:00</span>
   </div>
@@ -186,12 +186,12 @@ function buildToolbarHTML(options = {}) {
   }, 1000);
   // contextBridge doesn't work with data: URLs, so use window action flags
   // that the main process polls via executeJavaScript (same pattern as update banner).
-  window.__sidecarToolbarAction = null;
+  window.__amicusToolbarAction = null;
   document.getElementById('fold-btn').addEventListener('click', function() {
-    window.__sidecarToolbarAction = 'fold';
+    window.__amicusToolbarAction = 'fold';
   });
   document.getElementById('settings-btn').addEventListener('click', function() {
-    window.__sidecarToolbarAction = 'open-settings';
+    window.__amicusToolbarAction = 'open-settings';
   });
 
   // Update banner logic (data injected at build time, no IPC needed)
@@ -209,17 +209,17 @@ function buildToolbarHTML(options = {}) {
 
     // Notify main process to expand toolbar area
     // Uses postMessage since preload contextBridge doesn't work with data: URLs
-    window.__sidecarUpdateAction = null;
+    window.__amicusUpdateAction = null;
     btn.addEventListener('click', function() {
       btn.disabled = true;
       btn.textContent = 'Updating...';
       dismiss.style.display = 'none';
-      window.__sidecarUpdateAction = 'perform-update';
+      window.__amicusUpdateAction = 'perform-update';
     });
 
     dismiss.addEventListener('click', function() {
       banner.style.display = 'none';
-      window.__sidecarUpdateAction = 'dismiss';
+      window.__amicusUpdateAction = 'dismiss';
     });
   })();
 </script>

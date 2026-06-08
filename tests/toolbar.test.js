@@ -8,51 +8,51 @@ const { buildToolbarHTML, TOOLBAR_H, getBrandName } = require('../electron/toolb
 
 describe('toolbar', () => {
   describe('getBrandName', () => {
-    it('should return "Claude Sidecar" for code-local client', () => {
-      expect(getBrandName('code-local')).toBe('Claude Sidecar');
+    it('should return "Amicus" for code-local client', () => {
+      expect(getBrandName('code-local')).toBe('Amicus');
     });
 
-    it('should return "Claude Sidecar" for code-web client', () => {
-      expect(getBrandName('code-web')).toBe('Claude Sidecar');
+    it('should return "Amicus" for code-web client', () => {
+      expect(getBrandName('code-web')).toBe('Amicus');
     });
 
-    it('should return "Openwork Sidecar" for cowork client', () => {
-      expect(getBrandName('cowork')).toBe('Openwork Sidecar');
+    it('should return "Openwork Amicus" for cowork client', () => {
+      expect(getBrandName('cowork')).toBe('Openwork Amicus');
     });
 
-    it('should default to "Claude Sidecar" when no client specified', () => {
-      expect(getBrandName()).toBe('Claude Sidecar');
-      expect(getBrandName(undefined)).toBe('Claude Sidecar');
+    it('should default to "Amicus" when no client specified', () => {
+      expect(getBrandName()).toBe('Amicus');
+      expect(getBrandName(undefined)).toBe('Amicus');
     });
   });
 
   describe('buildToolbarHTML', () => {
-    it('should show "Claude Sidecar" by default', () => {
+    it('should show "Amicus" by default', () => {
       const html = buildToolbarHTML({ mode: 'sidecar' });
-      expect(html).toContain('Claude Sidecar');
-      expect(html).not.toContain('Openwork Sidecar');
+      expect(html).toContain('Amicus');
+      expect(html).not.toContain('Openwork Amicus');
     });
 
-    it('should show "Openwork Sidecar" for cowork client', () => {
+    it('should show "Openwork Amicus" for cowork client', () => {
       const html = buildToolbarHTML({ mode: 'sidecar', client: 'cowork' });
-      expect(html).toContain('Openwork Sidecar');
-      expect(html).not.toContain('Claude Sidecar');
+      expect(html).toContain('Openwork Amicus');
+      expect(html).not.toContain('>Amicus<');
     });
 
-    it('should show "Claude Sidecar" for code-local client', () => {
+    it('should show "Amicus" for code-local client', () => {
       const html = buildToolbarHTML({ mode: 'sidecar', client: 'code-local' });
-      expect(html).toContain('Claude Sidecar');
+      expect(html).toContain('Amicus');
     });
 
     it('should show correct branding in setup mode for cowork', () => {
       const html = buildToolbarHTML({ mode: 'setup', client: 'cowork' });
-      expect(html).toContain('Openwork Sidecar');
-      expect(html).not.toContain('Claude Sidecar');
+      expect(html).toContain('Openwork Amicus');
+      expect(html).not.toContain('>Amicus<');
     });
 
     it('should show correct branding in setup mode for code-local', () => {
       const html = buildToolbarHTML({ mode: 'setup', client: 'code-local' });
-      expect(html).toContain('Claude Sidecar');
+      expect(html).toContain('Amicus');
     });
   });
 

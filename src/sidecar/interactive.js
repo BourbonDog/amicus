@@ -33,13 +33,13 @@ function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, 
   const env = {
     ...process.env,
     PATH: `${nodeModulesBin}:${existingPath}`,
-    SIDECAR_TASK_ID: taskId,
-    SIDECAR_MODEL: model,
+    AMICUS_TASK_ID: taskId,
+    AMICUS_MODEL: model,
     SIDECAR_PROJECT: project
   };
 
-  if (client) { env.SIDECAR_CLIENT = client; }
-  if (windowPosition) { env.SIDECAR_WINDOW_POSITION = windowPosition; }
+  if (client) { env.AMICUS_CLIENT = client; }
+  if (windowPosition) { env.AMICUS_WINDOW_POSITION = windowPosition; }
 
   if (agent) {
     const agentConfig = mapAgentToOpenCode(agent);
@@ -171,10 +171,10 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     );
 
     // Pass OpenCode server info to Electron
-    env.SIDECAR_OPENCODE_PORT = serverPort;
-    env.SIDECAR_SESSION_ID = sessionId;
+    env.AMICUS_OPENCODE_PORT = serverPort;
+    env.AMICUS_SESSION_ID = sessionId;
 
-    const debugPort = process.env.SIDECAR_DEBUG_PORT || '9222';
+    const debugPort = process.env.SIDECAR_DEBUG_PORT || process.env.AMICUS_DEBUG_PORT || '9222';
     logger.debug('Launching Electron', { taskId, model, debugPort, serverPort, sessionId });
 
     const electronProcess = spawn(electronPath, [

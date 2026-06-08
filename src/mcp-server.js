@@ -64,7 +64,7 @@ function spawnSidecarProcess(args, sessionDir) {
   const child = spawn('node', [sidecarBin, ...args], {
     cwd: getProjectDir(),
     stdio: ['ignore', 'ignore', stderrFd],
-    env: { ...process.env, SIDECAR_DEBUG_PORT: '9223', LOG_LEVEL: process.env.LOG_LEVEL || 'info' },
+    env: { ...process.env, AMICUS_DEBUG_PORT: '9223', LOG_LEVEL: process.env.LOG_LEVEL || 'info' },
   });
   child.unref();
   return child;

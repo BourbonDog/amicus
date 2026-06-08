@@ -26,10 +26,10 @@ function launchSetupWindow() {
 
     const env = {
       ...process.env,
-      SIDECAR_MODE: 'setup'
+      AMICUS_MODE: 'setup'
     };
 
-    const debugPort = process.env.SIDECAR_DEBUG_PORT;
+    const debugPort = process.env.AMICUS_DEBUG_PORT || process.env.SIDECAR_DEBUG_PORT;
     const args = debugPort
       ? [`--remote-debugging-port=${debugPort}`, mainPath]
       : [mainPath];

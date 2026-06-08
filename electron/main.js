@@ -1,11 +1,11 @@
 /**
- * Sidecar Electron Shell - v3
+ * Amicus Electron Shell - v3
  *
  * Uses BrowserView to split the window into two physical areas:
  *   - Top: OpenCode Web UI (gets its own viewport, no CSS conflicts)
- *   - Bottom 40px: Sidecar toolbar (branding, task ID, timer, fold button)
+ *   - Bottom 40px: Amicus toolbar (branding, task ID, timer, fold button)
  *
- * Supports two modes via SIDECAR_MODE env var:
+ * Supports two modes via AMICUS_MODE env var:
  *   - 'sidecar' (default): OpenCode conversation with fold toolbar
  *   - 'setup': API key configuration form
  *
@@ -15,6 +15,7 @@
 const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, screen } = require('electron');
 const path = require('path');
 const { logger } = require('../src/utils/logger');
+const { getCompatEnv } = require('../src/utils/env-compat');
 const { buildToolbarHTML, TOOLBAR_H, getBrandName } = require('./toolbar');
 const { createFoldHandler } = require('./fold');
 const { registerSetupHandlers } = require('./ipc-setup');
@@ -45,15 +46,15 @@ process.on('unhandledRejection', (reason) => {
 // Configuration from Environment (set by src/sidecar/start.js)
 // ============================================================================
 
-const MODE = process.env.SIDECAR_MODE || 'sidecar';
-const TASK_ID = process.env.SIDECAR_TASK_ID || 'unknown';
-const MODEL = process.env.SIDECAR_MODEL || 'unknown';
-const CWD = process.env.SIDECAR_CWD || process.cwd();
-const CLIENT = process.env.SIDECAR_CLIENT || 'code-local';
-const OPENCODE_PORT = parseInt(process.env.SIDECAR_OPENCODE_PORT || '4096', 10);
-const OPENCODE_SESSION_ID = process.env.SIDECAR_SESSION_ID;
-const FOLD_SHORTCUT = process.env.SIDECAR_FOLD_SHORTCUT || 'CommandOrControl+Shift+F';
-const WINDOW_POSITION = process.env.SIDECAR_WINDOW_POSITION || 'right';
+const MODE = getCompatEnv('MODE') || 'sidecar';
+const TASK_ID = getCompatEnv('TASK_ID') || 'unknown';
+const MODEL = getCompatEnv('MODEL') || 'unknown';
+const CWD = getCompatEnv('CWD') || process.cwd();
+const CLIENT = getCompatEnv('CLIENT') || 'code-local';
+const OPENCODE_PORT = parseInt(getCompatEnv('OPENCODE_PORT') || '4096', 10);
+const OPENCODE_SESSION_ID = getCompatEnv('SESSION_ID');
+const FOLD_SHORTCUT = getCompatEnv('FOLD_SHORTCUT') || 'CommandOrControl+Shift+F';
+const WINDOW_POSITION = getCompatEnv('WINDOW_POSITION') || 'right';
 
 const OPENCODE_URL = `http://localhost:${OPENCODE_PORT}`;
 
@@ -75,10 +76,10 @@ const foldHandler = createFoldHandler({
 });
 
 // ============================================================================
-// Sidecar Window (OpenCode + Toolbar)
+// Amicus Window (OpenCode + Toolbar)
 // ============================================================================
 
-function createSidecarWindow() {
+function createAmicusWindow() {
   const shortcutLabel = FOLD_SHORTCUT.replace('CommandOrControl', 'Cmd');
 
   const WIN_W = 720;
@@ -91,7 +92,7 @@ function createSidecarWindow() {
     x: winX, y: winY,
     show: false,
     frame: true, backgroundColor: '#2D2B2A',
-    title: CLIENT === 'cowork' ? 'Openwork Sidecar' : 'Claude Sidecar',
+    title: CLIENT === 'cowork' ? 'Openwork Amicus' : 'Amicus',
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -101,8 +102,9 @@ function createSidecarWindow() {
 
   // Check for updates: prefer env var from CLI (cache is one-shot), fallback to direct check
   let updateInfo = null;
-  if (process.env.SIDECAR_UPDATE_INFO) {
-    try { updateInfo = JSON.parse(process.env.SIDECAR_UPDATE_INFO); } catch (_) {}
+  const updateInfoRaw = getCompatEnv('UPDATE_INFO');
+  if (updateInfoRaw) {
+    try { updateInfo = JSON.parse(updateInfoRaw); } catch (_) {}
   }
   if (!updateInfo) {
     const { getUpdateInfo, initUpdateCheck } = require('../src/utils/updater');
@@ -169,12 +171,12 @@ function createSidecarWindow() {
   });
 
   // Poll toolbar for button clicks (IPC doesn't work with data: URLs).
-  // Fold, settings, and update actions all use window.__sidecar*Action flags.
+  // Fold, settings, and update actions all use window.__amicus*Action flags.
   const toolbarPoll = setInterval(() => {
     if (!mainWindow || mainWindow.isDestroyed()) { clearInterval(toolbarPoll); return; }
-    mainWindow.webContents.executeJavaScript('window.__sidecarToolbarAction').then(action => {
+    mainWindow.webContents.executeJavaScript('window.__amicusToolbarAction').then(action => {
       if (!action) { return; }
-      mainWindow.webContents.executeJavaScript('window.__sidecarToolbarAction = null');
+      mainWindow.webContents.executeJavaScript('window.__amicusToolbarAction = null');
       if (action === 'fold') {
         foldHandler.triggerFold(mainWindow, contentView);
       } else if (action === 'open-settings') {
@@ -186,15 +188,15 @@ function createSidecarWindow() {
   if (updateInfo) {
     const updatePoll = setInterval(() => {
       if (!mainWindow || mainWindow.isDestroyed()) { clearInterval(updatePoll); return; }
-      mainWindow.webContents.executeJavaScript('window.__sidecarUpdateAction').then(action => {
+      mainWindow.webContents.executeJavaScript('window.__amicusUpdateAction').then(action => {
         if (action === 'perform-update') {
-          mainWindow.webContents.executeJavaScript('window.__sidecarUpdateAction = null');
+          mainWindow.webContents.executeJavaScript('window.__amicusUpdateAction = null');
           const { performUpdate } = require('../src/utils/updater');
           performUpdate().then(result => {
             if (!mainWindow || mainWindow.isDestroyed()) { return; }
             if (result.success) {
               mainWindow.webContents.executeJavaScript(`
-                document.getElementById('update-text').textContent = 'Updated! Your next sidecar session will use the new version.';
+                document.getElementById('update-text').textContent = 'Updated! Your next amicus session will use the new version.';
                 document.getElementById('update-btn').style.display = 'none';
                 document.getElementById('dismiss-btn').style.display = '';
               `);
@@ -208,7 +210,7 @@ function createSidecarWindow() {
             }
           });
         } else if (action === 'dismiss') {
-          mainWindow.webContents.executeJavaScript('window.__sidecarUpdateAction = null');
+          mainWindow.webContents.executeJavaScript('window.__amicusUpdateAction = null');
           currentToolbarH = TOOLBAR_H;
           updateContentBounds();
           clearInterval(updatePoll);
@@ -271,7 +273,7 @@ function updateContentBounds() {
   contentView.setBounds({ x: 0, y: 0, width: w, height: h - currentToolbarH });
 }
 
-// Sidecar wordmark SVG in the same pixel/block art style as the OpenCode logo.
+// Amicus wordmark SVG in the same pixel/block art style as the OpenCode logo.
 // Uses the same CSS variables (--icon-base, --icon-weak-base) and viewBox
 // proportions. Built on a 6px grid: each letter 24px wide, 30px tall (y:6-36),
 // 6px gaps between letters. Total 7 letters = 204px wide.
@@ -348,12 +350,12 @@ function rebrandUI() {
 // IPC Handlers
 // ============================================================================
 
-// Sidecar mode: fold
+// Amicus mode: fold
 ipcMain.handle('sidecar:fold', () => {
   return foldHandler.triggerFold(mainWindow, contentView);
 });
 
-// Sidecar mode: open settings in a child window
+// Amicus mode: open settings in a child window
 ipcMain.handle('sidecar:open-settings', () => {
   createSettingsChildWindow();
 });
@@ -423,7 +425,7 @@ app.whenReady().then(() => {
   if (MODE === 'setup') {
     createSetupWindow();
   } else {
-    createSidecarWindow();
+    createAmicusWindow();
   }
 });
 

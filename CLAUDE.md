@@ -144,7 +144,7 @@ electron/
 │   └── icon.svg
 ├── fold.js  # Fold Logic
 ├── ipc-setup.js  # IPC Setup Handlers
-├── main.js  # Sidecar Electron Shell - v3
+├── main.js  # Amicus Electron Shell - v3
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
@@ -155,7 +155,7 @@ electron/
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API
-├── toolbar.js  # Sidecar Toolbar HTML Builder
+├── toolbar.js  # Amicus Toolbar HTML Builder
 └── window-position.js  # Window Position Calculator
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels

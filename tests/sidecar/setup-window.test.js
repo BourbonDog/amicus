@@ -41,7 +41,7 @@ describe('setup-window', () => {
     jest.restoreAllMocks();
   });
 
-  it('should spawn Electron with SIDECAR_MODE=setup', async () => {
+  it('should spawn Electron with AMICUS_MODE=setup', async () => {
     const promise = launchSetupWindow();
 
     const dataCallback = mockProcess.stdout.on.mock.calls.find(c => c[0] === 'data')[1];
@@ -54,17 +54,17 @@ describe('setup-window', () => {
 
     expect(spawn).toHaveBeenCalled();
     const spawnArgs = spawn.mock.calls[0];
-    // Debug port is opt-in: without SIDECAR_DEBUG_PORT, only main.js is passed
+    // Debug port is opt-in: without AMICUS_DEBUG_PORT, only main.js is passed
     expect(spawnArgs[1][0]).toContain('main.js');
 
     const env = spawnArgs[2].env;
-    expect(env.SIDECAR_MODE).toBe('setup');
+    expect(env.AMICUS_MODE).toBe('setup');
 
     expect(result.success).toBe(true);
   });
 
-  it('should pass --remote-debugging-port when SIDECAR_DEBUG_PORT is set', async () => {
-    process.env.SIDECAR_DEBUG_PORT = '9333';
+  it('should pass --remote-debugging-port when AMICUS_DEBUG_PORT is set', async () => {
+    process.env.AMICUS_DEBUG_PORT = '9333';
     spawn.mockClear();
     spawn.mockReturnValue(mockProcess);
 
@@ -81,7 +81,7 @@ describe('setup-window', () => {
     const spawnArgs = spawn.mock.calls[0];
     expect(spawnArgs[1][0]).toBe('--remote-debugging-port=9333');
     expect(spawnArgs[1][1]).toContain('main.js');
-    delete process.env.SIDECAR_DEBUG_PORT;
+    delete process.env.AMICUS_DEBUG_PORT;
   });
 
   it('should parse enriched JSON with default model and keyCount', async () => {
