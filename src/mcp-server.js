@@ -1,4 +1,4 @@
-/** @module mcp-server — Sidecar MCP Server (stdio transport) */
+/** @module mcp-server — Amicus MCP Server (stdio transport) */
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -43,15 +43,15 @@ function textResult(text, isError) {
  */
 function computeNextPoll() {
   return {
-    hint: 'Run `sleep 25` in your shell before calling sidecar_status again. This enforces the wait and prevents token-wasting rapid polls.',
+    hint: 'Run `sleep 25` in your shell before calling amicus_status again. This enforces the wait and prevents token-wasting rapid polls.',
     wait_command: 'sleep 25',
   };
 }
 
-const HEADLESS_START_REMINDER = '<system-reminder>IMPORTANT: Before calling sidecar_status, you MUST run `sleep 25` in your shell first. This enforces the polling interval and prevents token waste. Do other useful work while waiting, or run `sleep 25` to block until the next poll window.</system-reminder>';
-const HEADLESS_STATUS_REMINDER = '<system-reminder>IMPORTANT: This sidecar is still running. Before calling sidecar_status again, you MUST run `sleep 25` in your shell first. Each premature poll wastes context tokens for zero benefit. Run `sleep 25` now, then check again.</system-reminder>';
+const HEADLESS_START_REMINDER = '<system-reminder>IMPORTANT: Before calling amicus_status, you MUST run `sleep 25` in your shell first. This enforces the polling interval and prevents token waste. Do other useful work while waiting, or run `sleep 25` to block until the next poll window.</system-reminder>';
+const HEADLESS_STATUS_REMINDER = '<system-reminder>IMPORTANT: This session is still running. Before calling amicus_status again, you MUST run `sleep 25` in your shell first. Each premature poll wastes context tokens for zero benefit. Run `sleep 25` now, then check again.</system-reminder>';
 
-/** Spawn a sidecar CLI process (fire-and-forget) */
+/** Spawn an Amicus CLI process (fire-and-forget) */
 function spawnSidecarProcess(args, sessionDir) {
   const sidecarBin = path.join(__dirname, '..', 'bin', 'amicus.js');
   let stderrFd = 'ignore';
@@ -72,7 +72,7 @@ function spawnSidecarProcess(args, sessionDir) {
 
 /** Tool handler implementations */
 const handlers = {
-  async sidecar_start(input, project) {
+  async amicus_start(input, project) {
     // Validate all inputs before any session creation
     const { validateStartInputs } = require('./utils/input-validators');
     const validation = validateStartInputs(input);
@@ -204,7 +204,7 @@ const handlers = {
         // Return immediately
         const body = JSON.stringify({
           taskId, status: 'running', mode: 'headless',
-          message: 'Sidecar started in headless mode. Use sidecar_status to check progress.',
+          message: 'Amicus started in headless mode. Use amicus_status to check progress.',
         });
         return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
       } catch (err) {
@@ -220,7 +220,7 @@ const handlers = {
     // Feature flag disabled (or shared server failed): fall back to per-process spawn
     let child;
     try { child = spawnSidecarProcess(args, sessionDir); } catch (err) {
-      return textResult(`Failed to start sidecar: ${err.message}`, true);
+      return textResult(`Failed to start Amicus: ${err.message}`, true);
     }
 
     if (child && child.pid) {
@@ -237,10 +237,10 @@ const handlers = {
     const isHeadless = !!input.noUi;
     const mode = isHeadless ? 'headless' : 'interactive';
     const message = isHeadless
-      ? 'Sidecar started in headless mode. Use sidecar_status to check progress.'
-      : 'Sidecar opened in interactive mode. Do NOT poll for status. ' +
-        "Tell the user: 'Let me know when you're done with the sidecar and have clicked Fold.' " +
-        'Then wait for the user to tell you. Use sidecar_read to get results once they confirm.';
+      ? 'Amicus started in headless mode. Use amicus_status to check progress.'
+      : 'Amicus opened in interactive mode. Do NOT poll for status. ' +
+        "Tell the user: 'Let me know when you're done with the session and have clicked Fold.' " +
+        'Then wait for the user to tell you. Use amicus_read to get results once they confirm.';
 
     const body = JSON.stringify({ taskId, status: 'running', mode, message });
     if (isHeadless) {
@@ -249,7 +249,7 @@ const handlers = {
     return textResult(body);
   },
 
-  async sidecar_status(input, project) {
+  async amicus_status(input, project) {
     const cwd = project || getProjectDir(input.project);
     const sessionDir = safeSessionDir(cwd, input.taskId);
     const metadata = readMetadata(input.taskId, cwd);
@@ -283,8 +283,8 @@ const handlers = {
         response.stalled = true;
         response.stalledForSeconds = Math.floor(progress.lastActivityMs / 1000);
         response.recovery = `This session appears stalled (no activity for ${response.stalledForSeconds}s). ` +
-          `To recover: 1) call sidecar_abort with taskId "${input.taskId}" ` +
-          `2) call sidecar_resume with taskId "${input.taskId}" and noUi: true to pick up where it left off.`;
+          `To recover: 1) call amicus_abort with taskId "${input.taskId}" ` +
+          `2) call amicus_resume with taskId "${input.taskId}" and noUi: true to pick up where it left off.`;
       }
 
       if (metadata.headless) {
@@ -301,7 +301,7 @@ const handlers = {
     return textResult(responseText);
   },
 
-  async sidecar_read(input, project) {
+  async amicus_read(input, project) {
     const cwd = project || getProjectDir(input.project);
     const sessionDir = safeSessionDir(cwd, input.taskId);
     if (!fs.existsSync(sessionDir)) {
@@ -331,7 +331,7 @@ const handlers = {
     return textResult(header + summaryText);
   },
 
-  async sidecar_list(input, project) {
+  async amicus_list(input, project) {
     const cwd = project || getProjectDir(input.project);
     // Scan BOTH roots: canonical amicus first, then legacy sidecar (shim).
     const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
@@ -371,7 +371,7 @@ const handlers = {
     return textResult(JSON.stringify(sessions, null, 2));
   },
 
-  async sidecar_resume(input, project) {
+  async amicus_resume(input, project) {
     const cwd = project || getProjectDir(input.project);
     const sessionDir = safeSessionDir(cwd, input.taskId);
     const args = ['resume', input.taskId, '--client', 'cowork', '--cwd', cwd];
@@ -382,11 +382,11 @@ const handlers = {
     }
     return textResult(JSON.stringify({
       taskId: input.taskId, status: 'running',
-      message: 'Session resumed. Use sidecar_status to check progress.',
+      message: 'Session resumed. Use amicus_status to check progress.',
     }));
   },
 
-  async sidecar_continue(input, project) {
+  async amicus_continue(input, project) {
     if (input.model) {
       const modelCheck = tryResolveModel(input.model);
       if (modelCheck.error) {
@@ -412,11 +412,11 @@ const handlers = {
     }
     return textResult(JSON.stringify({
       taskId: newTaskId, status: 'running',
-      message: 'Continuation started. Use sidecar_status to check progress.',
+      message: 'Continuation started. Use amicus_status to check progress.',
     }));
   },
 
-  async sidecar_abort(input, project) {
+  async amicus_abort(input, project) {
     const cwd = project || getProjectDir(input.project);
     const metadata = readMetadata(input.taskId, cwd);
     if (!metadata) { return textResult(`Session ${input.taskId} not found.`, true); }
@@ -427,7 +427,7 @@ const handlers = {
     if (metadata.pid) {
       try { process.kill(metadata.pid, 'SIGTERM'); } catch (err) {
         if (err.code !== 'ESRCH') {
-          logger.warn('Failed to kill sidecar process', { pid: metadata.pid, error: err.message });
+          logger.warn('Failed to kill Amicus process', { pid: metadata.pid, error: err.message });
         }
       }
     }
@@ -439,38 +439,49 @@ const handlers = {
 
     return textResult(JSON.stringify({
       taskId: input.taskId, status: 'aborted',
-      message: 'Session abort requested. The sidecar process will terminate shortly.',
+      message: 'Session abort requested. The Amicus process will terminate shortly.',
     }));
   },
 
-  async sidecar_setup() {
+  async amicus_setup() {
     try { spawnSidecarProcess(['setup']); } catch (err) {
       return textResult(`Failed to launch setup: ${err.message}`, true);
     }
     return textResult('Setup wizard launched. The Electron window should appear on your desktop.');
   },
-  async sidecar_guide() { return textResult(getGuideText()); },
+  async amicus_guide() { return textResult(getGuideText()); },
+};
+
+// DEPRECATED(amicus-shim): also register each tool under its legacy sidecar_*
+// name so existing agent scripts keep working. Remove in a future revision.
+const LEGACY_TOOL_ALIASES = {
+  amicus_start: 'sidecar_start', amicus_status: 'sidecar_status',
+  amicus_read: 'sidecar_read', amicus_list: 'sidecar_list',
+  amicus_resume: 'sidecar_resume', amicus_continue: 'sidecar_continue',
+  amicus_setup: 'sidecar_setup', amicus_abort: 'sidecar_abort',
+  amicus_guide: 'sidecar_guide',
 };
 
 /** Start the MCP server on stdio transport */
 async function startMcpServer() {
   const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
   const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-  const server = new McpServer({ name: 'sidecar', version: require('../package.json').version });
+  const server = new McpServer({ name: 'amicus', version: require('../package.json').version });
 
   for (const tool of getTools()) {
-    server.registerTool(
-      tool.name,
+    const register = (name) => server.registerTool(
+      name,
       { description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations },
       async (input) => {
-        try {
-          return await handlers[tool.name](input, getProjectDir(input.project));
-        } catch (err) {
-          logger.error(`MCP tool error: ${tool.name}`, { error: err.message });
+        try { return await handlers[tool.name](input, getProjectDir(input.project)); }
+        catch (err) {
+          logger.error(`MCP tool error: ${name}`, { error: err.message });
           return textResult(`Error: ${err.message}`, true);
         }
       }
     );
+    register(tool.name);
+    if (LEGACY_TOOL_ALIASES[tool.name]) { register(LEGACY_TOOL_ALIASES[tool.name]); }
   }
   process.on('SIGTERM', () => {
     sharedServer.shutdown();
@@ -482,7 +493,7 @@ async function startMcpServer() {
   });
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write('[sidecar] MCP server running on stdio\n');
+  process.stderr.write('[amicus] MCP server running on stdio\n');
 }
 
-module.exports = { handlers, startMcpServer, getProjectDir };
+module.exports = { handlers, startMcpServer, getProjectDir, LEGACY_TOOL_ALIASES };

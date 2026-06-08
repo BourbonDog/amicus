@@ -1,10 +1,10 @@
 /**
  * MCP Headless E2E Integration Test
  *
- * Spawns a real MCP server over stdio, calls sidecar_start with noUi=true
+ * Spawns a real MCP server over stdio, calls amicus_start with noUi=true
  * to launch a real headless sidecar that calls a real LLM (Gemini via
- * OpenRouter), polls sidecar_status until completion, then reads results
- * with sidecar_read.
+ * OpenRouter), polls amicus_status until completion, then reads results
+ * with amicus_read.
  *
  * Requires OPENROUTER_API_KEY to run. Skipped automatically when missing.
  */
@@ -14,7 +14,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'sidecar.js');
+const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 
 const HAS_API_KEY = !!(
@@ -102,14 +102,14 @@ function createMcpClient() {
   };
 }
 
-/** Poll sidecar_status until terminal state or timeout.
+/** Poll amicus_status until terminal state or timeout.
  * Collects all intermediate poll results for assertions. */
 async function pollUntilDone(client, taskId, project, { intervalMs = 5000, timeoutMs = 120000 } = {}) {
   const start = Date.now();
   const polls = [];
   while (Date.now() - start < timeoutMs) {
     const result = await client.request('tools/call', {
-      name: 'sidecar_status',
+      name: 'amicus_status',
       arguments: { taskId, project },
     });
 
@@ -138,7 +138,7 @@ async function pollUntilDone(client, taskId, project, { intervalMs = 5000, timeo
   return { final: { status: 'timeout', elapsed: `${Math.round((Date.now() - start) / 1000)}s` }, polls };
 }
 
-describeE2E('MCP Headless E2E: real LLM via sidecar_start', () => {
+describeE2E('MCP Headless E2E: real LLM via amicus_start', () => {
   let client;
   let tmpDir;
 
@@ -166,7 +166,7 @@ describeE2E('MCP Headless E2E: real LLM via sidecar_start', () => {
   it('start -> poll status -> read summary (full lifecycle)', async () => {
     // Step 1: Start a headless sidecar with a trivial prompt
     const startResult = await client.request('tools/call', {
-      name: 'sidecar_start',
+      name: 'amicus_start',
       arguments: {
         prompt: 'Reply with exactly this text and nothing else: SIDECAR_E2E_OK',
         model: 'gemini-flash',
@@ -186,7 +186,7 @@ describeE2E('MCP Headless E2E: real LLM via sidecar_start', () => {
     const { taskId } = startData;
     process.stderr.write(`  [e2e] Started task ${taskId}\n`);
 
-    // Step 2: Poll sidecar_status until it completes (allow up to 3 min)
+    // Step 2: Poll amicus_status until it completes (allow up to 3 min)
     const { final: finalStatus, polls } = await pollUntilDone(client, taskId, tmpDir, { timeoutMs: 180000 });
 
     process.stderr.write(`  [e2e] Final status: ${JSON.stringify(finalStatus)}\n`);
@@ -227,7 +227,7 @@ describeE2E('MCP Headless E2E: real LLM via sidecar_start', () => {
 
     // Step 4: Read the summary
     const readResult = await client.request('tools/call', {
-      name: 'sidecar_read',
+      name: 'amicus_read',
       arguments: { taskId, project: tmpDir },
     });
 
@@ -250,7 +250,7 @@ describeE2E('MCP Headless E2E: real LLM via sidecar_start', () => {
 
   it('list shows the completed session', async () => {
     const listResult = await client.request('tools/call', {
-      name: 'sidecar_list',
+      name: 'amicus_list',
       arguments: { project: tmpDir },
     });
 

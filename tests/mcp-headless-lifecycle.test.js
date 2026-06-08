@@ -1,7 +1,7 @@
 /**
  * MCP Headless Lifecycle Integration Tests
  *
- * Tests the full lifecycle of MCP-driven headless sidecar sessions by calling
+ * Tests the full lifecycle of MCP-driven headless Amicus sessions by calling
  * MCP handlers directly with realistic filesystem state. No real processes
  * are spawned — all state is created via fs in temp directories.
  *
@@ -90,8 +90,8 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', content: 'Found 3 potential issues in token validation.' },
       ]);
 
-      // Step 3: Call sidecar_status - verify status=running
-      const statusResult = await handlers.sidecar_status({ taskId }, tmpDir);
+      // Step 3: Call amicus_status - verify status=running
+      const statusResult = await handlers.amicus_status({ taskId }, tmpDir);
       const statusData = parseResult(statusResult);
       expect(statusData.taskId).toBe(taskId);
       expect(statusData.status).toBe('running');
@@ -116,13 +116,13 @@ describe('MCP Headless Lifecycle Integration', () => {
 
       writeSummary(sessDir, '## Auth Module Analysis\n\nFixed 3 issues in token validation.');
 
-      // Step 6: Call sidecar_status again - verify status=complete
-      const finalStatus = await handlers.sidecar_status({ taskId }, tmpDir);
+      // Step 6: Call amicus_status again - verify status=complete
+      const finalStatus = await handlers.amicus_status({ taskId }, tmpDir);
       const finalData = parseResult(finalStatus);
       expect(finalData.status).toBe('complete');
 
-      // Step 7: Call sidecar_read - verify summary content
-      const readResult = await handlers.sidecar_read({ taskId }, tmpDir);
+      // Step 7: Call amicus_read - verify summary content
+      const readResult = await handlers.amicus_read({ taskId }, tmpDir);
       expect(getText(readResult)).toContain('Auth Module Analysis');
       expect(getText(readResult)).toContain('Fixed 3 issues');
       expect(readResult.isError).toBeUndefined();
@@ -135,7 +135,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       const sessDir = createSession(tmpDir, taskId, { status: 'running' });
 
       // No conversation yet - conversation mode returns no data
-      const noConv = await handlers.sidecar_read({ taskId, mode: 'conversation' }, tmpDir);
+      const noConv = await handlers.amicus_read({ taskId, mode: 'conversation' }, tmpDir);
       expect(getText(noConv)).toContain('No conversation recorded');
 
       // Write 2 entries
@@ -144,7 +144,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', content: 'Step 2 complete.' },
       ]);
 
-      const conv2 = await handlers.sidecar_read({ taskId, mode: 'conversation' }, tmpDir);
+      const conv2 = await handlers.amicus_read({ taskId, mode: 'conversation' }, tmpDir);
       expect(getText(conv2)).toContain('Step 1 complete');
       expect(getText(conv2)).toContain('Step 2 complete');
 
@@ -157,7 +157,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', content: 'Step 5: All done.' },
       ]);
 
-      const conv5 = await handlers.sidecar_read({ taskId, mode: 'conversation' }, tmpDir);
+      const conv5 = await handlers.amicus_read({ taskId, mode: 'conversation' }, tmpDir);
       const text = getText(conv5);
       expect(text).toContain('Step 5: All done');
       // Count the JSONL lines
@@ -175,8 +175,8 @@ describe('MCP Headless Lifecycle Integration', () => {
         pid: 2147483647,
       });
 
-      // sidecar_abort should handle ESRCH gracefully
-      const result = await handlers.sidecar_abort({ taskId }, tmpDir);
+      // amicus_abort should handle ESRCH gracefully
+      const result = await handlers.amicus_abort({ taskId }, tmpDir);
       expect(result.isError).toBeUndefined();
       const data = parseResult(result);
       expect(data.status).toBe('aborted');
@@ -195,9 +195,9 @@ describe('MCP Headless Lifecycle Integration', () => {
         pid: 2147483647,
       });
 
-      await handlers.sidecar_abort({ taskId }, tmpDir);
+      await handlers.amicus_abort({ taskId }, tmpDir);
 
-      const status = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status = await handlers.amicus_status({ taskId }, tmpDir);
       const data = parseResult(status);
       expect(data.status).toBe('aborted');
     });
@@ -215,12 +215,12 @@ describe('MCP Headless Lifecycle Integration', () => {
       // Write partial output as summary
       writeSummary(sessDir, '## Partial Results\n\nTask timed out after 15 minutes. Partial analysis below.');
 
-      const status = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status = await handlers.amicus_status({ taskId }, tmpDir);
       const data = parseResult(status);
       expect(data.status).toBe('complete');
 
-      // sidecar_read returns partial summary
-      const read = await handlers.sidecar_read({ taskId }, tmpDir);
+      // amicus_read returns partial summary
+      const read = await handlers.amicus_read({ taskId }, tmpDir);
       expect(getText(read)).toContain('Partial Results');
       expect(getText(read)).toContain('timed out');
     });
@@ -234,7 +234,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         briefing: 'Complex refactoring task',
       });
 
-      const read = await handlers.sidecar_read({ taskId, mode: 'metadata' }, tmpDir);
+      const read = await handlers.amicus_read({ taskId, mode: 'metadata' }, tmpDir);
       const meta = JSON.parse(getText(read));
       expect(meta.timedOut).toBe(true);
       expect(meta.model).toBe('o3');
@@ -254,7 +254,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
 
       try {
-        const result = await handlers.sidecar_abort({ taskId }, tmpDir);
+        const result = await handlers.amicus_abort({ taskId }, tmpDir);
         const data = parseResult(result);
         expect(data.status).toBe('aborted');
         expect(data.taskId).toBe(taskId);
@@ -263,7 +263,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGTERM');
 
         // Verify status persisted
-        const status = await handlers.sidecar_status({ taskId }, tmpDir);
+        const status = await handlers.amicus_status({ taskId }, tmpDir);
         expect(parseResult(status).status).toBe('aborted');
       } finally {
         killSpy.mockRestore();
@@ -274,12 +274,12 @@ describe('MCP Headless Lifecycle Integration', () => {
       const taskId = 'abort-done-001';
       createSession(tmpDir, taskId, { status: 'complete' });
 
-      const result = await handlers.sidecar_abort({ taskId }, tmpDir);
+      const result = await handlers.amicus_abort({ taskId }, tmpDir);
       expect(getText(result)).toContain('not running');
     });
 
     test('abort a nonexistent session returns error', async () => {
-      const result = await handlers.sidecar_abort({ taskId: 'nope-nope' }, tmpDir);
+      const result = await handlers.amicus_abort({ taskId: 'nope-nope' }, tmpDir);
       expect(result.isError).toBe(true);
       expect(getText(result)).toContain('not found');
     });
@@ -292,7 +292,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       });
 
       const before = new Date().toISOString();
-      await handlers.sidecar_abort({ taskId }, tmpDir);
+      await handlers.amicus_abort({ taskId }, tmpDir);
 
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', taskId);
       const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
@@ -350,18 +350,18 @@ describe('MCP Headless Lifecycle Integration', () => {
       expect(content).toContain('ECONNREFUSED');
 
       // Status still shows error state
-      const status = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status = await handlers.amicus_status({ taskId }, tmpDir);
       const data = parseResult(status);
       expect(data.status).toBe('error');
 
       // Metadata mode shows error details
-      const metaResult = await handlers.sidecar_read({ taskId, mode: 'metadata' }, tmpDir);
+      const metaResult = await handlers.amicus_read({ taskId, mode: 'metadata' }, tmpDir);
       const meta = JSON.parse(getText(metaResult));
       expect(meta.error).toContain('crashed');
     });
   });
 
-  describe('Progress tracking through sidecar_status', () => {
+  describe('Progress tracking through amicus_status', () => {
     test('status reflects progress.json lifecycle stages', async () => {
       const taskId = 'progress-stage-001';
       const { writeProgress } = require('../src/sidecar/progress');
@@ -372,7 +372,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         pid: process.pid,
       });
 
-      const status1 = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status1 = await handlers.amicus_status({ taskId }, tmpDir);
       const data1 = parseResult(status1);
       expect(data1.status).toBe('running');
       expect(data1.latest).toBe('Starting up...');
@@ -381,7 +381,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       // Step 2: Write initializing stage
       writeProgress(sessDir, 'initializing');
 
-      const status2 = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status2 = await handlers.amicus_status({ taskId }, tmpDir);
       const data2 = parseResult(status2);
       expect(data2.stage).toBe('initializing');
       expect(data2.latest).toBe('Starting OpenCode server...');
@@ -390,7 +390,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       // Step 3: Write prompt_sent stage
       writeProgress(sessDir, 'prompt_sent');
 
-      const status3 = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status3 = await handlers.amicus_status({ taskId }, tmpDir);
       const data3 = parseResult(status3);
       expect(data3.stage).toBe('prompt_sent');
       expect(data3.latest).toBe('Briefing delivered, waiting for response...');
@@ -410,7 +410,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', type: 'tool_use', toolCall: { id: 't1', name: 'web_search' } },
       ]);
 
-      const status4 = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status4 = await handlers.amicus_status({ taskId }, tmpDir);
       const data4 = parseResult(status4);
       expect(data4.stage).toBe('receiving');
       expect(data4.latest).toBe('Using web_search');
@@ -428,7 +428,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         stageLabel: 'Calling tool: web_search',
       });
 
-      const status5 = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status5 = await handlers.amicus_status({ taskId }, tmpDir);
       const data5 = parseResult(status5);
       // extractLatest returns "Executing tool call..." but progress.json
       // has latestTool, so readProgress overrides with "Calling tool: web_search"
@@ -442,7 +442,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', content: 'Here are the search results for your query.' },
       ]);
 
-      const status6 = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status6 = await handlers.amicus_status({ taskId }, tmpDir);
       const data6 = parseResult(status6);
       expect(data6.messages).toBe(2);
       expect(data6.latest).toBe('Here are the search results for your query.');
@@ -461,7 +461,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', toolCall: { name: 'Read', id: 'r1' } },
       ]);
 
-      const status = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status = await handlers.amicus_status({ taskId }, tmpDir);
       const data = parseResult(status);
       expect(data.messages).toBe(2);
       expect(data.latest).toBe('Using Read');
@@ -475,11 +475,11 @@ describe('MCP Headless Lifecycle Integration', () => {
       createSession(tmpDir, taskId, { status: 'running' });
 
       // Reading conversation mode when no file exists
-      const conv = await handlers.sidecar_read({ taskId, mode: 'conversation' }, tmpDir);
+      const conv = await handlers.amicus_read({ taskId, mode: 'conversation' }, tmpDir);
       expect(getText(conv)).toContain('No conversation recorded');
 
       // Status is still running
-      const status = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status = await handlers.amicus_status({ taskId }, tmpDir);
       expect(parseResult(status).status).toBe('running');
     });
 
@@ -488,7 +488,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       createSession(tmpDir, taskId, { status: 'running' });
 
       // Reading summary when session is still running
-      const summary = await handlers.sidecar_read({ taskId }, tmpDir);
+      const summary = await handlers.amicus_read({ taskId }, tmpDir);
       expect(getText(summary)).toContain('No summary available');
     });
   });
@@ -500,24 +500,24 @@ describe('MCP Headless Lifecycle Integration', () => {
       createSession(tmpDir, 'abort-1', { status: 'aborted', createdAt: '2026-03-08T08:00:00Z' });
 
       // List all
-      const all = await handlers.sidecar_list({}, tmpDir);
+      const all = await handlers.amicus_list({}, tmpDir);
       const allData = parseResult(all);
       expect(allData.length).toBe(3);
 
       // Filter running
-      const running = await handlers.sidecar_list({ status: 'running' }, tmpDir);
+      const running = await handlers.amicus_list({ status: 'running' }, tmpDir);
       const runData = parseResult(running);
       expect(runData.length).toBe(1);
       expect(runData[0].id).toBe('run-1');
 
       // Filter complete
-      const complete = await handlers.sidecar_list({ status: 'complete' }, tmpDir);
+      const complete = await handlers.amicus_list({ status: 'complete' }, tmpDir);
       const completeData = parseResult(complete);
       expect(completeData.length).toBe(1);
       expect(completeData[0].id).toBe('done-1');
 
       // Filter aborted
-      const aborted = await handlers.sidecar_list({ status: 'aborted' }, tmpDir);
+      const aborted = await handlers.amicus_list({ status: 'aborted' }, tmpDir);
       const abortedData = parseResult(aborted);
       expect(abortedData.length).toBe(1);
       expect(abortedData[0].id).toBe('abort-1');
@@ -528,7 +528,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       createSession(tmpDir, 'second', { status: 'complete', createdAt: '2026-03-08T09:00:00Z' });
       createSession(tmpDir, 'third', { status: 'complete', createdAt: '2026-03-08T10:00:00Z' });
 
-      const result = await handlers.sidecar_list({}, tmpDir);
+      const result = await handlers.amicus_list({}, tmpDir);
       const data = parseResult(result);
       expect(data[0].id).toBe('third');
       expect(data[1].id).toBe('second');
@@ -546,7 +546,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         createdAt: twoMinAgo,
       });
 
-      const status = await handlers.sidecar_status({ taskId }, tmpDir);
+      const status = await handlers.amicus_status({ taskId }, tmpDir);
       const data = parseResult(status);
       // Should show approximately 2m in the elapsed field
       expect(data.elapsed).toMatch(/^2m \d+s$/);
@@ -559,7 +559,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       const sessDir = createSession(tmpDir, taskId, { status: 'complete' });
       writeSummary(sessDir, '## Summary Content\n\nDone.');
 
-      const result = await handlers.sidecar_read({ taskId }, tmpDir);
+      const result = await handlers.amicus_read({ taskId }, tmpDir);
       expect(getText(result)).toContain('Summary Content');
     });
 
@@ -571,7 +571,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         briefing: 'Test read modes',
       });
 
-      const result = await handlers.sidecar_read({ taskId, mode: 'metadata' }, tmpDir);
+      const result = await handlers.amicus_read({ taskId, mode: 'metadata' }, tmpDir);
       const meta = JSON.parse(getText(result));
       expect(meta.model).toBe('gpt-4o');
       expect(meta.briefing).toBe('Test read modes');
@@ -585,7 +585,7 @@ describe('MCP Headless Lifecycle Integration', () => {
         { role: 'assistant', content: 'World' },
       ]);
 
-      const result = await handlers.sidecar_read({ taskId, mode: 'conversation' }, tmpDir);
+      const result = await handlers.amicus_read({ taskId, mode: 'conversation' }, tmpDir);
       const text = getText(result);
       expect(text).toContain('"role":"user"');
       expect(text).toContain('"role":"assistant"');
@@ -594,13 +594,13 @@ describe('MCP Headless Lifecycle Integration', () => {
 
   describe('Error handling', () => {
     test('status for nonexistent session returns error', async () => {
-      const result = await handlers.sidecar_status({ taskId: 'no-such-task' }, tmpDir);
+      const result = await handlers.amicus_status({ taskId: 'no-such-task' }, tmpDir);
       expect(result.isError).toBe(true);
       expect(getText(result)).toContain('not found');
     });
 
     test('read for nonexistent session returns error', async () => {
-      const result = await handlers.sidecar_read({ taskId: 'no-such-task' }, tmpDir);
+      const result = await handlers.amicus_read({ taskId: 'no-such-task' }, tmpDir);
       expect(result.isError).toBe(true);
       expect(getText(result)).toContain('not found');
     });

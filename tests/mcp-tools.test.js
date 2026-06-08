@@ -2,7 +2,7 @@
  * MCP Tool Definitions Tests
  *
  * Tests for tool schema structure, required tools, input schema validation,
- * and the sidecar_guide text content.
+ * and the amicus_guide text content.
  */
 
 const { getTools, getGuideText, safeTaskId, safeModel } = require('../src/mcp-tools');
@@ -26,15 +26,15 @@ describe('MCP Tool Definitions', () => {
   test('has all required tools', () => {
     const names = TOOLS.map(t => t.name);
 
-    expect(names).toContain('sidecar_start');
-    expect(names).toContain('sidecar_status');
-    expect(names).toContain('sidecar_read');
-    expect(names).toContain('sidecar_list');
-    expect(names).toContain('sidecar_resume');
-    expect(names).toContain('sidecar_continue');
-    expect(names).toContain('sidecar_setup');
-    expect(names).toContain('sidecar_guide');
-    expect(names).toContain('sidecar_abort');
+    expect(names).toContain('amicus_start');
+    expect(names).toContain('amicus_status');
+    expect(names).toContain('amicus_read');
+    expect(names).toContain('amicus_list');
+    expect(names).toContain('amicus_resume');
+    expect(names).toContain('amicus_continue');
+    expect(names).toContain('amicus_setup');
+    expect(names).toContain('amicus_guide');
+    expect(names).toContain('amicus_abort');
   });
 
   test('has exactly 9 tools', () => {
@@ -47,9 +47,9 @@ describe('MCP Tool Definitions', () => {
     expect(names).toHaveLength(uniqueNames.length);
   });
 
-  test('all tool names use snake_case with sidecar_ prefix', () => {
+  test('all tool names use snake_case with amicus_ prefix', () => {
     for (const tool of TOOLS) {
-      expect(tool.name).toMatch(/^sidecar_[a-z_]+$/);
+      expect(tool.name).toMatch(/^amicus_[a-z_]+$/);
     }
   });
 
@@ -60,7 +60,7 @@ describe('MCP Tool Definitions', () => {
   });
 
   test('model description contains dynamic alias keys', () => {
-    const startTool = TOOLS.find(t => t.name === 'sidecar_start');
+    const startTool = TOOLS.find(t => t.name === 'amicus_start');
     const modelDesc = startTool.inputSchema.model.description;
     expect(modelDesc).toContain('codex');
     expect(modelDesc).toContain('opus');
@@ -68,8 +68,8 @@ describe('MCP Tool Definitions', () => {
     expect(modelDesc).toContain('deepseek');
   });
 
-  test('sidecar_start description does not contain brand or model names', () => {
-    const startTool = TOOLS.find(t => t.name === 'sidecar_start');
+  test('amicus_start description does not contain brand or model names', () => {
+    const startTool = TOOLS.find(t => t.name === 'amicus_start');
     const desc = startTool.description.toLowerCase();
     expect(desc).not.toContain('gemini');
     expect(desc).not.toContain('gpt');
@@ -78,7 +78,7 @@ describe('MCP Tool Definitions', () => {
   });
 
   test('model param description does not contain specific model IDs', () => {
-    const startTool = TOOLS.find(t => t.name === 'sidecar_start');
+    const startTool = TOOLS.find(t => t.name === 'amicus_start');
     const modelDesc = startTool.inputSchema.model.description;
     // Strip the parenthesized alias list before checking — alias names like
     // "gemini-3.1" are fine, but full IDs like "openrouter/google/gemini-3-flash-preview" are not
@@ -88,7 +88,7 @@ describe('MCP Tool Definitions', () => {
     expect(descWithoutAliases).not.toMatch(/gpt-\d/);
   });
 
-  test('sidecar_guide guide text does not contain hardcoded model IDs in prose', () => {
+  test('amicus_guide guide text does not contain hardcoded model IDs in prose', () => {
     const guide = getGuideText();
     // The alias table rows are fine (dynamic), but prose should not name specific models
     const linesWithoutTable = guide.split('\n')
@@ -99,11 +99,11 @@ describe('MCP Tool Definitions', () => {
     expect(prose).not.toContain('gemini-3-flash-preview');
   });
 
-  describe('sidecar_start', () => {
+  describe('amicus_start', () => {
     let startTool;
 
     beforeAll(() => {
-      startTool = TOOLS.find(t => t.name === 'sidecar_start');
+      startTool = TOOLS.find(t => t.name === 'amicus_start');
     });
 
     test('has prompt in input schema', () => {
@@ -161,128 +161,128 @@ describe('MCP Tool Definitions', () => {
     });
 
     test('description contains mode routing guidance', () => {
-      const tool = getTools().find(t => t.name === 'sidecar_start');
+      const tool = getTools().find(t => t.name === 'amicus_start');
       expect(tool.description).toContain('When in doubt, use interactive');
       expect(tool.description).toContain('does NOT need to monitor');
     });
   });
 
-  describe('sidecar_status', () => {
+  describe('amicus_status', () => {
     test('has taskId in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_status');
+      const tool = TOOLS.find(t => t.name === 'amicus_status');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
   });
 
-  describe('sidecar_read', () => {
+  describe('amicus_read', () => {
     test('has taskId in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_read');
+      const tool = TOOLS.find(t => t.name === 'amicus_read');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
 
     test('has mode in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_read');
+      const tool = TOOLS.find(t => t.name === 'amicus_read');
       expect(tool.inputSchema).toHaveProperty('mode');
     });
   });
 
-  describe('sidecar_list', () => {
+  describe('amicus_list', () => {
     test('has status in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_list');
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
       expect(tool.inputSchema).toHaveProperty('status');
     });
   });
 
-  describe('sidecar_resume', () => {
+  describe('amicus_resume', () => {
     test('has taskId in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_resume');
+      const tool = TOOLS.find(t => t.name === 'amicus_resume');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
 
     test('has noUi in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_resume');
+      const tool = TOOLS.find(t => t.name === 'amicus_resume');
       expect(tool.inputSchema).toHaveProperty('noUi');
     });
 
     test('has timeout in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_resume');
+      const tool = TOOLS.find(t => t.name === 'amicus_resume');
       expect(tool.inputSchema).toHaveProperty('timeout');
     });
   });
 
-  describe('sidecar_continue', () => {
+  describe('amicus_continue', () => {
     test('has taskId in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
 
     test('has prompt in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema).toHaveProperty('prompt');
     });
 
     test('has model in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema).toHaveProperty('model');
     });
 
     test('has noUi in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema).toHaveProperty('noUi');
     });
 
     test('has timeout in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema).toHaveProperty('timeout');
     });
 
     test('has contextTurns in input schema with correct description', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema.contextTurns.description).toContain('Default: 80000 tokens.');
     });
 
     test('has contextMaxTokens in input schema with correct description', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_continue');
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema.contextMaxTokens.description).toContain('Default: 80000.');
     });
   });
 
-  describe('sidecar_setup', () => {
+  describe('amicus_setup', () => {
     test('has empty input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_setup');
+      const tool = TOOLS.find(t => t.name === 'amicus_setup');
       expect(Object.keys(tool.inputSchema)).toHaveLength(0);
     });
   });
 
-  describe('sidecar_guide', () => {
+  describe('amicus_guide', () => {
     test('has empty input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_guide');
+      const tool = TOOLS.find(t => t.name === 'amicus_guide');
       expect(Object.keys(tool.inputSchema)).toHaveLength(0);
     });
   });
 
-  describe('sidecar_abort', () => {
+  describe('amicus_abort', () => {
     test('has taskId in input schema', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_abort');
+      const tool = TOOLS.find(t => t.name === 'amicus_abort');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
 
     test('description mentions abort', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_abort');
+      const tool = TOOLS.find(t => t.name === 'amicus_abort');
       expect(tool.description.toLowerCase()).toContain('abort');
     });
   });
 
   describe('polling guidance in descriptions', () => {
-    test('sidecar_start description mentions interactive and headless modes', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_start');
+    test('amicus_start description mentions interactive and headless modes', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_start');
       expect(tool.description).toContain('headless');
       expect(tool.description).toContain('interactive');
       expect(tool.description).toContain('do not poll');
     });
 
-    test('sidecar_status description mentions headless mode', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_status');
+    test('amicus_status description mentions headless mode', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_status');
       expect(tool.description).toContain('headless');
     });
   });
@@ -292,14 +292,14 @@ describe('MCP Tool Definitions', () => {
       const guide = getGuideText();
       expect(typeof guide).toBe('string');
       expect(guide.length).toBeGreaterThan(100);
-      expect(guide).toContain('sidecar');
+      expect(guide).toContain('Amicus');
     });
 
     test('contains workflow instructions', () => {
       const guide = getGuideText();
-      expect(guide).toContain('sidecar_start');
-      expect(guide).toContain('sidecar_status');
-      expect(guide).toContain('sidecar_read');
+      expect(guide).toContain('amicus_start');
+      expect(guide).toContain('amicus_status');
+      expect(guide).toContain('amicus_read');
     });
 
     test('contains agent selection guidance', () => {
@@ -381,8 +381,8 @@ describe('MCP Tool Definitions', () => {
 
   describe('MCP tool schemas include project param', () => {
     const toolsWithProject = [
-      'sidecar_start', 'sidecar_status', 'sidecar_read',
-      'sidecar_list', 'sidecar_resume', 'sidecar_continue', 'sidecar_abort',
+      'amicus_start', 'amicus_status', 'amicus_read',
+      'amicus_list', 'amicus_resume', 'amicus_continue', 'amicus_abort',
     ];
 
     for (const name of toolsWithProject) {
@@ -393,13 +393,13 @@ describe('MCP Tool Definitions', () => {
       });
     }
 
-    test('sidecar_setup does NOT have project parameter', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_setup');
+    test('amicus_setup does NOT have project parameter', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_setup');
       expect(tool.inputSchema.project).toBeUndefined();
     });
 
-    test('sidecar_guide does NOT have project parameter', () => {
-      const tool = TOOLS.find(t => t.name === 'sidecar_guide');
+    test('amicus_guide does NOT have project parameter', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_guide');
       expect(tool.inputSchema.project).toBeUndefined();
     });
   });

@@ -1,7 +1,7 @@
 /**
  * Shared Server E2E Integration Test
  *
- * Spawns a real MCP server, fires multiple concurrent sidecar_start calls
+ * Spawns a real MCP server, fires multiple concurrent amicus_start calls
  * using Gemini, verifies they all complete on a single shared server,
  * monitors RSS memory throughout, and checks cleanup.
  *
@@ -15,7 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'sidecar.js');
+const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 
 const HAS_API_KEY = !!(
@@ -179,7 +179,7 @@ async function pollUntilDone(client, taskId, project, { intervalMs = 5000, timeo
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const result = await client.request('tools/call', {
-      name: 'sidecar_status',
+      name: 'amicus_status',
       arguments: { taskId, project },
     });
 
@@ -256,14 +256,14 @@ describeE2E('Shared Server E2E: round-robin concurrent sessions with memory moni
   });
 
   it('should handle multiple concurrent sessions on a single shared server', async () => {
-    // Step 1: Fire N concurrent sidecar_start calls
+    // Step 1: Fire N concurrent amicus_start calls
     process.stderr.write(`\n  [e2e] Starting ${SESSION_COUNT} concurrent sessions...\n`);
 
     const startPromises = [];
     for (let i = 0; i < SESSION_COUNT; i++) {
       startPromises.push(
         client.request('tools/call', {
-          name: 'sidecar_start',
+          name: 'amicus_start',
           arguments: {
             prompt: `Reply with exactly: SESSION_${i}_OK. Nothing else.`,
             model: 'gemini',
@@ -324,7 +324,7 @@ describeE2E('Shared Server E2E: round-robin concurrent sessions with memory moni
     // Step 5: Read results to verify LLM actually responded
     for (let i = 0; i < SESSION_COUNT; i++) {
       const readResult = await client.request('tools/call', {
-        name: 'sidecar_read',
+        name: 'amicus_read',
         arguments: { taskId: taskIds[i], project: tmpDir },
       });
       const readText = readResult.result.content[0].text;

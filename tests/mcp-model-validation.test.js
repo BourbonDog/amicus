@@ -1,7 +1,7 @@
 /**
  * MCP Model Validation Tests
  *
- * Tests eager model validation in sidecar_start and sidecar_continue
+ * Tests eager model validation in amicus_start and amicus_continue
  * MCP handlers. Invalid models should return isError: true immediately
  * instead of spawning a child process that crashes silently.
  */
@@ -33,7 +33,7 @@ describe('MCP eager model validation', () => {
     );
   }
 
-  describe('sidecar_start', () => {
+  describe('amicus_start', () => {
     test('returns isError for unknown alias', async () => {
       writeConfig({
         default: 'gemini',
@@ -49,7 +49,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_start(
+        const result = await handlers.amicus_start(
           { model: 'nonexistent-model', prompt: 'test' }, tempDir
         );
 
@@ -70,7 +70,7 @@ describe('MCP eager model validation', () => {
           spawn: jest.fn(() => ({ pid: 99999, unref: jest.fn() })),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_start(
+        const result = await handlers.amicus_start(
           { model: 'badmodel', prompt: 'test' }, tempDir
         );
 
@@ -94,7 +94,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_start(
+        const result = await handlers.amicus_start(
           { model: 'gemini', prompt: 'test' }, tempDir
         );
 
@@ -120,7 +120,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_start(
+        const result = await handlers.amicus_start(
           { model: 'openrouter/google/gemini-3-flash-preview', prompt: 'test' }, tempDir
         );
 
@@ -140,7 +140,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_start(
+        const result = await handlers.amicus_start(
           { prompt: 'test' }, tempDir
         );
 
@@ -165,7 +165,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_start(
+        const result = await handlers.amicus_start(
           { prompt: 'test' }, tempDir
         );
 
@@ -175,7 +175,7 @@ describe('MCP eager model validation', () => {
     });
   });
 
-  describe('sidecar_continue', () => {
+  describe('amicus_continue', () => {
     test('returns isError for invalid model override', async () => {
       writeConfig({
         default: 'gemini',
@@ -191,7 +191,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_continue(
+        const result = await handlers.amicus_continue(
           { taskId: 'prev-task', prompt: 'continue work', model: 'bogus-alias' }, tempDir
         );
 
@@ -216,7 +216,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_continue(
+        const result = await handlers.amicus_continue(
           { taskId: 'prev-task', prompt: 'continue', model: 'gemini' }, tempDir
         );
 
@@ -235,7 +235,7 @@ describe('MCP eager model validation', () => {
           }),
         }));
         const { handlers } = require('../src/mcp-server');
-        const result = await handlers.sidecar_continue(
+        const result = await handlers.amicus_continue(
           { taskId: 'prev-task', prompt: 'continue' }, tempDir
         );
 

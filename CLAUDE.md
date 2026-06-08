@@ -132,7 +132,7 @@ src/
 ├── headless.js  # * Default timeout: 15 minutes per spec §6.2
 ├── index.js  # Claude Sidecar - Main Module
 ├── jsonl-parser.js  # JSONL Parser
-├── mcp-server.js  # @module mcp-server — Sidecar MCP Server (stdio transport)
+├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
 ├── mcp-tools.js  # Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only)
 ├── opencode-client.js  # OpenCode SDK Client Wrapper
 ├── prompt-builder.js  # System Prompt Builder
@@ -208,7 +208,7 @@ evals/
 | `headless.js` | * Default timeout: 15 minutes per spec §6.2 | `runHeadless()`, `waitForServer()`, `extractSummary()`, `formatFoldOutput()`, `DEFAULT_TIMEOUT()` |
 | `index.js` | Claude Sidecar - Main Module | `APIs()`, `startSidecar()`, `listSidecars()`, `resumeSidecar()`, `continueSidecar()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
-| `mcp-server.js` | @module mcp-server — Sidecar MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()` |
+| `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `LEGACY_TOOL_ALIASES()` |
 | `mcp-tools.js` | Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only) | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `opencode-client.js` | OpenCode SDK Client Wrapper | `parseModelString()`, `createClient()`, `createSession()`, `createChildSession()`, `sendPrompt()` |
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE()` |

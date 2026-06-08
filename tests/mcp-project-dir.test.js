@@ -60,7 +60,7 @@ describe('getProjectDir', () => {
 });
 
 describe('MCP handler dispatch passes input.project', () => {
-  test('sidecar_list uses input.project when provided', async () => {
+  test('amicus_list uses input.project when provided', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-proj-'));
     const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'test1');
     fs.mkdirSync(sessDir, { recursive: true });
@@ -72,7 +72,7 @@ describe('MCP handler dispatch passes input.project', () => {
     try {
       const { handlers } = require('../src/mcp-server');
       // Pass project via input (simulating MCP tool call with no 2nd arg)
-      const result = await handlers.sidecar_list({ project: tmpDir });
+      const result = await handlers.amicus_list({ project: tmpDir });
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toHaveLength(1);
       expect(parsed[0].id).toBe('test1');
@@ -81,7 +81,7 @@ describe('MCP handler dispatch passes input.project', () => {
     }
   });
 
-  test('sidecar_status uses input.project when no 2nd arg', async () => {
+  test('amicus_status uses input.project when no 2nd arg', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-proj-'));
     const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'stat1');
     fs.mkdirSync(sessDir, { recursive: true });
@@ -92,7 +92,7 @@ describe('MCP handler dispatch passes input.project', () => {
 
     try {
       const { handlers } = require('../src/mcp-server');
-      const result = await handlers.sidecar_status({ taskId: 'stat1', project: tmpDir });
+      const result = await handlers.amicus_status({ taskId: 'stat1', project: tmpDir });
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.taskId).toBe('stat1');
       expect(parsed.status).toBe('running');

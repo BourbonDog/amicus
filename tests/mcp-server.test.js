@@ -16,7 +16,7 @@ const os = require('os');
  * jest.doMock (unlike jest.mock) is not hoisted, so it can reference outer variables.
  */
 describe('MCP spawn arg building', () => {
-  test('sidecar_start passes --task-id matching returned taskId', async () => {
+  test('amicus_start passes --task-id matching returned taskId', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -26,7 +26,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      const result = await h.sidecar_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
       const { taskId } = JSON.parse(result.content[0].text);
       const idx = capturedArgs.indexOf('--task-id');
       expect(idx).toBeGreaterThan(-1);
@@ -34,7 +34,7 @@ describe('MCP spawn arg building', () => {
     });
   });
 
-  test('sidecar_start auto-passes --client cowork', async () => {
+  test('amicus_start auto-passes --client cowork', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -44,14 +44,14 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.sidecar_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('cowork');
     });
   });
 
-  test('sidecar_start passes --session-id when parentSession is provided', async () => {
+  test('amicus_start passes --session-id when parentSession is provided', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -61,14 +61,14 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.sidecar_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', parentSession: 'f58f2782-fc8c-41bc-afbc-e0c130b91aaf' }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', parentSession: 'f58f2782-fc8c-41bc-afbc-e0c130b91aaf' }, '/tmp');
       const idx = capturedArgs.indexOf('--session-id');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('f58f2782-fc8c-41bc-afbc-e0c130b91aaf');
     });
   });
 
-  test('sidecar_start passes --timeout when provided', async () => {
+  test('amicus_start passes --timeout when provided', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -78,14 +78,14 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.sidecar_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', timeout: 30 }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', timeout: 30 }, '/tmp');
       const idx = capturedArgs.indexOf('--timeout');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('30');
     });
   });
 
-  test('sidecar_continue returns a NEW taskId, not the parent taskId', async () => {
+  test('amicus_continue returns a NEW taskId, not the parent taskId', async () => {
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
         spawn: jest.fn(() => ({
@@ -95,7 +95,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       const parentTaskId = 'parent123';
-      const result = await h.sidecar_continue(
+      const result = await h.amicus_continue(
         { taskId: parentTaskId, prompt: 'follow-up task', noUi: true }, '/tmp'
       );
       const { taskId } = JSON.parse(result.content[0].text);
@@ -104,7 +104,7 @@ describe('MCP spawn arg building', () => {
     });
   });
 
-  test('sidecar_continue passes --task-id matching the new returned taskId', async () => {
+  test('amicus_continue passes --task-id matching the new returned taskId', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -114,7 +114,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      const result = await h.sidecar_continue(
+      const result = await h.amicus_continue(
         { taskId: 'old-parent', prompt: 'new task', noUi: true }, '/tmp'
       );
       const { taskId: newTaskId } = JSON.parse(result.content[0].text);
@@ -181,9 +181,9 @@ describe('MCP Server Handlers', () => {
 
   test('handlers has all expected tool names', () => {
     const expectedTools = [
-      'sidecar_start', 'sidecar_status', 'sidecar_read',
-      'sidecar_list', 'sidecar_resume', 'sidecar_continue',
-      'sidecar_setup', 'sidecar_guide', 'sidecar_abort',
+      'amicus_start', 'amicus_status', 'amicus_read',
+      'amicus_list', 'amicus_resume', 'amicus_continue',
+      'amicus_setup', 'amicus_guide', 'amicus_abort',
     ];
     for (const name of expectedTools) {
       expect(handlers).toHaveProperty(name);
@@ -191,29 +191,29 @@ describe('MCP Server Handlers', () => {
     }
   });
 
-  describe('sidecar_guide', () => {
-    test('returns guide text with Sidecar content', async () => {
-      const result = await handlers.sidecar_guide({});
+  describe('amicus_guide', () => {
+    test('returns guide text with Amicus content', async () => {
+      const result = await handlers.amicus_guide({});
       expect(result).toHaveProperty('content');
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toContain('Sidecar');
+      expect(result.content[0].text).toContain('Amicus');
     });
 
     test('guide text contains workflow instructions', async () => {
-      const result = await handlers.sidecar_guide({});
+      const result = await handlers.amicus_guide({});
       const text = result.content[0].text;
-      expect(text).toContain('sidecar_start');
-      expect(text).toContain('sidecar_status');
-      expect(text).toContain('sidecar_read');
+      expect(text).toContain('amicus_start');
+      expect(text).toContain('amicus_status');
+      expect(text).toContain('amicus_read');
     });
   });
 
-  describe('sidecar_list', () => {
+  describe('amicus_list', () => {
     test('returns empty message for fresh project with no sessions', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       try {
-        const result = await handlers.sidecar_list({}, tmpDir);
+        const result = await handlers.amicus_list({}, tmpDir);
         expect(result.content[0].text).toContain('No amicus sessions found');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -225,7 +225,7 @@ describe('MCP Server Handlers', () => {
       const sessionsDir = path.join(tmpDir, '.claude', 'sidecar_sessions');
       fs.mkdirSync(sessionsDir, { recursive: true });
       try {
-        const result = await handlers.sidecar_list({}, tmpDir);
+        const result = await handlers.amicus_list({}, tmpDir);
         expect(result.content[0].text).toContain('No amicus sessions found');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -245,7 +245,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_list({}, tmpDir);
+        const result = await handlers.amicus_list({}, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(Array.isArray(parsed)).toBe(true);
         expect(parsed).toHaveLength(1);
@@ -278,7 +278,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_list({ status: 'running' }, tmpDir);
+        const result = await handlers.amicus_list({ status: 'running' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed).toHaveLength(1);
         expect(parsed[0].status).toBe('running');
@@ -306,7 +306,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_list({}, tmpDir);
+        const result = await handlers.amicus_list({}, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed[0].id).toBe('newer');
         expect(parsed[1].id).toBe('older');
@@ -316,7 +316,7 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_status', () => {
+  describe('amicus_status', () => {
     test('returns status for existing running session with progress', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'abc12345');
@@ -335,7 +335,7 @@ describe('MCP Server Handlers', () => {
         '{"role":"user","content":"hello"}\n{"role":"assistant","content":"hi there"}\n');
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'abc12345' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'abc12345' }, tmpDir);
         expect(result.isError).toBeUndefined();
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.taskId).toBe('abc12345');
@@ -352,7 +352,7 @@ describe('MCP Server Handlers', () => {
     test('returns error for missing session', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       try {
-        const result = await handlers.sidecar_status({ taskId: 'nonexistent' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'nonexistent' }, tmpDir);
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('not found');
       } finally {
@@ -361,7 +361,7 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_status enriched response', () => {
+  describe('amicus_status enriched response', () => {
     test('includes messages and lastActivity when running', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'prog1');
@@ -376,7 +376,7 @@ describe('MCP Server Handlers', () => {
         '{"role":"assistant","content":"Found the issue"}\n');
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'prog1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'prog1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.status).toBe('running');
         expect(parsed.messages).toBe(2);
@@ -397,7 +397,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'noprog' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'noprog' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.messages).toBe(0);
         expect(parsed.latest).toBe('Starting up...');
@@ -417,7 +417,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'dead1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'dead1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.status).toBe('crashed');
         expect(parsed.reason).toBeDefined();
@@ -442,7 +442,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'done1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'done1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.taskId).toBe('done1');
         expect(parsed.status).toBe('complete');
@@ -465,7 +465,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'err1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'err1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.status).toBe('error');
         expect(parsed.reason).toBe('API key expired');
@@ -475,7 +475,7 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_status next_poll field', () => {
+  describe('amicus_status next_poll field', () => {
     test('includes next_poll when headless:true and status:running', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'hl1');
@@ -486,7 +486,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
       try {
-        const result = await handlers.sidecar_status({ taskId: 'hl1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'hl1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed).toHaveProperty('next_poll');
         expect(parsed.next_poll).toHaveProperty('hint');
@@ -507,7 +507,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
       try {
-        const result = await handlers.sidecar_status({ taskId: 'ia1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'ia1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed).not.toHaveProperty('next_poll');
       } finally {
@@ -525,7 +525,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
       try {
-        const result = await handlers.sidecar_status({ taskId: 'leg1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'leg1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed).not.toHaveProperty('next_poll');
       } finally {
@@ -542,7 +542,7 @@ describe('MCP Server Handlers', () => {
         createdAt: new Date().toISOString(),
       }));
       try {
-        const result = await handlers.sidecar_status({ taskId: 'hlc1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'hlc1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.status).toBe('complete');
         expect(parsed).not.toHaveProperty('next_poll');
@@ -561,7 +561,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
       try {
-        const result = await handlers.sidecar_status({ taskId: 'ph1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'ph1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.next_poll.hint).toContain('sleep 25');
       } finally {
@@ -569,7 +569,7 @@ describe('MCP Server Handlers', () => {
       }
     });
 
-    test('headless running sidecar_status includes system-reminder content block', async () => {
+    test('headless running amicus_status includes system-reminder content block', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'sr2');
       fs.mkdirSync(sessDir, { recursive: true });
@@ -579,7 +579,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
       try {
-        const result = await handlers.sidecar_status({ taskId: 'sr2' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'sr2' }, tmpDir);
         expect(result.content).toHaveLength(2);
         expect(result.content[1].text).toContain('<system-reminder>');
         expect(result.content[1].text).toContain('sleep 25');
@@ -588,7 +588,7 @@ describe('MCP Server Handlers', () => {
       }
     });
 
-    test('interactive running sidecar_status has no system-reminder', async () => {
+    test('interactive running amicus_status has no system-reminder', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'sri2');
       fs.mkdirSync(sessDir, { recursive: true });
@@ -598,7 +598,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
       try {
-        const result = await handlers.sidecar_status({ taskId: 'sri2' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'sri2' }, tmpDir);
         expect(result.content).toHaveLength(1);
         expect(result.content[0].text).not.toContain('<system-reminder>');
       } finally {
@@ -607,7 +607,7 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_status stall detection', () => {
+  describe('amicus_status stall detection', () => {
     test('includes stalled: true when lastActivityMs exceeds threshold', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-stall-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'stall1');
@@ -629,12 +629,12 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'stall1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'stall1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.stalled).toBe(true);
         expect(parsed.stalledForSeconds).toBeGreaterThanOrEqual(170);
-        expect(parsed.recovery).toContain('sidecar_abort');
-        expect(parsed.recovery).toContain('sidecar_resume');
+        expect(parsed.recovery).toContain('amicus_abort');
+        expect(parsed.recovery).toContain('amicus_resume');
         expect(parsed.recovery).toContain('stall1');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -659,7 +659,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'active1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'active1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.stalled).toBeUndefined();
       } finally {
@@ -686,7 +686,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'int1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'int1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.stalled).toBeUndefined();
         expect(parsed.recovery).toBeUndefined();
@@ -705,7 +705,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_status({ taskId: 'done2' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'done2' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.stalled).toBeUndefined();
       } finally {
@@ -714,7 +714,7 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_status model field', () => {
+  describe('amicus_status model field', () => {
     test('includes model in status response when stored in metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-model-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'mdl1');
@@ -725,7 +725,7 @@ describe('MCP Server Handlers', () => {
         createdAt: new Date().toISOString(),
       }));
       try {
-        const result = await handlers.sidecar_status({ taskId: 'mdl1' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'mdl1' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.model).toBe('openrouter/x-ai/grok-4.1-fast');
       } finally {
@@ -742,7 +742,7 @@ describe('MCP Server Handlers', () => {
         createdAt: new Date().toISOString(),
       }));
       try {
-        const result = await handlers.sidecar_status({ taskId: 'nomdl' }, tmpDir);
+        const result = await handlers.amicus_status({ taskId: 'nomdl' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed).not.toHaveProperty('model');
       } finally {
@@ -751,7 +751,7 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_read', () => {
+  describe('amicus_read', () => {
     test('returns summary when available', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'read123');
@@ -760,7 +760,7 @@ describe('MCP Server Handlers', () => {
       fs.writeFileSync(path.join(sessDir, 'summary.md'), '## Test Summary\n\nResults here.');
 
       try {
-        const result = await handlers.sidecar_read({ taskId: 'read123' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'read123' }, tmpDir);
         expect(result.isError).toBeUndefined();
         expect(result.content[0].text).toContain('Test Summary');
         expect(result.content[0].text).toContain('Results here.');
@@ -778,7 +778,7 @@ describe('MCP Server Handlers', () => {
       }));
       fs.writeFileSync(path.join(sessDir, 'summary.md'), '## Results\n\nFound the bug.');
       try {
-        const result = await handlers.sidecar_read({ taskId: 'rdmdl1' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'rdmdl1' }, tmpDir);
         expect(result.content[0].text).toContain('openrouter/x-ai/grok-4.1-fast');
         expect(result.content[0].text).toContain('Found the bug.');
       } finally {
@@ -793,7 +793,7 @@ describe('MCP Server Handlers', () => {
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
       fs.writeFileSync(path.join(sessDir, 'summary.md'), '## Results\n\nAll good.');
       try {
-        const result = await handlers.sidecar_read({ taskId: 'rdnomdl' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'rdnomdl' }, tmpDir);
         expect(result.content[0].text).toContain('All good.');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -808,7 +808,7 @@ describe('MCP Server Handlers', () => {
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify(meta));
 
       try {
-        const result = await handlers.sidecar_read({ taskId: 'meta1', mode: 'metadata' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'meta1', mode: 'metadata' }, tmpDir);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.taskId).toBe('meta1');
         expect(parsed.status).toBe('complete');
@@ -825,7 +825,7 @@ describe('MCP Server Handlers', () => {
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '{"role":"user","content":"hello"}\n');
 
       try {
-        const result = await handlers.sidecar_read({ taskId: 'conv1', mode: 'conversation' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'conv1', mode: 'conversation' }, tmpDir);
         expect(result.content[0].text).toContain('hello');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -839,7 +839,7 @@ describe('MCP Server Handlers', () => {
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
 
       try {
-        const result = await handlers.sidecar_read({ taskId: 'noconv', mode: 'conversation' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'noconv', mode: 'conversation' }, tmpDir);
         expect(result.content[0].text).toContain('No conversation recorded');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -853,7 +853,7 @@ describe('MCP Server Handlers', () => {
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
 
       try {
-        const result = await handlers.sidecar_read({ taskId: 'nosum' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'nosum' }, tmpDir);
         expect(result.content[0].text).toContain('No summary available');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -863,7 +863,7 @@ describe('MCP Server Handlers', () => {
     test('returns error for missing session', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       try {
-        const result = await handlers.sidecar_read({ taskId: 'nope' }, tmpDir);
+        const result = await handlers.amicus_read({ taskId: 'nope' }, tmpDir);
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('not found');
       } finally {
@@ -872,9 +872,9 @@ describe('MCP Server Handlers', () => {
     });
   });
 
-  describe('sidecar_start', () => {
+  describe('amicus_start', () => {
     test('handler is an async function', () => {
-      expect(typeof handlers.sidecar_start).toBe('function');
+      expect(typeof handlers.amicus_start).toBe('function');
     });
 
     test('returns interactive mode message when noUi is false', async () => {
@@ -887,7 +887,7 @@ describe('MCP Server Handlers', () => {
           }),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.sidecar_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.mode).toBe('interactive');
         expect(parsed.message).toContain('Do NOT poll');
@@ -905,58 +905,58 @@ describe('MCP Server Handlers', () => {
           }),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.sidecar_start({ prompt: 'implement feature', noUi: true, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'implement feature', noUi: true, model: 'google/gemini-test' }, '/tmp');
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.mode).toBe('headless');
         expect(parsed.message).toContain('headless');
       });
     });
 
-    test('headless sidecar_start response includes system-reminder content block', async () => {
+    test('headless amicus_start response includes system-reminder content block', async () => {
       await jest.isolateModulesAsync(async () => {
         jest.doMock('child_process', () => ({
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.sidecar_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
         expect(result.content).toHaveLength(2);
         expect(result.content[1].text).toContain('<system-reminder>');
         expect(result.content[1].text).toContain('sleep 25');
       });
     });
 
-    test('interactive sidecar_start response has no system-reminder', async () => {
+    test('interactive amicus_start response has no system-reminder', async () => {
       await jest.isolateModulesAsync(async () => {
         jest.doMock('child_process', () => ({
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.sidecar_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
         expect(result.content).toHaveLength(1);
         expect(result.content[0].text).not.toContain('<system-reminder>');
       });
     });
   });
 
-  describe('sidecar_resume', () => {
+  describe('amicus_resume', () => {
     test('handler is an async function', () => {
-      expect(typeof handlers.sidecar_resume).toBe('function');
+      expect(typeof handlers.amicus_resume).toBe('function');
     });
   });
 
-  describe('sidecar_continue', () => {
+  describe('amicus_continue', () => {
     test('handler is an async function', () => {
-      expect(typeof handlers.sidecar_continue).toBe('function');
+      expect(typeof handlers.amicus_continue).toBe('function');
     });
   });
 
-  describe('sidecar_setup', () => {
+  describe('amicus_setup', () => {
     test('handler is an async function', () => {
-      expect(typeof handlers.sidecar_setup).toBe('function');
+      expect(typeof handlers.amicus_setup).toBe('function');
     });
   });
 
-  describe('sidecar_abort PID killing', () => {
+  describe('amicus_abort PID killing', () => {
     test('sends SIGTERM to process when PID is stored in metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-abort-pid-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'killme1');
@@ -969,7 +969,7 @@ describe('MCP Server Handlers', () => {
 
       const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
       try {
-        const result = await handlers.sidecar_abort({ taskId: 'killme1' }, tmpDir);
+        const result = await handlers.amicus_abort({ taskId: 'killme1' }, tmpDir);
         expect(result.isError).toBeUndefined();
         expect(killSpy).toHaveBeenCalledWith(99999, 'SIGTERM');
       } finally {
@@ -994,7 +994,7 @@ describe('MCP Server Handlers', () => {
         throw err;
       });
       try {
-        const result = await handlers.sidecar_abort({ taskId: 'gone1' }, tmpDir);
+        const result = await handlers.amicus_abort({ taskId: 'gone1' }, tmpDir);
         expect(result.isError).toBeUndefined();
         const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
         expect(meta.status).toBe('aborted');
@@ -1015,7 +1015,7 @@ describe('MCP Server Handlers', () => {
 
       // No PID in metadata — abort should still update status gracefully
       try {
-        const result = await handlers.sidecar_abort({ taskId: 'abort1' }, tmpDir);
+        const result = await handlers.amicus_abort({ taskId: 'abort1' }, tmpDir);
         expect(result.isError).toBeUndefined();
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.status).toBe('aborted');
@@ -1039,7 +1039,7 @@ describe('MCP Server Handlers', () => {
       }));
 
       try {
-        const result = await handlers.sidecar_abort({ taskId: 'done1' }, tmpDir);
+        const result = await handlers.amicus_abort({ taskId: 'done1' }, tmpDir);
         expect(result.content[0].text).toContain('not running');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
@@ -1049,7 +1049,7 @@ describe('MCP Server Handlers', () => {
     test('returns error for missing session', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
       try {
-        const result = await handlers.sidecar_abort({ taskId: 'nonexistent' }, tmpDir);
+        const result = await handlers.amicus_abort({ taskId: 'nonexistent' }, tmpDir);
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('not found');
       } finally {
@@ -1059,7 +1059,7 @@ describe('MCP Server Handlers', () => {
   });
 });
 
-describe('sidecar_start context and summary args', () => {
+describe('amicus_start context and summary args', () => {
   it('passes --context-turns to CLI', async () => {
     let capturedArgs = [];
     await jest.isolateModulesAsync(async () => {
@@ -1076,7 +1076,7 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'test', model: 'openrouter/test/model', contextTurns: 25 }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', contextTurns: 25 }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--context-turns');
     expect(capturedArgs).toContain('25');
@@ -1098,7 +1098,7 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'test', model: 'openrouter/test/model', contextSince: '2h' }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', contextSince: '2h' }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--context-since');
     expect(capturedArgs).toContain('2h');
@@ -1120,7 +1120,7 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'test', model: 'openrouter/test/model', contextMaxTokens: 40000 }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', contextMaxTokens: 40000 }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--context-max-tokens');
     expect(capturedArgs).toContain('40000');
@@ -1142,7 +1142,7 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'test', model: 'openrouter/test/model', summaryLength: 'verbose' }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', summaryLength: 'verbose' }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--summary-length');
     expect(capturedArgs).toContain('verbose');
@@ -1164,7 +1164,7 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'self-contained task', model: 'openrouter/test/model', includeContext: false }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'self-contained task', model: 'openrouter/test/model', includeContext: false }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--no-context');
   });
@@ -1185,7 +1185,7 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'needs context', model: 'openrouter/test/model', includeContext: true }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'needs context', model: 'openrouter/test/model', includeContext: true }, '/tmp/proj');
     });
     expect(capturedArgs).not.toContain('--no-context');
   });
@@ -1206,13 +1206,13 @@ describe('sidecar_start context and summary args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_start({ prompt: 'default behavior', model: 'openrouter/test/model' }, '/tmp/proj');
+      await handlers.amicus_start({ prompt: 'default behavior', model: 'openrouter/test/model' }, '/tmp/proj');
     });
     expect(capturedArgs).not.toContain('--no-context');
   });
 });
 
-describe('sidecar_continue context args', () => {
+describe('amicus_continue context args', () => {
   it('passes --context-turns to CLI', async () => {
     let capturedArgs = [];
     await jest.isolateModulesAsync(async () => {
@@ -1229,7 +1229,7 @@ describe('sidecar_continue context args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_continue({ taskId: 'abc123', prompt: 'continue task', contextTurns: 10 }, '/tmp/proj');
+      await handlers.amicus_continue({ taskId: 'abc123', prompt: 'continue task', contextTurns: 10 }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--context-turns');
     expect(capturedArgs).toContain('10');
@@ -1251,14 +1251,14 @@ describe('sidecar_continue context args', () => {
         existsSync: jest.fn(() => false)
       }));
       const { handlers } = require('../src/mcp-server');
-      await handlers.sidecar_continue({ taskId: 'abc123', prompt: 'continue task', contextMaxTokens: 20000 }, '/tmp/proj');
+      await handlers.amicus_continue({ taskId: 'abc123', prompt: 'continue task', contextMaxTokens: 20000 }, '/tmp/proj');
     });
     expect(capturedArgs).toContain('--context-max-tokens');
     expect(capturedArgs).toContain('20000');
   });
 });
 
-describe('sidecar_start stderr capture', () => {
+describe('amicus_start stderr capture', () => {
   let tmpDir;
 
   beforeEach(() => {
@@ -1283,13 +1283,13 @@ describe('sidecar_start stderr capture', () => {
       // Ensure real fs is used (clear any leaked mock from prior tests)
       jest.doMock('fs', () => jest.requireActual('fs'));
       const { handlers: h } = require('../src/mcp-server');
-      await h.sidecar_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, tmpDir);
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, tmpDir);
     });
     // stdio[2] should be a number (file descriptor), not 'ignore'
     expect(typeof capturedOpts.stdio[2]).toBe('number');
   });
 
-  test('sidecar_resume passes sessionDir for stderr capture', async () => {
+  test('amicus_resume passes sessionDir for stderr capture', async () => {
     let capturedOpts;
     // Pre-create session with metadata so resume can find it
     const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'res1');
@@ -1308,13 +1308,13 @@ describe('sidecar_start stderr capture', () => {
       }));
       jest.doMock('fs', () => jest.requireActual('fs'));
       const { handlers: h } = require('../src/mcp-server');
-      await h.sidecar_resume({ taskId: 'res1' }, tmpDir);
+      await h.amicus_resume({ taskId: 'res1' }, tmpDir);
     });
     // stdio[2] should be a number (file descriptor), not 'ignore'
     expect(typeof capturedOpts.stdio[2]).toBe('number');
   });
 
-  test('sidecar_continue passes sessionDir for stderr capture', async () => {
+  test('amicus_continue passes sessionDir for stderr capture', async () => {
     let capturedOpts;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -1325,7 +1325,7 @@ describe('sidecar_start stderr capture', () => {
       }));
       jest.doMock('fs', () => jest.requireActual('fs'));
       const { handlers: h } = require('../src/mcp-server');
-      await h.sidecar_continue({ taskId: 'old1', prompt: 'follow up' }, tmpDir);
+      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, tmpDir);
     });
     // stdio[2] should be a number (file descriptor), not 'ignore'
     expect(typeof capturedOpts.stdio[2]).toBe('number');

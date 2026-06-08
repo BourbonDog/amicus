@@ -11,13 +11,15 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'sidecar.js');
+const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 const EXPECTED_TOOLS = [
-  'sidecar_start', 'sidecar_status', 'sidecar_read',
-  'sidecar_list', 'sidecar_resume', 'sidecar_continue',
-  'sidecar_setup', 'sidecar_guide', 'sidecar_abort',
+  'amicus_start', 'amicus_status', 'amicus_read',
+  'amicus_list', 'amicus_resume', 'amicus_continue',
+  'amicus_setup', 'amicus_guide', 'amicus_abort',
 ];
+// Each canonical tool is also registered under its legacy sidecar_* name (shim).
+const LEGACY_TOOLS = EXPECTED_TOOLS.map(n => n.replace(/^amicus_/, 'sidecar_'));
 
 /**
  * Helper: spawn the MCP server and provide send/receive methods.
@@ -130,20 +132,24 @@ describe('MCP Protocol: handshake and tool discovery', () => {
         clientInfo: { name: 'test-client', version: '1.0.0' },
       });
       expect(result.result.serverInfo).toBeDefined();
-      expect(result.result.serverInfo.name).toBe('sidecar');
+      expect(result.result.serverInfo.name).toBe('amicus');
     } finally {
       await freshClient.close();
     }
   });
 
-  it('lists all 9 sidecar tools via tools/list', async () => {
+  it('lists all 9 amicus tools plus legacy sidecar aliases via tools/list', async () => {
     const result = await client.request('tools/list', {});
     expect(result.result).toBeDefined();
     const toolNames = result.result.tools.map(t => t.name);
     for (const expected of EXPECTED_TOOLS) {
       expect(toolNames).toContain(expected);
     }
-    expect(toolNames.length).toBe(EXPECTED_TOOLS.length);
+    // Dual-registration shim: every canonical tool also exposed under sidecar_*.
+    for (const legacy of LEGACY_TOOLS) {
+      expect(toolNames).toContain(legacy);
+    }
+    expect(toolNames.length).toBe(EXPECTED_TOOLS.length + LEGACY_TOOLS.length);
   });
 
   it('each tool has a description and inputSchema', async () => {
@@ -176,29 +182,29 @@ describe('MCP Protocol: tool invocation', () => {
     if (tmpDir) { fs.rmSync(tmpDir, { recursive: true, force: true }); }
   });
 
-  it('sidecar_guide returns guide text', async () => {
+  it('amicus_guide returns guide text', async () => {
     const result = await client.request('tools/call', {
-      name: 'sidecar_guide',
+      name: 'amicus_guide',
       arguments: {},
     });
     expect(result.result).toBeDefined();
     const text = result.result.content[0].text;
-    expect(text).toContain('Sidecar');
-    expect(text).toContain('sidecar_start');
+    expect(text).toContain('Amicus');
+    expect(text).toContain('amicus_start');
   });
 
-  it('sidecar_list returns empty message for fresh project', async () => {
+  it('amicus_list returns empty message for fresh project', async () => {
     const result = await client.request('tools/call', {
-      name: 'sidecar_list',
+      name: 'amicus_list',
       arguments: { project: tmpDir },
     });
     expect(result.result).toBeDefined();
-    expect(result.result.content[0].text).toContain('No sidecar sessions');
+    expect(result.result.content[0].text).toContain('No amicus sessions');
   });
 
-  it('sidecar_status returns error for nonexistent task', async () => {
+  it('amicus_status returns error for nonexistent task', async () => {
     const result = await client.request('tools/call', {
-      name: 'sidecar_status',
+      name: 'amicus_status',
       arguments: { taskId: 'nonexistent', project: tmpDir },
     });
     expect(result.result).toBeDefined();
@@ -206,8 +212,8 @@ describe('MCP Protocol: tool invocation', () => {
     expect(result.result.content[0].text).toContain('not found');
   });
 
-  it('sidecar_list returns sessions after creating data on disk', async () => {
-    // Create a session on disk
+  it('legacy sidecar_list alias returns sessions from legacy dir on disk', async () => {
+    // Create a session on disk in the legacy sidecar_sessions dir (read-shim)
     const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'proto-test-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
@@ -224,8 +230,8 @@ describe('MCP Protocol: tool invocation', () => {
     expect(sessions[0].id).toBe('proto-test-001');
   });
 
-  it('sidecar_read returns summary from disk', async () => {
-    // Create session with summary
+  it('legacy sidecar_read alias returns summary from legacy dir on disk', async () => {
+    // Create session with summary in the legacy sidecar_sessions dir (read-shim)
     const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'proto-read-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
@@ -239,7 +245,7 @@ describe('MCP Protocol: tool invocation', () => {
     expect(result.result.content[0].text).toContain('race condition');
   });
 
-  it('full workflow: list -> status -> read over protocol', async () => {
+  it('full workflow via legacy aliases: list -> status -> read over protocol', async () => {
     const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'proto-flow-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({

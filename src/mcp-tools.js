@@ -1,7 +1,7 @@
 /**
- * MCP Tool Definitions for Sidecar
+ * MCP Tool Definitions for Amicus
  *
- * Defines all tools exposed by the sidecar MCP server.
+ * Defines all tools exposed by the Amicus MCP server.
  * Uses Zod schemas for input validation (converted to JSON Schema by MCP SDK).
  *
  * @module mcp-tools
@@ -30,29 +30,29 @@ function getTools() {
   const aliasNames = formatAliasNames();
   return [
   {
-    name: 'sidecar_start',
+    name: 'amicus_start',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
-      'Spawn a sidecar conversation with a different LLM. Returns a task ID immediately. ' +
+      'Spawn an Amicus session with a different LLM. Returns a task ID immediately. ' +
       'Mode selection: use INTERACTIVE (default, noUi: false) for research, ' +
       'exploration, analysis, and any task where the user benefits from watching ' +
       'progress live. It eliminates the polling problem entirely. ' +
       'Use HEADLESS (noUi: true) only for background automation the user does NOT ' +
       'need to monitor. When in doubt, use interactive. ' +
-      'EXCEPTION: When spawning multiple sidecars simultaneously, ' +
+      'EXCEPTION: When spawning multiple sessions simultaneously, ' +
       'ALWAYS use HEADLESS (noUi: true) for all of them unless the user ' +
       'explicitly requests interactive. Opening multiple Electron windows ' +
       'at once is disruptive. ' +
       'For headless mode, ALWAYS run `sleep 25` in your shell before each ' +
-      'sidecar_status call to enforce the polling interval. ' +
+      'amicus_status call to enforce the polling interval. ' +
       'For interactive mode, do not poll. Wait for the user to tell you ' +
-      'they\'ve clicked Fold, then use sidecar_read. ' +
-      'Call sidecar_guide first if you need help choosing a model or writing a good briefing.' +
+      'they\'ve clicked Fold, then use amicus_read. ' +
+      'Call amicus_guide first if you need help choosing a model or writing a good briefing.' +
       ' Pass includeContext: false when the briefing is fully self-contained.',
     inputSchema: {
       model: safeModel.optional().describe(
         `Short alias (${aliasNames}) or full provider/model ID. ` +
-        'If omitted, uses the configured default. Call sidecar_guide to see all aliases.'
+        'If omitted, uses the configured default. Call amicus_guide to see all aliases.'
       ),
       prompt: z.string().describe(
         'Detailed task briefing. Include: objective, background, ' +
@@ -92,7 +92,7 @@ function getTools() {
       includeContext: z.boolean().optional().default(true).describe(
         'Whether to include parent conversation history as context. '
         + 'Default: true. Set to false when the briefing is self-contained '
-        + 'and does not depend on prior conversation. See sidecar_guide for guidance.'
+        + 'and does not depend on prior conversation. See amicus_guide for guidance.'
       ),
       coworkProcess: z.string().optional().describe(
         'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +
@@ -104,7 +104,7 @@ function getTools() {
       ),
       windowPosition: z.enum(['right', 'left', 'center']).optional()
         .default('right').describe(
-          'Where to place the sidecar window on screen. ' +
+          'Where to place the Amicus window on screen. ' +
           'right (default): flush against the right edge. ' +
           'left: flush against the left edge. center: centered.'
         ),
@@ -114,16 +114,16 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_status',
+    name: 'amicus_status',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
-      'Check the status of a running sidecar task. Returns status ' +
+      'Check the status of a running Amicus session. Returns status ' +
       '(running/complete), elapsed time, and progress info. Primarily ' +
       'for headless mode \u2014 in interactive mode, wait for the user to ' +
-      'tell you the sidecar is done instead of polling.',
+      'tell you the session is done instead of polling.',
     inputSchema: {
       taskId: safeTaskId.describe(
-        'The task ID returned by sidecar_start.'
+        'The task ID returned by amicus_start.'
       ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
@@ -131,10 +131,10 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_read',
+    name: 'amicus_read',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
-      'Read the results of a completed sidecar task. Returns the summary ' +
+      'Read the results of a completed Amicus session. Returns the summary ' +
       'by default, or full conversation history, or session metadata.',
     inputSchema: {
       taskId: safeTaskId.describe('The task ID to read.'),
@@ -149,10 +149,10 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_list',
+    name: 'amicus_list',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
-      'List all sidecar sessions for the current project. Shows task ID, ' +
+      'List all Amicus sessions for the current project. Shows task ID, ' +
       'model, status, age, and briefing excerpt.',
     inputSchema: {
       status: z.enum(['all', 'running', 'complete']).optional().describe(
@@ -164,12 +164,12 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_resume',
+    name: 'amicus_resume',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
-      'Reopen a previous sidecar session with full conversation history ' +
-      'preserved. The sidecar continues in the same OpenCode session. ' +
-      'Returns a task ID immediately — use sidecar_status to poll.',
+      'Reopen a previous Amicus session with full conversation history ' +
+      'preserved. The session continues in the same OpenCode session. ' +
+      'Returns a task ID immediately — use amicus_status to poll.',
     inputSchema: {
       taskId: safeTaskId.describe(
         'The task ID of the session to resume.'
@@ -186,13 +186,13 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_continue',
+    name: 'amicus_continue',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
-      'Start a new sidecar session that inherits a previous session\'s ' +
+      'Start a new Amicus session that inherits a previous session\'s ' +
       'conversation as context. The previous session\'s messages become ' +
       'read-only background for the new task. Returns a task ID ' +
-      'immediately — use sidecar_status to poll.',
+      'immediately — use amicus_status to poll.',
     inputSchema: {
       taskId: safeTaskId.describe(
         'The task ID of the previous session to continue from.'
@@ -221,19 +221,19 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_setup',
+    name: 'amicus_setup',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
-      'Open the sidecar setup wizard to configure API keys and default ' +
+      'Open the Amicus setup wizard to configure API keys and default ' +
       'model. Launches an interactive Electron window for configuration.',
     inputSchema: {},
   },
   {
-    name: 'sidecar_abort',
+    name: 'amicus_abort',
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     description:
-      'Abort a running sidecar session. Stops the OpenCode agent ' +
-      'immediately. Use when a sidecar is taking too long or is no ' +
+      'Abort a running Amicus session. Stops the OpenCode agent ' +
+      'immediately. Use when a session is taking too long or is no ' +
       'longer needed.',
     inputSchema: {
       taskId: safeTaskId.describe(
@@ -245,20 +245,20 @@ function getTools() {
     },
   },
   {
-    name: 'sidecar_guide',
+    name: 'amicus_guide',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
-      'Get detailed usage instructions for sidecar — when to spawn ' +
-      'sidecars, how to write good briefings, agent selection guidelines, ' +
+      'Get detailed usage instructions for Amicus — when to spawn ' +
+      'sessions, how to write good briefings, agent selection guidelines, ' +
       'and the async workflow pattern. Call this first if you haven\'t ' +
-      'used sidecar before.',
+      'used Amicus before.',
     inputSchema: {},
   },
   ];
 }
 
 /**
- * Returns the guide text for the sidecar_guide tool.
+ * Returns the guide text for the amicus_guide tool.
  * Includes live alias table from user config.
  * @returns {string} Markdown-formatted guide text
  */
@@ -269,32 +269,32 @@ function getGuideText() {
     .map(([name, model]) => `| ${name} | ${model} |`)
     .join('\n');
 
-  return `# Sidecar Usage Guide
+  return `# Amicus Usage Guide
 
-## What Is Sidecar?
-Sidecar spawns parallel conversations with different LLMs and folds results back into your context.
+## What Is Amicus?
+Amicus spawns parallel conversations with different LLMs and folds results back into your context.
 
-## When to Use Sidecars
+## When to Use Amicus
 **DO:** Different model's strengths needed, deep exploration, parallel investigation.
 **DON'T:** Simple tasks you can handle directly.
 
 ## Async Workflow
 
 ### Headless Mode (noUi: true)
-1. sidecar_start with model + prompt + noUi: true -> get task ID
+1. amicus_start with model + prompt + noUi: true -> get task ID
 2. Run \`sleep 25\` in your shell (this enforces the polling interval)
-3. sidecar_status to check progress
-4. If still running, run \`sleep 25\` again before each subsequent sidecar_status call
-5. sidecar_read to get the summary once complete
+3. amicus_status to check progress
+4. If still running, run \`sleep 25\` again before each subsequent amicus_status call
+5. amicus_read to get the summary once complete
 6. Act on findings
 
-**IMPORTANT:** Always run \`sleep 25\` before every sidecar_status call. This is not optional. Each premature poll wastes context tokens for zero benefit. The sleep command enforces the wait mechanically.
+**IMPORTANT:** Always run \`sleep 25\` before every amicus_status call. This is not optional. Each premature poll wastes context tokens for zero benefit. The sleep command enforces the wait mechanically.
 
 ### Interactive Mode (noUi: false, default)
-1. sidecar_start with model + prompt -> get task ID
-2. Tell the user: "Let me know when you're done with the sidecar and have clicked Fold."
-3. Do NOT poll sidecar_status. Wait for the user to tell you it's done.
-4. If the user starts a new message without mentioning the sidecar, ask if they're done or just call sidecar_read
+1. amicus_start with model + prompt -> get task ID
+2. Tell the user: "Let me know when you're done with the session and have clicked Fold."
+3. Do NOT poll amicus_status. Wait for the user to tell you it's done.
+4. If the user starts a new message without mentioning the session, ask if they're done or just call amicus_read
 5. Act on findings
 
 ## Agent Selection
@@ -313,7 +313,7 @@ Include: Objective, Background, Files of interest, Success criteria, Constraints
 ${aliasRows}
 
 Or use full IDs in provider/model format (e.g., openrouter/provider/model-id).
-Run sidecar_setup to configure defaults and add custom aliases.
+Run amicus_setup to configure defaults and add custom aliases.
 
 ## Session Matching
 Cowork: pass coworkProcess (extract from CWD: /sessions/<name>/).
@@ -321,7 +321,7 @@ Claude Code CLI: pass parentSession with your session UUID.
 
 ## Context Control (includeContext)
 
-By default, sidecar includes your parent conversation history as context. Set \`includeContext: false\` to skip this and save tokens when the briefing is self-contained.
+By default, Amicus includes your parent conversation history as context. Set \`includeContext: false\` to skip this and save tokens when the briefing is self-contained.
 
 ### MUST Include Context (Red Flags)
 - Task references prior conversation ("the code we discussed", "that bug", "the approach you suggested")
@@ -329,7 +329,7 @@ By default, sidecar includes your parent conversation history as context. Set \`
 - Code review of changes made in this session
 - "Does this look right?" or validation requests
 - Continuing a debugging thread
-- Any task where the sidecar needs to understand what happened before
+- Any task where the session needs to understand what happened before
 
 ### Safe to Skip Context
 - Greenfield tasks with explicit file paths and instructions
@@ -348,10 +348,10 @@ When setting \`includeContext: false\`, write a richer briefing:
 **Constraints:** [Scope limits, things to avoid]
 \`\`\`
 
-The sidecar has NO other context. Everything it needs must be in the briefing.
+The session has NO other context. Everything it needs must be in the briefing.
 
 ## Existing Sessions
-Call sidecar_list before spawning. Use sidecar_resume to reopen or sidecar_continue to build on previous findings.
+Call amicus_list before spawning. Use amicus_resume to reopen or amicus_continue to build on previous findings.
 `;
 }
 
