@@ -130,7 +130,7 @@ src/
 ├── drift.js  # Context Drift Detection Module
 ├── environment.js  # Environment Detection Module
 ├── headless.js  # * Default timeout: 15 minutes per spec §6.2
-├── index.js  # Claude Sidecar - Main Module
+├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
 ├── mcp-tools.js  # Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only)
@@ -206,7 +206,7 @@ evals/
 | `drift.js` | Context Drift Detection Module | `calculateDrift()`, `formatDriftWarning()`, `countTurnsSince()`, `isDriftSignificant()` |
 | `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS()` |
 | `headless.js` | * Default timeout: 15 minutes per spec §6.2 | `runHeadless()`, `waitForServer()`, `extractSummary()`, `formatFoldOutput()`, `DEFAULT_TIMEOUT()` |
-| `index.js` | Claude Sidecar - Main Module | `APIs()`, `startSidecar()`, `listSidecars()`, `resumeSidecar()`, `continueSidecar()` |
+| `index.js` | Amicus - Main Module | `startAmicus()`, `startSidecar()`, `listAmicus()`, `listSidecars()`, `resumeAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `LEGACY_TOOL_ALIASES()` |
 | `mcp-tools.js` | Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only) | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |

@@ -1,5 +1,5 @@
 /**
- * Claude Sidecar - Main Module
+ * Amicus - Main Module
  *
  * Spec Reference: §9 Implementation
  * Re-exports all public APIs for the sidecar CLI.
@@ -29,6 +29,14 @@ const { detectEnvironment, inferClient, getSessionRoot } = require('./environmen
 const { compressContext, estimateTokenCount, buildPreamble } = require('./context-compression');
 
 module.exports = {
+  // Canonical Amicus public API (the *Sidecar names below are deprecated shims)
+  startAmicus: startSidecar,
+  listAmicus: listSidecars,
+  resumeAmicus: resumeSidecar,
+  continueAmicus: continueSidecar,
+  readAmicus: readSidecar,
+
+  // DEPRECATED(amicus-shim): remove *Sidecar exports in a future revision — see docs/SHIMS.md
   // Primary sidecar APIs
   startSidecar,
   listSidecars,

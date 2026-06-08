@@ -13,3 +13,4 @@ rebrand plan: `docs/superpowers/plans/2026-06-08-amicus-rebrand.md`.
 | Session dir | src/session-manager.js + call sites | .claude/sidecar_sessions reads | next major |
 | Config token | config.js + skill parser | [SIDECAR_CONFIG_UPDATE] / sidecar-config-hash parse | next major |
 | MCP tool names | src/mcp-server.js registration | sidecar_* tool aliases | next major |
+| Public API | src/index.js | startSidecar/listSidecars/... aliases | next major |
