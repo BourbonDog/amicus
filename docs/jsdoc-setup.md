@@ -6,23 +6,23 @@ This project uses **JSDoc comments** to provide TypeScript type information with
 
 ```javascript
 /**
- * Start a new sidecar session
- * @param {Object} options - Sidecar configuration
+ * Start a new Amicus session
+ * @param {Object} options - Amicus configuration
  * @param {string} options.model - LLM model identifier (e.g., 'google/gemini-2.5-flash')
- * @param {string} options.briefing - Task description for the sidecar
+ * @param {string} options.briefing - Task description for the Amicus session
  * @param {string} [options.sessionId] - Optional Claude Code session ID
  * @param {boolean} [options.headless=false] - Run without GUI
  * @param {number} [options.timeout=15] - Headless timeout in minutes
- * @returns {Promise<SidecarResult>} Session result with summary
+ * @returns {Promise<AmicusResult>} Session result with summary
  */
-async function startSidecar(options) {
+async function startAmicus(options) {
   // ...
 }
 
 /**
- * @typedef {Object} SidecarResult
+ * @typedef {Object} AmicusResult
  * @property {string} taskId - Unique session identifier
- * @property {string} summary - Fold summary from sidecar
+ * @property {string} summary - Fold summary from Amicus
  * @property {string} status - Session status (completed|timeout|error)
  * @property {string[]} [conflicts] - Files with potential conflicts
  */

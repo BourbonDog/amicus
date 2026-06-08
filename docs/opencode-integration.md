@@ -1,6 +1,6 @@
 # OpenCode Integration
 
-How sidecar integrates with OpenCode's native capabilities and avoids redundant implementations.
+How Amicus integrates with OpenCode's native capabilities and avoids redundant implementations.
 
 ## SDK & API Notes
 
@@ -76,7 +76,7 @@ The `chat` agent requires user interaction for write/bash permissions and stalls
 |------|---------------------|
 | `src/opencode-client.js` | SDK wrapper - `createSession()`, `sendPrompt()`, `getSessionStatus()` |
 | `src/headless.js` | Uses `session.status()` for completion detection |
-| `src/utils/agent-mapping.js` | Maps sidecar modes to OpenCode agents |
+| `src/utils/agent-mapping.js` | Maps Amicus modes to OpenCode agents |
 | `electron/main.js` | Creates child sessions for subagents |
 
 ---

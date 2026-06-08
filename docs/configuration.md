@@ -8,43 +8,43 @@ OPENROUTER_API_KEY=sk-or-...              # Multi-model API access
 
 # Optional
 OPENCODE_COMMAND=opencode                 # Override OpenCode command path
-SIDECAR_DEFAULT_MODEL=openrouter/google/gemini-2.5-flash
-SIDECAR_TIMEOUT=15                        # Headless timeout in minutes
+AMICUS_DEFAULT_MODEL=openrouter/google/gemini-2.5-flash
+AMICUS_TIMEOUT=15                         # Headless timeout in minutes
 LOG_LEVEL=error                           # debug | info | warn | error
 
 # Model Routing
-SIDECAR_DISABLE_MODEL_ROUTING=true        # Disable auto-routing for subagent tasks
-SIDECAR_EXPLORE_MODEL=openrouter/...      # Override model for Explore subagents
+AMICUS_DISABLE_MODEL_ROUTING=true         # Disable auto-routing for subagent tasks
+AMICUS_EXPLORE_MODEL=openrouter/...       # Override model for Explore subagents
 
 # Advanced / Debug
-SIDECAR_CONFIG_DIR=/path/to/config        # Override config directory (~/.config/sidecar)
-SIDECAR_ENV_DIR=/path/to/env              # Override .env file directory
-SIDECAR_DEBUG_PORT=9223                   # CDP debug port (default: 9222)
-SIDECAR_MOCK_UPDATE=available             # Mock update UI state for testing
+AMICUS_CONFIG_DIR=/path/to/config         # Override config directory (~/.config/amicus)
+AMICUS_ENV_DIR=/path/to/env               # Override .env file directory
+AMICUS_DEBUG_PORT=9223                    # CDP debug port (default: 9222)
+AMICUS_MOCK_UPDATE=available              # Mock update UI state for testing
 ```
 
 ---
 
 ## Process Lifecycle
 
-These environment variables control how sidecar processes self-terminate and share resources.
+These environment variables control how Amicus processes self-terminate and share resources.
 
 ```bash
 # Idle timeout overrides (values in minutes, 0 = disabled)
-SIDECAR_IDLE_TIMEOUT=0                    # Blanket override for all modes (0 = disabled)
-SIDECAR_IDLE_TIMEOUT_HEADLESS=15          # Headless mode idle timeout (default: 15 min)
-SIDECAR_IDLE_TIMEOUT_INTERACTIVE=60       # Interactive mode idle timeout (default: 60 min)
-SIDECAR_IDLE_TIMEOUT_SERVER=30            # Shared server idle timeout (default: 30 min)
+AMICUS_IDLE_TIMEOUT=0                     # Blanket override for all modes (0 = disabled)
+AMICUS_IDLE_TIMEOUT_HEADLESS=15           # Headless mode idle timeout (default: 15 min)
+AMICUS_IDLE_TIMEOUT_INTERACTIVE=60        # Interactive mode idle timeout (default: 60 min)
+AMICUS_IDLE_TIMEOUT_SERVER=30             # Shared server idle timeout (default: 30 min)
 
 # Resource limits
-SIDECAR_MAX_SESSIONS=20                   # Max concurrent sessions on shared server (default: 20)
-SIDECAR_REQUEST_TIMEOUT=5                 # Per-request timeout in minutes (default: 5 min)
+AMICUS_MAX_SESSIONS=20                    # Max concurrent sessions on shared server (default: 20)
+AMICUS_REQUEST_TIMEOUT=5                  # Per-request timeout in minutes (default: 5 min)
 
 # Shared server
-SIDECAR_SHARED_SERVER=1                   # Use shared OpenCode server (default: 1, set 0 to disable)
+AMICUS_SHARED_SERVER=1                    # Use shared OpenCode server (default: 1, set 0 to disable)
 ```
 
-Sidecar processes self-terminate after the configured idle period. The shared server (`SIDECAR_SHARED_SERVER=1`) allows multiple sidecar sessions to reuse a single OpenCode Go binary process rather than spawning one per invocation.
+Amicus processes self-terminate after the configured idle period. The shared server (`AMICUS_SHARED_SERVER=1`) allows multiple Amicus sessions to reuse a single OpenCode Go binary process rather than spawning one per invocation.
 
 ---
 
@@ -52,7 +52,7 @@ Sidecar processes self-terminate after the configured idle period. The shared se
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `electron` | ^28.0.0 | Interactive sidecar window |
+| `electron` | ^28.0.0 | Interactive Amicus window |
 | `tiktoken` | ^1.0.0 | Token estimation |
 | `jest` | ^29.0.0 | Testing framework |
 | `eslint` | ^8.0.0 | Code linting |
@@ -89,13 +89,13 @@ curl https://openrouter.ai/api/v1/models | jq '.data[].id' | grep -i gemini
 
 ## Model Aliases
 
-Sidecar supports model aliases configured via `sidecar setup`. Config is stored at `~/.config/sidecar/config.json`.
+Amicus supports model aliases configured via `amicus setup`. Config is stored at `~/.config/amicus/config.json`.
 
 ```bash
-sidecar setup                              # Interactive wizard
-sidecar start --prompt "Review auth"       # Uses config default model
-sidecar start --model opus --prompt "..."  # Uses alias
-sidecar start --model openrouter/google/gemini-3-flash-preview --prompt "..."  # Full string
+amicus setup                              # Interactive wizard
+amicus start --prompt "Review auth"       # Uses config default model
+amicus start --model opus --prompt "..."  # Uses alias
+amicus start --model openrouter/google/gemini-3-flash-preview --prompt "..."  # Full string
 ```
 
-Run `sidecar setup --add-alias name=model` to add custom aliases.
+Run `amicus setup --add-alias name=model` to add custom aliases.

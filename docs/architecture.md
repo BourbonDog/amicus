@@ -3,7 +3,7 @@
 ## Data Flow
 
 ```
-User: sidecar start --model google/gemini-2.5 --briefing "Debug auth issue"
+User: amicus start --model google/gemini-2.5 --briefing "Debug auth issue"
        ↓
 CLI parses args (cli.js)
        ↓
@@ -40,36 +40,36 @@ In headless mode, the agent outputs `[SIDECAR_FOLD]` autonomously when done, and
 
 ## Shared Server Architecture
 
-Multiple sidecar invocations share a single OpenCode Go binary when `SIDECAR_SHARED_SERVER=1` (the default). This eliminates per-invocation cold-start latency and reduces memory overhead.
+Multiple Amicus invocations share a single OpenCode Go binary when `AMICUS_SHARED_SERVER=1` (the default). This eliminates per-invocation cold-start latency and reduces memory overhead.
 
 ```
 Before (per-process):                After (shared server):
 MCP Server                           MCP Server
-  +-- sidecar CLI (port 4096)          +-- Shared OpenCode Server (port 4096)
+  +-- amicus CLI (port 4096)           +-- Shared OpenCode Server (port 4096)
   |     +-- OpenCode Go binary               +-- Session A
-  +-- sidecar CLI (port 4097)               +-- Session B
+  +-- amicus CLI (port 4097)               +-- Session B
   |     +-- OpenCode Go binary               +-- Session C
-  +-- sidecar CLI (port 4098)
+  +-- amicus CLI (port 4098)
         +-- OpenCode Go binary
 ```
 
-The shared server restarts automatically on crash, up to 3 times within any 5-minute window. After 3 restarts the server is considered unstable and will not restart again; use `SIDECAR_SHARED_SERVER=0` to fall back to per-process mode.
+The shared server restarts automatically on crash, up to 3 times within any 5-minute window. After 3 restarts the server is considered unstable and will not restart again; use `AMICUS_SHARED_SERVER=0` to fall back to per-process mode.
 
 ## IdleWatchdog State Machine
 
-Each sidecar process runs an `IdleWatchdog` that transitions between two states:
+Each Amicus process runs an `IdleWatchdog` that transitions between two states:
 
 - **BUSY**: A prompt is in flight or a session was recently active. Idle timer is paused.
 - **IDLE**: No active requests for the configured idle period. Process (or shared server) self-terminates.
 
-Transitions: `BUSY → IDLE` when the last active session goes quiet; `IDLE → BUSY` on any new incoming request. The idle clock resets on each BUSY→IDLE transition. Set `SIDECAR_IDLE_TIMEOUT=0` to disable self-termination entirely.
+Transitions: `BUSY → IDLE` when the last active session goes quiet; `IDLE → BUSY` on any new incoming request. The idle clock resets on each BUSY→IDLE transition. Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination entirely.
 
 ## Electron BrowserView Architecture
 
-The Electron shell (`electron/main.js`) uses a **BrowserView** to avoid CSS conflicts between the OpenCode SPA and the sidecar toolbar:
+The Electron shell (`electron/main.js`) uses a **BrowserView** to avoid CSS conflicts between the OpenCode SPA and the Amicus toolbar:
 
 - **BrowserView** (top): Loads the OpenCode web UI at `http://localhost:<port>`. Gets its own physical viewport, no CSS interference with the host window.
-- **Main window** (bottom 40px): Renders the sidecar toolbar (branding, task ID, timer, Fold button) via a `data:` URL.
+- **Main window** (bottom 40px): Renders the Amicus toolbar (branding, task ID, timer, Fold button) via a `data:` URL.
 - On resize, `updateContentBounds()` adjusts the BrowserView to fill `height - 40px`.
 
 This replaced earlier CSS-based approaches (`padding-bottom`, `calc(100dvh - 40px)`) which failed because OpenCode's Tailwind `h-dvh` class resolves to the actual browser viewport and ignores parent element overrides.

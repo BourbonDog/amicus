@@ -4,27 +4,27 @@
 
 ```bash
 # Core workflow
-sidecar start --model <model> --prompt "<task>" [--agent <agent>] [--validate-model]
-sidecar list [--status <filter>] [--all]
-sidecar resume <task_id>
-sidecar continue <task_id> --briefing "..."
-sidecar read <task_id> [--summary|--conversation]
+amicus start --model <model> --prompt "<task>" [--agent <agent>] [--validate-model]
+amicus list [--status <filter>] [--all]
+amicus resume <task_id>
+amicus continue <task_id> --briefing "..."
+amicus read <task_id> [--summary|--conversation]
 
 # Setup & maintenance
-sidecar setup                        # Configure default model and aliases
-sidecar setup --add-alias name=model # Add a custom alias
-sidecar mcp                          # Start MCP server (stdio transport)
-sidecar update                       # Update to latest version
+amicus setup                        # Configure default model and aliases
+amicus setup --add-alias name=model # Add a custom alias
+amicus mcp                          # Start MCP server (stdio transport)
+amicus update                       # Update to latest version
 ```
 
 ## MCP Server (for Cowork / Claude Desktop)
 
 ```bash
 # Auto-registered during npm install. Manual registration:
-claude mcp add-json sidecar '{"command":"npx","args":["-y","claude-sidecar@latest","mcp"]}' --scope user
+claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `sidecar_start`, `sidecar_status`, `sidecar_read`, `sidecar_list`, `sidecar_resume`, `sidecar_continue`, `sidecar_setup`, `sidecar_guide`, `sidecar_abort`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_setup`, `amicus_guide`, `amicus_abort`
 
 Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`
 
@@ -43,13 +43,13 @@ Custom agents defined in `~/.config/opencode/agents/` or `.opencode/agents/` are
 
 ## Process Self-Termination
 
-Sidecar processes automatically shut down after a period of inactivity, so you do not need to manually kill lingering processes. Default idle timeouts:
+Amicus processes automatically shut down after a period of inactivity, so you do not need to manually kill lingering processes. Default idle timeouts:
 
-- **Headless mode**: 15 minutes (`SIDECAR_IDLE_TIMEOUT_HEADLESS`)
-- **Interactive mode**: 60 minutes (`SIDECAR_IDLE_TIMEOUT_INTERACTIVE`)
-- **Shared server**: 30 minutes (`SIDECAR_IDLE_TIMEOUT_SERVER`)
+- **Headless mode**: 15 minutes (`AMICUS_IDLE_TIMEOUT_HEADLESS`)
+- **Interactive mode**: 60 minutes (`AMICUS_IDLE_TIMEOUT_INTERACTIVE`)
+- **Shared server**: 30 minutes (`AMICUS_IDLE_TIMEOUT_SERVER`)
 
-Set `SIDECAR_IDLE_TIMEOUT=0` to disable self-termination. See [docs/configuration.md](configuration.md#process-lifecycle) for all lifecycle env vars.
+Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination. See [docs/configuration.md](configuration.md#process-lifecycle) for all lifecycle env vars.
 
 ## Agentic Evals
 

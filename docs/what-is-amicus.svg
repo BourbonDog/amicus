@@ -42,7 +42,7 @@
 
   <!-- Working indicator dots -->
   <text x="58" y="148" font-family="SF Mono, Menlo, monospace" font-size="9" fill="#6A6E7A" font-style="italic">(keeps working while you</text>
-  <text x="58" y="160" font-family="SF Mono, Menlo, monospace" font-size="9" fill="#6A6E7A" font-style="italic"> interact with sidecar)</text>
+  <text x="58" y="160" font-family="SF Mono, Menlo, monospace" font-size="9" fill="#6A6E7A" font-style="italic"> interact with Amicus)</text>
 
   <!-- Fold result -->
   <rect x="48" y="185" width="300" height="44" rx="6" fill="#D97757" opacity="0.1" stroke="#D97757" stroke-width="1" stroke-dasharray="3,2" />
@@ -55,7 +55,7 @@
   <text x="58" y="249" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" font-weight="600" fill="#D97757">Claude</text>
   <text x="58" y="260" font-family="SF Mono, Menlo, monospace" font-size="9" fill="#D4D0CC">Updating approach with mutex...</text>
 
-  <!-- ===== Right Window: Sidecar ===== -->
+  <!-- ===== Right Window: Amicus ===== -->
   <rect x="430" y="24" width="340" height="260" fill="url(#box)" stroke="#D97757" stroke-width="2" rx="8" />
   <!-- Title bar -->
   <rect x="430" y="24" width="340" height="26" fill="#D97757" opacity="0.12" rx="8" />
@@ -63,7 +63,7 @@
   <circle cx="448" cy="37" r="4" fill="#E25555" opacity="0.7" />
   <circle cx="461" cy="37" r="4" fill="#E2A855" opacity="0.7" />
   <circle cx="474" cy="37" r="4" fill="#55C255" opacity="0.7" />
-  <text x="600" y="41" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#D97757" text-anchor="middle">Sidecar (parallel window)</text>
+  <text x="600" y="41" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#D97757" text-anchor="middle">Amicus (parallel window)</text>
 
   <!-- Model badge -->
   <rect x="448" y="58" width="120" height="18" rx="9" fill="#D97757" opacity="0.15" />
@@ -91,7 +91,7 @@
   <rect x="430" y="244" width="340" height="1" fill="#3D3A38" />
   <!-- Round bottom corners -->
   <rect x="430" y="272" width="340" height="12" fill="#2D2B2A" rx="8" />
-  <text x="460" y="262" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="8" font-weight="600" fill="#D97757" letter-spacing="0.5">SIDECAR</text>
+  <text x="460" y="262" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="8" font-weight="600" fill="#D97757" letter-spacing="0.5">AMICUS</text>
   <text x="510" y="262" font-family="SF Mono, Menlo, monospace" font-size="8" fill="#7A756F">3:42</text>
   <!-- Fold button -->
   <rect x="700" y="251" width="50" height="20" rx="4" fill="#D97757" />
@@ -107,6 +107,6 @@
   <text x="398" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#6A6E7A" text-anchor="middle">Fold</text>
 
   <!-- ===== Bottom tagline ===== -->
-  <text x="400" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" fill="#6A6E7A" text-anchor="middle">Your main session keeps working  ·  The sidecar finds the issue  ·  Results fold back automatically</text>
+  <text x="400" y="318" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" fill="#6A6E7A" text-anchor="middle">Your main session keeps working  ·  Amicus finds the issue  ·  Results fold back automatically</text>
 
 </svg>

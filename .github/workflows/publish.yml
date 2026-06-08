@@ -50,7 +50,7 @@ jobs:
 
           # Build the prompt
           PROMPT=$(cat <<'PROMPT_EOF'
-          You are writing release notes for a CLI tool called claude-sidecar.
+          You are writing release notes for a CLI tool called amicus.
 
           Write rich, categorized release notes in this exact style:
 

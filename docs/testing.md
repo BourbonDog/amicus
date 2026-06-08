@@ -1,10 +1,10 @@
 # Testing Guide
 
-Comprehensive guide to sidecar's test infrastructure, covering unit tests, integration tests, E2E tests, and the agentic eval system.
+Comprehensive guide to Amicus's test infrastructure, covering unit tests, integration tests, E2E tests, and the agentic eval system.
 
 ## Test Architecture
 
-Sidecar uses a three-tier testing strategy plus an eval system:
+Amicus uses a three-tier testing strategy plus an eval system:
 
 ```
 Tier 1: Unit Tests (mocked)          ~1200 tests, <2 min
@@ -18,7 +18,7 @@ Tier 3: E2E Tests (real LLM)         ~15 tests, ~3 min each
   └─ Requires OPENROUTER_API_KEY, skipped when missing
 
 Eval System: Agentic Evals           ~3 scenarios, ~5 min each
-  └─ Full Claude Code + sidecar interaction grading
+  └─ Full Claude Code + Amicus interaction grading
   └─ Programmatic checks + LLM-as-judge scoring
 ```
 
@@ -97,7 +97,7 @@ Integration tests verify source-level invariants without mocking. They read actu
 | Test File | What It Verifies |
 |-----------|-----------------|
 | `spawn-pipe-deadlock.integration.test.js` | `spawnSidecarProcess()` uses `ignore` (not `pipe`) for stdio, no `detached: true`, uses `child.unref()` |
-| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `SIDECAR_HEADLESS_TEST` env var |
+| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `AMICUS_HEADLESS_TEST` env var |
 
 These tests catch regressions in critical spawn/process configuration that would be hard to debug in production.
 
@@ -116,7 +116,7 @@ const HAS_API_KEY = !!(
   process.env.OPENROUTER_API_KEY ||
   (() => {
     try {
-      const envPath = path.join(os.homedir(), '.config', 'sidecar', '.env');
+      const envPath = path.join(os.homedir(), '.config', 'amicus', '.env');
       return fs.readFileSync(envPath, 'utf-8').includes('OPENROUTER_API_KEY=');
     } catch { return false; }
   })()
@@ -124,11 +124,11 @@ const HAS_API_KEY = !!(
 const describeE2E = HAS_API_KEY ? describe : describe.skip;
 ```
 
-The key can be in the environment or in `~/.config/sidecar/.env`.
+The key can be in the environment or in `~/.config/amicus/.env`.
 
 ### CLI Headless E2E (`cli-headless-e2e.integration.test.js`)
 
-Spawns the real `sidecar` CLI binary with `start --no-ui` and verifies the full headless lifecycle.
+Spawns the real `amicus` CLI binary with `start --no-ui` and verifies the full headless lifecycle.
 
 **What it tests:**
 1. `start --no-ui` runs to completion with real LLM
@@ -140,12 +140,12 @@ Spawns the real `sidecar` CLI binary with `start --no-ui` and verifies the full 
 **Architecture:**
 ```
 Test process
-  └─ spawn(node, [sidecar.js, start, --no-ui, ...])
+  └─ spawn(node, [amicus.js, start, --no-ui, ...])
        └─ OpenCode server (auto port)
             └─ Real LLM call (gemini-flash)
        └─ Session files written to tmpDir
-  └─ spawn(node, [sidecar.js, list, ...])  // verify list
-  └─ spawn(node, [sidecar.js, read, ...])  // verify read
+  └─ spawn(node, [amicus.js, list, ...])  // verify list
+  └─ spawn(node, [amicus.js, read, ...])  // verify read
 ```
 
 ### MCP Headless E2E (`mcp-headless-e2e.integration.test.js`)
@@ -153,23 +153,23 @@ Test process
 Spawns a real MCP server over stdio, sends JSON-RPC tool calls, and verifies the full MCP lifecycle.
 
 **What it tests:**
-1. `sidecar_start` with `noUi: true` launches a headless session
-2. `sidecar_status` polling until completion
-3. `sidecar_read` returns the summary
-4. `sidecar_list` shows the completed session
+1. `amicus_start` with `noUi: true` launches a headless session
+2. `amicus_status` polling until completion
+3. `amicus_read` returns the summary
+4. `amicus_list` shows the completed session
 5. Session files exist on disk with correct metadata
 
 **Architecture:**
 ```
 Test process
-  └─ spawn(node, [sidecar.js, mcp])  // MCP server over stdio
+  └─ spawn(node, [amicus.js, mcp])  // MCP server over stdio
        ├─ JSON-RPC: initialize
-       ├─ JSON-RPC: tools/call (sidecar_start)
+       ├─ JSON-RPC: tools/call (amicus_start)
        │    └─ OpenCode server (auto port)
        │         └─ Real LLM call
-       ├─ JSON-RPC: tools/call (sidecar_status)  // poll loop
-       ├─ JSON-RPC: tools/call (sidecar_read)
-       └─ JSON-RPC: tools/call (sidecar_list)
+       ├─ JSON-RPC: tools/call (amicus_status)  // poll loop
+       ├─ JSON-RPC: tools/call (amicus_read)
+       └─ JSON-RPC: tools/call (amicus_list)
 ```
 
 ### Electron CDP E2E (`electron-toolbar-e2e.integration.test.js`)
@@ -177,7 +177,7 @@ Test process
 Spawns a real Electron window (hidden) with a real OpenCode server, connects via Chrome DevTools Protocol, and asserts toolbar DOM state.
 
 **What it tests:**
-1. Brand name renders ("Sidecar")
+1. Brand name renders ("Amicus")
 2. Task ID displayed in toolbar
 3. Timer ticks (changes after 2 seconds)
 4. Fold button exists with shortcut label
@@ -231,7 +231,7 @@ Electron creates two CDP targets per window:
 | Target | URL Pattern | Contains |
 |--------|-------------|----------|
 | **Content** | `http://localhost:<port>` | OpenCode web UI (BrowserView) |
-| **Toolbar** | `data:text/html,...` | Sidecar toolbar (brand, timer, fold button) |
+| **Toolbar** | `data:text/html,...` | Amicus toolbar (brand, timer, fold button) |
 
 Use `CdpClient.toolbar()` or `CdpClient.content()` to connect to the right one.
 
@@ -253,15 +253,15 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 | Variable | Purpose |
 |----------|---------|
-| `OPENROUTER_API_KEY` | API key for real LLM calls. Without it, E2E tests are skipped. Can also be in `~/.config/sidecar/.env` |
+| `OPENROUTER_API_KEY` | API key for real LLM calls. Without it, E2E tests are skipped. Can also be in `~/.config/amicus/.env` |
 
 ### Test Infrastructure Variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SIDECAR_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
-| `SIDECAR_DEBUG_PORT` | `9222` | CDP remote debugging port. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
-| `SIDECAR_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Used in Electron toolbar E2E tests. |
+| `AMICUS_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
+| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
+| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Used in Electron toolbar E2E tests. |
 
 ---
 
@@ -269,7 +269,7 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 ### macOS
 
-No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `SIDECAR_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer.
+No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `AMICUS_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer.
 
 ### Linux (VPS / CI)
 
@@ -308,7 +308,7 @@ Screenshots are not committed to git. They're generated fresh on each test run f
 
 ## Agentic Eval System
 
-The eval system tests whether an LLM (Claude) can correctly use sidecar as a tool. Each eval spawns a real Claude Code process in an isolated sandbox.
+The eval system tests whether an LLM (Claude) can correctly use Amicus as a tool. Each eval spawns a real Claude Code process in an isolated sandbox.
 
 See [evals/README.md](../evals/README.md) for full documentation.
 
@@ -339,7 +339,7 @@ Two-stage: programmatic checks (gate) then LLM-as-judge (quality). All programma
 | Critical spawn config | Integration | Read source, assert pattern present |
 | New headless workflow | E2E | Real LLM, verify session files |
 | New toolbar UI element | E2E (CDP) | Real Electron, assert DOM via CDP |
-| LLM decision quality | Eval | Claude + sidecar in sandbox |
+| LLM decision quality | Eval | Claude + Amicus in sandbox |
 
 ### Naming Conventions
 
@@ -357,8 +357,8 @@ tests/
 When adding a new Electron E2E test:
 
 1. Reuse the `startRealServer()` + `spawnElectron()` + `CdpClient` pattern from `electron-toolbar-e2e.integration.test.js`
-2. Use `SIDECAR_HEADLESS_TEST=1` to suppress the window
-3. Use a unique `SIDECAR_DEBUG_PORT` (currently `9224` for toolbar tests)
+2. Use `AMICUS_HEADLESS_TEST=1` to suppress the window
+3. Use a unique `AMICUS_DEBUG_PORT` (currently `9224` for toolbar tests)
 4. Always clean up in `afterAll`: kill Electron, kill server, kill Xvfb
 5. Save screenshots to `tests/screenshots/` with descriptive names
 
@@ -460,7 +460,7 @@ Complete mapping of test files to their targets and focus areas.
 | `scripts/check-file-sizes.test.js` | File size limits | Line counting, batch checking |
 | `scripts/validate-docs.test.js` | Doc drift detection | Section extraction, drift comparison, staged file check |
 | `helpers/cdp-client.test.js` | CDP helper | Mock HTTP+WebSocket CDP server, factory methods |
-| `electron-headless-mode.test.js` | Electron headless | Source-level verify `SIDECAR_HEADLESS_TEST` guard |
+| `electron-headless-mode.test.js` | Electron headless | Source-level verify `AMICUS_HEADLESS_TEST` guard |
 | `cli-headless-e2e.integration.test.js` | CLI E2E (real LLM) | `start --no-ui`, `list`, `read`, `read --metadata` |
 | `electron-toolbar-e2e.integration.test.js` | Electron CDP E2E (real LLM) | Brand, task ID, timer, fold button, settings, update banner, screenshots |
 
@@ -472,10 +472,10 @@ Complete mapping of test files to their targets and focus areas.
 
 For UI changes, follow this autonomous verification process:
 
-1. **Launch the app** with appropriate mock env vars (e.g., `SIDECAR_MOCK_UPDATE=available`)
-2. **Use `SIDECAR_DEBUG_PORT=9223`** to avoid port conflicts with Chrome
+1. **Launch the app** with appropriate mock env vars (e.g., `AMICUS_MOCK_UPDATE=available`)
+2. **Use `AMICUS_DEBUG_PORT=9223`** to avoid port conflicts with Chrome
 3. **Inspect via Chrome DevTools Protocol**: Connect to `http://127.0.0.1:9223/json`, find the target page, query DOM state via WebSocket
-4. **Take a screenshot**: `screencapture -x /tmp/sidecar-<feature>.png` and visually verify
+4. **Take a screenshot**: `screencapture -x /tmp/amicus-<feature>.png` and visually verify
 5. **Check both targets**: The Electron window has two pages -- the OpenCode content (`http://localhost:...`) and the toolbar (`data:text/html`). Test each as needed.
 
 **Key gotcha:** `contextBridge` does not work with `data:` URLs. The toolbar (`data:text/html`) cannot use `window.sidecar` IPC. Use `executeJavaScript()` polling from the main process instead.
@@ -500,12 +500,12 @@ Never commit an image without completing visual verification. GitHub strips `<st
 
 ## Update Banner Mock Testing
 
-Use `SIDECAR_MOCK_UPDATE` to test update UI states without real npm operations:
+Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations:
 
 ```bash
-SIDECAR_MOCK_UPDATE=available sidecar start --model gemini --prompt "test"  # Shows banner
-SIDECAR_MOCK_UPDATE=success sidecar start --model gemini --prompt "test"    # Update succeeds
-SIDECAR_MOCK_UPDATE=error sidecar start --model gemini --prompt "test"      # Update fails
+AMICUS_MOCK_UPDATE=available amicus start --model gemini --prompt "test"  # Shows banner
+AMICUS_MOCK_UPDATE=success amicus start --model gemini --prompt "test"    # Update succeeds
+AMICUS_MOCK_UPDATE=error amicus start --model gemini --prompt "test"      # Update fails
 ```
 
 ---
@@ -514,11 +514,11 @@ SIDECAR_MOCK_UPDATE=error sidecar start --model gemini --prompt "test"      # Up
 
 | Problem | Cause | Solution |
 |---------|-------|---------|
-| E2E tests skipped | No `OPENROUTER_API_KEY` | Set the key in env or `~/.config/sidecar/.env` |
-| CDP connection refused | Wrong port or Chrome conflict | Use `SIDECAR_DEBUG_PORT=9224` (not 9222/9223) |
+| E2E tests skipped | No `OPENROUTER_API_KEY` | Set the key in env or `~/.config/amicus/.env` |
+| CDP connection refused | Wrong port or Chrome conflict | Use `AMICUS_DEBUG_PORT=9224` (not 9222/9223) |
 | Electron E2E skipped | `electron` not installed | `npm install` (it's a devDependency) |
 | Linux E2E crash | No X server | Install Xvfb: `apt-get install xvfb` |
 | Jest ESM error | Dynamic import in test | Use `tests/helpers/start-server.js` child process |
 | `waitForSelector` timeout | Element not rendered yet | Increase timeout or check selector name |
-| Screenshot empty/small | Window not created | Verify `SIDECAR_HEADLESS_TEST=1` is set |
+| Screenshot empty/small | Window not created | Verify `AMICUS_HEADLESS_TEST=1` is set |
 | Stale CDP target ID | Electron restarted | Always use `CdpClient.toolbar()` factory (retries) |

@@ -35,15 +35,15 @@
 
   <!-- Arrows: Clients → Sidecar Core -->
   <line x1="245" y1="86" x2="245" y2="140" stroke="#D97757" stroke-width="2" marker-end="url(#arrow-highlight)" />
-  <text x="245" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="500" fill="#D97757" text-anchor="middle" dx="-50">sidecar start</text>
+  <text x="245" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="500" fill="#D97757" text-anchor="middle" dx="-50">amicus start</text>
 
   <line x1="555" y1="86" x2="555" y2="140" stroke="#D97757" stroke-width="2" marker-end="url(#arrow-highlight)" />
-  <text x="555" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="500" fill="#D97757" text-anchor="middle" dx="52">sidecar_start</text>
+  <text x="555" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="500" fill="#D97757" text-anchor="middle" dx="52">amicus_start</text>
 
-  <!-- ===== Level 2: Sidecar CLI Core ===== -->
+  <!-- ===== Level 2: Amicus CLI Core ===== -->
   <rect x="100" y="145" width="600" height="65" fill="url(#box-grad)" stroke="#D97757" stroke-width="2" rx="8" />
-  <text x="400" y="173" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="600" fill="#E8E0D8" text-anchor="middle">Sidecar CLI Core</text>
-  <text x="400" y="193" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" fill="#E28E73" text-anchor="middle">bin/sidecar.js  ·  src/index.js</text>
+  <text x="400" y="173" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="600" fill="#E8E0D8" text-anchor="middle">Amicus CLI Core</text>
+  <text x="400" y="193" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" fill="#E28E73" text-anchor="middle">bin/amicus.js  ·  src/index.js</text>
 
   <!-- Arrows: Core → Session Logs / OpenCode Server -->
   <line x1="270" y1="210" x2="270" y2="268" stroke="#888C99" stroke-width="2" marker-end="url(#arrow)" />

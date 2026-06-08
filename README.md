@@ -2,25 +2,25 @@
 >
 > **Amicus** is an independent fork of [Claude Sidecar](https://github.com/jrenaldi79/sidecar) (MIT, © John Renaldi) that bundles the Sidecar engine with a multi-model **LLM Council** (`skills/second-opinion/`) and an ad-hoc multi-model **chat** skill (`skill/`) — installable as one system, with Claude as the orchestrator. See [`NOTICE`](./NOTICE) for attribution.
 >
-> The documentation below is still upstream Sidecar's, pending the rebrand.
+> The documentation below reflects the Amicus rebrand.
 
 ---
 
 <div align="center">
 
-# Claude Sidecar
+# Amicus
 
 **A parallel AI window that shares your context. Talk to any model while your main session keeps working.**
 
-![Claude Sidecar: Fork, Work, Fold](./docs/hero.png)
+![Amicus: Fork, Work, Fold](./docs/hero.png)
 
-Sidecar opens a real UI alongside Claude Code or Cowork, pre-loaded with your conversation context, connected to Gemini, GPT, DeepSeek, Qwen, Grok, or any other model. You interact with the sidecar in parallel (fact-check Claude's work, get a second opinion, explore a tangent) then fold the results back when you're ready.
+Amicus opens a real UI alongside Claude Code or Cowork, pre-loaded with your conversation context, connected to Gemini, GPT, DeepSeek, Qwen, Grok, or any other model. You interact with Amicus in parallel (fact-check Claude's work, get a second opinion, explore a tangent) then fold the results back when you're ready.
 
 [![Watch the demo](https://img.youtube.com/vi/Cl_RA8HAZJE/maxresdefault.jpg)](https://youtu.be/Cl_RA8HAZJE)
 
 > **Supported clients:** Claude Code CLI and Claude Cowork are fully tested and supported. Claude Code web and Claude Desktop are experimental.
 
-[![npm version](https://img.shields.io/npm/v/claude-sidecar?color=D97757&labelColor=1A1C29)](https://www.npmjs.com/package/claude-sidecar)
+[![npm version](https://img.shields.io/npm/v/amicus?color=D97757&labelColor=1A1C29)](https://www.npmjs.com/package/amicus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?labelColor=1A1C29)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?labelColor=1A1C29)](https://nodejs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?labelColor=1A1C29)](./CONTRIBUTING.md)
@@ -33,7 +33,7 @@ Sidecar opens a real UI alongside Claude Code or Cowork, pre-loaded with your co
 
 ## Table of Contents
 
-- [What Is Sidecar?](#what-is-sidecar)
+- [What Is Amicus?](#what-is-amicus)
 - [Use Cases](#use-cases)
 - [Getting Started](#getting-started)
 - [Quick Start](#quick-start)
@@ -44,7 +44,7 @@ Sidecar opens a real UI alongside Claude Code or Cowork, pre-loaded with your co
 - [Models](#models)
 - [MCP Integration](#mcp-integration)
 - [Configuration](#configuration)
-- [Understanding Sidecar Output](#understanding-sidecar-output)
+- [Understanding Amicus Output](#understanding-amicus-output)
 - [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -53,32 +53,32 @@ Sidecar opens a real UI alongside Claude Code or Cowork, pre-loaded with your co
 
 ---
 
-## What Is Sidecar?
+## What Is Amicus?
 
-Sidecar is a **literal second window** that runs alongside your Claude Code or Cowork session. It:
+Amicus is a **literal second window** that runs alongside your Claude Code or Cowork session. It:
 
-1. **Shares your context.** Your current conversation history is automatically extracted and passed to the sidecar. No copy-pasting, no re-explaining.
-2. **Runs in parallel.** Your main Claude session keeps working while you interact with the sidecar. It's not sequential, it's simultaneous.
+1. **Shares your context.** Your current conversation history is automatically extracted and passed to the Amicus session. No copy-pasting, no re-explaining.
+2. **Runs in parallel.** Your main Claude session keeps working while you interact with Amicus. It's not sequential, it's simultaneous.
 3. **Connects to any model.** Gemini 3.1 Pro (1M context), GPT-5.4, DeepSeek v3.2, Qwen, Grok: whatever's best for the job.
 4. **Folds back cleanly.** When you're done, click FOLD and a structured summary returns to your main context. No noise, just results.
 
-![What Is Sidecar: Fork and Fold](./docs/what-is-sidecar.png)
+![What Is Amicus: Fork and Fold](./docs/what-is-amicus.png)
 
 ---
 
 ## Use Cases
 
 ### Fact-Check Claude's Work
-Claude just proposed an architecture or made a claim? Open a sidecar to a different model and verify it, with full context already loaded.
+Claude just proposed an architecture or made a claim? Open Amicus to a different model and verify it, with full context already loaded.
 
 ### Get a Second Opinion on a Feature
 Designing something complex? Fork the conversation to Gemini or GPT-5.4 for an independent take. Compare approaches before committing to one.
 
 ### Deep-Dive Without Polluting Context
-Need to explore a rabbit hole (trace a bug, read a huge file, research an API)? Do it in the sidecar. Your main session stays clean and focused.
+Need to explore a rabbit hole (trace a bug, read a huge file, research an API)? Do it in Amicus. Your main session stays clean and focused.
 
 ### Parallel Investigation
-While Claude implements a fix, spin up a sidecar to review the test coverage, audit security implications, or draft documentation, all at the same time.
+While Claude implements a fix, spin up Amicus to review the test coverage, audit security implications, or draft documentation, all at the same time.
 
 ### Leverage Model Strengths
 - **Gemini 3.1 Pro**: 1M token context for analyzing entire codebases
@@ -98,27 +98,27 @@ While Claude implements a fix, spin up a sidecar to review the test coverage, au
 ### 1. Install
 
 ```bash
-npm install -g claude-sidecar
+npm install -g amicus
 ```
 
-On install, sidecar automatically configures itself for all supported clients:
-- **Claude Code CLI**: Registers an MCP server and installs a Skill, so Claude can launch and manage sidecars on your behalf
-- **Claude Desktop & Cowork**: Registers an MCP server, so sidecar tools appear natively in the UI
+On install, Amicus automatically configures itself for all supported clients:
+- **Claude Code CLI**: Registers an MCP server and installs a Skill, so Claude can launch and manage Amicus sessions on your behalf
+- **Claude Desktop & Cowork**: Registers an MCP server, so Amicus tools appear natively in the UI
 
 No manual registration needed. Just install and run setup.
 
 ### 2. Run Setup
 
 ```bash
-sidecar setup
+amicus setup
 ```
 
 This launches a **graphical setup wizard** that walks you through everything:
 
 | Step | What It Does |
 |------|-------------|
-| **1. API Keys** | Enter keys for OpenRouter, Google, OpenAI, and/or Anthropic. Each key is validated live against the provider's API. Keys are stored locally at `~/.config/sidecar/.env` with restricted permissions (0600). |
-| **2. Default Model** | Choose your go-to model from 20+ aliases (Gemini, GPT, Opus, DeepSeek, Qwen, Grok, and more). This is what sidecar uses when you omit `--model`. |
+| **1. API Keys** | Enter keys for OpenRouter, Google, OpenAI, and/or Anthropic. Each key is validated live against the provider's API. Keys are stored locally at `~/.config/amicus/.env` with restricted permissions (0600). |
+| **2. Default Model** | Choose your go-to model from 20+ aliases (Gemini, GPT, Opus, DeepSeek, Qwen, Grok, and more). This is what Amicus uses when you omit `--model`. |
 | **3. Model Routing** | Configure which provider serves each model. If you have both an OpenRouter key and a direct Google key, you can route Gemini through Google directly and everything else through OpenRouter. |
 | **4. Review** | Summary of your configuration before saving. |
 
@@ -127,13 +127,13 @@ This launches a **graphical setup wizard** that walks you through everything:
 You can also manage individual settings without re-running the full wizard:
 
 ```bash
-sidecar setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
+amicus setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
 ```
 
 ### 3. Verify
 
 ```bash
-sidecar start --model gemini --prompt "Hello, confirm sidecar is working"
+amicus start --model gemini --prompt "Hello, confirm Amicus is working"
 ```
 
 A window should open alongside your editor with Gemini ready to chat, pre-loaded with your Claude Code context.
@@ -143,35 +143,35 @@ A window should open alongside your editor with Gemini ready to chat, pre-loaded
 ## Quick Start
 
 ```bash
-# Fact-check: open a sidecar to verify Claude's approach
-sidecar start --model gemini --prompt "Fact-check the auth approach Claude just proposed"
+# Fact-check: open Amicus to verify Claude's approach
+amicus start --model gemini --prompt "Fact-check the auth approach Claude just proposed"
 
 # Second opinion: get a different model's take
-sidecar start --model gpt --prompt "Review this feature design. Is there a simpler approach?"
+amicus start --model gpt --prompt "Review this feature design. Is there a simpler approach?"
 
 # Deep dive: investigate without polluting your main context
-sidecar start --model gemini-pro --prompt "Analyze the entire codebase architecture"
+amicus start --model gemini-pro --prompt "Analyze the entire codebase architecture"
 
 # Headless: autonomous, no UI, summary returns automatically
-sidecar start --model gemini --prompt "Generate Jest tests for src/utils/" --no-ui
+amicus start --model gemini --prompt "Generate Jest tests for src/utils/" --no-ui
 
 # Use your configured default model (just omit --model)
-sidecar start --prompt "Security review the payment module"
+amicus start --prompt "Security review the payment module"
 ```
 
 ---
 
 ## How It Works
 
-1. **Context sharing.** Sidecar reads your Claude Code session from `~/.claude/projects/[project]/[session].jsonl` and passes it to the sidecar model automatically.
-2. **Window launch.** An Electron window opens alongside your editor with the sidecar UI (OpenCode-powered).
-3. **Parallel interaction.** You converse with the sidecar model while your main Claude session continues working independently.
+1. **Context sharing.** Amicus reads your Claude Code session from `~/.claude/projects/[project]/[session].jsonl` and passes it to the Amicus model automatically.
+2. **Window launch.** An Electron window opens alongside your editor with the Amicus UI (OpenCode-powered).
+3. **Parallel interaction.** You converse with the Amicus model while your main Claude session continues working independently.
 4. **Fold.** Click FOLD (or press `Cmd+Shift+F`) to generate a structured summary.
 5. **Context return.** The summary flows back into your Claude Code context for Claude to act on.
 
-The Electron shell uses a **BrowserView** architecture: the OpenCode web UI loads in a dedicated viewport, while the sidecar toolbar (branding, timer, Fold button) renders in the bottom 40px. No CSS conflicts with the host app.
+The Electron shell uses a **BrowserView** architecture: the OpenCode web UI loads in a dedicated viewport, while the Amicus toolbar (branding, timer, Fold button) renders in the bottom 40px. No CSS conflicts with the host app.
 
-![Sidecar Architecture](./docs/architecture.png)
+![Amicus Architecture](./docs/architecture.png)
 
 ---
 
@@ -179,23 +179,23 @@ The Electron shell uses a **BrowserView** architecture: the OpenCode web UI load
 
 ### Interactive + Headless Modes
 
-**Interactive (default):** Opens a window alongside Claude Code. You converse with the sidecar, steer the investigation, then click **FOLD** to generate a structured summary. Switch models mid-conversation without restarting.
+**Interactive (default):** Opens a window alongside Claude Code. You converse with Amicus, steer the investigation, then click **FOLD** to generate a structured summary. Switch models mid-conversation without restarting.
 
 **Headless (`--no-ui`):** The agent works autonomously in the background. When done, outputs a `[SIDECAR_FOLD]` summary automatically. Ideal for bulk tasks: test generation, documentation, linting.
 
 ### Context Passing
 
-Your conversation history is automatically shared with the sidecar. No re-explaining needed. Filter by turns (`--context-turns`) or time window (`--context-since 2h`).
+Your conversation history is automatically shared with Amicus. No re-explaining needed. Filter by turns (`--context-turns`) or time window (`--context-since 2h`).
 
 ### Adaptive Personality
 
-Sidecar detects its launch context and adapts:
+Amicus detects its launch context and adapts:
 - **From Claude Code** (`--client code-local`): Engineering-focused (debug, implement, review)
 - **From Cowork** (`--client cowork`): General-purpose (research, analyze, write, brainstorm)
 
 ### MCP Server Inheritance
 
-Sidecar automatically discovers MCP servers configured in your Claude Code session (`~/.claude.json`) and passes them through to the sidecar's OpenCode instance. Your sidecar has access to the same tools you do. Control this with:
+Amicus automatically discovers MCP servers configured in your Claude Code session (`~/.claude.json`) and passes them through to the Amicus OpenCode instance. Your Amicus session has access to the same tools you do. Control this with:
 
 - `--no-mcp` disables MCP inheritance entirely
 - `--exclude-mcp <name>` excludes specific servers (repeatable)
@@ -203,13 +203,13 @@ Sidecar automatically discovers MCP servers configured in your Claude Code sessi
 
 ### Safety Features
 
-- **Conflict detection**: Warns when files changed externally while the sidecar was running
-- **Drift awareness**: Indicates when the sidecar's context may be stale relative to your current session
+- **Conflict detection**: Warns when files changed externally while Amicus was running
+- **Drift awareness**: Indicates when the Amicus context may be stale relative to your current session
 - **Pre-flight validation**: All CLI inputs are validated before anything launches
 
 ### Auto-Update
 
-Sidecar checks the npm registry for updates once every 24 hours (cached, zero-latency background check). When an update is available:
+Amicus checks the npm registry for updates once every 24 hours (cached, zero-latency background check). When an update is available:
 
 - **CLI:** A notification box appears in your terminal after any command
 - **Electron UI:** A banner appears above the toolbar with a one-click **Update** button. No terminal commands needed.
@@ -218,32 +218,32 @@ Updating installs the latest code **and** re-runs the postinstall step, so your 
 
 ```bash
 # Or update manually from the CLI
-sidecar update
+amicus update
 ```
 
 ### Session Persistence
 
-Every sidecar is persisted. List past sessions, read their summaries, reopen them, or chain them together.
+Every Amicus session is persisted. List past sessions, read their summaries, reopen them, or chain them together.
 
 ```bash
-sidecar list                           # See all past sidecars
-sidecar read abc123                    # Read the summary
-sidecar resume abc123                  # Reopen the exact session
-sidecar continue abc123 --prompt "..." # New session building on previous findings
+amicus list                           # See all past Amicus sessions
+amicus read abc123                    # Read the summary
+amicus resume abc123                  # Reopen the exact session
+amicus continue abc123 --prompt "..." # New session building on previous findings
 ```
 
 ### MCP Integration
 
-Full MCP server for Claude Desktop and Cowork. Sidecar tools appear natively inside Cowork's sandboxed environment. No CLI required.
+Full MCP server for Claude Desktop and Cowork. Amicus tools appear natively inside Cowork's sandboxed environment. No CLI required.
 
 ---
 
 ## Commands
 
-### `sidecar start`: Launch a Sidecar
+### `amicus start`: Launch an Amicus Session
 
 ```bash
-sidecar start --model <model> --prompt "<task>"
+amicus start --model <model> --prompt "<task>"
 ```
 
 | Option | Description | Default |
@@ -266,69 +266,69 @@ sidecar start --model <model> --prompt "<task>"
 | `--exclude-mcp` | Exclude specific MCP server (repeatable) | |
 | `--client` | Client context: `code-local` `cowork` (`code-web` experimental) | `code-local` |
 
-### `sidecar list`: Browse Past Sessions
+### `amicus list`: Browse Past Sessions
 
 ```bash
-sidecar list                    # Current project
-sidecar list --status complete  # Completed only
-sidecar list --all              # All projects
-sidecar list --json             # JSON output
+amicus list                    # Current project
+amicus list --status complete  # Completed only
+amicus list --all              # All projects
+amicus list --json             # JSON output
 ```
 
-### `sidecar resume`: Reopen a Session
+### `amicus resume`: Reopen a Session
 
 ```bash
-sidecar resume <task_id>
+amicus resume <task_id>
 ```
 
 Reopens the exact OpenCode session with full conversation history preserved.
 
-### `sidecar continue`: Build on Previous Work
+### `amicus continue`: Build on Previous Work
 
 ```bash
-sidecar continue <task_id> --prompt "Now implement the fix from the analysis"
+amicus continue <task_id> --prompt "Now implement the fix from the analysis"
 ```
 
 Starts a **new** session with the previous session's conversation as read-only background context. Optionally switch models.
 
-### `sidecar read`: Read Session Output
+### `amicus read`: Read Session Output
 
 ```bash
-sidecar read <task_id>                  # Summary (default)
-sidecar read <task_id> --conversation   # Full conversation
-sidecar read <task_id> --metadata       # Session metadata
+amicus read <task_id>                  # Summary (default)
+amicus read <task_id> --conversation   # Full conversation
+amicus read <task_id> --metadata       # Session metadata
 ```
 
-### `sidecar abort`: Stop a Running Session
+### `amicus abort`: Stop a Running Session
 
 ```bash
-sidecar abort <task_id>
+amicus abort <task_id>
 ```
 
-Immediately stops a running sidecar session. The session status changes to `aborted`.
+Immediately stops a running Amicus session. The session status changes to `aborted`.
 
-### `sidecar setup`: Configure Sidecar
+### `amicus setup`: Configure Amicus
 
 ```bash
-sidecar setup                                           # Full setup wizard (GUI)
-sidecar setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
+amicus setup                                           # Full setup wizard (GUI)
+amicus setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
 ```
 
 Opens the graphical setup wizard for API keys, default model, model routing, and aliases. See [Getting Started](#2-run-setup) for details.
 
-### `sidecar update`: Update to Latest Version
+### `amicus update`: Update to Latest Version
 
 ```bash
-sidecar update
+amicus update
 ```
 
-Updates sidecar to the latest npm release. In the Electron UI, click the **Update** button in the banner instead. No terminal needed.
+Updates Amicus to the latest npm release. In the Electron UI, click the **Update** button in the banner instead. No terminal needed.
 
 ---
 
 ## Agent Modes
 
-Three primary modes control what the sidecar can do autonomously:
+Three primary modes control what Amicus can do autonomously:
 
 | Agent | Reads | Writes/Bash | Best For |
 |-------|-------|-------------|----------|
@@ -338,13 +338,13 @@ Three primary modes control what the sidecar can do autonomously:
 
 ```bash
 # Chat: good for fact-checking and analysis with human-in-the-loop (default)
-sidecar start --model gemini --prompt "Verify Claude's approach to the auth refactor"
+amicus start --model gemini --prompt "Verify Claude's approach to the auth refactor"
 
 # Plan: strict read-only, no changes possible
-sidecar start --model gemini --agent Plan --prompt "Security review of the payment module"
+amicus start --model gemini --agent Plan --prompt "Security review of the payment module"
 
 # Build: full autonomy, use when you explicitly want it to write code
-sidecar start --model gemini --agent Build --no-ui \
+amicus start --model gemini --agent Build --no-ui \
   --prompt "Generate comprehensive Jest tests for src/utils/"
 ```
 
@@ -354,7 +354,7 @@ sidecar start --model gemini --agent Build --no-ui \
 
 ## Models
 
-### Using Aliases (after `sidecar setup`)
+### Using Aliases (after `amicus setup`)
 
 | Alias | Model | Notes |
 |-------|-------|-------|
@@ -398,26 +398,26 @@ curl https://openrouter.ai/api/v1/models | jq '.data[].id' | grep -i gemini
 
 ## MCP Integration
 
-For Claude Desktop and Cowork, sidecar exposes a full MCP server auto-registered on install.
+For Claude Desktop and Cowork, Amicus exposes a full MCP server auto-registered on install.
 
 To register manually:
 ```bash
-claude mcp add-json sidecar '{"command":"npx","args":["-y","claude-sidecar@latest","mcp"]}' --scope user
+claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
 | MCP Tool | Description |
 |----------|-------------|
-| `sidecar_start` | Spawn a sidecar (returns task ID immediately) |
-| `sidecar_status` | Poll for completion |
-| `sidecar_read` | Get results: summary, conversation, or metadata |
-| `sidecar_list` | List past sessions |
-| `sidecar_resume` | Reopen a session |
-| `sidecar_continue` | New session building on previous |
-| `sidecar_abort` | Stop a running session |
-| `sidecar_setup` | Open setup wizard |
-| `sidecar_guide` | Get usage instructions |
+| `amicus_start` | Spawn an Amicus session (returns task ID immediately) |
+| `amicus_status` | Poll for completion |
+| `amicus_read` | Get results: summary, conversation, or metadata |
+| `amicus_list` | List past sessions |
+| `amicus_resume` | Reopen a session |
+| `amicus_continue` | New session building on previous |
+| `amicus_abort` | Stop a running session |
+| `amicus_setup` | Open setup wizard |
+| `amicus_guide` | Get usage instructions |
 
-**Async pattern:** `sidecar_start` returns a task ID immediately. Poll with `sidecar_status`, then read results with `sidecar_read`. This is non-blocking: the calling agent can do other work while the sidecar runs.
+**Async pattern:** `amicus_start` returns a task ID immediately. Poll with `amicus_status`, then read results with `amicus_read`. This is non-blocking: the calling agent can do other work while Amicus runs.
 
 ---
 
@@ -432,24 +432,24 @@ claude mcp add-json sidecar '{"command":"npx","args":["-y","claude-sidecar@lates
 | `OPENAI_API_KEY` | Direct OpenAI API key | |
 | `ANTHROPIC_API_KEY` | Direct Anthropic API key | |
 | `LOG_LEVEL` | Logging verbosity: `error` `warn` `info` `debug` | `error` |
-| `SIDECAR_CONFIG_DIR` | Override config directory | `~/.config/sidecar` |
-| `SIDECAR_ENV_DIR` | Override `.env` file directory | |
-| `SIDECAR_TIMEOUT` | Default headless timeout in minutes | `15` |
+| `AMICUS_CONFIG_DIR` | Override config directory | `~/.config/amicus` |
+| `AMICUS_ENV_DIR` | Override `.env` file directory | |
+| `AMICUS_TIMEOUT` | Default headless timeout in minutes | `15` |
 | `OPENCODE_COMMAND` | Override OpenCode binary path | `opencode` |
 
-API keys configured via `sidecar setup` are stored in `~/.config/sidecar/.env` with restricted permissions (0600). You can also set them as environment variables directly.
+API keys configured via `amicus setup` are stored in `~/.config/amicus/.env` with restricted permissions (0600). You can also set them as environment variables directly.
 
 ---
 
-## Understanding Sidecar Output
+## Understanding Amicus Output
 
 Every fold produces a structured summary:
 
 ```markdown
-## Sidecar Results: [Title]
+## Amicus Results: [Title]
 
 **Context Age:** [How stale the context might be]
-**FILE CONFLICT WARNING** [If files changed while the sidecar ran]
+**FILE CONFLICT WARNING** [If files changed while Amicus ran]
 
 **Task:** What was requested
 **Findings:** Key discoveries
@@ -467,10 +467,10 @@ Every fold produces a structured summary:
 
 | Issue | Cause | Solution |
 |-------|-------|---------|
-| `command not found: opencode` | OpenCode binary not found | Reinstall: `npm install -g claude-sidecar` (opencode-ai is bundled) |
-| 401 Unauthorized / auth errors | API key missing or wrong provider prefix | Run `sidecar setup` to configure keys, or verify `openrouter/...` prefix matches your credentials |
+| `command not found: opencode` | OpenCode binary not found | Reinstall: `npm install -g amicus` (opencode-ai is bundled) |
+| 401 Unauthorized / auth errors | API key missing or wrong provider prefix | Run `amicus setup` to configure keys, or verify `openrouter/...` prefix matches your credentials |
 | Headless stalls silently | `Chat` agent in headless mode | Use `--agent build`, not `--agent chat` in headless mode |
-| Session not found | No matching session ID | Run `sidecar list`, or omit `--session-id` to use most recent |
+| Session not found | No matching session ID | Run `amicus list`, or omit `--session-id` to use most recent |
 | No conversation history found | Project path encoding | Check `ls ~/.claude/projects/`. `/` and `_` are encoded as `-` in path |
 | Headless timeout | Task too complex for default timeout | Increase with `--timeout 30` |
 | Summary corrupted | Debug output leaking to stdout | Use `LOG_LEVEL=debug` to diagnose |
@@ -479,7 +479,7 @@ Every fold produces a structured summary:
 
 **Debug logging:**
 ```bash
-LOG_LEVEL=debug sidecar start --model gemini --prompt "test" --no-ui
+LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 ```
 
 ---
@@ -490,7 +490,7 @@ LOG_LEVEL=debug sidecar start --model gemini --prompt "test" --no-ui
 |-----|-------------|
 | [SKILL.md](./skill/SKILL.md) | Complete skill reference for Claude Code |
 | [Electron Testing](./docs/electron-testing.md) | Chrome DevTools Protocol patterns for UI testing |
-| [Agentic Evals](./evals/README.md) | End-to-end eval system for testing LLM interactions with sidecar |
+| [Agentic Evals](./evals/README.md) | End-to-end eval system for testing LLM interactions with Amicus |
 
 ---
 
@@ -507,20 +507,20 @@ npm test
 
 ### Autonomous UI Testing via Chrome DevTools Protocol
 
-Sidecar uses a novel approach for testing Electron UI features: instead of fragile DOM mock tests, we verify the real UI by connecting to the running Electron app via the **Chrome DevTools Protocol** (CDP).
+Amicus uses a novel approach for testing Electron UI features: instead of fragile DOM mock tests, we verify the real UI by connecting to the running Electron app via the **Chrome DevTools Protocol** (CDP).
 
 **How it works:**
 
-1. Launch sidecar with `SIDECAR_DEBUG_PORT=9223` (avoids conflict with Chrome on 9222)
-2. Use `SIDECAR_MOCK_UPDATE=available` or other mock env vars to force specific UI states
+1. Launch Amicus with `AMICUS_DEBUG_PORT=9223` (avoids conflict with Chrome on 9222)
+2. Use `AMICUS_MOCK_UPDATE=available` or other mock env vars to force specific UI states
 3. Connect to `http://127.0.0.1:9223/json` to discover debug targets
 4. Execute JavaScript in the Electron renderer via WebSocket to inspect DOM state
 5. Take a screenshot with `screencapture` to visually verify
 
 ```bash
 # Launch with mock update banner and debug port
-SIDECAR_MOCK_UPDATE=available SIDECAR_DEBUG_PORT=9223 \
-  sidecar start --model gemini --prompt "test"
+AMICUS_MOCK_UPDATE=available AMICUS_DEBUG_PORT=9223 \
+  amicus start --model gemini --prompt "test"
 
 # Find the toolbar page
 TOOLBAR_ID=$(curl -s http://127.0.0.1:9223/json | \
@@ -547,7 +547,7 @@ This approach tests real rendering in a real Electron window, not mocked DOM beh
 
 ## Built On
 
-Sidecar is a harness built on top of [**OpenCode**](https://opencode.ai), the open-source AI coding engine. OpenCode provides the conversation runtime, tool execution framework, agent system, and web UI. Sidecar adds context sharing from Claude Code, the Electron shell, fold/summary workflow, session persistence, and multi-client support (CLI, MCP, Cowork). We don't reinvent the wheel. OpenCode handles the hard parts of LLM interaction so Sidecar can focus on the parallel-window workflow.
+Amicus is a harness built on top of [**OpenCode**](https://opencode.ai), the open-source AI coding engine. OpenCode provides the conversation runtime, tool execution framework, agent system, and web UI. Amicus adds context sharing from Claude Code, the Electron shell, fold/summary workflow, session persistence, and multi-client support (CLI, MCP, Cowork). We don't reinvent the wheel. OpenCode handles the hard parts of LLM interaction so Amicus can focus on the parallel-window workflow.
 
 ---
 

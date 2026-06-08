@@ -45,7 +45,7 @@
   <circle cx="316" cy="62" r="4" fill="#E25555" opacity="0.7" />
   <circle cx="328" cy="62" r="4" fill="#E2A855" opacity="0.7" />
   <circle cx="340" cy="62" r="4" fill="#55C255" opacity="0.7" />
-  <text x="400" y="65" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" font-weight="600" fill="#D97757" text-anchor="middle">SIDECAR</text>
+  <text x="400" y="65" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" font-weight="600" fill="#D97757" text-anchor="middle">AMICUS</text>
   <!-- Model badge -->
   <rect x="340" y="82" width="120" height="18" rx="9" fill="#D97757" opacity="0.15" />
   <text x="400" y="94" font-family="SF Mono, Menlo, monospace" font-size="9" font-weight="600" fill="#E28E73" text-anchor="middle">Gemini 3 Pro</text>
@@ -59,7 +59,7 @@
   <rect x="300" y="168" width="200" height="28" fill="#2D2B2A" rx="0" />
   <rect x="300" y="196" width="200" height="14" fill="#2D2B2A" rx="0 0 8 8" />
   <rect x="300" y="168" width="200" height="1" fill="#3D3A38" />
-  <text x="330" y="182" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="7" font-weight="600" fill="#D97757" letter-spacing="0.5">SIDECAR</text>
+  <text x="330" y="182" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="7" font-weight="600" fill="#D97757" letter-spacing="0.5">AMICUS</text>
   <text x="370" y="182" font-family="SF Mono, Menlo, monospace" font-size="7" fill="#7A756F">2:34</text>
   <!-- Fold button -->
   <rect x="440" y="173" width="44" height="16" rx="3" fill="#D97757" />
