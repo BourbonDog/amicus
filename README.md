@@ -499,8 +499,8 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 Contributions are welcome!
 
 ```bash
-git clone https://github.com/jrenaldi79/claude-sidecar.git
-cd claude-sidecar
+git clone https://github.com/BourbonDog/amicus.git
+cd amicus
 npm install
 npm test
 ```

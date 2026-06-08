@@ -1,7 +1,7 @@
 /**
  * Start Command Helpers
  *
- * Model resolution and validation helpers extracted from bin/sidecar.js
+ * Model resolution and validation helpers extracted from bin/amicus.js
  * to keep the CLI entry point under the 300-line limit.
  */
 

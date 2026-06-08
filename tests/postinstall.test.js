@@ -41,7 +41,7 @@ describe('Postinstall MCP registration', () => {
     const configPath = path.join(tmpDir, 'claude.json');
 
     const oldConfig = { command: 'sidecar', args: ['mcp'] };
-    const newConfig = { command: 'npx', args: ['-y', 'claude-sidecar@latest', 'mcp'] };
+    const newConfig = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
     fs.writeFileSync(configPath, JSON.stringify({
       mcpServers: { sidecar: oldConfig },
     }));
@@ -60,7 +60,7 @@ describe('Postinstall MCP registration', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postinstall-test-'));
     const configPath = path.join(tmpDir, 'claude.json');
 
-    const config = { command: 'npx', args: ['-y', 'claude-sidecar@latest', 'mcp'] };
+    const config = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
     fs.writeFileSync(configPath, JSON.stringify({
       mcpServers: { sidecar: config },
     }));

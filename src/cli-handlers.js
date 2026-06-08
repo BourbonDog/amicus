@@ -1,7 +1,7 @@
 /**
  * CLI Command Handlers
  *
- * Extracted from bin/sidecar.js to keep the CLI entry point
+ * Extracted from bin/amicus.js to keep the CLI entry point
  * under the 300-line limit.
  */
 
@@ -92,20 +92,20 @@ async function handleAbort(args) {
 
 /**
  * Handle 'sidecar update' command
- * Updates claude-sidecar to the latest version
+ * Updates amicus to the latest version
  */
 async function handleUpdate() {
   const { performUpdate, getUpdateInfo, initUpdateCheck } = require('./utils/updater');
   initUpdateCheck();
   const info = getUpdateInfo();
   if (info) {
-    console.log(`Updating claude-sidecar ${info.current} → ${info.latest}...`);
+    console.log(`Updating amicus ${info.current} → ${info.latest}...`);
   } else {
-    console.log('Updating claude-sidecar to latest...');
+    console.log('Updating amicus to latest...');
   }
   const result = await performUpdate();
   if (result.success) {
-    console.log(`Updated successfully! Run 'sidecar --version' to verify.`);
+    console.log("Updated successfully! Run 'sidecar --version' to verify.");
   } else {
     console.error(`Update failed: ${result.error}`);
     process.exit(1);

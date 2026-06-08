@@ -1,5 +1,5 @@
 /**
- * End-to-End Tests for Claude Sidecar
+ * End-to-End Tests for Amicus
  *
  * Tests the full sidecar flow:
  * 1. Create a mock Claude Code session in the correct location

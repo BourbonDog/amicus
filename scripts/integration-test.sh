@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Integration Test Script for Claude Sidecar
+# Integration Test Script for Amicus
 #
 # This script tests the full end-to-end flow:
 # 1. Creates a test project directory
@@ -27,7 +27,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "============================================"
-echo "Claude Sidecar Integration Test"
+echo "Amicus Integration Test"
 echo "============================================"
 echo ""
 

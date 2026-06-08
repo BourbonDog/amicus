@@ -91,7 +91,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     logger.error('Electron not installed — interactive mode unavailable');
     return {
       summary: '', completed: false, timedOut: false, taskId,
-      error: 'Interactive mode requires electron. Install with: npm install -g claude-sidecar (or use --no-ui for headless mode)'
+      error: 'Interactive mode requires electron. Install with: npm install -g amicus (or use --no-ui for headless mode)'
     };
   }
 
