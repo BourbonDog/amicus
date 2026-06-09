@@ -56,7 +56,6 @@ docs/archive/
 
 # Design docs and plans (local only)
 docs/plans/
-docs/superpowers/
 
 # Eval workspace (generated during eval runs)
 evals/workspace/
