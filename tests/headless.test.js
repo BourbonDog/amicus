@@ -1044,5 +1044,57 @@ describe('Headless Mode Runner', () => {
       expect(result.completed).toBe(true);
       expect(Date.now() - start).toBeLessThan(1000); // 5ms polls, not 2000ms
     });
+
+    it('does NOT exit during a quiet tool-call gap longer than the old 4-poll threshold', async () => {
+      const running = {
+        info: { role: 'assistant', id: 'msg-1', time: {} },
+        parts: [
+          { id: 't1', type: 'tool_use', name: 'Read', input: { path: '/big' } },
+          { id: 'p1', type: 'text', text: 'Reading the file' }
+        ]
+      };
+      const done = {
+        info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+        parts: [
+          { id: 't1', type: 'tool_use', name: 'Read', input: { path: '/big' } },
+          { id: 'p1', type: 'text', text: `Reading the file... done\n${COMPLETE_MARKER}` }
+        ]
+      };
+      let n = 0;
+      mockGetMessages.mockImplementation(() => {
+        n++;
+        return Promise.resolve(n >= 8 ? [done] : [running]);
+      });
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 20 }
+      );
+      expect(result.completed).toBe(true);
+      expect(result.summary).toContain('done');
+      expect(n).toBeGreaterThanOrEqual(8);
+    });
+
+    it('treats new tool calls/results as activity (resets the idle counter)', async () => {
+      const seq = [
+        [{ info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+          { id: 'x', type: 'text', text: 'go' }, { id: 't1', type: 'tool_use', name: 'A', input: {} }] }],
+        [{ info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+          { id: 'x', type: 'text', text: 'go' }, { id: 't1', type: 'tool_use', name: 'A', input: {} },
+          { id: 'r1', type: 'tool_result', tool_use_id: 't1', content: 'ok' }] }],
+        [{ info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+          { id: 'x', type: 'text', text: 'go' }, { id: 't1', type: 'tool_use', name: 'A', input: {} },
+          { id: 'r1', type: 'tool_result', tool_use_id: 't1', content: 'ok' },
+          { id: 't2', type: 'tool_use', name: 'B', input: {} }] }],
+        [{ info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } }, parts: [
+          { id: 'x', type: 'text', text: `go done\n${COMPLETE_MARKER}` }] }],
+      ];
+      let n = 0;
+      mockGetMessages.mockImplementation(() => Promise.resolve(seq[Math.min(n++, seq.length - 1)]));
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 2 }
+      );
+      expect(result.completed).toBe(true);
+    });
   });
 });

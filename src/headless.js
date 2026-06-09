@@ -260,6 +260,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastAssistantMsgId = null;
     let lastOutputLength = 0; // Track output growth to detect streaming
     let stablePolls = 0; // Count polls where nothing has changed
+    let lastToolCallCount = 0;
+    let lastToolResultCount = 0;
+    const seenToolResultIds = new Set(); // deduplicate tool_result parts across polls
+    let lastMessageCount = 0;
     let receivingReported = false; // Track whether 'receiving' stage was reported
     const seenTextParts = new Map(); // partId -> last captured text length
     // seenPartIds reserved for future use (tracking processed non-text parts)
@@ -377,6 +381,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
                 });
                 receivingReported = true;
               } else if (part.type === 'tool_result') {
+                if (!seenToolResultIds.has(partId)) {
+                  seenToolResultIds.add(partId);
+                }
                 logger.debug('Tool result received (polling)', {
                   toolUseId: part.tool_use_id,
                   isError: part.is_error || false
@@ -426,32 +433,34 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           break;
         }
 
-        // Count as stable when nothing has changed — same messages, no new output.
-        //   1. assistantFinished + stable for 2 polls (ideal)
-        //   2. No output growth + same message count for 4 polls (fallback
-        //      for models that don't set time.completed reliably)
-        //
-        // IMPORTANT: Only count stable polls when the assistant has actually
-        // produced output. The SDK may create an empty assistant message
-        // placeholder immediately when promptAsync is called — that's NOT
-        // a completed response. We need real text output before we start
-        // counting towards completion.
+        // Activity-aware idle detection: ANY of text growth, a new tool call, a new
+        // tool result, a new message, or a new assistant message id counts as progress.
+        // Only count toward completion when NOTHING changed (genuine idle).
         const outputGrew = output.length > lastOutputLength;
         lastOutputLength = output.length;
+        const toolActivity = toolCalls.length > lastToolCallCount;
+        lastToolCallCount = toolCalls.length;
+        const resultActivity = seenToolResultIds.size > lastToolResultCount;
+        lastToolResultCount = seenToolResultIds.size;
+        const messageActivity = messageCount > lastMessageCount;
+        lastMessageCount = messageCount;
+        const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
 
-        if (!outputGrew && currentAssistantMsgId === lastAssistantMsgId) {
+        const progressed = outputGrew || toolActivity || resultActivity || messageActivity || newAssistant;
+
+        if (!progressed) {
+          // Require real output before counting toward completion — the SDK creates an
+          // empty assistant-message placeholder on promptAsync that is NOT a finished response.
           if (currentAssistantMsgId !== null && output.length > 0) {
             stablePolls++;
             const threshold = assistantFinished ? stableFinishedPolls : stableIdlePolls;
             if (stablePolls >= threshold) {
-              logger.debug('Session appears complete', { stablePolls, assistantFinished });
+              logger.debug('Session appears complete (idle)', { stablePolls, assistantFinished });
               break;
             }
           } else {
             logger.debug('Waiting for model to produce output', {
-              pollCount,
-              hasAssistantMsg: currentAssistantMsgId !== null,
-              outputLength: output.length
+              pollCount, hasAssistantMsg: currentAssistantMsgId !== null, outputLength: output.length
             });
           }
         } else {
