@@ -41,4 +41,14 @@ describe('model-catalog', () => {
     const models = await getCatalog({ maxAgeMs: -1 }); // force-expire → refresh → empty → stale
     expect(models.some(m => m.id === 'openrouter/stale')).toBe(true);
   });
+
+  test('refetches when the cache file is corrupt JSON', async () => {
+    const fetchAllModels = jest.fn().mockResolvedValue([{ id: 'openrouter/fresh', name: 'fresh' }]);
+    jest.doMock('../src/utils/model-fetcher', () => ({ fetchAllModels }));
+    const { getCatalog, catalogPath } = require('../src/utils/model-catalog');
+    fs.writeFileSync(catalogPath(), 'not json at all');
+    const models = await getCatalog();
+    expect(fetchAllModels).toHaveBeenCalledTimes(1);
+    expect(models.some(m => m.id === 'openrouter/fresh')).toBe(true);
+  });
 });

@@ -14,11 +14,8 @@ const path = require('path');
 
 // Lazy-load these so jest.doMock() in tests can intercept them after
 // this module is first required (the test pattern re-mocks mid-test).
-/* c8 ignore next */
 function _getConfigDir() { return require('./config').getConfigDir(); }
-/* c8 ignore next */
 function _readApiKeyValues() { return require('./api-key-store').readApiKeyValues(); }
-/* c8 ignore next */
 async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModels(keys); }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
@@ -66,6 +63,8 @@ async function refreshCatalog() {
 async function getCatalog(opts = {}) {
   const maxAgeMs = opts.maxAgeMs === undefined ? DEFAULT_MAX_AGE_MS : opts.maxAgeMs;
   const cache = readCache();
+  // A future fetchedAt (clock skew / hand-edited file) reads as indefinitely
+  // fresh; acceptable for a model catalog.
   const fresh = cache && (Date.now() - cache.fetchedAt) <= maxAgeMs;
   if (fresh) { return cache.models; }
 
