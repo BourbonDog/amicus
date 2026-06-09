@@ -41,7 +41,14 @@ describe('buildElectronEnv - window position', () => {
 });
 
 describe('getElectronPath', () => {
-  it('returns the path from require("electron") instead of hardcoded relative path', () => {
+  // This assertion needs a real electron install (it inspects require('electron')'s
+  // binary path). Local dev omits electron via --omit=optional, so skip it when
+  // electron isn't resolvable; it runs in CI where electron IS installed.
+  let electronInstalled = true;
+  try { require.resolve('electron'); } catch { electronInstalled = false; }
+  const itElectron = electronInstalled ? it : it.skip;
+
+  itElectron('returns the path from require("electron") instead of hardcoded relative path', () => {
     const { getElectronPath } = require('../../src/sidecar/interactive');
     const result = getElectronPath();
 
