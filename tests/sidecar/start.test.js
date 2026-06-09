@@ -316,6 +316,8 @@ describe('startSidecar includeContext option', () => {
   });
 
   it('skips buildContext when includeContext is false', async () => {
+    const PARENT_MARKER = '<<<PARENT_CONVERSATION_LEAK>>>';
+    buildContextMock.mockReturnValue(PARENT_MARKER);
     const { startSidecar } = require('../../src/sidecar/start');
     const { buildPrompts } = require('../../src/prompt-builder');
     await startSidecar({
@@ -324,5 +326,15 @@ describe('startSidecar includeContext option', () => {
     expect(buildContextMock).not.toHaveBeenCalled();
     const contextArg = buildPrompts.mock.calls[0][1];
     expect(contextArg).toContain('Context excluded');
+    expect(contextArg).not.toContain(PARENT_MARKER);
+  });
+
+  it('passes parent context to buildPrompts when includeContext is true', async () => {
+    const PARENT_MARKER = '<<<PARENT_CONVERSATION_LEAK>>>';
+    buildContextMock.mockReturnValue(PARENT_MARKER);
+    const { startSidecar } = require('../../src/sidecar/start');
+    const { buildPrompts } = require('../../src/prompt-builder');
+    await startSidecar({ model: 'gemini', prompt: 'test', noUi: true, includeContext: true });
+    expect(buildPrompts.mock.calls[0][1]).toContain(PARENT_MARKER);
   });
 });
