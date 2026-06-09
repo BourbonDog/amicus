@@ -21,8 +21,9 @@ const os = require('os');
  * // Returns: '-Users-john-myproject'
  */
 function encodeProjectPath(projectPath) {
-  // Replace slashes, backslashes, and underscores with dashes (matching Claude Code behavior)
-  return projectPath.replace(/[/\\_]/g, '-');
+  // Replace slashes, backslashes, the drive-letter colon, and underscores with
+  // dashes (matching Claude Code behavior). On Windows: C:\Users\x -> C--Users-x.
+  return projectPath.replace(/[/\\:_]/g, '-');
 }
 
 /**

@@ -41,11 +41,11 @@ describe('Session Resolver', () => {
       expect(result).toBe('Users-john-myproject');
     });
 
-    it('should handle Windows-style paths (backslashes)', () => {
-      // On Windows, paths may use backslashes
+    it('should handle Windows-style paths (drive colon + backslashes)', () => {
+      // Claude Code encodes C:\Users\john\myproject as C--Users-john-myproject:
+      // the drive-letter colon AND each backslash become a dash.
       const result = encodeProjectPath('C:\\Users\\john\\myproject');
-      // Should convert backslashes to dashes as well
-      expect(result).toBe('C:-Users-john-myproject');
+      expect(result).toBe('C--Users-john-myproject');
     });
 
     it('should convert underscores to dashes (matching Claude Code behavior)', () => {

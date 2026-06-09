@@ -55,13 +55,13 @@ function inferClient(args, platform) {
 
 /**
  * Encode a filesystem path for use as a directory name.
- * Replaces /, \, and _ with dashes.
+ * Replaces /, \, the drive-letter colon, and _ with dashes (matches Claude Code).
  *
  * @param {string} cwdPath - The working directory path
  * @returns {string} Encoded path safe for directory names
  */
 function encodePath(cwdPath) {
-  return cwdPath.replace(/[/\\_]/g, '-');
+  return cwdPath.replace(/[/\\:_]/g, '-');
 }
 
 /**
