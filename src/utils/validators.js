@@ -49,7 +49,9 @@ const { SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('../session-manager');
 
 /** Resolve a session path under a single root, throwing on path traversal. */
 function safeSessionDirUnder(project, root, taskId) {
-  const sessionsDir = path.join(project, '.claude', root);
+  // Resolve so both sides share the same drive/separator form; on Windows path.join
+  // yields a driveless root (\tmp\...) while path.resolve(taskId) adds the drive.
+  const sessionsDir = path.resolve(path.join(project, '.claude', root));
   const resolved = path.resolve(sessionsDir, taskId);
   if (!resolved.startsWith(sessionsDir + path.sep)) {
     throw new Error('Invalid task ID: path traversal detected');
