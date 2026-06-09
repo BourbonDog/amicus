@@ -1,12 +1,17 @@
 // tests/utils/result-schema.test.js
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
   SCHEMA_VERSION,
   buildRunResult,
   buildWaveResult,
   waveStatusFromLegs,
   waveExitCode,
+  buildRunResultFromSession,
+  buildWaveResultFromSession,
 } = require('../../src/utils/result-schema');
 
 describe('result-schema', () => {
@@ -147,5 +152,74 @@ describe('result-schema', () => {
       expect(doc.counts.total).toBe(0);
       expect(doc.status).toBe('error');
     });
+  });
+});
+
+describe('result-schema session rebuilders', () => {
+  let project;
+
+  const writeSession = (taskId, meta, summary) => {
+    const dir = path.join(project, '.claude', 'amicus_sessions', taskId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify({ taskId, ...meta }, null, 2));
+    if (summary !== undefined) {
+      fs.writeFileSync(path.join(dir, 'summary.md'), summary);
+    }
+    return dir;
+  };
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-schema-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(project, { recursive: true, force: true });
+  });
+
+  it('rebuilds a run doc from metadata + summary.md', () => {
+    writeSession('aaaa1111', {
+      model: 'openrouter/x/y', agent: 'plan', status: 'complete',
+      createdAt: '2026-06-09T10:00:00.000Z', completedAt: '2026-06-09T10:01:00.000Z',
+    }, 'the summary');
+    const doc = buildRunResultFromSession(project, 'aaaa1111');
+    expect(doc.type).toBe('run');
+    expect(doc.status).toBe('complete');
+    expect(doc.summary).toBe('the summary');
+    expect(doc.durationMs).toBe(60000);
+  });
+
+  it('returns null summary when summary.md is missing', () => {
+    writeSession('bbbb2222', { status: 'running', createdAt: '2026-06-09T10:00:00.000Z' });
+    const doc = buildRunResultFromSession(project, 'bbbb2222');
+    expect(doc.status).toBe('running');
+    expect(doc.summary).toBeNull();
+  });
+
+  it('throws for a missing session', () => {
+    expect(() => buildRunResultFromSession(project, 'nope0000')).toThrow(/not found/);
+  });
+
+  it('wave: prefers stored wave.json when present', () => {
+    const waveDir = writeSession('cafe0001', { type: 'wave', status: 'complete', legs: ['cafe0001-1'] });
+    fs.writeFileSync(path.join(waveDir, 'wave.json'), JSON.stringify({ schemaVersion: 1, type: 'wave', waveId: 'cafe0001', status: 'complete', legs: [] }));
+    const doc = buildWaveResultFromSession(project, 'cafe0001');
+    expect(doc.waveId).toBe('cafe0001');
+    expect(doc.status).toBe('complete');
+  });
+
+  it('wave: rebuilds live from leg sessions when wave.json is missing', () => {
+    writeSession('cafe0002', {
+      type: 'wave', status: 'running', legs: ['cafe0002-1', 'cafe0002-2'],
+      createdAt: '2026-06-09T10:00:00.000Z',
+      promptMeta: { source: 'inline', file: null, chars: 5 },
+    });
+    writeSession('cafe0002-1', { model: 'a/b', status: 'complete', parentWave: 'cafe0002', createdAt: '2026-06-09T10:00:01.000Z', completedAt: '2026-06-09T10:01:00.000Z' }, 'leg one');
+    writeSession('cafe0002-2', { model: 'c/d', status: 'error', reason: 'boom', parentWave: 'cafe0002', createdAt: '2026-06-09T10:00:01.000Z' });
+    const doc = buildWaveResultFromSession(project, 'cafe0002');
+    expect(doc.status).toBe('partial');
+    expect(doc.counts).toMatchObject({ total: 2, complete: 1, error: 1 });
+    expect(doc.legs[0].summary).toBe('leg one');
+    expect(doc.legs[1].error).toBe('boom');
+    expect(doc.prompt).toEqual({ source: 'inline', file: null, chars: 5 });
   });
 });

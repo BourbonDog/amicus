@@ -135,6 +135,64 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
   };
 }
 
+/**
+ * Rebuild a run document from a persisted session directory.
+ * @param {string} project - Project dir
+ * @param {string} taskId
+ * @returns {object} run document
+ * @throws {Error} if the session does not exist
+ */
+function buildRunResultFromSession(project, taskId) {
+  const fs = require('fs');
+  const path = require('path');
+  const { resolveExistingSessionDir } = require('../session-manager');
+  const sessionDir = resolveExistingSessionDir(project, taskId);
+  const metaPath = path.join(sessionDir, 'metadata.json');
+  if (!fs.existsSync(metaPath)) {
+    throw new Error(`Session ${taskId} not found`);
+  }
+  const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  const summaryPath = path.join(sessionDir, 'summary.md');
+  const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : null;
+  return buildRunResult({ taskId, metadata, summary, sessionDir });
+}
+
+/**
+ * Rebuild a wave document. Prefers the stored wave.json (written atomically at
+ * fanout exit); falls back to a live rebuild from leg sessions (e.g. after a
+ * hard kill of the fanout process).
+ * @param {string} project
+ * @param {string} waveId
+ * @returns {object} wave document
+ * @throws {Error} if the wave session does not exist
+ */
+function buildWaveResultFromSession(project, waveId) {
+  const fs = require('fs');
+  const path = require('path');
+  const { resolveExistingSessionDir } = require('../session-manager');
+  const waveDir = resolveExistingSessionDir(project, waveId);
+  const wavePath = path.join(waveDir, 'wave.json');
+  if (fs.existsSync(wavePath)) {
+    return JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+  }
+  const metaPath = path.join(waveDir, 'metadata.json');
+  if (!fs.existsSync(metaPath)) {
+    throw new Error(`Wave ${waveId} not found`);
+  }
+  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  const legs = (meta.legs || []).map((legId) => {
+    try { return buildRunResultFromSession(project, legId); }
+    catch { return buildRunResult({ taskId: legId, metadata: { status: 'unknown', parentWave: waveId } }); }
+  });
+  return buildWaveResult({
+    waveId,
+    legs,
+    promptMeta: meta.promptMeta || null,
+    createdAt: meta.createdAt || null,
+    completedAt: meta.completedAt || null,
+  });
+}
+
 module.exports = {
   SCHEMA_VERSION,
   TERMINAL_STATUSES,
@@ -143,4 +201,6 @@ module.exports = {
   buildWaveResult,
   waveStatusFromLegs,
   waveExitCode,
+  buildRunResultFromSession,
+  buildWaveResultFromSession,
 };
