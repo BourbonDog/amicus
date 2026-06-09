@@ -26,9 +26,18 @@ describe('armExitWatchdog', () => {
     expect(log).toHaveBeenCalled();
   });
 
-  test('returns an unref-able timer that does not hold the loop', () => {
+  test('unref()s the timer so it does not hold the loop open', () => {
     const exit = jest.fn();
-    const t = armExitWatchdog(0, 1500, { exit });
-    expect(typeof t.unref).toBe('function');
+    const realSetTimeout = setTimeout;
+    let captured;
+    const stSpy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      captured = realSetTimeout(fn, ms);
+      jest.spyOn(captured, 'unref');
+      return captured;
+    });
+    armExitWatchdog(0, 1500, { exit });
+    expect(typeof captured.unref).toBe('function');
+    expect(captured.unref).toHaveBeenCalled();
+    stSpy.mockRestore();
   });
 });

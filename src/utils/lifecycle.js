@@ -8,6 +8,10 @@
  * alive, the force-exit watchdog guarantees the process still exits.
  */
 
+// One-shot commands spin up the OpenCode server and must return to the shell
+// when done (F3 #15). Deliberately EXCLUDED: `mcp` (long-lived server), and
+// `setup`/`update` (no OpenCode server to leak, and `setup` can be a long-lived
+// interactive Electron flow that must never be force-exited).
 const ONE_SHOT_COMMANDS = new Set(['start', 'continue', 'resume', 'list', 'read', 'abort']);
 
 /** @param {string} command @returns {boolean} */
