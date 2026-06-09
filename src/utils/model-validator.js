@@ -151,4 +151,40 @@ async function promptModelSelection(models, alias, provider, failedModelId) {
   return newModel;
 }
 
-module.exports = { validateDirectModel, filterRelevantModels, normalizeModelId };
+/**
+ * Validate an OpenRouter-resolved model against the cached catalog (F3 #18).
+ * Only enforces for `openrouter/`-prefixed models (the catalog is authoritative
+ * there). Graceful when the catalog is empty/unavailable. Fails fast with
+ * suggestions when the model is genuinely absent.
+ *
+ * @param {string} resolvedModel
+ * @param {string} [alias]
+ * @param {{headless?: boolean}} [options]
+ * @returns {Promise<string>} the model (unchanged) when valid/unverifiable
+ */
+async function validateAgainstCatalog(resolvedModel, alias, options = {}) {
+  if (!resolvedModel.startsWith('openrouter/')) { return resolvedModel; }
+
+  const { getCatalog } = require('./model-catalog');
+  let catalog;
+  try { catalog = await getCatalog(); } catch { return resolvedModel; }
+  if (!catalog || catalog.length === 0) { return resolvedModel; }
+
+  // Only enforce when the OpenRouter catalog is actually present. If the fetch
+  // was unavailable (e.g. no key reached the fetcher) the catalog won't contain
+  // any openrouter/* ids — degrade gracefully instead of false-rejecting.
+  if (!catalog.some(m => m.id.startsWith('openrouter/'))) { return resolvedModel; }
+
+  if (catalog.some(m => m.id === resolvedModel)) { return resolvedModel; }
+
+  const relevant = filterRelevantModels(catalog, alias || resolvedModel.split('/').pop());
+  const list = relevant.slice(0, 10).map(m => `  ${m.id}`).join('\n');
+  throw new Error(
+    `Model '${resolvedModel}' not found in the OpenRouter catalog.\n` +
+    (list ? `Did you mean:\n${list}\n` : '') +
+    `Fix: amicus setup --add-alias ${alias || '<alias>'}=${relevant[0] ? relevant[0].id : 'openrouter/provider/model'}\n` +
+    'Run \'amicus refresh-models\' to update the catalog, or pass --no-validate-model to skip.'
+  );
+}
+
+module.exports = { validateDirectModel, filterRelevantModels, normalizeModelId, validateAgainstCatalog };

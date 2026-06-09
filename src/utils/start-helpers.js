@@ -34,22 +34,36 @@ function resolveModelFromArgs(args) {
 }
 
 /**
- * Validate direct-API fallback models exist on the provider (opt-in via --validate-model).
+ * Validate models before launch (F3 #18: default-on).
+ * --no-validate-model opts out; the old opt-in --validate-model is a no-op kept for back-compat.
  * Returns the (possibly corrected) model string.
  * @param {object} args - Parsed CLI arguments
  * @param {string|undefined} alias - The alias used for resolution
  * @returns {Promise<string>} Validated model string
  */
 async function validateFallbackModel(args, alias) {
+  // F3 #18: validation is default-on. --no-validate-model opts out; the old
+  // opt-in --validate-model is now a no-op kept for back-compat.
+  if (args['no-validate-model']) { return args.model; }
+
+  const headless = args['no-ui'] || !process.stdin.isTTY;
   const { detectFallback } = require('./config');
-  if (!args['validate-model'] || !alias || !detectFallback(alias, args.model)) {
-    return args.model;
+
+  // Direct-API fallback path: keep the provider-API existence check.
+  if (alias && detectFallback(alias, args.model)) {
+    const { validateDirectModel } = require('./model-validator');
+    try {
+      return await validateDirectModel(args.model, alias, { headless });
+    } catch (err) {
+      console.error(err.message);
+      process.exit(1);
+    }
   }
-  const { validateDirectModel } = require('./model-validator');
+
+  // OpenRouter (and any) resolved model: validate against the live catalog.
+  const { validateAgainstCatalog } = require('./model-validator');
   try {
-    return await validateDirectModel(args.model, alias, {
-      headless: args['no-ui'] || !process.stdin.isTTY
-    });
+    return await validateAgainstCatalog(args.model, alias, { headless });
   } catch (err) {
     console.error(err.message);
     process.exit(1);
