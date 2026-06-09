@@ -54,6 +54,24 @@ async function handleSetup(args) {
  * Marks a running session as aborted
  */
 async function handleAbort(args) {
+  if (args.all) {
+    const project = args.cwd || process.cwd();
+    const { enumerateSessions } = require('./sidecar/read');
+    const { markAborted } = require('./utils/session-abort');
+    const { getSessionDir } = require('./session-manager');
+    const running = enumerateSessions(project, { status: 'running' });
+    if (running.length === 0) {
+      console.log('No running sessions to abort.');
+      return;
+    }
+    for (const s of running) {
+      markAborted(getSessionDir(project, s.id), 'abort --all');
+      console.log(`Aborted ${s.id}`);
+    }
+    console.log(`Aborted ${running.length} running session(s).`);
+    return;
+  }
+
   const taskId = args._[1];
 
   if (!taskId) {

@@ -295,7 +295,7 @@ Commands:
   resume      Reopen a previous session
   continue    New session building on previous
   read        Output session summary/conversation
-  abort       Abort a running session
+  abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
   update      Update to latest version
@@ -335,6 +335,9 @@ Options for 'list':
   --status <filter>            Filter by status (running, complete)
   --all                        Show all projects
   --json                       Output as JSON
+
+Options for 'abort':
+  --all                        Abort all running sessions in this project
 
 Options for 'read':
   --summary                    Show summary (default)

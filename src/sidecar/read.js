@@ -30,28 +30,16 @@ function formatAge(dateStr) {
 }
 
 /**
- * List previous sidecar sessions
- * Spec Reference: §4.2
- *
- * @param {object} options
- * @param {string} [options.status] - Filter by status (all, running, complete)
- * @param {boolean} [options.json] - Output as JSON
- * @param {string} [options.project] - Project directory
+ * Enumerate sessions across canonical + legacy roots (dedup, amicus wins).
+ * @param {string} project
+ * @param {{status?: string}} [opts] - status filter ('running', etc.); omit/'all' for all
+ * @returns {Array<{id, model, status, agent, briefing, createdAt}>}
  */
-async function listSidecars(options) {
-  const { status, json, project = process.cwd() } = options;
-
-  // Scan BOTH roots: canonical amicus first, then legacy sidecar (shim).
+function enumerateSessions(project, opts = {}) {
   const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
     .map(d => path.join(project, '.claude', d))
     .filter(fs.existsSync);
 
-  if (roots.length === 0) {
-    console.log('No amicus sessions found.');
-    return;
-  }
-
-  // Dedup by task id — amicus (first root) wins over legacy.
   const byId = new Map();
   for (const root of roots) {
     for (const d of fs.readdirSync(root)) {
@@ -65,20 +53,31 @@ async function listSidecars(options) {
           id: d, model: meta.model, status: meta.status, agent: meta.agent,
           briefing: meta.briefing, createdAt: meta.createdAt,
         });
-      } catch {
-        // Skip unreadable metadata
-      }
+      } catch { /* skip unreadable */ }
     }
   }
 
   let sessions = Array.from(byId.values())
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  // Filter by status if specified
-  if (status && status !== 'all') {
-    sessions = sessions.filter(s => s.status === status);
+  if (opts.status && opts.status !== 'all') {
+    sessions = sessions.filter(s => s.status === opts.status);
   }
+  return sessions;
+}
 
+/**
+ * List previous sidecar sessions
+ * Spec Reference: §4.2
+ *
+ * @param {object} options
+ * @param {string} [options.status] - Filter by status (all, running, complete)
+ * @param {boolean} [options.json] - Output as JSON
+ * @param {string} [options.project] - Project directory
+ */
+async function listSidecars(options) {
+  const { status, json, project = process.cwd() } = options;
+
+  const sessions = enumerateSessions(project, { status });
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
     return;
@@ -155,6 +154,7 @@ async function readSidecar(options) {
 
 module.exports = {
   formatAge,
+  enumerateSessions,
   listSidecars,
   readSidecar
 };
