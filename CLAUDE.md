@@ -115,6 +115,7 @@ src/
 │   ├── model-fetcher.js  # Hardcoded Anthropic models (no public listing endpoint)
 │   ├── model-validator.js  # Alias-to-search-term mapping for filtering provider model lists
 │   ├── path-setup.js  # Ensures that the project's node_modules/.bin directory is included in the PATH.
+│   ├── port-pid.js  # Cross-platform listener-PID lookup.
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-lock.js  # Atomic session lock files to prevent concurrent resume/continue.
 │   ├── shared-server.js  # Manages a single shared OpenCode server for MCP sessions.
@@ -242,6 +243,7 @@ evals/
 | `utils/model-fetcher.js` | Hardcoded Anthropic models (no public listing endpoint) | `fetchModelsFromProvider()`, `fetchAllModels()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()`, `PROVIDER_FAMILY_NAMES()` |
 | `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()` |
 | `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH. | `ensureNodeModulesBinInPath()` |
+| `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-lock.js` | Atomic session lock files to prevent concurrent resume/continue. | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/shared-server.js` | Manages a single shared OpenCode server for MCP sessions. | `SharedServerManager()` |

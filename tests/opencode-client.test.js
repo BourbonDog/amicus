@@ -763,3 +763,30 @@ describe('OpenCode Client Wrapper', () => {
     });
   });
 });
+
+describe('startServer goPid (F3 #15)', () => {
+  // Note: startServer uses getCreateOpencodeServer() → getSDK() → dynamic import('@opencode-ai/sdk').
+  // Jest cannot mock dynamic import() without --experimental-vm-modules (same constraint as
+  // createClient above). The goPid capture and SIGKILL path are verified by integration tests.
+  it.skip('exposes server.goPid and SIGKILLs it when close() force-kills', async () => {
+    jest.useFakeTimers();
+    const sdkClose = jest.fn();
+    const portPidMod = require('../src/utils/port-pid');
+    const findSpy = jest.spyOn(portPidMod, 'findListenerPid').mockReturnValue(24680);
+    mockCreateOpencodeServer.mockResolvedValue({ url: 'http://127.0.0.1:4096', close: sdkClose });
+    mockCreateOpencodeClient.mockReturnValue({ session: {}, config: { get: jest.fn() } });
+    const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => true);
+
+    const { startServer } = require('../src/opencode-client');
+    const { server } = await startServer({ port: 0 });
+    expect(server.goPid).toBe(24680);
+    server.close();
+    expect(sdkClose).toHaveBeenCalled();
+    jest.advanceTimersByTime(2000);
+    expect(killSpy).toHaveBeenCalledWith(24680, 'SIGKILL');
+
+    findSpy.mockRestore();
+    killSpy.mockRestore();
+    jest.useRealTimers();
+  });
+});

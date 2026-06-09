@@ -347,6 +347,7 @@ function buildServerOptions(options = {}) {
           continue;
         }
         // Preserve extra remote options (headers, oauth, timeout, etc.)
+        // eslint-disable-next-line no-unused-vars
         const { type: _t, args: _a, command: _c, ...rest } = serverConfig;
         normalized[name] = {
           ...rest,
@@ -435,6 +436,8 @@ function buildServerOptions(options = {}) {
   return serverOptions;
 }
 
+const { findListenerPid } = require('./utils/port-pid');
+
 /**
  * Start an OpenCode server and return client + server handle
  *
@@ -454,32 +457,27 @@ async function startServer(options = {}) {
   const sdkServer = await createOpencodeServer(serverOptions);
   const client = await createClient(sdkServer.url);
 
-  // Wrap close() to force-kill the Go binary if SIGTERM doesn't work.
-  // The OpenCode Go server can ignore SIGTERM when MCP servers are active,
-  // which keeps Node's event loop alive indefinitely (Bug #4).
-  //
-  // We find the server PID by checking which process is LISTENING on the port
-  // (not just connected to it — lsof -ti returns both listeners and clients).
+  // Capture the Go server PID once so close() can force-kill it cross-platform
+  // (F3 #15). Prefer a PID the SDK exposes; fall back to the port listener.
+  // findListenerPid may return null if the port isn't bound yet (startup race);
+  // in that case close() degrades to SIGTERM-only, which is acceptable best-effort.
   const serverPort = parseInt(new URL(sdkServer.url).port, 10);
+  const goPid = sdkServer.pid || (sdkServer.process && sdkServer.process.pid) || findListenerPid(serverPort);
+
   const server = {
     url: sdkServer.url,
+    goPid,
     close() {
       sdkServer.close(); // sends SIGTERM via proc.kill()
-      // Schedule a force-kill fallback if the process doesn't exit.
-      // .unref() ensures this timer doesn't keep Node alive on its own.
+      // Force-kill fallback if the Go server ignores SIGTERM (it can when MCP
+      // servers are active, keeping Node's loop alive). .unref() so this timer
+      // never holds the process open by itself.
       const fallback = setTimeout(() => {
-        try {
-          const { execFileSync } = require('child_process');
-          // Find PID listening on the server port (not clients connected to it)
-          const result = execFileSync('lsof', ['-ti', `:${serverPort}`, '-sTCP:LISTEN'], {
-            encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']
-          }).trim();
-          const pid = parseInt(result, 10);
-          if (pid && pid !== process.pid) {
-            try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
-            require('./utils/logger').logger.debug('Force-killed OpenCode server', { port: serverPort, pid });
-          }
-        } catch { /* no listener found or process gone */ }
+        const pid = server.goPid;
+        if (pid && pid !== process.pid) {
+          try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
+          require('./utils/logger').logger.debug('Force-killed OpenCode server', { port: serverPort, pid });
+        }
       }, 2000);
       fallback.unref();
     }
