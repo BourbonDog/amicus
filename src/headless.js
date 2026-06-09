@@ -25,6 +25,11 @@ const COMPLETE_MARKER = FOLD_MARKER; // backward compat
  */
 const DEFAULT_TIMEOUT = 15 * 60 * 1000;
 
+/** Poll cadence + completion thresholds (env-overridable; injectable via options for tests). */
+const POLL_INTERVAL_MS = Number(process.env.AMICUS_POLL_INTERVAL_MS) || 2000;
+const STABLE_FINISHED_POLLS = Number(process.env.AMICUS_STABLE_FINISHED_POLLS) || 2;   // when time.completed is set
+const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;          // ~60s at 2s — no completion signal
+const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 
 /**
  * Wait for the OpenCode server to be ready using SDK health check
@@ -249,6 +254,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // Poll for completion by checking messages
     const startTime = Date.now();
     let pollCount = 0;
+    const pollIntervalMs = options.pollIntervalMs || POLL_INTERVAL_MS;
+    const stableFinishedPolls = options.stableFinishedPolls || STABLE_FINISHED_POLLS;
+    const stableIdlePolls = options.stableIdlePolls || STABLE_IDLE_POLLS;
     let lastAssistantMsgId = null;
     let lastOutputLength = 0; // Track output growth to detect streaming
     let stablePolls = 0; // Count polls where nothing has changed
@@ -258,7 +266,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     while (!completed && (Date.now() - startTime) < timeoutMs) {
       watchdog.touch();
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
 
       // Check for external abort signal (MCP tool or CLI command)
       try {
@@ -434,7 +442,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         if (!outputGrew && currentAssistantMsgId === lastAssistantMsgId) {
           if (currentAssistantMsgId !== null && output.length > 0) {
             stablePolls++;
-            const threshold = assistantFinished ? 2 : 4;
+            const threshold = assistantFinished ? stableFinishedPolls : stableIdlePolls;
             if (stablePolls >= threshold) {
               logger.debug('Session appears complete', { stablePolls, assistantFinished });
               break;
@@ -617,5 +625,9 @@ module.exports = {
   formatFoldOutput,
   DEFAULT_TIMEOUT,
   FOLD_MARKER,
-  COMPLETE_MARKER
+  COMPLETE_MARKER,
+  POLL_INTERVAL_MS,
+  STABLE_FINISHED_POLLS,
+  STABLE_IDLE_POLLS,
+  POLL_CALL_TIMEOUT_MS,
 };

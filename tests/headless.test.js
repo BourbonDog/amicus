@@ -927,19 +927,18 @@ describe('Headless Mode Runner', () => {
       expect(result.summary).toBe('Summary content');
     }, 15000);
 
-    it('should complete via stablePolls fallback after 4 stable polls without assistantFinished', async () => {
-      // assistantFinished is never true (time.completed not set), but output is stable
+    it('completes via the idle fallback after stableIdlePolls without assistantFinished', async () => {
       const stableMessage = [{
         info: { role: 'assistant', id: 'msg-1', time: {} },
         parts: [{ id: 'p1', type: 'text', text: 'Final output' }]
       }];
-
       mockGetMessages.mockResolvedValue(stableMessage);
-
-      const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 30000);
-      // Should break out after 4 stable polls (first poll captures text, then 4 stable)
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 4 }
+      );
       expect(result.summary).toBe('Final output');
-    }, 35000);
+    });
 
     it('should NOT exit early when model has not started generating yet', async () => {
       // Simulate slow model startup: first 3 polls return empty messages,
@@ -1031,5 +1030,19 @@ describe('Headless Mode Runner', () => {
       // Polls: 1(A), 2(AB), 3(ABC), then 4 stable polls needed → at least 7
       expect(callCount).toBeGreaterThanOrEqual(7);
     }, 35000);
+
+    it('honors an injected poll interval (fast path)', async () => {
+      mockGetMessages.mockResolvedValue([{
+        info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+        parts: [{ id: 'p1', type: 'text', text: `Quick\n${COMPLETE_MARKER}` }]
+      }]);
+      const start = Date.now();
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5 }
+      );
+      expect(result.completed).toBe(true);
+      expect(Date.now() - start).toBeLessThan(1000); // 5ms polls, not 2000ms
+    });
   });
 });
