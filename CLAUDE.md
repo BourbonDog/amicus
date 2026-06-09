@@ -109,14 +109,17 @@ src/
 │   ├── env-loader.js  # Credential Loader
 │   ├── idle-watchdog.js  # @type {Object.<string, number>} Default timeouts per mode in milliseconds
 │   ├── input-validators.js  # MCP input validation with structured error responses.
+│   ├── lifecycle.js  # @param {string} command @returns {boolean}
 │   ├── logger.js  # Structured Logger Module
 │   ├── mcp-discovery.js  # MCP Discovery - Discovers MCP servers from parent LLM configuration
 │   ├── mcp-validators.js  # MCP Validators
+│   ├── model-catalog.js  # @returns {string} Absolute path to the catalog cache file
 │   ├── model-fetcher.js  # Hardcoded Anthropic models (no public listing endpoint)
 │   ├── model-validator.js  # Alias-to-search-term mapping for filtering provider model lists
 │   ├── path-setup.js  # Ensures that the project's node_modules/.bin directory is included in the PATH.
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
 │   ├── server-setup.js  # Server Setup Utilities
+│   ├── session-abort.js  # Session abort on process signals (F3 #20).
 │   ├── session-lock.js  # Atomic session lock files to prevent concurrent resume/continue.
 │   ├── shared-server.js  # Manages a single shared OpenCode server for MCP sessions.
 │   ├── start-helpers.js  # Start Command Helpers
@@ -172,7 +175,9 @@ scripts/
 ├── generate-icon.js  # Generate app icon PNG from SVG source.
 ├── integration-test.sh
 ├── list-models.js
+├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Install skill file to ~/.claude/skills/sidecar/
+├── refresh-model-capabilities.js  # @returns {Promise<number>} count of models refreshed
 ├── test-tools.sh
 ├── validate-docs.js  # * Main entry point.
 ├── validate-thinking.js
@@ -221,7 +226,7 @@ evals/
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/interactive.js` | Check if Electron is available (lazy loading guard) | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
 | `sidecar/progress.js` | Lifecycle stage labels | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
-| `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `listSidecars()`, `readSidecar()` |
+| `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Load session metadata from session directory | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-utils.js` | Standard heartbeat interval in milliseconds | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
@@ -237,14 +242,17 @@ evals/
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/idle-watchdog.js` | @type {Object.<string, number>} Default timeouts per mode in milliseconds | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` | MCP input validation with structured error responses. | `validateStartInputs()`, `findSimilar()` |
+| `utils/lifecycle.js` | @param {string} command @returns {boolean} | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `normalizeMcpJson()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
+| `utils/model-catalog.js` | @returns {string} Absolute path to the catalog cache file | `getCatalog()`, `refreshCatalog()`, `catalogPath()` |
 | `utils/model-fetcher.js` | Hardcoded Anthropic models (no public listing endpoint) | `fetchModelsFromProvider()`, `fetchAllModels()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()`, `PROVIDER_FAMILY_NAMES()` |
-| `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()` |
+| `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()` |
 | `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH. | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
+| `utils/session-abort.js` | Session abort on process signals (F3 #20). | `markAborted()`, `installSignalAbort()` |
 | `utils/session-lock.js` | Atomic session lock files to prevent concurrent resume/continue. | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/shared-server.js` | Manages a single shared OpenCode server for MCP sessions. | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |

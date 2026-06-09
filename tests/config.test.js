@@ -202,7 +202,7 @@ describe('Sidecar Config Module', () => {
       const aliases = config.getDefaultAliases();
       expect(aliases.glm).toBe('openrouter/z-ai/glm-5');
       expect(aliases.minimax).toBe('openrouter/minimax/minimax-m2.5');
-      expect(aliases.grok).toBe('openrouter/x-ai/grok-4.1-fast');
+      expect(aliases.grok).toBe('openrouter/x-ai/grok-4.3');
       expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k2.5');
       expect(aliases.seed).toBe('openrouter/bytedance-seed/seed-2.0-mini');
     });
@@ -333,7 +333,7 @@ describe('Sidecar Config Module', () => {
       const result = config.buildProviderModels();
       expect(result).toHaveProperty('openrouter');
       expect(result.openrouter).toHaveProperty('models');
-      expect(result.openrouter.models['x-ai/grok-4.1-fast']).toBeDefined();
+      expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
       expect(result.openrouter.models['google/gemini-3.1-flash-lite-preview']).toBeDefined();
     });
 

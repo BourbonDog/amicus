@@ -32,7 +32,7 @@ const DEFAULT_ALIASES = {
   'devstral': 'openrouter/mistralai/devstral-2512',
   'glm': 'openrouter/z-ai/glm-5',
   'minimax': 'openrouter/minimax/minimax-m2.5',
-  'grok': 'openrouter/x-ai/grok-4.1-fast',
+  'grok': 'openrouter/x-ai/grok-4.3',
   'kimi': 'openrouter/moonshotai/kimi-k2.5',
   'seed': 'openrouter/bytedance-seed/seed-2.0-mini',
 };
@@ -266,7 +266,7 @@ function tryResolveModel(modelArg) {
 }
 
 /** Build OpenCode provider.models config from sidecar aliases.
- * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.1-fast": {}, ... } } } */
+ * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.3": {}, ... } } } */
 function buildProviderModels() {
   const aliases = getEffectiveAliases();
   const providers = {};
