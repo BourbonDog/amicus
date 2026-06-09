@@ -15,7 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'sidecar.js');
+const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 
 // --- Part 1: Config pipeline (no API key) ---
