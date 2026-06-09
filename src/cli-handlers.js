@@ -77,16 +77,14 @@ async function handleAbort(args) {
     process.exit(1);
   }
 
-  let meta;
   try {
-    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
   } catch (_err) {
     console.error(`Session ${taskId} has malformed metadata`);
     process.exit(1);
   }
-  meta.status = 'aborted';
-  meta.abortedAt = new Date().toISOString();
-  fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+  const { markAborted } = require('./utils/session-abort');
+  markAborted(sessionDir, 'manual abort');
   console.log(`Session ${taskId} marked as aborted.`);
 }
 

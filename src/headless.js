@@ -157,6 +157,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   let sessionId;
   const { IdleWatchdog } = require('./utils/idle-watchdog');
   let watchdog;
+  let uninstallSignals;
 
   try {
     if (!externalServer) {
@@ -216,6 +217,32 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
     logger.debug('Session ID', { sessionId });
     writeProgress(sessionDir, 'session_created');
+
+    // F3 #20: abort this session if the parent process is signalled. Record the
+    // Go server PID so `amicus list` liveness checks can see it. Only for the
+    // owned (non-shared) server — shared servers are torn down by their owner.
+    if (!externalServer) {
+      if (server && server.goPid) {
+        try {
+          const metaPath = path.join(sessionDir, 'metadata.json');
+          const m = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          m.goPid = server.goPid;
+          fs.writeFileSync(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
+        } catch { /* metadata optional */ }
+      }
+      const { installSignalAbort, markAborted } = require('./utils/session-abort');
+      uninstallSignals = installSignalAbort({
+        onAbort: (signal) => {
+          logger.warn('Signal received — aborting headless session', { taskId, signal });
+          markAborted(sessionDir, signal);
+          try { const { abortSession } = require('./opencode-client'); abortSession(client, sessionId); } catch { /* best-effort */ }
+          try { server.close(); } catch { /* best-effort */ }
+          const code = signal === 'SIGINT' ? 130 : 143;
+          const t = setTimeout(() => process.exit(code), 300);
+          if (t.unref) { t.unref(); }
+        },
+      });
+    }
 
     // Log user message to conversation before sending
     logMessage(conversationPath, {
@@ -548,6 +575,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
 
     watchdog.cancel();
+    if (uninstallSignals) { uninstallSignals(); }
     if (!externalServer) { server.close(); }
 
     // Log summary of tool calls for debugging
@@ -601,6 +629,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       }
     }
     if (watchdog) { watchdog.cancel(); }
+    if (uninstallSignals) { uninstallSignals(); }
     if (!externalServer) { server.close(); }
     return {
       summary: '',
