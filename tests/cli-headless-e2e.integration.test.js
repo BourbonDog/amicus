@@ -15,7 +15,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'sidecar.js');
+const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 
 const HAS_API_KEY = !!(
