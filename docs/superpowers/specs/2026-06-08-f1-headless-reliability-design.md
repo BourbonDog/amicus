@@ -1,7 +1,7 @@
 ---
 title: F1 — Headless Reliability Core (Design)
 date: 2026-06-08
-status: draft (awaiting user review)
+status: implemented (branch f1/headless-reliability, 2026-06-08)
 owner: BourbonDog
 parent: 2026-06-07-amicus-product-design.md (§6 F1)
 ---
