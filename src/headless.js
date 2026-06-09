@@ -88,7 +88,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     sendPromptAsync,
     getMessages,
     checkHealth,
-    startServer
+    startServer,
+    getSessionStatus
   } = require('./opencode-client');
 
   const { reasoning } = options;
@@ -453,6 +454,27 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             sessionError, pollCount
           });
           break;
+        }
+
+        // Authoritative idle signal from the OpenCode SDK (preferred over the heuristic).
+        // Gate on real output so a pre-processing 'idle' cannot end the run early.
+        // Best-effort: on any error, fall back to the activity heuristic below.
+        if (output.length > 0) {
+          try {
+            const remainingForStatus = deadline - Date.now();
+            const statusData = await withTimeout(
+              getSessionStatus(client, sessionId),
+              Math.min(pollCallTimeoutMs, remainingForStatus),
+              'getSessionStatus'
+            );
+            const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
+            if (s && s.type === 'idle') {
+              logger.debug('Session reported idle by SDK — completing', { sessionId });
+              break;
+            }
+          } catch (statusErr) {
+            logger.debug('session.status unavailable; using activity heuristic', { error: statusErr.message });
+          }
         }
 
         // Activity-aware idle detection: ANY of text growth, a new tool call, a new

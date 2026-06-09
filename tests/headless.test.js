@@ -24,6 +24,7 @@ const mockCheckHealth = jest.fn();
 const mockStartServer = jest.fn();
 const mockServerClose = jest.fn();
 const mockAbortSession = jest.fn();
+const mockGetSessionStatus = jest.fn();
 
 jest.mock('../src/opencode-client', () => ({
   createSession: mockCreateSession,
@@ -32,7 +33,8 @@ jest.mock('../src/opencode-client', () => ({
   getMessages: mockGetMessages,
   checkHealth: mockCheckHealth,
   startServer: mockStartServer,
-  abortSession: mockAbortSession
+  abortSession: mockAbortSession,
+  getSessionStatus: mockGetSessionStatus
 }));
 
 jest.mock('../src/utils/logger', () => ({
@@ -52,6 +54,9 @@ describe('Headless Mode Runner', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Default: non-idle status so existing tests never see the SDK-idle path.
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
 
     // Setup fs mocks
     fs.existsSync.mockReturnValue(true);
@@ -1111,6 +1116,40 @@ describe('Headless Mode Runner', () => {
         30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 2 }
       );
       expect(result.completed).toBe(true);
+    });
+
+    it('completes when the SDK reports the session idle (with output present)', async () => {
+      mockGetSessionStatus.mockResolvedValue({ type: 'idle' });
+      // Output present, but NO fold marker and NO time.completed — only the SDK idle signal can end it.
+      mockGetMessages.mockResolvedValue([{
+        info: { role: 'assistant', id: 'm1', time: {} },
+        parts: [{ id: 'p1', type: 'text', text: 'All done, no fold marker' }]
+      }]);
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 100000 } // huge, so ONLY status can end it
+      );
+      expect(result.summary).toContain('All done');
+    });
+
+    it('does NOT complete on idle before any output exists', async () => {
+      // Idle reported immediately, but no output on the first polls → must NOT end early.
+      mockGetSessionStatus.mockResolvedValue({ type: 'idle' });
+      let n = 0;
+      mockGetMessages.mockImplementation(() => {
+        n++;
+        if (n < 3) { return Promise.resolve([]); } // no messages yet
+        return Promise.resolve([{
+          info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } },
+          parts: [{ id: 'p1', type: 'text', text: `Real output\n${COMPLETE_MARKER}` }]
+        }]);
+      });
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5 }
+      );
+      expect(result.summary).toContain('Real output');
+      expect(n).toBeGreaterThanOrEqual(3);
     });
   });
 });
