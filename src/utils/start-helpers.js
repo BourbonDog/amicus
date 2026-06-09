@@ -63,7 +63,7 @@ async function validateFallbackModel(args, alias) {
   // OpenRouter (and any) resolved model: validate against the live catalog.
   const { validateAgainstCatalog } = require('./model-validator');
   try {
-    return await validateAgainstCatalog(args.model, alias, { headless });
+    return await validateAgainstCatalog(args.model, alias);
   } catch (err) {
     console.error(err.message);
     process.exit(1);

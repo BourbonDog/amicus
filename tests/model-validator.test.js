@@ -118,7 +118,7 @@ describe('Model Validator', () => {
     it('should include fix command in headless error', async () => {
       await expect(
         validateDirectModel('google/gemini-old-deprecated', 'gemini', { headless: true })
-      ).rejects.toThrow(/sidecar setup --add-alias/);
+      ).rejects.toThrow(/amicus setup --add-alias/);
     });
 
     it('should throw when stdin is not a TTY (non-interactive)', async () => {

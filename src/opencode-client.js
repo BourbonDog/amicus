@@ -439,6 +439,38 @@ function buildServerOptions(options = {}) {
 const { findListenerPid } = require('./utils/port-pid');
 
 /**
+ * Build the { url, goPid, close } server handle around a raw SDK server.
+ * Extracted + dependency-injected so the goPid capture and cross-platform
+ * force-kill (F3 #15) can be unit-tested without the SDK's dynamic import.
+ * @param {{url:string, close:Function, pid?:number, process?:{pid:number}}} sdkServer
+ * @param {{findListenerPid?:Function, kill?:Function, logger?:object}} [deps]
+ * @returns {{url:string, goPid:number|null, close:Function}}
+ */
+function buildServerHandle(sdkServer, deps = {}) {
+  const findPid = deps.findListenerPid || findListenerPid;
+  const kill = deps.kill || ((pid, sig) => process.kill(pid, sig));
+  const log = deps.logger || require('./utils/logger').logger;
+  const serverPort = parseInt(new URL(sdkServer.url).port, 10);
+  const goPid = sdkServer.pid || (sdkServer.process && sdkServer.process.pid) || findPid(serverPort);
+  const server = {
+    url: sdkServer.url,
+    goPid,
+    close() {
+      sdkServer.close();
+      const fallback = setTimeout(() => {
+        const pid = server.goPid;
+        if (pid && pid !== process.pid) {
+          try { kill(pid, 'SIGKILL'); } catch { /* already dead */ }
+          log.debug('Force-killed OpenCode server', { port: serverPort, pid });
+        }
+      }, 2000);
+      if (fallback.unref) { fallback.unref(); }
+    }
+  };
+  return server;
+}
+
+/**
  * Start an OpenCode server and return client + server handle
  *
  * @param {object} [options] - Server options
@@ -461,27 +493,7 @@ async function startServer(options = {}) {
   // (F3 #15). Prefer a PID the SDK exposes; fall back to the port listener.
   // findListenerPid may return null if the port isn't bound yet (startup race);
   // in that case close() degrades to SIGTERM-only, which is acceptable best-effort.
-  const serverPort = parseInt(new URL(sdkServer.url).port, 10);
-  const goPid = sdkServer.pid || (sdkServer.process && sdkServer.process.pid) || findListenerPid(serverPort);
-
-  const server = {
-    url: sdkServer.url,
-    goPid,
-    close() {
-      sdkServer.close(); // sends SIGTERM via proc.kill()
-      // Force-kill fallback if the Go server ignores SIGTERM (it can when MCP
-      // servers are active, keeping Node's loop alive). .unref() so this timer
-      // never holds the process open by itself.
-      const fallback = setTimeout(() => {
-        const pid = server.goPid;
-        if (pid && pid !== process.pid) {
-          try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
-          require('./utils/logger').logger.debug('Force-killed OpenCode server', { port: serverPort, pid });
-        }
-      }, 2000);
-      fallback.unref();
-    }
-  };
+  const server = buildServerHandle(sdkServer);
 
   return { client, server };
 }
@@ -596,6 +608,7 @@ module.exports = {
   abortSession,
   checkHealth,
   buildServerOptions,
+  buildServerHandle,
   startServer,
   loadMcpConfig,
   parseMcpSpec

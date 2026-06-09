@@ -58,7 +58,7 @@ async function handleAbort(args) {
     const project = args.cwd || process.cwd();
     const { enumerateSessions } = require('./sidecar/read');
     const { markAborted } = require('./utils/session-abort');
-    const { getSessionDir } = require('./session-manager');
+    const { resolveExistingSessionDir } = require('./session-manager');
     // A session may complete between enumeration and the write (TOCTOU); the
     // window is tiny for a local CLI and markAborted is best-effort, so we count
     // only sessions actually marked aborted.
@@ -69,7 +69,7 @@ async function handleAbort(args) {
     }
     let aborted = 0;
     for (const s of running) {
-      if (markAborted(getSessionDir(project, s.id), 'abort --all')) {
+      if (markAborted(resolveExistingSessionDir(project, s.id), 'abort --all')) {
         aborted++;
         console.log(`Aborted ${s.id}`);
       }

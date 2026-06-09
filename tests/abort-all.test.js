@@ -55,4 +55,16 @@ describe('handleAbort --all', () => {
     await handleAbort({ _: ['abort'], all: true, cwd: project });
     expect(logSpy).toHaveBeenCalledWith('No running sessions to abort.');
   });
+
+  test('aborts a running session that lives only in the legacy sidecar_sessions dir', async () => {
+    const id = 'deadbeef';
+    const legacyDir = path.join(project, '.claude', 'sidecar_sessions', id);
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'metadata.json'),
+      JSON.stringify({ taskId: id, status: 'running', model: 'm', createdAt: new Date().toISOString() }));
+    const { handleAbort } = require('../src/cli-handlers');
+    await handleAbort({ _: ['abort'], all: true, cwd: project });
+    const status = JSON.parse(fs.readFileSync(path.join(legacyDir, 'metadata.json'), 'utf-8')).status;
+    expect(status).toBe('aborted');
+  });
 });

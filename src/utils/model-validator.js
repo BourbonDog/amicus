@@ -159,12 +159,9 @@ async function promptModelSelection(models, alias, provider, failedModelId) {
  *
  * @param {string} resolvedModel
  * @param {string} [alias]
- * @param {{headless?: boolean}} [options]
  * @returns {Promise<string>} the model (unchanged) when valid/unverifiable
  */
-async function validateAgainstCatalog(resolvedModel, alias, options = {}) {
-  // Note: options.headless is accepted for parity with validateDirectModel; an
-  // interactive "pick a model" prompt on a catalog miss is a future enhancement.
+async function validateAgainstCatalog(resolvedModel, alias) {
   if (!resolvedModel.startsWith('openrouter/')) { return resolvedModel; }
 
   const { getCatalog } = require('./model-catalog');
