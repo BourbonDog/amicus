@@ -7,9 +7,12 @@ jest.mock('../electron/summary', () => ({
 jest.mock('../src/prompt-builder', () => ({
   getSummaryTemplate: jest.fn().mockReturnValue('template'),
 }));
+// virtual: true lets this mock register even when electron is not installed
+// (local dev omits it via --omit=optional). When electron IS present (CI), the
+// factory still overrides it, so behavior is identical either way.
 jest.mock('electron', () => ({
   app: { quit: jest.fn() },
-}));
+}), { virtual: true });
 
 describe('Fold nudge message', () => {
   let stdoutSpy;
