@@ -1,7 +1,7 @@
 ---
 title: F3 — Process Lifecycle & Alias Correctness — Design Spec
 date: 2026-06-09
-status: finalized (scope + decisions locked; ready for implementation planning)
+status: implemented (2026-06-09 — subagent-driven; full suite green, lint clean)
 owner: BourbonDog
 references:
   - docs/superpowers/specs/2026-06-07-amicus-product-design.md (§6 F3, §6 F5)
@@ -10,6 +10,13 @@ supersedes: none
 ---
 
 # F3 — Process Lifecycle & Alias Correctness
+
+> **Implemented 2026-06-09** (branch `f3-exec`, subagent-driven, 8 tasks + final-review fixes).
+> - **#15** — cross-platform Go-server reap via captured `server.goPid` (`port-pid.js`, `opencode-client.js` `buildServerHandle`) + one-shot force-exit watchdog (`lifecycle.js`, `bin/amicus.js`).
+> - **#20** — SIGTERM/SIGINT/SIGBREAK abort in `runHeadless` (`session-abort.js`, `markAborted`, `goPid` recorded to metadata) + `amicus abort --all` (legacy-dir aware).
+> - **#18 (full)** — TTL'd OpenRouter catalog cache (`model-catalog.js`), default-on validation w/ `--no-validate-model` (`model-validator.js` `validateAgainstCatalog`, `start-helpers.js`), pinned+verified `codex`, real `scripts/refresh-model-capabilities.js`.
+> - Result: full unit suite green (1662 passed, 5 skipped, 0 failed), `npm run lint` clean.
+> - Follow-ups (out of F3 scope): `grok` default alias is stale on the live catalog (caught by `models:check`); `continue`/`resume` don't run catalog validation; pre-existing `bin/sidecar.js` integration-test breakage (tracked in PR #2).
 
 ## 1. Summary
 
