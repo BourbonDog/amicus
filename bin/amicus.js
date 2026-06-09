@@ -15,6 +15,8 @@ const { parseArgs, validateStartArgs, getUsage } = require('../src/cli');
 const { validateTaskId } = require('../src/utils/validators');
 const { resolveModelFromArgs, validateFallbackModel } = require('../src/utils/start-helpers');
 const { handleSetup, handleAbort, handleUpdate, handleMcp } = require('../src/cli-handlers');
+const { isOneShotCommand, armExitWatchdog } = require('../src/utils/lifecycle');
+const { logger } = require('../src/utils/logger');
 
 const VERSION = require('../package.json').version;
 
@@ -104,6 +106,13 @@ async function main() {
   } catch (err) {
     console.error(`Error: ${err.message}`);
     process.exit(1);
+  }
+
+  // F3 #15: one-shot commands must not hang on a lingering handle. The work is
+  // done here; give natural drain a brief grace, then force-exit as a net.
+  // (mcp is long-lived and never reaches this point.)
+  if (isOneShotCommand(command)) {
+    armExitWatchdog(0, 1500, { log: (m, meta) => logger.debug(m, meta) });
   }
 }
 
