@@ -193,7 +193,11 @@ describe('api-key-store', () => {
       expect(content).not.toContain('old-key');
     });
 
-    it('should set file permissions to 0o600', () => {
+    // POSIX-only: NTFS ignores Unix mode bits, so fs reports 0o666 (438) on Windows.
+    // The source still writes { mode: 0o600 } (a harmless no-op on Windows). Real
+    // Windows ACL hardening of the key file is a deferred security backlog item.
+    const itPosix = process.platform === 'win32' ? it.skip : it;
+    itPosix('should set file permissions to 0o600 (POSIX only)', () => {
       saveApiKey('openrouter', 'sk-or-perms');
       const envPath = path.join(tmpDir, '.env');
       const stats = fs.statSync(envPath);
