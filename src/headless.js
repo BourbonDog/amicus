@@ -32,6 +32,21 @@ const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;   
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 
 /**
+ * Race a promise against a timeout. Returns the promise's result, or rejects with
+ * a timeout error after `ms`. A non-positive `ms` means "no extra timer" (return as-is).
+ */
+function withTimeout(promise, ms, label) {
+  if (!(ms > 0)) { return promise; }
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      if (t.unref) { t.unref(); }
+    }),
+  ]);
+}
+
+/**
  * Wait for the OpenCode server to be ready using SDK health check
  */
 async function waitForServer(client, checkHealthFn, maxAttempts = 30) {
@@ -253,10 +268,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     // Poll for completion by checking messages
     const startTime = Date.now();
+    const deadline = startTime + timeoutMs;
     let pollCount = 0;
     const pollIntervalMs = options.pollIntervalMs || POLL_INTERVAL_MS;
     const stableFinishedPolls = options.stableFinishedPolls || STABLE_FINISHED_POLLS;
     const stableIdlePolls = options.stableIdlePolls || STABLE_IDLE_POLLS;
+    const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
     let lastAssistantMsgId = null;
     let lastOutputLength = 0; // Track output growth to detect streaming
     let stablePolls = 0; // Count polls where nothing has changed
@@ -296,7 +313,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       pollCount++;
 
       try {
-        const messages = await getMessages(client, sessionId);
+        const remaining = deadline - Date.now();
+        const messages = await withTimeout(
+          getMessages(client, sessionId),
+          Math.min(pollCallTimeoutMs, remaining),
+          'getMessages'
+        );
         const messageCount = messages?.length || 0;
 
         // Find the last assistant message to check if it's complete
@@ -630,6 +652,7 @@ function logMessage(conversationPath, message) {
 module.exports = {
   runHeadless,
   waitForServer,
+  withTimeout,
   extractSummary,
   formatFoldOutput,
   DEFAULT_TIMEOUT,

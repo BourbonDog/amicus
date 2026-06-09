@@ -636,6 +636,22 @@ describe('Headless Mode Runner', () => {
       // Restore
       fs.readFileSync = originalReadFileSync;
     }, 15000);
+
+    it('does not hang when getMessages never resolves — dies at --timeout', async () => {
+      // getMessages hangs forever. Without a per-call timeout the loop freezes
+      // on the await and never re-checks the deadline.
+      mockGetMessages.mockImplementation(() => new Promise(() => {}));
+
+      const start = Date.now();
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        300, // 300ms --timeout
+        'build', { pollIntervalMs: 5, pollCallTimeoutMs: 50 }
+      );
+      expect(result.timedOut).toBe(true);
+      expect(mockAbortSession).toHaveBeenCalled();
+      expect(Date.now() - start).toBeLessThan(3000); // bounded, not infinite
+    }, 6000); // jest cap so a regression fails as a bounded timeout, not a forever-hang
   });
 
   describe('Progress Updates', () => {
