@@ -74,7 +74,7 @@ async function validateDirectModel(resolvedModel, alias, options = {}) {
     throw new Error(
       `Model '${modelId}' not found on ${provider} API.\n` +
       `Available models:\n${list}\n` +
-      `Fix with: sidecar setup --add-alias ${alias}=${relevant[0] ? normalizeModelId(provider, relevant[0].id) : 'provider/model'}`
+      `Fix with: amicus setup --add-alias ${alias}=${relevant[0] ? normalizeModelId(provider, relevant[0].id) : 'provider/model'}`
     );
   }
 
@@ -133,7 +133,7 @@ async function promptModelSelection(models, alias, provider, failedModelId) {
     if (fs.existsSync(configPath)) {
       throw new Error(
         `Cannot save model selection: config file at ${configPath} is malformed. ` +
-        'Fix it manually or run \'sidecar setup\'.'
+        'Fix it manually or run \'amicus setup\'.'
       );
     }
     config = {};
@@ -146,7 +146,7 @@ async function promptModelSelection(models, alias, provider, failedModelId) {
   } catch (err) {
     process.stderr.write(`  Warning: Could not save selection (${err.message}). Using for this session only.\n`);
   }
-  process.stderr.write(`  (To change later: sidecar setup --add-alias ${alias}=...)\n\n`);
+  process.stderr.write(`  (To change later: amicus setup --add-alias ${alias}=...)\n\n`);
 
   return newModel;
 }
@@ -163,6 +163,8 @@ async function promptModelSelection(models, alias, provider, failedModelId) {
  * @returns {Promise<string>} the model (unchanged) when valid/unverifiable
  */
 async function validateAgainstCatalog(resolvedModel, alias, options = {}) {
+  // Note: options.headless is accepted for parity with validateDirectModel; an
+  // interactive "pick a model" prompt on a catalog miss is a future enhancement.
   if (!resolvedModel.startsWith('openrouter/')) { return resolvedModel; }
 
   const { getCatalog } = require('./model-catalog');

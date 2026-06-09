@@ -29,7 +29,7 @@ function applyDirectApiFallback(model) {
     logger.warn({ msg: 'Using direct provider API (OPENROUTER_API_KEY not set)', original: model, resolved: direct });
     process.stderr.write(
       `Notice: Using direct ${provider} API (OPENROUTER_API_KEY not set). ` +
-      'Use --validate-model to verify model availability.\n'
+      'Model availability is validated automatically; pass --no-validate-model to skip.\n'
     );
     return direct;
   }

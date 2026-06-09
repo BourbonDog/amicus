@@ -42,6 +42,14 @@ describe('validateAgainstCatalog', () => {
     const out = await validateAgainstCatalog('openai/gpt-5.4', 'gpt', { headless: true });
     expect(out).toBe('openai/gpt-5.4');
   });
+
+  test('handles an absent model with no alias (uses model tail as filter)', async () => {
+    mockCatalog([{ id: 'openrouter/openai/gpt-5.4', name: 'gpt' }]);
+    const { validateAgainstCatalog } = require('../src/utils/model-validator');
+    await expect(
+      validateAgainstCatalog('openrouter/openai/ghost-model', undefined, { headless: true })
+    ).rejects.toThrow(/not found in the OpenRouter catalog/);
+  });
 });
 
 describe('validateFallbackModel default-on', () => {
