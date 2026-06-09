@@ -111,7 +111,9 @@ function findFilesRecursive(baseDir, prefix = '') {
     if (entry.isDirectory()) {
       results.push(...findFilesRecursive(baseDir, rel));
     } else {
-      results.push(rel);
+      // Normalize to forward slashes so file_created patterns (which use '/')
+      // match on Windows, where path.join produces backslashes. No-op on POSIX.
+      results.push(rel.split(path.sep).join('/'));
     }
   }
   return results;
