@@ -1,7 +1,7 @@
 ---
 title: F2 — Windows Green Suite (Design)
 date: 2026-06-09
-status: draft
+status: implemented (branch f2/windows-green-suite, 2026-06-09)
 owner: BourbonDog
 parent: 2026-06-07-amicus-product-design.md (§6 F2)
 ---
@@ -211,3 +211,30 @@ Windows correctness fix). Everything else is test-only.
   Each is its own spec.
 - Real Windows ACL hardening of the API-key file; centralizing path logic into a shared
   cross-platform module (Approach B — overlaps F3).
+
+## 9. Implementation notes (2026-06-09)
+
+Executed subagent-driven (implementer + spec + code-quality review per task). Outcome: the
+project's default test gate (`npm test` = unit suite; jest config excludes `*.integration.test.js`)
+is **green on Windows — 0 failed**, 1616 passed, 5 skipped (the 3 intentional F2 skips + 2
+pre-existing). Two deviations from the plan as written:
+
+1. **Regression caught by the full run, then fixed (completes F2a).** `tests/environment.test.js`
+   (`getSessionRoot › …code-local`) recomputed its expected path with the *old* encoder regex
+   inline, so the F2a fix flipped it red. The brainstorming-time grep missed it because the test
+   calls `getSessionRoot`, not `encodePath`, directly. Fixed by aligning the inline regex to
+   `/[/\\:_]/g` (commit on branch). Lesson: run the **full** suite (not just `tests/`) when scoping.
+
+2. **F2g folded in (user-approved).** A 9th pre-existing failure, `evals/tests/evaluator.test.js`
+   `file_created`, surfaced only in the full run (it lives in `evals/tests/`, outside `tests/`).
+   It is the same class of Windows path-separator bug: `findFilesRecursive` returned backslash
+   paths so `file_created`'s forward-slash patterns never matched. Fixed by normalizing the leaf
+   push to `/` (`rel.split(path.sep).join('/')`, a no-op on POSIX). On-theme, so folded into F2.
+
+**Integration suite (out of scope, pre-existing — NOT F2 regressions).** Running the excluded
+`*.integration.test.js` suite shows 3 failures, none caused by F2: `cli-handler` and
+`cli-headless-e2e` reference `bin/sidecar.js`, which the **F6 rebrand renamed to `bin/amicus.js`**
+(the helpers were never updated; the default gate excludes integration, so it went unnoticed);
+`mcp-headless-e2e` is a **real-LLM e2e** that needs live API/server credentials unavailable here.
+Tracked as a follow-up (integration-test maintenance / rebrand cleanup), not part of F2's
+Windows-unit-suite scope.
