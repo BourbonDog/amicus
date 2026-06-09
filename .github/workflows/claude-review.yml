@@ -28,7 +28,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: true
           prompt: |
             Review this PR. Always post a review comment summarizing your findings, even if no issues are found.
@@ -55,7 +55,10 @@ jobs:
             }
 
   security-review:
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    # DISABLED: claude-code-security-review supports only an ANTHROPIC_API_KEY — it cannot use
+    # a Max/Pro subscription (OAuth) token. Re-enable by adding the ANTHROPIC_API_KEY secret and
+    # deleting the `false && ` guard below (and update claude-api-key to that secret).
+    if: false && github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -134,7 +137,7 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
           plugin_marketplaces: |
             https://github.com/anthropics/claude-code.git
