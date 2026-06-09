@@ -69,6 +69,14 @@ describe('result-schema', () => {
       const doc = buildRunResult({ taskId: 't', metadata: { ...baseMeta, parentWave: 'deadbeef' } });
       expect(doc.waveId).toBe('deadbeef');
     });
+
+    it('durationMs is null (not NaN) for malformed timestamps', () => {
+      const doc = buildRunResult({
+        taskId: 't',
+        metadata: { createdAt: 'not-a-date', completedAt: 'also-bad', status: 'complete' },
+      });
+      expect(doc.durationMs).toBeNull();
+    });
   });
 
   describe('waveStatusFromLegs + waveExitCode', () => {
@@ -97,6 +105,11 @@ describe('result-schema', () => {
       expect(s).toBe('aborted');
       expect(waveExitCode(s)).toBe(1);
     });
+
+    it('empty legs array → error (never complete)', () => {
+      expect(waveStatusFromLegs([])).toBe('error');
+      expect(waveExitCode(waveStatusFromLegs([]))).toBe(1);
+    });
   });
 
   describe('buildWaveResult', () => {
@@ -122,6 +135,17 @@ describe('result-schema', () => {
       });
       expect(doc.durationMs).toBe(312456);
       expect(doc.legs).toHaveLength(2);
+    });
+
+    it('explicit status override wins over leg aggregation', () => {
+      const doc = buildWaveResult({ waveId: 'w', legs: [{ status: 'complete' }], status: 'aborted' });
+      expect(doc.status).toBe('aborted');
+    });
+
+    it('legs defaults to empty array without throwing', () => {
+      const doc = buildWaveResult({ waveId: 'w' });
+      expect(doc.counts.total).toBe(0);
+      expect(doc.status).toBe('error');
     });
   });
 });

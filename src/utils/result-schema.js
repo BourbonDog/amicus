@@ -27,6 +27,13 @@ function statusFromResult(result) {
   return 'complete';
 }
 
+/** Millisecond delta between two ISO timestamps, or null if either is missing/malformed. */
+function durationBetween(createdAt, completedAt) {
+  if (!createdAt || !completedAt) { return null; }
+  const ms = new Date(completedAt).getTime() - new Date(createdAt).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
 /**
  * Build a run document (single session result).
  * Used by `start --json`, `read <taskId> --json`, and every wave leg.
@@ -45,9 +52,7 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');
   const createdAt = metadata.createdAt || null;
   const completedAt = metadata.completedAt || metadata.abortedAt || null;
-  const durationMs = (createdAt && completedAt)
-    ? new Date(completedAt).getTime() - new Date(createdAt).getTime()
-    : null;
+  const durationMs = durationBetween(createdAt, completedAt);
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'run',
@@ -98,13 +103,16 @@ function waveExitCode(waveStatus) {
  * @param {object} opts
  * @param {string} opts.waveId
  * @param {Array<object>} opts.legs - run documents (in --models order)
+ * Counts track the four primary terminal statuses (complete/error/timeout/aborted);
+ * legs with other statuses (e.g. 'crashed', 'running' in a rebuilt wave) count toward
+ * `total` only, so total may exceed the sum of the named buckets.
  * @param {{source: string, file: string|null, chars: number}|null} [opts.promptMeta]
  * @param {string|null} [opts.createdAt]
  * @param {string|null} [opts.completedAt]
  * @param {string|null} [opts.status] - Override (e.g. 'aborted' on signal); default aggregates legs
  * @returns {object} wave document
  */
-function buildWaveResult({ waveId, legs, promptMeta = null, createdAt = null, completedAt = null, status = null }) {
+function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null }) {
   const counts = {
     total: legs.length,
     complete: legs.filter(l => l.status === 'complete').length,
@@ -112,14 +120,12 @@ function buildWaveResult({ waveId, legs, promptMeta = null, createdAt = null, co
     timeout: legs.filter(l => l.status === 'timeout').length,
     aborted: legs.filter(l => l.status === 'aborted').length,
   };
-  const durationMs = (createdAt && completedAt)
-    ? new Date(completedAt).getTime() - new Date(createdAt).getTime()
-    : null;
+  const durationMs = durationBetween(createdAt, completedAt);
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'wave',
     waveId,
-    status: status || waveStatusFromLegs(legs),
+    status: (status !== null && status !== undefined) ? status : waveStatusFromLegs(legs),
     counts,
     legs,
     prompt: promptMeta,
