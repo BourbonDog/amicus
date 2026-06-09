@@ -30,6 +30,12 @@ describe('markAborted', () => {
     fs.writeFileSync(path.join(dir, 'metadata.json'), '{bad json');
     expect(() => markAborted(dir, 'SIGINT')).not.toThrow();
   });
+
+  test('returns true on success and false when metadata is missing', () => {
+    expect(markAborted(dir, 'SIGTERM')).toBe(true);
+    fs.rmSync(path.join(dir, 'metadata.json'));
+    expect(markAborted(dir, 'SIGTERM')).toBe(false);
+  });
 });
 
 describe('installSignalAbort', () => {

@@ -14,18 +14,20 @@ const path = require('path');
  * Synchronously mark a session's metadata as aborted. Best-effort: never throws.
  * @param {string} sessionDir
  * @param {string} reason - e.g. a signal name
+ * @returns {boolean} true if the session was marked aborted
  */
 function markAborted(sessionDir, reason) {
   try {
     const metaPath = path.join(sessionDir, 'metadata.json');
-    if (!fs.existsSync(metaPath)) { return; }
+    if (!fs.existsSync(metaPath)) { return false; }
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
     meta.status = 'aborted';
     meta.reason = `Aborted (${reason})`;
     meta.abortedAt = new Date().toISOString();
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+    return true;
   } catch {
-    // best-effort
+    return false;
   }
 }
 

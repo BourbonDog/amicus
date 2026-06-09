@@ -49,4 +49,10 @@ describe('handleAbort --all', () => {
     expect(read('bbbbbbbb')).toBe('aborted');
     expect(read('cccccccc')).toBe('complete');
   });
+
+  test('prints the no-op message when nothing is running', async () => {
+    const { handleAbort } = require('../src/cli-handlers');
+    await handleAbort({ _: ['abort'], all: true, cwd: project });
+    expect(logSpy).toHaveBeenCalledWith('No running sessions to abort.');
+  });
 });
