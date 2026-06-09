@@ -231,11 +231,17 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         } catch { /* metadata optional */ }
       }
       const { installSignalAbort, markAborted } = require('./utils/session-abort');
+      let aborting = false;
       uninstallSignals = installSignalAbort({
         onAbort: (signal) => {
+          if (aborting) { return; }
+          aborting = true;
           logger.warn('Signal received — aborting headless session', { taskId, signal });
           markAborted(sessionDir, signal);
-          try { const { abortSession } = require('./opencode-client'); abortSession(client, sessionId); } catch { /* best-effort */ }
+          try {
+            const { abortSession } = require('./opencode-client');
+            abortSession(client, sessionId).catch(() => {});
+          } catch { /* best-effort */ }
           try { server.close(); } catch { /* best-effort */ }
           const code = signal === 'SIGINT' ? 130 : 143;
           const t = setTimeout(() => process.exit(code), 300);

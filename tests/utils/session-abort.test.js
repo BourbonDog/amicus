@@ -25,6 +25,11 @@ describe('markAborted', () => {
     fs.rmSync(path.join(dir, 'metadata.json'));
     expect(() => markAborted(dir, 'SIGINT')).not.toThrow();
   });
+
+  test('is a no-op (no throw) when metadata is corrupt JSON', () => {
+    fs.writeFileSync(path.join(dir, 'metadata.json'), '{bad json');
+    expect(() => markAborted(dir, 'SIGINT')).not.toThrow();
+  });
 });
 
 describe('installSignalAbort', () => {
