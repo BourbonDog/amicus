@@ -96,8 +96,10 @@ describe('End-to-End Sidecar Flow', () => {
    * Spec Reference: §5.2 Claude Code Conversation Storage
    */
   function createMockClaudeSession(projectPath, messages) {
-    // Encode project path: /Users/john/myproject -> -Users-john-myproject
-    const encodedPath = projectPath.replace(/[/\\]/g, '-');
+    // Encode the project path with the SAME function the product uses, so the
+    // mock session dir matches what sidecar will look up (and is legal on Windows).
+    const { encodeProjectPath } = require('../src/session');
+    const encodedPath = encodeProjectPath(projectPath);
 
     // Create Claude Code session directory structure at mock home
     const sessionDir = path.join(tmpHomeDir, '.claude', 'projects', encodedPath);
