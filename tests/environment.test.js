@@ -132,7 +132,7 @@ describe('Environment Detection', () => {
       );
 
       const currentCwd = process.cwd();
-      const encodedPath = currentCwd.replace(/[/\\_]/g, '-');
+      const encodedPath = currentCwd.replace(/[/\\:_]/g, '-');
       const expected = path.join(homedir, '.claude', 'projects', encodedPath);
       expect(result).toBe(expected);
     });
