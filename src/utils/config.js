@@ -11,31 +11,9 @@ const crypto = require('crypto');
 const { applyDirectApiFallback, autoRepairAlias } = require('./alias-resolver');
 const { getCompatEnv } = require('./env-compat');
 
-/** Default model alias map — short names to full OpenRouter model identifiers */
-const DEFAULT_ALIASES = {
-  'gemini': 'openrouter/google/gemini-3.1-flash-lite-preview',
-  'gemini-pro': 'openrouter/google/gemini-3.1-pro-preview',
-  'gpt': 'openrouter/openai/gpt-5.4',
-  'gpt-pro': 'openrouter/openai/gpt-5.4-pro',
-  // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
-  // Drift is caught by default-on catalog validation — see model-validator.js.
-  'codex': 'openrouter/openai/gpt-5.3-codex',
-  'claude': 'openrouter/anthropic/claude-sonnet-4.6',
-  'sonnet': 'openrouter/anthropic/claude-sonnet-4.6',
-  'opus': 'openrouter/anthropic/claude-opus-4.6',
-  'haiku': 'openrouter/anthropic/claude-haiku-4.5',
-  'deepseek': 'openrouter/deepseek/deepseek-v3.2',
-  'qwen': 'openrouter/qwen/qwen3.5-397b-a17b',
-  'qwen-coder': 'openrouter/qwen/qwen3-coder-next',
-  'qwen-flash': 'openrouter/qwen/qwen3.5-flash-02-23',
-  'mistral': 'openrouter/mistralai/mistral-large-2512',
-  'devstral': 'openrouter/mistralai/devstral-2512',
-  'glm': 'openrouter/z-ai/glm-5',
-  'minimax': 'openrouter/minimax/minimax-m2.5',
-  'grok': 'openrouter/x-ai/grok-4.3',
-  'kimi': 'openrouter/moonshotai/kimi-k2.5',
-  'seed': 'openrouter/bytedance-seed/seed-2.0-mini',
-};
+/** Default model alias map — derived from the curated-models single source (F5) */
+const { toDefaultAliases } = require('./curated-models');
+const DEFAULT_ALIASES = toDefaultAliases();
 
 /** @returns {string} Config directory path */
 function getConfigDir() {

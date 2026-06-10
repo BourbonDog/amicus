@@ -14,16 +14,13 @@ const { loadConfig, saveConfig, getDefaultAliases, getConfigDir } = require('../
 const { logger } = require('../utils/logger');
 
 /**
- * Model choices presented during interactive setup
+ * Model choices presented during readline setup — derived from curated-models (F5).
  * @type {Array<{number: number, alias: string, label: string}>}
  */
-const MODEL_CHOICES = [
-  { number: 1, alias: 'gemini', label: 'Gemini 3 Flash (fast, large context)' },
-  { number: 2, alias: 'gemini-pro', label: 'Gemini 3 Pro (advanced reasoning)' },
-  { number: 3, alias: 'gpt', label: 'GPT-5.4 (strong coding)' },
-  { number: 4, alias: 'opus', label: 'Claude Opus 4.6 (deep analysis)' },
-  { number: 5, alias: 'deepseek', label: 'DeepSeek v3.2 (open-source)' },
-];
+const { getCuratedModels } = require('../utils/curated-models');
+const MODEL_CHOICES = getCuratedModels().map((c, i) => ({
+  number: i + 1, alias: c.alias, label: `${c.label} (${c.blurb})`
+}));
 
 /**
  * Add a model alias to the existing config (or create config if none exists)

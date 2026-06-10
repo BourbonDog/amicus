@@ -6,23 +6,14 @@
  * Models are disabled when no configured API key matches their routes.
  */
 
-/** @type {Array<{alias: string, label: string, routes: Object<string,string>}>} */
-const MODEL_CHOICES = [
-  { alias: 'gemini', label: 'Gemini 3 Flash \u2014 fast, large context',
-    routes: { openrouter: 'openrouter/google/gemini-3-flash-preview',
-              google: 'google/gemini-3-flash-preview' } },
-  { alias: 'gemini-pro', label: 'Gemini 3 Pro \u2014 advanced reasoning',
-    routes: { openrouter: 'openrouter/google/gemini-3-pro-preview',
-              google: 'google/gemini-3-pro-preview' } },
-  { alias: 'gpt', label: 'GPT-5.2 Chat \u2014 strong coding',
-    routes: { openrouter: 'openrouter/openai/gpt-5.2-chat',
-              openai: 'openai/gpt-5.2-chat' } },
-  { alias: 'opus', label: 'Claude Opus 4.6 \u2014 deep analysis',
-    routes: { openrouter: 'openrouter/anthropic/claude-opus-4.6',
-              anthropic: 'anthropic/claude-opus-4.6' } },
-  { alias: 'deepseek', label: 'DeepSeek v3.2 \u2014 open-source',
-    routes: { openrouter: 'openrouter/deepseek/deepseek-v3.2' } },
-];
+/**
+ * Wizard quick-pick cards \u2014 derived from curated-models (F5).
+ * @type {Array<{alias: string, label: string, routes: Object<string,string>}>}
+ */
+const { getCuratedModels } = require('../src/utils/curated-models');
+const MODEL_CHOICES = getCuratedModels().map(c => ({
+  alias: c.alias, label: `${c.label} \u2014 ${c.blurb}`, routes: c.routes
+}));
 
 const PROVIDER_NAMES = {
   openrouter: 'OpenRouter',
