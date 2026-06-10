@@ -77,8 +77,8 @@ describe('start --json (F4)', () => {
   });
 });
 
-describe('finalizeSession conflict routing (F4)', () => {
-  it('accepts an opts arg and routes the conflict warning to stderr in json mode', () => {
+describe('finalizeSession signature (source guard)', () => {
+  it('accepts an opts arg and uses process.stderr.write for quietStdout routing', () => {
     const src = fs.readFileSync(path.join(__dirname, '../src/sidecar/session-utils.js'), 'utf-8');
     expect(src).toMatch(/function finalizeSession\(sessionDir, summary, project, metadata, opts = \{\}\)/);
     expect(src).toContain('process.stderr.write');

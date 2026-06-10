@@ -161,6 +161,70 @@ describe('Session Utils', () => {
 
       expect(metadata.conflicts).toEqual(conflicts);
     });
+
+    it('routes conflict warning to stderr (not stdout) when quietStdout is true', () => {
+      const conflicts = [{ file: 'src/bar.js', type: 'external_edit' }];
+      detectConflicts.mockReturnValue(conflicts);
+
+      const sessDir = '/tmp/test-session-quiet';
+      const metadata = {
+        taskId: 'task-quiet',
+        filesWritten: ['src/bar.js'],
+        createdAt: new Date().toISOString()
+      };
+
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        finalizeSession(sessDir, 'summary', '/project', metadata, { quietStdout: true });
+
+        // Warning must appear on stderr
+        const stderrCalls = stderrSpy.mock.calls.map(c => c[0]).join('');
+        expect(stderrCalls).toContain('conflict warning');
+
+        // Warning must NOT appear on stdout (console.log)
+        const logWarningCalls = consoleSpy.mock.calls.filter(
+          args => typeof args[0] === 'string' && args[0].includes('conflict warning')
+        );
+        expect(logWarningCalls).toHaveLength(0);
+      } finally {
+        stderrSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
+
+    it('routes conflict warning to stdout (console.log) when quietStdout is not set', () => {
+      const conflicts = [{ file: 'src/baz.js', type: 'external_edit' }];
+      detectConflicts.mockReturnValue(conflicts);
+
+      const sessDir = '/tmp/test-session-loud';
+      const metadata = {
+        taskId: 'task-loud',
+        filesWritten: ['src/baz.js'],
+        createdAt: new Date().toISOString()
+      };
+
+      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => {});
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        finalizeSession(sessDir, 'summary', '/project', metadata);
+
+        // Warning must appear on stdout (console.log)
+        const logWarningCalls = consoleSpy.mock.calls.filter(
+          args => typeof args[0] === 'string' && args[0].includes('conflict warning')
+        );
+        expect(logWarningCalls.length).toBeGreaterThan(0);
+
+        // Warning must NOT appear on stderr
+        const stderrWarningCalls = stderrSpy.mock.calls.filter(
+          args => typeof args[0] === 'string' && args[0].includes('conflict warning')
+        );
+        expect(stderrWarningCalls).toHaveLength(0);
+      } finally {
+        stderrSpy.mockRestore();
+        consoleSpy.mockRestore();
+      }
+    });
   });
 
   describe('outputSummary', () => {
