@@ -112,6 +112,11 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
           r.checked = (r.value === cfg.default);
         });
       }
+      if (cfg && cfg.default && cfg.default.indexOf('/') !== -1) {
+        // F5: a search-picked full model id matches no radio — restore it so
+        // reopening setup and clicking Finish never silently reverts the default.
+        window.customDefaultModel = cfg.default;
+      }
       if (cfg && cfg.aliases) {
         modelChoicesData.forEach(function(mc) {
           var currentModel = cfg.aliases[mc.alias];
@@ -425,7 +430,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   function selectCustomModel(id) {
     window.customDefaultModel = id;
     document.querySelectorAll('input[name="default-model"]').forEach(function(r) { r.checked = false; });
+    var box = $('model-search-results');
+    var keep = box ? box.scrollTop : 0;
     renderSearchResults();
+    if (box) { box.scrollTop = keep; }
   }
 
   document.addEventListener('input', function(e) {

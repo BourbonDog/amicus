@@ -318,7 +318,10 @@ function buildWizardCSS() {
   .search-row:hover { background: #34312F; }
   .search-row.selected { background: #4A3328; outline: 1px solid #D97757; }
   .search-row-id { color: #D4D0CC; font-size: 12px; font-family: 'SF Mono', Menlo, Consolas, monospace; }
-  .search-row-sub { color: #A09B96; font-size: 11px; margin-top: 2px; }`;
+  .search-row-sub { color: #A09B96; font-size: 11px; margin-top: 2px; }
+  .icon-btn { background: none; border: 1px solid #3D3A38; border-radius: 6px; color: #A09B96; cursor: pointer; font-size: 14px; padding: 6px 10px; }
+  .icon-btn:hover { border-color: #D97757; color: #D97757; }
+  .icon-btn:disabled { opacity: 0.5; cursor: default; }`;
 }
 
 module.exports = { buildWizardCSS };

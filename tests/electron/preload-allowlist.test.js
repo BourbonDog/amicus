@@ -18,5 +18,8 @@ describe('preload-setup allowlist', () => {
     for (const channel of invoked) {
       expect(src).toContain(`'${channel}'`);
     }
+    const totalInvokes = (script.match(/\.invoke\(/g) || []).length;
+    const literalInvokes = [...script.matchAll(/invoke\('([^']+)'/g)].length;
+    expect(totalInvokes).toBe(literalInvokes); // a non-literal invoke(channelVar) must fail loudly
   });
 });

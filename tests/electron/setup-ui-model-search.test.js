@@ -22,3 +22,12 @@ describe('buildModelStepHTML embeds the search section', () => {
     expect(search).toBeGreaterThan(cards);
   });
 });
+
+describe('wizard script round-trips a custom default', () => {
+  it('restores window.customDefaultModel from a full-id cfg.default', () => {
+    const { buildSetupHTML } = require('../../electron/setup-ui');
+    const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+    expect(script).toContain("cfg.default.indexOf('/') !== -1");
+    expect(script).toContain('window.customDefaultModel = cfg.default');
+  });
+});
