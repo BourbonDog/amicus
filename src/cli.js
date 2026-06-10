@@ -359,6 +359,8 @@ Options for 'abort':
 Options for 'read':
   --summary                    Show summary (default)
   --conversation               Show full conversation
+  --metadata                   Show session metadata
+  --json                       Emit the run/wave result as stable JSON
 
 OpenCode Agent Types:
     Chat       Reads auto, writes/bash ask permission (interactive default)

@@ -74,12 +74,14 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
 
 /**
  * Aggregate wave status from leg documents.
+ * any leg running → 'running' (live rebuild of an in-flight wave);
  * all complete → 'complete'; ≥1 complete → 'partial';
  * 0 complete + ≥1 aborted → 'aborted'; else 'error'.
  * @param {Array<{status: string}>} legs
  * @returns {string}
  */
 function waveStatusFromLegs(legs) {
+  if (legs.some(l => l.status === 'running')) { return 'running'; }
   const complete = legs.filter(l => l.status === 'complete').length;
   if (complete === legs.length && legs.length > 0) { return 'complete'; }
   if (complete > 0) { return 'partial'; }
@@ -142,7 +144,7 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
  * @param {string} taskId
  * @returns {object} run document
  * @throws {Error} if the session does not exist
- * @throws {SyntaxError} if metadata.json is not valid JSON
+ * @throws {Error} if metadata.json is missing or corrupt
  */
 function buildRunResultFromSession(project, taskId) {
   const fs = require('fs');
@@ -153,7 +155,12 @@ function buildRunResultFromSession(project, taskId) {
   if (!fs.existsSync(metaPath)) {
     throw new Error(`Session ${taskId} not found`);
   }
-  const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  let metadata;
+  try {
+    metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  } catch (err) {
+    throw new Error(`Session ${taskId}: metadata is corrupt (${err.message})`);
+  }
   const summaryPath = path.join(sessionDir, 'summary.md');
   const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : null;
   return buildRunResult({ taskId, metadata, summary, sessionDir });
@@ -167,7 +174,7 @@ function buildRunResultFromSession(project, taskId) {
  * @param {string} waveId
  * @returns {object} wave document
  * @throws {Error} if the wave session does not exist
- * @throws {SyntaxError} if wave metadata.json is not valid JSON
+ * @throws {Error} if metadata.json is missing or corrupt
  */
 function buildWaveResultFromSession(project, waveId) {
   const fs = require('fs');
@@ -186,7 +193,12 @@ function buildWaveResultFromSession(project, waveId) {
   if (!fs.existsSync(metaPath)) {
     throw new Error(`Wave ${waveId} not found`);
   }
-  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  let meta;
+  try {
+    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  } catch (err) {
+    throw new Error(`Wave ${waveId}: metadata is corrupt (${err.message})`);
+  }
   const legs = (meta.legs || []).map((legId) => {
     try { return buildRunResultFromSession(project, legId); }
     catch (err) {

@@ -97,7 +97,7 @@ async function listSidecars(options) {
         ((s.briefing?.length > 30) ? '...' : '');
       console.log(
         `${(s.id || '').padEnd(10)}` +
-        `${(s.type === 'wave' ? `wave(${s.legCount} legs)` : (s.model || '')).padEnd(23)}` +
+        `${(s.type === 'wave' ? `wave(${s.legCount ?? 0} legs)` : (s.model || '')).padEnd(23)}` +
         `${(s.status || 'unknown').padEnd(11)}` +
         `${age.padEnd(12)}` +
         `${briefingShort}`

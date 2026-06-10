@@ -76,4 +76,20 @@ describe('read --json and wave-aware list (F4)', () => {
     const out = logSpy.mock.calls.map(c => c[0]).join('\n');
     expect(out).toContain('wave(2 legs)');
   });
+
+  it('read --json on a live wave (no wave.json) reports running, not error', async () => {
+    writeSession('feed5555', { type: 'wave', status: 'running', legs: ['feed5555-1'], createdAt: new Date().toISOString() });
+    writeSession('feed5555-1', { model: 'a/b', status: 'running', parentWave: 'feed5555', createdAt: new Date().toISOString() });
+    await readSidecar({ taskId: 'feed5555', json: true, project });
+    const doc = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(doc.status).toBe('running');
+    expect(doc.legs[0].status).toBe('running');
+  });
+
+  it('read --json on corrupt metadata throws a contextual error', async () => {
+    const dir = writeSession('feed6666', { status: 'complete' });
+    fs.writeFileSync(path.join(dir, 'metadata.json'), '{ not json');
+    await expect(readSidecar({ taskId: 'feed6666', json: true, project }))
+      .rejects.toThrow(/feed6666: metadata is corrupt/);
+  });
 });

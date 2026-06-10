@@ -238,4 +238,9 @@ describe('result-schema session rebuilders', () => {
     expect(doc.status).toBe('complete');
     expect(doc.legs[0].summary).toBe('leg ok');
   });
+
+  it('waveStatusFromLegs: any running leg → running', () => {
+    const { waveStatusFromLegs } = require('../../src/utils/result-schema');
+    expect(waveStatusFromLegs([{ status: 'complete' }, { status: 'running' }])).toBe('running');
+  });
 });

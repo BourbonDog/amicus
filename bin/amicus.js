@@ -356,7 +356,6 @@ async function handleRead(args) {
 
   await readSidecar({
     taskId,
-    summary: args.summary,
     conversation: args.conversation,
     metadata: args.metadata,
     json: args.json,
