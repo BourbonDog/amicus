@@ -1,7 +1,7 @@
 // tests/sidecar/fanout-output.test.js
 'use strict';
 
-const { formatWaveHuman } = require('../../src/sidecar/fanout-output');
+const { formatWaveHuman, fmtDuration } = require('../../src/sidecar/fanout-output');
 
 describe('formatWaveHuman', () => {
   const wave = {
@@ -30,5 +30,16 @@ describe('formatWaveHuman', () => {
   it('shows a placeholder for legs without a summary', () => {
     const out = formatWaveHuman(wave);
     expect(out).toContain('(no output)');
+  });
+});
+
+describe('fmtDuration', () => {
+  const { fmtDuration } = require('../../src/sidecar/fanout-output');
+  it('formats null, zero, seconds and minutes', () => {
+    expect(fmtDuration(null)).toBe('-');
+    expect(fmtDuration(undefined)).toBe('-');
+    expect(fmtDuration(0)).toBe('0s');
+    expect(fmtDuration(42000)).toBe('42s');
+    expect(fmtDuration(65000)).toBe('1m5s');
   });
 });
