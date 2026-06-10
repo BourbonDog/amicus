@@ -20,6 +20,7 @@ const { buildToolbarHTML, TOOLBAR_H, getBrandName } = require('./toolbar');
 const { createFoldHandler } = require('./fold');
 const { registerSetupHandlers } = require('./ipc-setup');
 const { computeWindowPosition } = require('./window-position');
+const { attachLoadFailsafe, buildLoadErrorHTML } = require('./load-failsafe');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
@@ -151,12 +152,43 @@ function createAmicusWindow() {
   const contentUrl = OPENCODE_SESSION_ID
     ? `${OPENCODE_URL}/${Buffer.from(CWD).toString('base64url')}/session/${OPENCODE_SESSION_ID}`
     : OPENCODE_URL;
+
+  // The window only becomes visible on the success path below. Without this
+  // failsafe, a failed/stalled UI load leaves an invisible window and a
+  // silently hung process (the historical "Starting up... | 0 messages" bug).
+  const failsafe = attachLoadFailsafe({
+    webContents: contentView.webContents,
+    timeoutMs: parseInt(getCompatEnv('GUI_LOAD_TIMEOUT_MS') || '', 10) || undefined,
+    onFail: ({ reason, errorCode, errorDescription, validatedURL }) => {
+      logger.error('OpenCode UI failed to load', {
+        reason, errorCode, errorDescription, validatedURL, url: contentUrl
+      });
+      if (reason === 'load-failed') {
+        const html = buildLoadErrorHTML({
+          url: validatedURL || contentUrl, errorCode, errorDescription
+        });
+        contentView.webContents
+          .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+          .catch(() => {});
+      }
+      // On timeout, show whatever is in flight rather than aborting the load.
+      mainWindow.addBrowserView(contentView);
+      updateContentBounds();
+      if (!process.env.SIDECAR_HEADLESS_TEST) {
+        mainWindow.show();
+      }
+    }
+  });
+
   contentView.webContents.loadURL(contentUrl);
 
   contentView.webContents.on('did-finish-load', () => {
     // Wait for React to render, then rebrand and show window
     setTimeout(() => {
       rebrandUI().then(() => {
+        // Disarm only once the window is actually about to show, so a wedged
+        // rebrand/executeJavaScript is still covered by the timeout.
+        failsafe.cancel();
         mainWindow.addBrowserView(contentView);
         updateContentBounds();
         if (!process.env.SIDECAR_HEADLESS_TEST) {
