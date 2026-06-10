@@ -256,7 +256,7 @@ function getTools() {
       'session readable by taskId.',
     inputSchema: {
       models: z.array(safeModel).min(1).max(10).describe(
-        `2-10 models for genuine fan-out. Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed.`
+        `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed.`
       ),
       prompt: z.string().describe(
         'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'

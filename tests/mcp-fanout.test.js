@@ -34,6 +34,7 @@ describe('wave crash detection in amicus_status', () => {
     expect(waveBranch).toContain('process.kill(metadata.pid, 0)');
     expect(waveBranch).toContain('Fan-out process exited unexpectedly');
     expect(waveBranch).toContain('Parent fan-out process killed');
+    expect(src).toContain('never leave a pid-less wave record');
   });
 
   it('behavioral: wave with dead pid is marked crashed and running legs cascade', async () => {
@@ -88,6 +89,38 @@ describe('wave crash detection in amicus_status', () => {
       const crashedLeg = response.legs.find(l => l.taskId === legId);
       expect(crashedLeg).toBeDefined();
       expect(crashedLeg.status).toBe('crashed');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('amicus_read on crashed wave without wave.json', () => {
+  it('amicus_read on a crashed wave without wave.json is honest about it', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+
+    const { handlers } = require('../src/mcp-server');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fanout-read-crash-'));
+    try {
+      const waveId = 'wave-read-crash-001';
+      const sessBase = path.join(tmpDir, '.claude', 'amicus_sessions');
+      const waveDir = path.join(sessBase, waveId);
+      fs.mkdirSync(waveDir, { recursive: true });
+
+      // Write wave metadata with 'crashed' status — no wave.json present
+      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: waveId, type: 'wave', status: 'crashed', legs: ['x-1'],
+        headless: true, createdAt: new Date().toISOString(),
+      }, null, 2));
+
+      const result = await handlers.amicus_read({ taskId: waveId, mode: 'summary' }, tmpDir);
+
+      // Must be a non-error response with an honest message about the crash
+      expect(result.isError).toBeUndefined();
+      expect(/ended with status 'crashed'/.test(result.content[0].text)).toBe(true);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

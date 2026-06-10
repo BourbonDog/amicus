@@ -273,7 +273,7 @@ const handlers = {
             reason: 'Fan-out process exited unexpectedly',
           });
           fs.writeFileSync(path.join(sessionDir, 'metadata.json'),
-            JSON.stringify(metadata, null, 2));
+            JSON.stringify(metadata, null, 2), { mode: 0o600 });
           // Cascade to legs whose pollers died with the parent
           for (const leg of legs) {
             if (leg.status === 'running') {
@@ -285,7 +285,7 @@ const handlers = {
                 });
                 fs.writeFileSync(
                   path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
-                  JSON.stringify(legMeta, null, 2));
+                  JSON.stringify(legMeta, null, 2), { mode: 0o600 });
                 leg.status = 'crashed';
               }
             }
@@ -372,7 +372,12 @@ const handlers = {
         return textResult(fs.readFileSync(wavePath, 'utf-8'));
       }
       const legsTotal = (readMeta.legs || []).length;
-      return textResult(`Wave ${input.taskId} is still running (${legsTotal} legs). Poll amicus_status.`);
+      const stillRunning = !readMeta.status || readMeta.status === 'running';
+      const msg = stillRunning
+        ? `Wave ${input.taskId} is still running (${legsTotal} legs). Poll amicus_status.`
+        : `Wave ${input.taskId} ended with status '${readMeta.status}' before writing wave.json ` +
+          '(fan-out may have been killed). Read individual legs by taskId, or use mode \'metadata\'.';
+      return textResult(msg);
     }
 
     const mode = input.mode || 'summary';
@@ -546,6 +551,13 @@ const handlers = {
     if (input.includeContext === false) { args.push('--no-context'); }
 
     try { spawnSidecarProcess(args, waveDir); } catch (err) {
+      // Best-effort: never leave a pid-less wave record claiming 'running'
+      // forever (crash detection only probes records WITH a pid).
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
+        Object.assign(m, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
+        fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
+      } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }
 
