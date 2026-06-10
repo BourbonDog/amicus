@@ -13,6 +13,7 @@ describe('seedCatalog', () => {
     const lines = [];
     await seedCatalog((s) => lines.push(s));
     expect(refresh).toHaveBeenCalled();
+    expect(lines[0]).toBe('Refreshing model catalog...');
     expect(lines.join('\n')).toContain('Model catalog seeded (1 models)');
   });
 
@@ -48,18 +49,28 @@ describe('--add-alias catalog warning', () => {
     jest.doMock('../../src/utils/model-catalog', () => ({
       getCatalog: jest.fn(async () => catalog),
     }));
+    jest.doMock('../../src/utils/alias-audit', () => ({
+      findStaleAliases: jest.fn((sources, catalog) =>
+        catalog.length > 0 && catalog.some(m => m.id.startsWith(sources[0].model.split('/')[0] + '/')) &&
+        !catalog.some(m => m.id === sources[0].model) ? sources : []),
+      suggestReplacements: jest.fn(() => ['openrouter/x-ai/grok-4.3']),
+    }));
     const { handleSetup } = require('../../src/cli-handlers');
     const warnings = [];
-    const orig = console.warn;
+    const logs = [];
+    const origWarn = console.warn;
+    const origLog = console.log;
     console.warn = (s) => warnings.push(String(s));
+    console.log = (s) => logs.push(String(s));
     return handleSetup({ 'add-alias': 'grok=openrouter/x-ai/grok-9.9' })
-      .finally(() => { console.warn = orig; })
+      .finally(() => { console.warn = origWarn; console.log = origLog; })
       .then(() => warnings.join('\n'));
   }
 
   it('warns when the model is absent from a populated openrouter catalog', async () => {
     const out = await runAddAlias({ catalog: [{ id: 'openrouter/x-ai/grok-4.3', name: 'G' }] });
     expect(out).toContain('not found in the model catalog');
+    expect(out).toContain('Did you mean: openrouter/x-ai/grok-4.3');
     expect(out).toContain('amicus models --search');
   });
 

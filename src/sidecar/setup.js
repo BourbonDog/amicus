@@ -141,6 +141,7 @@ async function runApiKeySetup() {
 async function seedCatalog(print) {
   const log = print ?? console.log;
   try {
+    log('Refreshing model catalog...');
     const { refreshCatalog } = require('../utils/model-catalog');
     const models = await refreshCatalog();
     if (models.length > 0) {

@@ -46,13 +46,15 @@ async function handleSetup(args) {
     // F5: warn (never block) when the model is absent from a checkable catalog.
     try {
       const { getCatalog } = require('./utils/model-catalog');
+      const { findStaleAliases, suggestReplacements } = require('./utils/alias-audit');
       const catalog = await getCatalog();
-      const provider = model.split('/')[0];
-      const checkable = catalog.some(m => m.id.startsWith(provider + '/'));
-      if (checkable && !catalog.some(m => m.id === model)) {
+      const stale = findStaleAliases([{ alias: name, model, source: 'user-config' }], catalog);
+      if (stale.length > 0) {
+        const candidates = suggestReplacements(model, catalog);
         console.warn(
-          `Warning: '${model}' not found in the model catalog. ` +
-          `Double-check with: amicus models --search ${model.split('/').pop()}`
+          `Warning: '${model}' not found in the model catalog.` +
+          (candidates.length > 0 ? ` Did you mean: ${candidates.join(', ')}` : '') +
+          `\nDouble-check with: amicus models --search ${model.split('/').pop()}`
         );
       }
     } catch { /* warn-only path */ }
