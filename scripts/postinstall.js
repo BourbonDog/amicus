@@ -77,17 +77,30 @@ function installSkill() {
 /** Install the LLM Council skill to ~/.claude/skills/second-opinion/ */
 function installCouncilSkill(sourceDir = COUNCIL_SOURCE_DIR) {
   const destDir = path.join(skillsRoot(), 'second-opinion');
+  try {
+    fs.mkdirSync(destDir, { recursive: true });
+  } catch (err) {
+    console.error(`[amicus] Warning: Could not create council skill dir: ${err.message}`);
+    return;
+  }
+  let failed = 0;
   for (const { file, mode } of COUNCIL_FILES) {
     try {
       const dest = path.join(destDir, file);
       if (mode === 'if-missing' && fs.existsSync(dest)) { continue; }
-      fs.mkdirSync(destDir, { recursive: true });
       fs.copyFileSync(path.join(sourceDir, file), dest);
     } catch (err) {
+      failed++;
       console.error(`[amicus] Warning: Could not install council file ${file}: ${err.message}`);
     }
   }
-  console.log('[amicus] Council skill installed to ~/.claude/skills/second-opinion/');
+  if (failed === COUNCIL_FILES.length) {
+    console.error('[amicus] Warning: Council skill NOT installed (all files failed — see warnings above).');
+  } else if (failed > 0) {
+    console.log(`[amicus] Council skill partially installed (${failed}/${COUNCIL_FILES.length} files failed — see warnings above).`);
+  } else {
+    console.log('[amicus] Council skill installed to ~/.claude/skills/second-opinion/');
+  }
 }
 
 /** Register MCP server in Claude Code config */

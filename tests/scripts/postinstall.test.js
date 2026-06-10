@@ -66,6 +66,7 @@ describe('postinstall skill installation', () => {
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => installCouncilSkill(path.join(homeDir, 'no-such-source'))).not.toThrow();
     expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('Warning'));
+    expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('Council skill installed'));
     errSpy.mockRestore();
   });
 });
