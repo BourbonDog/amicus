@@ -359,6 +359,7 @@ async function handleRead(args) {
     summary: args.summary,
     conversation: args.conversation,
     metadata: args.metadata,
+    json: args.json,
     project: args.cwd
   });
 }

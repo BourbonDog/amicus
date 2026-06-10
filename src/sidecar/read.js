@@ -52,6 +52,9 @@ function enumerateSessions(project, opts = {}) {
         byId.set(d, {
           id: d, model: meta.model, status: meta.status, agent: meta.agent,
           briefing: meta.briefing, createdAt: meta.createdAt,
+          type: meta.type || 'run',
+          parentWave: meta.parentWave || null,
+          legCount: Array.isArray(meta.legs) ? meta.legs.length : null,
         });
       } catch { /* skip unreadable */ }
     }
@@ -94,7 +97,7 @@ async function listSidecars(options) {
         ((s.briefing?.length > 30) ? '...' : '');
       console.log(
         `${(s.id || '').padEnd(10)}` +
-        `${(s.model || '').padEnd(23)}` +
+        `${(s.type === 'wave' ? `wave(${s.legCount} legs)` : (s.model || '')).padEnd(23)}` +
         `${(s.status || 'unknown').padEnd(11)}` +
         `${age.padEnd(12)}` +
         `${briefingShort}`
@@ -114,12 +117,32 @@ async function listSidecars(options) {
  * @param {string} [options.project] - Project directory
  */
 async function readSidecar(options) {
-  const { taskId, conversation, metadata, project = process.cwd() } = options;
+  const { taskId, conversation, metadata, json, project = process.cwd() } = options;
 
   const sessionDir = safeSessionDir(project, taskId);
 
   if (!fs.existsSync(sessionDir)) {
     throw new Error(`Session ${taskId} not found`);
+  }
+
+  const metaPath = path.join(sessionDir, 'metadata.json');
+  let meta = {};
+  try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* legacy/partial */ }
+
+  if (json) {
+    const { buildRunResultFromSession, buildWaveResultFromSession } = require('../utils/result-schema');
+    const doc = meta.type === 'wave'
+      ? buildWaveResultFromSession(project, taskId)
+      : buildRunResultFromSession(project, taskId);
+    console.log(JSON.stringify(doc, null, 2));
+    return;
+  }
+
+  if (meta.type === 'wave' && !conversation && !metadata) {
+    const { buildWaveResultFromSession } = require('../utils/result-schema');
+    const { formatWaveHuman } = require('./fanout-output');
+    console.log(formatWaveHuman(buildWaveResultFromSession(project, taskId)));
+    return;
   }
 
   if (conversation) {
