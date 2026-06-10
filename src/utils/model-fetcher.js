@@ -9,11 +9,11 @@ const https = require('https');
 
 /** Hardcoded Anthropic models (no public listing endpoint) */
 const ANTHROPIC_MODELS = [
-  { id: 'anthropic/claude-opus-4-6', name: 'Claude Opus 4.6' },
-  { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
-  { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5' },
-  { id: 'anthropic/claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
-  { id: 'anthropic/claude-3-5-haiku', name: 'Claude 3.5 Haiku' }
+  { id: 'anthropic/claude-opus-4-6', name: 'Claude Opus 4.6', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-sonnet-4-5', name: 'Claude Sonnet 4.5', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-3-5-haiku', name: 'Claude 3.5 Haiku', contextLength: null, pricing: null }
 ];
 
 const PROVIDER_FAMILY_NAMES = {
@@ -27,12 +27,18 @@ const PROVIDER_FAMILY_NAMES = {
 const PROVIDER_FETCH_CONFIG = {
   openrouter: {
     url: 'https://openrouter.ai/api/v1/models',
-    authHeader: (key) => ({ 'Authorization': `Bearer ${key}` }),
+    // Public endpoint: works keyless; attach auth only when a key exists (F5).
+    authHeader: (key) => (key ? { 'Authorization': `Bearer ${key}` } : {}),
     normalize: (body) => {
       const data = JSON.parse(body);
       return (data.data || []).map(m => ({
         id: `openrouter/${m.id}`,
-        name: m.name || m.id
+        name: m.name || m.id,
+        contextLength: m.context_length != null ? m.context_length : null,
+        pricing: m.pricing
+          ? { prompt: m.pricing.prompt != null ? m.pricing.prompt : null,
+              completion: m.pricing.completion != null ? m.pricing.completion : null }
+          : null
       }));
     }
   },
@@ -44,7 +50,9 @@ const PROVIDER_FETCH_CONFIG = {
       const data = JSON.parse(body);
       return (data.models || []).map(m => ({
         id: `google/${m.name.replace('models/', '')}`,
-        name: m.displayName || m.name.replace('models/', '')
+        name: m.displayName || m.name.replace('models/', ''),
+        contextLength: m.inputTokenLimit != null ? m.inputTokenLimit : null,
+        pricing: null
       }));
     }
   },
@@ -55,7 +63,9 @@ const PROVIDER_FETCH_CONFIG = {
       const data = JSON.parse(body);
       return (data.data || []).map(m => ({
         id: `openai/${m.id}`,
-        name: m.id
+        name: m.id,
+        contextLength: null,
+        pricing: null
       }));
     }
   }
@@ -113,21 +123,23 @@ function fetchModelsFromProvider(provider, key) {
   });
 }
 
+/** Providers to fetch: every keyed provider + openrouter (keyless-capable) + anthropic. */
+function providersToFetch(keys) {
+  const set = new Set(Object.keys(keys).filter(p => keys[p]));
+  set.add('openrouter');
+  set.add('anthropic');
+  return Array.from(set);
+}
+
 /**
- * Fetch models from all providers that have keys configured
+ * Fetch models from all providers that have keys configured; openrouter is
+ * always included (keyless public endpoint) as is anthropic (hardcoded list).
  * @param {Object<string, string>} keys - Map of provider → API key string
- * @returns {Promise<Array<{id: string, name: string}>>} Combined model list
+ * @returns {Promise<Array<{id: string, name: string, contextLength: number|null, pricing: object|null}>>} Combined model list
  */
 async function fetchAllModels(keys) {
-  const providers = Object.keys(keys).filter(p => keys[p]);
-  const fetches = providers.map(p => fetchModelsFromProvider(p, keys[p]));
-
-  // Always include anthropic
-  if (!providers.includes('anthropic')) {
-    fetches.push(fetchModelsFromProvider('anthropic', ''));
-  }
-
-  const results = await Promise.all(fetches);
+  const providers = providersToFetch(keys);
+  const results = await Promise.all(providers.map(p => fetchModelsFromProvider(p, keys[p] || '')));
   return results.flat();
 }
 
@@ -159,7 +171,9 @@ function groupModelsByFamily(models) {
 module.exports = {
   fetchModelsFromProvider,
   fetchAllModels,
+  providersToFetch,
   groupModelsByFamily,
   ANTHROPIC_MODELS,
+  PROVIDER_FETCH_CONFIG,
   PROVIDER_FAMILY_NAMES
 };

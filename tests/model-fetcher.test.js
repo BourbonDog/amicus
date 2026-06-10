@@ -59,8 +59,8 @@ describe('model-fetcher', () => {
 
       const result = await fetchModelsFromProvider('openrouter', 'sk-or-test');
       expect(result).toEqual([
-        { id: 'openrouter/google/gemini-3-flash', name: 'Gemini 3 Flash' },
-        { id: 'openrouter/openai/gpt-5', name: 'GPT-5' }
+        { id: 'openrouter/google/gemini-3-flash', name: 'Gemini 3 Flash', contextLength: null, pricing: null },
+        { id: 'openrouter/openai/gpt-5', name: 'GPT-5', contextLength: null, pricing: null }
       ]);
     });
 
@@ -74,8 +74,8 @@ describe('model-fetcher', () => {
 
       const result = await fetchModelsFromProvider('google', 'AIza-test');
       expect(result).toEqual([
-        { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash' },
-        { id: 'google/gemini-3-pro', name: 'Gemini 3 Pro' }
+        { id: 'google/gemini-3-flash', name: 'Gemini 3 Flash', contextLength: null, pricing: null },
+        { id: 'google/gemini-3-pro', name: 'Gemini 3 Pro', contextLength: null, pricing: null }
       ]);
     });
 
@@ -89,8 +89,8 @@ describe('model-fetcher', () => {
 
       const result = await fetchModelsFromProvider('openai', 'sk-test');
       expect(result).toEqual([
-        { id: 'openai/gpt-5', name: 'gpt-5' },
-        { id: 'openai/o3', name: 'o3' }
+        { id: 'openai/gpt-5', name: 'gpt-5', contextLength: null, pricing: null },
+        { id: 'openai/o3', name: 'o3', contextLength: null, pricing: null }
       ]);
     });
 
