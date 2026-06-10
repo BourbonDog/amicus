@@ -48,13 +48,16 @@ async function validateFanoutModels(modelsArg, opts = {}) {
   if (raw.length === 0) {
     return { error: 'Error: --models requires a comma-separated list (e.g. gemini,gpt,deepseek)' };
   }
-  const maxLegs = Number(process.env.AMICUS_FANOUT_MAX_LEGS) || DEFAULT_MAX_LEGS;
+  // Invalid or non-positive AMICUS_FANOUT_MAX_LEGS (0, negative, garbage) falls back to the default.
+  const envCap = Number(process.env.AMICUS_FANOUT_MAX_LEGS);
+  const maxLegs = (Number.isInteger(envCap) && envCap > 0) ? envCap : DEFAULT_MAX_LEGS;
   if (raw.length > maxLegs) {
     return { error: `Error: --models exceeds the fan-out cap of ${maxLegs} legs (set AMICUS_FANOUT_MAX_LEGS to raise)` };
   }
 
   const { tryResolveModel } = require('../utils/config');
   const { validateApiKey } = require('../utils/validators');
+  const { validateAgainstCatalog } = require('../utils/model-validator');
   const legs = [];
   for (const modelInput of raw) {
     const resolved = tryResolveModel(modelInput);
@@ -67,7 +70,6 @@ async function validateFanoutModels(modelsArg, opts = {}) {
       return { error: keyCheck.error };
     }
     if (!opts.noValidateModel) {
-      const { validateAgainstCatalog } = require('../utils/model-validator');
       const alias = modelInput.includes('/') ? undefined : modelInput;
       try {
         model = await validateAgainstCatalog(model, alias);

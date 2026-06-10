@@ -95,5 +95,13 @@ describe('fanout validation helpers', () => {
       const r = await validateFanoutModels('nosuchalias-xyz-f4');
       expect(r.error).toBeDefined();
     });
+
+    it('treats invalid AMICUS_FANOUT_MAX_LEGS values as unset (default cap applies)', async () => {
+      const eleven = Array.from({ length: 11 }, (_, i) => `p/m${i}`).join(',');
+      process.env.AMICUS_FANOUT_MAX_LEGS = 'garbage';
+      expect((await validateFanoutModels(eleven)).error).toMatch(/cap of 10/);
+      process.env.AMICUS_FANOUT_MAX_LEGS = '0';
+      expect((await validateFanoutModels(eleven)).error).toMatch(/cap of 10/);
+    });
   });
 });
