@@ -39,15 +39,14 @@ function readCache() {
   return null;
 }
 
-/** Write the cache. Best-effort; never throws. @param {Array} models */
+/** Write the cache atomically (tmp+rename). Best-effort; never throws. @param {Array} models */
 function writeCache(models) {
   try {
     fs.mkdirSync(_getConfigDir(), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(
-      catalogPath(),
-      JSON.stringify({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2),
-      { mode: 0o600 }
-    );
+    const target = catalogPath();
+    const tmp = `${target}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, target);
   } catch { /* best-effort */ }
 }
 

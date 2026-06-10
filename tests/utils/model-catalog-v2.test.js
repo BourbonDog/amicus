@@ -71,4 +71,12 @@ describe('model-catalog schema v2', () => {
     expect(info.models).toEqual(ROWS);
     expect(typeof info.fetchedAt).toBe('number');
   });
+
+  it('writeCache is atomic: no .tmp file remains after refresh', async () => {
+    mockFetch(ROWS);
+    const { refreshCatalog, catalogPath } = require('../../src/utils/model-catalog');
+    await refreshCatalog();
+    expect(fs.existsSync(catalogPath() + '.tmp')).toBe(false);
+    expect(fs.existsSync(catalogPath())).toBe(true);
+  });
 });

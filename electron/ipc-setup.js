@@ -4,7 +4,7 @@
  * Extracted from main.js to keep file sizes under 300 lines.
  * Registers all setup-mode IPC handlers: validate-key, save-key,
  * remove-key, setup-done, save-config, get-config, get-api-keys,
- * and fetch-models.
+ * fetch-models, get-catalog, and refresh-catalog.
  */
 
 const { logger } = require('../src/utils/logger');
@@ -28,7 +28,18 @@ function registerSetupHandlers(ipcMain, getMainWindow) {
   ipcMain.handle('sidecar:save-key', async (_event, provider, key) => {
     try {
       const { saveApiKey } = require('../src/utils/api-key-store');
-      return saveApiKey(provider, key);
+      const result = saveApiKey(provider, key);
+      // F5: warm the model catalog as soon as a key lands so the Step 2
+      // picker renders instantly. Fire-and-forget; failures are silent
+      // (Step 2's get-catalog will retry via its own getCatalogInfo()).
+      if (result && result.success !== false) {
+        setImmediate(() => {
+          try {
+            require('../src/utils/model-catalog').refreshCatalog().catch(() => {});
+          } catch { /* best-effort */ }
+        });
+      }
+      return result;
     } catch (err) {
       logger.error('save-key handler error', { error: err.message });
       return { success: false, error: err.message };
@@ -133,6 +144,28 @@ function registerSetupHandlers(ipcMain, getMainWindow) {
     } catch (err) {
       logger.error('fetch-models handler error', { error: err.message });
       return [];
+    }
+  });
+
+  // F5: wizard Step 2 reads the catalog CACHE (self-refreshing when stale).
+  ipcMain.handle('sidecar:get-catalog', async () => {
+    try {
+      const { getCatalogInfo } = require('../src/utils/model-catalog');
+      return await getCatalogInfo();
+    } catch (err) {
+      logger.error('get-catalog handler error', { error: err.message });
+      return { models: [], fetchedAt: null };
+    }
+  });
+
+  ipcMain.handle('sidecar:refresh-catalog', async () => {
+    try {
+      const { refreshCatalog, getCatalogInfo } = require('../src/utils/model-catalog');
+      await refreshCatalog();
+      return await getCatalogInfo();
+    } catch (err) {
+      logger.error('refresh-catalog handler error', { error: err.message });
+      return { models: [], fetchedAt: null };
     }
   });
 }
