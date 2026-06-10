@@ -52,6 +52,7 @@ describe('model-catalog schema v2', () => {
     fs.mkdirSync(tmpDir, { recursive: true });
     fs.writeFileSync(catalogPath(), JSON.stringify({ schemaVersion: 2, fetchedAt: Date.now(), models: ROWS }));
     expect(await getCatalog()).toEqual(ROWS);
+    expect(require('../../src/utils/model-fetcher').fetchAllModels).not.toHaveBeenCalled();
   });
 
   it('v1 cache still serves as stale fallback when the refresh comes back empty', async () => {

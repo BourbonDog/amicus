@@ -22,7 +22,7 @@ function _readApiKeyValues() { return require('./api-key-store').readApiKeyValue
 async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModels(keys); }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
-const SCHEMA_VERSION = 2;
+const CATALOG_SCHEMA_VERSION = 2;
 
 /** @returns {string} Absolute path to the catalog cache file */
 function catalogPath() {
@@ -45,7 +45,7 @@ function writeCache(models) {
     fs.mkdirSync(_getConfigDir(), { recursive: true, mode: 0o700 });
     fs.writeFileSync(
       catalogPath(),
-      JSON.stringify({ schemaVersion: SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2),
+      JSON.stringify({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2),
       { mode: 0o600 }
     );
   } catch { /* best-effort */ }
@@ -74,7 +74,7 @@ async function getCatalog(opts = {}) {
   // A future fetchedAt (clock skew / hand-edited file) reads as indefinitely
   // fresh; acceptable for a model catalog. v1 caches (no schemaVersion) always
   // read as stale so they get refreshed to v2 on next access.
-  const fresh = cache && cache.schemaVersion === SCHEMA_VERSION &&
+  const fresh = cache && cache.schemaVersion === CATALOG_SCHEMA_VERSION &&
     (Date.now() - cache.fetchedAt) <= maxAgeMs;
   if (fresh) { return cache.models; }
 
@@ -93,4 +93,4 @@ async function getCatalogInfo(opts = {}) {
   return { models, fetchedAt: cache ? cache.fetchedAt : null };
 }
 
-module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, SCHEMA_VERSION };
+module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, CATALOG_SCHEMA_VERSION };
