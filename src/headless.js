@@ -30,6 +30,7 @@ const POLL_INTERVAL_MS = Number(process.env.AMICUS_POLL_INTERVAL_MS) || 2000;
 const STABLE_FINISHED_POLLS = Number(process.env.AMICUS_STABLE_FINISHED_POLLS) || 2;   // when time.completed is set
 const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;          // ~60s at 2s — no completion signal
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
+const MAX_CONSECUTIVE_POLL_FAILURES = Number(process.env.AMICUS_MAX_CONSECUTIVE_POLL_FAILURES) || 15; // ≈30s at 2s polls
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -308,6 +309,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const stableFinishedPolls = options.stableFinishedPolls || STABLE_FINISHED_POLLS;
     const stableIdlePolls = options.stableIdlePolls || STABLE_IDLE_POLLS;
     const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
+    const maxConsecutivePollFailures = options.maxConsecutivePollFailures || MAX_CONSECUTIVE_POLL_FAILURES;
+    let consecutivePollFailures = 0;
     let lastAssistantMsgId = null;
     let lastOutputLength = 0; // Track output growth to detect streaming
     let stablePolls = 0; // Count polls where nothing has changed
@@ -353,6 +356,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           Math.min(pollCallTimeoutMs, remaining),
           'getMessages'
         );
+        consecutivePollFailures = 0;
         const messageCount = messages?.length || 0;
 
         // Find the last assistant message to check if it's complete
@@ -546,8 +550,19 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         lastAssistantMsgId = currentAssistantMsgId;
 
       } catch (pollError) {
-        logger.debug('Polling error', { error: pollError.message });
-        // Continue polling despite errors
+        consecutivePollFailures++;
+        logger.debug('Polling error', {
+          error: pollError.message, consecutivePollFailures
+        });
+        if (consecutivePollFailures >= maxConsecutivePollFailures) {
+          // F4: a dead server otherwise burns the full timeout in futile polls.
+          sessionError = sessionError
+            || `Polling failed ${consecutivePollFailures} consecutive times: ${pollError.message}`;
+          logger.error('Exiting poll loop after consecutive failures', {
+            consecutivePollFailures, taskId
+          });
+          break;
+        }
       }
     }
 
@@ -719,4 +734,5 @@ module.exports = {
   STABLE_FINISHED_POLLS,
   STABLE_IDLE_POLLS,
   POLL_CALL_TIMEOUT_MS,
+  MAX_CONSECUTIVE_POLL_FAILURES,
 };
