@@ -255,6 +255,26 @@ const handlers = {
     const metadata = readMetadata(input.taskId, cwd);
     if (!metadata) { return textResult(`Session ${input.taskId} not found.`, true); }
 
+    if (metadata.type === 'wave') {
+      const legs = (metadata.legs || []).map((legId) => {
+        const m = readMetadata(legId, cwd);
+        return { taskId: legId, model: (m && m.model) || null, status: (m && m.status) || 'unknown' };
+      });
+      const { TERMINAL_STATUSES } = require('./utils/result-schema');
+      const done = legs.filter(l => TERMINAL_STATUSES.includes(l.status)).length;
+      const ms = Date.now() - new Date(metadata.createdAt).getTime();
+      const response = {
+        taskId: metadata.taskId, type: 'wave', status: metadata.status,
+        legsComplete: done, legsTotal: legs.length, legs,
+        elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
+      };
+      const responseText = JSON.stringify(response);
+      if (metadata.status === 'running') {
+        return { content: [{ type: 'text', text: responseText }, { type: 'text', text: HEADLESS_STATUS_REMINDER }] };
+      }
+      return textResult(responseText);
+    }
+
     if (metadata.status === 'running' && metadata.pid) {
       try { process.kill(metadata.pid, 0); } catch {
         Object.assign(metadata, {
@@ -306,6 +326,19 @@ const handlers = {
     const sessionDir = safeSessionDir(cwd, input.taskId);
     if (!fs.existsSync(sessionDir)) {
       return textResult(`Session ${input.taskId} not found.`, true);
+    }
+
+    const readMeta = (() => {
+      try { return JSON.parse(fs.readFileSync(path.join(sessionDir, 'metadata.json'), 'utf-8')); }
+      catch { return {}; }
+    })();
+    if (readMeta.type === 'wave' && (input.mode || 'summary') === 'summary') {
+      const wavePath = path.join(sessionDir, 'wave.json');
+      if (fs.existsSync(wavePath)) {
+        return textResult(fs.readFileSync(wavePath, 'utf-8'));
+      }
+      const legsTotal = (readMeta.legs || []).length;
+      return textResult(`Wave ${input.taskId} is still running (${legsTotal} legs). Poll amicus_status.`);
     }
 
     const mode = input.mode || 'summary';
@@ -443,6 +476,52 @@ const handlers = {
     }));
   },
 
+  async amicus_fanout(input, project) {
+    const cwd = project || getProjectDir(input.project);
+    const { generateTaskId } = require('./sidecar/start');
+    const { deriveLegIds } = require('./sidecar/fanout');
+    const waveId = generateTaskId();
+    const legIds = deriveLegIds(waveId, input.models.length);
+    const waveDir = getSessionDir(cwd, waveId);
+
+    let briefingPath;
+    try {
+      fs.mkdirSync(waveDir, { recursive: true, mode: 0o700 });
+      briefingPath = path.join(waveDir, 'briefing.md');
+      // The prompt goes via file: the spawned command line must NOT carry it,
+      // or it re-hits the ~32KB Windows argument cap (F4 spec §4.2).
+      fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
+      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: waveId, type: 'wave', status: 'running', legs: legIds,
+        models: input.models, headless: true, createdAt: new Date().toISOString(),
+      }, null, 2), { mode: 0o600 });
+    } catch (err) {
+      return textResult(`Failed to prepare fan-out wave: ${err.message}`, true);
+    }
+
+    const args = [
+      'fanout', '--models', input.models.join(','),
+      '--prompt-file', briefingPath, '--wave-id', waveId,
+      '--json', '--client', 'cowork', '--cwd', cwd,
+    ];
+    const agent = input.agent || 'Build';
+    args.push('--agent', agent);
+    if (input.thinking)      { args.push('--thinking', input.thinking); }
+    if (input.timeout)       { args.push('--timeout', String(input.timeout)); }
+    if (input.summaryLength) { args.push('--summary-length', input.summaryLength); }
+    if (input.includeContext === false) { args.push('--no-context'); }
+
+    try { spawnSidecarProcess(args, waveDir); } catch (err) {
+      return textResult(`Failed to start fan-out: ${err.message}`, true);
+    }
+
+    const body = JSON.stringify({
+      waveId, taskIds: legIds, status: 'running', mode: 'headless',
+      message: 'Fan-out started. Poll amicus_status with the waveId; amicus_read the waveId when complete.',
+    });
+    return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
+  },
+
   async amicus_setup() {
     try { spawnSidecarProcess(['setup']); } catch (err) {
       return textResult(`Failed to launch setup: ${err.message}`, true);
@@ -459,6 +538,7 @@ const LEGACY_TOOL_ALIASES = {
   amicus_read: 'sidecar_read', amicus_list: 'sidecar_list',
   amicus_resume: 'sidecar_resume', amicus_continue: 'sidecar_continue',
   amicus_setup: 'sidecar_setup', amicus_abort: 'sidecar_abort',
+  amicus_fanout: 'sidecar_fanout',
   amicus_guide: 'sidecar_guide',
 };
 

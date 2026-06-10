@@ -183,7 +183,7 @@ describe('MCP Server Handlers', () => {
     const expectedTools = [
       'amicus_start', 'amicus_status', 'amicus_read',
       'amicus_list', 'amicus_resume', 'amicus_continue',
-      'amicus_setup', 'amicus_guide', 'amicus_abort',
+      'amicus_setup', 'amicus_guide', 'amicus_abort', 'amicus_fanout',
     ];
     for (const name of expectedTools) {
       expect(handlers).toHaveProperty(name);

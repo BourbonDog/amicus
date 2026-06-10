@@ -35,10 +35,11 @@ describe('MCP Tool Definitions', () => {
     expect(names).toContain('amicus_setup');
     expect(names).toContain('amicus_guide');
     expect(names).toContain('amicus_abort');
+    expect(names).toContain('amicus_fanout');
   });
 
-  test('has exactly 9 tools', () => {
-    expect(TOOLS).toHaveLength(9);
+  test('has exactly 10 tools', () => {
+    expect(TOOLS).toHaveLength(10);
   });
 
   test('tool names are unique', () => {

@@ -245,6 +245,43 @@ function getTools() {
     },
   },
   {
+    name: 'amicus_fanout',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description:
+      'Run N models on the SAME prompt in parallel (one shared engine) and ' +
+      'aggregate the results. Headless only. Returns {waveId, taskIds[]} ' +
+      'immediately. Poll amicus_status with the waveId (run `sleep 25` between ' +
+      'polls); when done, amicus_read the waveId for the aggregated JSON wave ' +
+      'document (per-leg summaries inside). Each leg is also an ordinary ' +
+      'session readable by taskId.',
+    inputSchema: {
+      models: z.array(safeModel).min(1).max(10).describe(
+        `2-10 models for genuine fan-out. Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed.`
+      ),
+      prompt: z.string().describe(
+        'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'
+      ),
+      agent: z.enum(['Plan', 'Build']).optional().describe(
+        'Agent mode for every leg. Build (default): full tool access. Plan: read-only analysis. Chat is not supported headless.'
+      ),
+      thinking: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional().describe(
+        'Reasoning effort for every leg. Default: medium.'
+      ),
+      timeout: z.number().optional().describe(
+        'Per-leg timeout in minutes (wall-clock ≈ slowest leg). Default: 15.'
+      ),
+      summaryLength: z.enum(['brief', 'normal', 'verbose']).optional().describe(
+        'Summary verbosity for every leg.'
+      ),
+      includeContext: z.boolean().optional().default(true).describe(
+        'Include parent conversation context (built once, shared by all legs). Set false for self-contained briefings.'
+      ),
+      project: z.string().optional().describe(
+        'Optional project directory path. Auto-detected from working directory if omitted.'
+      ),
+    },
+  },
+  {
     name: 'amicus_guide',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
