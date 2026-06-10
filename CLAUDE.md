@@ -90,6 +90,9 @@ src/
 │   ├── context-builder.js  # Context Builder Module
 │   ├── continue.js  # Load previous session data (metadata, summary, conversation)
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
+│   ├── fanout-leg.js  # Map a runHeadless result to a leg metadata status.
+│   ├── fanout-output.js  # Format ms as "1m5s" / "42s".
+│   ├── fanout.js  # Default max legs per wave (env-overridable).
 │   ├── interactive.js  # Check if Electron is available (lazy loading guard)
 │   ├── progress.js  # Lifecycle stage labels
 │   ├── read.js  # Sidecar Read Operations Module
@@ -116,8 +119,10 @@ src/
 │   ├── model-catalog.js  # @returns {string} Absolute path to the catalog cache file
 │   ├── model-fetcher.js  # Hardcoded Anthropic models (no public listing endpoint)
 │   ├── model-validator.js  # Alias-to-search-term mapping for filtering provider model lists
-│   ├── path-setup.js  # Ensures that the project's node_modules/.bin directory is included in the PATH.
+│   ├── path-setup.js  # Ensures that the project's node_modules/.bin directory is included in the PATH,
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
+│   ├── prompt-source.js  # Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4).
+│   ├── result-schema.js  # Leg/run statuses that count as terminal for wave aggregation.
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort on process signals (F3 #20).
 │   ├── session-lock.js  # Atomic session lock files to prevent concurrent resume/continue.
@@ -224,6 +229,9 @@ evals/
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
 | `sidecar/continue.js` | Load previous session data (metadata, summary, conversation) | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
+| `sidecar/fanout-leg.js` | Map a runHeadless result to a leg metadata status. | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
+| `sidecar/fanout-output.js` | Format ms as "1m5s" / "42s". | `formatWaveHuman()`, `fmtDuration()` |
+| `sidecar/fanout.js` | Default max legs per wave (env-overridable). | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
 | `sidecar/interactive.js` | Check if Electron is available (lazy loading guard) | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
 | `sidecar/progress.js` | Lifecycle stage labels | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
@@ -249,8 +257,10 @@ evals/
 | `utils/model-catalog.js` | @returns {string} Absolute path to the catalog cache file | `getCatalog()`, `refreshCatalog()`, `catalogPath()` |
 | `utils/model-fetcher.js` | Hardcoded Anthropic models (no public listing endpoint) | `fetchModelsFromProvider()`, `fetchAllModels()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()`, `PROVIDER_FAMILY_NAMES()` |
 | `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()` |
-| `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH. | `ensureNodeModulesBinInPath()` |
+| `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH, | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
+| `utils/prompt-source.js` | Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4). | `resolvePromptSource()` |
+| `utils/result-schema.js` | Leg/run statuses that count as terminal for wave aggregation. | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort on process signals (F3 #20). | `markAborted()`, `installSignalAbort()` |
 | `utils/session-lock.js` | Atomic session lock files to prevent concurrent resume/continue. | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
