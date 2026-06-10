@@ -3,6 +3,9 @@
  *
  * Caches the combined provider model list to ~/.config/amicus/model-catalog.json
  * with a TTL so model validation doesn't hit the network on every launch.
+ * Schema v2: enriched rows ({id, name, contextLength, pricing}) written at every
+ * refresh; v1 caches (no schemaVersion) are treated as stale and refreshed, but
+ * remain usable as a graceful-degradation fallback when the refresh returns empty.
  * Degrades gracefully: a failed/empty refresh falls back to stale cache, and
  * callers treat an empty catalog as "cannot validate" (never block a launch).
  */
@@ -19,6 +22,7 @@ function _readApiKeyValues() { return require('./api-key-store').readApiKeyValue
 async function _fetchAllModels(keys) { return require('./model-fetcher').fetchAllModels(keys); }
 
 const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+const SCHEMA_VERSION = 2;
 
 /** @returns {string} Absolute path to the catalog cache file */
 function catalogPath() {
@@ -39,7 +43,11 @@ function readCache() {
 function writeCache(models) {
   try {
     fs.mkdirSync(_getConfigDir(), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(catalogPath(), JSON.stringify({ fetchedAt: Date.now(), models }, null, 2), { mode: 0o600 });
+    fs.writeFileSync(
+      catalogPath(),
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2),
+      { mode: 0o600 }
+    );
   } catch { /* best-effort */ }
 }
 
@@ -64,8 +72,10 @@ async function getCatalog(opts = {}) {
   const maxAgeMs = opts.maxAgeMs === undefined ? DEFAULT_MAX_AGE_MS : opts.maxAgeMs;
   const cache = readCache();
   // A future fetchedAt (clock skew / hand-edited file) reads as indefinitely
-  // fresh; acceptable for a model catalog.
-  const fresh = cache && (Date.now() - cache.fetchedAt) <= maxAgeMs;
+  // fresh; acceptable for a model catalog. v1 caches (no schemaVersion) always
+  // read as stale so they get refreshed to v2 on next access.
+  const fresh = cache && cache.schemaVersion === SCHEMA_VERSION &&
+    (Date.now() - cache.fetchedAt) <= maxAgeMs;
   if (fresh) { return cache.models; }
 
   const refreshed = await refreshCatalog();
@@ -73,4 +83,14 @@ async function getCatalog(opts = {}) {
   return cache ? cache.models : []; // stale fallback / empty
 }
 
-module.exports = { getCatalog, refreshCatalog, catalogPath };
+/**
+ * Catalog rows plus cache timestamp (for UI display).
+ * @returns {Promise<{models: Array, fetchedAt: number|null}>}
+ */
+async function getCatalogInfo(opts = {}) {
+  const models = await getCatalog(opts);
+  const cache = readCache();
+  return { models, fetchedAt: cache ? cache.fetchedAt : null };
+}
+
+module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, SCHEMA_VERSION };
