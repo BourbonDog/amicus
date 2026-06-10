@@ -35,7 +35,8 @@
     "src/",
     "electron/",
     "skill/",
-    "scripts/postinstall.js"
+    "scripts/postinstall.js",
+    "scripts/setup-hooks.js"
   ],
   "scripts": {
     "start": "node --experimental-top-level-await --experimental-vm-modules bin/amicus.js",
@@ -55,7 +56,7 @@
     "generate-docs": "node scripts/generate-docs.js",
     "generate-docs:check": "node scripts/generate-docs.js --check",
     "validate-docs": "node scripts/validate-docs.js --full",
-    "prepare": "[ -d .git ] && husky || true"
+    "prepare": "node scripts/setup-hooks.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",

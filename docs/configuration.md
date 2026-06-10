@@ -56,7 +56,7 @@ Amicus processes self-terminate after the configured idle period. The shared ser
 | `tiktoken` | ^1.0.0 | Token estimation |
 | `jest` | ^29.0.0 | Testing framework |
 | `eslint` | ^8.0.0 | Code linting |
-| `husky` | ^9.1.7 | Git hook management |
+| `husky` | ^9.1.7 | Unused (legacy) — hooks are configured by `scripts/setup-hooks.js` |
 | `lint-staged` | ^16.3.2 | Run linters on staged files |
 
 ### Bundled Dependencies
