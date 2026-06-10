@@ -39,7 +39,7 @@ non-Claude chairman + per-model inspectable artifacts.
 
 ## 3. What changes vs. v1
 
-| Area | v1 (today) | v2 (this design) |
+| Area | v1 | v3 (this design) |
 |---|---|---|
 | Independent reviews | ✅ Phase 2 parallel sidecars | ✅ Stage 1 — now emits a **structured findings list** |
 | Cross-review | ❌ none | ⭐ **Stage 2** — anonymized peer ranking **+** per-finding adjudication |
@@ -50,8 +50,8 @@ non-Claude chairman + per-model inspectable artifacts.
 | MODEL-NOTES | per-model quirks | + **reviewer-reliability** rolling table feeding recommendations |
 | Transport (v3) | N parallel `start` calls + prose-scraping | ⭐ one `fanout --json` wave per stage; briefings via `--prompt-file`; JSON status/summary parsing |
 
-Preserved unchanged: intake/criteria intake, sidecar operating rules, reviewed-copy vs
-standalone-report logic, cost guardrail, and the Phase 6 approval-gated MODEL-NOTES update.
+Preserved unchanged: intake/criteria intake, the MODEL-NOTES operating rules, reviewed-copy vs
+standalone-report logic, cost guardrail, and the Stage 6 approval-gated MODEL-NOTES update.
 
 ## 4. The council flow
 
@@ -60,7 +60,7 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 
 ### Stage 0 — Intake & prep
 - Confirm **source material**, **the analysis**, **the criteria** (ask only for what's missing).
-- Prepare material for sidecar models per MODEL-NOTES (extract clean text from links / large /
+- Prepare material for council models per MODEL-NOTES (extract clean text from links / large /
   marked-up sources to a small temp file; small text used as-is).
 - Pick the council: **non-Claude models, default 3 from different families** (enough voices for
   a real cross-review + a tie-breaker). Recommend ranked-by-fit (consult MODEL-NOTES
@@ -75,7 +75,7 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 ### Stage 1 — Independent reviews
 - All council models review **your artifact** via ONE fanout wave (see SKILL.md Stage 1 for the
   canonical command). The wave JSON returns every leg's status + review in one parse. A red-team
-  reviewer with a distinct brief runs as a parallel solo `amicus start --json` (fanout legs share
+  reviewer with a distinct brief runs as a separate concurrent `amicus start --json` call alongside the wave (fanout legs share
   one prompt by design).
 - Required structured output: a **findings list**, each finding = `id · claim · severity
   (blocker/major/minor/nit) · location (section/quote) · rationale`, plus a short overall take.
@@ -202,7 +202,7 @@ Add a compact rolling table consulted in Stage 0 and updated (with approval) in 
   - **Stage 2:** a judge leg dies → tally rankings/adjudications over the surviving judges and
     disclose the reduced bench in `crossreview-matrix.md`. Tier definitions are unchanged (they
     already count "judges engaged").
-  - **Stage 3:** chair failure keeps the v2 fallback chain (re-run → promote next-best non-Claude
+  - **Stage 3:** chair failure uses the same fallback chain (re-run → promote next-best non-Claude
     → Claude chairs with explicit disclosure).
 - **Run stats (v3):** `report.md` includes a per-leg table (model, status, durationMs) read from
   the wave/run documents. The schema carries no cost data — never invent cost figures.

@@ -319,4 +319,5 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 ## Files
 
 - `MODEL-NOTES.md` — operating rules, per-model quirks, cost guardrail, and the reviewer-reliability rolling table. **Read it before Stage 0 (council selection and launch); update it (with approval) in Stage 6.**
-- `V2-COUNCIL-DESIGN.md` — the design spec this skill implements. Consult it if a mechanics question arises that the skill prose does not resolve.
+- `COUNCIL-DESIGN.md` — the design spec this skill implements (v3). Consult it if a mechanics
+  question arises that the skill prose does not resolve.
