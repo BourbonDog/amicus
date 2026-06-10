@@ -13,11 +13,11 @@ const readline = require('readline');
 const { loadConfig, saveConfig, getDefaultAliases, getConfigDir } = require('../utils/config');
 const { logger } = require('../utils/logger');
 
+const { getCuratedModels } = require('../utils/curated-models');
 /**
  * Model choices presented during readline setup — derived from curated-models (F5).
  * @type {Array<{number: number, alias: string, label: string}>}
  */
-const { getCuratedModels } = require('../utils/curated-models');
 const MODEL_CHOICES = getCuratedModels().map((c, i) => ({
   number: i + 1, alias: c.alias, label: `${c.label} (${c.blurb})`
 }));

@@ -6,11 +6,11 @@
  * Models are disabled when no configured API key matches their routes.
  */
 
+const { getCuratedModels } = require('../src/utils/curated-models');
 /**
  * Wizard quick-pick cards \u2014 derived from curated-models (F5).
  * @type {Array<{alias: string, label: string, routes: Object<string,string>}>}
  */
-const { getCuratedModels } = require('../src/utils/curated-models');
 const MODEL_CHOICES = getCuratedModels().map(c => ({
   alias: c.alias, label: `${c.label} \u2014 ${c.blurb}`, routes: c.routes
 }));

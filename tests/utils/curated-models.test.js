@@ -50,7 +50,7 @@ describe('curated-models', () => {
   it('every card route id carries its provider prefix', () => {
     for (const c of getCuratedModels()) {
       for (const [provider, id] of Object.entries(c.routes)) {
-        const expectedPrefix = provider === 'openrouter' ? 'openrouter/' : `${provider}/`;
+        const expectedPrefix = `${provider}/`;
         expect(id.startsWith(expectedPrefix)).toBe(true);
       }
     }
@@ -58,6 +58,12 @@ describe('curated-models', () => {
 
   it('listCuratedRoutes flattens every route of every entry (cards + cardless)', () => {
     const routes = listCuratedRoutes();
+    // 9 card routes (4 dual-route cards + 1 single) + 15 cardless = 24; a
+    // derivation that drops the direct routes must fail here (Task 4 depends on them).
+    expect(routes).toHaveLength(24);
+    expect(routes).toContainEqual(
+      { alias: 'opus', provider: 'anthropic', model: 'anthropic/claude-opus-4-6' }
+    );
     const aliases = new Set(routes.map(r => r.alias));
     expect(aliases.size).toBe(20);
     expect(routes).toContainEqual(
