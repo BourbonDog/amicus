@@ -152,6 +152,7 @@ describe('model-fetcher', () => {
     }
 
     it('should always include anthropic models even with no keys', async () => {
+      mockHttpsGet(200, { data: [] });
       const result = await fetchAllModels({});
       expect(result.length).toBeGreaterThan(0);
       expect(result.some(m => m.id.startsWith('anthropic/'))).toBe(true);

@@ -3,7 +3,7 @@
  * return enriched rows {id, name, contextLength, pricing}.
  */
 const {
-  PROVIDER_FETCH_CONFIG, fetchAllModels, ANTHROPIC_MODELS
+  PROVIDER_FETCH_CONFIG, ANTHROPIC_MODELS
 } = require('../../src/utils/model-fetcher');
 
 describe('keyless OpenRouter', () => {
@@ -17,7 +17,7 @@ describe('keyless OpenRouter', () => {
       .toEqual({ 'Authorization': 'Bearer sk-x' });
   });
 
-  it('fetchAllModels always includes openrouter even with no keys', () => {
+  it('providersToFetch always includes openrouter even with no keys', () => {
     const { providersToFetch } = require('../../src/utils/model-fetcher');
     expect(providersToFetch({}).sort()).toEqual(['anthropic', 'openrouter']);
     expect(providersToFetch({ google: 'g-key' }).sort())

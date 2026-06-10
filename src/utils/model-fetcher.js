@@ -34,10 +34,10 @@ const PROVIDER_FETCH_CONFIG = {
       return (data.data || []).map(m => ({
         id: `openrouter/${m.id}`,
         name: m.name || m.id,
-        contextLength: m.context_length != null ? m.context_length : null,
+        contextLength: m.context_length ?? null,
         pricing: m.pricing
-          ? { prompt: m.pricing.prompt != null ? m.pricing.prompt : null,
-              completion: m.pricing.completion != null ? m.pricing.completion : null }
+          ? { prompt: m.pricing.prompt ?? null,
+              completion: m.pricing.completion ?? null }
           : null
       }));
     }
@@ -51,7 +51,7 @@ const PROVIDER_FETCH_CONFIG = {
       return (data.models || []).map(m => ({
         id: `google/${m.name.replace('models/', '')}`,
         name: m.displayName || m.name.replace('models/', ''),
-        contextLength: m.inputTokenLimit != null ? m.inputTokenLimit : null,
+        contextLength: m.inputTokenLimit ?? null,
         pricing: null
       }));
     }
@@ -77,7 +77,7 @@ const FETCH_TIMEOUT_MS = 5000;
  * Fetch models from a single provider API
  * @param {string} provider - Provider name (openrouter, google, openai, anthropic)
  * @param {string} key - API key
- * @returns {Promise<Array<{id: string, name: string}>>} Normalized model list
+ * @returns {Promise<Array<{id: string, name: string, contextLength: number|null, pricing: {prompt: string|null, completion: string|null}|null}>>} Normalized model list
  */
 function fetchModelsFromProvider(provider, key) {
   if (provider === 'anthropic') {
@@ -145,7 +145,7 @@ async function fetchAllModels(keys) {
 
 /**
  * Group models by provider family for <optgroup> rendering
- * @param {Array<{id: string, name: string}>} models
+ * @param {Array<{id: string, name: string, contextLength: number|null, pricing: {prompt: string|null, completion: string|null}|null}>} models
  * @returns {Array<{family: string, models: Array<{id: string, name: string}>}>}
  */
 function groupModelsByFamily(models) {
