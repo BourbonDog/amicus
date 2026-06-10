@@ -179,10 +179,17 @@ async function startSidecar(options) {
 
   try {
     if (effectiveHeadless) {
-      result = await runHeadless(
-        model, systemPrompt, userMessage, taskId, effectiveProject,
-        timeout * 60 * 1000, agent || 'build', { mcp: mcpServers, summaryLength, reasoning, port: opencodePort }
-      );
+      try {
+        result = await runHeadless(
+          model, systemPrompt, userMessage, taskId, effectiveProject,
+          timeout * 60 * 1000, agent || 'build', { mcp: mcpServers, summaryLength, reasoning, port: opencodePort }
+        );
+      } catch (err) {
+        if (!json) { throw err; }
+        // --json contract: stdout must always carry a parseable run doc,
+        // even when the engine throws rather than returning {error}.
+        result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId };
+      }
       summary = result.summary || '## Sidecar Results: No Output\n\nHeadless mode completed without summary.';
       if (result.timedOut) { logger.warn('Task timed out', { taskId }); }
       if (result.error) { logger.error('Task error', { taskId, error: result.error }); }

@@ -75,6 +75,25 @@ describe('start --json (F4)', () => {
     });
     expect(logSpy).toHaveBeenCalledWith('JSON MODE SUMMARY');
   });
+
+  it('emits a parseable error document even when runHeadless THROWS', async () => {
+    mockRunHeadless.mockRejectedValue(new Error('server exploded'));
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'feed0004',
+    });
+    const doc = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(doc.status).toBe('error');
+    expect(doc.error).toBe('server exploded');
+  });
+
+  it('non-json mode still propagates a runHeadless throw (unchanged behavior)', async () => {
+    mockRunHeadless.mockRejectedValue(new Error('server exploded'));
+    await expect(startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, taskId: 'feed0005',
+    })).rejects.toThrow('server exploded');
+  });
 });
 
 describe('finalizeSession signature (source guard)', () => {
