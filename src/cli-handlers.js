@@ -140,7 +140,7 @@ async function handleAbort(args) {
  */
 async function handleUpdate() {
   const { performUpdate, getUpdateInfo, initUpdateCheck } = require('./utils/updater');
-  initUpdateCheck();
+  await initUpdateCheck();
   const info = getUpdateInfo();
   if (info) {
     console.log(`Updating amicus ${info.current} → ${info.latest}...`);

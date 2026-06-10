@@ -16,6 +16,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const { logger } = require('./logger');
 const { getCompatEnv } = require('./env-compat');
+const { loadUpdateNotifier } = require('./update-notifier-loader');
 
 const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
 
@@ -39,9 +40,11 @@ function getMockMode() {
 
 /**
  * Initialize the update checker with package info.
- * In mock mode, skips the real update-notifier call.
+ * Async because update-notifier is ESM-only and must be loaded with a
+ * dynamic import(). In mock mode, skips the real update-notifier call.
+ * @returns {Promise<void>}
  */
-function initUpdateCheck() {
+async function initUpdateCheck() {
   const mock = getMockMode();
   if (mock) {
     logger.debug('Update check skipped (mock mode)', { mock });
@@ -49,7 +52,7 @@ function initUpdateCheck() {
   }
 
   try {
-    const mod = require('update-notifier');
+    const mod = await loadUpdateNotifier();
     const updateNotifier = mod.default || mod;
     notifier = updateNotifier({
       pkg: { name: pkg.name, version: pkg.version }
