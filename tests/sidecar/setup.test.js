@@ -23,6 +23,11 @@ jest.mock('../../src/sidecar/setup-window', () => ({
   launchSetupWindow: jest.fn().mockResolvedValue({ success: true })
 }));
 
+// Mock model-catalog to prevent real HTTPS fetches to openrouter.ai during seedCatalog()
+jest.mock('../../src/utils/model-catalog', () => ({
+  refreshCatalog: jest.fn(async () => [])
+}));
+
 describe('Setup Wizard', () => {
   let tmpDir;
   let envDir;
