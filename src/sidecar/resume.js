@@ -142,6 +142,9 @@ async function resumeSidecar(options) {
   try {
     const mcpServers = buildMcpConfig({ mcp, mcpConfig, clientType: client, noMcp, excludeMcp });
     logger.info('Resuming session', { taskId, model: metadata.model, briefing: metadata.briefing });
+    // Inherited model: advisory only (F5) — never block reopening a session.
+    const { warnIfNotInCatalog } = require('../utils/model-validator');
+    await warnIfNotInCatalog(metadata.model);
 
     // Check for file drift
     const drift = checkFileDrift(metadata, project);

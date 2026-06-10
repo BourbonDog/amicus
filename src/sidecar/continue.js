@@ -131,6 +131,11 @@ async function continueSidecar(options) {
   acquireLock(prevSessionDir, headless ? 'headless' : 'interactive');
 
   const model = options.model || oldMetadata.model;
+  if (!options.model) {
+    // Inherited model: advisory only (F5) — never block reopening a session.
+    const { warnIfNotInCatalog } = require('../utils/model-validator');
+    await warnIfNotInCatalog(model);
+  }
   const mcpServers = buildMcpConfig({ mcp, mcpConfig, clientType: client, noMcp, excludeMcp });
   logger.info('Continuing from session', { oldTaskId, model });
 

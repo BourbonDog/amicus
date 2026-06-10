@@ -323,6 +323,13 @@ async function handleContinue(args) {
     process.exit(1);
   }
 
+  // F5: an explicitly passed --model gets the same resolution+validation as start.
+  if (args.model !== undefined) {
+    const { model, alias } = resolveModelFromArgs(args);
+    args.model = model;
+    args.model = await validateFallbackModel(args, alias);
+  }
+
   const { continueSidecar } = require('../src/index');
 
   await continueSidecar({

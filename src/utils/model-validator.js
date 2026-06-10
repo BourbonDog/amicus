@@ -186,4 +186,21 @@ async function validateAgainstCatalog(resolvedModel, alias) {
   );
 }
 
-module.exports = { validateDirectModel, filterRelevantModels, normalizeModelId, validateAgainstCatalog };
+/**
+ * Non-blocking advisory check for inherited models (F5: continue/resume).
+ * Same catalog logic as validateAgainstCatalog, but warns on stderr instead
+ * of throwing — a session that already ran with this model must stay openable.
+ * @param {string} model
+ */
+async function warnIfNotInCatalog(model) {
+  try {
+    await validateAgainstCatalog(model);
+  } catch (err) {
+    process.stderr.write(
+      `Warning: ${String(err.message).split('\n')[0]} ` +
+      '(continuing anyway — run \'amicus models --check\' to review aliases)\n'
+    );
+  }
+}
+
+module.exports = { validateDirectModel, filterRelevantModels, normalizeModelId, validateAgainstCatalog, warnIfNotInCatalog };
