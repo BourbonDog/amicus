@@ -1,7 +1,9 @@
-# Second Opinion v2 — "LLM Council" Design
+# Second Opinion v3 — "LLM Council" Design
 
-_Status: approved design, pre-implementation. Date: 2026-06-03._
-_Designs a rewrite of `SKILL.md` (and additions to `MODEL-NOTES.md`) for the `second-opinion` skill._
+_Status: implemented (v3). v2 (2026-06-03) added the council mechanics; v3 (2026-06-10) swapped the
+transport onto the Amicus fanout/JSON engine primitives. v2 history lives in git
+(`V2-COUNCIL-DESIGN.md`, deleted at v3)._
+_Design for `SKILL.md` and `MODEL-NOTES.md` of the `second-opinion` skill._
 
 ## 1. Intent
 
@@ -29,11 +31,11 @@ non-Claude chairman + per-model inspectable artifacts.
 - **Subject of review.** The novel cross-review step has models critique **each other's
   reviews of your artifact** — *not* re-review the artifact. (LLM Council ranks the models'
   own answers; here the "answers" are the reviews.)
-- **This is an executed skill, not an app.** All of LLM Council's `council.py` logic
-  (anonymize → rank → aggregate → chair) becomes **prose workflow Claude performs by hand**
-  while driving the `amicus` CLI. No backend, no parsing code, no API server. Claude relabels
-  reviews in the briefings it writes, tallies rankings in its head/notes, and reads structured
-  model output directly.
+- **This is an executed skill, not an app.** All council logic (anonymize → rank → aggregate →
+  chair) is prose workflow Claude performs while driving the `amicus` CLI. v3 note: the *transport*
+  is now engine-native — each review wave is ONE `amicus fanout --json` call returning structured
+  run documents — but scoring, tallying, anonymization, and synthesis remain Claude's manual work.
+  No backend, no parsing code beyond reading JSON fields.
 
 ## 3. What changes vs. v1
 
@@ -46,6 +48,7 @@ non-Claude chairman + per-model inspectable artifacts.
 | Scoring | none | ⭐ Reviewer **street-cred** + per-finding **peer-confidence** |
 | Artifacts | reviewed copy + report | + per-model raw reviews, cross-review matrix, chair verdict (run folder) |
 | MODEL-NOTES | per-model quirks | + **reviewer-reliability** rolling table feeding recommendations |
+| Transport (v3) | N parallel `start` calls + prose-scraping | ⭐ one `fanout --json` wave per stage; briefings via `--prompt-file`; JSON status/summary parsing |
 
 Preserved unchanged: intake/criteria intake, sidecar operating rules, reviewed-copy vs
 standalone-report logic, cost guardrail, and the Phase 6 approval-gated MODEL-NOTES update.
@@ -70,8 +73,10 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
   Stage-1 review to the bundle but does **not** judge (Stage 2) or chair (Stage 3). See §5.4.
 
 ### Stage 1 — Independent reviews
-- Each council model reviews **your artifact** in parallel (background sidecars, MODEL-NOTES
-  launch rules).
+- All council models review **your artifact** via ONE fanout wave (see SKILL.md Stage 1 for the
+  canonical command). The wave JSON returns every leg's status + review in one parse. A red-team
+  reviewer with a distinct brief runs as a parallel solo `amicus start --json` (fanout legs share
+  one prompt by design).
 - Required structured output: a **findings list**, each finding = `id · claim · severity
   (blocker/major/minor/nit) · location (section/quote) · rationale`, plus a short overall take.
 - Save each raw review to the run folder (§6).
@@ -82,7 +87,8 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 ### Stage 2 — Cross-review (the headline)
 - Claude builds **one shared anonymized bundle**: all Stage 1 reviews relabeled **Review A/B/C…**,
   with a private label↔model map Claude keeps (§5.1).
-- The **same bundle** goes to **every** council model, each asked to do two things on the bundle:
+- The **same bundle** goes to **every** council model — exactly fanout's shared-prompt model: one
+  wave call distributes it, and each judge is asked to do two things on the bundle:
   1. **Rank** the reviews by accuracy + insight, ending with a parseable block:
      `FINAL RANKING:` then `1. Review C` / `2. Review A` … (LLM Council's format).
   2. **Adjudicate findings** — for each finding in the bundle: `agree | dispute | neutral` +
@@ -181,15 +187,27 @@ Add a compact rolling table consulted in Stage 0 and updated (with approval) in 
   reviewer"). Kept tight per the existing no-bloat rule; merge/prune rather than append.
 
 ## 8. Gating, cost, degradation & failure handling
+
 - **Gating:** council is the default identity but scales down (§ Stage 0). Always disclose run
   shape/cost and confirm before launching.
 - **Cost guardrail (unchanged):** never `o3`/`o3-pro` unless the user asks by name; warn on cost.
-- **Degradation:** gating counts **non-Claude judges**. 1 judge → single-pass (no Stage 2/chair);
-  if the bench drops below 2 mid-run, degrade to single-pass. 2 judges → Stage 2 runs but note
-  the thin ranking. ("Claude in the council" adds a *judged* review but **no** judge, so it
-  doesn't change these thresholds.)
-- **Failures:** poller-trap / transient 502 → existing re-run mitigations (MODEL-NOTES). Never
-  present a half-finished or empty run as an answer.
+- **Degradation (judge-count thresholds, unchanged):** gating counts **non-Claude judges**.
+  1 judge → single-pass (no Stage 2/chair); if the bench drops below 2 mid-run, degrade to
+  single-pass and disclose. 2 judges → Stage 2 runs but note the thin ranking. ("Claude in the
+  council" adds a *judged* review but **no** judge.)
+- **Wave-degrade rules (v3):** leg failures are read from the wave document
+  (`status: partial`, `counts`, per-leg `status`/`error`):
+  - **Stage 1:** a leg ends `error`/`timeout`/`crashed`/`aborted` → proceed when ≥2 reviews
+    survive; below 2, offer a re-run of the dead leg or a disclosed downgrade to single-pass.
+  - **Stage 2:** a judge leg dies → tally rankings/adjudications over the surviving judges and
+    disclose the reduced bench in `crossreview-matrix.md`. Tier definitions are unchanged (they
+    already count "judges engaged").
+  - **Stage 3:** chair failure keeps the v2 fallback chain (re-run → promote next-best non-Claude
+    → Claude chairs with explicit disclosure).
+- **Run stats (v3):** `report.md` includes a per-leg table (model, status, durationMs) read from
+  the wave/run documents. The schema carries no cost data — never invent cost figures.
+- **Transient failures:** provider 502s etc. → re-run the affected leg (solo `start --json`) or
+  the wave; never present a half-finished run as an answer.
 
 ## 9. Non-goals (YAGNI)
 - No web UI, API server, or persistent conversation store (LLM Council's app shell).
@@ -203,9 +221,7 @@ Add a compact rolling table consulted in Stage 0 and updated (with approval) in 
   three qualitative tiers, if tiers prove too coarse in practice.
 
 ## 11. Implementation surface
-- **Rewrite** `SKILL.md`: replace the 6-phase workflow with the Stage 0–6 council flow above;
-  update the front-matter `description` to mention peer cross-review / council / chair while
-  preserving existing trigger phrases.
-- **Extend** `MODEL-NOTES.md`: add the reviewer-reliability table (§7) and any new Stage-2
-  briefing tips; keep the headless-poller and per-model sections.
+- `SKILL.md` — the Stage 0–6 council flow on the v3 transport.
+- `MODEL-NOTES.md` — reviewer-reliability table, per-model quirks, cost guardrail, Stage-2
+  briefing tips. Engine workarounds that F1/F2/F4 made obsolete were pruned at v3.
 - No other files.
