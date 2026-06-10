@@ -32,7 +32,7 @@ function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, 
   const { agent, isResume, conversation, mcp, client, windowPosition } = options;
   const env = {
     ...process.env,
-    PATH: `${nodeModulesBin}:${existingPath}`,
+    PATH: `${nodeModulesBin}${path.delimiter}${existingPath}`,
     AMICUS_TASK_ID: taskId,
     AMICUS_MODEL: model,
     SIDECAR_PROJECT: project
