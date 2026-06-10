@@ -55,11 +55,11 @@ describe('getElectronPath', () => {
     // Should NOT be a hardcoded node_modules/.bin/electron path
     expect(result).not.toContain('node_modules/.bin/electron');
 
-    // Should be the actual Electron binary path (what require('electron')
-    // returns) — compare against it directly: the path shape is
-    // platform-specific ('Electron.app/...' on macOS, 'dist\electron.exe'
-    // on Windows).
+    // Should be the actual Electron binary path (what require('electron') returns).
+    // Compare against require('electron') itself: the binary name differs by
+    // platform (Electron.app/.../Electron on macOS, electron.exe on Windows).
     expect(result).toBe(require('electron'));
+    expect(result.toLowerCase()).toContain('electron');
   });
 
   it('returns null when electron is not installed', () => {
