@@ -16,7 +16,28 @@ jest.mock('../../src/utils/logger', () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }));
 
-const { parseModelsList, deriveLegIds, validateFanoutModels } = require('../../src/sidecar/fanout');
+// --- additional mocks (place at top of file with the others) ---
+const mockRunHeadless = jest.fn();
+jest.mock('../../src/headless', () => {
+  const actual = jest.requireActual('../../src/headless');
+  return { ...actual, runHeadless: mockRunHeadless };
+});
+
+const mockServerClose = jest.fn();
+const mockStartOpenCodeServer = jest.fn();
+jest.mock('../../src/sidecar/session-utils', () => {
+  const actual = jest.requireActual('../../src/sidecar/session-utils');
+  return { ...actual, startOpenCodeServer: mockStartOpenCodeServer };
+});
+
+const mockBuildContext = jest.fn(() => 'CTX');
+jest.mock('../../src/sidecar/context-builder', () => ({
+  buildContext: mockBuildContext,
+  parseDuration: jest.fn(),
+}));
+// --- end additional mocks ---
+
+const { parseModelsList, deriveLegIds, validateFanoutModels, runFanout } = require('../../src/sidecar/fanout');
 
 describe('fanout validation helpers', () => {
   beforeEach(() => {
@@ -103,5 +124,154 @@ describe('fanout validation helpers', () => {
       process.env.AMICUS_FANOUT_MAX_LEGS = '0';
       expect((await validateFanoutModels(eleven)).error).toMatch(/cap of 10/);
     });
+  });
+});
+
+const fsReal = require('fs');
+const os = require('os');
+const pathReal = require('path');
+
+describe('runFanout orchestrator', () => {
+  let project;
+
+  const legOk = (taskId) => ({
+    summary: `summary ${taskId}`, completed: true, timedOut: false, aborted: false, taskId, toolCalls: [],
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    project = fsReal.mkdtempSync(pathReal.join(os.tmpdir(), 'amicus-fanout-'));
+    mockStartOpenCodeServer.mockResolvedValue({
+      client: { tag: 'client' },
+      server: { url: 'http://127.0.0.1:1', close: mockServerClose, goPid: 4242 },
+    });
+    mockRunHeadless.mockImplementation(async (_m, _s, _u, taskId) => legOk(taskId));
+  });
+
+  afterEach(() => {
+    fsReal.rmSync(project, { recursive: true, force: true });
+  });
+
+  const baseOpts = () => ({
+    models: 'openrouter/a/b,openrouter/c/d',
+    prompt: 'do the thing',
+    promptMeta: { source: 'inline', file: null, chars: 12 },
+    project,
+    includeContext: false,
+    noValidateModel: true,
+    json: true,
+    quiet: true, // suppress stdout in tests
+  });
+
+  it('starts ONE server, runs N legs with the shared client/server, returns a complete wave', async () => {
+    const { wave, exitCode } = await runFanout(baseOpts());
+
+    expect(mockStartOpenCodeServer).toHaveBeenCalledTimes(1);
+    expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+    for (const call of mockRunHeadless.mock.calls) {
+      const options = call[7];
+      expect(options.client).toEqual({ tag: 'client' });
+      expect(options.server.url).toBe('http://127.0.0.1:1');
+      expect(options.watchdog).toBeDefined(); // injected per-leg watchdog
+    }
+    expect(mockServerClose).toHaveBeenCalledTimes(1);
+    expect(wave.status).toBe('complete');
+    expect(wave.counts).toMatchObject({ total: 2, complete: 2 });
+    expect(exitCode).toBe(0);
+  });
+
+  it('derives leg ids from the wave id and persists legs as ordinary sessions with parentWave', async () => {
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafe1234' });
+    expect(wave.waveId).toBe('cafe1234');
+    expect(wave.legs.map(l => l.taskId)).toEqual(['cafe1234-1', 'cafe1234-2']);
+
+    const legMeta = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe1234-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta.parentWave).toBe('cafe1234');
+    expect(legMeta.status).toBe('complete');
+    const legSummary = fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe1234-1', 'summary.md'), 'utf-8');
+    expect(legSummary).toBe('summary cafe1234-1');
+  });
+
+  it('one leg failing yields partial results, sibling summaries intact, exit 2', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId))
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => ({
+        summary: '', completed: false, timedOut: true, aborted: false, taskId, toolCalls: [],
+      }));
+    const { wave, exitCode } = await runFanout(baseOpts());
+    expect(wave.status).toBe('partial');
+    expect(exitCode).toBe(2);
+    expect(wave.legs[0].status).toBe('complete');
+    expect(wave.legs[1].status).toBe('timeout');
+    expect(wave.legs[0].summary).toMatch(/^summary /);
+  });
+
+  it('a leg that REJECTS becomes an error leg, never sinks siblings', async () => {
+    mockRunHeadless
+      .mockImplementationOnce(async () => { throw new Error('kaboom'); })
+      .mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+    const { wave, exitCode } = await runFanout(baseOpts());
+    expect(wave.legs[0].status).toBe('error');
+    expect(wave.legs[0].error).toMatch(/kaboom/);
+    expect(wave.legs[1].status).toBe('complete');
+    expect(exitCode).toBe(2);
+  });
+
+  it('builds context ONCE and reuses it across legs', async () => {
+    await runFanout({ ...baseOpts(), includeContext: true });
+    expect(mockBuildContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes wave.json and finalizes wave metadata', async () => {
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafe9999' });
+    const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', 'cafe9999');
+    const stored = JSON.parse(fsReal.readFileSync(pathReal.join(waveDir, 'wave.json'), 'utf-8'));
+    expect(stored.waveId).toBe('cafe9999');
+    expect(stored.status).toBe(wave.status);
+    const meta = JSON.parse(fsReal.readFileSync(pathReal.join(waveDir, 'metadata.json'), 'utf-8'));
+    expect(meta.type).toBe('wave');
+    expect(meta.status).toBe('complete');
+    expect(fsReal.readFileSync(pathReal.join(waveDir, 'briefing.md'), 'utf-8')).toBe('do the thing');
+  });
+
+  it('json mode (non-quiet): stdout carries EXACTLY one parseable JSON document', async () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runFanout({ ...baseOpts(), quiet: false });
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const doc = JSON.parse(logSpy.mock.calls[0][0]); // whole-output parse must succeed
+      expect(doc.type).toBe('wave');
+      expect(doc.schemaVersion).toBe(1);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('server start failure → error wave, exit 1, no legs launched', async () => {
+    mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+    const { wave, exitCode } = await runFanout(baseOpts());
+    expect(exitCode).toBe(1);
+    expect(wave.status).toBe('error');
+    expect(mockRunHeadless).not.toHaveBeenCalled();
+  });
+
+  it('per-leg watchdog timeout marks ONLY that leg aborted (no process.exit, no server.close)', async () => {
+    let capturedWatchdog;
+    mockRunHeadless.mockImplementationOnce(async (_m, _s, _u, taskId, _p, _t, _a, options) => {
+      capturedWatchdog = options.watchdog;
+      options.watchdog.onTimeout(); // simulate idle-timeout firing mid-run
+      return { summary: '', completed: false, timedOut: false, aborted: true, taskId, toolCalls: [] };
+    }).mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafe7777' });
+    expect(capturedWatchdog).toBeDefined();
+    // sibling unaffected, server closed exactly once at the END
+    expect(wave.legs[1].status).toBe('complete');
+    expect(mockServerClose).toHaveBeenCalledTimes(1);
+    const legMeta = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe7777-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta.status).toBe('aborted');
   });
 });

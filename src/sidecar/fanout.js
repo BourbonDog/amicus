@@ -8,10 +8,11 @@
  * an ordinary session (parentWave metadata); results aggregate into a wave
  * document persisted as wave.json in the wave session dir.
  * Spec: docs/superpowers/specs/2026-06-09-f4-fanout-json-design.md
- *
- * NOTE: fs, path, and logger are used by the Task 7 orchestrator half.
- * Add those imports when implementing runFanout() in Task 7.
  */
+
+const fs = require('fs');
+const path = require('path');
+const { logger } = require('../utils/logger');
 
 /** Default max legs per wave (env-overridable). */
 const DEFAULT_MAX_LEGS = 10;
@@ -82,4 +83,223 @@ async function validateFanoutModels(modelsArg, opts = {}) {
   return { legs };
 }
 
-module.exports = { parseModelsList, deriveLegIds, validateFanoutModels, DEFAULT_MAX_LEGS };
+/** Map a runHeadless result to a leg metadata status. */
+function legStatusFromResult(result) {
+  const { statusFromResult } = require('../utils/result-schema');
+  return statusFromResult(result);
+}
+
+/** Write/merge wave metadata (preserves fields an MCP pre-spawn handler wrote). */
+function writeWaveMetadata(waveDir, patch) {
+  const metaPath = path.join(waveDir, 'metadata.json');
+  let existing = {};
+  if (fs.existsSync(metaPath)) {
+    try { existing = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* corrupt → rewrite */ }
+  }
+  const merged = { ...existing, ...patch };
+  fs.writeFileSync(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+  return merged;
+}
+
+/** Read-merge-write a leg's metadata.json. Returns the merged object. */
+function writeLegPatch(legDir, patch) {
+  const metaPath = path.join(legDir, 'metadata.json');
+  let meta = {};
+  try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* fresh */ }
+  const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  const merged = { ...meta, ...defined };
+  fs.writeFileSync(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+  return merged;
+}
+
+/**
+ * Run one leg end-to-end: session record → runHeadless (shared server) →
+ * leg finalize. Never throws — always resolves to a run document.
+ */
+async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet }) {
+  const { IdleWatchdog } = require('../utils/idle-watchdog');
+  const { markAborted } = require('../utils/session-abort');
+  const { runHeadless } = require('../headless');
+  const { SessionPaths, saveInitialContext } = require('./session-utils');
+  const { buildRunResult } = require('../utils/result-schema');
+  const { createSessionMetadata } = require('./start');
+
+  const legDir = createSessionMetadata(legId, project, {
+    model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
+  });
+  writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
+  saveInitialContext(legDir, systemPrompt, userMessage);
+
+  // Per-leg watchdog: timeout aborts ONLY this leg (file-marker → the leg's
+  // own poll loop exits). NEVER server.close()/process.exit() — shared server.
+  const watchdog = new IdleWatchdog({
+    mode: 'headless',
+    onTimeout: () => {
+      logger.warn('Leg idle-timeout — aborting leg', { legId });
+      markAborted(legDir, 'leg idle-timeout');
+    },
+  }).start();
+
+  let result;
+  try {
+    result = await runHeadless(
+      leg.model, systemPrompt, userMessage, legId, project,
+      timeoutMs, agent || 'build',
+      { client, server, watchdog, summaryLength, reasoning }
+    );
+  } catch (err) {
+    result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: legId };
+  } finally {
+    watchdog.cancel();
+  }
+
+  const status = legStatusFromResult(result);
+  const summary = result.summary || null;
+  if (summary) {
+    fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
+  }
+  const finalMeta = writeLegPatch(legDir, {
+    status,
+    reason: result.error || undefined,
+    completedAt: new Date().toISOString(),
+  });
+  if (!quiet) {
+    process.stderr.write(`[fanout] leg ${legId} (${leg.modelInput}): ${status}\n`);
+  }
+  return buildRunResult({
+    taskId: legId, metadata: finalMeta, result, summary,
+    modelInput: leg.modelInput, sessionDir: legDir, waveId,
+  });
+}
+
+/**
+ * Run a fan-out wave. Spec §4.3.
+ * @param {object} options - models, prompt, promptMeta, waveId?, project, agent?,
+ *   thinking?, timeout? (minutes), summaryLength?, includeContext?, sessionId?,
+ *   contextTurns?, contextSince?, contextMaxTokens?, mcp?, mcpConfig?, noMcp?,
+ *   excludeMcp?, noValidateModel?, json?, client?, quiet? (suppress stdout — tests)
+ * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
+ */
+async function runFanout(options) {
+  const { buildWaveResult, waveExitCode } = require('../utils/result-schema');
+  const { generateTaskId, buildMcpConfig } = require('./start');
+  const { startOpenCodeServer, createHeartbeat, HEARTBEAT_INTERVAL } = require('./session-utils');
+  const { buildContext } = require('./context-builder');
+  const { buildPrompts } = require('../prompt-builder');
+  const { installSignalAbort, markAborted } = require('../utils/session-abort');
+  const { getSessionDir } = require('../session-manager');
+
+  const project = options.project || process.cwd();
+  const createdAt = new Date().toISOString();
+  const emit = (doc) => {
+    if (options.quiet) { return; }
+    if (options.json) {
+      console.log(JSON.stringify(doc, null, 2));
+    } else {
+      const { formatWaveHuman } = require('./fanout-output');
+      console.log(formatWaveHuman(doc));
+    }
+  };
+  const errorWave = (waveId, message) => {
+    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, createdAt, completedAt: new Date().toISOString(), status: 'error' });
+    doc.error = message;
+    emit(doc);
+    return { wave: doc, exitCode: 1 };
+  };
+
+  // 1. Fail-fast validation
+  const validated = await validateFanoutModels(options.models, { noValidateModel: options.noValidateModel });
+  if (validated.error) { return errorWave(options.waveId, validated.error); }
+  const legs = validated.legs;
+
+  // 2. Wave record
+  const waveId = options.waveId || generateTaskId();
+  const legIds = deriveLegIds(waveId, legs.length);
+  const waveDir = getSessionDir(project, waveId);
+  fs.mkdirSync(waveDir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(waveDir, 'briefing.md'), options.prompt, { mode: 0o600 });
+  writeWaveMetadata(waveDir, {
+    taskId: waveId, type: 'wave', status: 'running', mode: 'headless',
+    models: legs.map(l => l.model), legs: legIds,
+    briefing: String(options.prompt).slice(0, 200),
+    promptMeta: options.promptMeta || null,
+    pid: process.pid, project, createdAt,
+  });
+
+  // 3. Context + prompts built ONCE (model-independent)
+  const context = options.includeContext !== false
+    ? buildContext(project, options.sessionId || 'current', {
+        contextTurns: options.contextTurns, contextSince: options.contextSince,
+        contextMaxTokens: options.contextMaxTokens, client: options.client,
+      })
+    : '[Context excluded by caller - briefing is self-contained]';
+  const { system: systemPrompt, userMessage } = buildPrompts(
+    options.prompt, context, project, true, options.agent || 'build', options.summaryLength, options.client
+  );
+
+  // 4. One shared OpenCode server
+  const mcpServers = buildMcpConfig({
+    mcp: options.mcp, mcpConfig: options.mcpConfig, clientType: options.client,
+    noMcp: options.noMcp, excludeMcp: options.excludeMcp,
+  });
+  let client, server;
+  try {
+    ({ client, server } = await startOpenCodeServer(mcpServers));
+  } catch (err) {
+    writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
+    return errorWave(waveId, `Failed to start server: ${err.message}`);
+  }
+  if (server.goPid) { writeWaveMetadata(waveDir, { goPid: server.goPid }); }
+
+  // 5. Signal abort: mark wave + all legs, close server, exit 130/143
+  const legDirs = legIds.map(id => getSessionDir(project, id));
+  let signalled = false;
+  const uninstallSignals = installSignalAbort({
+    onAbort: (signal) => {
+      if (signalled) { return; }
+      signalled = true;
+      logger.warn('Signal received — aborting wave', { waveId, signal });
+      markAborted(waveDir, signal);
+      for (const dir of legDirs) { markAborted(dir, signal); }
+      try { server.close(); } catch { /* best-effort */ }
+      const code = signal === 'SIGINT' ? 130 : 143;
+      const t = setTimeout(() => process.exit(code), 300);
+      if (t.unref) { t.unref(); }
+    },
+  });
+
+  // 6. Launch all legs concurrently (runLeg never rejects)
+  const heartbeat = options.quiet ? { stop() {} } : createHeartbeat(HEARTBEAT_INTERVAL);
+  const timeoutMs = (options.timeout || 15) * 60 * 1000;
+  const reasoning = options.thinking ? { effort: options.thinking } : undefined;
+  let legDocs;
+  try {
+    legDocs = await Promise.all(legs.map((leg, i) => runLeg({
+      leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
+      timeoutMs, agent: options.agent, client, server,
+      summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
+    })));
+  } finally {
+    heartbeat.stop();
+    uninstallSignals();
+    try { server.close(); } catch { /* already closed on signal */ }
+  }
+
+  // 7. Aggregate, persist (atomic: tmp + rename), finalize, emit
+  const completedAt = new Date().toISOString();
+  const wave = buildWaveResult({
+    waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
+  });
+  const wavePath = path.join(waveDir, 'wave.json');
+  const waveTmp = `${wavePath}.tmp`;
+  fs.writeFileSync(waveTmp, JSON.stringify(wave, null, 2), { mode: 0o600 });
+  fs.renameSync(waveTmp, wavePath);
+  writeWaveMetadata(waveDir, { status: wave.status, completedAt });
+  emit(wave);
+  return { wave, exitCode: waveExitCode(wave.status) };
+}
+
+module.exports = {
+  parseModelsList, deriveLegIds, validateFanoutModels, DEFAULT_MAX_LEGS,
+  runFanout, runLeg, writeWaveMetadata,
+};
