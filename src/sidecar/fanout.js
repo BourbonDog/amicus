@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('../utils/logger');
+const { runLeg } = require('./fanout-leg');
 
 /** Default max legs per wave (env-overridable). */
 const DEFAULT_MAX_LEGS = 10;
@@ -83,12 +84,6 @@ async function validateFanoutModels(modelsArg, opts = {}) {
   return { legs };
 }
 
-/** Map a runHeadless result to a leg metadata status. */
-function legStatusFromResult(result) {
-  const { statusFromResult } = require('../utils/result-schema');
-  return statusFromResult(result);
-}
-
 /** Write/merge wave metadata (preserves fields an MCP pre-spawn handler wrote). */
 function writeWaveMetadata(waveDir, patch) {
   const metaPath = path.join(waveDir, 'metadata.json');
@@ -99,77 +94,6 @@ function writeWaveMetadata(waveDir, patch) {
   const merged = { ...existing, ...patch };
   fs.writeFileSync(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
   return merged;
-}
-
-/** Read-merge-write a leg's metadata.json. Returns the merged object. */
-function writeLegPatch(legDir, patch) {
-  const metaPath = path.join(legDir, 'metadata.json');
-  let meta = {};
-  try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* fresh */ }
-  const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
-  const merged = { ...meta, ...defined };
-  fs.writeFileSync(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
-  return merged;
-}
-
-/**
- * Run one leg end-to-end: session record → runHeadless (shared server) →
- * leg finalize. Never throws — always resolves to a run document.
- */
-async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet }) {
-  const { IdleWatchdog } = require('../utils/idle-watchdog');
-  const { markAborted } = require('../utils/session-abort');
-  const { runHeadless } = require('../headless');
-  const { SessionPaths, saveInitialContext } = require('./session-utils');
-  const { buildRunResult } = require('../utils/result-schema');
-  const { createSessionMetadata } = require('./start');
-
-  const legDir = createSessionMetadata(legId, project, {
-    model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
-  });
-  writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
-  saveInitialContext(legDir, systemPrompt, userMessage);
-
-  // Per-leg watchdog: timeout aborts ONLY this leg (file-marker → the leg's
-  // own poll loop exits). NEVER server.close()/process.exit() — shared server.
-  const watchdog = new IdleWatchdog({
-    mode: 'headless',
-    onTimeout: () => {
-      logger.warn('Leg idle-timeout — aborting leg', { legId });
-      markAborted(legDir, 'leg idle-timeout');
-    },
-  }).start();
-
-  let result;
-  try {
-    result = await runHeadless(
-      leg.model, systemPrompt, userMessage, legId, project,
-      timeoutMs, agent || 'build',
-      { client, server, watchdog, summaryLength, reasoning }
-    );
-  } catch (err) {
-    result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: legId };
-  } finally {
-    watchdog.cancel();
-  }
-
-  const status = legStatusFromResult(result);
-  const summary = result.summary || null;
-  if (summary) {
-    fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
-  }
-  const finalMeta = writeLegPatch(legDir, {
-    status,
-    reason: result.error || undefined,
-    completedAt: new Date().toISOString(),
-  });
-  if (!quiet) {
-    process.stderr.write(`[fanout] leg ${legId} (${leg.modelInput}): ${status}\n`);
-  }
-  return buildRunResult({
-    taskId: legId, metadata: finalMeta, result, summary,
-    modelInput: leg.modelInput, sessionDir: legDir, waveId,
-  });
 }
 
 /**
@@ -251,20 +175,23 @@ async function runFanout(options) {
   }
   if (server.goPid) { writeWaveMetadata(waveDir, { goPid: server.goPid }); }
 
-  // 5. Signal abort: mark wave + all legs, close server, exit 130/143
+  // 5. Signal abort: mark wave + all legs aborted, close the server, then let
+  // NORMAL control flow finalize — legs see their abort marker within one poll
+  // (~2s) and settle, so step 7 still writes wave.json and emits a parseable
+  // aborted document. An unref'd force-exit watchdog backstops a wedged leg.
   const legDirs = legIds.map(id => getSessionDir(project, id));
-  let signalled = false;
+  let signalled = null;
   const uninstallSignals = installSignalAbort({
     onAbort: (signal) => {
-      if (signalled) { return; }
-      signalled = true;
+      const code = signal === 'SIGINT' ? 130 : 143;
+      if (signalled) { process.exit(code); } // second signal: exit NOW
+      signalled = signal;
       logger.warn('Signal received — aborting wave', { waveId, signal });
       markAborted(waveDir, signal);
       for (const dir of legDirs) { markAborted(dir, signal); }
       try { server.close(); } catch { /* best-effort */ }
-      const code = signal === 'SIGINT' ? 130 : 143;
-      const t = setTimeout(() => process.exit(code), 300);
-      if (t.unref) { t.unref(); }
+      const { armExitWatchdog } = require('../utils/lifecycle');
+      armExitWatchdog(code, 10000, { log: (m, meta) => logger.debug(m, meta) });
     },
   });
 
@@ -289,6 +216,7 @@ async function runFanout(options) {
   const completedAt = new Date().toISOString();
   const wave = buildWaveResult({
     waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
+    status: signalled ? 'aborted' : null,
   });
   const wavePath = path.join(waveDir, 'wave.json');
   const waveTmp = `${wavePath}.tmp`;
@@ -296,7 +224,10 @@ async function runFanout(options) {
   fs.renameSync(waveTmp, wavePath);
   writeWaveMetadata(waveDir, { status: wave.status, completedAt });
   emit(wave);
-  return { wave, exitCode: waveExitCode(wave.status) };
+  const exitCode = signalled
+    ? (signalled === 'SIGINT' ? 130 : 143)
+    : waveExitCode(wave.status);
+  return { wave, exitCode };
 }
 
 module.exports = {

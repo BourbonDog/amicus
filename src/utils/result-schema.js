@@ -126,6 +126,7 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
     type: 'wave',
     waveId,
     status: (status !== null && status !== undefined) ? status : waveStatusFromLegs(legs),
+    error: null,
     counts,
     legs,
     prompt: promptMeta,

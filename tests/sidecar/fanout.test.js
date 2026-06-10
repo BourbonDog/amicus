@@ -274,4 +274,69 @@ describe('runFanout orchestrator', () => {
       pathReal.join(project, '.claude', 'amicus_sessions', 'cafe7777-1', 'metadata.json'), 'utf-8'));
     expect(legMeta.status).toBe('aborted');
   });
+
+  it('SIGINT mid-wave: finalizes an aborted wave document, exit 130, wave.json written', async () => {
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit must not be called on first signal');
+    });
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      mockRunHeadless.mockImplementation(async (_m, _s, _u, taskId) => {
+        // Fire the signal while the first leg is in flight, then resolve as aborted
+        if (taskId.endsWith('-1')) {
+          process.emit('SIGINT');
+          await new Promise(r => setTimeout(r, 20));
+          return { summary: '', completed: false, timedOut: false, aborted: true, taskId, toolCalls: [] };
+        }
+        await new Promise(r => setTimeout(r, 30));
+        return { summary: '', completed: false, timedOut: false, aborted: true, taskId, toolCalls: [] };
+      });
+
+      const { wave, exitCode } = await runFanout({ ...baseOpts(), waveId: 'cafe5555', quiet: false });
+
+      expect(exitCode).toBe(130);
+      expect(wave.status).toBe('aborted');
+      expect(exitSpy).not.toHaveBeenCalled();
+      // wave.json persisted with the aborted status
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafe5555', 'wave.json'), 'utf-8'));
+      expect(stored.status).toBe('aborted');
+      // stdout got exactly one parseable document
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(logSpy.mock.calls[0][0]).status).toBe('aborted');
+      // wave + leg metadata marked aborted
+      const waveMeta = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafe5555', 'metadata.json'), 'utf-8'));
+      expect(waveMeta.status).toBe('aborted');
+    } finally {
+      exitSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it('a leg finishing concurrently with an abort cannot demote the aborted marker', async () => {
+    // Simulate: signal marks the leg aborted while runHeadless is in flight;
+    // the leg then completes normally — disk status must stay 'aborted'.
+    mockRunHeadless.mockImplementationOnce(async (_m, _s, _u, taskId, projectArg) => {
+      const legDir = pathReal.join(projectArg, '.claude', 'amicus_sessions', taskId);
+      const meta = JSON.parse(fsReal.readFileSync(pathReal.join(legDir, 'metadata.json'), 'utf-8'));
+      meta.status = 'aborted';
+      fsReal.writeFileSync(pathReal.join(legDir, 'metadata.json'), JSON.stringify(meta, null, 2));
+      return legOk(taskId); // completes "successfully" after the abort marker landed
+    }).mockImplementationOnce(async (_m, _s, _u, taskId) => legOk(taskId));
+
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafe6666' });
+    const legMeta = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe6666-1', 'metadata.json'), 'utf-8'));
+    expect(legMeta.status).toBe('aborted');       // disk: abort preserved
+    expect(wave.legs[0].status).toBe('aborted');  // doc agrees with disk
+    expect(wave.legs[1].status).toBe('complete');
+  });
+
+  it('validation failure leaves no wave directory behind', async () => {
+    const { wave, exitCode } = await runFanout({ ...baseOpts(), models: '', waveId: 'cafe0000' });
+    expect(exitCode).toBe(1);
+    expect(wave.status).toBe('error');
+    expect(fsReal.existsSync(pathReal.join(project, '.claude', 'amicus_sessions', 'cafe0000'))).toBe(false);
+  });
 });
