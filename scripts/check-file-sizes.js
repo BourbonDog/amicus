@@ -16,7 +16,18 @@ const { resolve } = require('node:path');
 const CONFIG = {
   maxLines: 300,
   include: ['src/**/*.js'],
-  exclude: ['src/utils/config.js'],
+  exclude: [
+    'src/utils/config.js',
+    // Grandfathered: already over the limit when the '**' glob bug was fixed
+    // (top-level src files had escaped the gate). Shrink one below maxLines,
+    // then remove it from this list.
+    'src/cli.js',
+    'src/headless.js',
+    'src/mcp-server.js',
+    'src/mcp-tools.js',
+    'src/opencode-client.js',
+    'src/session-manager.js',
+  ],
 };
 
 /**
@@ -55,6 +66,8 @@ function checkFiles(files, limit) {
 
 /**
  * Simple glob match for include/exclude patterns.
+ * '**\/' matches zero or more directories (so 'src/**\/*.js' covers
+ * top-level src files too); '*' matches within a single path segment.
  * @param {string} filePath - Path to check
  * @param {string[]} patterns - Glob patterns to match against
  * @returns {boolean} True if path matches any pattern
@@ -62,8 +75,11 @@ function checkFiles(files, limit) {
 function matchesPattern(filePath, patterns) {
   for (const pattern of patterns) {
     const regexStr = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*\*\//g, '<<GLOBSTAR_DIR>>')
       .replace(/\*\*/g, '<<GLOBSTAR>>')
       .replace(/\*/g, '[^/]*')
+      .replace(/<<GLOBSTAR_DIR>>/g, '(?:[^/]+/)*')
       .replace(/<<GLOBSTAR>>/g, '.*');
     if (new RegExp(`^${regexStr}$`).test(filePath)) {
       return true;
@@ -123,4 +139,4 @@ if (process.argv[1] && process.argv[1].includes('check-file-sizes')) {
   main();
 }
 
-module.exports = { checkFileSize, checkFiles, matchesPattern };
+module.exports = { checkFileSize, checkFiles, matchesPattern, CONFIG };
