@@ -186,6 +186,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Install skill file to ~/.claude/skills/sidecar/
+├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
 ├── test-tools.sh
 ├── validate-docs.js  # * Main entry point.
 ├── validate-thinking.js
@@ -292,7 +293,7 @@ Any commit that adds, removes, or renames a file in `src/`, `bin/`, or `scripts/
 
 ## Git Hooks
 
-Managed by [husky](https://typicode.github.io/husky/).
+Version-controlled in `.husky/` and executed directly by git via `core.hooksPath=.husky`, configured by `scripts/setup-hooks.js` (runs automatically on `npm install` via `prepare`; after a clone with `--ignore-scripts`, run `node scripts/setup-hooks.js` once). Because the committed `.husky/` directory exists in every checkout, hooks also fire in **linked git worktrees** — the husky shim setup this replaces pointed at the generated, gitignored `.husky/_`, which is never checked out in a worktree, so hooks silently never fired there.
 
 **pre-commit (<2s):** lint-staged -> check-secrets (block) -> check-file-sizes (block) -> generate-docs (auto-stage) -> validate-docs (warn)
 

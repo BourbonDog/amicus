@@ -505,6 +505,8 @@ npm install
 npm test
 ```
 
+`npm install` configures the git hooks (`core.hooksPath=.husky`) via the `prepare` script. If you install with `--ignore-scripts`, run `node scripts/setup-hooks.js` once instead. Hooks then fire in the clone and in every linked git worktree — no per-worktree setup.
+
 ### Autonomous UI Testing via Chrome DevTools Protocol
 
 Amicus uses a novel approach for testing Electron UI features: instead of fragile DOM mock tests, we verify the real UI by connecting to the running Electron app via the **Chrome DevTools Protocol** (CDP).

@@ -8,6 +8,11 @@
 #    tests" task lands; switch this to `npm run test:all` once they pass.
 # 2. npm audit (warn only)
 
+# Git runs this file directly (core.hooksPath=.husky, set by
+# scripts/setup-hooks.js); abort on unguarded failures, as husky's
+# `sh -e` shim did before.
+set -e
+
 # Check if tests already passed for the current HEAD commit
 HEAD_SHA=$(git rev-parse HEAD 2>/dev/null)
 CACHED_SHA=""

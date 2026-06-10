@@ -7,6 +7,11 @@
 # 4. Auto-regenerate doc sections (auto-stages CLAUDE.md if changed)
 # 5. CLAUDE.md drift warning
 
+# Git runs this file directly (core.hooksPath=.husky, set by
+# scripts/setup-hooks.js); abort on the first failing check, as husky's
+# `sh -e` shim did before.
+set -e
+
 npx lint-staged
 
 node scripts/check-secrets.js
