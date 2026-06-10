@@ -101,13 +101,33 @@ async function handleAbort(args) {
     process.exit(1);
   }
 
+  let meta;
   try {
-    JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
   } catch (_err) {
     console.error(`Session ${taskId} has malformed metadata`);
     process.exit(1);
   }
   const { markAborted } = require('./utils/session-abort');
+
+  // F4: aborting a wave aborts every still-running leg too.
+  if (meta.type === 'wave') {
+    const { resolveExistingSessionDir } = require('./session-manager');
+    let aborted = 0;
+    for (const legId of meta.legs || []) {
+      const legDir = resolveExistingSessionDir(project, legId);
+      try {
+        const legMeta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
+        if (legMeta.status === 'running') {
+          if (markAborted(legDir, 'wave abort')) { aborted++; }
+        }
+      } catch { /* skip unreadable leg */ }
+    }
+    markAborted(sessionDir, 'manual abort');
+    console.log(`Wave ${taskId} marked as aborted (${aborted} running leg(s) aborted).`);
+    return;
+  }
+
   markAborted(sessionDir, 'manual abort');
   console.log(`Session ${taskId} marked as aborted.`);
 }
