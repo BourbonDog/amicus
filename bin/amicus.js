@@ -42,7 +42,7 @@ async function main() {
   // Non-interactive update check (skip for mcp, --version, --help)
   if (command !== 'mcp' && !args.version && !args.help) {
     const { initUpdateCheck, getUpdateInfo, notifyUpdate } = require('../src/utils/updater');
-    initUpdateCheck();
+    await initUpdateCheck();
     // Pass update info to Electron child process via env var,
     // because update-notifier deletes the cache entry after reading it.
     const cliUpdateInfo = getUpdateInfo();

@@ -3,7 +3,15 @@
  *
  * Tests for self-update functionality: checking for updates,
  * notifying users, and performing updates via npm.
+ *
+ * update-notifier v6+ is ESM-only, so the updater loads it through the
+ * CJS seam src/utils/update-notifier-loader.js (a wrapped dynamic import).
+ * Tests mock that seam: jest's CJS test VM cannot execute a native
+ * import() without --experimental-vm-modules. The seam itself is covered
+ * by a child-process test that runs the real import in real Node.
  */
+
+const path = require('path');
 
 // Store original env
 const originalEnv = { ...process.env };
@@ -19,6 +27,18 @@ afterAll(() => {
   process.env = { ...originalEnv };
 });
 
+/**
+ * Mock the update-notifier loader seam to resolve with a fake module
+ * whose default export is the given notifier constructor.
+ * @param {Function} constructor - Fake update-notifier constructor
+ * @returns {jest.Mock} The mocked loadUpdateNotifier function
+ */
+function mockLoader(constructor) {
+  const loadUpdateNotifier = jest.fn(() => Promise.resolve({ default: constructor }));
+  jest.doMock('../src/utils/update-notifier-loader', () => ({ loadUpdateNotifier }));
+  return loadUpdateNotifier;
+}
+
 describe('Updater Module', () => {
 
   describe('getUpdateInfo()', () => {
@@ -28,30 +48,26 @@ describe('Updater Module', () => {
       expect(info).toBeNull();
     });
 
-    it('should return null when no update is available', () => {
-      jest.doMock('update-notifier', () => {
-        return jest.fn(() => ({
-          update: undefined,
-          notify: jest.fn()
-        }));
-      });
+    it('should return null when no update is available', async () => {
+      mockLoader(jest.fn(() => ({
+        update: undefined,
+        notify: jest.fn()
+      })));
       const updater = require('../src/utils/updater');
 
-      updater.initUpdateCheck();
+      await updater.initUpdateCheck();
       const info = updater.getUpdateInfo();
       expect(info).toBeNull();
     });
 
-    it('should return update info when update is available', () => {
-      jest.doMock('update-notifier', () => {
-        return jest.fn(() => ({
-          update: { current: '0.3.0', latest: '1.0.0' },
-          notify: jest.fn()
-        }));
-      });
+    it('should return update info when update is available', async () => {
+      mockLoader(jest.fn(() => ({
+        update: { current: '0.3.0', latest: '1.0.0' },
+        notify: jest.fn()
+      })));
       const updater = require('../src/utils/updater');
 
-      updater.initUpdateCheck();
+      await updater.initUpdateCheck();
       const info = updater.getUpdateInfo();
 
       expect(info).not.toBeNull();
@@ -62,17 +78,15 @@ describe('Updater Module', () => {
   });
 
   describe('notifyUpdate()', () => {
-    it('should call notifier.notify()', () => {
+    it('should call notifier.notify()', async () => {
       const mockNotify = jest.fn();
-      jest.doMock('update-notifier', () => {
-        return jest.fn(() => ({
-          update: { current: '0.3.0', latest: '1.0.0' },
-          notify: mockNotify
-        }));
-      });
+      mockLoader(jest.fn(() => ({
+        update: { current: '0.3.0', latest: '1.0.0' },
+        notify: mockNotify
+      })));
       const updater = require('../src/utils/updater');
 
-      updater.initUpdateCheck();
+      await updater.initUpdateCheck();
       updater.notifyUpdate();
 
       expect(mockNotify).toHaveBeenCalled();
@@ -85,16 +99,17 @@ describe('Updater Module', () => {
   });
 
   describe('initUpdateCheck()', () => {
-    it('should initialize with package info', () => {
+    it('should initialize with package info', async () => {
       const mockConstructor = jest.fn(() => ({
         update: undefined,
         notify: jest.fn()
       }));
-      jest.doMock('update-notifier', () => mockConstructor);
+      const loadUpdateNotifier = mockLoader(mockConstructor);
       const updater = require('../src/utils/updater');
 
-      updater.initUpdateCheck();
+      await updater.initUpdateCheck();
 
+      expect(loadUpdateNotifier).toHaveBeenCalled();
       expect(mockConstructor).toHaveBeenCalledWith(
         expect.objectContaining({
           pkg: expect.objectContaining({
@@ -105,21 +120,70 @@ describe('Updater Module', () => {
       );
     });
 
-    it('should skip initialization in mock mode', () => {
+    it('should use the module itself when there is no default export', async () => {
       const mockConstructor = jest.fn(() => ({
-        update: undefined,
+        update: { current: '0.3.0', latest: '1.0.0' },
         notify: jest.fn()
       }));
-      jest.doMock('update-notifier', () => mockConstructor);
+      const loadUpdateNotifier = jest.fn(() => Promise.resolve(mockConstructor));
+      jest.doMock('../src/utils/update-notifier-loader', () => ({ loadUpdateNotifier }));
+      const updater = require('../src/utils/updater');
+
+      await updater.initUpdateCheck();
+
+      expect(mockConstructor).toHaveBeenCalled();
+      expect(updater.getUpdateInfo()).toHaveProperty('latest', '1.0.0');
+    });
+
+    it('should skip initialization in mock mode', async () => {
+      const loadUpdateNotifier = mockLoader(jest.fn());
 
       process.env.SIDECAR_MOCK_UPDATE = 'available';
       const updater = require('../src/utils/updater');
 
-      updater.initUpdateCheck();
+      await updater.initUpdateCheck();
 
-      // Should NOT call the real update-notifier in mock mode
-      expect(mockConstructor).not.toHaveBeenCalled();
+      // Should NOT load the real update-notifier in mock mode
+      expect(loadUpdateNotifier).not.toHaveBeenCalled();
     });
+
+    it('should resolve without throwing when the loader fails', async () => {
+      const loadUpdateNotifier = jest.fn(() =>
+        Promise.reject(new Error('require() of ES Module not supported'))
+      );
+      jest.doMock('../src/utils/update-notifier-loader', () => ({ loadUpdateNotifier }));
+      const updater = require('../src/utils/updater');
+
+      await expect(updater.initUpdateCheck()).resolves.toBeUndefined();
+      expect(updater.getUpdateInfo()).toBeNull();
+      expect(() => updater.notifyUpdate()).not.toThrow();
+    });
+  });
+
+  describe('update-notifier-loader (real dynamic import)', () => {
+    // Regression test for the ERR_REQUIRE_ESM bug: update-notifier is
+    // ESM-only, so require() always threw and update checks silently never
+    // ran. Verify the real loader can import it in a real Node process
+    // (jest's CJS VM cannot execute a native import(), hence the child).
+    it('loads update-notifier and exposes a callable constructor', () => {
+      const { spawnSync } = require('child_process');
+      const loaderPath = path.join(__dirname, '..', 'src', 'utils', 'update-notifier-loader.js');
+      const script =
+        `require(${JSON.stringify(loaderPath)}).loadUpdateNotifier()` +
+        ".then((mod) => { process.exit(typeof (mod.default || mod) === 'function' ? 0 : 2); })" +
+        '.catch((err) => { console.error(err && err.message); process.exit(1); });';
+
+      const res = spawnSync(process.execPath, ['-e', script], {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf-8',
+        timeout: 30000
+      });
+
+      const outcome = res.status === 0
+        ? 'ok'
+        : `exit ${res.status}: ${(res.stderr || '').trim()}`;
+      expect(outcome).toBe('ok');
+    }, 30000);
   });
 
   describe('performUpdate()', () => {
@@ -185,11 +249,11 @@ describe('Updater Module', () => {
 
   describe('SIDECAR_MOCK_UPDATE env var', () => {
     describe('mode: "available"', () => {
-      it('should return fake update info from getUpdateInfo', () => {
+      it('should return fake update info from getUpdateInfo', async () => {
         process.env.SIDECAR_MOCK_UPDATE = 'available';
         const updater = require('../src/utils/updater');
 
-        updater.initUpdateCheck();
+        await updater.initUpdateCheck();
         const info = updater.getUpdateInfo();
 
         expect(info).not.toBeNull();
@@ -209,11 +273,11 @@ describe('Updater Module', () => {
         expect(result).toHaveProperty('success', true);
       });
 
-      it('should return fake update info from getUpdateInfo', () => {
+      it('should return fake update info from getUpdateInfo', async () => {
         process.env.SIDECAR_MOCK_UPDATE = 'success';
         const updater = require('../src/utils/updater');
 
-        updater.initUpdateCheck();
+        await updater.initUpdateCheck();
         const info = updater.getUpdateInfo();
 
         expect(info).not.toBeNull();
@@ -234,11 +298,11 @@ describe('Updater Module', () => {
     });
 
     describe('mode: "updating"', () => {
-      it('should return fake update info from getUpdateInfo', () => {
+      it('should return fake update info from getUpdateInfo', async () => {
         process.env.SIDECAR_MOCK_UPDATE = 'updating';
         const updater = require('../src/utils/updater');
 
-        updater.initUpdateCheck();
+        await updater.initUpdateCheck();
         const info = updater.getUpdateInfo();
 
         expect(info).not.toBeNull();

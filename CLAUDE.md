@@ -129,6 +129,7 @@ src/
 │   ├── shared-server.js  # Manages a single shared OpenCode server for MCP sessions.
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── thinking-validators.js  # Thinking Level Validators
+│   ├── update-notifier-loader.js  # update-notifier Loader
 │   ├── updater.js  # @type {import('update-notifier').UpdateNotifier|null}
 │   └── validators.js  # * Provider to API key mapping
 ├── cli-handlers.js  # CLI Command Handlers
@@ -267,6 +268,7 @@ evals/
 | `utils/shared-server.js` | Manages a single shared OpenCode server for MCP sessions. | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
+| `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | @type {import('update-notifier').UpdateNotifier|null} | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | * Provider to API key mapping | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 <!-- /AUTO:modules -->

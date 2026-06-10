@@ -108,6 +108,10 @@ function createAmicusWindow() {
   }
   if (!updateInfo) {
     const { getUpdateInfo, initUpdateCheck } = require('../src/utils/updater');
+    // initUpdateCheck is async (update-notifier is ESM-only). Fire-and-forget
+    // here: it seeds update-notifier's cache for the next launch, and the
+    // synchronous read below still serves the mock-mode banner. Real runs get
+    // update info via the CLI env var above.
     initUpdateCheck();
     updateInfo = getUpdateInfo();
   }
@@ -361,9 +365,9 @@ ipcMain.handle('sidecar:open-settings', () => {
 });
 
 // Update check
-ipcMain.handle('sidecar:get-update-info', () => {
+ipcMain.handle('sidecar:get-update-info', async () => {
   const { getUpdateInfo, initUpdateCheck } = require('../src/utils/updater');
-  initUpdateCheck();
+  await initUpdateCheck();
   return getUpdateInfo();
 });
 
