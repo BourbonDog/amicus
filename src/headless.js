@@ -311,6 +311,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
     const maxConsecutivePollFailures = options.maxConsecutivePollFailures || MAX_CONSECUTIVE_POLL_FAILURES;
     let consecutivePollFailures = 0;
+    let pollFailureBail = false;
     let lastAssistantMsgId = null;
     let lastOutputLength = 0; // Track output growth to detect streaming
     let stablePolls = 0; // Count polls where nothing has changed
@@ -561,6 +562,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           logger.error('Exiting poll loop after consecutive failures', {
             consecutivePollFailures, taskId
           });
+          pollFailureBail = true;
           break;
         }
       }
@@ -610,11 +612,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       });
     }
 
-    // If the model returned an error and produced no output, propagate the error
-    // so startSidecar() marks the session as 'error' instead of 'complete'
-    if (sessionError && !output) {
+    // Propagate the error when the model errored with no output (F1 semantics:
+    // a model error alongside streamed output still yields a usable summary),
+    // and ALWAYS when the poll loop bailed on consecutive failures (F4: a dead
+    // server must never classify as a complete leg, even with partial output).
+    if (sessionError && (!output || pollFailureBail)) {
       return {
-        summary: '',
+        summary: output ? extractSummary(output) : '',
         completed: false,
         timedOut,
         aborted,

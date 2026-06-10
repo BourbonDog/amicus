@@ -61,6 +61,26 @@ describe('consecutive poll-failure fast-exit (F4)', () => {
     expect(result.error).toMatch(/3 consecutive/);
   });
 
+  it('classifies partial-output + dead-server as error (never complete), keeping the partial summary', async () => {
+    const partialMsg = [{
+      info: { role: 'assistant', id: 'm1', time: {} },
+      parts: [{ type: 'text', text: 'partial output, no fold marker' }],
+    }];
+    mockGetMessages
+      .mockResolvedValueOnce(partialMsg)
+      .mockResolvedValueOnce(partialMsg)
+      .mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, maxConsecutivePollFailures: 3 }
+    );
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(/3 consecutive/);
+    expect(result.summary).toContain('partial output');
+  });
+
   it('resets the failure counter on a successful poll', async () => {
     // 2 failures, then success-with-marker → must complete despite K=3
     mockGetMessages
