@@ -1,7 +1,7 @@
 ---
 title: F5 — Dynamic OpenRouter Model Catalog — Design Spec
 date: 2026-06-10
-status: finalized — ready for writing-plans
+status: implemented (2026-06-10 — suite 1847 total / 1843 pass / 4 skip / 0 fail, lint clean, live CLI + sandboxed wizard CDP e2e passed; real-session smoke on picker default)
 owner: BourbonDog
 references:
   - docs/superpowers/specs/2026-06-07-amicus-product-design.md (§6 F5, §5 component 5)
@@ -11,6 +11,21 @@ supersedes: none
 ---
 
 # F5 — Dynamic OpenRouter Model Catalog
+
+> **Implemented 2026-06-10** (branch f5-exec, subagent-driven: 10 tasks, two-stage review per task)
+>
+> Shipped surface:
+> - curated-models single source ×3 consumers (config defaults, wizard cards, alias-audit)
+> - keyless enriched fetcher (OpenRouter public endpoint; context + pricing in cache)
+> - cache v2 atomic + floor-only guard (schemaVersion 2; v1 auto-migrates)
+> - alias-audit dedup + numeric ranking (`amicus models --check`, 47 aliases clean)
+> - `amicus models` command (table / --search / --check / --refresh / --json)
+> - catalog IPC + preload allowlist + warm seed (Electron; `sidecar:get-catalog` / `sidecar:refresh-catalog`)
+> - searchable wizard picker w/ round-trip (CDP-verified: grok search → select → config written; restore on relaunch confirmed)
+> - setup seeding both flows (Electron + readline) + add-alias suggestions
+> - continue/resume validation split (explicit `--model` validates like start; inherited models warn, never block)
+>
+> Follow-ups: (a) `openai/gpt-5.4` direct route unverified (no OPENAI key on dev machine; backstopped by `models --check` once a key exists); (b) worktree husky hooks don't fire — investigate repo-side (hooks gates run manually this branch); (c) wizard Step 3 alias editor still uses live fetch-models (migration to catalog deferred); (d) failed-refresh memo to avoid repeated 5s timeouts offline.
 
 ## 1. Summary
 
