@@ -185,7 +185,7 @@ scripts/
 ├── generate-icon.js  # Generate app icon PNG from SVG source.
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
-├── postinstall.js  # Install skill file to ~/.claude/skills/sidecar/
+├── postinstall.js  # Install the chat skill to ~/.claude/skills/sidecar/
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
 ├── test-tools.sh
 ├── validate-docs.js  # * Main entry point.

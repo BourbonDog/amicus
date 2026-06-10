@@ -14,8 +14,20 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 
 const SKILL_SOURCE = path.join(__dirname, '..', 'skill', 'SKILL.md');
-const SKILL_DEST_DIR = path.join(os.homedir(), '.claude', 'skills', 'sidecar');
-const SKILL_DEST = path.join(SKILL_DEST_DIR, 'SKILL.md');
+const COUNCIL_SOURCE_DIR = path.join(__dirname, '..', 'skills', 'second-opinion');
+
+/** Council files + per-file install semantics: SKILL/COUNCIL-DESIGN are product code
+ * (overwrite on update); MODEL-NOTES is user data — its reviewer-reliability table evolves
+ * per-run, so it is seeded once and never clobbered. */
+const COUNCIL_FILES = [
+  { file: 'SKILL.md', mode: 'overwrite' },
+  { file: 'COUNCIL-DESIGN.md', mode: 'overwrite' },
+  { file: 'MODEL-NOTES.md', mode: 'if-missing' },
+];
+
+function skillsRoot() {
+  return path.join(os.homedir(), '.claude', 'skills');
+}
 
 const MCP_CONFIG = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
 
@@ -50,15 +62,32 @@ function addMcpToConfigFile(configPath, name, config) {
   return status;
 }
 
-/** Install skill file to ~/.claude/skills/sidecar/ */
+/** Install the chat skill to ~/.claude/skills/sidecar/ */
 function installSkill() {
   try {
-    fs.mkdirSync(SKILL_DEST_DIR, { recursive: true });
-    fs.copyFileSync(SKILL_SOURCE, SKILL_DEST);
-    console.log('[amicus] Skill installed to ~/.claude/skills/sidecar/');
+    const destDir = path.join(skillsRoot(), 'sidecar');
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.copyFileSync(SKILL_SOURCE, path.join(destDir, 'SKILL.md'));
+    console.log('[amicus] Chat skill installed to ~/.claude/skills/sidecar/');
   } catch (err) {
-    console.error(`[amicus] Warning: Could not install skill: ${err.message}`);
+    console.error(`[amicus] Warning: Could not install chat skill: ${err.message}`);
   }
+}
+
+/** Install the LLM Council skill to ~/.claude/skills/second-opinion/ */
+function installCouncilSkill(sourceDir = COUNCIL_SOURCE_DIR) {
+  const destDir = path.join(skillsRoot(), 'second-opinion');
+  for (const { file, mode } of COUNCIL_FILES) {
+    try {
+      const dest = path.join(destDir, file);
+      if (mode === 'if-missing' && fs.existsSync(dest)) { continue; }
+      fs.mkdirSync(destDir, { recursive: true });
+      fs.copyFileSync(path.join(sourceDir, file), dest);
+    } catch (err) {
+      console.error(`[amicus] Warning: Could not install council file ${file}: ${err.message}`);
+    }
+  }
+  console.log('[amicus] Council skill installed to ~/.claude/skills/second-opinion/');
 }
 
 /** Register MCP server in Claude Code config */
@@ -133,6 +162,7 @@ function registerClaudeDesktop() {
 function main() {
   console.log('[amicus] Installing...');
   installSkill();
+  installCouncilSkill();
   registerClaudeCode();
   registerClaudeDesktop();
 
@@ -147,4 +177,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { addMcpToConfigFile };
+module.exports = { addMcpToConfigFile, installSkill, installCouncilSkill, COUNCIL_FILES };
