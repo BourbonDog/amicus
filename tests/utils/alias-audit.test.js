@@ -1,6 +1,6 @@
 /** F5: stale-alias audit across defaults + user config + curated routes, with suggestions. */
 const {
-  collectAliasSources, findStaleAliases, suggestReplacements
+  findStaleAliases, suggestReplacements
 } = require('../../src/utils/alias-audit');
 
 const CATALOG = [
@@ -35,6 +35,12 @@ describe('findStaleAliases', () => {
   it('returns [] when the catalog is empty (cannot check)', () => {
     expect(findStaleAliases([{ alias: 'x', model: 'openrouter/a/b', source: 'defaults' }], [])).toEqual([]);
   });
+
+  it('ignores malformed catalog rows when building the provider index', () => {
+    const cat = [null, { id: 42 }, { id: 'openrouter/x-ai/grok-4.3', name: 'ok' }];
+    const sources = [{ alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults' }];
+    expect(findStaleAliases(sources, cat)).toHaveLength(1);
+  });
 });
 
 describe('suggestReplacements', () => {
@@ -45,6 +51,27 @@ describe('suggestReplacements', () => {
 
   it('is deterministic and returns [] when no same-vendor rows exist', () => {
     expect(suggestReplacements('openrouter/unknown-vendor/m1', CATALOG)).toEqual([]);
+  });
+
+  it('caps at n (default 3) when more same-vendor candidates exist', () => {
+    const wide = [...CATALOG, { id: 'openrouter/x-ai/grok-2', name: 'Grok 2' }];
+    expect(suggestReplacements('openrouter/x-ai/grok-4.1-fast', wide)).toHaveLength(3);
+  });
+
+  it('breaks equal-prefix ties numerically so grok-10 outranks grok-9', () => {
+    const cat = [
+      { id: 'openrouter/x-ai/grok-9', name: 'g9' },
+      { id: 'openrouter/x-ai/grok-10', name: 'g10' },
+      { id: 'openrouter/x-ai/grok-4', name: 'g4' },
+    ];
+    expect(suggestReplacements('openrouter/x-ai/grok-2', cat))
+      .toEqual(['openrouter/x-ai/grok-10', 'openrouter/x-ai/grok-9', 'openrouter/x-ai/grok-4']);
+  });
+
+  it('ignores malformed catalog rows instead of throwing', () => {
+    const cat = [null, { name: 'no-id' }, { id: 42 }, { id: 'openrouter/x-ai/grok-4.3', name: 'ok' }];
+    expect(suggestReplacements('openrouter/x-ai/grok-4.1-fast', cat))
+      .toEqual(['openrouter/x-ai/grok-4.3']);
   });
 });
 
@@ -63,6 +90,26 @@ describe('collectAliasSources', () => {
       { alias: 'grok', model: 'openrouter/x-ai/grok-4.3', source: 'defaults' },
       { alias: 'mine', model: 'openrouter/foo/bar', source: 'user-config' },
       { alias: 'gemini', model: 'google/g-1', source: 'curated-route (google)' },
+    ]);
+  });
+
+  it('dedupes identical (alias, model) pairs, first source wins', () => {
+    jest.resetModules();
+    jest.doMock('../../src/utils/config', () => ({
+      getDefaultAliases: () => ({ grok: 'openrouter/x-ai/grok-4.3' }),
+      loadConfig: () => ({ aliases: { grok: 'openrouter/x-ai/grok-4.3', mine: 'openrouter/foo/bar' } }),
+    }));
+    jest.doMock('../../src/utils/curated-models', () => ({
+      listCuratedRoutes: () => [
+        { alias: 'grok', provider: 'openrouter', model: 'openrouter/x-ai/grok-4.3' },
+        { alias: 'grok', provider: 'google', model: 'google/grok-direct' },
+      ],
+    }));
+    const { collectAliasSources: collect } = require('../../src/utils/alias-audit');
+    expect(collect()).toEqual([
+      { alias: 'grok', model: 'openrouter/x-ai/grok-4.3', source: 'defaults' },
+      { alias: 'mine', model: 'openrouter/foo/bar', source: 'user-config' },
+      { alias: 'grok', model: 'google/grok-direct', source: 'curated-route (google)' },
     ]);
   });
 });

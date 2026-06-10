@@ -9,7 +9,13 @@
 
 'use strict';
 
-/** @returns {Array<{alias,model,source}>} every alias mapping we ship or the user set */
+/**
+ * @returns {Array<{alias,model,source}>} every alias mapping we ship or the user set
+ * Identical (alias, model) pairs are deduped, first source wins — defaults derive from curated
+ * routes, so every default would otherwise double-report. A user --add-alias override creates a
+ * distinct user-config row; shipped defaults/curated routes stay audited until curated-models.js
+ * itself is updated.
+ */
 function collectAliasSources() {
   const { getDefaultAliases, loadConfig } = require('./config');
   const { listCuratedRoutes } = require('./curated-models');
@@ -26,13 +32,20 @@ function collectAliasSources() {
   for (const r of listCuratedRoutes()) {
     out.push({ alias: r.alias, model: r.model, source: `curated-route (${r.provider})` });
   }
-  return out;
+  const seen = new Set();
+  return out.filter(({ alias, model }) => {
+    const key = `${alias} ${model}`;
+    if (seen.has(key)) { return false; }
+    seen.add(key);
+    return true;
+  });
 }
 
 /** Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'. */
 function idsByProvider(catalog) {
   const map = new Map();
   for (const m of catalog) {
+    if (!(m && typeof m.id === 'string')) { continue; }
     const provider = m.id.split('/')[0];
     if (!map.has(provider)) { map.set(provider, new Set()); }
     map.get(provider).add(m.id);
@@ -75,10 +88,10 @@ function suggestReplacements(staleModel, catalog, n = 3) {
     return i;
   };
   return catalog
-    .map(m => m.id)
+    .filter(m => m && typeof m.id === 'string').map(m => m.id)
     .filter(id => id.startsWith(vendorPrefix) && id !== staleModel)
     .sort((a, b) =>
-      (sharedLen(b, staleModel) - sharedLen(a, staleModel)) || b.localeCompare(a))
+      (sharedLen(b, staleModel) - sharedLen(a, staleModel)) || b.localeCompare(a, 'en', { numeric: true }))
     .slice(0, n);
 }
 
