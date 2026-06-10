@@ -133,6 +133,27 @@ async function runApiKeySetup() {
 }
 
 /**
+ * Seed/refresh the model catalog (F5). Never throws — setup must complete offline.
+ * A floor-only/offline refresh returns [] (see model-catalog), reported as unavailable.
+ * @param {(line: string) => void} [print] - defaults to console.log
+ */
+/* eslint-disable no-console -- CLI wizard requires direct console output */
+async function seedCatalog(print) {
+  const log = print ?? console.log;
+  try {
+    const { refreshCatalog } = require('../utils/model-catalog');
+    const models = await refreshCatalog();
+    if (models.length > 0) {
+      log(`Model catalog seeded (${models.length} models).`);
+      return;
+    }
+  } catch (err) {
+    logger.debug('Catalog seed failed', { error: err.message });
+  }
+  log('Model catalog unavailable (offline?) — it will refresh on first start.');
+}
+
+/**
  * Run the readline-based setup wizard (headless fallback)
  *
  * Guides the user through:
@@ -140,7 +161,6 @@ async function runApiKeySetup() {
  * 2. Default model selection
  * 3. Config file creation
  */
-/* eslint-disable no-console -- CLI wizard requires direct console output */
 async function runReadlineSetup() {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -179,6 +199,7 @@ async function runReadlineSetup() {
     if (!chosen) {
       console.log(`Invalid choice: "${answer}". Using "gemini" as default.`);
       const cfg = createDefaultConfig('gemini');
+      await seedCatalog();
       const aliasCount = Object.keys(cfg.aliases).length;
       console.log('');
       console.log(`Config created with ${aliasCount} aliases.`);
@@ -187,6 +208,7 @@ async function runReadlineSetup() {
     }
 
     const cfg = createDefaultConfig(chosen);
+    await seedCatalog();
     const aliasCount = Object.keys(cfg.aliases).length;
 
     console.log('');
@@ -215,6 +237,8 @@ async function runInteractiveSetup() {
           createDefaultConfig(result.default);
         }
       }
+
+      await seedCatalog();
 
       const configPath = path.join(getConfigDir(), 'config.json');
       const keyLabel = result.keyCount
@@ -250,5 +274,6 @@ module.exports = {
   runInteractiveSetup,
   runReadlineSetup,
   runApiKeySetup,
+  seedCatalog,
   MODEL_CHOICES,
 };

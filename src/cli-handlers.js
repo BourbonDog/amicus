@@ -43,6 +43,19 @@ async function handleSetup(args) {
     }
     addAlias(name, model);
     console.log(`Alias '${name}' added: ${model}`);
+    // F5: warn (never block) when the model is absent from a checkable catalog.
+    try {
+      const { getCatalog } = require('./utils/model-catalog');
+      const catalog = await getCatalog();
+      const provider = model.split('/')[0];
+      const checkable = catalog.some(m => m.id.startsWith(provider + '/'));
+      if (checkable && !catalog.some(m => m.id === model)) {
+        console.warn(
+          `Warning: '${model}' not found in the model catalog. ` +
+          `Double-check with: amicus models --search ${model.split('/').pop()}`
+        );
+      }
+    } catch { /* warn-only path */ }
     return;
   }
 
