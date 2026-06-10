@@ -118,6 +118,8 @@ async function handleAbort(args) {
       const legDir = resolveExistingSessionDir(project, legId);
       try {
         const legMeta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
+        // TOCTOU: a leg may complete between this read and markAborted —
+        // best-effort, same contract as abort --all above.
         if (legMeta.status === 'running') {
           if (markAborted(legDir, 'wave abort')) { aborted++; }
         }
