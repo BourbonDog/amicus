@@ -31,6 +31,8 @@ d('fanout end-to-end (real LLM)', () => {
         out = execFileSync('node', [
           path.join(__dirname, '..', 'bin', 'amicus.js'),
           'fanout',
+          // Model IDs rot when providers rename or delist them.
+          // Run `npm run models:check` to verify these are still valid.
           '--models', 'openrouter/google/gemini-2.5-flash-lite,openrouter/deepseek/deepseek-chat',
           '--prompt', 'Reply with exactly the word PONG and nothing else.',
           '--no-context', '--agent', 'Plan', '--timeout', '5',

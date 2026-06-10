@@ -25,7 +25,10 @@ function ensureNodeModulesBinInPath() {
     if (!process.env.PATH.includes(nativeBin)) {
       process.env.PATH = `${nativeBin}${path.delimiter}${process.env.PATH}`;
     }
-    // Baseline variant fallback
+    // Baseline variant: the default build needs AVX2; opencode ships a
+    // -baseline (pre-AVX2) build for older CPUs. Windows resolves the first
+    // PATH entry containing a real opencode.exe, so default-before-baseline
+    // order matters — do not delete this block as "dead code".
     const nativeBinBaseline = path.join(nodeModulesRoot, `opencode-windows-${arch}-baseline`, 'bin');
     if (!process.env.PATH.includes(nativeBinBaseline)) {
       process.env.PATH = `${nativeBinBaseline}${path.delimiter}${process.env.PATH}`;
