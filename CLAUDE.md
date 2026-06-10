@@ -94,6 +94,7 @@ src/
 │   ├── fanout-output.js  # Format ms as "1m5s" / "42s".
 │   ├── fanout.js  # Default max legs per wave (env-overridable).
 │   ├── interactive.js  # Check if Electron is available (lazy loading guard)
+│   ├── models.js  # '0.000003' per token → '3.00' per Mtok; '—' when unknown
 │   ├── progress.js  # Lifecycle stage labels
 │   ├── read.js  # Sidecar Read Operations Module
 │   ├── resume.js  # Load session metadata from session directory
@@ -103,11 +104,13 @@ src/
 │   └── start.js  # Generate a unique 8-character hex task ID
 ├── utils/
 │   ├── agent-mapping.js  # * All OpenCode native agent names (lowercase)
+│   ├── alias-audit.js  # Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'.
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── api-key-store.js  # Maps provider IDs to environment variable names
 │   ├── api-key-validation.js  # Validation endpoints per provider
 │   ├── auth-json.js  # Known provider IDs that map to sidecar's PROVIDER_ENV_MAP
-│   ├── config.js  # Default model alias map — short names to full OpenRouter model identifiers
+│   ├── config.js  # Default model alias map — derived from the curated-models single source (F5)
+│   ├── curated-models.js  # Alias-only entries (no wizard card); openrouter route only.
 │   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
 │   ├── idle-watchdog.js  # @type {Object.<string, number>} Default timeouts per mode in milliseconds
@@ -162,7 +165,7 @@ electron/
 ├── setup-ui-aliases.js  # Grouping metadata for the 20 default aliases
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Provider metadata for the setup form
-├── setup-ui-model.js  # @type {Array<{alias: string, label: string, routes: Object<string,string>}>}
+├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API
@@ -181,10 +184,8 @@ scripts/
 ├── generate-docs.js  # @param {string} dirPath @returns {string[]} Sorted .md filenames
 ├── generate-icon.js  # Generate app icon PNG from SVG source.
 ├── integration-test.sh
-├── list-models.js
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Install skill file to ~/.claude/skills/sidecar/
-├── refresh-model-capabilities.js  # @returns {Promise<number>} count of models refreshed
 ├── test-tools.sh
 ├── validate-docs.js  # * Main entry point.
 ├── validate-thinking.js
@@ -235,6 +236,7 @@ evals/
 | `sidecar/fanout-output.js` | Format ms as "1m5s" / "42s". | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout.js` | Default max legs per wave (env-overridable). | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
 | `sidecar/interactive.js` | Check if Electron is available (lazy loading guard) | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
+| `sidecar/models.js` | '0.000003' per token → '3.00' per Mtok; '—' when unknown | `handleModels()` |
 | `sidecar/progress.js` | Lifecycle stage labels | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Load session metadata from session directory | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
@@ -243,11 +245,13 @@ evals/
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `detectApiKeys()`, `runInteractiveSetup()`, `runReadlineSetup()` |
 | `sidecar/start.js` | Generate a unique 8-character hex task ID | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `utils/agent-mapping.js` | * All OpenCode native agent names (lowercase) | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
+| `utils/alias-audit.js` | Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `applyDirectApiFallback()`, `autoRepairAlias()` |
 | `utils/api-key-store.js` | Maps provider IDs to environment variable names | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | Validation endpoints per provider | `validateApiKey()`, `validateOpenRouterKey()`, `VALIDATION_ENDPOINTS()` |
 | `utils/auth-json.js` | Known provider IDs that map to sidecar's PROVIDER_ENV_MAP | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
-| `utils/config.js` | Default model alias map — short names to full OpenRouter model identifiers | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
+| `utils/config.js` | Default model alias map — derived from the curated-models single source (F5) | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
+| `utils/curated-models.js` | Alias-only entries (no wizard card); openrouter route only. | `getCuratedModels()`, `toDefaultAliases()`, `listCuratedRoutes()` |
 | `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/idle-watchdog.js` | @type {Object.<string, number>} Default timeouts per mode in milliseconds | `IdleWatchdog()`, `resolveTimeout()` |
@@ -256,9 +260,9 @@ evals/
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `normalizeMcpJson()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
-| `utils/model-catalog.js` | @returns {string} Absolute path to the catalog cache file | `getCatalog()`, `refreshCatalog()`, `catalogPath()` |
-| `utils/model-fetcher.js` | Hardcoded Anthropic models (no public listing endpoint) | `fetchModelsFromProvider()`, `fetchAllModels()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()`, `PROVIDER_FAMILY_NAMES()` |
-| `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()` |
+| `utils/model-catalog.js` | @returns {string} Absolute path to the catalog cache file | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `CATALOG_SCHEMA_VERSION()` |
+| `utils/model-fetcher.js` | Hardcoded Anthropic models (no public listing endpoint) | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
+| `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()` |
 | `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH, | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/prompt-source.js` | Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4). | `resolvePromptSource()` |
