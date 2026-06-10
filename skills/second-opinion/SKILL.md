@@ -41,19 +41,23 @@ The flow runs as a **Stage 0 intake/prep step** followed by **three sequential r
 
 Confirm the three inputs before doing anything else: **source material**, **the analysis** (the thing to be reviewed), and **the criteria** (what quality/correctness means for this material). Ask only for what is missing; don't re-ask for what is already provided.
 
-**Prepare material for sidecar models** following `MODEL-NOTES.md`:
-- Large, linked, or heavily marked-up sources → extract clean text to a small, clearly-named temp file; pass the path to sidecar models with the strict single-read / no-glob / no-narration instruction.
+**Prepare material for council models:**
+- Large, linked, or heavily marked-up sources → extract clean text to a small, clearly-named temp
+  file in the run folder (briefing hygiene: token cost and model focus). Reference its absolute
+  path in the briefing, or inline it if small.
 - Small, clean text → feed inline in the briefing.
-- All temp extract files are named clearly temporary and cleaned up after the run.
+- Write every briefing to a temp file (`_tmp-*.md` in the run folder) and pass it with
+  `--prompt-file` — never inline a briefing as a CLI argument. All `_tmp-*` files are cleaned up
+  after the run.
 
 **Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting the reviewer-reliability table in `MODEL-NOTES.md`. State the estimated cost. **Disclose the run shape up front** before asking for confirmation — e.g.:
 
-> This run uses 3 council models + 1 chair call = ~7 calls across 3 waves, ~12 min.
+> This run uses 3 council models across 2 fanout waves + 1 chair call (~7 model runs), ~10 min.
 
 Then **wait for confirmation**. Never launch without it. Honor the cost guardrail in `MODEL-NOTES.md` (no `o3`/`o3-pro` without explicit ask-by-name).
 
 **Scale-down is explicit — state which mode applies:**
-- **1 model** → thorough single pass; Stage 2 (cross-review) and Stage 3 (chair synthesis) are skipped entirely; Claude synthesizes directly.
+- **1 model** → thorough single pass; Stage 2 (cross-review) and Stage 3 (chair synthesis) are skipped entirely; Claude synthesizes directly. Transport: a single solo `amicus start --no-ui --json` (no fanout).
 - **2 models** → Stage 2 runs but the ranking is thin (one ranker per review); note this limitation.
 - **3 models (default)** → full deep council with meaningful cross-review and tie-breaking.
 
@@ -69,14 +73,36 @@ When off, Claude does not contribute a review and does not appear in the bundle.
 
 ### Stage 1 — Independent reviews
 
-Each council model reviews **the artifact** independently. Launch all council models **in parallel** as background sidecars, following the operating rules in `MODEL-NOTES.md`. The canonical sidecar launch command is:
+Each council model reviews **the artifact** independently. Write one Stage-1 briefing file
+(`_tmp-briefing-stage1.md` in the run folder) and launch the whole wave as ONE background call:
 
 ```
-amicus start --model <alias> --agent Plan --no-context --no-ui \
-  --summary-length verbose --timeout <min> --prompt "<briefing>"
+amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
+  --agent Plan --no-context --summary-length verbose --timeout <min>
 ```
 
-`--no-ui` is mandatory (the interactive Electron GUI hangs on this machine). Run in background (`run_in_background: true`); you are notified on completion — do not poll. Launch the full wave in parallel before waiting on any single result.
+Run it in the background (`run_in_background: true`); you are notified on completion — do not
+poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
+ONE JSON wave document on stdout (`schemaVersion: 1`): check `status` (`complete` | `partial` |
+`error`), `counts`, and each leg in `legs[]` — a leg's `summary` field IS that model's review;
+`model`/`modelInput` identify the reviewer; `status`/`error` identify failures. Exit code 0 =
+all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted.
+
+**Red-team variant:** fanout legs share a single prompt by design. When one model gets a distinct
+red-team brief, launch it as a separate concurrent solo run alongside the wave:
+
+```
+amicus start --model <redteam-model> --no-ui --json \
+  --prompt-file <run-folder>/_tmp-briefing-redteam.md \
+  --agent Plan --no-context --summary-length verbose --timeout <min>
+```
+
+Its stdout is a single run document; the `summary` field is the review.
+
+**Cowork / no-Bash environments:** use the MCP tools instead — `amicus_fanout` (briefing via
+file) returns `{waveId, taskIds[]}` immediately; poll `amicus_status`, then `amicus_read` each
+leg. The council's briefings are always self-contained (`--no-context`), so MCP transport is
+equivalent.
 
 **Required structured output from every model.** Instruct each council model to produce:
 
@@ -89,11 +115,21 @@ amicus start --model <alias> --agent Plan --no-context --no-ui \
 
 2. A **short overall take** — 2–4 sentences summarizing the reviewer's overall assessment.
 
-Instruct models to emit the structured output verbatim, without preamble or narration, so it reads cleanly. Briefings should apply the single-read / no-glob / no-narration mitigation from `MODEL-NOTES.md`.
+Instruct models to emit the structured output verbatim, without preamble, so it reads cleanly.
 
-Save each raw review to the run folder as `review-<model>.md` the moment it arrives. Do not wait for all models before saving.
+When the wave returns, save each leg's `summary` to the run folder as `review-<model>.md`
+(one file per reviewer) before moving on.
 
 **"Claude in the council" (when toggled on):** Claude also produces a **fresh** Stage-1 review on the artifact in the identical findings format — a new structured pass on the artifact, not a formalization of anything said upstream. This review is added to the bundle as one more anonymous entry. Claude does not rank or adjudicate in Stage 2 (it holds the label map), and does not chair in Stage 3. Save it as `review-claude.md`.
+
+**Wave-degrade rules (Stage 1).** Read failures from the wave document — never silently ignore
+them:
+- All legs `complete` → proceed normally.
+- A leg ends `error`/`timeout`/`crashed`/`aborted` but **≥ 2 reviews survive** → proceed with the
+  survivors; name the dead leg and its `error` when presenting; the bench shrinks accordingly.
+- **Fewer than 2 reviews survive** → offer the user a re-run of the dead leg(s) (solo
+  `amicus start --json`, same briefing file) or a disclosed downgrade to single-pass mode
+  (Stage 2 and Stage 3 skipped, per the scale-down rules).
 
 ---
 
@@ -108,7 +144,18 @@ This is the peer-validation step. Claude builds one shared anonymized bundle, di
 
 Each model **unknowingly ranks and adjudicates its own review** — this is the anti-favoritism mechanism, not a bug. Because no model knows which review is its own, self-bias washes out symmetrically across judges.
 
-**Distribute the same bundle to every council model in parallel** (background sidecars per `MODEL-NOTES.md`). Each judge is asked to do two things on the bundle:
+**Distribute the same bundle to every council model** — this is exactly fanout's shared-prompt
+model. Write the bundle + judging instructions to `_tmp-bundle-stage2.md` and launch one wave:
+
+```
+amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
+  --agent Plan --no-context --summary-length verbose --timeout <min>
+```
+
+(Background, same JSON handling as Stage 1.) Each judge's leg `summary` is its ranking +
+adjudication response. **Stage-2 degrade:** a judge leg dies → tally over the surviving judges
+(≥ 1) and disclose the reduced bench in `crossreview-matrix.md`; tier definitions are unchanged
+(they already count "judges engaged"). Each judge is asked to do two things on the bundle:
 
 **Task A — Rank.** Order the reviews from most to least accurate and insightful. End the response with a parseable block in exactly this format (no other text on those lines):
 
@@ -136,7 +183,16 @@ A designated **non-Claude** chair synthesizes the verdict across all reviews, ra
 2. Promote the next-best non-Claude council model as chair.
 3. **Claude chairs only as last resort — with explicit disclosure** that the verdict is no longer fully independent of the orchestrator.
 
-**Chair briefing.** Send the chair one call (single background sidecar per `MODEL-NOTES.md`) containing:
+**Chair briefing.** Write the chair packet to `_tmp-chair-packet.md` and send one solo run
+(background):
+
+```
+amicus start --model <chair> --no-ui --json \
+  --prompt-file <run-folder>/_tmp-chair-packet.md \
+  --agent Plan --no-context --summary-length verbose --timeout <min>
+```
+
+The run document's `summary` is the verdict. The packet contains:
 - All Stage-1 reviews (de-anonymized — model attribution restored)
 - All cross-review ranking outputs (with model attribution)
 - All adjudication outputs (with model attribution and `agree | dispute | neutral` verdicts per finding)
@@ -193,7 +249,10 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
 - `review-<model>.md` × N (already saved in Stage 1)
 - `crossreview-matrix.md` — the de-anonymized adjudication grid and street-cred table
 - `verdict.md` (already saved in Stage 3)
-- `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was applied (+ the "How Claude's review fared" readout when "Claude in the council" is on)
+- `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was
+  applied (+ the "How Claude's review fared" readout when "Claude in the council" is on) + a
+  **run-stats table**: one row per model call (stage, model, status, durationMs) read from the
+  wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
 
 Tell the user exactly which files were written and where.
 
@@ -310,9 +369,12 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `review-<model>.md` ×N — raw Stage 1 reviews (plus `review-claude.md` when "Claude in the council" is on)
   - `crossreview-matrix.md` — adjudication grid + de-anonymized street-cred table
   - `verdict.md` — the chair's synthesis
-  - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on)
+  - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on) + a
+    **run-stats table**: one row per model call (stage, model, status, durationMs) read from the
+    wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
-- Temp extracts: give them a clearly-temporary name and clean them up at the end.
+- Temp working files (`_tmp-*.md`: extracts, stage briefings, bundle, chair packet) live in the
+  run folder and are cleaned up at the end of the run.
 
 ---
 
