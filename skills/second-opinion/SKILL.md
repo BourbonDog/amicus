@@ -41,6 +41,10 @@ The flow runs as a **Stage 0 intake/prep step** followed by **three sequential r
 
 Confirm the three inputs before doing anything else: **source material**, **the analysis** (the thing to be reviewed), and **the criteria** (what quality/correctness means for this material). Ask only for what is missing; don't re-ask for what is already provided.
 
+**Establish the run folder first:** `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
+if no `output/` directory exists). Create it now — every temp file, briefing, review, and artifact
+in this run is written here. Use its absolute path in all `--prompt-file` arguments.
+
 **Prepare material for council models:**
 - Large, linked, or heavily marked-up sources → extract clean text to a small, clearly-named temp
   file in the run folder (briefing hygiene: token cost and model focus). Reference its absolute
@@ -61,7 +65,7 @@ Then **wait for confirmation**. Never launch without it. Honor the cost guardrai
 - **2 models** → Stage 2 runs but the ranking is thin (one ranker per review); note this limitation.
 - **3 models (default)** → full deep council with meaningful cross-review and tie-breaking.
 
-The scale-down levels count **non-Claude judges**; enabling "Claude in the council" adds a judged review but not a judge, so it does not change these levels. If the bench drops below 2 during the run, degrade to single-pass mode and disclose this.
+The scale-down levels count **non-Claude judges**; enabling "Claude in the council" adds a judged review but not a judge, so it does not change these levels. If the bench drops below 2 surviving reviews during the run, apply the Stage-1 wave-degrade rule (offer re-run or a disclosed single-pass downgrade).
 
 **Present the "Claude in the council" toggle (default: off).** At launch, offer:
 
@@ -85,8 +89,8 @@ Run it in the background (`run_in_background: true`); you are notified on comple
 poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
 ONE JSON wave document on stdout (`schemaVersion: 1`): check `status` (`complete` | `partial` |
 `error`), `counts`, and each leg in `legs[]` — a leg's `summary` field IS that model's review;
-`model`/`modelInput` identify the reviewer; `status`/`error` identify failures. Exit code 0 =
-all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted.
+`model`/`modelInput` identify the reviewer (`model` is the resolved id, `modelInput` the alias you passed — use the alias for `review-<model>.md` filenames); `status`/`error` identify failures. Exit code 0 =
+all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted. (To re-fetch a single leg later: `amicus read <taskId> --json`.)
 
 **Red-team variant:** fanout legs share a single prompt by design. When one model gets a distinct
 red-team brief, launch it as a separate concurrent solo run alongside the wave:
@@ -126,7 +130,7 @@ When the wave returns, save each leg's `summary` to the run folder as `review-<m
 them:
 - All legs `complete` → proceed normally.
 - A leg ends `error`/`timeout`/`crashed`/`aborted` but **≥ 2 reviews survive** → proceed with the
-  survivors; name the dead leg and its `error` when presenting; the bench shrinks accordingly.
+  survivors; name the dead leg and its `error` when presenting; the bench shrinks accordingly. If this leaves exactly 2 surviving reviews, the run is now effectively a 2-model council — apply the thin-ranking disclosure (Stage 0 / Stage 4) from here on.
 - **Fewer than 2 reviews survive** → offer the user a re-run of the dead leg(s) (solo
   `amicus start --json`, same briefing file) or a disclosed downgrade to single-pass mode
   (Stage 2 and Stage 3 skipped, per the scale-down rules).
@@ -370,10 +374,9 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `crossreview-matrix.md` — adjudication grid + de-anonymized street-cred table
   - `verdict.md` — the chair's synthesis
   - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on) + a
-    **run-stats table**: one row per model call (stage, model, status, durationMs) read from the
-    wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
+    **run-stats table**: one row per model call — **stage** (which stage you launched the call for) plus **model, status, durationMs** read from the wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
-- Temp working files (`_tmp-*.md`: extracts, stage briefings, bundle, chair packet) live in the
+- Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet) live in the
   run folder and are cleaned up at the end of the run.
 
 ---
