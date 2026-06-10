@@ -14,12 +14,16 @@ _Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see chang
 - **`--no-context`** always — council briefings are self-contained; don't drag the host
   conversation in.
 - **`--summary-length verbose`** — the analysis IS the deliverable; don't let it get summarized away.
-- **Briefings via `--prompt-file`** (temp `_tmp-*.md` files in the run folder) — no size cap, no
-  shell-quoting hazards. Never inline a briefing as a CLI argument.
+- **Briefings via `--prompt-file`** (temp `_tmp-*.md` files in the run folder — `output/<stem>-council/`,
+  defined in SKILL.md Stage 0) — no size cap, no shell-quoting hazards. Never inline a briefing as
+  a CLI argument.
 - **Run in the background (`run_in_background: true`); you're notified on completion. Don't poll.**
 - **Read results from the JSON documents** (`--json`): a wave's `legs[].summary` / a run's
   `summary` is the model's output; `status`/`error`/`counts` are ground truth for failures. Never
   scrape stderr logs to judge success.
+- **Transient provider errors** (502s, connection drops): re-run the affected leg (solo
+  `amicus start --json`, same briefing file) or the wave — see per-model notes for
+  model-specific signals. Never present a half-finished run as an answer.
 - **Credentials:** keys live in `~/.config/amicus/.env` (legacy `~/.config/sidecar/.env` still
   read). Configure with `amicus setup`.
 
