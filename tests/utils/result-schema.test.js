@@ -222,4 +222,20 @@ describe('result-schema session rebuilders', () => {
     expect(doc.legs[1].error).toBe('boom');
     expect(doc.prompt).toEqual({ source: 'inline', file: null, chars: 5 });
   });
+
+  it('throws for a missing wave session', () => {
+    expect(() => buildWaveResultFromSession(project, 'dead0000')).toThrow(/not found/);
+  });
+
+  it('corrupt wave.json falls back to live rebuild from legs', () => {
+    const waveDir = writeSession('cafe0003', {
+      type: 'wave', status: 'running', legs: ['cafe0003-1'],
+      createdAt: '2026-06-09T10:00:00.000Z',
+    });
+    fs.writeFileSync(path.join(waveDir, 'wave.json'), '{ this is not valid json');
+    writeSession('cafe0003-1', { model: 'a/b', status: 'complete', parentWave: 'cafe0003' }, 'leg ok');
+    const doc = buildWaveResultFromSession(project, 'cafe0003');
+    expect(doc.status).toBe('complete');
+    expect(doc.legs[0].summary).toBe('leg ok');
+  });
 });

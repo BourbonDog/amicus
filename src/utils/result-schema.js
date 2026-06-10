@@ -141,6 +141,7 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
  * @param {string} taskId
  * @returns {object} run document
  * @throws {Error} if the session does not exist
+ * @throws {SyntaxError} if metadata.json is not valid JSON
  */
 function buildRunResultFromSession(project, taskId) {
   const fs = require('fs');
@@ -165,6 +166,7 @@ function buildRunResultFromSession(project, taskId) {
  * @param {string} waveId
  * @returns {object} wave document
  * @throws {Error} if the wave session does not exist
+ * @throws {SyntaxError} if wave metadata.json is not valid JSON
  */
 function buildWaveResultFromSession(project, waveId) {
   const fs = require('fs');
@@ -173,7 +175,11 @@ function buildWaveResultFromSession(project, waveId) {
   const waveDir = resolveExistingSessionDir(project, waveId);
   const wavePath = path.join(waveDir, 'wave.json');
   if (fs.existsSync(wavePath)) {
-    return JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+    try {
+      return JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
+    } catch {
+      // Corrupt wave.json (e.g. hard-kill mid-write) — fall through to live rebuild
+    }
   }
   const metaPath = path.join(waveDir, 'metadata.json');
   if (!fs.existsSync(metaPath)) {
@@ -182,7 +188,11 @@ function buildWaveResultFromSession(project, waveId) {
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
   const legs = (meta.legs || []).map((legId) => {
     try { return buildRunResultFromSession(project, legId); }
-    catch { return buildRunResult({ taskId: legId, metadata: { status: 'unknown', parentWave: waveId } }); }
+    catch (err) {
+      const { logger } = require('./logger');
+      logger.warn('Failed to rebuild leg session; using unknown stub', { legId, error: err.message });
+      return buildRunResult({ taskId: legId, metadata: { status: 'unknown', parentWave: waveId } });
+    }
   });
   return buildWaveResult({
     waveId,
