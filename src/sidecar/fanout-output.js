@@ -32,6 +32,7 @@ function formatWaveHuman(wave) {
     }
     lines.push('');
   }
+  if (wave.error) { lines.push(`Error: ${wave.error}`); }
   lines.push('─'.repeat(40));
   const counts = wave.counts || { complete: '?', total: '?' };
   lines.push(`Wave ${wave.waveId}: ${wave.status} — ${counts.complete}/${counts.total} complete in ${fmtDuration(wave.durationMs)}`);

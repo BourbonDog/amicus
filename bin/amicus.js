@@ -195,6 +195,15 @@ async function handleFanout(args) {
     console.error('Error: --agent chat is interactive-only; fanout is headless');
     process.exit(1);
   }
+  if (args.timeout !== undefined && args.timeout <= 0) {
+    console.error('Error: --timeout must be a positive number');
+    process.exit(1);
+  }
+  const { parseModelsList } = require('../src/sidecar/fanout');
+  if (parseModelsList(args.models).length === 0) {
+    console.error('Error: --models must contain at least one non-empty entry');
+    process.exit(1);
+  }
 
   // Direct require — the src/index.js public re-export is added later (Task 13)
   const { runFanout } = require('../src/sidecar/fanout');

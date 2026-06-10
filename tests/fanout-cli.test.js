@@ -26,4 +26,12 @@ describe('fanout CLI surface', () => {
     expect(src).toContain('handleFanout');
     expect(src).toContain('armExitWatchdog(exitCode');
   });
+
+  it('handleFanout source guards timeout and empty model lists', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../bin/amicus.js'), 'utf-8');
+    expect(src).toContain('--timeout must be a positive number');
+    expect(src).toContain('at least one non-empty entry');
+  });
 });

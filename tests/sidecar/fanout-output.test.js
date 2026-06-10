@@ -31,6 +31,11 @@ describe('formatWaveHuman', () => {
     const out = formatWaveHuman(wave);
     expect(out).toContain('(no output)');
   });
+
+  it('renders a top-level wave error when present', () => {
+    const out = formatWaveHuman({ ...wave, error: 'Error: --models requires a comma-separated list' });
+    expect(out).toContain('Error: --models requires');
+  });
 });
 
 describe('fmtDuration', () => {
