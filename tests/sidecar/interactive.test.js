@@ -14,9 +14,19 @@ jest.mock('../../src/utils/logger', () => ({
   }
 }));
 
+const path = require('path');
+
 const { buildElectronEnv } = require('../../src/sidecar/interactive');
 
 const BASE_ARGS = ['task-001', 'google/gemini-2.5', '/project', '/bin', '/usr/bin'];
+
+describe('buildElectronEnv - PATH', () => {
+  it('joins nodeModulesBin and the existing PATH with the platform delimiter', () => {
+    const env = buildElectronEnv(...BASE_ARGS, {});
+    // ':' on POSIX, ';' on Windows — a hardcoded ':' corrupts the child PATH on win32
+    expect(env.PATH).toBe(`/bin${path.delimiter}/usr/bin`);
+  });
+});
 
 describe('buildElectronEnv - window position', () => {
   it('sets AMICUS_WINDOW_POSITION when windowPosition is provided', () => {
@@ -55,8 +65,11 @@ describe('getElectronPath', () => {
     // Should NOT be a hardcoded node_modules/.bin/electron path
     expect(result).not.toContain('node_modules/.bin/electron');
 
-    // Should be the actual Electron binary path (what require('electron') returns)
-    expect(result).toContain('Electron');
+    // Should be the actual Electron binary path (what require('electron') returns).
+    // Compare against require('electron') itself: the binary name differs by
+    // platform (Electron.app/.../Electron on macOS, electron.exe on Windows).
+    expect(result).toBe(require('electron'));
+    expect(result.toLowerCase()).toContain('electron');
   });
 
   it('returns null when electron is not installed', () => {

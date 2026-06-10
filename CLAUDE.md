@@ -153,6 +153,7 @@ electron/
 │   └── icon.svg
 ├── fold.js  # Fold Logic
 ├── ipc-setup.js  # IPC Setup Handlers
+├── load-failsafe.js  # @param {*} value @returns {string} HTML-escaped text
 ├── main.js  # Amicus Electron Shell - v3
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
 ├── preload.js  # Sidecar Preload - v3 Minimal
