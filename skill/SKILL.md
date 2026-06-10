@@ -11,14 +11,19 @@ description: >
   run_in_background: true. Never run amicus start/resume/continue in the foreground.
   (2) The fold summary returns on stdout when the user clicks Fold in the GUI or the
   headless agent finishes. Use TaskOutput to read it when the background task completes.
-  (3) Use --prompt for the start command (NOT --briefing). --briefing is only for
-  subagent spawn. (4) NEVER use o3 or o3-pro unless the user explicitly asks for it by
+  (3) For long or multi-line briefings, write them to a temp file and pass
+  --prompt-file <path> (mutually exclusive with --prompt; avoids shell-quoting hazards
+  and argument-size caps). (4) NEVER use o3 or o3-pro unless the user explicitly asks for it by
   name. These models are extremely expensive ($10-60+ per request). If the user asks for
   o3, warn them about the cost before proceeding. Default to gemini for most tasks.
   (5) When the user asks to query MULTIPLE LLMs simultaneously (e.g., "ask Gemini AND
   ChatGPT", "compare Gemini vs GPT"), ALWAYS use --no-ui (headless) for all of them
   unless the user explicitly requests interactive. Opening multiple Electron windows at
   once is disruptive. Launch them all in parallel with run_in_background: true.
+  (6) When the SAME prompt should go to N models, use `amicus fanout --models a,b,c
+  --prompt-file <path> --json` (one headless wave, one JSON result) instead of N
+  separate start calls. Different prompts per model → separate parallel
+  `amicus start --no-ui` calls.
 ---
 
 # Amicus: Multi-Model Subagent Tool
@@ -50,6 +55,8 @@ On install, an MCP server is auto-registered for Claude Cowork and Claude Deskto
 ## Setup: Configuring API Access
 
 Amicus uses the OpenCode SDK to communicate with LLM providers. You need to configure API credentials for your chosen provider(s).
+
+**Recommended:** run `amicus setup` — a guided wizard that stores keys in `~/.config/amicus/.env`, picks your default model from the live catalog, and seeds aliases. The options below are manual alternatives.
 
 ### Option A: OpenRouter (Recommended for Multi-Model Access)
 
@@ -223,16 +230,17 @@ amicus start \
   - `name=command` - Local MCP server (spawns process)
 - `--mcp-config <path>`: Path to opencode.json file with MCP server configuration. Alternative to `--mcp` for complex setups.
 - `--client <type>`: Client entry point (`code-local`, `code-web`, `cowork`). Affects system prompt personality. Default: `code-local`.
+- `--prompt-file <path>`: Read the prompt/briefing from a UTF-8 file (mutually exclusive with
+  `--prompt`). Use for long or multi-line briefings.
+- `--json`: With `--no-ui`, emit the run result as one stable JSON document on stdout
+  (`schemaVersion: 1`; the `summary` field is the model's output).
+- `--no-validate-model`: Skip the model-catalog pre-flight check (validation is on by default).
 - `--agent <agent>`: Agent mode (controls tool permissions). If omitted, defaults to **Chat**.
 
   **Primary Agents (for `amicus start`):**
   - `Chat` **(default)**: Reads auto-approved, writes/bash require user permission
   - `Plan`: Read-only mode - no file modifications possible
   - `Build`: Full tool access - all operations auto-approved
-
-  **Subagents (for `amicus subagent spawn`):**
-  - `Explore`: Read-only subagent - for codebase exploration
-  - `General`: Full-access subagent - for research requiring file writes
 
   **Custom Agents:**
   Custom agents defined in `~/.config/opencode/agents/` or `.opencode/agents/` are passed through directly.
@@ -286,6 +294,39 @@ amicus start --model gemini --prompt "Detailed task description"
 # Fix: Set the API key for your provider
 export OPENROUTER_API_KEY=sk-or-your-key
 amicus start --model gemini --prompt "Task"
+```
+
+### Fan Out One Prompt to N Models
+
+```bash
+amicus fanout --models gemini,gpt,deepseek --prompt-file ./briefing.md --json
+```
+
+Runs the same prompt on every listed model in parallel (one shared engine server, headless),
+then prints ONE JSON wave document: `status` (`complete`|`partial`|`error`), `counts`, and
+`legs[]` where each leg's `summary` is that model's answer. Exit codes: 0 complete, 2 partial,
+1 error/aborted. Aliases and full `provider/model` IDs both work; duplicates are allowed
+(distinct legs). `--wave-id <id>` pins leg IDs to `<id>-1..N`. Shared per-leg knobs: `--agent`,
+`--thinking`, `--timeout`, `--summary-length`, `--no-context`, `--context-*`, `--mcp*`,
+`--no-validate-model`, `--cwd`.
+
+### Inspect the Model Catalog
+
+```bash
+amicus models                    # list the live catalog (context + pricing columns)
+amicus models --search grok      # substring search over id + name
+amicus models --refresh          # force-refresh from OpenRouter (TTL cache otherwise)
+amicus models --check            # audit configured aliases against the catalog
+```
+
+The catalog is cached at `~/.config/amicus/model-catalog.json` and refreshes automatically;
+`start`/`fanout` validate models against it before launching (skip with `--no-validate-model`).
+
+### Abort a Running Session
+
+```bash
+amicus abort <task_id>     # stop one session
+amicus abort --all         # stop every running session in this project
 ```
 
 ### List Past Sidecars
@@ -353,47 +394,6 @@ amicus read <task_id> --metadata      # Show session metadata
 - `--metadata`: Show session metadata (model, agent, timestamps, etc.)
 - `--cwd <path>`: Project directory (default: current directory)
 
-### Subagent Commands
-
-> 🚧 **Planned Feature**: Subagent commands are documented for future reference but are **not yet implemented** in the current CLI. Running these commands will result in "Unknown command: subagent" errors. This section describes the planned API for when the feature is released.
-
-Spawn and manage subagents within a sidecar session. Subagents run in parallel with the main session.
-
-#### Spawn a Subagent
-
-```bash
-amicus subagent spawn \
-  --parent <sidecar-task-id> \
-  --agent <General|Explore> \
-  --prompt "<task description>"
-```
-
-**Required:**
-- `--parent`: The task ID of the parent sidecar session
-- `--agent`: Subagent type - `General` (full access) or `Explore` (read-only)
-- `--prompt`: Task description for the subagent
-
-**Example:**
-```bash
-amicus subagent spawn --parent abc123 --agent Explore --prompt "Find all API endpoints in src/"
-amicus subagent spawn --parent abc123 --agent General --prompt "Research authentication patterns"
-```
-
-#### List Subagents
-
-```bash
-amicus subagent list --parent <sidecar-task-id>
-amicus subagent list --parent abc123 --status running
-amicus subagent list --parent abc123 --status completed
-```
-
-#### Read Subagent Results
-
-```bash
-amicus subagent read <subagent-id>                 # Show summary
-amicus subagent read <subagent-id> --conversation  # Show full conversation
-```
-
 ---
 
 ## Models Available
@@ -411,17 +411,14 @@ Full model strings also work: `--model openrouter/provider/model-id`
 
 ### Verifying Model Names
 
-**Note:** Model names change frequently as providers release new versions. To verify current model names:
+Model names change frequently. Verify against the live catalog:
 
 ```bash
-# List available OpenRouter models
-curl https://openrouter.ai/api/v1/models | jq '.data[].id' | grep -i gemini
-
-# Or check the OpenRouter website
-# https://openrouter.ai/models
+amicus models --search gemini
 ```
 
-Always verify model names before using them in production scripts.
+Aliases are seeded by `amicus setup` and audited by `amicus models --check`, which suggests
+replacements for stale aliases.
 
 ---
 
@@ -553,7 +550,7 @@ amicus start \
 
 ## Agent Modes
 
-Amicus uses OpenCode's agent framework with three primary modes and two subagent types:
+Amicus uses OpenCode's agent framework with three primary modes:
 
 ### Primary Agents (for Main Sessions)
 
@@ -604,32 +601,6 @@ amicus start --model gemini --prompt "Implement the login feature" --agent Build
 - Offloading development tasks to the sidecar
 - User explicitly requests implementation ("implement", "fix", "write", "create")
 - Headless batch operations (test generation, linting, etc.)
-
-### Subagents (Spawned Within Sessions)
-
-These agents are spawned from within a sidecar session using `amicus subagent spawn`:
-
-#### General Subagent
-
-Full-access subagent for research and parallel tasks:
-- Same capabilities as Build agent
-- Used for spawning parallel work within a session
-
-```bash
-amicus subagent spawn --parent abc123 --agent General --prompt "Research auth patterns"
-```
-
-#### Explore Subagent
-
-Read-only subagent for codebase exploration:
-- Optimized for searching and understanding code
-- Read-only access (no writes, no bash)
-
-```bash
-amicus subagent spawn --parent abc123 --agent Explore --prompt "Find all API endpoints"
-```
-
-**Important:** When using `amicus start`, use **Chat**, **Plan**, or **Build**. When using `amicus subagent spawn`, use **General** or **Explore**.
 
 ---
 
@@ -828,30 +799,7 @@ Focus on: token handling, session management, CSRF protection.
 Analyze and report findings."
 ```
 
-### Example 4: Spawn Subagents for Parallel Work
-
-```bash
-# First, start a sidecar (defaults to Chat mode)
-amicus start --model gemini --prompt "Debug auth issues"
-# Output: Started sidecar with task ID: abc123
-
-# Spawn an Explore subagent for codebase search
-amicus subagent spawn \
-  --parent abc123 \
-  --agent Explore \
-  --prompt "Find all database queries and list which files they're in"
-
-# Spawn a General subagent for parallel research
-amicus subagent spawn \
-  --parent abc123 \
-  --agent General \
-  --prompt "Research best practices for JWT token refresh"
-
-# Check subagent status
-amicus subagent list --parent abc123
-```
-
-### Example 5: Continue Previous Work
+### Example 4: Continue Previous Work
 
 ```bash
 # First, check what exists
@@ -873,8 +821,8 @@ The mutex approach looks correct. Add tests."
 
 ### "Missing Authentication header" in Claude Code or CI
 
-API keys in `~/.zshrc` are not available in non-interactive shells. Resolution order: `process.env` > `~/.config/sidecar/.env` > `~/.local/share/opencode/auth.json` (first wins). Fix:
-1. Run `amicus setup` (stores keys in `~/.config/sidecar/.env`)
+API keys in `~/.zshrc` are not available in non-interactive shells. Resolution order: `process.env` > `~/.config/amicus/.env` (legacy `~/.config/sidecar/.env` still read) > `~/.local/share/opencode/auth.json` (first wins). Fix:
+1. Run `amicus setup` (stores keys in `~/.config/amicus/.env`)
 2. Or move exports to `~/.zshenv`
 3. Or add credentials to `~/.local/share/opencode/auth.json`
 
