@@ -307,7 +307,18 @@ function buildWizardCSS() {
     background: transparent; color: #A09B96;
   }
   .nav-btn:hover { border-color: #D97757; color: #D97757; }  .nav-btn.primary { background: #D97757; color: #FFF; border-color: #D97757; }
-  .nav-btn.primary:hover { background: #C4623F; }  .nav-btn:disabled { opacity: 0.4; cursor: default; }`;
+  .nav-btn.primary:hover { background: #C4623F; }  .nav-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .search-head { display: flex; gap: 8px; margin: 18px 0 8px; }
+  #model-search-input { flex: 1; background: #1F1D1C; color: #D4D0CC; border: 1px solid #3D3A38; border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .search-meta { color: #7A756F; font-size: 11px; margin-bottom: 6px; }
+  .search-results { max-height: 220px; overflow-y: auto; border: 1px solid #3D3A38; border-radius: 6px; }
+  .search-results:empty { border: none; }
+  .search-row { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #2D2B2A; }
+  .search-row:hover { background: #34312F; }
+  .search-row.selected { background: #4A3328; outline: 1px solid #D97757; }
+  .search-row-id { color: #D4D0CC; font-size: 12px; font-family: 'SF Mono', Menlo, Consolas, monospace; }
+  .search-row-sub { color: #A09B96; font-size: 11px; margin-top: 2px; }`;
 }
 
 module.exports = { buildWizardCSS };

@@ -47,7 +47,8 @@ function buildAliasEditorHTML(aliases) {
 
   // Pick a representative example from actual aliases
   const exampleAlias = 'gemini';
-  const exampleModel = aliases[exampleAlias] || 'openrouter/google/gemini-3-flash-preview';
+  // Fallback literal kept in sync with curated-models (toDefaultAliases().gemini)
+  const exampleModel = aliases[exampleAlias] || 'openrouter/google/gemini-3.1-flash-lite-preview';
 
   // SVG icons for the example box
   const terminalIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="12" rx="2" stroke="#D97757" stroke-width="1.5"/><path d="M4 6l2.5 2L4 10" stroke="#D97757" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 10H11" stroke="#5A5550" stroke-width="1.5" stroke-linecap="round"/></svg>`;

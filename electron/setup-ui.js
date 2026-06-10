@@ -153,7 +153,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     nextBtn.style.display = step < 4 ? '' : 'none';
     finishBtn.style.display = step === 4 ? '' : 'none';
     if (step === 4) { buildReview(); }
-    if (step === 2) { updateRoutingPills(); }
+    if (step === 2) { updateRoutingPills(); ensureCatalogLoaded(); }
     if (step === 3) {
       updateAliasRoutes();
       if (!window.availableModels) { fetchAvailableModels(); }
@@ -295,7 +295,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     document.getElementById('review-keys').textContent =
       kn.length > 0 ? kn.map(function(k) { return k + ' \\u2713'; }).join(', ') : 'None';
     var r = document.querySelector('input[name="default-model"]:checked');
-    document.getElementById('review-model').textContent = r ? r.value : 'Not selected';
+    document.getElementById('review-model').textContent = window.customDefaultModel || (r ? r.value : 'Not selected');
     var routeLines = [];
     modelChoicesData.forEach(function(mc) {
       var prov = routingChoices[mc.alias];
@@ -333,7 +333,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     finishBtn.disabled = true; finishBtn.textContent = 'Saving...';
     try {
       var r = document.querySelector('input[name="default-model"]:checked');
-      var dm = r ? r.value : 'gemini';
+      var dm = window.customDefaultModel || (r ? r.value : 'gemini');
       var routingOverrides = {};
       modelChoicesData.forEach(function(mc) {
         var prov = routingChoices[mc.alias];
@@ -358,6 +358,95 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       if (groups && groups.length > 0) { window.availableModels = groups; }
     } catch (_e) {}
   }
+
+  // ===== F5: searchable catalog picker (Step 2) =====
+  var catalogRows = null, catalogFetchedAt = null;
+  window.customDefaultModel = null;
+
+  async function ensureCatalogLoaded() {
+    if (catalogRows) { return; }
+    try {
+      var info = await window.sidecarSetup.invoke('sidecar:get-catalog');
+      applyCatalog(info);
+    } catch (_e) {}
+  }
+
+  function applyCatalog(info) {
+    catalogRows = (info && info.models) || [];
+    catalogFetchedAt = info && info.fetchedAt;
+    var section = $('model-search-section');
+    if (!section) { return; }
+    section.style.display = catalogRows.length > 0 ? '' : 'none';
+    renderSearchMeta();
+    renderSearchResults();
+  }
+
+  function renderSearchMeta() {
+    var meta = $('model-search-meta');
+    if (!meta) { return; }
+    var when = catalogFetchedAt ? new Date(catalogFetchedAt).toLocaleString() : 'never';
+    meta.textContent = catalogRows.length + ' models \\u00b7 catalog fetched ' + when;
+  }
+
+  function fmtCtx(n) { return n == null ? '' : ' \\u00b7 ctx ' + n; }
+  function fmtPrice(p) {
+    if (!p || p.prompt == null) { return ''; }
+    var x = Number(p.prompt) * 1e6;
+    return isNaN(x) ? '' : ' \\u00b7 $' + x.toFixed(2) + '/M in';
+  }
+
+  function renderSearchResults() {
+    var box = $('model-search-results');
+    if (!box) { return; }
+    var q = ($('model-search-input').value || '').toLowerCase();
+    var rows = !q ? [] : catalogRows.filter(function(m) {
+      return m.id.toLowerCase().indexOf(q) !== -1 || (m.name || '').toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 50);
+    box.innerHTML = '';
+    rows.forEach(function(m) {
+      var div = document.createElement('div');
+      div.className = 'search-row' + (window.customDefaultModel === m.id ? ' selected' : '');
+      div.setAttribute('data-model-id', m.id);
+      var title = document.createElement('div');
+      title.className = 'search-row-id';
+      title.textContent = m.id;
+      var sub = document.createElement('div');
+      sub.className = 'search-row-sub';
+      sub.textContent = (m.name || '') + fmtCtx(m.contextLength) + fmtPrice(m.pricing);
+      div.appendChild(title); div.appendChild(sub);
+      div.addEventListener('click', function() { selectCustomModel(m.id); });
+      box.appendChild(div);
+    });
+    if (q && rows.length === 0) {
+      box.textContent = 'No models match "' + q + '"';
+    }
+  }
+
+  function selectCustomModel(id) {
+    window.customDefaultModel = id;
+    document.querySelectorAll('input[name="default-model"]').forEach(function(r) { r.checked = false; });
+    renderSearchResults();
+  }
+
+  document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'model-search-input') { renderSearchResults(); }
+  });
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.name === 'default-model' && e.target.checked) {
+      window.customDefaultModel = null;
+      renderSearchResults();
+    }
+  });
+  document.addEventListener('click', async function(e) {
+    if (e.target && e.target.id === 'model-search-refresh') {
+      e.target.disabled = true;
+      try {
+        var info = await window.sidecarSetup.invoke('sidecar:refresh-catalog');
+        applyCatalog(info);
+      } catch (_e2) {}
+      e.target.disabled = false;
+    }
+  });
 
   ${aliasJs}
 

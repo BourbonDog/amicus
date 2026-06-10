@@ -49,6 +49,22 @@ function bestAvailableProvider(providers, configuredKeys) {
 }
 
 /**
+ * Search-over-catalog section (F5). Hidden until the wizard script confirms
+ * a non-empty catalog; rows are rendered client-side from the get-catalog IPC.
+ * @returns {string} HTML fragment
+ */
+function buildModelSearchHTML() {
+  return `<div id="model-search-section" style="display:none">
+      <div class="search-head">
+        <input type="text" id="model-search-input" placeholder="Search all models (id or name)..." autocomplete="off">
+        <button class="icon-btn" id="model-search-refresh" title="Refresh catalog">&#x21bb;</button>
+      </div>
+      <div id="model-search-meta" class="search-meta"></div>
+      <div id="model-search-results" class="search-results"></div>
+    </div>`;
+}
+
+/**
  * Build the HTML fragment for Step 2 (Model Selection)
  * @param {Array<{alias: string, label: string, routes: Object<string,string>}>} choices
  * @param {string} [selectedAlias] - Pre-selected alias, defaults to first available choice
@@ -115,7 +131,8 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
     <div class="model-list" id="model-list">
       ${cards}
     </div>
+    ${buildModelSearchHTML()}
   </div>`;
 }
 
-module.exports = { buildModelStepHTML, MODEL_CHOICES, PROVIDER_NAMES };
+module.exports = { buildModelSearchHTML, buildModelStepHTML, MODEL_CHOICES, PROVIDER_NAMES };
