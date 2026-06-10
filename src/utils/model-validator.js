@@ -193,6 +193,7 @@ async function validateAgainstCatalog(resolvedModel, alias) {
  * @param {string} model
  */
 async function warnIfNotInCatalog(model) {
+  if (typeof model !== 'string' || !model) { return; }
   try {
     await validateAgainstCatalog(model);
   } catch (err) {

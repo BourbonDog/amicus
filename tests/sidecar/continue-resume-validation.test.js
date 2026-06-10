@@ -52,6 +52,19 @@ describe('warnIfNotInCatalog', () => {
     const { warnIfNotInCatalog } = require('../../src/utils/model-validator');
     await expect(warnIfNotInCatalog('openrouter/a/b')).resolves.toBeUndefined();
   });
+
+  it('is silent for non-string/empty models (legacy metadata)', async () => {
+    const { warnIfNotInCatalog } = load({ catalog: [{ id: 'openrouter/x-ai/grok-4.3', name: 'G' }] });
+    const writes = [];
+    const orig = process.stderr.write;
+    process.stderr.write = (s) => { writes.push(String(s)); return true; };
+    try {
+      await warnIfNotInCatalog(undefined);
+      await warnIfNotInCatalog('');
+      await warnIfNotInCatalog(42);
+    } finally { process.stderr.write = orig; }
+    expect(writes.join('')).toBe('');
+  });
 });
 
 describe('wiring (source guards)', () => {
@@ -63,6 +76,7 @@ describe('wiring (source guards)', () => {
     const handler = src.slice(src.indexOf('async function handleContinue'), src.indexOf('async function handleRead'));
     expect(handler).toMatch(/resolveModelFromArgs/);
     expect(handler).toMatch(/validateFallbackModel/);
+    expect(handler).toMatch(/if \(args\.model !== undefined\)/);
   });
 
   it('continueSidecar and resumeSidecar warn on inherited models', () => {
