@@ -11,6 +11,7 @@ const { resumeSidecar } = require('./sidecar/resume');
 const { continueSidecar } = require('./sidecar/continue');
 const { readSidecar, listSidecars, formatAge } = require('./sidecar/read');
 const { buildContext, parseDuration } = require('./sidecar/context-builder');
+const { runFanout } = require('./sidecar/fanout');
 
 // Import from prompt-builder
 const { buildSystemPrompt, buildPrompts, getSummaryTemplate, SUMMARY_TEMPLATE } = require('./prompt-builder');
@@ -35,6 +36,7 @@ module.exports = {
   resumeAmicus: resumeSidecar,
   continueAmicus: continueSidecar,
   readAmicus: readSidecar,
+  runFanout,
 
   // DEPRECATED(amicus-shim): remove *Sidecar exports in a future revision — see docs/SHIMS.md
   // Primary sidecar APIs

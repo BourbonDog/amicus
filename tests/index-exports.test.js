@@ -13,3 +13,10 @@ describe('public API amicus aliases', () => {
     expect(api.listAmicus).toBe(api.listSidecars);
   });
 });
+
+describe('F4 exports', () => {
+  it('exposes runFanout on the public API', () => {
+    const api = require('../src/index');
+    expect(typeof api.runFanout).toBe('function');
+  });
+});

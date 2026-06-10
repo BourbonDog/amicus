@@ -334,6 +334,13 @@ Amicus spawns parallel conversations with different LLMs and folds results back 
 4. If the user starts a new message without mentioning the session, ask if they're done or just call amicus_read
 5. Act on findings
 
+### Fan-Out (amicus_fanout)
+Run the SAME prompt across 1-10 models in parallel (one shared engine):
+1. amicus_fanout with models + prompt -> {waveId, taskIds[]}
+2. sleep 25, then amicus_status with the waveId (repeat until done)
+3. amicus_read the waveId -> aggregated JSON wave document (per-leg summaries inside)
+Each leg is an ordinary session: read/resume/continue it by taskId.
+
 ## Agent Selection
 | Agent | Reads | Writes | Bash | Use When |
 |-------|-------|--------|------|----------|
