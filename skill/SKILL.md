@@ -26,7 +26,7 @@ description: >
   `amicus start --no-ui` calls.
 ---
 
-# Amicus: Multi-Model Subagent Tool
+# Amicus: Multi-Model Sidecar Tool
 
 Spawn parallel conversations with different LLMs (Gemini, GPT, ChatGPT, Codex, o3, etc.) and fold results back into your context.
 
@@ -60,7 +60,7 @@ Amicus uses the OpenCode SDK to communicate with LLM providers. You need to conf
 
 ### Option A: OpenRouter (Recommended for Multi-Model Access)
 
-OpenRouter provides unified access to many models (Gemini, GPT-4, Claude, o3, etc.) with a single API key.
+OpenRouter provides unified access to many models (Gemini, GPT-4, Claude, o3, etc.) with a single API key. If you'd rather not hand-edit JSON, run `amicus setup` instead — it stores the key for you.
 
 **Step 1: Get an OpenRouter API key**
 - Sign up at https://openrouter.ai
@@ -322,13 +322,6 @@ amicus models --check            # audit configured aliases against the catalog
 The catalog is cached at `~/.config/amicus/model-catalog.json` and refreshes automatically;
 `start`/`fanout` validate models against it before launching (skip with `--no-validate-model`).
 
-### Abort a Running Session
-
-```bash
-amicus abort <task_id>     # stop one session
-amicus abort --all         # stop every running session in this project
-```
-
 ### List Past Sidecars
 
 ```bash
@@ -394,6 +387,13 @@ amicus read <task_id> --metadata      # Show session metadata
 - `--metadata`: Show session metadata (model, agent, timestamps, etc.)
 - `--cwd <path>`: Project directory (default: current directory)
 
+### Abort a Running Session
+
+```bash
+amicus abort <task_id>     # stop one session
+amicus abort --all         # stop every running session in this project
+```
+
 ---
 
 ## Models Available
@@ -418,7 +418,7 @@ amicus models --search gemini
 ```
 
 Aliases are seeded by `amicus setup` and audited by `amicus models --check`, which suggests
-replacements for stale aliases.
+replacements for stale aliases. See also [Inspect the Model Catalog](#inspect-the-model-catalog) for `--refresh` and the cache location.
 
 ---
 
@@ -636,7 +636,7 @@ This is useful when you want to:
 - **Default agent is `build`** — `chat` agent requires interactive UI and will stall in headless mode
 - **Always use headless when spawning multiple sidecars at once** (see Multi-LLM rule below)
 
-**Multi-LLM Rule:** When the user asks to query two or more LLMs simultaneously (e.g., "ask Gemini and ChatGPT", "compare three models"), use `--no-ui` for **all** of them. Launch them in parallel with `run_in_background: true`. Only switch to interactive if the user explicitly asks.
+**Multi-LLM Rule:** When the SAME prompt goes to N models, use `amicus fanout` (see [Fan Out One Prompt to N Models](#fan-out-one-prompt-to-n-models)) — one headless wave, one JSON result. When prompts differ per model, use separate parallel `amicus start --no-ui` calls with `run_in_background: true`. Only switch to interactive if the user explicitly asks.
 
 **Agent Headless Compatibility:**
 
@@ -647,6 +647,8 @@ This is useful when you want to:
 | `explore` | Yes | Read-only codebase exploration |
 | `general` | Yes | Full-access subagent |
 | `chat` | **No** | Blocked — requires interactive mode for write permissions |
+
+(`explore` and `general` are OpenCode-native agent types accepted by `--agent`; custom agents from `~/.config/opencode/agents/` are passed through as-is.)
 
 ```bash
 # Error: chat + headless
@@ -968,6 +970,7 @@ amicus start --model gemini --prompt "Task"
 
 1. [ ] Install amicus: `npm install -g amicus`
 2. [ ] Configure API access (choose one):
-   - [ ] OpenRouter: Create `~/.local/share/opencode/auth.json` with your key
+   - [ ] Run `amicus setup` (recommended — wizard stores keys and seeds aliases)
+   - [ ] OpenRouter manual: Create `~/.local/share/opencode/auth.json` with your key
    - [ ] Direct API: Set environment variable (`GOOGLE_GENERATIVE_AI_API_KEY`, etc.)
 3. [ ] Test amicus: `amicus start --model <your-model> --prompt "Hello" --no-ui`
