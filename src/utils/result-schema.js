@@ -216,6 +216,36 @@ function buildWaveResultFromSession(project, waveId) {
   });
 }
 
+/**
+ * Build a model-catalog document (`models [--search] [--refresh] --json`).
+ * @param {{models: Array, fetchedAt: number|null, refreshed?: boolean, search?: string|null}} opts
+ */
+function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null }) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    type: 'model-catalog',
+    fetchedAt: fetchedAt || null,
+    refreshed,
+    search,
+    count: models.length,
+    models,
+  };
+}
+
+/**
+ * Build an alias-audit document (`models --check --json`).
+ * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean}} opts
+ */
+function buildAuditDoc({ stale, catalogAvailable }) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    type: 'alias-audit',
+    catalogAvailable,
+    staleCount: stale.length,
+    stale,
+  };
+}
+
 module.exports = {
   SCHEMA_VERSION,
   TERMINAL_STATUSES,
@@ -226,4 +256,6 @@ module.exports = {
   waveExitCode,
   buildRunResultFromSession,
   buildWaveResultFromSession,
+  buildCatalogDoc,
+  buildAuditDoc,
 };

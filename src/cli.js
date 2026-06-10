@@ -297,6 +297,7 @@ Commands:
   resume      Reopen a previous session
   continue    New session building on previous
   read        Output session summary/conversation
+  models      List/search the model catalog, refresh it, audit aliases
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
@@ -347,6 +348,12 @@ Options for 'fanout':
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
+
+Options for 'models':
+  --search <q>                 Filter by substring over model id and name
+  --refresh                    Force-refresh the catalog from provider APIs
+  --check                      Audit aliases against the catalog (exit = stale count)
+  --json                       Machine-readable output
 
 Options for 'list':
   --status <filter>            Filter by status (running, complete)

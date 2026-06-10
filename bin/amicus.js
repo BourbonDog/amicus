@@ -90,6 +90,11 @@ async function main() {
       case 'read':
         await handleRead(args);
         break;
+      case 'models': {
+        const { handleModels } = require('../src/sidecar/models');
+        exitCode = await handleModels(args);
+        break;
+      }
       case 'setup':
         await handleSetup(args);
         break;
