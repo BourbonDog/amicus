@@ -2,8 +2,8 @@
 const { isOneShotCommand, armExitWatchdog } = require('../../src/utils/lifecycle');
 
 describe('isOneShotCommand', () => {
-  test('start/continue/resume/list/read/abort are one-shot', () => {
-    for (const c of ['start', 'continue', 'resume', 'list', 'read', 'abort']) {
+  test('start/continue/resume/list/read/abort/fanout are one-shot', () => {
+    for (const c of ['start', 'continue', 'resume', 'list', 'read', 'abort', 'fanout']) {
       expect(isOneShotCommand(c)).toBe(true);
     }
   });

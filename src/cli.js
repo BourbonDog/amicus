@@ -292,6 +292,7 @@ Usage: amicus <command> [options]
 
 Commands:
   start       Launch a new amicus session
+  fanout      Run N models on the same prompt in parallel (headless)
   list        Show previous sessions
   resume      Reopen a previous session
   continue    New session building on previous
@@ -308,6 +309,8 @@ Options for 'start':
                                - Direct API: google/gemini-2.5-flash
                                - OpenRouter: openrouter/google/gemini-2.5-flash
   --prompt <text>              Required. Task description
+  --prompt-file <path>         Read the prompt from a UTF-8 file (XOR --prompt)
+  --json                       With --no-ui: emit the run result as stable JSON
   --agent <agent>              OpenCode agent to use (see Agent Types below)
   --session-id <id|"current">  Session ID to pull context from (default: current)
   --cwd <path>                 Project directory (default: cwd)
@@ -332,6 +335,18 @@ Options for 'start':
   --validate-model             (Deprecated: validation is on by default)
   --no-validate-model          Skip model-catalog validation before launch
   --position <pos>             Window position: right (default), left, center
+
+Options for 'fanout':
+  --models <a,b,c>             Required. Comma-separated aliases or provider/model IDs
+  --prompt <text>              Task briefing (or use --prompt-file)
+  --prompt-file <path>         Read the briefing from a UTF-8 file (avoids the
+                               ~32KB Windows argument cap). Mutually exclusive
+                               with --prompt. Also works with 'start'.
+  --wave-id <id>               Explicit wave ID (leg IDs become <id>-1..N)
+  --json                       Emit the wave result as stable JSON on stdout
+  Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
+  --no-context, --context-*, --mcp*, --no-validate-model, --cwd
+  Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
 
 Options for 'list':
   --status <filter>            Filter by status (running, complete)

@@ -69,10 +69,14 @@ async function main() {
     process.exit(0);
   }
 
+  let exitCode = 0;
   try {
     switch (command) {
       case 'start':
         await handleStart(args);
+        break;
+      case 'fanout':
+        exitCode = await handleFanout(args);
         break;
       case 'list':
         await handleList(args);
@@ -111,8 +115,9 @@ async function main() {
   // F3 #15: one-shot commands must not hang on a lingering handle. The work is
   // done here; give natural drain a brief grace, then force-exit as a net.
   // (mcp is long-lived and never reaches this point.)
+  if (exitCode) { process.exitCode = exitCode; }
   if (isOneShotCommand(command)) {
-    armExitWatchdog(0, 1500, { log: (m, meta) => logger.debug(m, meta) });
+    armExitWatchdog(exitCode, 1500, { log: (m, meta) => logger.debug(m, meta) });
   }
 }
 
@@ -161,6 +166,62 @@ async function handleStart(args) {
     coworkProcess: args['cowork-process'],
     position: args.position
   });
+}
+
+/**
+ * Handle 'amicus fanout' command (F4).
+ * Returns the wave exit code: 0 all complete, 2 partial, 1 none/hard failure,
+ * 130/143 when the wave was signal-aborted.
+ */
+async function handleFanout(args) {
+  const { resolvePromptSource } = require('../src/utils/prompt-source');
+  const promptRes = resolvePromptSource(args);
+  if (promptRes.error) {
+    console.error(promptRes.error);
+    process.exit(1);
+  }
+  if (typeof args.models !== 'string' || !args.models.trim()) {
+    console.error('Error: --models is required (comma-separated aliases or provider/model IDs)');
+    process.exit(1);
+  }
+  if (args['wave-id']) {
+    const check = validateTaskId(String(args['wave-id']));
+    if (!check.valid) {
+      console.error(check.error);
+      process.exit(1);
+    }
+  }
+  if (args.agent && String(args.agent).toLowerCase() === 'chat') {
+    console.error('Error: --agent chat is interactive-only; fanout is headless');
+    process.exit(1);
+  }
+
+  // Direct require — the src/index.js public re-export is added later (Task 13)
+  const { runFanout } = require('../src/sidecar/fanout');
+  const { exitCode } = await runFanout({
+    models: args.models,
+    prompt: promptRes.prompt,
+    promptMeta: promptRes.promptMeta,
+    waveId: args['wave-id'],
+    project: args.cwd || process.cwd(),
+    agent: args.agent || args.mode,
+    thinking: args.thinking,
+    timeout: args.timeout,
+    summaryLength: args['summary-length'],
+    includeContext: !args['no-context'],
+    sessionId: args['session-id'],
+    contextTurns: args['context-turns'],
+    contextSince: args['context-since'],
+    contextMaxTokens: args['context-max-tokens'],
+    mcp: args.mcp,
+    mcpConfig: args['mcp-config'],
+    noMcp: args['no-mcp'],
+    excludeMcp: args['exclude-mcp'],
+    noValidateModel: args['no-validate-model'],
+    json: !!args.json,
+    client: args.client,
+  });
+  return exitCode;
 }
 
 /**
