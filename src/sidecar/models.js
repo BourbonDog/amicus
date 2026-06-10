@@ -75,7 +75,7 @@ async function runRefresh(args) {
   const models = await refreshCatalog();
   if (args.json) {
     process.stdout.write(JSON.stringify(buildCatalogDoc({
-      models, fetchedAt: Date.now(), refreshed: true
+      models, fetchedAt: models.length > 0 ? Date.now() : null, refreshed: true
     }), null, 2) + '\n');
     return 0;
   }
@@ -123,6 +123,10 @@ async function runCheck(args) {
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
 async function handleModels(args) {
+  if (args.search === true) {
+    process.stderr.write('Error: --search requires a value\n');
+    return 1;
+  }
   if (args.refresh) { return runRefresh(args); }
   if (args.check) { return runCheck(args); }
   return runList(args);

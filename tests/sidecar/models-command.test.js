@@ -32,7 +32,7 @@ function captureStdout(fn) {
   const writes = [];
   const orig = process.stdout.write;
   process.stdout.write = (s) => { writes.push(String(s)); return true; };
-  return Promise.resolve(fn()).finally(() => { process.stdout.write = orig; })
+  return Promise.resolve().then(fn).finally(() => { process.stdout.write = orig; })
     .then(code => ({ code, out: writes.join('') }));
 }
 
@@ -134,5 +134,27 @@ describe('amicus models', () => {
     expect(usage).toContain('models');
     expect(usage).toContain('--refresh');
     expect(usage).toContain('--check');
+  });
+
+  it('--search without a value errors instead of dumping the catalog', async () => {
+    const { handleModels } = loadHandler();
+    const writes = [];
+    const orig = process.stderr.write;
+    process.stderr.write = (s) => { writes.push(String(s)); return true; };
+    let code;
+    try { code = await handleModels({ _: ['models'], search: true }); }
+    finally { process.stderr.write = orig; }
+    expect(code).toBe(1);
+    expect(writes.join('')).toContain('--search requires a value');
+  });
+
+  it('npm model scripts point at a live CLI entry (dangling-script regression guard)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+    for (const name of ['refresh-models', 'models:info', 'models:check']) {
+      expect(pkg.scripts[name]).toContain('bin/amicus.js models');
+    }
+    expect(fs.existsSync(path.join(__dirname, '..', '..', 'bin', 'amicus.js'))).toBe(true);
   });
 });
