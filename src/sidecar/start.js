@@ -147,7 +147,7 @@ async function startSidecar(options) {
     contextMaxTokens = 80000, noUi, headless = false, timeout = 15,
     agent, mcp, mcpConfig, summaryLength = 'normal', thinking,
     client, sessionDir, noMcp, excludeMcp, opencodePort, coworkProcess, includeContext = true,
-    position = 'right'
+    position = 'right', json = false, modelInput = null
   } = options;
 
   const effectivePrompt = prompt || briefing;
@@ -201,7 +201,7 @@ async function startSidecar(options) {
     releaseLock(sessDir);
   }
 
-  outputSummary(summary);
+  if (!json) { outputSummary(summary); }
   const metaPath = SessionPaths.metadataFile(sessDir);
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
@@ -219,7 +219,17 @@ async function startSidecar(options) {
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Session completed with error', { taskId, error: result.error });
   } else {
-    finalizeSession(sessDir, summary, effectiveProject, meta);
+    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json });
+  }
+
+  if (json) {
+    const { buildRunResult } = require('../utils/result-schema');
+    const finalMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    const doc = buildRunResult({
+      taskId, metadata: finalMeta, result, summary,
+      modelInput, sessionDir: sessDir,
+    });
+    console.log(JSON.stringify(doc, null, 2));
   }
 }
 

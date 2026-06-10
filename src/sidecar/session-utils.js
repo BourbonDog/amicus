@@ -66,7 +66,7 @@ function saveInitialContext(sessionDir, systemPrompt, userMessage) {
 }
 
 /** Finalize session - detect conflicts, save summary, update metadata */
-function finalizeSession(sessionDir, summary, project, metadata) {
+function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
 
   // Detect file conflicts
@@ -78,7 +78,12 @@ function finalizeSession(sessionDir, summary, project, metadata) {
 
   if (conflicts.length > 0) {
     const conflictWarning = formatConflictWarning(conflicts);
-    console.log(`\n${conflictWarning}\n`);
+    if (opts.quietStdout) {
+      // JSON mode: stdout must stay pure JSON (F4) — warn on stderr instead.
+      process.stderr.write(`\n${conflictWarning}\n`);
+    } else {
+      console.log(`\n${conflictWarning}\n`);
+    }
     metadata.conflicts = conflicts;
   }
 

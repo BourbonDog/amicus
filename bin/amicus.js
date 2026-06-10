@@ -126,6 +126,21 @@ async function main() {
  * Spec Reference: §4.1
  */
 async function handleStart(args) {
+  // F4: --prompt-file support (XOR --prompt) and --json gating
+  if (args.prompt !== undefined || args['prompt-file'] !== undefined) {
+    const { resolvePromptSource } = require('../src/utils/prompt-source');
+    const promptRes = resolvePromptSource(args);
+    if (promptRes.error) {
+      console.error(promptRes.error);
+      process.exit(1);
+    }
+    args.prompt = promptRes.prompt;
+  }
+  if (args.json && !args['no-ui']) {
+    console.error('Error: --json requires --no-ui');
+    process.exit(1);
+  }
+
   const { model, alias } = resolveModelFromArgs(args);
   args.model = model;
   args.model = await validateFallbackModel(args, alias);
@@ -164,7 +179,9 @@ async function handleStart(args) {
     noMcp: args['no-mcp'],
     excludeMcp: args['exclude-mcp'],
     coworkProcess: args['cowork-process'],
-    position: args.position
+    position: args.position,
+    json: !!args.json,
+    modelInput: alias || null,
   });
 }
 

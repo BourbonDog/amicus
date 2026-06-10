@@ -60,4 +60,11 @@ describe('resolvePromptSource', () => {
     const r = resolvePromptSource({ 'prompt-file': f });
     expect(r.error).toMatch(/empty/);
   });
+
+  it('errors on a BOM-only file (still empty after strip)', () => {
+    const f = path.join(tmp, 'bom-only.md');
+    fs.writeFileSync(f, '﻿');
+    const r = resolvePromptSource({ 'prompt-file': f });
+    expect(r.error).toMatch(/empty/);
+  });
 });

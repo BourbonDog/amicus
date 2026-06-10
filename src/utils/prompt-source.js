@@ -46,10 +46,8 @@ function resolvePromptSource(args) {
     };
   }
 
-  return {
-    prompt: String(inline),
-    promptMeta: { source: 'inline', file: null, chars: String(inline).length },
-  };
+  const text = String(inline);
+  return { prompt: text, promptMeta: { source: 'inline', file: null, chars: text.length } };
 }
 
 module.exports = { resolvePromptSource };
