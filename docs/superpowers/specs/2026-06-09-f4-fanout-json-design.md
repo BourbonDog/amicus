@@ -1,7 +1,7 @@
 ---
 title: F4 — Council-Native Fan-Out & Structured JSON Output — Design Spec
 date: 2026-06-09
-status: finalized (2026-06-09 brainstorm — approved by owner)
+status: implemented (2026-06-09 — subagent-driven; full suite green 1757/5/0, lint clean; real-LLM smoke passed)
 owner: BourbonDog
 references:
   - docs/superpowers/specs/2026-06-07-amicus-product-design.md (§6 F4)
@@ -11,6 +11,14 @@ supersedes: none
 ---
 
 # F4 — Council-Native Fan-Out & Structured JSON Output
+
+> **Implemented 2026-06-09** (branch `f4-exec`, subagent-driven: 14 tasks, two-stage review per task, final Opus holistic review — verdict MERGE, all 7 acceptance criteria PASS).
+> - `amicus fanout` + `runFanout` orchestrator: one shared OpenCode server, concurrent legs as ordinary sessions (`parentWave`), per-leg backstop watchdogs, signal abort that finalizes an aborted wave through normal control flow, atomic `wave.json` (tmp+rename).
+> - `--json` (versioned `result-schema.js` run/wave docs, pure stdout incl. throw paths) on `fanout`/`start`/`read`; `--prompt-file` (BOM-safe, kills the ~32 KB Windows arg cap) on `start`/`fanout`.
+> - MCP `amicus_fanout` (briefing-via-file spawn, immediate `{waveId, taskIds[]}`) + wave-aware `amicus_status` (live legs, hard-kill crash detection w/ leg cascade) and `amicus_read`; `sidecar_fanout` alias.
+> - Engine hardening: consecutive-poll-failure fast-exit in `runHeadless` (dead server fails in ~30 s, never a false-complete leg); Windows native-bin PATH fix (`path-setup.js`) unblocking real-LLM runs.
+> - Result: suite 1757 passed / 5 skipped / 0 failed (baseline 1669 + 88 new), lint clean; real 2-model wave smoke passed end-to-end (~11 s, both legs complete).
+> - Follow-ups (out of F4 scope): council-skill rewrite to consume fanout/JSON (tracked in product spec); Cowork session pinning for MCP fanout context (`coworkProcess`/`parentSession` not forwarded); JSON error docs for CLI pre-flight arg errors under `--json`; `amicus_status` `readOnlyHint` now inaccurate (crash detection writes — pre-existing pattern); `counts` buckets exclude `crashed`/`idle-timeout` (documented in-code).
 
 ## 1. Summary
 
