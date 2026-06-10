@@ -262,12 +262,46 @@ const handlers = {
       });
       const { TERMINAL_STATUSES } = require('./utils/result-schema');
       const done = legs.filter(l => TERMINAL_STATUSES.includes(l.status)).length;
+
+      // Crash-detection for hard-killed fanout processes: the wave branch
+      // returns early, so the single-session pid probe below never runs here.
+      if (metadata.status === 'running' && metadata.pid) {
+        try { process.kill(metadata.pid, 0); } catch {
+          const crashedAt = new Date().toISOString();
+          Object.assign(metadata, {
+            status: 'crashed', crashedAt,
+            reason: 'Fan-out process exited unexpectedly',
+          });
+          fs.writeFileSync(path.join(sessionDir, 'metadata.json'),
+            JSON.stringify(metadata, null, 2));
+          // Cascade to legs whose pollers died with the parent
+          for (const leg of legs) {
+            if (leg.status === 'running') {
+              const legMeta = readMetadata(leg.taskId, cwd);
+              if (legMeta) {
+                Object.assign(legMeta, {
+                  status: 'crashed', crashedAt,
+                  reason: 'Parent fan-out process killed',
+                });
+                fs.writeFileSync(
+                  path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
+                  JSON.stringify(legMeta, null, 2));
+                leg.status = 'crashed';
+              }
+            }
+          }
+        }
+      }
+
       const ms = Date.now() - new Date(metadata.createdAt).getTime();
       const response = {
         taskId: metadata.taskId, type: 'wave', status: metadata.status,
         legsComplete: done, legsTotal: legs.length, legs,
         elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
       };
+      if (metadata.status === 'crashed' || metadata.status === 'error') {
+        response.reason = metadata.reason || 'Unknown error';
+      }
       const responseText = JSON.stringify(response);
       if (metadata.status === 'running') {
         return { content: [{ type: 'text', text: responseText }, { type: 'text', text: HEADLESS_STATUS_REMINDER }] };
