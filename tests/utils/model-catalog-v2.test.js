@@ -76,7 +76,29 @@ describe('model-catalog schema v2', () => {
     mockFetch(ROWS);
     const { refreshCatalog, catalogPath } = require('../../src/utils/model-catalog');
     await refreshCatalog();
-    expect(fs.existsSync(catalogPath() + '.tmp')).toBe(false);
+    expect(fs.readdirSync(tmpDir).filter(f => f.includes('.tmp'))).toEqual([]);
     expect(fs.existsSync(catalogPath())).toBe(true);
+    expect(JSON.parse(fs.readFileSync(catalogPath(), 'utf-8')).models).toEqual(ROWS);
+  });
+
+  it('floor-only refresh (offline) does not clobber an existing cache', async () => {
+    const FLOOR = [
+      { id: 'anthropic/claude-opus-4-6', name: 'Opus', contextLength: null, pricing: null },
+      { id: 'anthropic/claude-sonnet-4-6', name: 'Sonnet', contextLength: null, pricing: null },
+    ];
+    mockFetch(FLOOR);
+    const { refreshCatalog, getCatalog, catalogPath } = require('../../src/utils/model-catalog');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(catalogPath(), JSON.stringify({ schemaVersion: 2, fetchedAt: Date.now() - 1000, models: ROWS }));
+    const refreshed = await refreshCatalog();
+    expect(refreshed).toEqual([]); // floor-only = failed refresh per contract
+    expect(await getCatalog()).toEqual(ROWS); // good cache stands
+  });
+
+  it('floor-only refresh on a fresh machine writes nothing', async () => {
+    mockFetch([{ id: 'anthropic/claude-opus-4-6', name: 'Opus', contextLength: null, pricing: null }]);
+    const { refreshCatalog, catalogPath } = require('../../src/utils/model-catalog');
+    expect(await refreshCatalog()).toEqual([]);
+    expect(fs.existsSync(catalogPath())).toBe(false);
   });
 });

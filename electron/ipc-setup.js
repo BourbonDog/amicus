@@ -31,7 +31,8 @@ function registerSetupHandlers(ipcMain, getMainWindow) {
       const result = saveApiKey(provider, key);
       // F5: warm the model catalog as soon as a key lands so the Step 2
       // picker renders instantly. Fire-and-forget; failures are silent
-      // (Step 2's get-catalog will retry via its own getCatalogInfo()).
+      // (a failed warm-up never clobbers the cache; Step 2's get-catalog or
+      // the refresh button retry it).
       if (result && result.success !== false) {
         setImmediate(() => {
           try {
@@ -162,7 +163,9 @@ function registerSetupHandlers(ipcMain, getMainWindow) {
     try {
       const { refreshCatalog, getCatalogInfo } = require('../src/utils/model-catalog');
       await refreshCatalog();
-      return await getCatalogInfo();
+      // maxAgeMs: Infinity — report whatever the cache now holds without
+      // re-triggering a second fetch when the refresh just failed.
+      return await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
     } catch (err) {
       logger.error('refresh-catalog handler error', { error: err.message });
       return { models: [], fetchedAt: null };

@@ -72,4 +72,20 @@ describe('catalog IPC', () => {
     await new Promise(r => setImmediate(r));
     expect(refresh).not.toHaveBeenCalled();
   });
+
+  it('sidecar:refresh-catalog reports the cache without a second fetch on failure', async () => {
+    const refresh = jest.fn(async () => []);
+    const info = jest.fn(async (opts) => ({ models: [], fetchedAt: 7 }));
+    jest.resetModules();
+    jest.doMock('../../src/utils/model-catalog', () => ({
+      getCatalogInfo: info, refreshCatalog: refresh,
+    }));
+    const handlers = {};
+    const { registerSetupHandlers } = require('../../electron/ipc-setup');
+    registerSetupHandlers({ handle: (n, f) => { handlers[n] = f; } }, () => null);
+    const res = await handlers['sidecar:refresh-catalog']({});
+    expect(res).toEqual({ models: [], fetchedAt: 7 });
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(info.mock.invocationCallOrder[0]);
+    expect(info).toHaveBeenCalledWith({ maxAgeMs: Number.POSITIVE_INFINITY });
+  });
 });

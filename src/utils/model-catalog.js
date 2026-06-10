@@ -41,13 +41,15 @@ function readCache() {
 
 /** Write the cache atomically (tmp+rename). Best-effort; never throws. @param {Array} models */
 function writeCache(models) {
+  const target = catalogPath();
+  const tmp = `${target}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(_getConfigDir(), { recursive: true, mode: 0o700 });
-    const target = catalogPath();
-    const tmp = `${target}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, target);
-  } catch { /* best-effort */ }
+  } catch {
+    try { fs.unlinkSync(tmp); } catch { /* best-effort */ }
+  }
 }
 
 /**
@@ -57,8 +59,14 @@ function writeCache(models) {
 async function refreshCatalog() {
   const keys = _readApiKeyValues();
   const models = await _fetchAllModels(keys);
-  if (models && models.length > 0) { writeCache(models); }
-  return models || [];
+  // The anthropic rows are a hardcoded zero-network floor: a result containing
+  // ONLY them means every network provider failed. Treat that as a failed
+  // refresh — never clobber a previously-good cache with the floor (the
+  // "stale cache stands" contract).
+  const networkRows = (models || []).filter(m => m && typeof m.id === 'string' && !m.id.startsWith('anthropic/'));
+  if (networkRows.length === 0) { return []; }
+  writeCache(models);
+  return models;
 }
 
 /**
