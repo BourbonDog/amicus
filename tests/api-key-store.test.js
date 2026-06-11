@@ -57,11 +57,38 @@ describe('api-key-store', () => {
       expect(result).toBe(path.join(tmpDir, '.env'));
     });
 
-    it('should default to ~/.config/sidecar/.env', () => {
+    it('should default to ~/.config/amicus/.env', () => {
       delete process.env.SIDECAR_ENV_DIR;
       const result = getEnvPath();
       const homeDir = process.env.HOME || process.env.USERPROFILE;
-      expect(result).toBe(path.join(homeDir, '.config', 'sidecar', '.env'));
+      expect(result).toBe(path.join(homeDir, '.config', 'amicus', '.env'));
+    });
+
+    it('should return path inside AMICUS_ENV_DIR when set', () => {
+      delete process.env.SIDECAR_ENV_DIR;
+      const amicusTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-envdir-'));
+      try {
+        process.env.AMICUS_ENV_DIR = amicusTmpDir;
+        const result = getEnvPath();
+        expect(result).toBe(path.join(amicusTmpDir, '.env'));
+      } finally {
+        delete process.env.AMICUS_ENV_DIR;
+        fs.rmSync(amicusTmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('AMICUS_ENV_DIR wins over legacy SIDECAR_ENV_DIR', () => {
+      const amicusTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-envdir-win-'));
+      try {
+        // Both set — AMICUS_ must win
+        process.env.SIDECAR_ENV_DIR = tmpDir;
+        process.env.AMICUS_ENV_DIR = amicusTmpDir;
+        const result = getEnvPath();
+        expect(result).toBe(path.join(amicusTmpDir, '.env'));
+      } finally {
+        delete process.env.AMICUS_ENV_DIR;
+        fs.rmSync(amicusTmpDir, { recursive: true, force: true });
+      }
     });
   });
 

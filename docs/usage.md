@@ -2,61 +2,211 @@
 
 ## CLI Commands
 
+The `am` alias is interchangeable with `amicus` everywhere.
+
 ```bash
 # Core workflow
-amicus start --model <model> --prompt "<task>" [--agent <agent>] [--validate-model]
-amicus list [--status <filter>] [--all]
+amicus start --model <model> --prompt "<task>"
+amicus start --model <model> --prompt-file briefing.md --no-ui --json
+amicus fanout --models gemini,deepseek,gpt --prompt "Review this" --json
+amicus list [--status <filter>] [--all] [--json]
 amicus resume <task_id>
-amicus continue <task_id> --briefing "..."
-amicus read <task_id> [--summary|--conversation]
+amicus continue <task_id> --prompt "Next step..."
+amicus read <task_id> [--conversation|--metadata|--json]
+amicus abort <task_id>
+amicus abort --all
 
 # Setup & maintenance
-amicus setup                        # Configure default model and aliases
-amicus setup --add-alias name=model # Add a custom alias
-amicus mcp                          # Start MCP server (stdio transport)
-amicus update                       # Update to latest version
+amicus setup                              # Full wizard: keys, default model, aliases
+amicus setup --api-keys                   # Open just the API-key step
+amicus setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
+amicus models                             # List the live catalog
+amicus models --search gemini             # Filter by substring
+amicus models --refresh                   # Force-fetch from provider APIs
+amicus models --check                     # Audit aliases against catalog
+amicus mcp                                # Start MCP server (stdio transport)
+amicus update                             # Update to latest version
 ```
 
-## MCP Server (for Cowork / Claude Desktop)
+---
+
+## `amicus start` — Launch a Session
 
 ```bash
-# Auto-registered during npm install. Manual registration:
+amicus start --model gemini --prompt "Fact-check the auth approach"
+amicus start --model opus --prompt-file briefing.md --no-ui --json
+amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
+```
+
+**Key options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--model <model>` | Alias or full `provider/model` ID. | config default |
+| `--prompt <text>` | Task description (mutually exclusive with `--prompt-file`). | *(required)* |
+| `--prompt-file <path>` | Read the prompt from a UTF-8 file. Preferred for long briefings; avoids the ~32 KB Windows argument cap. | |
+| `--no-ui` | Run headless (autonomous, no window). | off |
+| `--json` | Emit the run result as a stable JSON run document on stdout (requires `--no-ui`). | off |
+| `--timeout <minutes>` | Headless timeout. | `15` |
+| `--agent <agent>` | `Chat` (interactive), `Build` (full tool access), `Plan` (read-only). | `Chat` interactive / `Build` headless |
+| `--no-validate-model` | Skip catalog validation before launch. | validation on |
+
+See `amicus start --help` or the README for the full option list (context, MCP, thinking, summary length, window position, etc.).
+
+**Catalog validation.** For an explicit `--model`, the model is checked against the live catalog before launch — a typo'd name fails fast with same-vendor suggestions. For a model inherited from a previous session (`continue`/`resume` without `--model`), validation is **advisory**: a warning is printed but the session starts anyway. Skip with `--no-validate-model`.
+
+---
+
+## `amicus fanout` — Same Prompt, Many Models
+
+Fanout runs one headless wave: every leg receives the **same** prompt concurrently (this is the shared-prompt model that the council's review stages are built on). When all legs settle, Amicus emits a single JSON wave document on stdout.
+
+```bash
+amicus fanout --models gemini,deepseek,gpt --prompt "Review this design" --json
+amicus fanout --models gemini,opus --prompt-file briefing.md --json --wave-id my-wave-1
+```
+
+**Key options:**
+
+| Option | Description |
+|--------|-------------|
+| `--models <a,b,c>` | Comma-separated aliases or full provider IDs (required). |
+| `--prompt <text>` | Shared briefing (mutually exclusive with `--prompt-file`). |
+| `--prompt-file <path>` | Read the shared briefing from a file. Preferred for long briefs and required on Windows when content exceeds ~32 KB. |
+| `--wave-id <id>` | Set the wave ID explicitly; leg IDs become `<wave-id>-1` … `<wave-id>-N`. |
+| `--json` | Emit the wave document on stdout. |
+| `--no-validate-model` | Skip catalog validation. |
+
+**Exit codes:** `0` all legs complete · `2` partial wave (at least one leg failed) · `1` none complete / hard failure · `130` SIGINT · `143` SIGTERM.
+
+**Wave document shape:**
+
+```json
+{
+  "schemaVersion": 1,
+  "waveId": "...",
+  "status": "complete",
+  "counts": { "total": 2, "complete": 2, "error": 0, "timeout": 0, "aborted": 0 },
+  "legs": [
+    {
+      "taskId": "...", "model": "...", "modelInput": "...", "agent": "...",
+      "status": "complete", "summary": "...", "error": null,
+      "createdAt": "...", "completedAt": "...", "durationMs": 0
+    }
+  ]
+}
+```
+
+`status` is `complete | partial | error | aborted`. Each leg's `summary` is that model's full response.
+
+**Fanout vs. N parallel starts.** Use `fanout` when every leg should receive the **same prompt** — this is what the council's independent review waves use. Use N separate `start` calls when each leg needs a **different prompt**.
+
+---
+
+## Other Commands
+
+```bash
+amicus list                          # Current project
+amicus list --status running         # Filter: running, complete, aborted, error
+amicus list --all                    # All projects
+amicus list --json                   # Machine-readable
+
+amicus read <id>                     # Fold summary (default)
+amicus read <id> --conversation      # Full conversation
+amicus read <id> --metadata          # Session metadata
+amicus read <id> --json              # Stable JSON run or wave document
+
+amicus resume <id>                   # Reopen session with full history
+amicus continue <id> --prompt "..."  # New session; previous one as read-only context
+
+amicus abort <id>                    # Stop one running session
+amicus abort --all                   # Stop all running sessions in this project
+```
+
+---
+
+## MCP Server
+
+```bash
+# Auto-registered on npm install. Manual registration:
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `amicus_start`, `amicus_status`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_setup`, `amicus_guide`, `amicus_abort`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`
 
-Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`
+The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
+
+Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `idle-timeout`
+
+> Legacy `sidecar_*` tool names are still registered as aliases of each `amicus_*` tool for backward compatibility.
+
+---
 
 ## OpenCode Agent Types
 
-The `--agent` option specifies which OpenCode native agent to use:
+The `--agent` option controls which OpenCode agent drives the session:
 
 | Agent | Description | Tool Access |
 |-------|-------------|-------------|
-| **Build** | Default primary agent | Full (read, write, bash, task) |
+| **Chat** | Interactive conversation | Reads freely, asks before writes/bash |
+| **Build** | Full-access primary agent (headless default) | Read, write, bash, task |
 | **Plan** | Read-only analysis | Read-only |
-| **General** | Full-access subagent | Full |
-| **Explore** | Read-only subagent | Read-only |
 
-Custom agents defined in `~/.config/opencode/agents/` or `.opencode/agents/` are also supported.
+`--agent Chat` is interactive-only and incompatible with `--no-ui`. Custom agents defined in `~/.config/opencode/agents/` or `.opencode/agents/` are also supported.
+
+---
+
+## Context Sharing
+
+When you `start` or `fanout`, Amicus automatically includes your recent Claude Code conversation history as context. Tune it:
+
+- `--context-turns <N>` — max conversation turns to include (default 50).
+- `--context-since <duration>` — time window (e.g. `2h`); overrides turns.
+- `--context-max-tokens <N>` — cap the context size (default 80000).
+- `--no-context` — skip parent history entirely (useful for `fanout` with a self-contained briefing).
+
+---
 
 ## Process Self-Termination
 
-Amicus processes automatically shut down after a period of inactivity, so you do not need to manually kill lingering processes. Default idle timeouts:
+Amicus processes automatically shut down after a period of inactivity. Default idle timeouts:
 
-- **Headless mode**: 15 minutes (`AMICUS_IDLE_TIMEOUT_HEADLESS`)
-- **Interactive mode**: 60 minutes (`AMICUS_IDLE_TIMEOUT_INTERACTIVE`)
-- **Shared server**: 30 minutes (`AMICUS_IDLE_TIMEOUT_SERVER`)
+- **Headless mode**: 15 minutes
+- **Interactive mode**: 60 minutes
+- **Shared server**: 30 minutes
 
-Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination. See [docs/configuration.md](configuration.md#process-lifecycle) for all lifecycle env vars.
+> **Note:** Idle-timeout env var names currently use the legacy `SIDECAR_IDLE_TIMEOUT*` prefix. See [docs/configuration.md](configuration.md#process-lifecycle) for the full list.
+
+Set `SIDECAR_IDLE_TIMEOUT=0` to disable self-termination. This is useful when running long batch jobs that must not timeout between calls.
+
+---
+
+## JSON Output
+
+With `--json`, Amicus emits stable, versioned documents on stdout.
+
+**Run document** (single session):
+
+```json
+{
+  "taskId": "...", "model": "...", "modelInput": "...", "agent": "...",
+  "status": "complete", "summary": "...", "error": null,
+  "createdAt": "...", "completedAt": "...", "durationMs": 0
+}
+```
+
+`modelInput` is the alias you passed; `model` is the resolved id. `status` is one of `complete | error | timeout | aborted | crashed | idle-timeout`.
+
+**Exit codes:** `0` success · `2` partial wave · `1` error / hard failure · `130` SIGINT · `143` SIGTERM.
+
+---
 
 ## Agentic Evals
 
 ```bash
-node evals/run_eval.js --eval-id 1       # Single eval
-node evals/run_eval.js --all             # All evals
-node evals/run_eval.js --all --dry-run   # Print commands only
+node evals/run_eval.js --eval-id 1          # Single eval
+node evals/run_eval.js --all                # All evals
+node evals/run_eval.js --all --dry-run      # Print commands only
 node evals/run_eval.js --eval-id 1 --model opus  # Override model
 ```
 

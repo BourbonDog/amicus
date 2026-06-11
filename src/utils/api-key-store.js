@@ -1,10 +1,11 @@
 /**
  * API Key Store — reading, saving, and validating API keys.
- * Keys stored in ~/.config/sidecar/.env with 0o600 permissions.
+ * Keys stored in ~/.config/amicus/.env with 0o600 permissions.
  */
 const fs = require('fs');
 const path = require('path');
 const { validateApiKey, validateOpenRouterKey, VALIDATION_ENDPOINTS } = require('./api-key-validation');
+const { getCompatEnv } = require('./env-compat');
 
 /** Maps provider IDs to environment variable names */
 const PROVIDER_ENV_MAP = {
@@ -22,15 +23,16 @@ const LEGACY_KEY_NAMES = {
 
 /** Get the path to the .env file */
 function getEnvPath() {
-  if (process.env.SIDECAR_ENV_DIR) {
-    const resolved = path.resolve(process.env.SIDECAR_ENV_DIR);
+  const envDir = getCompatEnv('ENV_DIR');
+  if (envDir) {
+    const resolved = path.resolve(envDir);
     if (resolved.includes('\0')) {
-      throw new Error('Invalid SIDECAR_ENV_DIR: null bytes not allowed');
+      throw new Error('Invalid ENV_DIR: null bytes not allowed');
     }
     return path.join(resolved, '.env');
   }
   const homeDir = process.env.HOME || process.env.USERPROFILE;
-  return path.join(homeDir, '.config', 'sidecar', '.env');
+  return path.join(homeDir, '.config', 'amicus', '.env');
 }
 
 /** Parse a .env file into a key-value map (comments/blanks excluded) */
