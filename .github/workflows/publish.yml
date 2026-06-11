@@ -21,10 +21,13 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
+      # OIDC trusted publishing needs npm >= 11.5; Node 22 bundles npm 10.x
+      - run: npm install -g npm@latest
+
       - run: npm ci
+      # Auth via npm Trusted Publishing (GitHub OIDC) — no token. Provenance is
+      # implied under trusted publishing; the explicit flag keeps intent visible.
       - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         env:
