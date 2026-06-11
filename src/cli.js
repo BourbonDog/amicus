@@ -111,7 +111,7 @@ function isBooleanFlag(key) {
      'api-keys',
      'validate-model',
      'no-validate-model',
-     'remove'
+     'remove'                // used by 'key' command only; other handlers ignore it
    ];
   return booleanFlags.includes(key);
 }

@@ -73,6 +73,23 @@ describe('handleKey — save', () => {
     expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown provider'));
     exitSpy.mockRestore();
   });
+
+  test('prints error and exits when provider given but no key and no --remove', async () => {
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    await expect(handleKey({ _: ['key', 'deepseek'] })).rejects.toThrow('exit');
+    expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining('API key is required'));
+    exitSpy.mockRestore();
+  });
+
+  test('prints error and exits when saveApiKey fails after valid key', async () => {
+    validateApiKey.mockResolvedValue({ valid: true });
+    saveApiKey.mockReturnValue({ success: false, error: 'File permission denied' });
+
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    await expect(handleKey({ _: ['key', 'deepseek', 'sk-test'] })).rejects.toThrow('exit');
+    expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining('File permission denied'));
+    exitSpy.mockRestore();
+  });
 });
 
 describe('handleKey — remove', () => {
