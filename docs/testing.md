@@ -466,7 +466,7 @@ Complete mapping of test files to their targets and focus areas.
 | `sidecar/start.test.js` | Session starting | Task ID generation, metadata creation, MCP config |
 | `sidecar/resume.test.js` | Session resumption | Drift detection, metadata loading |
 | `sidecar/continue.test.js` | Session continuation | Previous session loading, context building |
-| `sidecar/read.test.js` | Session reading | Listing, age formatting, output modes |
+| `read-json.test.js` | Session reading | `read --json` run/wave documents, wave-aware list |
 | `sidecar/context-builder.test.js` | Context building | Session resolution, message filtering |
 | `sidecar/session-utils.test.js` | Shared utilities | Session paths, finalization, heartbeat |
 | `sidecar/progress.test.js` | Progress reader | Message counts, latest activity, last activity |
