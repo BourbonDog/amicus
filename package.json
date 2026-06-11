@@ -1,7 +1,7 @@
 {
   "name": "amicus",
   "version": "0.5.2",
-  "description": "A parallel AI window for Claude Code. Fork conversations to Gemini, GPT, DeepSeek, or any model via OpenRouter, then fold results back.",
+  "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "keywords": [
     "claude",
     "claude-code",
@@ -12,14 +12,19 @@
     "parallel",
     "llm",
     "gemini",
-    "cowork"
+    "cowork",
+    "council",
+    "second-opinion",
+    "fanout"
   ],
-  "author": "John Renaldi",
+  "author": "BourbonDog",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jrenaldi79/sidecar"
+    "url": "https://github.com/BourbonDog/amicus.git"
   },
+  "bugs": "https://github.com/BourbonDog/amicus/issues",
+  "homepage": "https://github.com/BourbonDog/amicus#readme",
   "bin": {
     "amicus": "./bin/amicus.js",
     "am": "./bin/amicus.js",
@@ -35,6 +40,7 @@
     "src/",
     "electron/",
     "skill/",
+    "skills/",
     "scripts/postinstall.js",
     "scripts/setup-hooks.js"
   ],
