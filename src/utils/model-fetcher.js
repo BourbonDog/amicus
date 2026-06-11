@@ -89,7 +89,7 @@ const FETCH_TIMEOUT_MS = 5000;
 
 /**
  * Fetch models from a single provider API
- * @param {string} provider - Provider name (openrouter, google, openai, anthropic)
+ * @param {string} provider - Provider name (openrouter, google, openai, anthropic, deepseek)
  * @param {string} key - API key
  * @returns {Promise<Array<{id: string, name: string, contextLength: number|null, pricing: {prompt: string|null, completion: string|null}|null}>>} Normalized model list
  */

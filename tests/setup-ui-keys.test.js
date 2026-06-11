@@ -20,11 +20,12 @@ describe('setup-ui-keys', () => {
       expect(html.length).toBeGreaterThan(0);
     });
 
-    it('should contain provider buttons for all 4 providers', () => {
+    it('should contain provider buttons for all 5 providers', () => {
       expect(html).toContain('data-provider="openrouter"');
       expect(html).toContain('data-provider="google"');
       expect(html).toContain('data-provider="openai"');
       expect(html).toContain('data-provider="anthropic"');
+      expect(html).toContain('data-provider="deepseek"');
     });
 
     it('should mark OpenRouter as recommended', () => {

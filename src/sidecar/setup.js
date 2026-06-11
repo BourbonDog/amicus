@@ -68,7 +68,7 @@ function createDefaultConfig(defaultModel) {
 
 /**
  * Detect available API keys from .env file and process.env
- * @returns {{openrouter: boolean, google: boolean, openai: boolean, anthropic: boolean}}
+ * @returns {{openrouter: boolean, google: boolean, openai: boolean, anthropic: boolean, deepseek: boolean}}
  */
 function detectApiKeys() {
   const { readApiKeys } = require('../utils/api-key-store');
