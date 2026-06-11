@@ -193,6 +193,20 @@ describe('setup-ui-model', () => {
           expect(pills).toMatch(/data-provider="google"[^>]*>Google AI<\/button>/);
         }
       });
+
+      it('deepseek toggle pill shows DeepSeek label', () => {
+        // build HTML for the deepseek card with both openrouter and deepseek keys configured
+        const configuredKeys = { openrouter: true, deepseek: true };
+        const html = buildModelStepHTML(MODEL_CHOICES, undefined, configuredKeys);
+        const deepseekIdx = html.indexOf('value="deepseek"');
+        expect(deepseekIdx).toBeGreaterThan(-1);
+        const cardEnd = html.indexOf('</label>', deepseekIdx);
+        const cardHtml = html.slice(deepseekIdx, cardEnd);
+        // assert the HTML contains 'DeepSeek' inside the pill for the deepseek route
+        expect(cardHtml).toContain('route-toggle');
+        expect(cardHtml).toContain('data-provider="deepseek"');
+        expect(cardHtml).toContain('>DeepSeek<');
+      });
     });
   });
 
@@ -264,6 +278,10 @@ describe('setup-ui-model', () => {
       expect(PROVIDER_NAMES.google).toBe('Google AI');
       expect(PROVIDER_NAMES.openai).toBe('OpenAI');
       expect(PROVIDER_NAMES.anthropic).toBe('Anthropic');
+    });
+
+    it('should include DeepSeek', () => {
+      expect(PROVIDER_NAMES.deepseek).toBe('DeepSeek');
     });
   });
 });

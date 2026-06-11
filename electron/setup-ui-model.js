@@ -19,7 +19,8 @@ const PROVIDER_NAMES = {
   openrouter: 'OpenRouter',
   google: 'Google AI',
   openai: 'OpenAI',
-  anthropic: 'Anthropic'
+  anthropic: 'Anthropic',
+  deepseek: 'DeepSeek'
 };
 
 /**
