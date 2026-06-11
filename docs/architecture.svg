@@ -33,7 +33,7 @@
   <text x="555" y="54" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#E8E0D8" text-anchor="middle">Claude Desktop</text>
   <text x="555" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" fill="#A5A9B5" text-anchor="middle">(Cowork MCP)</text>
 
-  <!-- Arrows: Clients → Sidecar Core -->
+  <!-- Arrows: Clients → Amicus Core -->
   <line x1="245" y1="86" x2="245" y2="140" stroke="#D97757" stroke-width="2" marker-end="url(#arrow-highlight)" />
   <text x="245" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="500" fill="#D97757" text-anchor="middle" dx="-50">amicus start</text>
 

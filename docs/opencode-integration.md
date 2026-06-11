@@ -18,15 +18,21 @@ How Amicus integrates with OpenCode's native capabilities and avoids redundant i
 - Sending model as string causes 400 Bad Request
 - Use `formatModelForAPI()` from `electron/ui/model-picker.js` for conversion
 
+### Session Status Idle Signal
+
+The OpenCode SDK exposes `client.session.status({ path: { id } })`, wrapped by `getSessionStatus()` in `src/opencode-client.js`. In headless runs this is the **authoritative completion signal**: when the response is `{ type: 'idle' }`, the poll loop in `src/headless.js` treats the session as done and exits immediately.
+
+This signal is **gated on real output existing** (the `output.length > 0` check at `src/headless.js` line 500) so a pre-processing `idle` response from the SDK cannot end the run before the model has produced any text. If the status call fails or returns an unexpected shape, the code falls back transparently to the activity-heuristic idle detection (consecutive polls with no output growth, no new tool calls, no new messages). This gating was introduced as the F1 authoritative-idle-signal improvement.
+
 ---
 
 ## What OpenCode Provides (Use Native APIs)
 
 | Feature | OpenCode API | How We Use It |
 |---------|-------------|---------------|
-| **Agent Types** | Native `Build`, `Plan`, `Explore`, `General` | Pass `agent` parameter to `sendPrompt()` |
+| **Agent Types** | Native `build`, `plan`, `explore`, `general`, `chat` | Pass `agent` parameter to `sendPrompt()` |
 | **Tool Permissions** | Enforced by agent framework | NO custom prompt-based restrictions |
-| **Session Status** | `session.status()` | Used in `headless.js` for completion detection |
+| **Session Status** | `session.status()` | Used in `headless.js` as authoritative idle signal (F1) |
 | **Session Messages** | `session.messages()` | Used for polling and conversation capture |
 | **Child Sessions** | `session.create({ parentID })` | Used for subagent spawning |
 | **Health Check** | `config.get()` | Used to verify server ready state |
@@ -48,35 +54,42 @@ The following custom implementations were **removed** because OpenCode handles t
 
 | Removed | Reason | Native Replacement |
 |---------|--------|-------------------|
-| ~~`buildCodeModeEnvironment()`~~ | Tool restrictions in prompts | OpenCode `Build` agent |
-| ~~`buildPlanModeEnvironment()`~~ | Tool restrictions in prompts | OpenCode `Plan` agent |
-| ~~`buildAskModeEnvironment()`~~ | Tool restrictions in prompts | OpenCode `Build` with `permissions` |
+| ~~`buildCodeModeEnvironment()`~~ | Tool restrictions in prompts | OpenCode `build` agent |
+| ~~`buildPlanModeEnvironment()`~~ | Tool restrictions in prompts | OpenCode `plan` agent |
+| ~~`buildAskModeEnvironment()`~~ | Tool restrictions in prompts | OpenCode `build` with `permissions` |
 | ~~Custom heartbeat polling~~ | Basic sleep loop | `session.status()` API |
 
 ---
 
 ## Agent Type Mapping
 
+Agent name mapping is implemented in `src/utils/agent-mapping.js`. All known OpenCode native agents are normalised to lowercase before being sent to the API:
+
 ```javascript
 // src/utils/agent-mapping.js
-mapAgentToOpenCode('build')    // -> { agent: 'Build' }
-mapAgentToOpenCode('plan')     // -> { agent: 'Plan' }
-mapAgentToOpenCode('explore')  // -> { agent: 'Explore' }
-mapAgentToOpenCode('general')  // -> { agent: 'General' }
-mapAgentToOpenCode('custom')   // -> { agent: 'custom' } // passed through
+mapAgentToOpenCode('build')    // -> { agent: 'build' }
+mapAgentToOpenCode('plan')     // -> { agent: 'plan' }
+mapAgentToOpenCode('explore')  // -> { agent: 'explore' }
+mapAgentToOpenCode('general')  // -> { agent: 'general' }
+mapAgentToOpenCode('chat')     // -> { agent: 'chat' }
+mapAgentToOpenCode('custom')   // -> { agent: 'custom' } // passed through as lowercase
 ```
 
-**Headless mode defaults:** When `--no-ui` is set, the default agent is `build` (not `chat`).
-The `chat` agent requires user interaction for write/bash permissions and stalls in headless mode.
-`isHeadlessSafe(agent)` returns `true` (safe), `false` (chat), or `null` (custom/unknown).
+**Default when agent is unset:** `mapAgentToOpenCode(undefined)` returns `{ agent: 'chat' }`.
+
+**Headless mode default:** When `--no-ui` is set, Amicus hard-codes `agent || 'build'` before calling `mapAgentToOpenCode` (`src/headless.js` line 275), so the effective default in headless mode is `build`, not `chat`. The `chat` agent requires user interaction for write/bash permissions and stalls in headless mode.
+
+`isHeadlessSafe(agent)` returns `true` (safe: build/plan/explore/general), `false` (unsafe: chat), or `null` (custom/unknown).
+
+**Legacy exported names** `startSidecar`, `listSidecars`, `resumeSidecar`, `continueSidecar`, `readSidecar` are real source identifiers that exist in `src/index.js` as deprecated shims pointing to the canonical `startAmicus` / `listAmicus` / etc. exports. They are kept for backward compatibility, tracked in `docs/SHIMS.md`.
 
 ## Key Integration Files
 
 | File | OpenCode Integration |
 |------|---------------------|
 | `src/opencode-client.js` | SDK wrapper - `createSession()`, `sendPrompt()`, `getSessionStatus()` |
-| `src/headless.js` | Uses `session.status()` for completion detection |
-| `src/utils/agent-mapping.js` | Maps Amicus modes to OpenCode agents |
+| `src/headless.js` | Uses `session.status()` for authoritative idle detection (F1); falls back to activity heuristic |
+| `src/utils/agent-mapping.js` | Maps Amicus agent names to OpenCode agents (all lowercase) |
 | `electron/main.js` | Creates child sessions for subagents |
 
 ---
