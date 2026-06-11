@@ -253,6 +253,7 @@ describe('model-fetcher', () => {
     function mockHttpsGet(statusCode, body) {
       const mockResponse = {
         statusCode,
+        // Simplified sync mock: fires data/end immediately (real Node streams are async, but ordering holds here)
         on: jest.fn((event, cb) => {
           if (event === 'data') { cb(typeof body === 'string' ? body : JSON.stringify(body)); }
           if (event === 'end') { cb(); }
@@ -276,6 +277,7 @@ describe('model-fetcher', () => {
         expect(header).toEqual({ 'Authorization': 'Bearer sk-ds-test' });
       });
 
+
       it('normalize maps DeepSeek data array to correct shape', () => {
         const body = JSON.stringify({
           object: 'list',
@@ -294,6 +296,11 @@ describe('model-fetcher', () => {
       it('normalize returns [] on empty data array', () => {
         const body = JSON.stringify({ object: 'list', data: [] });
         const result = PROVIDER_FETCH_CONFIG.deepseek.normalize(body);
+        expect(result).toEqual([]);
+      });
+
+      test('deepseek normalize returns [] when data key is missing', () => {
+        const result = PROVIDER_FETCH_CONFIG.deepseek.normalize(JSON.stringify({ object: 'list' }));
         expect(result).toEqual([]);
       });
     });
