@@ -279,13 +279,13 @@ Draft new or updated entries for the per-model sections of `MODEL-NOTES.md` that
 - **confirm-rate** — incorporate this run's share of each model's findings that ended up Confirmed.
 - Merge into the existing row for that model; prune the notes column to stay tight.
 
-**Compose the proposed MODEL-NOTES diff.** Combine the run-lessons updates and the reviewer-reliability table updates into a single proposed diff (old → new for every changed section). Show it to the user in full.
+**Compose the proposed MODEL-NOTES diff.** Combine the run-lessons updates and the reviewer-reliability table updates into a single proposed diff (old → new for every changed section). **Write the full diff to a file in the run folder** — `_tmp-proposed-model-notes-update.md` — so the user can open and review it before deciding. Presenting the diff as chat text alone is **not sufficient**: an approval dialog can hide the chat transcript, so the user may be asked to decide on a diff they never saw.
 
-**Wait for explicit approval before writing anything.** Present the diff and ask:
+**Wait for explicit approval before writing anything.** Ask, with the diff file's path inside the approval prompt itself:
 
-> Approve this MODEL-NOTES update? (yes / no / edit)
+> Proposed MODEL-NOTES update written to `<run-folder>/_tmp-proposed-model-notes-update.md` — open it to review. Approve this MODEL-NOTES update? (yes / no / edit)
 
-If the user approves, write the changes. If they say "edit", incorporate their corrections and show the revised diff before writing. Do not write any partial update — write only after the full diff is approved.
+If the user approves, write the changes. If they say "edit", incorporate their corrections, rewrite the diff file, and re-present its path for approval before writing. Do not write any partial update — write only after the full diff is approved.
 
 **Keep MODEL-NOTES tight.** Do not append new bullets when an existing entry covers the same ground — merge or reword instead. If a note has been superseded by a better mitigation, prune the old one. The goal is a compact, authoritative reference, not a changelog.
 
@@ -377,8 +377,9 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on) + a
     **run-stats table**: one row per model call — **stage** (which stage you launched the call for) plus **model, status, durationMs** read from the wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
-- Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet) live in the
-  run folder and are cleaned up at the end of the run.
+- Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet, proposed
+  MODEL-NOTES diff) live in the run folder and are cleaned up at the end of the run — the proposed-diff file
+  only after the Stage-6 approval decision is resolved.
 
 ---
 
