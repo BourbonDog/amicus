@@ -41,6 +41,7 @@
     "electron/",
     "skill/",
     "skills/",
+    "CHANGELOG.md",
     "scripts/postinstall.js",
     "scripts/setup-hooks.js"
   ],

@@ -301,6 +301,7 @@ Commands:
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
+    --add-alias <name=model> Add a model alias without the full wizard
   update      Update to latest version
   mcp         Start MCP server (stdio transport)
 

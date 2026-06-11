@@ -7,8 +7,8 @@ _Design for `SKILL.md` and `MODEL-NOTES.md` of the `second-opinion` skill._
 
 ## 1. Intent
 
-Upgrade `second-opinion` by porting the best mechanics of the **LLM Council** web app
-(`C:\Users\sendt\OneDrive\AIProjects\GitHub\llm-council`) — peer cross-review, anonymized
+Upgrade `second-opinion` by porting the best mechanics of the **LLM Council** web-app
+pattern — peer cross-review, anonymized
 ranking, aggregate scoring, and a designated chairman — into the skill, while keeping its
 existing strengths (model recommendation, sidecar orchestration, tiered accept/deny,
 reviewed-copy output, and the MODEL-NOTES self-improvement loop).
