@@ -180,9 +180,74 @@ async function handleMcp() {
   await startMcpServer();
 }
 
+/**
+ * Handle 'amicus key' command
+ * Lists, saves, or removes API keys for a provider without opening the Electron wizard.
+ */
+async function handleKey(args) {
+  const { readApiKeys, readApiKeyHints, saveApiKey, removeApiKey, PROVIDER_ENV_MAP } = require('./utils/api-key-store');
+  const { validateApiKey } = require('./utils/api-key-validation');
+
+  const provider = args._[1];
+  const keyArg = args._[2];
+
+  // List mode: no provider given
+  if (!provider) {
+    const configured = readApiKeys();
+    const hints = readApiKeyHints();
+    const knownProviders = Object.keys(PROVIDER_ENV_MAP);
+    console.log('');
+    console.log('Configured API keys:');
+    for (const p of knownProviders) {
+      const status = configured[p] ? `✓  ${hints[p]}` : '✗  not set';
+      console.log(`  ${p.padEnd(12)} ${status}`);
+    }
+    console.log('');
+    return;
+  }
+
+  // Validate provider
+  if (!PROVIDER_ENV_MAP[provider]) {
+    console.error(`Error: Unknown provider "${provider}". Known providers: ${Object.keys(PROVIDER_ENV_MAP).join(', ')}`);
+    process.exit(1);
+  }
+
+  // Remove mode
+  if (args.remove) {
+    const result = removeApiKey(provider);
+    if (!result.success) {
+      console.error(`Error: ${result.error}`);
+      process.exit(1);
+    }
+    console.log(`${provider} key removed.`);
+    return;
+  }
+
+  // Save mode: key required
+  if (!keyArg) {
+    console.error(`Error: API key is required. Usage: amicus key ${provider} <apikey>`);
+    process.exit(1);
+  }
+
+  console.log(`Validating ${provider} key...`);
+  const validation = await validateApiKey(provider, keyArg);
+  if (!validation.valid) {
+    console.error(`Error: ${validation.error}`);
+    process.exit(1);
+  }
+
+  const result = saveApiKey(provider, keyArg);
+  if (!result.success) {
+    console.error(`Error: ${result.error}`);
+    process.exit(1);
+  }
+  console.log(`${provider} key validated and saved.`);
+}
+
 module.exports = {
   handleSetup,
   handleAbort,
   handleUpdate,
   handleMcp,
+  handleKey,
 };

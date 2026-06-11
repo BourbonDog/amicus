@@ -14,7 +14,7 @@ loadCredentials();
 const { parseArgs, validateStartArgs, getUsage } = require('../src/cli');
 const { validateTaskId } = require('../src/utils/validators');
 const { resolveModelFromArgs, validateFallbackModel } = require('../src/utils/start-helpers');
-const { handleSetup, handleAbort, handleUpdate, handleMcp } = require('../src/cli-handlers');
+const { handleSetup, handleAbort, handleUpdate, handleMcp, handleKey } = require('../src/cli-handlers');
 const { isOneShotCommand, armExitWatchdog } = require('../src/utils/lifecycle');
 const { logger } = require('../src/utils/logger');
 
@@ -97,6 +97,9 @@ async function main() {
       }
       case 'setup':
         await handleSetup(args);
+        break;
+      case 'key':
+        await handleKey(args);
         break;
       case 'abort':
         await handleAbort(args);

@@ -110,7 +110,8 @@ function isBooleanFlag(key) {
      'help',
      'api-keys',
      'validate-model',
-     'no-validate-model'
+     'no-validate-model',
+     'remove'
    ];
   return booleanFlags.includes(key);
 }
@@ -302,6 +303,10 @@ Commands:
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
     --add-alias <name=model> Add a model alias without the full wizard
+  key         Manage API keys from the command line
+    <provider> <apikey>      Validate and save a key
+    <provider> --remove      Remove a saved key
+    (no args)                List all configured providers
   update      Update to latest version
   mcp         Start MCP server (stdio transport)
 
