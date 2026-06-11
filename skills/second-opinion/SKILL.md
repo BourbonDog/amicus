@@ -82,12 +82,12 @@ Each council model reviews **the artifact** independently. Write one Stage-1 bri
 
 ```
 amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
-  --agent Plan --no-context --summary-length verbose --timeout <min>
+  --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
 Run it in the background (`run_in_background: true`); you are notified on completion — do not
 poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
-ONE JSON wave document on stdout (`schemaVersion: 1`): check `status` (`complete` | `partial` |
+ONE JSON wave document on stdout (`schemaVersion: 1`; the wave's id field is `waveId`, each leg's id is `taskId`): check `status` (`complete` | `partial` |
 `error`), `counts`, and each leg in `legs[]` — a leg's `summary` field IS that model's review;
 `model`/`modelInput` identify the reviewer (`model` is the resolved id, `modelInput` the alias you passed — use the alias for `review-<model>.md` filenames); `status`/`error` identify failures. Exit code 0 =
 all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted. (To re-fetch a single leg later: `amicus read <taskId> --json`.)
@@ -98,7 +98,7 @@ red-team brief, launch it as a separate concurrent solo run alongside the wave:
 ```
 amicus start --model <redteam-model> --no-ui --json \
   --prompt-file <run-folder>/_tmp-briefing-redteam.md \
-  --agent Plan --no-context --summary-length verbose --timeout <min>
+  --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
 Its stdout is a single run document; the `summary` field is the review.
@@ -153,7 +153,7 @@ model. Write the bundle + judging instructions to `_tmp-bundle-stage2.md` and la
 
 ```
 amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
-  --agent Plan --no-context --summary-length verbose --timeout <min>
+  --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
 (Background, same JSON handling as Stage 1.) Each judge's leg `summary` is its ranking +
@@ -193,7 +193,7 @@ A designated **non-Claude** chair synthesizes the verdict across all reviews, ra
 ```
 amicus start --model <chair> --no-ui --json \
   --prompt-file <run-folder>/_tmp-chair-packet.md \
-  --agent Plan --no-context --summary-length verbose --timeout <min>
+  --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
 The run document's `summary` is the verdict. The packet contains:
@@ -255,8 +255,9 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
 - `verdict.md` (already saved in Stage 3)
 - `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was
   applied (+ the "How Claude's review fared" readout when "Claude in the council" is on) + a
-  **run-stats table**: one row per model call (stage, model, status, durationMs) read from the
-  wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
+  **run-stats table**: one row per model call — **stage** (which stage you launched the call for)
+  plus **model, status, durationMs** read from the wave/run JSON documents. The schema carries no
+  cost data — do not invent cost figures.
 
 Tell the user exactly which files were written and where.
 

@@ -11,9 +11,9 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 - **Fork & Fold Workflow**: Spawn specialized models for deep exploration, fold summaries back
 - **Multi-Model Routing**: Use the right model for the job (Gemini's large context, o3's reasoning, GPT-4's coding)
-- **Clean Context**: Isolate deep explorations to sidecars, keep main conversation focused
+- **Clean Context**: Isolate deep explorations to parallel sessions, keep main conversation focused
 - **Async-Safe Operations**: File conflict detection and context drift warnings
-- **Session Persistence**: Resume, continue, or read previous sidecar sessions
+- **Session Persistence**: Resume, continue, or read previous sessions
 
 ### Key Value Proposition
 
@@ -28,8 +28,18 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ### Development
 ```bash
-npm start                    # Run sidecar CLI
+npm start                    # Run amicus CLI (interactive)
 npm run lint                 # Run ESLint
+```
+
+### CLI
+```bash
+amicus start --model gemini --prompt "..."  # Start a headless session
+amicus fanout --models g4o,gemini --prompt "..." --json  # Multi-model fanout wave
+amicus models                              # List available models
+amicus models --search gpt                # Filter catalog
+amicus read <taskId>                      # Read session output
+amicus list                               # List sessions
 ```
 
 ### Testing
@@ -60,11 +70,11 @@ npm run validate-docs                # Alias for --full mode
 ┌─────────────────────────────────────────────────────────────┐
 │                       Claude Code                            │
 │                            │                                 │
-│                  sidecar CLI / MCP Server                    │
+│                  amicus CLI / MCP Server                    │
 │      ┌──────────────┬────────┴────────────────────┐         │
 │      │              │                             │         │
 │      ▼              ▼                             ▼         │
-│  Interactive    Headless Mode      MCP (sidecar mcp)        │
+│  Interactive    Headless Mode      MCP (amicus mcp)        │
 │  (Electron)    (OpenCode API)     (stdio transport)         │
 │      │              │              Cowork / Desktop          │
 │      └──────────────┴──────────────┘                        │
@@ -305,7 +315,7 @@ Version-controlled in `.husky/` and executed directly by git via `core.hooksPath
 
 ## Structured Logging
 
-Use `src/utils/logger.js` (levels: error/warn/info/debug). Logs go to stderr to avoid polluting stdout (used for sidecar summary output). See global CLAUDE.md for general logging guidelines.
+Use `src/utils/logger.js` (levels: error/warn/info/debug). Logs go to stderr to avoid polluting stdout (used for session summary output). See global CLAUDE.md for general logging guidelines.
 
 ---
 
@@ -358,7 +368,7 @@ See [docs/jsdoc-setup.md](docs/jsdoc-setup.md) for JSDoc patterns, `.d.ts` gener
 
 - [ ] Run `npm test` - all tests passing
 - [ ] Run `npm run lint` - no lint errors
-- [ ] **If UI changed**: Launch Electron with `SIDECAR_DEBUG_PORT=9223`, inspect via CDP, take screenshot to verify
+- [ ] **If UI changed**: Launch Electron with `AMICUS_DEBUG_PORT=9223`, inspect via CDP, take screenshot to verify
 - [ ] Update CLAUDE.md if architecture changed
 
 ---
@@ -394,7 +404,7 @@ The pre-commit hook runs this automatically. See [docs/doc-system.md](docs/doc-s
 
 ## Process Lifecycle Management
 
-Sidecar processes self-terminate after inactivity via IdleWatchdog. MCP sessions use a shared multiplexed server instead of per-session processes.
+Amicus processes self-terminate after inactivity via IdleWatchdog. MCP sessions use a shared multiplexed server instead of per-session processes.
 
 ### Environment Variables
 
@@ -435,4 +445,9 @@ GEMINI.md and AGENTS.md are symlinks to CLAUDE.md -- no sync needed.
 - [docs/electron-testing.md](docs/electron-testing.md) - CDP patterns
 - [docs/jsdoc-setup.md](docs/jsdoc-setup.md) - JSDoc, `.d.ts` generation
 - [evals/README.md](evals/README.md) - Agentic eval system
-- [docs/plans/index.md](docs/plans/index.md) - Design plans
+- docs/superpowers/plans/ — design plans and specs
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contributor guide
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [skills/second-opinion/SKILL.md](skills/second-opinion/SKILL.md) — LLM Council skill
+- [skills/second-opinion/MODEL-NOTES.md](skills/second-opinion/MODEL-NOTES.md) — per-model operating rules
+- [skills/second-opinion/COUNCIL-DESIGN.md](skills/second-opinion/COUNCIL-DESIGN.md) — council design spec

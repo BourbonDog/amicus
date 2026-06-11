@@ -10,7 +10,7 @@ const path = require('path');
 const { validateTaskId, safeSessionDir } = require('./utils/validators');
 
 /**
- * Handle 'sidecar setup' command
+ * Handle 'amicus setup' command
  * Runs interactive setup wizard or adds an alias via --add-alias
  */
 async function handleSetup(args) {
@@ -150,7 +150,7 @@ async function handleAbort(args) {
 }
 
 /**
- * Handle 'sidecar update' command
+ * Handle 'amicus update' command
  * Updates amicus to the latest version
  */
 async function handleUpdate() {
@@ -164,7 +164,7 @@ async function handleUpdate() {
   }
   const result = await performUpdate();
   if (result.success) {
-    console.log("Updated successfully! Run 'sidecar --version' to verify.");
+    console.log("Updated successfully! Run 'amicus --version' to verify.");
   } else {
     console.error(`Update failed: ${result.error}`);
     process.exit(1);
@@ -172,7 +172,7 @@ async function handleUpdate() {
 }
 
 /**
- * Handle 'sidecar mcp' command
+ * Handle 'amicus mcp' command
  * Starts the MCP server on stdio transport
  */
 async function handleMcp() {
