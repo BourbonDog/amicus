@@ -10,6 +10,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const { logger } = require('../utils/logger');
 const { getElectronPath } = require('./interactive');
+const { getCompatEnv } = require('../utils/env-compat');
 
 /**
  * Launch the Electron setup window for API key entry
@@ -29,7 +30,7 @@ function launchSetupWindow() {
       AMICUS_MODE: 'setup'
     };
 
-    const debugPort = process.env.AMICUS_DEBUG_PORT || process.env.SIDECAR_DEBUG_PORT;
+    const debugPort = getCompatEnv('DEBUG_PORT');
     const args = debugPort
       ? [`--remote-debugging-port=${debugPort}`, mainPath]
       : [mainPath];
