@@ -81,8 +81,6 @@ mapAgentToOpenCode('custom')   // -> { agent: 'custom' } // passed through as lo
 
 `isHeadlessSafe(agent)` returns `true` (safe: build/plan/explore/general), `false` (unsafe: chat), or `null` (custom/unknown).
 
-**Legacy exported names** `startSidecar`, `listSidecars`, `resumeSidecar`, `continueSidecar`, `readSidecar` are real source identifiers that exist in `src/index.js` as deprecated shims pointing to the canonical `startAmicus` / `listAmicus` / etc. exports. They are kept for backward compatibility, tracked in `docs/SHIMS.md`.
-
 ## Key Integration Files
 
 | File | OpenCode Integration |
@@ -91,6 +89,13 @@ mapAgentToOpenCode('custom')   // -> { agent: 'custom' } // passed through as lo
 | `src/headless.js` | Uses `session.status()` for authoritative idle detection (F1); falls back to activity heuristic |
 | `src/utils/agent-mapping.js` | Maps Amicus agent names to OpenCode agents (all lowercase) |
 | `electron/main.js` | Creates child sessions for subagents |
+| `src/sidecar/fanout.js` | `amicus fanout` reuses the same `runHeadless` path per leg over one shared server — see [Fanout Wave Architecture](architecture.md#fanout-wave-architecture). |
+
+---
+
+## Backward Compatibility
+
+**Legacy exported names** `startSidecar`, `listSidecars`, `resumeSidecar`, `continueSidecar`, `readSidecar` are real source identifiers that exist in `src/index.js` as deprecated shims pointing to the canonical `startAmicus` / `listAmicus` / etc. exports. They are kept for backward compatibility, tracked in `docs/SHIMS.md`.
 
 ---
 

@@ -6,7 +6,7 @@
 
 ## API Keys
 
-Amicus reads API keys from `~/.config/amicus/.env` and from `process.env`. The `.env` file wins over `process.env` so that keys written by `amicus setup` are not silently overridden by a shell environment.
+Amicus reads API keys from `~/.config/amicus/.env` and from `process.env`. Environment variables already set in your shell win; the `.env` file fills in anything unset; `auth.json` is the last fallback. Keys written by `amicus setup` are never silently overridden by something with higher priority.
 
 | Variable | Purpose |
 |----------|---------|

@@ -175,9 +175,9 @@ Amicus processes automatically shut down after a period of inactivity. Default i
 - **Interactive mode**: 60 minutes
 - **Shared server**: 30 minutes
 
-> **Note:** Idle-timeout env var names currently use the legacy `SIDECAR_IDLE_TIMEOUT*` prefix. See [docs/configuration.md](configuration.md#process-lifecycle) for the full list.
+Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination entirely. For per-mode control use `AMICUS_IDLE_TIMEOUT_HEADLESS`, `AMICUS_IDLE_TIMEOUT_INTERACTIVE`, or `AMICUS_IDLE_TIMEOUT_SERVER` (all in minutes). See [docs/configuration.md](configuration.md#process-lifecycle) for the full table.
 
-Set `SIDECAR_IDLE_TIMEOUT=0` to disable self-termination. This is useful when running long batch jobs that must not timeout between calls.
+Legacy `SIDECAR_IDLE_TIMEOUT*` names still honored (deprecated).
 
 ---
 
