@@ -90,16 +90,14 @@ describe('setup-ui-model', () => {
         expect(html).toContain('via OpenRouter');
       });
 
-      it('should show only static text when model has one route regardless of keys', () => {
-        // deepseek only has openrouter route — no toggle at all
-        const configuredKeys = { openrouter: true, google: true, openai: true };
+      it('should show route-toggle for deepseek when deepseek key is configured', () => {
+        // deepseek now has openrouter + deepseek direct routes — toggle shown when key present
+        const configuredKeys = { openrouter: true, google: true, openai: true, deepseek: true };
         const html = buildModelStepHTML(MODEL_CHOICES, undefined, configuredKeys);
         const deepseekIdx = html.indexOf('value="deepseek"');
         const cardEnd = html.indexOf('</label>', deepseekIdx);
         const cardHtml = html.slice(deepseekIdx, cardEnd);
-        expect(cardHtml).toContain('route-static');
-        // deepseek card should not have a route-toggle since it has only 1 route
-        expect(cardHtml).not.toContain('route-toggle');
+        expect(cardHtml).toContain('route-toggle');
       });
 
       it('should hide toggles when configuredKeys not provided', () => {
@@ -247,9 +245,11 @@ describe('setup-ui-model', () => {
       expect(opus.routes.anthropic).toContain('anthropic/');
     });
 
-    it('should only have openrouter route for deepseek', () => {
+    it('should have both openrouter and deepseek routes for deepseek', () => {
       const deepseek = MODEL_CHOICES.find(c => c.alias === 'deepseek');
-      expect(Object.keys(deepseek.routes)).toEqual(['openrouter']);
+      expect(Object.keys(deepseek.routes)).toContain('openrouter');
+      expect(Object.keys(deepseek.routes)).toContain('deepseek');
+      expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-chat');
     });
   });
 

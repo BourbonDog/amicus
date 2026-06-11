@@ -31,7 +31,8 @@ const CARDS = [
     routes: { openrouter: 'openrouter/anthropic/claude-opus-4.6',
               anthropic: 'anthropic/claude-opus-4-6' } },
   { alias: 'deepseek', label: 'DeepSeek v3.2', blurb: 'open-source',
-    routes: { openrouter: 'openrouter/deepseek/deepseek-v3.2' } },
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v3.2',
+              deepseek: 'deepseek/deepseek-chat' } },
 ];
 
 /** Alias-only entries (no wizard card); openrouter route only. */

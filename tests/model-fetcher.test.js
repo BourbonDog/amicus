@@ -371,3 +371,19 @@ describe('model-fetcher', () => {
     });
   });
 });
+
+const { listCuratedRoutes, toDefaultAliases } = require('../src/utils/curated-models');
+
+describe('curated-models deepseek routes', () => {
+  test('deepseek CARD has a direct deepseek route', () => {
+    const routes = listCuratedRoutes();
+    const direct = routes.find(r => r.alias === 'deepseek' && r.provider === 'deepseek');
+    expect(direct).toBeDefined();
+    expect(direct.model).toBe('deepseek/deepseek-chat');
+  });
+
+  test('toDefaultAliases deepseek still prefers openrouter route', () => {
+    const aliases = toDefaultAliases();
+    expect(aliases.deepseek).toMatch(/^openrouter\//);
+  });
+});

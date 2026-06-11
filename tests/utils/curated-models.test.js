@@ -58,9 +58,9 @@ describe('curated-models', () => {
 
   it('listCuratedRoutes flattens every route of every entry (cards + cardless)', () => {
     const routes = listCuratedRoutes();
-    // 9 card routes (4 dual-route cards + 1 single) + 15 cardless = 24; a
+    // 10 card routes (5 dual-route cards) + 15 cardless = 25; a
     // derivation that drops the direct routes must fail here (Task 4 depends on them).
-    expect(routes).toHaveLength(24);
+    expect(routes).toHaveLength(25);
     expect(routes).toContainEqual(
       { alias: 'opus', provider: 'anthropic', model: 'anthropic/claude-opus-4-6' }
     );
