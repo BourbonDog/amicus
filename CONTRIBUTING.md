@@ -1,6 +1,6 @@
 # Contributing to Amicus
 
-Thanks for helping! Amicus is an independent MIT fork of
+Thanks for helping! Amicus is an upgraded MIT fork of
 [Claude Sidecar](https://github.com/jrenaldi79/sidecar) (see `NOTICE`); the engine, council
 skill, and docs are all maintained in this monorepo.
 
