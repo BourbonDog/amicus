@@ -97,7 +97,7 @@
   <line x1="940" y1="265" x2="890" y2="230" stroke="#666" stroke-width="1.2" stroke-dasharray="5,4"/>
   <polygon points="892,234 884,228 888,226" fill="#666"/>
 
-  <!-- Sidecar window -->
+  <!-- Amicus window -->
   <g transform="translate(950, 110)">
     <rect width="180" height="120" rx="10" fill="url(#box-grad)" stroke="#D97757" stroke-width="1.2"/>
     <!-- Title bar -->

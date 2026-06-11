@@ -37,7 +37,7 @@
   <path d="M 200 130 L 290 130" fill="none" stroke="#D97757" stroke-width="2" marker-end="url(#arr)" />
   <text x="245" y="122" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#D97757" text-anchor="middle">Fork</text>
 
-  <!-- ===== Center: Sidecar Window ===== -->
+  <!-- ===== Center: Amicus Window ===== -->
   <rect x="300" y="50" width="200" height="160" fill="url(#box)" stroke="#D97757" stroke-width="2" rx="8" />
   <!-- Window title bar -->
   <rect x="300" y="50" width="200" height="24" fill="#D97757" opacity="0.15" rx="8" />
@@ -88,7 +88,7 @@
     <text x="100" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" fill="#6A6E7A" text-anchor="middle">via OpenRouter</text>
   </g>
 
-  <!-- Connecting line from sidecar to model list -->
+  <!-- Connecting line from Amicus to model list -->
   <line x1="500" y1="130" x2="560" y2="130" stroke="#3A3C4C" stroke-width="1" stroke-dasharray="3,3" />
 
   <!-- ===== Bottom tagline ===== -->
