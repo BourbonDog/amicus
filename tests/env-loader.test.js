@@ -36,7 +36,7 @@ describe('env-loader', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('should load keys from sidecar .env into process.env', () => {
+  it('should load keys from amicus .env into process.env', () => {
     fs.writeFileSync(
       path.join(tmpDir, '.env'),
       'OPENROUTER_API_KEY=sk-or-from-file\n',

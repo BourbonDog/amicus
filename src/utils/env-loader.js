@@ -27,7 +27,7 @@ function loadCredentials() {
       const fromFile = fileEntries.get(envVar);
       if (fromFile && fromFile.length > 0) {
         process.env[envVar] = fromFile;
-        logger.info(`Loaded ${envVar} from sidecar .env`);
+        logger.info(`Loaded ${envVar} from amicus .env`);
       }
     }
   }

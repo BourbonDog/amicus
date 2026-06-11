@@ -327,7 +327,7 @@ claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]
 
 ## Configuration
 
-`amicus setup` is the recommended way to configure Amicus — it writes API keys to `~/.config/amicus/.env` (`0600`) and persists your default model and aliases. The environment variables below are for overrides and tuning.
+`amicus setup` is the recommended way to configure Amicus — it writes API keys to `~/.config/amicus/.env` (`0600`) and persists your default model and aliases. The environment variables below are for overrides and tuning. Dev-only variables (mock/update testing) are documented in [docs/configuration.md](./docs/configuration.md).
 
 **API keys**
 
@@ -345,7 +345,8 @@ claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]
 |----------|---------|---------|
 | `LOG_LEVEL` | Log verbosity: `error`, `warn`, `info`, `debug`. | `error` |
 | `AMICUS_CONFIG_DIR` | Override the config directory (keys, catalog, sessions). | `~/.config/amicus` |
-| `AMICUS_FANOUT_MAX_LEGS` | Cap the number of legs in a single fanout wave. | |
+| `AMICUS_FANOUT_MAX_LEGS` | Cap the number of legs in a single fanout wave; non-positive values fall back to 10. | `10` |
+| `AMICUS_SHARED_SERVER` | When `1`, multiple MCP sessions share a single OpenCode Go process, eliminating cold-start latency. Set to `0` for per-process isolation or to diagnose a crash loop. | `1` |
 
 **Headless poller tuning** (advanced — rarely needed)
 
