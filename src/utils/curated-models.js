@@ -1,78 +1,105 @@
 /**
- * Curated Models — THE single source of truth for default model lists.
+ * Curated Models — family definitions + pinned fallbacks (v2).
  *
- * Three consumers derive from this module (F5 anti-drift):
- *   - src/utils/config.js DEFAULT_ALIASES   (toDefaultAliases)
- *   - electron/setup-ui-model.js MODEL_CHOICES (getCuratedModels)
- *   - src/sidecar/setup.js MODEL_CHOICES      (getCuratedModels)
- * Never hand-edit a model id anywhere else. `amicus models --check`
- * audits every route here against the live catalog.
+ * Families are MATCH RULES over the live catalog, not pinned truths:
+ * src/utils/quick-picks.js resolves each family to the current catalog
+ * flagship at setup time. The pinned `fallback` ids are used only when
+ * the catalog cannot resolve a route (offline / unkeyed provider) and to
+ * derive the static DEFAULT_ALIASES (runtime alias resolution must never
+ * wait on the network). `amicus models --check` audits every pinned route
+ * here against the live catalog AND warns when a fallback falls behind
+ * the live resolution.
  */
 
 'use strict';
 
 /**
- * Card entries (shown as wizard quick picks). `routes` maps provider →
- * full model id; the openrouter route doubles as the default alias target.
- * Direct (non-openrouter) route ids MUST be verified against the provider
- * whenever they change.
+ * Wizard quick-pick families. `idPattern` matches the model segment after
+ * `<vendorPath>/` (openrouter ns) or `<provider>/` (direct ns).
+ * Pinned ids verified against the live catalog 2026-06-11.
  */
-const CARDS = [
-  { alias: 'gemini', label: 'Gemini 3.1 Flash Lite', blurb: 'fast, large context',
-    routes: { openrouter: 'openrouter/google/gemini-3.1-flash-lite-preview',
-              google: 'google/gemini-3.1-flash-lite-preview' } },
-  { alias: 'gemini-pro', label: 'Gemini 3.1 Pro', blurb: 'advanced reasoning',
-    routes: { openrouter: 'openrouter/google/gemini-3.1-pro-preview',
-              google: 'google/gemini-3.1-pro-preview' } },
-  { alias: 'gpt', label: 'GPT-5.4', blurb: 'strong coding',
-    routes: { openrouter: 'openrouter/openai/gpt-5.4',
-              openai: 'openai/gpt-5.4' } },
-  { alias: 'opus', label: 'Claude Opus 4.6', blurb: 'deep analysis',
-    routes: { openrouter: 'openrouter/anthropic/claude-opus-4.6',
-              anthropic: 'anthropic/claude-opus-4-6' } },
-  { alias: 'deepseek', label: 'DeepSeek v3.2', blurb: 'open-source',
-    routes: { openrouter: 'openrouter/deepseek/deepseek-v3.2',
-              deepseek: 'deepseek/deepseek-chat' } },
+const FAMILIES = [
+  { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
+    vendorPath: 'google',
+    idPattern: /^gemini-[\d.]+-flash(-preview|-exp|-latest)?$/,
+    directProviders: ['google'],
+    fallback: { openrouter: 'openrouter/google/gemini-3.5-flash',
+                google: 'google/gemini-3.5-flash' } },
+  { alias: 'gemini-pro', label: 'Gemini Pro-class', blurb: 'advanced reasoning',
+    vendorPath: 'google',
+    idPattern: /^gemini-[\d.]+-pro(-preview|-exp|-latest)?$/,
+    directProviders: ['google'],
+    fallback: { openrouter: 'openrouter/google/gemini-3.1-pro-preview' } },
+  { alias: 'gpt', label: 'GPT flagship', blurb: 'strong coding',
+    vendorPath: 'openai',
+    idPattern: /^gpt-[\d.]+$/,
+    directProviders: ['openai'],
+    fallback: { openrouter: 'openrouter/openai/gpt-5.5' } },
+  { alias: 'opus', label: 'Claude Opus-class', blurb: 'deep analysis',
+    vendorPath: 'anthropic',
+    idPattern: /^claude-opus-[\d.-]+$/,
+    directProviders: ['anthropic'],
+    fallback: { openrouter: 'openrouter/anthropic/claude-opus-4.8',
+                anthropic: 'anthropic/claude-opus-4-6' } },
+  { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+    vendorPath: 'deepseek',
+    idPattern: /^deepseek-v[\d.]+(-pro)?$/,
+    directProviders: ['deepseek'],
+    fallback: { openrouter: 'openrouter/deepseek/deepseek-v4-pro',
+                deepseek: 'deepseek/deepseek-chat' } },
 ];
 
-/** Alias-only entries (no wizard card); openrouter route only. */
+/** Alias-only entries (no wizard quick pick); openrouter route only.
+ *  Refreshed against the live catalog 2026-06-11. */
 const CARDLESS = [
-  { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.4-pro' } },
+  { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.5-pro' } },
   // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
   { alias: 'codex', routes: { openrouter: 'openrouter/openai/gpt-5.3-codex' } },
   { alias: 'claude', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-4.6' } },
   { alias: 'sonnet', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-4.6' } },
   { alias: 'haiku', routes: { openrouter: 'openrouter/anthropic/claude-haiku-4.5' } },
-  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.5-397b-a17b' } },
+  { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.7-max' } },
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
-  { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.5-flash-02-23' } },
-  { alias: 'mistral', routes: { openrouter: 'openrouter/mistralai/mistral-large-2512' } },
+  { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },
+  { alias: 'mistral', routes: { openrouter: 'openrouter/mistralai/mistral-medium-3-5' } },
   { alias: 'devstral', routes: { openrouter: 'openrouter/mistralai/devstral-2512' } },
-  { alias: 'glm', routes: { openrouter: 'openrouter/z-ai/glm-5' } },
-  { alias: 'minimax', routes: { openrouter: 'openrouter/minimax/minimax-m2.5' } },
+  { alias: 'glm', routes: { openrouter: 'openrouter/z-ai/glm-5.1' } },
+  { alias: 'minimax', routes: { openrouter: 'openrouter/minimax/minimax-m2.7' } },
   { alias: 'grok', routes: { openrouter: 'openrouter/x-ai/grok-4.3' } },
-  { alias: 'kimi', routes: { openrouter: 'openrouter/moonshotai/kimi-k2.5' } },
-  { alias: 'seed', routes: { openrouter: 'openrouter/bytedance-seed/seed-2.0-mini' } },
+  { alias: 'kimi', routes: { openrouter: 'openrouter/moonshotai/kimi-k2.6' } },
+  { alias: 'seed', routes: { openrouter: 'openrouter/bytedance-seed/seed-2.0-lite' } },
 ];
 
-/** @returns {Array<{alias,label,blurb,routes}>} card entries (wizard quick picks) */
-function getCuratedModels() {
-  return CARDS.map(c => ({ ...c, routes: { ...c.routes } }));
+/** @returns {Array} deep-enough copies of the family definitions */
+function getFamilies() {
+  return FAMILIES.map(f => ({
+    ...f,
+    directProviders: [...f.directProviders],
+    fallback: { ...f.fallback },
+  }));
 }
 
-/** @returns {Object<string,string>} alias → preferred route (openrouter first) */
+/** @returns {Object<string,string>} alias → pinned route (openrouter first). STATIC — runtime-safe. */
 function toDefaultAliases() {
   const out = {};
-  for (const e of [...CARDS, ...CARDLESS]) {
+  for (const f of FAMILIES) {
+    out[f.alias] = f.fallback.openrouter || Object.values(f.fallback)[0];
+  }
+  for (const e of CARDLESS) {
     out[e.alias] = e.routes.openrouter || Object.values(e.routes)[0];
   }
   return out;
 }
 
-/** @returns {Array<{alias,provider,model}>} every route of every entry, flattened */
+/** @returns {Array<{alias,provider,model}>} every pinned route, flattened (for the alias audit) */
 function listCuratedRoutes() {
   const out = [];
-  for (const e of [...CARDS, ...CARDLESS]) {
+  for (const f of FAMILIES) {
+    for (const [provider, model] of Object.entries(f.fallback)) {
+      out.push({ alias: f.alias, provider, model });
+    }
+  }
+  for (const e of CARDLESS) {
     for (const [provider, model] of Object.entries(e.routes)) {
       out.push({ alias: e.alias, provider, model });
     }
@@ -80,4 +107,4 @@ function listCuratedRoutes() {
   return out;
 }
 
-module.exports = { getCuratedModels, toDefaultAliases, listCuratedRoutes };
+module.exports = { getFamilies, toDefaultAliases, listCuratedRoutes };

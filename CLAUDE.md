@@ -120,7 +120,7 @@ src/
 │   ├── api-key-validation.js  # Validation endpoints per provider
 │   ├── auth-json.js  # Known provider IDs that map to sidecar's PROVIDER_ENV_MAP
 │   ├── config.js  # Default model alias map — derived from the curated-models single source (F5)
-│   ├── curated-models.js  # Alias-only entries (no wizard card); openrouter route only.
+│   ├── curated-models.js  # @returns {Array} deep-enough copies of the family definitions
 │   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
 │   ├── idle-watchdog.js  # @type {Object.<string, number>} Default timeouts per mode in milliseconds
@@ -262,7 +262,7 @@ evals/
 | `utils/api-key-validation.js` | Validation endpoints per provider | `validateApiKey()`, `validateOpenRouterKey()`, `VALIDATION_ENDPOINTS()` |
 | `utils/auth-json.js` | Known provider IDs that map to sidecar's PROVIDER_ENV_MAP | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
 | `utils/config.js` | Default model alias map — derived from the curated-models single source (F5) | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
-| `utils/curated-models.js` | Alias-only entries (no wizard card); openrouter route only. | `getCuratedModels()`, `toDefaultAliases()`, `listCuratedRoutes()` |
+| `utils/curated-models.js` | @returns {Array} deep-enough copies of the family definitions | `getFamilies()`, `toDefaultAliases()`, `listCuratedRoutes()` |
 | `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/idle-watchdog.js` | @type {Object.<string, number>} Default timeouts per mode in milliseconds | `IdleWatchdog()`, `resolveTimeout()` |
