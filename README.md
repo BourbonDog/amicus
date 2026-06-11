@@ -88,9 +88,9 @@ This opens a graphical wizard:
 
 > *council review this*
 
-Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end.
+Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill installed in the previous step is what teaches Claude to recognize this — if nothing happens, confirm it landed in `~/.claude/skills/second-opinion/`.)
 
-**Your first sidecar** — fork one model with full context:
+**Your first sidecar.** The sidecar is the lower-level path — you can invoke it by phrase through Claude too, but the CLI gives you the flags directly:
 
 ```bash
 amicus start --model gemini --prompt "Fact-check the auth approach Claude just proposed"
@@ -292,7 +292,7 @@ amicus models --check         # audit your aliases against the catalog
 | `openrouter/provider/model` | `openrouter/google/gemini-2.5-flash` | `OPENROUTER_API_KEY` |
 | `google/model` | `google/gemini-2.5-flash` | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | `openai/model` | `openai/gpt-5` | `OPENAI_API_KEY` |
-| `anthropic/model` | `anthropic/claude-opus-4` | `ANTHROPIC_API_KEY` |
+| `anthropic/model` | `anthropic/claude-opus-4` (the `opus` alias resolves here by default) | `ANTHROPIC_API_KEY` |
 
 ---
 
@@ -405,6 +405,8 @@ With `--json`, Amicus emits stable, versioned documents on stdout — built for 
 
 Amicus is **first-class on Windows** — developed and tested on Windows 11, no WSL required.
 
+Most Claude-adjacent tooling assumes macOS/Linux; Amicus doesn't.
+
 - The full unit suite runs green on Windows 11.
 - Native-binary PATH handling resolves the OpenCode binary correctly under Windows.
 - Session-path encoding is handled natively (the Claude project-path encoding that trips up naive `~/.claude/projects` lookups is accounted for).
@@ -416,6 +418,7 @@ Amicus is **first-class on Windows** — developed and tested on Windows 11, no 
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
+| "council review this" does nothing | The `second-opinion` skill isn't installed | Check `~/.claude/skills/second-opinion/SKILL.md` exists; re-run `npm install -g amicus` (postinstall installs both skills) |
 | `401` / auth error | API key missing, or the model prefix doesn't match the key you have | Run `amicus setup`; make sure the prefix (`openrouter/…` vs `google/…` vs `openai/…` vs `anthropic/…`) matches the credentials you configured. |
 | Session not found | No session matches the given ID | Run `amicus list`, or omit `--session-id` to use the most recent. |
 | No conversation history found | Project-path encoding | Check `~/.claude/projects/`; `/` and `_` in the project path are encoded as `-` in the directory name. |
