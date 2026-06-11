@@ -327,6 +327,7 @@ Options for 'start':
   --context-since <duration>   Time filter (e.g., 2h). Overrides turns.
    --context-max-tokens <N>     Max context tokens (default: 80000)
    --summary-length <length>    Summary verbosity: brief, normal (default), verbose
+   --thinking <level>           Reasoning effort: none, minimal, low, medium, high, xhigh
    --mcp <spec>                 Add MCP server. Formats:
                                 - name=url (remote server)
                                 - name=command (local server)
