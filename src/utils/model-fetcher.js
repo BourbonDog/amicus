@@ -20,7 +20,8 @@ const PROVIDER_FAMILY_NAMES = {
   openrouter: 'OpenRouter',
   google: 'Google',
   openai: 'OpenAI',
-  anthropic: 'Anthropic'
+  anthropic: 'Anthropic',
+  deepseek: 'DeepSeek'
 };
 
 /** Provider API configs for fetching model lists */
@@ -63,6 +64,19 @@ const PROVIDER_FETCH_CONFIG = {
       const data = JSON.parse(body);
       return (data.data || []).map(m => ({
         id: `openai/${m.id}`,
+        name: m.id,
+        contextLength: null,
+        pricing: null
+      }));
+    }
+  },
+  deepseek: {
+    url: 'https://api.deepseek.com/models',
+    authHeader: (key) => ({ 'Authorization': `Bearer ${key}` }),
+    normalize: (body) => {
+      const data = JSON.parse(body);
+      return (data.data || []).map(m => ({
+        id: `deepseek/${m.id}`,
         name: m.id,
         contextLength: null,
         pricing: null

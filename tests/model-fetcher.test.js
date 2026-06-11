@@ -12,7 +12,9 @@ const {
   fetchModelsFromProvider,
   fetchAllModels,
   groupModelsByFamily,
-  ANTHROPIC_MODELS
+  ANTHROPIC_MODELS,
+  PROVIDER_FETCH_CONFIG,
+  PROVIDER_FAMILY_NAMES
 } = require('../src/utils/model-fetcher');
 
 describe('model-fetcher', () => {
@@ -235,6 +237,130 @@ describe('model-fetcher', () => {
       const groups = groupModelsByFamily(models);
       const totalModels = groups.reduce((sum, g) => sum + g.models.length, 0);
       expect(totalModels).toBe(3);
+    });
+
+    it('should label a deepseek model as family DeepSeek', () => {
+      const models = [
+        { id: 'deepseek/deepseek-chat', name: 'deepseek-chat' }
+      ];
+      const groups = groupModelsByFamily(models);
+      expect(groups.length).toBe(1);
+      expect(groups[0].family).toBe('DeepSeek');
+    });
+  });
+
+  describe('DeepSeek provider', () => {
+    function mockHttpsGet(statusCode, body) {
+      const mockResponse = {
+        statusCode,
+        on: jest.fn((event, cb) => {
+          if (event === 'data') { cb(typeof body === 'string' ? body : JSON.stringify(body)); }
+          if (event === 'end') { cb(); }
+          return mockResponse;
+        })
+      };
+      https.get.mockImplementation((_url, _opts, cb) => {
+        cb(mockResponse);
+        return { on: jest.fn(), destroy: jest.fn() };
+      });
+    }
+
+    describe('PROVIDER_FETCH_CONFIG.deepseek', () => {
+      it('exists and has the correct url', () => {
+        expect(PROVIDER_FETCH_CONFIG.deepseek).toBeDefined();
+        expect(PROVIDER_FETCH_CONFIG.deepseek.url).toBe('https://api.deepseek.com/models');
+      });
+
+      it('authHeader returns a Bearer Authorization header', () => {
+        const header = PROVIDER_FETCH_CONFIG.deepseek.authHeader('sk-ds-test');
+        expect(header).toEqual({ 'Authorization': 'Bearer sk-ds-test' });
+      });
+
+      it('normalize maps DeepSeek data array to correct shape', () => {
+        const body = JSON.stringify({
+          object: 'list',
+          data: [
+            { id: 'deepseek-chat', object: 'model' },
+            { id: 'deepseek-reasoner', object: 'model' }
+          ]
+        });
+        const result = PROVIDER_FETCH_CONFIG.deepseek.normalize(body);
+        expect(result).toEqual([
+          { id: 'deepseek/deepseek-chat', name: 'deepseek-chat', contextLength: null, pricing: null },
+          { id: 'deepseek/deepseek-reasoner', name: 'deepseek-reasoner', contextLength: null, pricing: null }
+        ]);
+      });
+
+      it('normalize returns [] on empty data array', () => {
+        const body = JSON.stringify({ object: 'list', data: [] });
+        const result = PROVIDER_FETCH_CONFIG.deepseek.normalize(body);
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('PROVIDER_FAMILY_NAMES.deepseek', () => {
+      it('equals DeepSeek', () => {
+        expect(PROVIDER_FAMILY_NAMES.deepseek).toBe('DeepSeek');
+      });
+    });
+
+    describe('fetchModelsFromProvider deepseek', () => {
+      it('returns normalized list on HTTP 200', async () => {
+        mockHttpsGet(200, {
+          object: 'list',
+          data: [
+            { id: 'deepseek-chat', object: 'model' },
+            { id: 'deepseek-reasoner', object: 'model' }
+          ]
+        });
+
+        const result = await fetchModelsFromProvider('deepseek', 'sk-ds-test');
+        expect(result).toEqual([
+          { id: 'deepseek/deepseek-chat', name: 'deepseek-chat', contextLength: null, pricing: null },
+          { id: 'deepseek/deepseek-reasoner', name: 'deepseek-reasoner', contextLength: null, pricing: null }
+        ]);
+      });
+
+      it('returns [] on HTTP 401', async () => {
+        mockHttpsGet(401, 'Unauthorized');
+        const result = await fetchModelsFromProvider('deepseek', 'bad-key');
+        expect(result).toEqual([]);
+      });
+
+      it('returns [] on network error', async () => {
+        https.get.mockImplementation((_url, _opts, _cb) => {
+          const req = {
+            on: jest.fn((event, cb) => {
+              if (event === 'error') { cb(new Error('ECONNREFUSED')); }
+            }),
+            destroy: jest.fn()
+          };
+          return req;
+        });
+
+        const result = await fetchModelsFromProvider('deepseek', 'sk-ds-test');
+        expect(result).toEqual([]);
+      });
+    });
+
+    describe('fetchModelsFromProvider anthropic (no https.get)', () => {
+      it('returns ANTHROPIC_MODELS without calling https.get', async () => {
+        const result = await fetchModelsFromProvider('anthropic', '');
+        expect(result).toEqual(ANTHROPIC_MODELS);
+        expect(https.get).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('fetchAllModels with deepseek key', () => {
+      it('includes deepseek/deepseek-chat in results', async () => {
+        mockHttpsGet(200, {
+          object: 'list',
+          data: [{ id: 'deepseek-chat', object: 'model' }]
+        });
+
+        const result = await fetchAllModels({ deepseek: 'sk-ds-test' });
+        expect(result.some(m => m.id === 'deepseek/deepseek-chat')).toBe(true);
+      });
     });
   });
 });
