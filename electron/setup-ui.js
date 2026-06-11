@@ -24,7 +24,7 @@ function buildSetupHTML(options = {}) {
   const providerNamesJson = JSON.stringify(PROVIDER_NAMES);
   const defaultAliasesJson = JSON.stringify(getDefaultAliases());
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Sidecar Setup</title>
+<html><head><meta charset="utf-8"><title>Amicus Setup</title>
 <style>${css}</style></head><body>
   <div class="header"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2v12" stroke="#D97757" stroke-width="2" stroke-linecap="round"/><path d="M10 2v5c0 2-3 3-7 5" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/></svg><span class="header-title">${brandName} Setup</span></div>
   <div class="progress-bar"><div class="progress-step active" id="step-1"><span class="progress-dot">1</span><span>API Keys</span></div><div class="progress-connector"></div><div class="progress-step" id="step-2"><span class="progress-dot">2</span><span>Models</span></div><div class="progress-connector"></div><div class="progress-step" id="step-3"><span class="progress-dot">3</span><span>Routing</span></div><div class="progress-connector"></div><div class="progress-step" id="step-4"><span class="progress-dot">4</span><span>Review</span></div></div>
