@@ -8,6 +8,7 @@ const {
 describe('curated-models v2 (families)', () => {
   test('getFamilies returns the five wizard families with required fields', () => {
     const fams = getFamilies();
+    // Order is load-bearing: it is the wizard's display order.
     expect(fams.map(f => f.alias)).toEqual(['gemini', 'gemini-pro', 'gpt', 'opus', 'deepseek']);
     for (const f of fams) {
       expect(typeof f.label).toBe('string');
@@ -40,5 +41,16 @@ describe('curated-models v2 (families)', () => {
       { alias: 'deepseek', provider: 'deepseek', model: 'deepseek/deepseek-chat' });
     expect(routes).toContainEqual(
       { alias: 'gemini', provider: 'openrouter', model: 'openrouter/google/gemini-3.5-flash' });
+  });
+
+  test('family openrouter fallbacks match their own idPattern (self-consistency)', () => {
+    for (const f of getFamilies()) {
+      const or = f.fallback.openrouter;
+      const ns = `openrouter/${f.vendorPath}/`;
+      expect(or.startsWith(ns)).toBe(true);
+      // Direct fallbacks may be intentionally different ids (e.g. deepseek-chat);
+      // only the openrouter pin must be a member of its own family.
+      expect(f.idPattern.test(or.slice(ns.length))).toBe(true);
+    }
   });
 });

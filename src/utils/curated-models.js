@@ -1,6 +1,5 @@
-/**
- * Curated Models — family definitions + pinned fallbacks (v2).
- *
+/** Family definitions + pinned fallbacks for the wizard model picker (v2). */
+/*
  * Families are MATCH RULES over the live catalog, not pinned truths:
  * src/utils/quick-picks.js resolves each family to the current catalog
  * flagship at setup time. The pinned `fallback` ids are used only when
@@ -16,6 +15,12 @@
 /**
  * Wizard quick-pick families. `idPattern` matches the model segment after
  * `<vendorPath>/` (openrouter ns) or `<provider>/` (direct ns).
+ * `directProviders` lists direct namespaces the quick-picks resolver may
+ * resolve live from the catalog. A per-provider `fallback` entry is
+ * OPTIONAL: when absent and the catalog cannot resolve that namespace,
+ * the direct route is omitted (no pinned guess is better than a wrong one).
+ * `gpt`'s pattern intentionally matches any plain numeric flagship id
+ * (gpt-5.5, gpt-6) and excludes suffixed variants (-pro/-mini/-codex).
  * Pinned ids verified against the live catalog 2026-06-11.
  */
 const FAMILIES = [
@@ -49,8 +54,10 @@ const FAMILIES = [
                 deepseek: 'deepseek/deepseek-chat' } },
 ];
 
-/** Alias-only entries (no wizard quick pick); openrouter route only.
- *  Refreshed against the live catalog 2026-06-11. */
+/**
+ * Alias-only entries (no wizard quick pick); openrouter route only.
+ * Refreshed against the live catalog 2026-06-11.
+ */
 const CARDLESS = [
   { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.5-pro' } },
   // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
@@ -70,7 +77,11 @@ const CARDLESS = [
   { alias: 'seed', routes: { openrouter: 'openrouter/bytedance-seed/seed-2.0-lite' } },
 ];
 
-/** @returns {Array} deep-enough copies of the family definitions */
+/**
+ * @returns {Array} shallow-spread copies of the family definitions;
+ * `idPattern` is intentionally a shared RegExp reference — safe because
+ * none use the g/y flags (no lastIndex state) and callers treat it read-only.
+ */
 function getFamilies() {
   return FAMILIES.map(f => ({
     ...f,
@@ -79,7 +90,9 @@ function getFamilies() {
   }));
 }
 
-/** @returns {Object<string,string>} alias → pinned route (openrouter first). STATIC — runtime-safe. */
+/**
+ * @returns {Object<string,string>} alias → pinned route (openrouter first). STATIC — runtime-safe.
+ */
 function toDefaultAliases() {
   const out = {};
   for (const f of FAMILIES) {
@@ -91,7 +104,9 @@ function toDefaultAliases() {
   return out;
 }
 
-/** @returns {Array<{alias,provider,model}>} every pinned route, flattened (for the alias audit) */
+/**
+ * @returns {Array<{alias,provider,model}>} every pinned route, flattened (for the alias audit).
+ */
 function listCuratedRoutes() {
   const out = [];
   for (const f of FAMILIES) {
