@@ -16,7 +16,7 @@ const { readAuthJsonKeys } = require('./auth-json');
  * Sources (in priority order):
  * 1. process.env - already set, never overwritten
  * 2. ~/.config/amicus/.env - user-configured via `amicus setup`
- *    (DEPRECATED(amicus-shim): falls back to ~/.config/sidecar/.env if amicus dir absent)
+ *    (DEPRECATED(amicus-shim): falls back to ~/.config/sidecar/.env if the amicus .env absent)
  * 3. ~/.local/share/opencode/auth.json - OpenCode SDK fallback
  */
 function loadCredentials() {

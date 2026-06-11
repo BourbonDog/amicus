@@ -57,11 +57,24 @@ describe('api-key-store', () => {
       expect(result).toBe(path.join(tmpDir, '.env'));
     });
 
-    it('should default to ~/.config/amicus/.env', () => {
+    it('should default to ~/.config/amicus/.env on a fresh machine (neither .env exists)', () => {
       delete process.env.SIDECAR_ENV_DIR;
-      const result = getEnvPath();
-      const homeDir = process.env.HOME || process.env.USERPROFILE;
-      expect(result).toBe(path.join(homeDir, '.config', 'amicus', '.env'));
+      delete process.env.AMICUS_ENV_DIR;
+
+      // Use a fresh empty home so neither .env file exists → must return amicus path
+      const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-home-fresh-'));
+      const origHome = process.env.HOME;
+      const origUserProfile = process.env.USERPROFILE;
+      try {
+        process.env.HOME = fakeHome;
+        process.env.USERPROFILE = fakeHome;
+        const result = getEnvPath();
+        expect(result).toBe(path.join(fakeHome, '.config', 'amicus', '.env'));
+      } finally {
+        process.env.HOME = origHome;
+        process.env.USERPROFILE = origUserProfile;
+        fs.rmSync(fakeHome, { recursive: true, force: true });
+      }
     });
 
     it('should return path inside AMICUS_ENV_DIR when set', () => {
@@ -88,6 +101,60 @@ describe('api-key-store', () => {
       } finally {
         delete process.env.AMICUS_ENV_DIR;
         fs.rmSync(amicusTmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('falls back to legacy ~/.config/sidecar/.env when it exists and the amicus one does not', () => {
+      // No env-dir override — use real home-dir logic with mocked HOME
+      delete process.env.SIDECAR_ENV_DIR;
+      delete process.env.AMICUS_ENV_DIR;
+
+      const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-home-legacy-'));
+      const origHome = process.env.HOME;
+      const origUserProfile = process.env.USERPROFILE;
+      try {
+        process.env.HOME = fakeHome;
+        process.env.USERPROFILE = fakeHome;
+
+        // Create only the legacy sidecar .env (amicus one absent)
+        const sidecarEnvPath = path.join(fakeHome, '.config', 'sidecar', '.env');
+        fs.mkdirSync(path.dirname(sidecarEnvPath), { recursive: true });
+        fs.writeFileSync(sidecarEnvPath, 'OPENROUTER_API_KEY=sk-legacy\n');
+
+        const result = getEnvPath();
+        expect(result).toBe(sidecarEnvPath);
+      } finally {
+        process.env.HOME = origHome;
+        process.env.USERPROFILE = origUserProfile;
+        fs.rmSync(fakeHome, { recursive: true, force: true });
+      }
+    });
+
+    it('prefers ~/.config/amicus/.env when both exist', () => {
+      delete process.env.SIDECAR_ENV_DIR;
+      delete process.env.AMICUS_ENV_DIR;
+
+      const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-home-both-'));
+      const origHome = process.env.HOME;
+      const origUserProfile = process.env.USERPROFILE;
+      try {
+        process.env.HOME = fakeHome;
+        process.env.USERPROFILE = fakeHome;
+
+        // Create BOTH .env files
+        const amicusEnvPath = path.join(fakeHome, '.config', 'amicus', '.env');
+        const sidecarEnvPath = path.join(fakeHome, '.config', 'sidecar', '.env');
+        fs.mkdirSync(path.dirname(amicusEnvPath), { recursive: true });
+        fs.mkdirSync(path.dirname(sidecarEnvPath), { recursive: true });
+        fs.writeFileSync(amicusEnvPath, 'OPENROUTER_API_KEY=sk-amicus\n');
+        fs.writeFileSync(sidecarEnvPath, 'OPENROUTER_API_KEY=sk-legacy\n');
+
+        const result = getEnvPath();
+        expect(result).toBe(amicusEnvPath);
+      } finally {
+        process.env.HOME = origHome;
+        process.env.USERPROFILE = origUserProfile;
+        fs.rmSync(fakeHome, { recursive: true, force: true });
       }
     });
   });
