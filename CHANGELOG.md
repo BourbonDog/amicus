@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-10
+
 Everything since the fork from upstream `claude-sidecar` v0.5.2 — the Amicus launch line.
 
 ### Added
