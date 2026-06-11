@@ -225,8 +225,8 @@ describe('setup-ui wizard', () => {
   });
 
   describe('PROVIDERS export', () => {
-    it('should export 4 providers', () => {
-      expect(PROVIDERS).toHaveLength(4);
+    it('should export 5 providers', () => {
+      expect(PROVIDERS).toHaveLength(5);
     });
 
     it('should have openrouter as recommended', () => {

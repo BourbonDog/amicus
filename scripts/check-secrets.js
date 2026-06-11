@@ -27,6 +27,7 @@ const CONFIG = {
     '**/*.spec.js',
     '**/*.md',
     'docs/**',
+    'electron/setup-ui-keys.js',
   ],
 };
 

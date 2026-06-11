@@ -43,6 +43,15 @@ const PROVIDERS = [
     helpUrl: 'https://console.anthropic.com/settings/keys',
     helpLabel: 'console.anthropic.com/settings/keys',
     recommended: false
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    description: 'Direct access to DeepSeek-V3 and DeepSeek-R1 models',
+    placeholder: 'sk-...',
+    helpUrl: 'https://platform.deepseek.com/api_keys',
+    helpLabel: 'platform.deepseek.com/api_keys',
+    recommended: false
   }
 ];
 
