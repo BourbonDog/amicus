@@ -5,6 +5,23 @@
 
 ---
 
+## Install Fails with `EEXIST: … claude-sidecar`
+
+**Symptom:** `npm install -g amicus` fails with `npm error code EEXIST` naming a `claude-sidecar` (or `sidecar`) file under your global npm bin directory.
+
+**Cause:** The old upstream `claude-sidecar` package is still installed globally. Amicus ships `sidecar`/`claude-sidecar` as deprecated bin aliases, and npm refuses to overwrite bin shims owned by a different package.
+
+**Fix:**
+
+```bash
+npm uninstall -g claude-sidecar
+npm install -g amicus
+```
+
+Nothing is lost in the swap: your config (`~/.config/sidecar/`), saved keys, and past sessions are all still read by Amicus through the legacy-path shims (see `docs/SHIMS.md`).
+
+---
+
 ## Auth / 401 Errors
 
 **Symptom:** `401 Unauthorized`, `invalid_api_key`, or `OPENROUTER_API_KEY is not set`.
