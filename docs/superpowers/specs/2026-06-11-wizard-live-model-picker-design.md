@@ -11,7 +11,7 @@ Found in the 2026-06-11 real-user setup-wizard run (dev main `c62529c`). Three d
 
 **D2 — Step 2 doesn't let the user pick an arbitrary model (in practice).** Cards expose only a provider-route toggle (OpenRouter vs direct), never the model. The F5 search-over-catalog section technically sets any model as default, but failed in practice: hidden until the catalog IPC returns non-empty (`applyCatalog`, `electron/setup-ui.js:384` — `display:none` at 0 models), renders zero rows until a query is typed, unlabeled, and visually subordinate to the radio cards. Observed user outcome: "it isn't letting me pick the models for each of the choices."
 
-**D3 — Finish silently rewrites card aliases with stale curated ids.** The finish handler (`electron/setup-ui.js:337-354`) unconditionally builds `routingOverrides[alias] = mc.routes[prov]` for ALL card aliases; route-pill clicks (`setup-ui.js:281`) write the stale curated id for that provider into `aliasEdits` even when the user's alias was customized; the save handler (`electron/ipc-setup.js:98-106`) rebuilds the table as curated `getDefaultAliases()` + overrides. User deviations survive only via the load-time diff (`setup-ui.js:131`) and only if no pill was clicked. Evidence: the 2026-06-11 run downgraded `gemini` from `google/gemini-3.5-flash` to `google/gemini-3.1-flash-lite-preview` without the user choosing it. The rebuild has a second defect: aliases the user deleted resurrect on every finish.
+**D3 — Finish silently rewrites card aliases with stale curated ids.** Three vectors: the finish handler (`electron/setup-ui.js:337-354`) unconditionally builds `routingOverrides[alias] = mc.routes[prov]` for ALL card aliases; merely *visiting* Step 3 auto-stamps every card alias's curated route into `aliasEdits` (`updateAliasRoutes`, `setup-ui.js:278-284`) — this is the vector that fired in the 2026-06-11 run; and the save handler (`electron/ipc-setup.js:98-106`) rebuilds the table as curated `getDefaultAliases()` + overrides. User deviations survive only via the load-time diff (`setup-ui.js:131`) and only when the Step-3 stamp doesn't reach them first. Evidence: the 2026-06-11 run downgraded `gemini` from `google/gemini-3.5-flash` to `google/gemini-3.1-flash-lite-preview` without the user choosing it. The rebuild has a second defect: aliases the user deleted resurrect on every finish.
 
 ## User-locked decisions (2026-06-11, in-session)
 
@@ -46,9 +46,9 @@ One unified "Choose Default Model" step:
 - **`DEFAULT_ALIASES` stays static** (built from pinned fallbacks). It is runtime-load-bearing — `resolveModel`/`getEffectiveAliases`/`autoRepairAlias` must never wait on the network.
 - **`amicus models --check`** gains a non-blocking warning when a pinned fallback has fallen behind the live resolution, so the fallback can't rot silently either.
 
-### 3. IPC + renderer plumbing
+### 3. Main-process plumbing (amended during planning — simpler than a new IPC)
 
-- New **`sidecar:get-quick-picks`** handler (main process) returning resolved rows + catalog meta; **must be added to the `electron/preload-setup.js` channel allowlist** (F5 review lesson: a missing allowlist entry leaves the feature dead at runtime).
+- Quick picks resolve **at window build time in the Electron main process**: `createSetupWindow` (electron/main.js) becomes async, awaits `getCatalog()` (self-refreshing cache) and passes `{ quickPicks, seedAliases }` into `buildSetupHTML`, which injects them where static `MODEL_CHOICES`/`getDefaultAliases()` are injected today. No new IPC channel and no preload-allowlist change needed — the original `sidecar:get-quick-picks` design is dropped as YAGNI (the renderer never needs to re-fetch; quick picks are fixed at wizard open per §2, and the refresh button continues to affect only the search section).
 - Step 2 HTML builders consume resolved rows instead of `getCuratedModels()`; search-section visibility gating removed per §1.
 
 ### 4. Finish payload + save semantics (the clobber fix)
@@ -80,7 +80,7 @@ No new network paths: everything rides the existing `getCatalogInfo`/`refreshCat
 3. Finish writes only: the default, the selected quick-pick's alias, and explicit Step-3 edits — nothing else (regression-tested against the gemini downgrade).
 4. Save is read-modify-write: unrelated aliases, unknown config keys, and deletions all survive.
 5. Fresh-install seeding is current-when-online in both flows; the readline flow accepts any validated model id.
-6. `sidecar:get-quick-picks` is allowlisted in preload and the feature works at runtime (CDP-verified).
+6. Quick picks resolve in the main process at window build time; live-resolved rows render and the full flow works at runtime (CDP-verified).
 7. Suite green, lint clean; `models --check` reports pinned-fallback drift.
 
 ### 9. Out of scope
