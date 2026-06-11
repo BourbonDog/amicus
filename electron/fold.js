@@ -64,7 +64,7 @@ function createFoldHandler(state) {
               while (overlay.firstChild) { overlay.removeChild(overlay.firstChild); }
               var msg = document.createElement('div');
               msg.style.cssText = 'color:#E8E0D8;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:500;text-align:center;max-width:320px;';
-              msg.textContent = 'Summary saved. Tell Claude you\\u2019re done with the sidecar so it can read the results.';
+              msg.textContent = 'Summary saved. Tell Claude you\\u2019re done with the Amicus session so it can read the results.';
               overlay.appendChild(msg);
             }
           })();

@@ -55,6 +55,6 @@ describe('Fold nudge message', () => {
 
     const allScripts = executedScripts.join(' ');
     expect(allScripts).toContain('Tell Claude');
-    expect(allScripts).toContain('done with the sidecar');
+    expect(allScripts).toContain('done with the Amicus session');
   });
 });

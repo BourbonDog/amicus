@@ -60,7 +60,7 @@ function buildAliasEditorHTML(aliases) {
         <div class="example-flow">
           <div class="example-step">
             ${terminalIcon}
-            <span class="example-cmd">sidecar start --model <strong>${exampleAlias}</strong></span>
+            <span class="example-cmd">amicus start --model <strong>${exampleAlias}</strong></span>
           </div>
           <div class="example-connector">${arrowIcon}</div>
           <div class="example-step">
@@ -72,7 +72,7 @@ function buildAliasEditorHTML(aliases) {
 
   return `<div class="step-content">
       <h1>Model Routing</h1>
-      <p class="subtitle">When you ask Sidecar for help, you can pick which LLM to collaborate with or offload tasks to. These names on the left route to the specific model on the right.</p>
+      <p class="subtitle">When you ask Amicus for help, you can pick which LLM to collaborate with or offload tasks to. These names on the left route to the specific model on the right.</p>
       ${exampleBox}
       <div class="alias-editor">
         ${searchInput}

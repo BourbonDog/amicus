@@ -312,28 +312,25 @@ function updateContentBounds() {
 // Amicus wordmark SVG in the same pixel/block art style as the OpenCode logo.
 // Uses the same CSS variables (--icon-base, --icon-weak-base) and viewBox
 // proportions. Built on a 6px grid: each letter 24px wide, 30px tall (y:6-36),
-// 6px gaps between letters. Total 7 letters = 204px wide.
-const SIDECAR_WORDMARK = [
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 234 43" fill="none" class="CLASS">',
+// 6px gaps between letters (letter N starts at x = N*30). 6 letters end at
+// x=174; ~30px right padding -> viewBox 0 0 204 43.
+const AMICUS_WORDMARK = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 204 43" fill="none" class="CLASS">',
   '<g>',
-  // S (x:0-24): top-right bar, left arm, full middle, right arm, bottom-left bar
-  '<path d="M24 12H6V6H24ZM6 18H0V12H6ZM24 24H0V18H24ZM24 30H18V24H24ZM18 36H0V30H18Z" fill="var(--icon-base)"/>',
-  // I (x:30-54): top bar, center stem, bottom bar
-  '<path d="M54 12H30V6H54ZM48 30H36V12H48ZM54 36H30V30H54Z" fill="var(--icon-base)"/>',
-  // D (x:60-84): box outline with lighter inner
-  '<path d="M78 30H66V12H78Z" fill="var(--icon-weak-base)"/>',
-  '<path d="M84 12H60V6H84ZM66 30H60V12H66ZM84 30H78V12H84ZM84 36H60V30H84Z" fill="var(--icon-base)"/>',
-  // E (x:90-114): top bar, left wall, middle tab, bottom bar
-  '<path d="M114 12H90V6H114ZM96 30H90V12H96ZM108 24H96V18H108Z" fill="var(--icon-weak-base)"/>',
-  '<path d="M114 12H90V6H114ZM96 36H90V6H96ZM108 24H90V18H108ZM114 36H90V30H114Z" fill="var(--icon-base)"/>',
-  // C (x:120-144): top bar, left wall, bottom bar
-  '<path d="M144 12H120V6H144ZM126 30H120V12H126ZM144 36H120V30H144Z" fill="var(--icon-base)"/>',
-  // A (x:150-174): peak, walls, crossbar with lighter inner
-  '<path d="M168 30H156V24H168Z" fill="var(--icon-weak-base)"/>',
-  '<path d="M168 12H156V6H168ZM156 36H150V12H156ZM174 36H168V12H174ZM174 24H150V18H174Z" fill="var(--icon-base)"/>',
-  // R (x:180-204): top bar, left wall, bump, diagonal leg
-  '<path d="M198 18H186V12H198Z" fill="var(--icon-weak-base)"/>',
-  '<path d="M204 12H180V6H204ZM186 36H180V12H186ZM204 18H198V12H204ZM198 24H186V18H198ZM204 36H198V24H204Z" fill="var(--icon-base)"/>',
+  // A (x:0-24): peak, walls, crossbar with lighter inner
+  '<path d="M18 30H6V24H18Z" fill="var(--icon-weak-base)"/>',
+  '<path d="M18 12H6V6H18ZM6 36H0V12H6ZM24 36H18V12H24ZM24 24H0V18H24Z" fill="var(--icon-base)"/>',
+  // M (x:30-54): full top bar, left+right walls, hanging center tooth (lighter)
+  '<path d="M45 24H39V12H45Z" fill="var(--icon-weak-base)"/>',
+  '<path d="M54 12H30V6H54ZM36 36H30V12H36ZM54 36H48V12H54Z" fill="var(--icon-base)"/>',
+  // I (x:60-84): top bar, center stem, bottom bar
+  '<path d="M84 12H60V6H84ZM78 30H66V12H78ZM84 36H60V30H84Z" fill="var(--icon-base)"/>',
+  // C (x:90-114): top bar, left wall, bottom bar
+  '<path d="M114 12H90V6H114ZM96 30H90V12H96ZM114 36H90V30H114Z" fill="var(--icon-base)"/>',
+  // U (x:120-144): left wall, right wall, bottom bar (open top)
+  '<path d="M126 30H120V6H126ZM144 30H138V6H144ZM144 36H120V30H144Z" fill="var(--icon-base)"/>',
+  // S (x:150-174): top-right bar, left arm, full middle, right arm, bottom-left bar
+  '<path d="M174 12H156V6H174ZM156 18H150V12H156ZM174 24H150V18H174ZM174 30H168V24H174ZM168 36H150V30H168Z" fill="var(--icon-base)"/>',
   '</g></svg>',
 ].join('');
 
@@ -354,7 +351,7 @@ function rebrandUI() {
         var logo = document.querySelector('svg[viewBox="0 0 234 42"]');
         if (!logo) { return false; }
         var cls = logo.getAttribute('class') || '';
-        var markup = ${JSON.stringify(SIDECAR_WORDMARK)}.replace('CLASS', cls);
+        var markup = ${JSON.stringify(AMICUS_WORDMARK)}.replace('CLASS', cls);
         logo.insertAdjacentHTML('afterend', markup);
         logo.remove();
         return true;
