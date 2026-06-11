@@ -322,7 +322,9 @@ node scripts/verify-ui-state.js "$PAGE_ID"
 kill $AMICUS_PID
 ```
 
-## Visual UI Testing with Screenshots (macOS)
+## Visual UI Testing with Screenshots
+
+### macOS (native tools)
 
 **Launch and position Electron window:**
 ```bash
@@ -331,6 +333,7 @@ node bin/amicus.js start --model "openrouter/google/gemini-3-flash-preview" --br
 sleep 8
 
 # Bring window to front and position it (window may open off-screen)
+# Note: osascript / AppleScript is macOS-only
 osascript << 'EOF'
 tell application "System Events"
     tell process "Electron"
@@ -341,9 +344,25 @@ end tell
 EOF
 ```
 
-**Take screenshot:**
+**Take screenshot (macOS — `screencapture` is macOS-only):**
 ```bash
 screencapture -x /tmp/amicus-screenshot.png
+```
+
+### Windows (CDP-based, cross-platform)
+
+`screencapture` and AppleScript are not available on Windows. Use CDP `Page.captureScreenshot` instead (works on all platforms):
+
+```javascript
+const { CdpClient } = require('./tests/helpers/cdp-client');
+const cdp = await CdpClient.toolbar(9223);
+await cdp.screenshot('C:\\tmp\\amicus-screenshot.png');
+cdp.close();
+```
+
+To verify window visibility on Windows without a screenshot:
+```powershell
+Get-Process electron | Select-Object MainWindowTitle, MainWindowHandle
 ```
 
 **Dynamic page ID retrieval (required - ID changes each session):**
@@ -353,7 +372,7 @@ PAGE_ID=$(curl -s http://127.0.0.1:9223/json | node -e "const d=require('fs').re
 
 **Click UI elements and inspect state (run from amicus directory for `ws` module):**
 ```bash
-cd /Users/john_renaldi/claude-code-projects/amicus
+cd /path/to/amicus
 cat << EOF > test-ui.js
 const WebSocket = require('ws');
 const ws = new WebSocket('ws://127.0.0.1:9223/devtools/page/${PAGE_ID}');
@@ -422,7 +441,7 @@ echo "Toolbar ID: $TOOLBAR_ID"
 
 **Inspect toolbar state (update banner, buttons, timer):**
 ```bash
-cd /Users/john_renaldi/claude-code-projects/amicus
+cd /path/to/amicus
 node -e "
 const WebSocket = require('ws');
 const ws = new WebSocket('ws://127.0.0.1:9223/devtools/page/$TOOLBAR_ID');

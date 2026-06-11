@@ -15,17 +15,17 @@ Sections between `<!-- AUTO:name -->` markers in CLAUDE.md are maintained by `sc
 ### Marker Format
 
 ```markdown
-<!-- AUTO:directory-tree -->
+<!-- AUTO:tree -->
 (generated content here)
-<!-- /AUTO:directory-tree -->
+<!-- /AUTO:tree -->
 ```
 
 ### Current Markers
 
 | Marker | Content | Source |
 |--------|---------|--------|
-| `directory-tree` | ASCII directory tree with JSDoc annotations | Filesystem scan of `bin/`, `src/`, `electron/`, `tests/`, `scripts/`, `evals/` |
-| `module-index` | Markdown table of all `src/**/*.js` modules | JSDoc description + `module.exports` extraction |
+| `tree` | ASCII directory tree with JSDoc annotations | Filesystem scan of `bin/`, `src/`, `electron/`, `scripts/`, `evals/` (note: `tests/` is NOT included) |
+| `modules` | Markdown table of all `src/**/*.js` modules | JSDoc description + `module.exports` extraction |
 
 ### How It Works
 
@@ -36,7 +36,7 @@ Sections between `<!-- AUTO:name -->` markers in CLAUDE.md are maintained by `sc
 
 ### Adding a New Auto-Generated Section
 
-1. Add a new marker pair to CLAUDE.md:
+1. Add a new marker pair to CLAUDE.md (short lowercase name, no hyphens required but keep it terse):
    ```markdown
    <!-- AUTO:my-section -->
    <!-- /AUTO:my-section -->

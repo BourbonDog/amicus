@@ -1,5 +1,7 @@
 # Amicus compatibility shims (remove in a future revision)
 
+Removal is scheduled for a post-launch revision once users have migrated.
+
 These backward-compat shims let pre-rebrand `sidecar*` setups keep working after
 the Amicus rebrand. Each is logged once on use where applicable. **Remove all of
 these together in a future major revision once users have migrated.** See the

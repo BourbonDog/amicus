@@ -25,12 +25,17 @@ Eval System: Agentic Evals           ~3 scenarios, ~5 min each
 ### Quick Reference
 
 ```bash
-npm test                                    # All unit + integration tests
+npm test                                    # Unit tests only (*.integration.test.js excluded by jest.config.js)
 npm test tests/context.test.js              # Single file (preferred during dev)
 npm test -- --coverage                      # Coverage report
 npm test -- -t "should extract"             # Run tests matching pattern
 
-# E2E tests (require OPENROUTER_API_KEY)
+npm run test:integration                    # Integration tests only (real processes, not LLM)
+npm run test:all                            # Unit + integration (pre-push gate)
+npm run test:e2e:mcp                        # MCP E2E with real repomix (requires OPENROUTER_API_KEY)
+npm run lint                                # ESLint on src/
+
+# Run individual E2E test files (require OPENROUTER_API_KEY)
 npm test tests/cli-headless-e2e.integration.test.js
 npm test tests/mcp-headless-e2e.integration.test.js
 npm test tests/electron-toolbar-e2e.integration.test.js
@@ -58,7 +63,7 @@ Unit tests mock all external dependencies (OpenCode SDK, filesystem, network) an
 | Drift calculation | `drift.test.js` | Staleness scoring, turn counting |
 | Headless mode | `headless.test.js` | Polling logic, fold marker detection, timeout |
 | MCP tools | `mcp-tools.test.js`, `mcp-server.test.js` | Zod schemas, tool handlers |
-| Sidecar operations | `sidecar/*.test.js` | Start, resume, continue, read, context-builder |
+| Session operations | `sidecar/*.test.js` | Start, resume, continue, read, context-builder |
 | Config/utils | Various `utils/*.test.js` | Agent mapping, config loading, validation |
 
 ### What NOT to Unit Test
@@ -96,8 +101,8 @@ Integration tests verify source-level invariants without mocking. They read actu
 
 | Test File | What It Verifies |
 |-----------|-----------------|
-| `spawn-pipe-deadlock.integration.test.js` | `spawnSidecarProcess()` uses `ignore` (not `pipe`) for stdio, no `detached: true`, uses `child.unref()` |
-| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `AMICUS_HEADLESS_TEST` env var |
+| `spawn-pipe-deadlock.integration.test.js` | `spawnSidecarProcess()` in `src/mcp-server.js` uses `ignore` (not `pipe`) for stdio, no `detached: true`, uses `child.unref()` |
+| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `SIDECAR_HEADLESS_TEST` env var (compat shim — not yet renamed) |
 
 These tests catch regressions in critical spawn/process configuration that would be hard to debug in production.
 
@@ -183,7 +188,7 @@ Spawns a real Electron window (hidden) with a real OpenCode server, connects via
 4. Fold button exists with shortcut label
 5. Settings gear button exists
 6. Update banner hidden by default
-7. Update banner visible when `SIDECAR_MOCK_UPDATE=available`
+7. Update banner visible when `AMICUS_MOCK_UPDATE=available` (or legacy `SIDECAR_MOCK_UPDATE=available`)
 8. Screenshots captured as PNG files
 
 **Architecture:**
@@ -259,17 +264,19 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `AMICUS_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
-| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
-| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Used in Electron toolbar E2E tests. |
+| `SIDECAR_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). (Name is a compat shim; the AMICUS_ rename is pending.) |
+| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port. Checked after `SIDECAR_DEBUG_PORT`. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
+| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Legacy `SIDECAR_MOCK_UPDATE` also accepted. Used in Electron toolbar E2E tests. |
 
 ---
 
-## Cross-Platform: macOS vs Linux
+## Cross-Platform: macOS / Linux / Windows
 
 ### macOS
 
-No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `AMICUS_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer.
+No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `SIDECAR_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer via `Page.captureScreenshot`.
+
+The visual testing docs reference `screencapture -x` and AppleScript window positioning — those are macOS-specific tools. See the Windows section for the cross-platform equivalent.
 
 ### Linux (VPS / CI)
 
@@ -290,6 +297,25 @@ function ensureDisplay() {
 ```bash
 apt-get install -y xvfb libgtk-3-0 libnotify4 libnss3 libxss1 libasound2
 ```
+
+### Windows 11
+
+The unit suite runs fully green on Windows (verified F2). A few platform-specific details:
+
+**Path encoding (`src/session.js`, `src/environment.js`):** `encodeProjectPath` / `encodePath` replace `/`, `\`, `:`, and `_` with dashes. On Windows, `C:\Users\x` encodes to `C--Users-x` — the drive-colon and both backslashes each become a dash. This matches Claude Code's directory naming behavior.
+
+**OpenCode binary on PATH (`src/utils/path-setup.js`):** Node's `spawn()` without `shell: true` cannot run `.cmd` shims. `ensureNodeModulesBinInPath()` adds `opencode-windows-x64/bin` and `opencode-windows-x64-baseline/bin` to `PATH` before spawning, so `opencode.exe` resolves directly. The baseline variant supports pre-AVX2 CPUs; normal-before-baseline order in `PATH` is intentional.
+
+**Screenshots:** `screencapture` is macOS-only. On Windows, screenshots in E2E tests still work because they go through CDP `Page.captureScreenshot` (rendered off-screen). For manual visual inspection use:
+```powershell
+# Check window visibility
+Get-Process electron | Select-Object MainWindowTitle, MainWindowHandle
+# CDP screenshot (cross-platform — use the CdpClient helper)
+const cdp = await CdpClient.toolbar(9223);
+await cdp.screenshot('C:\\tmp\\amicus-test.png');
+```
+
+**X server:** Not required. Electron on Windows creates a renderer natively without a display server. The `ensureDisplay()` / Xvfb logic in E2E tests is Linux-only and is skipped on `win32`.
 
 ---
 
@@ -403,12 +429,19 @@ All test files go in `tests/`. Test helpers go in `tests/helpers/`. The Jest con
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.js'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '\\.integration\\.test\\.js$',  // E2E/integration tests excluded from default gate
+    '\\.worktrees/'
+  ],
   collectCoverageFrom: ['src/**/*.js', 'bin/**/*.js', 'electron/**/*.js'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
   verbose: true
 };
 ```
+
+`npm test` runs only `*.test.js` files that do NOT match `*.integration.test.js`. E2E and integration tests must be run explicitly via `npm run test:integration`, `npm run test:all`, or by naming the file directly.
 
 **Timeouts:** E2E tests set per-test timeouts of 180 seconds (3 minutes) for real LLM calls. Unit tests use Jest's default 5-second timeout.
 
@@ -475,7 +508,7 @@ For UI changes, follow this autonomous verification process:
 1. **Launch the app** with appropriate mock env vars (e.g., `AMICUS_MOCK_UPDATE=available`)
 2. **Use `AMICUS_DEBUG_PORT=9223`** to avoid port conflicts with Chrome
 3. **Inspect via Chrome DevTools Protocol**: Connect to `http://127.0.0.1:9223/json`, find the target page, query DOM state via WebSocket
-4. **Take a screenshot**: `screencapture -x /tmp/amicus-<feature>.png` and visually verify
+4. **Take a screenshot**: Use CDP `Page.captureScreenshot` (cross-platform) via the `CdpClient` helper. On macOS you can also use `screencapture -x /tmp/amicus-<feature>.png`. On Windows use the `CdpClient` approach (no `screencapture` binary available).
 5. **Check both targets**: The Electron window has two pages -- the OpenCode content (`http://localhost:...`) and the toolbar (`data:text/html`). Test each as needed.
 
 **Key gotcha:** `contextBridge` does not work with `data:` URLs. The toolbar (`data:text/html`) cannot use `window.sidecar` IPC. Use `executeJavaScript()` polling from the main process instead.
@@ -500,7 +533,7 @@ Never commit an image without completing visual verification. GitHub strips `<st
 
 ## Update Banner Mock Testing
 
-Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations:
+Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations (legacy `SIDECAR_MOCK_UPDATE` also accepted):
 
 ```bash
 AMICUS_MOCK_UPDATE=available amicus start --model gemini --prompt "test"  # Shows banner
