@@ -7,9 +7,10 @@ describe('package.json launch identity', () => {
     expect(pkg.files).toContain('skills/');
   });
   test('repository/bugs/homepage point at BourbonDog/amicus', () => {
-    expect(pkg.repository.url).toBe('https://github.com/BourbonDog/amicus.git');
+    expect(pkg.repository.url).toBe('git+https://github.com/BourbonDog/amicus.git');
     expect(pkg.bugs).toBe('https://github.com/BourbonDog/amicus/issues');
     expect(pkg.homepage).toBe('https://github.com/BourbonDog/amicus#readme');
+    expect(pkg.author).toBe('BourbonDog');
   });
   test('keywords carry the council positioning', () => {
     for (const k of ['council', 'second-opinion', 'fanout']) {
