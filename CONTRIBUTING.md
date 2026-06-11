@@ -61,4 +61,4 @@ etc. Full reference: `docs/electron-testing.md`.
 ## License
 
 MIT. By contributing you agree your contributions are MIT-licensed. Original engine
-© 2025 John Renaldi; modifications and the council © 2026 BourbonDog (see `LICENSE` + `NOTICE`).
+© 2025 John Renaldi; modifications and the council © 2026 Christian Wagner (see `LICENSE` + `NOTICE`).

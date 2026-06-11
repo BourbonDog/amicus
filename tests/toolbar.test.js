@@ -16,8 +16,8 @@ describe('toolbar', () => {
       expect(getBrandName('code-web')).toBe('Amicus');
     });
 
-    it('should return "Openwork Amicus" for cowork client', () => {
-      expect(getBrandName('cowork')).toBe('Openwork Amicus');
+    it('should return "Amicus" for cowork client too', () => {
+      expect(getBrandName('cowork')).toBe('Amicus');
     });
 
     it('should default to "Amicus" when no client specified', () => {
@@ -33,10 +33,10 @@ describe('toolbar', () => {
       expect(html).not.toContain('Openwork Amicus');
     });
 
-    it('should show "Openwork Amicus" for cowork client', () => {
+    it('should show plain "Amicus" for cowork client', () => {
       const html = buildToolbarHTML({ mode: 'sidecar', client: 'cowork' });
-      expect(html).toContain('Openwork Amicus');
-      expect(html).not.toContain('>Amicus<');
+      expect(html).toContain('>Amicus<');
+      expect(html).not.toContain('Openwork');
     });
 
     it('should show "Amicus" for code-local client', () => {
@@ -46,8 +46,8 @@ describe('toolbar', () => {
 
     it('should show correct branding in setup mode for cowork', () => {
       const html = buildToolbarHTML({ mode: 'setup', client: 'cowork' });
-      expect(html).toContain('Openwork Amicus');
-      expect(html).not.toContain('>Amicus<');
+      expect(html).toContain('>Amicus<');
+      expect(html).not.toContain('Openwork');
     });
 
     it('should show correct branding in setup mode for code-local', () => {

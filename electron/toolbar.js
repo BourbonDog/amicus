@@ -8,12 +8,11 @@
 const TOOLBAR_H = 40;
 
 /**
- * Get the brand name based on client type
- * @param {string} [client='code-local'] - Client type (code-local, code-web, cowork)
- * @returns {string} Brand name to display
+ * Get the brand name to display
+ * @returns {string} Always 'Amicus' — all clients share one brand
  */
-function getBrandName(client) {
-  return client === 'cowork' ? 'Openwork Amicus' : 'Amicus';
+function getBrandName() {
+  return 'Amicus';
 }
 
 /**

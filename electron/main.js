@@ -93,7 +93,7 @@ function createAmicusWindow() {
     x: winX, y: winY,
     show: false,
     frame: true, backgroundColor: '#2D2B2A',
-    title: CLIENT === 'cowork' ? 'Openwork Amicus' : 'Amicus',
+    title: 'Amicus',
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

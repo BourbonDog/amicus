@@ -25,10 +25,10 @@ describe('setup-ui wizard', () => {
       expect(html).toContain('Amicus');
     });
 
-    it('should show "Openwork Amicus" for cowork client', () => {
+    it('should show plain "Amicus" for cowork client', () => {
       const coworkHtml = buildSetupHTML({ client: 'cowork' });
-      expect(coworkHtml).toContain('Openwork Amicus');
-      expect(coworkHtml).not.toContain('>Amicus<');
+      expect(coworkHtml).toContain('Amicus Setup');
+      expect(coworkHtml).not.toContain('Openwork');
     });
 
     it('should use the dark theme colors', () => {

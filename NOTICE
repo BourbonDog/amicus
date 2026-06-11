@@ -1,15 +1,15 @@
 Amicus
 ======
 
-Amicus is an independent fork of "Claude Sidecar" by John Renaldi
+Amicus is inspired by "Claude Sidecar" by John Renaldi
 (https://github.com/jrenaldi79/sidecar), used under the MIT License.
 
 The original MIT License and copyright (Copyright (c) 2025 John Renaldi) are
 preserved in full in the LICENSE file. Modifications and additions made as part
-of Amicus are Copyright (c) 2026 BourbonDog, also released under the MIT License.
+of Amicus are Copyright (c) 2026 Christian Wagner, also released under the MIT License.
 
 Amicus bundles, as one installable system:
-  - The forked Sidecar engine — CLI, Electron GUI, MCP server, OpenCode transport.
+  - The upgraded fork of the Sidecar engine — CLI, Electron GUI, MCP server, OpenCode transport.
   - The "second-opinion" (LLM Council) skill   -> skills/second-opinion/
   - The "sidecar" ad-hoc multi-model chat skill -> skill/
 
