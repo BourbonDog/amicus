@@ -66,15 +66,16 @@ These variables control the polling loop that drives headless sessions. The defa
 
 Amicus processes self-terminate after a configurable idle period. The idle watchdog is active in all modes — headless, interactive, and shared-server.
 
-> **Note:** The idle-watchdog currently reads the legacy `SIDECAR_IDLE_TIMEOUT*` environment variable names directly. Set `SIDECAR_IDLE_TIMEOUT_HEADLESS`, `SIDECAR_IDLE_TIMEOUT_INTERACTIVE`, `SIDECAR_IDLE_TIMEOUT_SERVER`, and `SIDECAR_IDLE_TIMEOUT` (blanket) until these are migrated to `AMICUS_*` names in a future release.
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `AMICUS_IDLE_TIMEOUT` | Blanket override for all modes (minutes; `0` = disabled). | *(mode default)* |
+| `AMICUS_IDLE_TIMEOUT_HEADLESS` | Per-mode override for headless sessions (minutes). | `15` |
+| `AMICUS_IDLE_TIMEOUT_INTERACTIVE` | Per-mode override for interactive sessions (minutes). | `60` |
+| `AMICUS_IDLE_TIMEOUT_SERVER` | Per-mode override for shared-server sessions (minutes). | `30` |
 
-Default idle timeouts:
+Legacy `SIDECAR_IDLE_TIMEOUT*` names are still honored (deprecated — one-time warning on use).
 
-- **Headless mode**: 15 minutes
-- **Interactive mode**: 60 minutes
-- **Shared server**: 30 minutes
-
-Set the blanket `SIDECAR_IDLE_TIMEOUT=0` to disable self-termination entirely.
+Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination entirely.
 
 ### Shared server
 

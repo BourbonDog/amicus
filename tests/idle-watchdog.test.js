@@ -191,6 +191,19 @@ describe('IdleWatchdog', () => {
       const wd = new IdleWatchdog({ mode: 'headless' });
       expect(wd.timeout).toBe(Infinity);
     });
+
+    test('AMICUS_IDLE_TIMEOUT_HEADLESS is honored', () => {
+      process.env.AMICUS_IDLE_TIMEOUT_HEADLESS = '7';
+      const wd = new IdleWatchdog({ mode: 'headless' });
+      expect(wd.timeout).toBe(7 * 60 * 1000);
+    });
+
+    test('AMICUS_IDLE_TIMEOUT_HEADLESS wins over SIDECAR_IDLE_TIMEOUT_HEADLESS', () => {
+      process.env.AMICUS_IDLE_TIMEOUT_HEADLESS = '10';
+      process.env.SIDECAR_IDLE_TIMEOUT_HEADLESS = '99';
+      const wd = new IdleWatchdog({ mode: 'headless' });
+      expect(wd.timeout).toBe(10 * 60 * 1000);
+    });
   });
 
   describe('full lifecycle', () => {

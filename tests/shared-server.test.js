@@ -33,6 +33,29 @@ describe('SharedServerManager', () => {
       expect(mgr.enabled).toBe(false);
       process.env.SIDECAR_SHARED_SERVER = orig;
     });
+
+    test('disabled when AMICUS_SHARED_SERVER=0', () => {
+      const orig = process.env.AMICUS_SHARED_SERVER;
+      delete process.env.AMICUS_SHARED_SERVER;
+      process.env.AMICUS_SHARED_SERVER = '0';
+      const mgr = new SharedServerManager();
+      expect(mgr.enabled).toBe(false);
+      if (orig === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+      else { process.env.AMICUS_SHARED_SERVER = orig; }
+    });
+
+    test('AMICUS_SHARED_SERVER wins over SIDECAR_SHARED_SERVER (AMICUS=1, SIDECAR=0 → enabled)', () => {
+      const origA = process.env.AMICUS_SHARED_SERVER;
+      const origS = process.env.SIDECAR_SHARED_SERVER;
+      process.env.AMICUS_SHARED_SERVER = '1';
+      process.env.SIDECAR_SHARED_SERVER = '0';
+      const mgr = new SharedServerManager();
+      expect(mgr.enabled).toBe(true);
+      if (origA === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+      else { process.env.AMICUS_SHARED_SERVER = origA; }
+      if (origS === undefined) { delete process.env.SIDECAR_SHARED_SERVER; }
+      else { process.env.SIDECAR_SHARED_SERVER = origS; }
+    });
   });
 
   describe('session tracking', () => {

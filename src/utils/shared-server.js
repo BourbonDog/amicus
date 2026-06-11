@@ -6,6 +6,7 @@
  */
 
 const { IdleWatchdog } = require('./idle-watchdog');
+const { getCompatEnv } = require('./env-compat');
 
 const MAX_RESTARTS = 3;
 const RESTART_WINDOW = 5 * 60 * 1000;
@@ -25,7 +26,7 @@ class SharedServerManager {
   constructor(options = {}) {
     this.logger = options.logger || console;
     this.maxSessions = Number(process.env.SIDECAR_MAX_SESSIONS) || 20;
-    this.enabled = process.env.SIDECAR_SHARED_SERVER !== '0';
+    this.enabled = getCompatEnv('SHARED_SERVER') !== '0';
 
     /** @type {object|null} Active server handle */
     this.server = null;
