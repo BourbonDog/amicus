@@ -24,6 +24,10 @@ description: >
   --prompt-file <path> --json` (one headless wave, one JSON result) instead of N
   separate start calls. Different prompts per model → separate parallel
   `amicus start --no-ui` calls.
+  (7) For a SINGLE-model sidecar, DEFAULT to interactive — omit --no-ui so the
+  Electron UI opens and the user can watch, converse, and click Fold. Use --no-ui
+  for a single model only when the user asks for headless/autonomous, or for
+  unattended bulk automation. Interactive launches still use run_in_background: true.
 ---
 
 # Amicus: Multi-Model Sidecar Tool
@@ -608,13 +612,15 @@ amicus start --model gemini --prompt "Implement the login feature" --agent Build
 
 ### Interactive (Default)
 
+**The default for single-model sidecars — omit `--no-ui`.** Reach for headless only when the user asks for it, the run is part of a multi-model wave, or the task is unattended bulk automation.
+
 - Opens a GUI window
 - User can converse with the sidecar
 - **Model Picker:** Click the model name in the input area to switch models mid-conversation
 - Click **FOLD** when done to generate summary
 - Summary returns to your context via stdout
 
-**Use for:** Debugging, exploration, architectural discussions
+**Use for:** Any single-model sidecar — debugging, exploration, second opinions, reviews, architectural discussions
 
 **Mid-Conversation Model Switching:**
 In interactive mode, you can change models without restarting:
@@ -635,6 +641,7 @@ This is useful when you want to:
 - Summary returns automatically
 - **Default agent is `build`** — `chat` agent requires interactive UI and will stall in headless mode
 - **Always use headless when spawning multiple sidecars at once** (see Multi-LLM rule below)
+- **Not the default for single-model runs** — a single-model sidecar opens the UI unless the user asks for headless or the task is unattended bulk work
 
 **Multi-LLM Rule:** When the SAME prompt goes to N models, use `amicus fanout` (see [Fan Out One Prompt to N Models](#fan-out-one-prompt-to-n-models)) — one headless wave, one JSON result. When prompts differ per model, use separate parallel `amicus start --no-ui` calls with `run_in_background: true`. Only switch to interactive if the user explicitly asks.
 
@@ -656,7 +663,7 @@ amicus start --model gemini --prompt "..." --agent chat --no-ui
 # → Error: --agent chat requires interactive mode (remove --no-ui or use --agent build)
 ```
 
-**Use for:** Bulk tasks, test generation, documentation, linting
+**Use for:** Multi-model waves, bulk tasks, test generation, documentation, linting — or when the user explicitly asks for headless
 
 ```bash
 amicus start \
@@ -679,11 +686,14 @@ amicus start \
 **Example invocation pattern:**
 ```
 Bash tool:
-  command: "amicus start --model gemini --prompt '...' --no-ui"
+  command: "amicus start --model gemini --prompt '...'"
   run_in_background: true
 ```
 
-After launching, tell the user:
+After launching an interactive sidecar, tell the user:
+> "The Amicus window is open — chat with it there and click FOLD when you're done. I'll pick up the summary here."
+
+After launching a headless sidecar, tell the user:
 > "Amicus is running in the background. I'll share the results when it completes."
 
 **When the background task completes**, you will be automatically notified. Use the `TaskOutput` tool with the task ID to read the sidecar's summary output, then present it to the user. Do NOT poll or sleep — the notification arrives automatically.
