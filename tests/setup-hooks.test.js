@@ -17,11 +17,23 @@ const path = require('node:path');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(REPO_ROOT, 'scripts', 'setup-hooks.js');
 
+/**
+ * git exports repo context (GIT_DIR, GIT_INDEX_FILE, ...) to hooks. When this
+ * suite runs inside a pre-push hook — e.g. pushing from a linked worktree —
+ * inheriting those would redirect the scratch-repo git calls below at the
+ * real repository (which is exactly what corrupted a real push once). Strip
+ * GIT_* so every child git resolves its repo from cwd; explicit per-call env
+ * overrides still win.
+ */
+const CLEAN_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => !k.toUpperCase().startsWith('GIT_'))
+);
+
 function run(cmd, args, cwd, env) {
   return execFileSync(cmd, args, {
     cwd,
     encoding: 'utf-8',
-    env: env ? { ...process.env, ...env } : process.env,
+    env: env ? { ...CLEAN_ENV, ...env } : CLEAN_ENV,
   });
 }
 
