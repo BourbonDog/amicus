@@ -4,7 +4,7 @@
  * choices) must derive from this one module.
  */
 const {
-  getCuratedModels, toDefaultAliases, listCuratedRoutes
+  getCuratedModels, getFamilies, toDefaultAliases, listCuratedRoutes
 } = require('../../src/utils/curated-models');
 
 // Pinned expectation: the exact alias map shipped before F5 (config.js@80f060d).
@@ -90,13 +90,15 @@ describe('curated-models', () => {
     }
   });
 
-  it('readline MODEL_CHOICES derive from this module (anti-drift)', () => {
-    const { MODEL_CHOICES } = require('../../src/sidecar/setup');
-    expect(MODEL_CHOICES.map(m => m.alias)).toEqual(getCuratedModels().map(c => c.alias));
-    MODEL_CHOICES.forEach((mc, i) => {
-      expect(mc.number).toBe(i + 1);
-      const curated = getCuratedModels()[i];
-      expect(mc.label).toBe(`${curated.label} (${curated.blurb})`);
-    });
+  it('readline picks derive from getFamilies via quick-picks (anti-drift)', () => {
+    // MODEL_CHOICES was removed; readline now uses resolveQuickPicks(catalog).
+    // Anti-drift: family aliases appear in the same order in getFamilies.
+    const { resolveQuickPicks } = require('../../src/utils/quick-picks');
+    const picks = resolveQuickPicks([]);
+    expect(picks.map(p => p.alias)).toEqual(getFamilies().map(f => f.alias));
+    for (const p of picks) {
+      expect(typeof p.label).toBe('string');
+      expect(typeof p.blurb).toBe('string');
+    }
   });
 });

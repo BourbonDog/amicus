@@ -13,15 +13,6 @@ const readline = require('readline');
 const { loadConfig, saveConfig, getDefaultAliases, getConfigDir } = require('../utils/config');
 const { logger } = require('../utils/logger');
 
-const { getCuratedModels } = require('../utils/curated-models');
-/**
- * Model choices presented during readline setup — derived from curated-models (F5).
- * @type {Array<{number: number, alias: string, label: string}>}
- */
-const MODEL_CHOICES = getCuratedModels().map((c, i) => ({
-  number: i + 1, alias: c.alias, label: `${c.label} (${c.blurb})`
-}));
-
 /**
  * Add a model alias to the existing config (or create config if none exists)
  * @param {string} name - Alias name
@@ -90,21 +81,28 @@ function askQuestion(rl, prompt) {
 }
 
 /**
- * Resolve user input to a model alias name
- * @param {string} input - User input (number 1-5 or alias name)
- * @returns {string|null} Resolved alias name, or null if invalid
+ * Resolve readline input against the live picks.
+ * @returns {{alias?: string, modelId?: string, noUpgrade?: boolean}|null}
+ *   alias  → numbered/named quick pick (upgrades that alias unless noUpgrade)
+ *   modelId → free-form full model id (default only, no alias writes)
  */
-function resolveChoice(input) {
+function resolveChoice(input, picks, catalog) {
   const num = parseInt(input, 10);
-  if (num >= 1 && num <= MODEL_CHOICES.length) {
-    return MODEL_CHOICES[num - 1].alias;
+  if (num >= 1 && num <= picks.length) {
+    return { alias: picks[num - 1].alias };
   }
-
-  const defaults = getDefaultAliases();
-  if (defaults[input] !== undefined) {
-    return input;
+  if (input.includes('/')) {
+    const known = (catalog || []).some(m => m && m.id === input);
+    if (!known) {
+      console.log(`Warning: '${input}' not found in the model catalog (offline or new model) — using it anyway.`); // eslint-disable-line no-console
+    }
+    return { modelId: input };
   }
-
+  const cfg = loadConfig();
+  const aliases = { ...getDefaultAliases(), ...((cfg && cfg.aliases) || {}) };
+  if (aliases[input] !== undefined) {
+    return { alias: input, noUpgrade: true };
+  }
   return null;
 }
 
@@ -159,8 +157,8 @@ async function seedCatalog(print) {
  *
  * Guides the user through:
  * 1. API key detection
- * 2. Default model selection
- * 3. Config file creation
+ * 2. Default model selection from live quick-picks (read-modify-write, no clobber)
+ * 3. Config file save
  */
 async function runReadlineSetup() {
   const rl = readline.createInterface({
@@ -187,34 +185,49 @@ async function runReadlineSetup() {
     }
     console.log('');
 
+    const { getCatalog } = require('../utils/model-catalog');
+    const { resolveQuickPicks, toLiveSeedAliases } = require('../utils/quick-picks');
+    let catalog = [];
+    try { catalog = await getCatalog(); } catch (_err) { /* offline: pinned */ }
+    const picks = resolveQuickPicks(catalog);
+
     console.log('Choose your default model:');
     console.log('');
-    for (const choice of MODEL_CHOICES) {
-      console.log(`  ${choice.number}) ${choice.alias} - ${choice.label}`);
-    }
+    picks.forEach((p, i) => {
+      const badge = p.source === 'fallback' ? ' [offline list]' : '';
+      console.log(`  ${i + 1}) ${p.alias} - ${p.label} (${p.blurb}) → ${p.routes.openrouter}${badge}`);
+    });
     console.log('');
 
-    const answer = await askQuestion(rl, 'Pick a default (1-5 or alias name): ');
-    const chosen = resolveChoice(answer);
+    const answer = await askQuestion(rl,
+      `Pick a default (1-${picks.length}, alias name, or any full model id): `);
+    const chosen = resolveChoice(answer, picks, catalog);
 
     if (!chosen) {
-      console.log(`Invalid choice: "${answer}". Using "gemini" as default.`);
-      const cfg = createDefaultConfig('gemini');
-      await seedCatalog();
-      const aliasCount = Object.keys(cfg.aliases).length;
-      console.log('');
-      console.log(`Config created with ${aliasCount} aliases.`);
-      console.log(`Config path: ${path.join(getConfigDir(), 'config.json')}`);
+      console.log(`Invalid choice: "${answer}". Keeping configuration unchanged.`);
       return;
     }
 
-    const cfg = createDefaultConfig(chosen);
+    // Read-modify-write — never rebuild the alias table (no-clobber rule).
+    const cfg = loadConfig() || { aliases: toLiveSeedAliases(catalog) };
+    if (!cfg.aliases) { cfg.aliases = {}; }
+    if (chosen.alias) {
+      cfg.default = chosen.alias;
+      const pick = picks.find(p => p.alias === chosen.alias);
+      if (pick && !chosen.noUpgrade) {
+        cfg.aliases[chosen.alias] = pick.routes.openrouter || Object.values(pick.routes)[0];
+      } else if (cfg.aliases[chosen.alias] === undefined) {
+        cfg.aliases[chosen.alias] = getDefaultAliases()[chosen.alias];
+      }
+    } else {
+      cfg.default = chosen.modelId;
+    }
+    saveConfig(cfg);
     await seedCatalog();
-    const aliasCount = Object.keys(cfg.aliases).length;
 
     console.log('');
-    console.log(`Default model set to: ${chosen}`);
-    console.log(`Config created with ${aliasCount} aliases.`);
+    console.log(`Default model set to: ${cfg.default}`);
+    console.log(`Config saved (${Object.keys(cfg.aliases).length} aliases).`);
     console.log(`Config path: ${path.join(getConfigDir(), 'config.json')}`);
   } finally {
     rl.close();
@@ -276,5 +289,4 @@ module.exports = {
   runReadlineSetup,
   runApiKeySetup,
   seedCatalog,
-  MODEL_CHOICES,
 };
