@@ -14,24 +14,21 @@ const { resolveQuickPicks } = require('../src/utils/quick-picks');
  * @param {string} [options.client='code-local'] - Client type for branding
  * @param {Array} [options.quickPicks] - Resolved quick-pick rows from resolveQuickPicks(catalog).
  *   Defaults to pinned fallbacks when not provided.
- * @param {object} [options.seedAliases] - Seed alias map for the alias editor.
- *   Defaults to getDefaultAliases() when not provided.
  */
 function buildSetupHTML(options = {}) {
   const {
     client = 'code-local',
     quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
-    seedAliases = getDefaultAliases(),
   } = options;
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
   const modelHtml = buildModelStepHTML(quickPicks);
-  const aliasHtml = buildAliasEditorHTML(seedAliases);
+  const aliasHtml = buildAliasEditorHTML(getDefaultAliases());
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);
   const modelChoicesJson = JSON.stringify(quickPicks);
   const providerNamesJson = JSON.stringify(PROVIDER_NAMES);
-  const defaultAliasesJson = JSON.stringify(seedAliases);
+  const defaultAliasesJson = JSON.stringify(getDefaultAliases());
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Amicus Setup</title>
 <style>${css}</style></head><body>
@@ -181,6 +178,23 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     } else { nextBtn.disabled = false; }
   }
 
+  // Single source of the route choice for a quick-pick row: explicit pill
+  // choice if its key still exists, else first provider with a key, else
+  // the row's first route. Returns the full model id or null.
+  function pickRouteFor(mc) {
+    if (!mc) { return null; }
+    var provs = Object.keys(mc.routes);
+    var prov = routingChoices[mc.alias];
+    if (!prov || !mc.routes[prov]) {
+      prov = null;
+      for (var i = 0; i < provs.length; i++) {
+        if (configuredKeys[provs[i]]) { prov = provs[i]; break; }
+      }
+      if (!prov) { prov = provs[0]; }
+    }
+    return mc.routes[prov] || null;
+  }
+
   function updateRoutingPills() {
     var hasAnyKey = Object.values(configuredKeys).some(function(v) { return v; });
     var firstAvailableAlias = null;
@@ -312,16 +326,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         if (modelChoicesData[i2].alias === r2.value) { mc2 = modelChoicesData[i2]; break; }
       }
       if (mc2) {
-        var pr = routingChoices[mc2.alias];
-        if (!pr || !mc2.routes[pr]) {
-          var ps = Object.keys(mc2.routes);
-          pr = null;
-          for (var j2 = 0; j2 < ps.length; j2++) {
-            if (configuredKeys[ps[j2]]) { pr = ps[j2]; break; }
-          }
-          if (!pr) { pr = Object.keys(mc2.routes)[0]; }
-        }
-        writes.push(mc2.alias + ' \\u2192 ' + mc2.routes[pr]);
+        var routeId2 = pickRouteFor(mc2);
+        if (routeId2) { writes.push(mc2.alias + ' \\u2192 ' + routeId2); }
       }
     }
     document.getElementById('review-routing').textContent =
@@ -363,16 +369,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
           if (modelChoicesData[i].alias === r.value) { mc = modelChoicesData[i]; break; }
         }
         if (mc) {
-          var provs = Object.keys(mc.routes);
-          var prov = routingChoices[mc.alias];
-          if (!prov || !mc.routes[prov]) {
-            prov = null;
-            for (var j = 0; j < provs.length; j++) {
-              if (configuredKeys[provs[j]]) { prov = provs[j]; break; }
-            }
-            if (!prov) { prov = provs[0]; }
-          }
-          aliasWrites[mc.alias] = mc.routes[prov];
+          var routeId = pickRouteFor(mc);
+          if (routeId) { aliasWrites[mc.alias] = routeId; }
         }
       }
       Object.keys(aliasEdits).forEach(function(k) {
@@ -477,17 +475,9 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
         if (modelChoicesData[i].alias === alias) { mc = modelChoicesData[i]; break; }
       }
       if (!mc) { return; }
-      var provs = Object.keys(mc.routes);
-      var prov = routingChoices[alias];
-      if (!prov || !mc.routes[prov]) {
-        prov = null;
-        for (var j = 0; j < provs.length; j++) {
-          if (configuredKeys[provs[j]]) { prov = provs[j]; break; }
-        }
-        if (!prov) { prov = provs[0]; }
-      }
+      var routeId = pickRouteFor(mc);
       var idEl = el.querySelector('.write-preview-id');
-      if (idEl) { idEl.textContent = mc.routes[prov]; }
+      if (idEl && routeId) { idEl.textContent = routeId; }
     });
   }
 

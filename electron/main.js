@@ -273,15 +273,13 @@ function createAmicusWindow() {
 async function createSetupWindow() {
   // Lazy-load setup UI to avoid loading it for sidecar mode
   const { buildSetupHTML } = require('./setup-ui');
-  const { resolveQuickPicks, toLiveSeedAliases } = require('../src/utils/quick-picks');
-  let quickPicks, seedAliases;
+  const { resolveQuickPicks } = require('../src/utils/quick-picks');
+  let quickPicks;
   try {
     const catalog = await require('../src/utils/model-catalog').getCatalog();
     quickPicks = resolveQuickPicks(catalog);
-    seedAliases = toLiveSeedAliases(catalog);
   } catch (_err) {
     quickPicks = undefined;  // buildSetupHTML falls back to pinned
-    seedAliases = undefined;
   }
 
   mainWindow = new BrowserWindow({
@@ -296,7 +294,7 @@ async function createSetupWindow() {
     }
   });
 
-  const html = buildSetupHTML({ client: CLIENT, quickPicks, seedAliases });
+  const html = buildSetupHTML({ client: CLIENT, quickPicks });
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 

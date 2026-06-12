@@ -250,8 +250,8 @@ describe('setup-ui wizard', () => {
 });
 
 describe('buildSetupHTML (resolved picks)', () => {
-  test('injects quickPicks as modelChoicesData and seed aliases as defaultAliases', () => {
-    const html = buildSetupHTML({ quickPicks: PICKS, seedAliases: { gemini: 'openrouter/google/gemini-9.9-flash' } });
+  test('injects quickPicks as modelChoicesData and defaultAliases as static defaults', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS });
     expect(html).toContain('openrouter/google/gemini-9.9-flash');
     expect(html).toContain('var modelChoicesData =');
     expect(html).not.toContain('routingOverrides'); // blanket card writes are gone
