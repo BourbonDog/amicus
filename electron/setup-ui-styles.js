@@ -321,7 +321,12 @@ function buildWizardCSS() {
   .search-row-sub { color: #A09B96; font-size: 11px; margin-top: 2px; }
   .icon-btn { background: none; border: 1px solid #3D3A38; border-radius: 6px; color: #A09B96; cursor: pointer; font-size: 14px; padding: 6px 10px; }
   .icon-btn:hover { border-color: #D97757; color: #D97757; }
-  .icon-btn:disabled { opacity: 0.5; cursor: default; }`;
+  .icon-btn:disabled { opacity: 0.5; cursor: default; }
+  .search-label { margin: 14px 0 6px; font-size: 12px; opacity: 0.75; }
+  .pick-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #5a4a35; margin-left: 6px; }
+  .model-resolved { display: block; font-size: 11px; opacity: 0.6; font-family: monospace; }
+  .write-preview { display: none; font-size: 11px; margin-top: 4px; }
+  .write-preview-active { display: block; }`;
 }
 
 module.exports = { buildWizardCSS };

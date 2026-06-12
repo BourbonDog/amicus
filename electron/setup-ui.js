@@ -1,28 +1,37 @@
 /** Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review */
 const { buildKeysStepHTML, PROVIDERS } = require('./setup-ui-keys');
-const { buildModelStepHTML, MODEL_CHOICES, PROVIDER_NAMES } = require('./setup-ui-model');
+const { buildModelStepHTML, PROVIDER_NAMES } = require('./setup-ui-model');
 const { buildAliasEditorHTML } = require('./setup-ui-aliases');
 const { buildWizardCSS } = require('./setup-ui-styles');
 const { buildKeysScript } = require('./setup-ui-keys-script');
 const { buildAliasScript } = require('./setup-ui-alias-script');
 const { getDefaultAliases } = require('../src/utils/config');
 const { getBrandName } = require('./toolbar');
+const { resolveQuickPicks } = require('../src/utils/quick-picks');
 
 /**
  * @param {object} [options={}]
  * @param {string} [options.client='code-local'] - Client type for branding
+ * @param {Array} [options.quickPicks] - Resolved quick-pick rows from resolveQuickPicks(catalog).
+ *   Defaults to pinned fallbacks when not provided.
+ * @param {object} [options.seedAliases] - Seed alias map for the alias editor.
+ *   Defaults to getDefaultAliases() when not provided.
  */
 function buildSetupHTML(options = {}) {
-  const { client = 'code-local' } = options;
+  const {
+    client = 'code-local',
+    quickPicks = resolveQuickPicks([]),          // pinned fallbacks when not provided
+    seedAliases = getDefaultAliases(),
+  } = options;
   const brandName = getBrandName(client);
   const keysHtml = buildKeysStepHTML(PROVIDERS);
-  const modelHtml = buildModelStepHTML(MODEL_CHOICES);
-  const aliasHtml = buildAliasEditorHTML(getDefaultAliases());
+  const modelHtml = buildModelStepHTML(quickPicks);
+  const aliasHtml = buildAliasEditorHTML(seedAliases);
   const css = buildWizardCSS();
   const providersJson = JSON.stringify(PROVIDERS);
-  const modelChoicesJson = JSON.stringify(MODEL_CHOICES);
+  const modelChoicesJson = JSON.stringify(quickPicks);
   const providerNamesJson = JSON.stringify(PROVIDER_NAMES);
-  const defaultAliasesJson = JSON.stringify(getDefaultAliases());
+  const defaultAliasesJson = JSON.stringify(seedAliases);
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Amicus Setup</title>
 <style>${css}</style></head><body>
@@ -240,6 +249,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var fallback = document.querySelector('input[name="default-model"][value="' + firstAvailableAlias + '"]');
       if (fallback) { fallback.checked = true; }
     }
+    updateWritePreviews();
   }
 
   function updateAliasRoutes() {
@@ -275,13 +285,6 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       if (row.querySelector('.alias-model-select')) { return; }
       var modelSpan = row.querySelector('.alias-model');
       if (!modelSpan) { return; }
-      // For MODEL_CHOICES aliases: update text to match available routing
-      if (routedModels[alias]) {
-        modelSpan.textContent = routedModels[alias];
-        aliasEdits[alias] = routedModels[alias];
-        row.classList.remove('alias-no-key');
-        return;
-      }
       // Check if the model's provider has a configured key
       var model = aliasEdits[alias] || modelSpan.textContent;
       var prefix = model.split('/')[0];
@@ -301,17 +304,28 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       kn.length > 0 ? kn.map(function(k) { return k + ' \\u2713'; }).join(', ') : 'None';
     var r = document.querySelector('input[name="default-model"]:checked');
     document.getElementById('review-model').textContent = window.customDefaultModel || (r ? r.value : 'Not selected');
-    var routeLines = [];
-    modelChoicesData.forEach(function(mc) {
-      var prov = routingChoices[mc.alias];
-      if (!prov) {
-        var provs = Object.keys(mc.routes);
-        prov = provs.find(function(p) { return configuredKeys[p]; }) || provs[0];
+    var writes = [];
+    var r2 = document.querySelector('input[name="default-model"]:checked');
+    if (!window.customDefaultModel && r2) {
+      var mc2 = null;
+      for (var i2 = 0; i2 < modelChoicesData.length; i2++) {
+        if (modelChoicesData[i2].alias === r2.value) { mc2 = modelChoicesData[i2]; break; }
       }
-      var provName = providerNamesData[prov] || prov;
-      routeLines.push(mc.alias + ' \\u2192 ' + provName);
-    });
-    document.getElementById('review-routing').textContent = routeLines.join(', ');
+      if (mc2) {
+        var pr = routingChoices[mc2.alias];
+        if (!pr || !mc2.routes[pr]) {
+          var ps = Object.keys(mc2.routes);
+          pr = null;
+          for (var j2 = 0; j2 < ps.length; j2++) {
+            if (configuredKeys[ps[j2]]) { pr = ps[j2]; break; }
+          }
+          if (!pr) { pr = Object.keys(mc2.routes)[0]; }
+        }
+        writes.push(mc2.alias + ' \\u2192 ' + mc2.routes[pr]);
+      }
+    }
+    document.getElementById('review-routing').textContent =
+      writes.length > 0 ? writes.join(', ') : 'No alias changes';
     var editCount = Object.keys(aliasEdits).length;
     var reviewAliases = document.getElementById('review-aliases');
     if (reviewAliases) {
@@ -332,26 +346,39 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     routingChoices[alias] = provider;
     var toggle = pill.parentElement;
     toggle.querySelectorAll('.route-pill').forEach(function(p) { p.classList.toggle('active', p === pill); });
+    updateWritePreviews();
   });
 
   finishBtn.addEventListener('click', async function() {
     finishBtn.disabled = true; finishBtn.textContent = 'Saving...';
     try {
       var r = document.querySelector('input[name="default-model"]:checked');
-      var dm = window.customDefaultModel || (r ? r.value : 'gemini');
-      var routingOverrides = {};
-      modelChoicesData.forEach(function(mc) {
-        var prov = routingChoices[mc.alias];
-        if (!prov) {
-          var provs = Object.keys(mc.routes);
-          prov = provs.find(function(p) { return configuredKeys[p]; }) || provs[0];
+      var dm = window.customDefaultModel || (r ? r.value : null);
+      var aliasWrites = {};
+      if (!window.customDefaultModel && r) {
+        // Selecting a quick pick = explicit touch: upgrade that ONE alias
+        // to the resolved id via the chosen route (user-locked decision #2).
+        var mc = null;
+        for (var i = 0; i < modelChoicesData.length; i++) {
+          if (modelChoicesData[i].alias === r.value) { mc = modelChoicesData[i]; break; }
         }
-        routingOverrides[mc.alias] = mc.routes[prov];
-      });
+        if (mc) {
+          var provs = Object.keys(mc.routes);
+          var prov = routingChoices[mc.alias];
+          if (!prov || !mc.routes[prov]) {
+            prov = null;
+            for (var j = 0; j < provs.length; j++) {
+              if (configuredKeys[provs[j]]) { prov = provs[j]; break; }
+            }
+            if (!prov) { prov = provs[0]; }
+          }
+          aliasWrites[mc.alias] = mc.routes[prov];
+        }
+      }
       Object.keys(aliasEdits).forEach(function(k) {
-        routingOverrides[k] = aliasEdits[k];
+        aliasWrites[k] = aliasEdits[k];
       });
-      await window.sidecarSetup.invoke('sidecar:save-config', dm, routingOverrides);
+      await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites);
       var kc = Object.values(configuredKeys).filter(function(v) { return v; }).length;
       await window.sidecarSetup.invoke('sidecar:setup-done', dm, kc);
     } catch (_e) { finishBtn.disabled = false; finishBtn.textContent = 'Finish'; }
@@ -379,11 +406,12 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   function applyCatalog(info) {
     catalogRows = (info && info.models) || [];
     catalogFetchedAt = info && info.fetchedAt;
-    var section = $('model-search-section');
-    if (!section) { return; }
-    section.style.display = catalogRows.length > 0 ? '' : 'none';
     renderSearchMeta();
     renderSearchResults();
+    if (catalogRows.length === 0) {
+      var meta = $('model-search-meta');
+      if (meta) { meta.textContent = 'Catalog unavailable (offline?) \\u2014 use \\u21bb to retry.'; }
+    }
   }
 
   function renderSearchMeta() {
@@ -434,6 +462,33 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     var keep = box ? box.scrollTop : 0;
     renderSearchResults();
     if (box) { box.scrollTop = keep; }
+    updateWritePreviews();
+  }
+
+  function updateWritePreviews() {
+    var r = document.querySelector('input[name="default-model"]:checked');
+    var sel = (!window.customDefaultModel && r) ? r.value : null;
+    document.querySelectorAll('.write-preview').forEach(function(el) {
+      var alias = el.getAttribute('data-alias');
+      el.classList.toggle('write-preview-active', alias === sel);
+      if (alias !== sel) { return; }
+      var mc = null;
+      for (var i = 0; i < modelChoicesData.length; i++) {
+        if (modelChoicesData[i].alias === alias) { mc = modelChoicesData[i]; break; }
+      }
+      if (!mc) { return; }
+      var provs = Object.keys(mc.routes);
+      var prov = routingChoices[alias];
+      if (!prov || !mc.routes[prov]) {
+        prov = null;
+        for (var j = 0; j < provs.length; j++) {
+          if (configuredKeys[provs[j]]) { prov = provs[j]; break; }
+        }
+        if (!prov) { prov = provs[0]; }
+      }
+      var idEl = el.querySelector('.write-preview-id');
+      if (idEl) { idEl.textContent = mc.routes[prov]; }
+    });
   }
 
   document.addEventListener('input', function(e) {
@@ -443,6 +498,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     if (e.target && e.target.name === 'default-model' && e.target.checked) {
       window.customDefaultModel = null;
       renderSearchResults();
+      updateWritePreviews();
     }
   });
   document.addEventListener('click', async function(e) {

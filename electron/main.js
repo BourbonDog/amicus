@@ -270,9 +270,19 @@ function createAmicusWindow() {
 // Setup Window (API Key Form)
 // ============================================================================
 
-function createSetupWindow() {
+async function createSetupWindow() {
   // Lazy-load setup UI to avoid loading it for sidecar mode
   const { buildSetupHTML } = require('./setup-ui');
+  const { resolveQuickPicks, toLiveSeedAliases } = require('../src/utils/quick-picks');
+  let quickPicks, seedAliases;
+  try {
+    const catalog = await require('../src/utils/model-catalog').getCatalog();
+    quickPicks = resolveQuickPicks(catalog);
+    seedAliases = toLiveSeedAliases(catalog);
+  } catch (_err) {
+    quickPicks = undefined;  // buildSetupHTML falls back to pinned
+    seedAliases = undefined;
+  }
 
   mainWindow = new BrowserWindow({
     width: 560, height: 680, minWidth: 480, minHeight: 580,
@@ -286,7 +296,7 @@ function createSetupWindow() {
     }
   });
 
-  const html = buildSetupHTML({ client: CLIENT });
+  const html = buildSetupHTML({ client: CLIENT, quickPicks, seedAliases });
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 
@@ -456,7 +466,7 @@ app.whenReady().then(() => {
   }
 
   if (MODE === 'setup') {
-    createSetupWindow();
+    createSetupWindow().catch((err) => { logger.error('createSetupWindow failed', err); });
   } else {
     createAmicusWindow();
   }

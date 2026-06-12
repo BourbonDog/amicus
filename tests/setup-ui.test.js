@@ -8,6 +8,12 @@
 
 const { buildSetupHTML, PROVIDERS } = require('../electron/setup-ui');
 
+const PICKS = [
+  { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
+    source: 'live',
+    routes: { openrouter: 'openrouter/google/gemini-9.9-flash' } },
+];
+
 describe('setup-ui wizard', () => {
   let html;
 
@@ -192,9 +198,11 @@ describe('setup-ui wizard', () => {
       expect(html).toContain('route-pill');
     });
 
-    it('should pass routing overrides to save-config', () => {
-      // The finish handler should send overrides
-      expect(html).toContain('routingOverrides');
+    it('should pass aliasWrites to save-config (only touched aliases)', () => {
+      // The finish handler should send only the touched alias writes
+      expect(html).toContain('aliasWrites');
+      // The old blanket card-write loop is gone
+      expect(html).not.toContain('routingOverrides');
     });
   });
 
@@ -238,5 +246,23 @@ describe('setup-ui wizard', () => {
       const ids = PROVIDERS.map(p => p.id);
       expect(new Set(ids).size).toBe(ids.length);
     });
+  });
+});
+
+describe('buildSetupHTML (resolved picks)', () => {
+  test('injects quickPicks as modelChoicesData and seed aliases as defaultAliases', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS, seedAliases: { gemini: 'openrouter/google/gemini-9.9-flash' } });
+    expect(html).toContain('openrouter/google/gemini-9.9-flash');
+    expect(html).toContain('var modelChoicesData =');
+    expect(html).not.toContain('routingOverrides'); // blanket card writes are gone
+    expect(html).toContain('aliasWrites');
+  });
+  test('defaults to pinned fallbacks when no picks are provided', () => {
+    const html = buildSetupHTML();
+    expect(html).toContain('openrouter/google/gemini-3.5-flash'); // Task-1 pinned id
+  });
+  test('Step-3 visit no longer stamps card aliases into aliasEdits', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS });
+    expect(html).not.toContain('aliasEdits[alias] = routedModels[alias]');
   });
 });
