@@ -2,18 +2,15 @@
  * Setup UI - Step 2: Default Model Selection
  *
  * Builds the HTML for the model selection step of the wizard.
- * Renders radio card choices with provider routing and pre-selection support.
- * Models are disabled when no configured API key matches their routes.
+ * Renders radio card choices with provider routing, write-preview,
+ * and offline-badge support.
+ *
+ * Choices are RESOLVED rows passed in at call time (see src/utils/quick-picks.js):
+ *   { alias, label, blurb, source: 'live'|'fallback', routes: Object<string,string> }
+ * No curated-models import — this module is pure builder/renderer.
  */
 
-const { getCuratedModels } = require('../src/utils/curated-models');
-/**
- * Wizard quick-pick cards \u2014 derived from curated-models (F5).
- * @type {Array<{alias: string, label: string, routes: Object<string,string>}>}
- */
-const MODEL_CHOICES = getCuratedModels().map(c => ({
-  alias: c.alias, label: `${c.label} \u2014 ${c.blurb}`, routes: c.routes
-}));
+'use strict';
 
 const PROVIDER_NAMES = {
   openrouter: 'OpenRouter',
@@ -38,7 +35,7 @@ function isModelAvailable(providers, configuredKeys) {
 }
 
 /**
- * Find the best available provider for a model's static route text.
+ * Find the best available provider for a model's route display.
  * Prefers the first provider with a configured key; falls back to first provider.
  * @param {string[]} providers - Route provider IDs
  * @param {Object<string,boolean>} configuredKeys - Which providers have keys
@@ -50,12 +47,13 @@ function bestAvailableProvider(providers, configuredKeys) {
 }
 
 /**
- * Search-over-catalog section (F5). Hidden until the wizard script confirms
- * a non-empty catalog; rows are rendered client-side from the get-catalog IPC.
+ * Search-over-catalog section. Always visible — no display:none gating.
+ * Rows are rendered client-side from the get-catalog IPC response.
  * @returns {string} HTML fragment
  */
 function buildModelSearchHTML() {
-  return `<div id="model-search-section" style="display:none">
+  return `<div id="model-search-section">
+      <div class="search-label">&hellip;or pick any model from the catalog</div>
       <div class="search-head">
         <input type="text" id="model-search-input" placeholder="Search all models (id or name)..." autocomplete="off">
         <button class="icon-btn" id="model-search-refresh" title="Refresh catalog">&#x21bb;</button>
@@ -66,10 +64,11 @@ function buildModelSearchHTML() {
 }
 
 /**
- * Build the HTML fragment for Step 2 (Model Selection)
- * @param {Array<{alias: string, label: string, routes: Object<string,string>}>} choices
- * @param {string} [selectedAlias] - Pre-selected alias, defaults to first available choice
- * @param {Object<string,boolean>} [configuredKeys] - Provider IDs the user has keys for
+ * Build the HTML fragment for Step 2 (Model Selection).
+ * @param {Array<{alias:string, label:string, blurb:string, source:string, routes:Object<string,string>}>} choices
+ *   Resolved rows from resolveQuickPicks(). Each row has separate label + blurb fields.
+ * @param {string} [selectedAlias] - Pre-selected alias; defaults to first available choice.
+ * @param {Object<string,boolean>} [configuredKeys] - Provider IDs the user has keys for.
  * @returns {string} HTML fragment
  */
 function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
@@ -101,12 +100,19 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
     const showToggle = available.length >= 2;
     const bestProvider = bestAvailableProvider(providers, configuredKeys);
 
+    // Resolved id for the write-preview (prefer bestProvider route)
+    const previewId = c.routes[bestProvider] || Object.values(c.routes)[0] || '';
+
+    // Offline badge for fallback rows
+    const badge = c.source === 'fallback'
+      ? '<span class="pick-badge">offline list</span>' : '';
+
     let routeHtml = '';
     if (!modelAvailable) {
       routeHtml = '<span class="no-key-hint">No API key configured</span>';
     } else if (hasMultipleRoutes) {
       const pills = providers.map(p => {
-        const isActive = (showToggle && p === bestProvider) || (!showToggle && p === bestProvider);
+        const isActive = p === bestProvider;
         const cls = isActive ? 'route-pill active' : 'route-pill';
         return `<button class="${cls}" data-alias="${c.alias}" data-provider="${p}">${PROVIDER_NAMES[p]}</button>`;
       }).join('');
@@ -117,17 +123,20 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
     } else {
       routeHtml = `<span class="route-static">via ${PROVIDER_NAMES[bestProvider]}</span>`;
     }
+
     return `<label class="${cardClass}">
         <input type="radio" name="default-model" value="${c.alias}" ${checked}${disabled}>
         <span class="model-alias">${c.alias}</span>
-        <span class="model-label">${c.label}</span>
+        <span class="model-label">${c.label} — ${c.blurb}</span>${badge}
+        <span class="model-resolved">${previewId}</span>
         ${routeHtml}
+        <span class="write-preview" data-alias="${c.alias}">will set <code>${c.alias}</code> → <code class="write-preview-id">${previewId}</code></span>
       </label>`;
   }).join('\n      ');
 
   return `<div class="step-content">
     <h1>Choose Default Model</h1>
-    <p class="subtitle">Pick the model to use when no --model flag is given.</p>
+    <p class="subtitle">Current models resolved from the live catalog. Pick the default used when no --model flag is given.</p>
 
     <div class="model-list" id="model-list">
       ${cards}
@@ -136,4 +145,4 @@ function buildModelStepHTML(choices, selectedAlias, configuredKeys = {}) {
   </div>`;
 }
 
-module.exports = { buildModelSearchHTML, buildModelStepHTML, MODEL_CHOICES, PROVIDER_NAMES };
+module.exports = { buildModelSearchHTML, buildModelStepHTML, PROVIDER_NAMES };

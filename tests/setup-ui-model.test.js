@@ -6,7 +6,27 @@
  * provider routing toggles, and PROVIDER_NAMES export.
  */
 
-const { buildModelStepHTML, MODEL_CHOICES, PROVIDER_NAMES } = require('../electron/setup-ui-model');
+const { buildModelStepHTML, buildModelSearchHTML, PROVIDER_NAMES } = require('../electron/setup-ui-model');
+
+// Local fixture replacing the deleted MODEL_CHOICES export.
+// Matches the v2 resolved-row shape: { alias, label, blurb, source, routes }.
+const MODEL_CHOICES = [
+  { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
+    source: 'live',
+    routes: { openrouter: 'openrouter/google/gemini-3.5-flash', google: 'google/gemini-3.5-flash' } },
+  { alias: 'gemini-pro', label: 'Gemini Pro-class', blurb: 'advanced reasoning',
+    source: 'live',
+    routes: { openrouter: 'openrouter/google/gemini-3.1-pro-preview', google: 'google/gemini-3.1-pro-preview' } },
+  { alias: 'gpt', label: 'GPT flagship', blurb: 'strong coding',
+    source: 'live',
+    routes: { openrouter: 'openrouter/openai/gpt-5.5', openai: 'openai/gpt-5.5' } },
+  { alias: 'opus', label: 'Claude Opus-class', blurb: 'deep analysis',
+    source: 'live',
+    routes: { openrouter: 'openrouter/anthropic/claude-opus-4.8', anthropic: 'anthropic/claude-opus-4-6' } },
+  { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+    source: 'live',
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-chat' } },
+];
 
 describe('setup-ui-model', () => {
   describe('buildModelStepHTML', () => {
@@ -126,7 +146,7 @@ describe('setup-ui-model', () => {
       });
 
       it('should disable model when no configured key matches any route', () => {
-        // only google key — deepseek only has openrouter route → unavailable
+        // only google key — deepseek only has openrouter+deepseek routes → unavailable
         const configuredKeys = { google: true };
         const html = buildModelStepHTML(MODEL_CHOICES, undefined, configuredKeys);
         const deepseekIdx = html.indexOf('value="deepseek"');
@@ -210,18 +230,22 @@ describe('setup-ui-model', () => {
     });
   });
 
-  describe('MODEL_CHOICES', () => {
-    it('should export 5 model choices', () => {
+  // MODEL_CHOICES is now a local fixture (v2 row shape); tests pin the fixture's own shape
+  describe('MODEL_CHOICES fixture', () => {
+    it('should have 5 model choices', () => {
       expect(MODEL_CHOICES).toHaveLength(5);
     });
 
-    it('should have required fields on each choice', () => {
+    it('should have required v2 fields on each choice', () => {
       for (const choice of MODEL_CHOICES) {
         expect(choice).toHaveProperty('alias');
         expect(choice).toHaveProperty('label');
+        expect(choice).toHaveProperty('blurb');
+        expect(choice).toHaveProperty('source');
         expect(choice).toHaveProperty('routes');
         expect(typeof choice.alias).toBe('string');
         expect(typeof choice.label).toBe('string');
+        expect(typeof choice.blurb).toBe('string');
         expect(typeof choice.routes).toBe('object');
       }
     });
@@ -282,6 +306,36 @@ describe('setup-ui-model', () => {
 
     it('should include DeepSeek', () => {
       expect(PROVIDER_NAMES.deepseek).toBe('DeepSeek');
+    });
+  });
+
+  // New v2 row tests
+  const PICKS = [
+    { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
+      source: 'live',
+      routes: { openrouter: 'openrouter/google/gemini-3.5-flash', google: 'google/gemini-3.5-flash' } },
+    { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
+      source: 'fallback',
+      routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro' } },
+  ];
+
+  describe('buildModelStepHTML (v2 rows)', () => {
+    test('renders the resolved model id and a write-preview per row', () => {
+      const html = buildModelStepHTML(PICKS, 'gemini', { openrouter: true, google: true });
+      expect(html).toContain('openrouter/google/gemini-3.5-flash');
+      expect(html).toContain('class="write-preview"');
+      expect(html).toContain('data-alias="gemini"');
+      expect(html).toContain('will set');
+    });
+    test('fallback rows carry the offline badge', () => {
+      const html = buildModelStepHTML(PICKS, 'gemini', { openrouter: true });
+      expect(html).toContain('class="pick-badge"');
+      expect(html).toContain('offline list');
+    });
+    test('search section has no display:none gating and is labeled', () => {
+      const html = buildModelSearchHTML();
+      expect(html).not.toContain('display:none');
+      expect(html).toContain('or pick any model');
     });
   });
 });
