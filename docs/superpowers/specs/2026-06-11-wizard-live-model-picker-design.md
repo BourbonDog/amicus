@@ -1,6 +1,6 @@
 # Wizard Live Model Picker — Design (Step 2 + finish-path no-clobber)
 
-**Date:** 2026-06-11 · **Status:** finalized (user-approved in-session)
+**Date:** 2026-06-11 · **Status:** implemented (plan executed 2026-06-11; e2e-verified)
 **Branch:** `fix/wizard-live-model-picker` (collect-locally policy: no push, no PR, no version bump until the user's batch point)
 
 ## Problem
