@@ -64,4 +64,26 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     expect(written.aliases.gemini).toBe('openrouter/google/gemini-9.9-flash');
     expect(written.default).toBe('gemini');
   });
+
+  test('invalid input does not write config', async () => {
+    mockReadline('xyz');
+    const { loadConfig, saveConfig } = require('../src/utils/config');
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: {} });
+    const { runReadlineSetup } = require('../src/sidecar/setup');
+    await runReadlineSetup();
+    expect(saveConfig).not.toHaveBeenCalled();
+  });
+
+  test('offline catalog (getCatalog rejects) still serves picks from fallbacks', async () => {
+    mockReadline('1');
+    const { getCatalog } = require('../src/utils/model-catalog');
+    getCatalog.mockRejectedValueOnce(new Error('network down'));
+    const { loadConfig, saveConfig } = require('../src/utils/config');
+    loadConfig.mockReturnValue(null);
+    const { runReadlineSetup } = require('../src/sidecar/setup');
+    await runReadlineSetup();
+    const written = saveConfig.mock.calls[0][0];
+    expect(written.default).toBe('gemini');
+    expect(saveConfig).toHaveBeenCalledTimes(1);
+  });
 });

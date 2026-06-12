@@ -217,7 +217,8 @@ async function runReadlineSetup() {
       if (pick && !chosen.noUpgrade) {
         cfg.aliases[chosen.alias] = pick.routes.openrouter || Object.values(pick.routes)[0];
       } else if (cfg.aliases[chosen.alias] === undefined) {
-        cfg.aliases[chosen.alias] = getDefaultAliases()[chosen.alias];
+        const fallback = getDefaultAliases()[chosen.alias];
+        if (fallback !== undefined) { cfg.aliases[chosen.alias] = fallback; }
       }
     } else {
       cfg.default = chosen.modelId;
