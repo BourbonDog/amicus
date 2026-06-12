@@ -265,4 +265,18 @@ describe('buildSetupHTML (resolved picks)', () => {
     const html = buildSetupHTML({ quickPicks: PICKS });
     expect(html).not.toContain('aliasEdits[alias] = routedModels[alias]');
   });
+  test('init-loaded config deviations go to aliasDisplay, not aliasEdits', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS });
+    expect(html).toContain('var aliasDisplay = {}');
+    expect(html).toContain('aliasDisplay[k] = cfg.aliases[k]');
+    expect(html).not.toContain('aliasEdits[k] = cfg.aliases[k]');
+  });
+  test('finish applies the quick-pick selection after the aliasEdits overlay', () => {
+    const html = buildSetupHTML({ quickPicks: PICKS });
+    const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+    const overlayIdx = script.indexOf('aliasWrites[k] = aliasEdits[k]');
+    const selectionIdx = script.indexOf('aliasWrites[mc.alias] = routeId');
+    expect(overlayIdx).toBeGreaterThan(-1);
+    expect(selectionIdx).toBeGreaterThan(overlayIdx);
+  });
 });

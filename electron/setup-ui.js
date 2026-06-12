@@ -69,6 +69,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var defaultAliases = ${defaultAliasesJson};
   var routingChoices = {};
   var aliasEdits = {};
+  var aliasDisplay = {};
   window.availableModels = null;
   var keyValid = false, validatedKey = '';
   var $ = function(id) { return document.getElementById(id); };
@@ -134,7 +135,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
           }
         });
         Object.keys(cfg.aliases).forEach(function(k) {
-          if (cfg.aliases[k] !== defaultAliases[k]) { aliasEdits[k] = cfg.aliases[k]; }
+          if (cfg.aliases[k] !== defaultAliases[k]) { aliasDisplay[k] = cfg.aliases[k]; }
         });
         applyAliasEditsToUI();
       }
@@ -142,6 +143,12 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   })();
 
   function applyAliasEditsToUI() {
+    Object.keys(aliasDisplay).forEach(function(k) {
+      var row = document.querySelector('.alias-row[data-alias="' + k + '"]');
+      if (!row) { return; }
+      var modelSpan = row.querySelector('.alias-model');
+      if (modelSpan) { modelSpan.textContent = aliasDisplay[k]; }
+    });
     Object.keys(aliasEdits).forEach(function(k) {
       var row = document.querySelector('.alias-row[data-alias="' + k + '"]');
       if (!row) { return; }
@@ -300,7 +307,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var modelSpan = row.querySelector('.alias-model');
       if (!modelSpan) { return; }
       // Check if the model's provider has a configured key
-      var model = aliasEdits[alias] || modelSpan.textContent;
+      var model = aliasEdits[alias] || aliasDisplay[alias] || modelSpan.textContent;
       var prefix = model.split('/')[0];
       var noKey = false;
       if (prefix === 'openrouter') {
@@ -361,6 +368,9 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
       var r = document.querySelector('input[name="default-model"]:checked');
       var dm = window.customDefaultModel || (r ? r.value : null);
       var aliasWrites = {};
+      Object.keys(aliasEdits).forEach(function(k) {
+        aliasWrites[k] = aliasEdits[k];
+      });
       if (!window.customDefaultModel && r) {
         // Selecting a quick pick = explicit touch: upgrade that ONE alias
         // to the resolved id via the chosen route (user-locked decision #2).
@@ -373,9 +383,6 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
           if (routeId) { aliasWrites[mc.alias] = routeId; }
         }
       }
-      Object.keys(aliasEdits).forEach(function(k) {
-        aliasWrites[k] = aliasEdits[k];
-      });
       await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites);
       var kc = Object.values(configuredKeys).filter(function(v) { return v; }).length;
       await window.sidecarSetup.invoke('sidecar:setup-done', dm, kc);
