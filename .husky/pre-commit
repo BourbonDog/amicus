@@ -16,6 +16,9 @@ set -e
 # the worktree shares the stash ref namespace with the main repo but the
 # resolution path breaks when no stash exists. Use --no-stash to skip
 # the backup (the backup is for safety only; eslint --fix is idempotent).
+# --no-stash skips lint-staged's stash backup; eslint --fix may then touch
+# unstaged hunks of partially-staged files in the working tree (never the
+# commit). Acceptable for this repo's style-only fix rules.
 if git rev-parse --git-dir | grep -q 'worktrees'; then
   npx lint-staged --no-stash
 else
