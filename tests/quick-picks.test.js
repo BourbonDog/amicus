@@ -15,6 +15,10 @@ describe('compareIdsDesc', () => {
     const ids = ['google/gemini-3.5-flash-preview', 'google/gemini-3.5-flash'];
     expect(ids.sort(compareIdsDesc)[0]).toBe('google/gemini-3.5-flash');
   });
+  test(':free compound suffix: preview:free loses to its own base', () => {
+    const ids = ['openrouter/openai/gpt-5.5-preview:free', 'openrouter/openai/gpt-5.5'];
+    expect(ids.sort(compareIdsDesc)[0]).toBe('openrouter/openai/gpt-5.5');
+  });
 });
 
 describe('pickCurrent', () => {
@@ -79,5 +83,11 @@ describe('toLiveSeedAliases', () => {
   test('null/empty catalog returns the static defaults unchanged', () => {
     const { toDefaultAliases } = require('../src/utils/curated-models');
     expect(toLiveSeedAliases(null)).toEqual(toDefaultAliases());
+  });
+  test('family aliases that fell back to pinned are not overlaid', () => {
+    // Catalog has gemini flash but NOT gemini-pro -> gemini-pro stays pinned
+    const { toDefaultAliases } = require('../src/utils/curated-models');
+    const seeds = toLiveSeedAliases([row('openrouter/google/gemini-9.9-flash')]);
+    expect(seeds['gemini-pro']).toBe(toDefaultAliases()['gemini-pro']);
   });
 });

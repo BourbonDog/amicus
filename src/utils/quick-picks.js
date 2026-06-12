@@ -12,7 +12,7 @@
 
 const { getFamilies, toDefaultAliases } = require('./curated-models');
 
-const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)$/;
+const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)+$/;
 
 /** Numeric-desc comparator; same-base marker variant sorts after its base. */
 function compareIdsDesc(a, b) {
@@ -29,6 +29,8 @@ function compareIdsDesc(a, b) {
 /**
  * Newest catalog id under `<nsPrefix><vendorPath>/` whose model segment
  * matches idPattern. nsPrefix is 'openrouter/' or '' (direct rows).
+ * @param {string} vendorPath - vendor segment in the OpenRouter namespace,
+ *   or the provider name when matching direct-namespace rows (nsPrefix '').
  * @returns {string|null} full catalog id
  */
 function pickCurrent(catalog, nsPrefix, vendorPath, idPattern) {
@@ -44,6 +46,7 @@ function pickCurrent(catalog, nsPrefix, vendorPath, idPattern) {
 /**
  * @param {Array<{id:string}>} catalog
  * @returns {Array<{alias,label,blurb,source:'live'|'fallback',routes:Object<string,string>}>}
+ * `routes` may be empty if a family defines no fallback and the catalog has no match.
  */
 function resolveQuickPicks(catalog) {
   return getFamilies().map(f => {
