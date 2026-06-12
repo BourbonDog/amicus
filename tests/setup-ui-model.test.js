@@ -230,64 +230,29 @@ describe('setup-ui-model', () => {
     });
   });
 
-  // MODEL_CHOICES is now a local fixture (v2 row shape); tests pin the fixture's own shape
-  describe('MODEL_CHOICES fixture', () => {
-    it('should have 5 model choices', () => {
-      expect(MODEL_CHOICES).toHaveLength(5);
+  describe('quick-pick fallback rows (replaces MODEL_CHOICES shape tests)', () => {
+    const { resolveQuickPicks } = require('../src/utils/quick-picks');
+    const rows = resolveQuickPicks([]);
+
+    test('five families resolve in wizard display order', () => {
+      expect(rows.map(r => r.alias)).toEqual(['gemini', 'gemini-pro', 'gpt', 'opus', 'deepseek']);
     });
 
-    it('should have required v2 fields on each choice', () => {
-      for (const choice of MODEL_CHOICES) {
-        expect(choice).toHaveProperty('alias');
-        expect(choice).toHaveProperty('label');
-        expect(choice).toHaveProperty('blurb');
-        expect(choice).toHaveProperty('source');
-        expect(choice).toHaveProperty('routes');
-        expect(typeof choice.alias).toBe('string');
-        expect(typeof choice.label).toBe('string');
-        expect(typeof choice.blurb).toBe('string');
-        expect(typeof choice.routes).toBe('object');
+    test('every row has label, blurb, source fallback, and a non-empty openrouter route', () => {
+      for (const r of rows) {
+        expect(typeof r.label).toBe('string');
+        expect(typeof r.blurb).toBe('string');
+        expect(r.source).toBe('fallback');
+        expect(typeof r.routes.openrouter).toBe('string');
+        expect(r.routes.openrouter.length).toBeGreaterThan(0);
       }
     });
 
-    it('should have unique aliases', () => {
-      const aliases = MODEL_CHOICES.map(c => c.alias);
-      expect(new Set(aliases).size).toBe(aliases.length);
-    });
-
-    it('should have openrouter route for every choice', () => {
-      for (const choice of MODEL_CHOICES) {
-        expect(choice.routes).toHaveProperty('openrouter');
-        expect(choice.routes.openrouter).toContain('openrouter/');
+    test('rows render through buildModelStepHTML without error', () => {
+      const html = buildModelStepHTML(rows, 'gemini', { openrouter: true });
+      for (const r of rows) {
+        expect(html).toContain(`value="${r.alias}"`);
       }
-    });
-
-    it('should have google route for gemini models', () => {
-      const gemini = MODEL_CHOICES.find(c => c.alias === 'gemini');
-      expect(gemini.routes).toHaveProperty('google');
-      expect(gemini.routes.google).toContain('google/');
-
-      const geminiPro = MODEL_CHOICES.find(c => c.alias === 'gemini-pro');
-      expect(geminiPro.routes).toHaveProperty('google');
-    });
-
-    it('should have openai route for gpt model', () => {
-      const gpt = MODEL_CHOICES.find(c => c.alias === 'gpt');
-      expect(gpt.routes).toHaveProperty('openai');
-      expect(gpt.routes.openai).toContain('openai/');
-    });
-
-    it('should have anthropic route for opus model', () => {
-      const opus = MODEL_CHOICES.find(c => c.alias === 'opus');
-      expect(opus.routes).toHaveProperty('anthropic');
-      expect(opus.routes.anthropic).toContain('anthropic/');
-    });
-
-    it('should have both openrouter and deepseek routes for deepseek', () => {
-      const deepseek = MODEL_CHOICES.find(c => c.alias === 'deepseek');
-      expect(Object.keys(deepseek.routes)).toContain('openrouter');
-      expect(Object.keys(deepseek.routes)).toContain('deepseek');
-      expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-chat');
     });
   });
 
