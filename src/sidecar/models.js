@@ -15,6 +15,8 @@
 const { getCatalogInfo, refreshCatalog, catalogPath } = require('../utils/model-catalog');
 const { collectAliasSources, findStaleAliases, suggestReplacements } = require('../utils/alias-audit');
 const { buildCatalogDoc, buildAuditDoc } = require('../utils/result-schema');
+const { getFamilies } = require('../utils/curated-models');
+const { pickCurrent } = require('../utils/quick-picks');
 
 const CHECK_EXIT_CAP = 100;
 
@@ -105,8 +107,13 @@ async function runCheck(args) {
     }), null, 2) + '\n');
     return Math.min(stale.length, CHECK_EXIT_CAP);
   }
+  const driftLines = buildFallbackDriftReport(catalog);
   if (stale.length === 0) {
     process.stdout.write(`All aliases resolve to catalog models (${sources.length} checked).\n`);
+    if (driftLines.length > 0) {
+      process.stdout.write('Pinned fallback drift:\n');
+      for (const l of driftLines) { process.stdout.write(l + '\n'); }
+    }
     return 0;
   }
   for (const s of stale) {
@@ -118,7 +125,30 @@ async function runCheck(args) {
       process.stdout.write('  no same-vendor candidates in catalog\n');
     }
   }
+  if (driftLines.length > 0) {
+    process.stdout.write('Pinned fallback drift:\n');
+    for (const l of driftLines) { process.stdout.write(l + '\n'); }
+  }
   return Math.min(stale.length, CHECK_EXIT_CAP);
+}
+
+/**
+ * Non-blocking drift report: pinned family fallbacks vs live resolution.
+ * Empty catalog → [] (cannot check). Never affects the exit code.
+ * @param {Array<{id:string}>} catalog
+ * @returns {string[]} human-readable warning lines
+ */
+function buildFallbackDriftReport(catalog) {
+  if (!catalog || catalog.length === 0) { return []; }
+  const lines = [];
+  for (const f of getFamilies()) {
+    const live = pickCurrent(catalog, 'openrouter/', f.vendorPath, f.idPattern);
+    if (live && f.fallback.openrouter && live !== f.fallback.openrouter) {
+      lines.push(
+        `  pinned fallback drift: ${f.alias} → ${f.fallback.openrouter} (live: ${live}) — update curated-models.js`);
+    }
+  }
+  return lines;
 }
 
 /** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
@@ -132,4 +162,4 @@ async function handleModels(args) {
   return runList(args);
 }
 
-module.exports = { handleModels };
+module.exports = { handleModels, buildFallbackDriftReport };

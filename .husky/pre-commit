@@ -12,7 +12,15 @@
 # `sh -e` shim did before.
 set -e
 
-npx lint-staged
+# In linked git worktrees, lint-staged's stash-backup step fails because
+# the worktree shares the stash ref namespace with the main repo but the
+# resolution path breaks when no stash exists. Use --no-stash to skip
+# the backup (the backup is for safety only; eslint --fix is idempotent).
+if git rev-parse --git-dir | grep -q 'worktrees'; then
+  npx lint-staged --no-stash
+else
+  npx lint-staged
+fi
 
 node scripts/check-secrets.js
 node scripts/check-file-sizes.js
