@@ -135,6 +135,7 @@ src/
 │   ├── path-setup.js  # Ensures that the project's node_modules/.bin directory is included in the PATH,
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
 │   ├── prompt-source.js  # Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4).
+│   ├── quick-picks.js  # Numeric-desc comparator; same-base marker variant sorts after its base.
 │   ├── result-schema.js  # Leg/run statuses that count as terminal for wave aggregation.
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort on process signals (F3 #20).
@@ -277,6 +278,7 @@ evals/
 | `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH, | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/prompt-source.js` | Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4). | `resolvePromptSource()` |
+| `utils/quick-picks.js` | Numeric-desc comparator; same-base marker variant sorts after its base. | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/result-schema.js` | Leg/run statuses that count as terminal for wave aggregation. | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort on process signals (F3 #20). | `markAborted()`, `installSignalAbort()` |
