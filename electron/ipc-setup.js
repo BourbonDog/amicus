@@ -7,14 +7,14 @@
  * fetch-models, get-catalog, and refresh-catalog.
  */
 
+const { ipcMain } = require('electron');
 const { logger } = require('../src/utils/logger');
 
 /**
  * Register all setup-related IPC handlers
- * @param {Electron.IpcMain} ipcMain - Electron IPC main
  * @param {function} getMainWindow - Returns the current main BrowserWindow
  */
-function registerSetupHandlers(ipcMain, getMainWindow) {
+function registerSetupHandlers(getMainWindow) {
   ipcMain.handle('sidecar:validate-key', async (_event, provider, key) => {
     try {
       const { validateApiKey } = require('../src/utils/api-key-store');
@@ -95,13 +95,28 @@ function registerSetupHandlers(ipcMain, getMainWindow) {
     }
   });
 
-  ipcMain.handle('sidecar:save-config', (_event, defaultModel, aliasOverrides) => {
-    const { saveConfig, getDefaultAliases } = require('../src/utils/config');
-    const aliases = getDefaultAliases();
-    if (aliasOverrides && typeof aliasOverrides === 'object') {
-      Object.assign(aliases, aliasOverrides);
+  // Read-modify-write: never rewrite an alias the renderer didn't send.
+  // aliasWrites values: string = set, null = delete. First run seeds live.
+  ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites) => {
+    const { loadConfig, saveConfig } = require('../src/utils/config');
+    let cfg = loadConfig();
+    if (!cfg) {
+      const { toLiveSeedAliases } = require('../src/utils/quick-picks');
+      let catalog = [];
+      try {
+        catalog = await require('../src/utils/model-catalog').getCatalog();
+      } catch (_err) { /* offline: pinned seeds */ }
+      cfg = { aliases: toLiveSeedAliases(catalog) };
     }
-    saveConfig({ default: defaultModel, aliases });
+    if (!cfg.aliases) { cfg.aliases = {}; }
+    if (defaultModel) { cfg.default = defaultModel; }
+    if (aliasWrites && typeof aliasWrites === 'object') {
+      for (const [alias, model] of Object.entries(aliasWrites)) {
+        if (model === null) { delete cfg.aliases[alias]; }
+        else if (typeof model === 'string' && model) { cfg.aliases[alias] = model; }
+      }
+    }
+    saveConfig(cfg);
     return { success: true };
   });
 

@@ -417,7 +417,7 @@ ipcMain.handle('sidecar:resize-toolbar', (_event, height) => {
 });
 
 // Setup mode: all setup IPC handlers (extracted to ipc-setup.js)
-registerSetupHandlers(ipcMain, () => mainWindow);
+registerSetupHandlers(() => mainWindow);
 
 // ============================================================================
 // Settings Child Window (opened from sidecar toolbar gear button)

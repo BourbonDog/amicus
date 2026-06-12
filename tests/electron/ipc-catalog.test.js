@@ -6,6 +6,11 @@ jest.mock('../../src/utils/logger', () => ({
 
 function registerWithFakes({ catalogInfo, refreshImpl, saveImpl } = {}) {
   jest.resetModules();
+  const handlers = {};
+  jest.doMock('electron', () => ({
+    ipcMain: { handle: (name, fn) => { handlers[name] = fn; } },
+    BrowserWindow: { fromWebContents: jest.fn() },
+  }), { virtual: true });
   jest.doMock('../../src/utils/model-catalog', () => ({
     getCatalogInfo: jest.fn(async () => catalogInfo || { models: [], fetchedAt: null }),
     refreshCatalog: refreshImpl || jest.fn(async () => []),
@@ -18,10 +23,8 @@ function registerWithFakes({ catalogInfo, refreshImpl, saveImpl } = {}) {
     readApiKeyHints: jest.fn(() => ({})),
     readApiKeyValues: jest.fn(() => ({})),
   }));
-  const handlers = {};
-  const fakeIpc = { handle: (name, fn) => { handlers[name] = fn; } };
   const { registerSetupHandlers } = require('../../electron/ipc-setup');
-  registerSetupHandlers(fakeIpc, () => null);
+  registerSetupHandlers(() => null);
   return handlers;
 }
 
@@ -34,13 +37,17 @@ describe('catalog IPC', () => {
 
   it('sidecar:get-catalog degrades to empty on error', async () => {
     jest.resetModules();
+    const handlers = {};
+    jest.doMock('electron', () => ({
+      ipcMain: { handle: (n, f) => { handlers[n] = f; } },
+      BrowserWindow: { fromWebContents: jest.fn() },
+    }), { virtual: true });
     jest.doMock('../../src/utils/model-catalog', () => ({
       getCatalogInfo: jest.fn(async () => { throw new Error('boom'); }),
       refreshCatalog: jest.fn(),
     }));
-    const handlers = {};
     const { registerSetupHandlers } = require('../../electron/ipc-setup');
-    registerSetupHandlers({ handle: (n, f) => { handlers[n] = f; } }, () => null);
+    registerSetupHandlers(() => null);
     expect(await handlers['sidecar:get-catalog']({})).toEqual({ models: [], fetchedAt: null });
   });
 
@@ -77,12 +84,16 @@ describe('catalog IPC', () => {
     const refresh = jest.fn(async () => []);
     const info = jest.fn(async (opts) => ({ models: [], fetchedAt: 7 }));
     jest.resetModules();
+    const handlers = {};
+    jest.doMock('electron', () => ({
+      ipcMain: { handle: (n, f) => { handlers[n] = f; } },
+      BrowserWindow: { fromWebContents: jest.fn() },
+    }), { virtual: true });
     jest.doMock('../../src/utils/model-catalog', () => ({
       getCatalogInfo: info, refreshCatalog: refresh,
     }));
-    const handlers = {};
     const { registerSetupHandlers } = require('../../electron/ipc-setup');
-    registerSetupHandlers({ handle: (n, f) => { handlers[n] = f; } }, () => null);
+    registerSetupHandlers(() => null);
     const res = await handlers['sidecar:refresh-catalog']({});
     expect(res).toEqual({ models: [], fetchedAt: 7 });
     expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(info.mock.invocationCallOrder[0]);
