@@ -53,4 +53,21 @@ describe('curated-models v2 (families)', () => {
       expect(f.idPattern.test(or.slice(ns.length))).toBe(true);
     }
   });
+
+  test('config.getDefaultAliases() derives from this module (anti-drift)', () => {
+    const { getDefaultAliases } = require('../src/utils/config');
+    expect(getDefaultAliases()).toEqual(toDefaultAliases());
+  });
+
+  test('readline quick-picks derive from getFamilies (anti-drift)', () => {
+    // resolveQuickPicks(catalog) drives the readline Step 2 picker;
+    // family aliases must appear in the same order as getFamilies().
+    const { resolveQuickPicks } = require('../src/utils/quick-picks');
+    const picks = resolveQuickPicks([]);
+    expect(picks.map(p => p.alias)).toEqual(getFamilies().map(f => f.alias));
+    for (const p of picks) {
+      expect(typeof p.label).toBe('string');
+      expect(typeof p.blurb).toBe('string');
+    }
+  });
 });

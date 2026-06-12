@@ -69,8 +69,8 @@ describe('setup-ui-aliases', () => {
 
     it('should contain model strings in each row', () => {
       expect(html).toContain('class="alias-model"');
-      expect(html).toContain('openrouter/google/gemini-3.1-flash-lite-preview');
-      expect(html).toContain('openrouter/openai/gpt-5.4');
+      expect(html).toContain('openrouter/google/gemini-3.5-flash');
+      expect(html).toContain('openrouter/openai/gpt-5.5');
     });
 
     it('should contain arrow separators', () => {

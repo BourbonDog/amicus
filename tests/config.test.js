@@ -152,10 +152,10 @@ describe('Sidecar Config Module', () => {
       }
     });
 
-    it('should map gemini to openrouter/google/gemini-3.1-flash-lite-preview', () => {
+    it('should map gemini to openrouter/google/gemini-3.5-flash', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.gemini).toBe('openrouter/google/gemini-3.1-flash-lite-preview');
+      expect(aliases.gemini).toBe('openrouter/google/gemini-3.5-flash');
     });
 
     it('should map claude to openrouter/anthropic/claude-sonnet-4.6', () => {
@@ -164,47 +164,47 @@ describe('Sidecar Config Module', () => {
       expect(aliases.claude).toBe('openrouter/anthropic/claude-sonnet-4.6');
     });
 
-    it('should map opus to openrouter/anthropic/claude-opus-4.6', () => {
+    it('should map opus to openrouter/anthropic/claude-opus-4.8', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.6');
+      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.8');
     });
 
-    it('should map gpt to openrouter/openai/gpt-5.4', () => {
+    it('should map gpt to openrouter/openai/gpt-5.5', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.gpt).toBe('openrouter/openai/gpt-5.4');
+      expect(aliases.gpt).toBe('openrouter/openai/gpt-5.5');
     });
 
-    it('should map deepseek to openrouter/deepseek/deepseek-v3.2', () => {
+    it('should map deepseek to openrouter/deepseek/deepseek-v4-pro', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.deepseek).toBe('openrouter/deepseek/deepseek-v3.2');
+      expect(aliases.deepseek).toBe('openrouter/deepseek/deepseek-v4-pro');
     });
 
     it('should map all qwen variants correctly', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.qwen).toBe('openrouter/qwen/qwen3.5-397b-a17b');
+      expect(aliases.qwen).toBe('openrouter/qwen/qwen3.7-max');
       expect(aliases['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
-      expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.5-flash-02-23');
+      expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
     });
 
     it('should map mistral and devstral correctly', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.mistral).toBe('openrouter/mistralai/mistral-large-2512');
+      expect(aliases.mistral).toBe('openrouter/mistralai/mistral-medium-3-5');
       expect(aliases.devstral).toBe('openrouter/mistralai/devstral-2512');
     });
 
     it('should map remaining aliases correctly', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.glm).toBe('openrouter/z-ai/glm-5');
-      expect(aliases.minimax).toBe('openrouter/minimax/minimax-m2.5');
+      expect(aliases.glm).toBe('openrouter/z-ai/glm-5.1');
+      expect(aliases.minimax).toBe('openrouter/minimax/minimax-m2.7');
       expect(aliases.grok).toBe('openrouter/x-ai/grok-4.3');
-      expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k2.5');
-      expect(aliases.seed).toBe('openrouter/bytedance-seed/seed-2.0-mini');
+      expect(aliases.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
+      expect(aliases.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
     });
   });
 
@@ -217,8 +217,8 @@ describe('Sidecar Config Module', () => {
     it('should return defaults when no config exists', () => {
       const config = loadModule();
       const aliases = config.getEffectiveAliases();
-      expect(aliases.gemini).toBe('openrouter/google/gemini-3.1-flash-lite-preview');
-      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.6');
+      expect(aliases.gemini).toBe('openrouter/google/gemini-3.5-flash');
+      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.8');
     });
 
     it('should merge user aliases with defaults (user wins)', () => {
@@ -235,7 +235,7 @@ describe('Sidecar Config Module', () => {
 
       expect(aliases.gemini).toBe('openrouter/google/custom-gemini');
       expect(aliases['my-model']).toBe('openrouter/custom/model');
-      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.6');
+      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.8');
     });
   });
 
@@ -334,16 +334,16 @@ describe('Sidecar Config Module', () => {
       expect(result).toHaveProperty('openrouter');
       expect(result.openrouter).toHaveProperty('models');
       expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
-      expect(result.openrouter.models['google/gemini-3.1-flash-lite-preview']).toBeDefined();
+      expect(result.openrouter.models['google/gemini-3.5-flash']).toBeDefined();
     });
 
     it('should include all default alias models', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
       const modelKeys = Object.keys(result.openrouter.models);
-      expect(modelKeys).toContain('anthropic/claude-opus-4.6');
+      expect(modelKeys).toContain('anthropic/claude-opus-4.8');
       expect(modelKeys).toContain('openai/gpt-5.3-codex');
-      expect(modelKeys).toContain('deepseek/deepseek-v3.2');
+      expect(modelKeys).toContain('deepseek/deepseek-v4-pro');
     });
 
     it('should include user-configured aliases', () => {
