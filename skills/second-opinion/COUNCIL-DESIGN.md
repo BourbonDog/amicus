@@ -120,7 +120,9 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 ### Stage 6 — Capture lessons (compounding)
 - Reflect on failures/mitigations and briefing wording, as today.
 - **Additionally** update the per-model **reviewer-reliability** table (§7).
-- **Show the proposed MODEL-NOTES diff and get approval before writing.** Keep it tight.
+- **Write the proposed MODEL-NOTES diff to a run-folder file and get approval before writing.**
+  The approval prompt carries the diff file's path; chat text alone is not sufficient (an approval
+  dialog can hide the chat transcript). Keep it tight.
 
 ## 5. Key mechanics
 
