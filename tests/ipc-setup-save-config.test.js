@@ -10,7 +10,6 @@ jest.mock('electron', () => ({
 jest.mock('../src/utils/config', () => ({
   loadConfig: jest.fn(),
   saveConfig: jest.fn(),
-  getDefaultAliases: jest.fn(() => ({ gemini: 'pinned/gemini' })),
 }));
 jest.mock('../src/utils/quick-picks', () => ({
   toLiveSeedAliases: jest.fn(() => ({ gemini: 'live/gemini', qwen: 'live/qwen' })),
@@ -66,5 +65,15 @@ describe('sidecar:save-config (read-modify-write)', () => {
     const written = saveConfig.mock.calls[0][0];
     expect(written.aliases).toEqual({ gemini: 'live/gemini', qwen: 'live/qwen' });
     expect(written.default).toBe('gemini');
+  });
+
+  test('first run with getCatalog rejection still seeds (pinned via empty catalog)', async () => {
+    const { getCatalog } = require('../src/utils/model-catalog');
+    getCatalog.mockRejectedValueOnce(new Error('offline'));
+    loadConfig.mockReturnValue(null);
+    await save('gemini', {});
+    const { toLiveSeedAliases } = require('../src/utils/quick-picks');
+    expect(toLiveSeedAliases).toHaveBeenCalledWith([]);
+    expect(saveConfig).toHaveBeenCalled();
   });
 });

@@ -98,26 +98,32 @@ function registerSetupHandlers(getMainWindow) {
   // Read-modify-write: never rewrite an alias the renderer didn't send.
   // aliasWrites values: string = set, null = delete. First run seeds live.
   ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites) => {
-    const { loadConfig, saveConfig } = require('../src/utils/config');
-    let cfg = loadConfig();
-    if (!cfg) {
-      const { toLiveSeedAliases } = require('../src/utils/quick-picks');
-      let catalog = [];
-      try {
-        catalog = await require('../src/utils/model-catalog').getCatalog();
-      } catch (_err) { /* offline: pinned seeds */ }
-      cfg = { aliases: toLiveSeedAliases(catalog) };
-    }
-    if (!cfg.aliases) { cfg.aliases = {}; }
-    if (defaultModel) { cfg.default = defaultModel; }
-    if (aliasWrites && typeof aliasWrites === 'object') {
-      for (const [alias, model] of Object.entries(aliasWrites)) {
-        if (model === null) { delete cfg.aliases[alias]; }
-        else if (typeof model === 'string' && model) { cfg.aliases[alias] = model; }
+    try {
+      const { loadConfig, saveConfig } = require('../src/utils/config');
+      let cfg = loadConfig();
+      if (!cfg) {
+        const { toLiveSeedAliases } = require('../src/utils/quick-picks');
+        let catalog = [];
+        try {
+          catalog = await require('../src/utils/model-catalog').getCatalog();
+        } catch (_err) { /* offline: pinned seeds */ }
+        cfg = { aliases: toLiveSeedAliases(catalog) };
       }
+      if (!cfg.aliases) { cfg.aliases = {}; }
+      if (defaultModel) { cfg.default = defaultModel; }
+      if (aliasWrites && typeof aliasWrites === 'object') {
+        for (const [alias, model] of Object.entries(aliasWrites)) {
+          if (model === null) { delete cfg.aliases[alias]; }
+          // empty string: ignore (use null to delete)
+          else if (typeof model === 'string' && model) { cfg.aliases[alias] = model; }
+        }
+      }
+      saveConfig(cfg);
+      return { success: true };
+    } catch (err) {
+      logger.error('save-config handler error', { error: err.message });
+      throw err; // renderer invoke() rejects; its catch re-enables Finish
     }
-    saveConfig(cfg);
-    return { success: true };
   });
 
   ipcMain.handle('sidecar:get-config', () => {
