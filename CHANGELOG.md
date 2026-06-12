@@ -5,6 +5,39 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-11
+
+### Added
+- **DeepSeek as a direct API provider**: DeepSeek card and API key step in the setup wizard,
+  live model fetch from DeepSeek's `/models`, and a direct `deepseek/...` route used
+  automatically when no OpenRouter key is configured.
+- **`amicus key`**: headless API key management — `amicus key` lists configured providers with
+  masked hints, `amicus key <provider> <key>` validates and saves, `--remove` deletes. No GUI
+  required.
+- **Live quick picks in the setup wizard (Step 2)**: recommended models resolve per family
+  against the live catalog when the window opens (no stale pinned ids), with always-visible
+  labeled search and a write-preview showing exactly which alias will change.
+
+### Changed
+- **Setup wizard finish is now read-modify-write**: picking a model sets the default and
+  upgrades only that one alias; untouched aliases are never rewritten and deleted aliases stay
+  deleted. (Previously, finishing setup could silently rewrite every card alias.)
+- Readline (no-Electron) setup parity: free-form model ids and the same no-clobber behavior.
+  `amicus models --check` now also warns when a curated pinned fallback drifts from the live
+  catalog.
+- Council skill (Stage 6): the proposed MODEL-NOTES diff is written to a run-folder file and
+  the approval prompt carries the file path — approval dialogs can hide chat text.
+- Chat skill docs: single-model sidecars default to interactive (GUI) mode; headless remains
+  the default for fanouts and bulk runs.
+- Attribution: npm package author is Christian Wagner; "Inspired by" fork wording in
+  CONTRIBUTING.
+
+### Fixed
+- **Electron preload crash on every page**: `window.sidecar` (contextBridge) is now exposed
+  before DOM injection, and the injected CSS guards against a null `documentElement` — the
+  silent TypeError previously killed both the bridge and the anti-white-flash styling.
+- DeepSeek provider pill showed `undefined` in the wizard model step.
+
 ## [1.0.0] - 2026-06-10
 
 Everything since the fork from upstream `claude-sidecar` v0.5.2 — the Amicus launch line.
