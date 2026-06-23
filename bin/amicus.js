@@ -11,10 +11,11 @@
 const { loadCredentials } = require('../src/utils/env-loader');
 loadCredentials();
 
-const { parseArgs, validateStartArgs, getUsage } = require('../src/cli');
+const { parseArgs, getUsage } = require('../src/cli');
 const { validateTaskId } = require('../src/utils/validators');
 const { resolveModelFromArgs, validateFallbackModel } = require('../src/utils/start-helpers');
 const { handleSetup, handleAbort, handleUpdate, handleMcp, handleKey } = require('../src/cli-handlers');
+const { handleStart, handleFanout, handleRead } = require('../src/cli-handlers-run');
 const { isOneShotCommand, armExitWatchdog } = require('../src/utils/lifecycle');
 const { logger } = require('../src/utils/logger');
 
@@ -130,135 +131,6 @@ async function main() {
 }
 
 /**
- * Handle 'sidecar start' command
- * Spec Reference: §4.1
- */
-async function handleStart(args) {
-  // F4: --prompt-file support (XOR --prompt) and --json gating
-  if (args.prompt !== undefined || args['prompt-file'] !== undefined) {
-    const { resolvePromptSource } = require('../src/utils/prompt-source');
-    const promptRes = resolvePromptSource(args);
-    if (promptRes.error) {
-      console.error(promptRes.error);
-      process.exit(1);
-    }
-    args.prompt = promptRes.prompt;
-  }
-  if (args.json && !args['no-ui']) {
-    console.error('Error: --json requires --no-ui');
-    process.exit(1);
-  }
-
-  const { model, alias } = resolveModelFromArgs(args);
-  args.model = model;
-  args.model = await validateFallbackModel(args, alias);
-
-  // Normalize agent: --agent takes precedence, otherwise use --mode
-  args.agent = args.agent || args.mode;
-
-  const validation = validateStartArgs(args);
-  if (!validation.valid) {
-    console.error(validation.error);
-    process.exit(1);
-  }
-
-  const { startSidecar } = require('../src/index');
-
-  return await startSidecar({
-    taskId: args['task-id'],
-    model: args.model,
-    prompt: args.prompt,
-    sessionId: args['session-id'],
-    cwd: args.cwd,
-    contextTurns: args['context-turns'],
-    contextSince: args['context-since'],
-    contextMaxTokens: args['context-max-tokens'],
-    noUi: args['no-ui'],
-    timeout: args.timeout,
-    agent: args.agent,
-    mcp: args.mcp,
-    mcpConfig: args['mcp-config'],
-    thinking: args.thinking,
-    summaryLength: args['summary-length'],
-    client: args.client,
-    sessionDir: args['session-dir'],
-    foldShortcut: args['fold-shortcut'],
-    opencodePort: args['opencode-port'],
-    noMcp: args['no-mcp'],
-    excludeMcp: args['exclude-mcp'],
-    coworkProcess: args['cowork-process'],
-    position: args.position,
-    json: !!args.json,
-    modelInput: alias || null,
-  });
-}
-
-/**
- * Handle 'amicus fanout' command (F4).
- * Returns the wave exit code: 0 all complete, 2 partial, 1 none/hard failure,
- * 130/143 when the wave was signal-aborted.
- */
-async function handleFanout(args) {
-  const { resolvePromptSource } = require('../src/utils/prompt-source');
-  const promptRes = resolvePromptSource(args);
-  if (promptRes.error) {
-    console.error(promptRes.error);
-    process.exit(1);
-  }
-  if (typeof args.models !== 'string' || !args.models.trim()) {
-    console.error('Error: --models is required (comma-separated aliases or provider/model IDs)');
-    process.exit(1);
-  }
-  if (args['wave-id']) {
-    const check = validateTaskId(String(args['wave-id']));
-    if (!check.valid) {
-      console.error(check.error);
-      process.exit(1);
-    }
-  }
-  if (args.agent && String(args.agent).toLowerCase() === 'chat') {
-    console.error('Error: --agent chat is interactive-only; fanout is headless');
-    process.exit(1);
-  }
-  if (args.timeout !== undefined && args.timeout <= 0) {
-    console.error('Error: --timeout must be a positive number');
-    process.exit(1);
-  }
-  const { parseModelsList } = require('../src/sidecar/fanout');
-  if (parseModelsList(args.models).length === 0) {
-    console.error('Error: --models must contain at least one non-empty entry');
-    process.exit(1);
-  }
-
-  // Direct require — the src/index.js public re-export is added later (Task 13)
-  const { runFanout } = require('../src/sidecar/fanout');
-  const { exitCode } = await runFanout({
-    models: args.models,
-    prompt: promptRes.prompt,
-    promptMeta: promptRes.promptMeta,
-    waveId: args['wave-id'],
-    project: args.cwd || process.cwd(),
-    agent: args.agent || args.mode,
-    thinking: args.thinking,
-    timeout: args.timeout,
-    summaryLength: args['summary-length'],
-    includeContext: !args['no-context'],
-    sessionId: args['session-id'],
-    contextTurns: args['context-turns'],
-    contextSince: args['context-since'],
-    contextMaxTokens: args['context-max-tokens'],
-    mcp: args.mcp,
-    mcpConfig: args['mcp-config'],
-    noMcp: args['no-mcp'],
-    excludeMcp: args['exclude-mcp'],
-    noValidateModel: args['no-validate-model'],
-    json: !!args.json,
-    client: args.client,
-  });
-  return exitCode;
-}
-
-/**
  * Handle 'sidecar list' command
  * Spec Reference: §4.2
  */
@@ -345,36 +217,6 @@ async function handleContinue(args) {
     contextMaxTokens: args['context-max-tokens'],
     headless: args['no-ui'],
     timeout: args.timeout
-  });
-}
-
-/**
- * Handle 'sidecar read' command
- * Spec Reference: §4.5
- */
-async function handleRead(args) {
-  const taskId = args._[1];
-
-  if (!taskId) {
-    console.error('Error: task_id is required for read');
-    console.error('Usage: sidecar read <task_id> [--summary|--conversation]');
-    process.exit(1);
-  }
-
-  const taskIdCheck = validateTaskId(taskId);
-  if (!taskIdCheck.valid) {
-    console.error(taskIdCheck.error);
-    process.exit(1);
-  }
-
-  const { readSidecar } = require('../src/index');
-
-  await readSidecar({
-    taskId,
-    conversation: args.conversation,
-    metadata: args.metadata,
-    json: args.json,
-    project: args.cwd
   });
 }
 

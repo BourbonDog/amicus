@@ -158,7 +158,7 @@ function validateStartArgs(args) {
 
   // Validate model format if model is present (model is resolved externally via resolveModel)
   if (args.model && !isValidModelFormat(args.model)) {
-    return { valid: false, error: 'Error: --model must be in format provider/model (e.g., google/gemini-2.5-flash) or openrouter/provider/model' };
+    return { valid: false, code: 'BAD_MODEL', error: 'Error: --model must be in format provider/model (e.g., google/gemini-2.5-flash) or openrouter/provider/model' };
   }
 
   // Validate cwd path exists (if provided)

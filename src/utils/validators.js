@@ -260,6 +260,7 @@ function validateApiKey(model) {
         '    (non-interactive shells like Claude Code and CI do not source ~/.zshrc)\n';
     return {
       valid: false,
+      code: 'MISSING_KEY',
       error:
         `Error: ${keyName} not found for ${providerInfo.name}.\n\n` +
         'Fix with one of:\n' +

@@ -30,7 +30,8 @@ describe('fanout CLI surface', () => {
   it('handleFanout source guards timeout and empty model lists', () => {
     const fs = require('fs');
     const path = require('path');
-    const src = fs.readFileSync(path.join(__dirname, '../bin/amicus.js'), 'utf-8');
+    // handleFanout was extracted from bin/amicus.js to src/cli-handlers-run.js (WS-2 #6)
+    const src = fs.readFileSync(path.join(__dirname, '../src/cli-handlers-run.js'), 'utf-8');
     expect(src).toContain('--timeout must be a positive number');
     expect(src).toContain('at least one non-empty entry');
   });
