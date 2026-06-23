@@ -168,7 +168,7 @@ Lets you see how the bench judges Claude's *own* take.
 - **Which review: always fresh** — Claude does a new structured Stage-1 review on the artifact
   every time it's enabled (not a formalization of upstream feedback).
 - **Readout — "How Claude's review fared":** Claude's street-cred rank among peers and the
-  Confirmed/Contested/Singleton split of its findings, reported in the matrix and report.
+  Disputed/Confirmed/Contested/Singleton split of its findings, reported in the matrix and report.
 - **Integrity:** when Claude presents results, it reports the bench's verdict on its own review
   at face value — no defending or re-litigating.
 

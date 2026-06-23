@@ -208,7 +208,7 @@ The output `record` carries the deterministic tiers (Disputed / Confirmed / Cont
 
 A designated **non-Claude** chair synthesizes the verdict across all reviews, rankings, and adjudications. The chair produces an independent verdict that Claude then presents — Claude does not paraphrase, edit, or re-synthesize it.
 
-**Chair selection (confirmed in Stage 0).** Default: Claude recommends the strongest reasoner in the council (guided by the reviewer-reliability table in `MODEL-NOTES.md`) and the user confirms before the run launches. The chair may be a council member who already participated in Stages 1 and 2 — it receives the de-anonymized full bundle, all ranking outputs, and all adjudications so it has the complete picture.
+**Chair selection (confirmed in Stage 0).** Default: Claude recommends the strongest reasoner in the council (guided by `amicus council stats` (peers-only street-cred) and the qualitative quirks in `MODEL-NOTES.md`) and the user confirms before the run launches. The chair may be a council member who already participated in Stages 1 and 2 — it receives the de-anonymized full bundle, all ranking outputs, and all adjudications so it has the complete picture.
 
 **Fallback order if the chair fails:**
 1. Re-run the chair call (transient failure — `MODEL-NOTES.md` mitigations apply).
