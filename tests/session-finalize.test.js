@@ -6,6 +6,8 @@ describe('resolveTerminalState', () => {
   });
   it('error wins over everything → error / 1', () => {
     expect(resolveTerminalState({ completed: true, error: 'boom' })).toEqual({ status: 'error', exitCode: 1 });
+    expect(resolveTerminalState({ aborted: true, error: 'boom' })).toEqual({ status: 'error', exitCode: 1 });
+    expect(resolveTerminalState({ timedOut: true, error: 'boom' })).toEqual({ status: 'error', exitCode: 1 });
   });
   it('timed-out (no error) → timed-out / 2', () => {
     expect(resolveTerminalState({ completed: false, timedOut: true })).toEqual({ status: 'timed-out', exitCode: 2 });

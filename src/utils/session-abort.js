@@ -1,10 +1,12 @@
 /**
- * Session abort on process signals (F3 #20).
+ * Session abort utilities: signal handler installation and terminal metadata writes.
  *
- * When the parent process is killed (SIGTERM/SIGINT/SIGBREAK), the running
- * headless session must be aborted so no orphaned OpenCode session keeps
- * burning API credits. `markAborted` is the synchronous metadata write that
- * guarantees `amicus list` won't show an orphan afterward.
+ * Handles two related responsibilities: (1) installing process signal handlers
+ * (SIGINT, SIGTERM, SIGBREAK) that trigger abort callbacks, and (2) synchronously
+ * writing terminal status to session metadata (markTerminal and markAborted).
+ * These work together to ensure that when a session process is signaled, the
+ * session is marked as aborted immediately, preventing orphaned sessions from
+ * consuming API credits and ensuring `amicus list` reflects the true state.
  */
 
 const fs = require('fs');
