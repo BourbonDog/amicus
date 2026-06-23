@@ -93,6 +93,10 @@ describe('check-secrets', () => {
       expect(orRes.some(r => r.pattern === 'sk-or-')).toBe(true);
       expect(orRes.some(r => r.pattern === 'sk-')).toBe(false);
 
+      const orLong = scanForSecrets('K=sk-or-v1-' + 'a'.repeat(40), '.env');
+      expect(orLong.some(r => r.pattern === 'sk-or-')).toBe(true);
+      expect(orLong.some(r => r.pattern === 'sk-')).toBe(false);
+
       const antRes = scanForSecrets('K=sk-ant-' + 'a'.repeat(40), '.env');
       expect(antRes.some(r => r.pattern === 'sk-ant-')).toBe(true);
       expect(antRes.some(r => r.pattern === 'sk-')).toBe(false);
