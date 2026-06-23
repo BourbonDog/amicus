@@ -9,7 +9,7 @@
  * any rename/removal bumps SCHEMA_VERSION.
  */
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** Leg/run statuses that count as terminal for wave aggregation. */
 const TERMINAL_STATUSES = ['complete', 'error', 'timeout', 'aborted', 'crashed', 'idle-timeout'];
@@ -48,7 +48,7 @@ function durationBetween(createdAt, completedAt) {
  * @param {string|null} [opts.waveId] - Explicit wave id (falls back to metadata.parentWave)
  * @returns {object} run document
  */
-function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null }) {
+function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null, usage = null }) {
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');
   const createdAt = metadata.createdAt || null;
   const completedAt = metadata.completedAt || metadata.abortedAt || null;
@@ -69,6 +69,7 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     durationMs,
     sessionDir,
     opencodeSessionId: metadata.opencodeSessionId || null,
+    usage: usage !== null ? usage : (metadata.usage || null),
   };
 }
 
@@ -115,6 +116,7 @@ function waveExitCode(waveStatus) {
  * @returns {object} wave document
  */
 function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null }) {
+  const { sumWaveUsage } = require('./pricing');
   const counts = {
     total: legs.length,
     complete: legs.filter(l => l.status === 'complete').length,
@@ -135,6 +137,7 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
     createdAt,
     completedAt,
     durationMs,
+    usage: sumWaveUsage(legs),
   };
 }
 

@@ -232,12 +232,20 @@ async function startSidecar(options) {
     finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status });
   }
 
+  const { resolveUsage } = require('../utils/pricing');
+  const runUsage = result && result.usage ? resolveUsage({ model, usageTotals: result.usage }) : null;
+  if (runUsage) {
+    const m = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    m.usage = runUsage;
+    fs.writeFileSync(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
+  }
+
   if (json) {
     const { buildRunResult } = require('../utils/result-schema');
     const finalMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
     const doc = buildRunResult({
       taskId, metadata: finalMeta, result, summary,
-      modelInput, sessionDir: sessDir,
+      modelInput, sessionDir: sessDir, usage: runUsage,
     });
     console.log(JSON.stringify(doc, null, 2));
   }

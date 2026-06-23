@@ -82,6 +82,13 @@ describe('result-schema', () => {
       });
       expect(doc.durationMs).toBeNull();
     });
+
+    it('attaches an explicit usage block, else falls back to metadata.usage, else null', () => {
+      const usage = { tokens: { input: 1, output: 2, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' } };
+      expect(buildRunResult({ taskId: 't', metadata: baseMeta, usage }).usage).toEqual(usage);
+      expect(buildRunResult({ taskId: 't', metadata: { ...baseMeta, usage } }).usage).toEqual(usage);
+      expect(buildRunResult({ taskId: 't', metadata: baseMeta }).usage).toBeNull();
+    });
   });
 
   describe('waveStatusFromLegs + waveExitCode', () => {
@@ -151,6 +158,17 @@ describe('result-schema', () => {
       const doc = buildWaveResult({ waveId: 'w' });
       expect(doc.counts.total).toBe(0);
       expect(doc.status).toBe('error');
+    });
+
+    it('aggregates leg usage into a wave usage block', () => {
+      const u = (amount, source) => ({ tokens: { input: 5, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, cost: { amount, currency: 'USD', source } });
+      const doc = buildWaveResult({ waveId: 'w', legs: [
+        { status: 'complete', usage: u(0.1, 'reported') },
+        { status: 'complete', usage: u(0.05, 'estimated') },
+      ] });
+      expect(doc.usage.tokens.input).toBe(10);
+      expect(doc.usage.cost.amount).toBeCloseTo(0.15, 6);
+      expect(doc.usage.cost.source).toBe('mixed');
     });
   });
 });

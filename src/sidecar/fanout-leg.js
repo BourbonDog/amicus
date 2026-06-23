@@ -87,10 +87,13 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   if (summary) {
     fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
   }
+  const { resolveUsage } = require('../utils/pricing');
+  const usage = result && result.usage ? resolveUsage({ model: leg.model, usageTotals: result.usage }) : null;
   const finalMeta = writeLegPatch(legDir, {
     status,
     reason: result.error || undefined,
     completedAt: new Date().toISOString(),
+    usage: usage || undefined,
   });
   const effectiveResult = finalMeta.status === 'aborted'
     ? { ...result, aborted: true }
@@ -100,7 +103,7 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   }
   return buildRunResult({
     taskId: legId, metadata: finalMeta, result: effectiveResult, summary,
-    modelInput: leg.modelInput, sessionDir: legDir, waveId,
+    modelInput: leg.modelInput, sessionDir: legDir, waveId, usage,
   });
 }
 

@@ -17,6 +17,7 @@ jest.mock('../src/utils/logger', () => ({
 }));
 
 const fs = require('fs');
+const { SCHEMA_VERSION } = require('../src/utils/result-schema');
 const os = require('os');
 const path = require('path');
 const { startSidecar } = require('../src/sidecar/start');
@@ -48,7 +49,7 @@ describe('start --json (F4)', () => {
     expect(logSpy).toHaveBeenCalledTimes(1); // exactly one stdout write
     const doc = JSON.parse(logSpy.mock.calls[0][0]); // whole-output parse must succeed
     expect(doc).toMatchObject({
-      schemaVersion: 1, type: 'run', taskId: 'feed0001',
+      schemaVersion: SCHEMA_VERSION, type: 'run', taskId: 'feed0001',
       model: 'openrouter/a/b', modelInput: 'somealias',
       status: 'complete', summary: 'JSON MODE SUMMARY',
     });

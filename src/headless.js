@@ -301,6 +301,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let aborted = false;
     let sessionError = null; // Captures model/SDK errors from assistant messages
     const toolCalls = [];
+    const usageByMsg = new Map();
 
     // Poll for completion by checking messages
     const startTime = Date.now();
@@ -372,6 +373,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             // Track assistant message state
             if (role === 'assistant') {
               currentAssistantMsgId = msg.info.id;
+              if (msg.info.tokens || typeof msg.info.cost === 'number') {
+                usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
+              }
               // Check for errors — capture for result propagation
               if (msg.info.error) {
                 sessionError = msg.info.error.data?.message
@@ -617,6 +621,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // a model error alongside streamed output still yields a usable summary),
     // and ALWAYS when the poll loop bailed on consecutive failures (F4: a dead
     // server must never classify as a complete leg, even with partial output).
+    const { sumPerMessageUsage } = require('./utils/pricing');
+    const usage = sumPerMessageUsage(usageByMsg);
+
     if (sessionError && (!output || pollFailureBail)) {
       return {
         summary: output ? extractSummary(output) : '',
@@ -625,6 +632,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         aborted,
         taskId,
         toolCalls,
+        usage,
         error: sessionError
       };
     }
@@ -636,6 +644,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       aborted,
       taskId,
       toolCalls, // Include tool calls in result for verification
+      usage,
       exitCode: 0
     };
 
@@ -657,12 +666,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (watchdog) { watchdog.cancel(); }
     if (uninstallSignals) { uninstallSignals(); }
     if (!externalServer) { server.close(); }
+    const { emptyUsageTotals } = require('./utils/pricing');
     return {
       summary: '',
       completed: false,
       timedOut: false,
       aborted: false,
       taskId,
+      usage: emptyUsageTotals(),
       error: error.message
     };
   }

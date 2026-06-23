@@ -60,7 +60,7 @@ describe('amicus models', () => {
     const { code, out } = await captureStdout(() => handleModels({ _: ['models'], json: true }));
     expect(code).toBe(0);
     const doc = JSON.parse(out);
-    expect(doc.schemaVersion).toBe(1);
+    expect(doc.schemaVersion).toBe(2);
     expect(doc.type).toBe('model-catalog');
     expect(doc.count).toBe(2);
     expect(doc.models[0].id).toBe('openrouter/x-ai/grok-4.3');

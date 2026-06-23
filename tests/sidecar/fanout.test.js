@@ -243,7 +243,7 @@ describe('runFanout orchestrator', () => {
       expect(logSpy).toHaveBeenCalledTimes(1);
       const doc = JSON.parse(logSpy.mock.calls[0][0]); // whole-output parse must succeed
       expect(doc.type).toBe('wave');
-      expect(doc.schemaVersion).toBe(1);
+      expect(doc.schemaVersion).toBe(2);
     } finally {
       logSpy.mockRestore();
     }
