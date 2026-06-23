@@ -1,16 +1,22 @@
 'use strict';
 
-const { createActivityPoller } = require('../src/utils/activity-poller');
+const { createActivityPoller, killIfAlive } = require('../src/utils/activity-poller');
 
 describe('interactive watchdog teardown', () => {
-  it('kills the electron process when the idle timeout fires', () => {
+  it('killIfAlive sends SIGTERM to a running process', () => {
     const electronProcess = { killed: false, kill: jest.fn() };
-    // The onTimeout body wired in interactive.js:
-    const onTimeout = () => {
-      if (electronProcess && !electronProcess.killed) { electronProcess.kill('SIGTERM'); }
-    };
-    onTimeout();
+    killIfAlive(electronProcess);
     expect(electronProcess.kill).toHaveBeenCalledWith('SIGTERM');
+  });
+
+  it('killIfAlive does not call kill if process is already killed', () => {
+    const electronProcess = { killed: true, kill: jest.fn() };
+    killIfAlive(electronProcess);
+    expect(electronProcess.kill).not.toHaveBeenCalled();
+  });
+
+  it('killIfAlive does not throw when process is null', () => {
+    expect(() => killIfAlive(null)).not.toThrow();
   });
 
   it('an active (busy) session touches the watchdog instead of being killed', async () => {

@@ -114,7 +114,7 @@ src/
 │   ├── setup.js  # Sidecar Setup Wizard
 │   └── start.js  # Generate a unique 8-character hex task ID
 ├── utils/
-│   ├── activity-poller.js  # Periodically poll an async status source and fire onActivity() whenever the
+│   ├── activity-poller.js  # SIGTERM a child process if it exists and isn't already killed.
 │   ├── agent-mapping.js  # * All OpenCode native agent names (lowercase)
 │   ├── alias-audit.js  # Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'.
 │   ├── alias-resolver.js  # Alias Resolver Utilities
@@ -259,7 +259,7 @@ evals/
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `detectApiKeys()`, `runInteractiveSetup()`, `runReadlineSetup()` |
 | `sidecar/start.js` | Generate a unique 8-character hex task ID | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
-| `utils/activity-poller.js` | Periodically poll an async status source and fire onActivity() whenever the | `createActivityPoller()` |
+| `utils/activity-poller.js` | SIGTERM a child process if it exists and isn't already killed. | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | * All OpenCode native agent names (lowercase) | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `applyDirectApiFallback()`, `autoRepairAlias()` |

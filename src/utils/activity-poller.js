@@ -1,10 +1,9 @@
 'use strict';
 
 /**
- * Periodically poll an async status source and fire onActivity() whenever the
- * session is doing work (any non-'idle' status type). Best-effort: getStatus
- * errors are swallowed and polling continues. Timers are unref'd so the poller
- * never keeps the process alive.
+ * Poll an async status source on an interval and fire onActivity() on any non-idle state.
+ * Best-effort: getStatus errors are swallowed and polling continues. Timers are unref'd
+ * so the poller never keeps the process alive.
  *
  * @param {object} opts
  * @param {() => Promise<{type?:string}>} opts.getStatus
@@ -40,4 +39,9 @@ function createActivityPoller({ getStatus, onActivity, intervalMs = 30000 }) {
   };
 }
 
-module.exports = { createActivityPoller };
+/** SIGTERM a child process if it exists and isn't already killed. */
+function killIfAlive(child) {
+  if (child && !child.killed) { child.kill('SIGTERM'); }
+}
+
+module.exports = { createActivityPoller, killIfAlive };

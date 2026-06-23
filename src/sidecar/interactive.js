@@ -155,16 +155,14 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
   // The real teardown handler is installed BEFORE start() (closes the startup
   // race) and references a closure that is assigned once Electron spawns.
   const { IdleWatchdog } = require('../utils/idle-watchdog');
-  const { createActivityPoller } = require('../utils/activity-poller');
+  const { createActivityPoller, killIfAlive } = require('../utils/activity-poller');
   const { getSessionStatus } = require('../opencode-client');
   let electronProcess = null;
   const watchdog = new IdleWatchdog({
     mode: 'interactive',
     onTimeout: () => {
       logger.info('Interactive idle timeout - shutting down', { taskId });
-      if (electronProcess && !electronProcess.killed) {
-        electronProcess.kill('SIGTERM');
-      }
+      killIfAlive(electronProcess);
     },
   }).start();
 
