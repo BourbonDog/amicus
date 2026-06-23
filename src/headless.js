@@ -190,8 +190,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         mode: 'headless',
         onTimeout: () => {
           logger.info('Headless idle timeout - shutting down', { taskId });
-          server.close();
-          process.exit(0);
+          const { idleBackstopTeardown } = require('./utils/session-abort');
+          process.exit(idleBackstopTeardown(sessionDir, server, externalServer));
         },
       }).start();
     }
@@ -244,7 +244,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             abortSession(client, sessionId).catch(() => {});
           } catch { /* best-effort */ }
           try { server.close(); } catch { /* best-effort */ }
-          const code = signal === 'SIGINT' ? 130 : 143;
+          const { resolveTerminalState } = require('./sidecar/session-finalize');
+          const code = resolveTerminalState({ aborted: true }, signal).exitCode;
           const t = setTimeout(() => process.exit(code), 300);
           if (t.unref) { t.unref(); }
         },

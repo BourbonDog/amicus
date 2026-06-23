@@ -59,4 +59,22 @@ function installSignalAbort({ onAbort, signals = ['SIGINT', 'SIGTERM', 'SIGBREAK
   };
 }
 
-module.exports = { markTerminal, markAborted, installSignalAbort };
+/**
+ * Idle-backstop teardown: mark timed-out, write a stub summary, close the owned server.
+ * Returns the exit code (always 2).
+ * @param {string} sessionDir
+ * @param {{close: () => void}|null} server
+ * @param {boolean} externalServer - when true, the server is not ours to close
+ * @returns {2}
+ */
+function idleBackstopTeardown(sessionDir, server, externalServer) {
+  try {
+    markTerminal(sessionDir, 'timed-out', 'Idle backstop timeout');
+    fs.writeFileSync(path.join(sessionDir, 'summary.md'),
+      'Session timed out — idle backstop fired before completion.\n', { mode: 0o600 });
+  } catch { /* best-effort */ }
+  if (!externalServer && server) { try { server.close(); } catch { /* best-effort */ } }
+  return 2;
+}
+
+module.exports = { markTerminal, markAborted, installSignalAbort, idleBackstopTeardown };

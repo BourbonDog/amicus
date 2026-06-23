@@ -283,7 +283,7 @@ evals/
 | `utils/quick-picks.js` | Numeric-desc comparator; same-base marker variant sorts after its base. | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/result-schema.js` | Leg/run statuses that count as terminal for wave aggregation. | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
-| `utils/session-abort.js` | Mark a session aborted (preserves prior behavior). | `markTerminal()`, `markAborted()`, `installSignalAbort()` |
+| `utils/session-abort.js` | Mark a session aborted (preserves prior behavior). | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
 | `utils/session-lock.js` | Atomic session lock files to prevent concurrent resume/continue. | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/shared-server.js` | Manages a single shared OpenCode server for MCP sessions. | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |

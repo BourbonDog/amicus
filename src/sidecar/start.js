@@ -218,15 +218,18 @@ async function startSidecar(options) {
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
   }
 
-  // Mark error results as 'error' instead of 'complete'
-  if (result && result.error) {
+  // Map the run result to a definitive terminal status + exit code (single source of truth).
+  const { resolveTerminalState } = require('./session-finalize');
+  const terminal = resolveTerminalState(result);
+  if (terminal.status === 'error') {
     meta.status = 'error';
-    meta.reason = result.error;
+    meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
     meta.completedAt = new Date().toISOString();
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
-    logger.error('Session completed with error', { taskId, error: result.error });
+    logger.error('Session completed with error', { taskId, error: meta.reason });
   } else {
-    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json });
+    // complete / timed-out / aborted: persist the (possibly partial) summary with the correct status.
+    finalizeSession(sessDir, summary, effectiveProject, meta, { quietStdout: json, status: terminal.status });
   }
 
   if (json) {
@@ -238,6 +241,8 @@ async function startSidecar(options) {
     });
     console.log(JSON.stringify(doc, null, 2));
   }
+
+  return terminal.exitCode;
 }
 
 module.exports = {

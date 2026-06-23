@@ -73,7 +73,7 @@ async function main() {
   try {
     switch (command) {
       case 'start':
-        await handleStart(args);
+        exitCode = await handleStart(args);
         break;
       case 'fanout':
         exitCode = await handleFanout(args);
@@ -164,7 +164,7 @@ async function handleStart(args) {
 
   const { startSidecar } = require('../src/index');
 
-  await startSidecar({
+  return await startSidecar({
     taskId: args['task-id'],
     model: args.model,
     prompt: args.prompt,
