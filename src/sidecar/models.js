@@ -1,7 +1,7 @@
 /**
  * `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
  *
- *   amicus models                  list (curated aliases marked)
+ *   amicus models                  list (effective aliases marked)
  *   amicus models --search <q>     substring filter over id+name
  *   amicus models --refresh        force-refresh the cache
  *   amicus models --check          stale-alias audit (exit = stale count, max 100)
@@ -37,11 +37,11 @@ function fmtRow(m, aliasesById) {
   return `${aliasCol}${m.id}\n    ${m.name}  ctx ${ctx}  $/Mtok in ${pIn} out ${pOut}`;
 }
 
-/** alias marks: id → comma-joined alias names (defaults only — the curated view) */
+/** alias marks: id → comma-joined alias names (effective user aliases) */
 function aliasMarks() {
-  const { getDefaultAliases } = require('../utils/config');
+  const { getEffectiveAliases } = require('../utils/config');
   const map = new Map();
-  for (const [alias, model] of Object.entries(getDefaultAliases())) {
+  for (const [alias, model] of Object.entries(getEffectiveAliases())) {
     map.set(model, map.has(model) ? `${map.get(model)},${alias}` : alias);
   }
   return map;
@@ -60,7 +60,7 @@ async function runList(args) {
     return 0;
   }
   const marks = aliasMarks();
-  // Curated (alias-marked) rows first, then the rest.
+  // Effective aliases (alias-marked) rows first, then the rest.
   const curated = filtered.filter(m => marks.has(m.id));
   const rest = filtered.filter(m => !marks.has(m.id));
   for (const m of [...curated, ...rest]) {

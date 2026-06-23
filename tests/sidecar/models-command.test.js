@@ -136,6 +136,28 @@ describe('amicus models', () => {
     expect(usage).toContain('--check');
   });
 
+  it('marks rows using the user\'s effective aliases, not curated defaults', async () => {
+    jest.resetModules();
+    jest.doMock('../../src/utils/model-catalog', () => ({
+      getCatalogInfo: jest.fn(async () => ({
+        models: [
+          { id: 'openrouter/x-ai/grok-4.3', name: 'Grok 4.3', contextLength: 256000, pricing: null },
+        ],
+        fetchedAt: 1718000000000,
+      })),
+      refreshCatalog: jest.fn(async () => []),
+      catalogPath: () => 'C:/fake/model-catalog.json',
+    }));
+    jest.doMock('../../src/utils/config', () => ({
+      getEffectiveAliases: () => ({ myalias: 'openrouter/x-ai/grok-4.3' }),
+      getDefaultAliases: () => ({ gemini: 'openrouter/google/not-in-catalog' }),
+    }));
+    const { handleModels } = require('../../src/sidecar/models');
+    const { code, out } = await captureStdout(() => handleModels({ _: ['models'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('[myalias] openrouter/x-ai/grok-4.3');
+  });
+
   it('--search without a value errors instead of dumping the catalog', async () => {
     const { handleModels } = loadHandler();
     const writes = [];
