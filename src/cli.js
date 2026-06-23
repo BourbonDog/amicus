@@ -303,6 +303,8 @@ Commands:
   continue    New session building on previous
   read        Output session summary/conversation
   models      List/search the model catalog, refresh it, audit aliases
+  council tally <input.json> [--json]   Tally council findings → tiers/street-cred
+  council stats [--json]                Reviewer-reliability from the ledger
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window

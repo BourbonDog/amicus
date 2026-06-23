@@ -156,6 +156,7 @@ src/
 │   ├── update-notifier-loader.js  # update-notifier Loader
 │   ├── updater.js  # Updater Module
 │   └── validators.js  # Input Validators
+├── cli-handlers-council.js
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
@@ -235,6 +236,7 @@ evals/
 <!-- AUTO:modules -->
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
+| `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `DEFAULTS()` |
