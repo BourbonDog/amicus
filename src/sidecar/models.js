@@ -20,11 +20,12 @@ const { pickCurrent } = require('../utils/quick-picks');
 
 const CHECK_EXIT_CAP = 100;
 
-/** '0.000003' per token → '3.00' per Mtok; '—' when unknown */
+/** '0.000003' per token → '3.00' per Mtok; '—' when unknown or variable (-1) */
 function perMtok(perToken) {
   if (perToken === null || perToken === undefined) { return '—'; }
   const n = Number(perToken);
-  return Number.isNaN(n) ? '—' : (n * 1e6).toFixed(2);
+  if (Number.isNaN(n) || n < 0) { return '—'; }
+  return (n * 1e6).toFixed(2);
 }
 
 function fmtRow(m, aliasesById) {

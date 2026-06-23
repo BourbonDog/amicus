@@ -148,6 +148,18 @@ describe('amicus models', () => {
     expect(writes.join('')).toContain('--search requires a value');
   });
 
+  it('renders the -1 variable-pricing sentinel as — not a negative price', async () => {
+    const catalog = [
+      { id: 'openrouter/acme/variable', name: 'Variable', contextLength: 1000,
+        pricing: { prompt: '-1', completion: '-1' } },
+    ];
+    const { handleModels } = loadHandler({ catalog });
+    const { code, out } = await captureStdout(() => handleModels({ _: ['models'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('$/Mtok in — out —');
+    expect(out).not.toContain('-1000000');
+  });
+
   it('npm model scripts point at a live CLI entry (dangling-script regression guard)', () => {
     const fs = require('fs');
     const path = require('path');

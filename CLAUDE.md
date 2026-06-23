@@ -104,7 +104,7 @@ src/
 │   ├── fanout-output.js  # Format ms as "1m5s" / "42s".
 │   ├── fanout.js  # Default max legs per wave (env-overridable).
 │   ├── interactive.js  # Check if Electron is available (lazy loading guard)
-│   ├── models.js  # '0.000003' per token → '3.00' per Mtok; '—' when unknown
+│   ├── models.js  # '0.000003' per token → '3.00' per Mtok; '—' when unknown or variable (-1)
 │   ├── progress.js  # Lifecycle stage labels
 │   ├── read.js  # Sidecar Read Operations Module
 │   ├── resume.js  # Load session metadata from session directory
@@ -248,7 +248,7 @@ evals/
 | `sidecar/fanout-output.js` | Format ms as "1m5s" / "42s". | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout.js` | Default max legs per wave (env-overridable). | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
 | `sidecar/interactive.js` | Check if Electron is available (lazy loading guard) | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
-| `sidecar/models.js` | '0.000003' per token → '3.00' per Mtok; '—' when unknown | `handleModels()`, `buildFallbackDriftReport()` |
+| `sidecar/models.js` | '0.000003' per token → '3.00' per Mtok; '—' when unknown or variable (-1) | `handleModels()`, `buildFallbackDriftReport()` |
 | `sidecar/progress.js` | Lifecycle stage labels | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Load session metadata from session directory | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
