@@ -54,11 +54,11 @@ in this run is written here. Use its absolute path in all `--prompt-file` argume
   `--prompt-file` — never inline a briefing as a CLI argument. All `_tmp-*` files are cleaned up
   after the run.
 
-**Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting the reviewer-reliability table in `MODEL-NOTES.md`. State the estimated cost. **Disclose the run shape up front** before asking for confirmation — e.g.:
+**Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting the reviewer-reliability table in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — e.g.:
 
 > This run uses 3 council models across 2 fanout waves + 1 chair call (~7 model runs), ~10 min.
 
-Then **wait for confirmation**. Never launch without it. Honor the cost guardrail in `MODEL-NOTES.md` (no `o3`/`o3-pro` without explicit ask-by-name).
+Then **wait for confirmation**. Never launch without it. The budget gate enforces the cost guardrail in code: by default it refuses any leg whose price exceeds the per-$/Mtok threshold (the o3/o3-pro guard). To run an intentionally expensive model the user explicitly asked for by name, pass `--no-cost-gate`; to raise only the total ceiling, pass `--max-cost <$>`.
 
 **Scale-down is explicit — state which mode applies:**
 - **1 model** → thorough single pass; Stage 2 (cross-review) and Stage 3 (chair synthesis) are skipped entirely; Claude synthesizes directly. Transport: a single solo `amicus start --no-ui --json` (no fanout).
@@ -256,8 +256,11 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
 - `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was
   applied (+ the "How Claude's review fared" readout when "Claude in the council" is on) + a
   **run-stats table**: one row per model call — **stage** (which stage you launched the call for)
-  plus **model, status, durationMs** read from the wave/run JSON documents. The schema carries no
-  cost data — do not invent cost figures.
+  plus **model, status, durationMs, and cost** read from the wave/run JSON `usage`
+  block. Cost is `usage.cost.amount` (USD); mark it with its `usage.cost.source`
+  — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
+  invent a figure. Add a wave **total cost** row from the wave document's
+  `usage.cost` (`source: reported|estimated|mixed|unknown`).
 
 Tell the user exactly which files were written and where.
 
@@ -364,7 +367,7 @@ Use these together with the reviewer-reliability table in `MODEL-NOTES.md`, whic
 - **Contrarian / red-team value** → when material is persuasive, consensus-prone, or high-stakes, assign one model an explicit red-team brief: argue against the others, hunt for what they will miss. This is especially valuable when the default council is likely to agree.
 - **Consult the reviewer-reliability table** in `MODEL-NOTES.md` — a model's historical confirm-rate and avg street-cred are the best predictors of council value for a given run type.
 
-Always **rank recommendations by fit**, state the trade-off for each option, and surface the estimated cost. Never present a single option without explanation.
+Always **rank recommendations by fit**, state the trade-off for each option, and surface the estimated cost (an estimate, not a guarantee; unpriced legs disclosed as "cost unknown"). Never present a single option without explanation.
 
 ---
 
@@ -375,7 +378,11 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `crossreview-matrix.md` — adjudication grid + de-anonymized street-cred table
   - `verdict.md` — the chair's synthesis
   - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on) + a
-    **run-stats table**: one row per model call — **stage** (which stage you launched the call for) plus **model, status, durationMs** read from the wave/run JSON documents. The schema carries no cost data — do not invent cost figures.
+    **run-stats table**: one row per model call — **stage** (which stage you launched the call for) plus **model, status, durationMs, and cost** read from the wave/run JSON `usage`
+    block. Cost is `usage.cost.amount` (USD); mark it with its `usage.cost.source`
+    — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
+    invent a figure. Add a wave **total cost** row from the wave document's
+    `usage.cost` (`source: reported|estimated|mixed|unknown`).
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
 - Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet, proposed
   MODEL-NOTES diff) live in the run folder and are cleaned up at the end of the run — the proposed-diff file

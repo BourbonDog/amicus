@@ -79,8 +79,13 @@ _Scale note: the 2026-06-04 run used a 4-review pool (Claude in-council), so str
 3-model runs. Merge/prune rather than append._
 
 ## Cost guardrail
-- **Never** use `o3` / `o3-pro` unless the user explicitly asks for it by name — these cost
-  roughly $10–60+ per request. Warn about cost before proceeding even when asked.
+- The budget gate enforces this in code: a per-$/Mtok threshold (ON by default)
+  refuses o3/o3-pro-class models before a wave launches. This replaces the old
+  "remember not to" rule — it can no longer be forgotten.
+- To run `o3`/`o3-pro` (≈ $10–60+/request) the user must ask by name AND you
+  pass `--no-cost-gate` (disables both guards) for that run. Still warn first.
+- `--max-cost <$>` raises only the soft total ceiling; it does not unblock an
+  over-threshold model.
 
 ## General
 - Model citations are usually real but **verify any load-bearing reference before publishing**;
