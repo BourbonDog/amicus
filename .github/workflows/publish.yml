@@ -25,6 +25,7 @@ jobs:
       - run: npm install -g npm@latest
 
       - run: npm ci
+      - run: npm test
       # Auth via npm Trusted Publishing (GitHub OIDC) — no token. Provenance is
       # implied under trusted publishing; the explicit flag keeps intent visible.
       - run: npm publish --access public --provenance
