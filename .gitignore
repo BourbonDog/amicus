@@ -62,3 +62,7 @@ docs/plans/
 
 # Eval workspace (generated during eval runs)
 evals/workspace/
+
+# Test output logs (Jest redirects; scratch only)
+test_output*.txt
+*.jestlog
