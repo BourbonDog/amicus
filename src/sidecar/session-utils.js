@@ -90,12 +90,12 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   // Save summary
   fs.writeFileSync(SessionPaths.summaryFile(sessionDir), summary, { mode: 0o600 });
 
-  // Update metadata to complete
-  metadata.status = 'complete';
+  // Update metadata to the resolved terminal status (default complete).
+  metadata.status = opts.status || 'complete';
   metadata.completedAt = new Date().toISOString();
   fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
 
-  logger.info('Session complete', { taskId: metadata.taskId });
+  logger.info('Session finalized', { taskId: metadata.taskId, status: metadata.status });
 }
 
 /** Output summary to stdout with standard formatting */

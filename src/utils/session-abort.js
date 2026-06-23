@@ -11,24 +11,31 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Synchronously mark a session's metadata as aborted. Best-effort: never throws.
+ * Synchronously write a terminal status to a session's metadata. Best-effort: never throws.
+ * `aborted` uses `abortedAt`; every other status uses `completedAt`.
  * @param {string} sessionDir
- * @param {string} reason - e.g. a signal name
- * @returns {boolean} true if the session was marked aborted
+ * @param {'aborted'|'timed-out'|'error'|'complete'} status
+ * @param {string} reason
+ * @returns {boolean} true if written
  */
-function markAborted(sessionDir, reason) {
+function markTerminal(sessionDir, status, reason) {
   try {
     const metaPath = path.join(sessionDir, 'metadata.json');
     if (!fs.existsSync(metaPath)) { return false; }
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    meta.status = 'aborted';
-    meta.reason = `Aborted (${reason})`;
-    meta.abortedAt = new Date().toISOString();
+    meta.status = status;
+    meta.reason = reason;
+    meta[status === 'aborted' ? 'abortedAt' : 'completedAt'] = new Date().toISOString();
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     return true;
   } catch {
     return false;
   }
+}
+
+/** Mark a session aborted (preserves prior behavior). */
+function markAborted(sessionDir, reason) {
+  return markTerminal(sessionDir, 'aborted', `Aborted (${reason})`);
 }
 
 /**
@@ -50,4 +57,4 @@ function installSignalAbort({ onAbort, signals = ['SIGINT', 'SIGTERM', 'SIGBREAK
   };
 }
 
-module.exports = { markAborted, installSignalAbort };
+module.exports = { markTerminal, markAborted, installSignalAbort };

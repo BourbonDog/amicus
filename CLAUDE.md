@@ -108,6 +108,7 @@ src/
 │   ├── progress.js  # Lifecycle stage labels
 │   ├── read.js  # Sidecar Read Operations Module
 │   ├── resume.js  # Load session metadata from session directory
+│   ├── session-finalize.js  # Map a runHeadless result to the canonical terminal status + process exit code.
 │   ├── session-utils.js  # Standard heartbeat interval in milliseconds
 │   ├── setup-window.js  # Setup Window Launcher
 │   ├── setup.js  # Sidecar Setup Wizard
@@ -138,7 +139,7 @@ src/
 │   ├── quick-picks.js  # Numeric-desc comparator; same-base marker variant sorts after its base.
 │   ├── result-schema.js  # Leg/run statuses that count as terminal for wave aggregation.
 │   ├── server-setup.js  # Server Setup Utilities
-│   ├── session-abort.js  # Session abort on process signals (F3 #20).
+│   ├── session-abort.js  # Mark a session aborted (preserves prior behavior).
 │   ├── session-lock.js  # Atomic session lock files to prevent concurrent resume/continue.
 │   ├── shared-server.js  # Manages a single shared OpenCode server for MCP sessions.
 │   ├── start-helpers.js  # Start Command Helpers
@@ -252,6 +253,7 @@ evals/
 | `sidecar/progress.js` | Lifecycle stage labels | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Load session metadata from session directory | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
+| `sidecar/session-finalize.js` | Map a runHeadless result to the canonical terminal status + process exit code. | `resolveTerminalState()` |
 | `sidecar/session-utils.js` | Standard heartbeat interval in milliseconds | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `detectApiKeys()`, `runInteractiveSetup()`, `runReadlineSetup()` |
@@ -281,7 +283,7 @@ evals/
 | `utils/quick-picks.js` | Numeric-desc comparator; same-base marker variant sorts after its base. | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/result-schema.js` | Leg/run statuses that count as terminal for wave aggregation. | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
-| `utils/session-abort.js` | Session abort on process signals (F3 #20). | `markAborted()`, `installSignalAbort()` |
+| `utils/session-abort.js` | Mark a session aborted (preserves prior behavior). | `markTerminal()`, `markAborted()`, `installSignalAbort()` |
 | `utils/session-lock.js` | Atomic session lock files to prevent concurrent resume/continue. | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/shared-server.js` | Manages a single shared OpenCode server for MCP sessions. | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
