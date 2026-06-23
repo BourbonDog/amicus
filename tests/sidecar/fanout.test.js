@@ -16,6 +16,12 @@ jest.mock('../../src/utils/logger', () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
 }));
 
+const mockLookupPricing = jest.fn(() => null);
+jest.mock('../../src/utils/pricing', () => {
+  const actual = jest.requireActual('../../src/utils/pricing');
+  return { ...actual, lookupPricing: (...args) => mockLookupPricing(...args) };
+});
+
 // --- additional mocks (place at top of file with the others) ---
 const mockRunHeadless = jest.fn();
 jest.mock('../../src/headless', () => {
@@ -42,6 +48,7 @@ const { parseModelsList, deriveLegIds, validateFanoutModels, runFanout } = requi
 describe('fanout validation helpers', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLookupPricing.mockReturnValue(null);
     delete process.env.AMICUS_FANOUT_MAX_LEGS;
   });
 
@@ -142,6 +149,7 @@ describe('runFanout orchestrator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLookupPricing.mockReturnValue(null); // default: unpriced legs (existing tests unaffected)
     project = fsReal.mkdtempSync(pathReal.join(os.tmpdir(), 'amicus-fanout-'));
     mockStartOpenCodeServer.mockResolvedValue({
       client: { tag: 'client' },
@@ -344,5 +352,24 @@ describe('runFanout orchestrator', () => {
     expect(result.errorDoc).toBeDefined();
     expect(result.errorDoc.code).toBe('BAD_ARGS');
     expect(fsReal.existsSync(pathReal.join(project, '.claude', 'amicus_sessions', 'cafe0000'))).toBe(false);
+  });
+
+  it('honors explicitly-passed maxCostPerMtok over config default (refuses with BUDGET_EXCEEDED)', async () => {
+    // Covers Finding 1: runFanout must prefer options.maxCostPerMtok over cfg.maxCostPerMtok.
+    // Strategy: mock lookupPricing to return a priced model ($30/Mtok out), then pass
+    // maxCostPerMtok: 0.0001 (tiny threshold). The budget gate should fire pre-flight
+    // — wave: null, errorDoc.code === BUDGET_EXCEEDED, no server started.
+    mockLookupPricing.mockReturnValue({ prompt: 0.01, completion: 0.03 }); // ~$30/Mtok out
+    const result = await runFanout({
+      ...baseOpts(),
+      maxCostPerMtok: 0.0001,
+      noCostGate: false,
+      waveId: 'cafe1111',
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.wave).toBeNull();
+    expect(result.errorDoc).toBeDefined();
+    expect(result.errorDoc.code).toBe('BUDGET_EXCEEDED');
+    expect(mockStartOpenCodeServer).not.toHaveBeenCalled();
   });
 });

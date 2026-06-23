@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { logger } = require('../utils/logger');
 const { runLeg } = require('./fanout-leg');
+const { ERROR_CODES } = require('../utils/error-doc');
 
 /** Default max legs per wave (env-overridable). */
 const DEFAULT_MAX_LEGS = 10;
@@ -154,10 +155,11 @@ async function runFanout(options) {
     const { checkBudget, formatBudgetError } = require('./budget');
     const { loadConfig } = require('../utils/config');
     const cfg = loadConfig() || {};
+    const maxCostPerMtok = options.maxCostPerMtok !== undefined ? options.maxCostPerMtok : cfg.maxCostPerMtok;
     const promptChars = (options.promptMeta && options.promptMeta.chars) || (options.prompt ? options.prompt.length : 0);
-    const budget = checkBudget(legs, { maxCostPerMtok: cfg.maxCostPerMtok, maxCost: options.maxCost !== null && options.maxCost !== undefined ? options.maxCost : cfg.maxCost, promptChars });
+    const budget = checkBudget(legs, { maxCostPerMtok, maxCost: options.maxCost !== null && options.maxCost !== undefined ? options.maxCost : cfg.maxCost, promptChars });
     if (!budget.ok) {
-      return failPre('BUDGET_EXCEEDED', 'Error: budget gate refused the wave', formatBudgetError(budget));
+      return failPre(ERROR_CODES.BUDGET_EXCEEDED, 'Error: budget gate refused the wave', formatBudgetError(budget));
     }
   }
 
