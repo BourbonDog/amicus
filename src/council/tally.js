@@ -59,4 +59,50 @@ function computeStreetCred(rankings, models) {
   });
 }
 
-module.exports = { assignTier, computeStreetCred };
+const COUNCIL_SCHEMA_VERSION = 1;
+const VERDICTS = { agree: 'a', dispute: 'd', neutral: 'n' };
+
+function countTiers(findings) {
+  const counts = { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 };
+  for (const f of findings) { counts[f.tier] += 1; }
+  return counts;
+}
+
+/**
+ * Deterministic council tally. Pure: no IO. Claude assembles `input`
+ * (de-anonymized) and may override margin tiers afterward.
+ * @returns {object} record
+ */
+function tally(input) {
+  const { meta, findings, rankings, adjudications, runStats } = input;
+  const byFinding = new Map();
+  for (const adj of adjudications) {
+    if (!byFinding.has(adj.findingId)) { byFinding.set(adj.findingId, []); }
+    byFinding.get(adj.findingId).push({ judge: adj.judge, verdict: adj.verdict });
+  }
+  const outFindings = findings.map(f => {
+    const votes = byFinding.get(f.id) || [];
+    const peers = votes.filter(v => v.judge !== f.raiser);
+    const basis = { a: 0, d: 0, n: 0 };
+    for (const v of peers) { basis[VERDICTS[v.verdict]] += 1; }
+    const { tier, confidence } = assignTier(basis.a, basis.d);
+    return { id: f.id, raiser: f.raiser, severity: f.severity, tier, basis, confidence,
+             tierOverride: null, adjudications: votes };
+  });
+  return {
+    schemaVersion: COUNCIL_SCHEMA_VERSION,
+    meta,
+    judged: Array.isArray(rankings) && rankings.length >= 2,
+    streetCred: computeStreetCred(rankings || [], meta.models),
+    findings: outFindings,
+    runStats: (runStats || []).map(r => ({
+      model: r.model, role: r.role, wasChair: !!r.wasChair, conformance: r.conformance || 'clean',
+      status: r.status || 'unknown',
+      durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
+      usage: r.usage || null,
+    })),
+    tierCounts: countTiers(outFindings),
+  };
+}
+
+module.exports = { assignTier, computeStreetCred, tally, COUNCIL_SCHEMA_VERSION };

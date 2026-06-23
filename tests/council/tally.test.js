@@ -2,6 +2,8 @@
 'use strict';
 const { assignTier } = require('../../src/council/tally');
 const { computeStreetCred } = require('../../src/council/tally');
+const { tally } = require('../../src/council/tally');
+const avInput = require('./fixtures/av-receiver-input');
 
 describe('assignTier (peers-only cascade)', () => {
   const cases = [
@@ -60,5 +62,43 @@ describe('computeStreetCred', () => {
     const c = sc.find(s => s.model === 'claude');
     expect(c.withSelf).toBeCloseTo((2 + 1) / 2);
     expect(c.peersOnly).toBeCloseTo(c.withSelf);
+  });
+});
+
+describe('tally() — av-receiver golden fixture', () => {
+  const record = tally(avInput);
+  const tierOf = id => record.findings.find(f => f.id === id).tier;
+
+  test('tierCounts match the verified peers-only result', () => {
+    expect(record.tierCounts).toEqual({ Confirmed: 19, Contested: 2, Singleton: 11, Disputed: 3 });
+  });
+
+  test('the eight self-agree downgrades land as Singleton', () => {
+    for (const id of ['A3','A6','B7','B8','B10','B11','B12','C9']) { expect(tierOf(id)).toBe('Singleton'); }
+  });
+
+  test('C2 stays Contested (engine removes the grid/summary contradiction)', () => {
+    expect(tierOf('C2')).toBe('Contested');
+    expect(record.findings.find(f => f.id === 'C2').basis).toEqual({ a: 0, d: 1, n: 1 });
+  });
+
+  test('disputed findings are the three C-series factual errors', () => {
+    expect(['C6','C7','C12'].map(tierOf)).toEqual(['Disputed','Disputed','Disputed']);
+  });
+
+  test('basis excludes the raiser; adjudications keep all votes; tierOverride is null', () => {
+    const a1 = record.findings.find(f => f.id === 'A1');
+    expect(a1.basis).toEqual({ a: 2, d: 0, n: 0 });          // peers gpt+mistral
+    expect(a1.adjudications).toHaveLength(3);                 // incl. deepseek self
+    expect(a1.tierOverride).toBeNull();                       // tally never records overrides (that's buildVerdict)
+  });
+
+  test('judged is true and runStats echo through with null durations', () => {
+    expect(record.judged).toBe(true);
+    expect(record.runStats.every(r => r.durationMs === null)).toBe(true);
+  });
+
+  test('schemaVersion is the council version, independent of WS-2', () => {
+    expect(record.schemaVersion).toBe(1);
   });
 });
