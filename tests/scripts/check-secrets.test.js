@@ -5,7 +5,10 @@
  * tokens, and private key material in file contents.
  */
 
-const { scanForSecrets } = require('../../scripts/check-secrets');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { scanForSecrets, scanAll } = require('../../scripts/check-secrets');
 
 describe('check-secrets', () => {
   describe('scanForSecrets', () => {
@@ -100,6 +103,54 @@ describe('check-secrets', () => {
       const antRes = scanForSecrets('K=sk-ant-' + 'a'.repeat(40), '.env');
       expect(antRes.some(r => r.pattern === 'sk-ant-')).toBe(true);
       expect(antRes.some(r => r.pattern === 'sk-')).toBe(false);
+    });
+  });
+
+  describe('scanAll', () => {
+    let tmpDir;
+    let tmpFile;
+
+    afterEach(() => {
+      // Clean up the temp file and directory after each test
+      try {
+        if (tmpFile && fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+        if (tmpDir && fs.existsSync(tmpDir)) fs.rmdirSync(tmpDir);
+      } catch {
+        // best-effort cleanup
+      }
+      tmpDir = null;
+      tmpFile = null;
+    });
+
+    it('returns an array', () => {
+      // Minimal smoke-test: scanAll with an empty list is always an array
+      expect(Array.isArray(scanAll([]))).toBe(true);
+    });
+
+    it('detects a secret in a temp file outside the allowlist', () => {
+      // Create a temp directory OUTSIDE the repo (os.tmpdir() is never under tests/**)
+      // so the allowlist does NOT exempt it — this proves scanAll reads and scans files.
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-scanall-'));
+      tmpFile = path.join(tmpDir, 'secrets.env');
+      // Write a fake OpenRouter key (matches /sk-or-[\w-]{3,}/g)
+      fs.writeFileSync(tmpFile, `OPENROUTER_KEY=sk-or-v1-${'a'.repeat(40)}\n`, 'utf-8');
+
+      const findings = scanAll([tmpFile]);
+
+      expect(Array.isArray(findings)).toBe(true);
+      expect(findings.length).toBeGreaterThan(0);
+      expect(findings[0].file).toBe(tmpFile);
+      expect(findings[0].secrets.length).toBeGreaterThan(0);
+      expect(findings[0].secrets[0].pattern).toBe('sk-or-');
+    });
+
+    it('returns [] when the injected file list is clean', () => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-scanall-'));
+      tmpFile = path.join(tmpDir, 'clean.env');
+      fs.writeFileSync(tmpFile, 'PORT=3000\nNODE_ENV=production\n', 'utf-8');
+
+      const findings = scanAll([tmpFile]);
+      expect(findings).toEqual([]);
     });
   });
 });

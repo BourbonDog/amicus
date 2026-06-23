@@ -27,6 +27,8 @@ const CONFIG = {
     'src/mcp-tools.js',
     'src/opencode-client.js',
     'src/session-manager.js',
+    // Grandfathered by whole-tree CI scan (was 355 lines on main before Task 4)
+    'src/prompt-builder.js',
   ],
 };
 
@@ -88,11 +90,47 @@ function matchesPattern(filePath, patterns) {
   return false;
 }
 
+/** List git-tracked files (whole-tree CI scan, no staging area). */
+function listTrackedFiles() {
+  const out = execFileSync('git', ['ls-files'], { encoding: 'utf-8' });
+  return out.trim().split('\n').filter(Boolean);
+}
+
 /**
- * Main: scan git staged files.
+ * Check sizes across all tracked include-minus-exclude files.
+ * @param {string[]} [files] - File list to check; defaults to all git-tracked files.
+ * @returns {Array<{file: string, lines: number, limit: number}>}
+ */
+function checkAllTracked(files = listTrackedFiles()) {
+  const target = files.filter(f =>
+    matchesPattern(f, CONFIG.include) && !matchesPattern(f, CONFIG.exclude)
+  );
+  const loaded = target.map(f => ({ path: f, content: readFileSync(resolve(f), 'utf-8') }));
+  return checkFiles(loaded, CONFIG.maxLines);
+}
+
+/**
+ * Main: scan git staged files (pre-commit) or all tracked files (--all / CI).
  * Exit 1 if any file exceeds the limit.
  */
 function main() {
+  if (process.argv.includes('--all')) {
+    const violations = checkAllTracked();
+    if (violations.length > 0) {
+      console.error(
+        '\n  BLOCKED: File size limit exceeded (max %d lines):',
+        CONFIG.maxLines
+      );
+      for (const v of violations) {
+        console.error(`    ${v.file}: ${v.lines} lines (limit: ${v.limit})`);
+      }
+      console.error('\n  Refactor large files before committing.\n');
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  // Existing staged-files (pre-commit) path — unchanged
   let stagedFiles;
   try {
     const output = execFileSync(
@@ -139,4 +177,4 @@ if (process.argv[1] && process.argv[1].includes('check-file-sizes')) {
   main();
 }
 
-module.exports = { checkFileSize, checkFiles, matchesPattern, CONFIG };
+module.exports = { checkFileSize, checkFiles, matchesPattern, checkAllTracked, listTrackedFiles, CONFIG };

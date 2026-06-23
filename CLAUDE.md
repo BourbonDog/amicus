@@ -187,9 +187,9 @@ electron/
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # * Run a single test with specified model and thinking level
-├── check-file-sizes.js  # File size enforcement script for pre-commit hook.
+├── check-file-sizes.js  # List git-tracked files (whole-tree CI scan, no staging area).
 ├── check-html.js
-├── check-secrets.js  # Secret detection script for pre-commit hook.
+├── check-secrets.js  # List git-tracked files (whole-tree CI scan, no staging area).
 ├── check-ui.js
 ├── debug-cdp.js
 ├── eval-with-monitoring.sh

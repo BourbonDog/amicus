@@ -84,11 +84,54 @@ function scanForSecrets(content, filePath, options = {}) {
   return results;
 }
 
+/** List git-tracked files (whole-tree CI scan, no staging area). */
+function listTrackedFiles() {
+  const out = execFileSync('git', ['ls-files'], { encoding: 'utf-8' });
+  return out.trim().split('\n').filter(Boolean);
+}
+
 /**
- * Main: scan git staged files.
- * Exit 1 if secrets found (blocks commit).
+ * Scan every tracked file; returns [{file, secrets}].
+ * @param {string[]} [files] - File list to scan; defaults to all git-tracked files.
+ * @returns {Array<{file: string, secrets: Array<{pattern: string, description: string, line: number}>}>}
+ */
+function scanAll(files = listTrackedFiles()) {
+  const findings = [];
+  for (const file of files) {
+    try {
+      const content = readFileSync(resolve(file), 'utf-8');
+      const secrets = scanForSecrets(content, file);
+      if (secrets.length > 0) {
+        findings.push({ file, secrets });
+      }
+    } catch {
+      // binary or unreadable — skip
+    }
+  }
+  return findings;
+}
+
+/**
+ * Main: scan git staged files (pre-commit) or all tracked files (--all / CI).
+ * Exit 1 if secrets found.
  */
 function main() {
+  if (process.argv.includes('--all')) {
+    const findings = scanAll();
+    if (findings.length > 0) {
+      for (const { file, secrets } of findings) {
+        console.error(`\n  BLOCKED: secret(s) in ${file}:`);
+        for (const s of secrets) {
+          console.error(`    Line ${s.line}: ${s.description} (${s.pattern})`);
+        }
+      }
+      console.error('\n  Remove secrets before pushing. Use .env for local secrets.\n');
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+
+  // Existing staged-files (pre-commit) path — unchanged
   let stagedFiles;
   try {
     const output = execFileSync(
@@ -137,4 +180,4 @@ if (process.argv[1] && process.argv[1].includes('check-secrets')) {
   main();
 }
 
-module.exports = { scanForSecrets, matchesAllowlist };
+module.exports = { scanForSecrets, matchesAllowlist, scanAll, listTrackedFiles };
