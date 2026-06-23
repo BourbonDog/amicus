@@ -48,38 +48,39 @@ function deriveLegIds(waveId, count) {
 async function validateFanoutModels(modelsArg, opts = {}) {
   const raw = parseModelsList(modelsArg);
   if (raw.length === 0) {
-    return { error: 'Error: --models requires a comma-separated list (e.g. gemini,gpt,deepseek)' };
+    return { error: 'Error: --models requires a comma-separated list (e.g. gemini,gpt,deepseek)', code: 'BAD_ARGS' };
   }
   // Invalid or non-positive AMICUS_FANOUT_MAX_LEGS (0, negative, garbage) falls back to the default.
   const envCap = Number(process.env.AMICUS_FANOUT_MAX_LEGS);
   const maxLegs = (Number.isInteger(envCap) && envCap > 0) ? envCap : DEFAULT_MAX_LEGS;
   if (raw.length > maxLegs) {
-    return { error: `Error: --models exceeds the fan-out cap of ${maxLegs} legs (set AMICUS_FANOUT_MAX_LEGS to raise)` };
+    return { error: `Error: --models exceeds the fan-out cap of ${maxLegs} legs (set AMICUS_FANOUT_MAX_LEGS to raise)`, code: 'BAD_ARGS' };
   }
 
   const { tryResolveModel } = require('../utils/config');
   const { validateApiKey } = require('../utils/validators');
   const { validateAgainstCatalog } = require('../utils/model-validator');
+  const { lookupPricing } = require('../utils/pricing');
   const legs = [];
   for (const modelInput of raw) {
     const resolved = tryResolveModel(modelInput);
     if (resolved.error) {
-      return { error: `Error: model '${modelInput}': ${resolved.error}` };
+      return { error: `Error: model '${modelInput}': ${resolved.error}`, code: 'BAD_MODEL' };
     }
     let model = resolved.model;
     const keyCheck = validateApiKey(model);
     if (!keyCheck.valid) {
-      return { error: keyCheck.error };
+      return { error: keyCheck.error, code: 'MISSING_KEY' };
     }
     if (!opts.noValidateModel) {
       const alias = modelInput.includes('/') ? undefined : modelInput;
       try {
         model = await validateAgainstCatalog(model, alias);
       } catch (err) {
-        return { error: err.message };
+        return { error: err.message, code: 'BAD_MODEL' };
       }
     }
-    legs.push({ modelInput, model });
+    legs.push({ modelInput, model, pricing: lookupPricing(model) });
   }
   return { legs };
 }
@@ -131,10 +132,34 @@ async function runFanout(options) {
     return { wave: doc, exitCode: 1 };
   };
 
+  const failPre = (code, message, hint) => {
+    if (!options.quiet) {
+      if (options.json) {
+        const { buildErrorDoc } = require('../utils/error-doc');
+        console.log(JSON.stringify(buildErrorDoc({ code, message, hint }), null, 2));
+      } else {
+        console.error(hint ? `${message}\n${hint}` : message);
+      }
+    }
+    return { wave: null, errorDoc: { code, message }, exitCode: 1 };
+  };
+
   // 1. Fail-fast validation
   const validated = await validateFanoutModels(options.models, { noValidateModel: options.noValidateModel });
-  if (validated.error) { return errorWave(options.waveId, validated.error); }
+  if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
+
+  // 1b. Budget gate (pre-creation; refuse before spending)
+  if (!options.noCostGate) {
+    const { checkBudget, formatBudgetError } = require('./budget');
+    const { loadConfig } = require('../utils/config');
+    const cfg = loadConfig() || {};
+    const promptChars = (options.promptMeta && options.promptMeta.chars) || (options.prompt ? options.prompt.length : 0);
+    const budget = checkBudget(legs, { maxCostPerMtok: cfg.maxCostPerMtok, maxCost: options.maxCost !== null && options.maxCost !== undefined ? options.maxCost : cfg.maxCost, promptChars });
+    if (!budget.ok) {
+      return failPre('BUDGET_EXCEEDED', 'Error: budget gate refused the wave', formatBudgetError(budget));
+    }
+  }
 
   // 2. Wave record
   const waveId = options.waveId || generateTaskId();

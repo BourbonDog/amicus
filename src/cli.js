@@ -111,7 +111,8 @@ function isBooleanFlag(key) {
      'api-keys',
      'validate-model',
      'no-validate-model',
-     'remove'                // used by 'key' command only; other handlers ignore it
+     'remove',               // used by 'key' command only; other handlers ignore it
+     'no-cost-gate',         // disable the budget gate for this run
    ];
   return booleanFlags.includes(key);
 }
@@ -120,6 +121,9 @@ function isBooleanFlag(key) {
  * Parse a value to the appropriate type
  */
 function parseValue(key, value) {
+  // max-cost is a float (dollars), not an integer
+  if (key === 'max-cost') { return parseFloat(value); }
+
   // Numeric options
   const numericOptions = ['context-turns', 'context-max-tokens', 'timeout', 'opencode-port'];
    if (numericOptions.includes(key)) {
@@ -352,6 +356,8 @@ Options for 'fanout':
                                with --prompt. Also works with 'start'.
   --wave-id <id>               Explicit wave ID (leg IDs become <id>-1..N)
   --json                       Emit the wave result as stable JSON on stdout
+  --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
+  --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure

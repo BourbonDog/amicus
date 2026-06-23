@@ -97,6 +97,7 @@ src/
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
+│   ├── budget.js
 │   ├── context-builder.js  # Context Builder Module
 │   ├── continue.js  # Sidecar Continue Operations - Handles continuing from previous sessions
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
@@ -247,6 +248,7 @@ evals/
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `decodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
+| `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |

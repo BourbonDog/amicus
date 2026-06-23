@@ -87,12 +87,14 @@ describe('fanout validation helpers', () => {
       expect(r2.legs).toHaveLength(11);
     });
 
-    it('resolves every model and keeps the original input alongside', async () => {
+    it('resolves every model and keeps the original input alongside (with pricing field)', async () => {
       const r = await validateFanoutModels('openrouter/a/b,c/d');
-      expect(r.legs).toEqual([
-        { modelInput: 'openrouter/a/b', model: 'openrouter/a/b' },
-        { modelInput: 'c/d', model: 'c/d' },
-      ]);
+      expect(r.legs).toHaveLength(2);
+      expect(r.legs[0]).toMatchObject({ modelInput: 'openrouter/a/b', model: 'openrouter/a/b' });
+      expect(r.legs[1]).toMatchObject({ modelInput: 'c/d', model: 'c/d' });
+      // pricing field is present (may be null if not in catalog)
+      expect(Object.prototype.hasOwnProperty.call(r.legs[0], 'pricing')).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(r.legs[1], 'pricing')).toBe(true);
       expect(mockValidateAgainstCatalog).toHaveBeenCalledTimes(2);
     });
 
@@ -333,10 +335,14 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[1].status).toBe('complete');
   });
 
-  it('validation failure leaves no wave directory behind', async () => {
-    const { wave, exitCode } = await runFanout({ ...baseOpts(), models: '', waveId: 'cafe0000' });
-    expect(exitCode).toBe(1);
-    expect(wave.status).toBe('error');
+  it('validation failure returns error-doc (not a wave), leaves no wave directory behind', async () => {
+    // Pre-creation pre-flight errors (invalid models list) emit an error-doc, not a wave-doc.
+    // Source: WS-2 coupling change — failPre returns { wave: null, errorDoc, exitCode: 1 }.
+    const result = await runFanout({ ...baseOpts(), models: '', waveId: 'cafe0000' });
+    expect(result.exitCode).toBe(1);
+    expect(result.wave).toBeNull();
+    expect(result.errorDoc).toBeDefined();
+    expect(result.errorDoc.code).toBe('BAD_ARGS');
     expect(fsReal.existsSync(pathReal.join(project, '.claude', 'amicus_sessions', 'cafe0000'))).toBe(false);
   });
 });

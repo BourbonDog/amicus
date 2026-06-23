@@ -45,6 +45,20 @@ async function handleStart(args) {
     process.exit(failJson(useJson, { code: validation.code || ERROR_CODES.BAD_ARGS, message: validation.error }));
   }
 
+  // Budget gate for solo start
+  if (!args['no-cost-gate']) {
+    const { lookupPricing } = require('./utils/pricing');
+    const { checkBudget, formatBudgetError } = require('./sidecar/budget');
+    const { loadConfig } = require('./utils/config');
+    const cfg = loadConfig() || {};
+    const soloLeg = { modelInput: alias || args.model, model: args.model, pricing: lookupPricing(args.model) };
+    const promptChars = (args.prompt && String(args.prompt).length) || 0;
+    const budget = checkBudget([soloLeg], { maxCostPerMtok: cfg.maxCostPerMtok, maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost, promptChars });
+    if (!budget.ok) {
+      process.exit(failJson(useJson, { code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run', hint: formatBudgetError(budget) }));
+    }
+  }
+
   const { startSidecar } = require('./index');
 
   return await startSidecar({
@@ -111,6 +125,8 @@ async function handleFanout(args) {
 
   // Direct require — the src/index.js public re-export is added later (Task 13)
   const { runFanout } = require('./sidecar/fanout');
+  const { loadConfig } = require('./utils/config');
+  const cfg = loadConfig() || {};
   const { exitCode } = await runFanout({
     models: args.models,
     prompt: promptRes.prompt,
@@ -133,6 +149,9 @@ async function handleFanout(args) {
     noValidateModel: args['no-validate-model'],
     json: !!args.json,
     client: args.client,
+    maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost,
+    noCostGate: !!args['no-cost-gate'],
+    maxCostPerMtok: cfg.maxCostPerMtok,
   });
   return exitCode;
 }
