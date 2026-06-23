@@ -176,12 +176,7 @@ function validateExplicitSession(session, _projectPath) {
 }
 
 /**
- * Validate agent mode
- *
- * Accepts:
- * - OpenCode native agents: Build, Plan, General, Explore
- * - Custom agents: any non-empty string (for user-defined OpenCode agents)
- *
+ * Validate agent mode (native OpenCode agents or any non-empty custom agent string).
  * @param {string} agent
  * @returns {{valid: boolean, error?: string}}
  */
@@ -239,11 +234,8 @@ const { MODEL_THINKING_SUPPORT, getSupportedThinkingLevels, validateThinkingLeve
 
 /**
  * Validate API key is present for the given model's provider.
- *
- * Assumes loadCredentials() has already run, projecting all credential
- * sources (sidecar .env, auth.json) into process.env.
- *
- * @param {string} model - The model string (e.g., 'openrouter/google/gemini-2.5-flash')
+ * Assumes loadCredentials() has already run (projects .env + auth.json → process.env).
+ * @param {string} model - e.g. 'openrouter/google/gemini-2.5-flash'
  * @returns {{valid: boolean, error?: string}}
  */
 function validateApiKey(model) {
@@ -259,14 +251,21 @@ function validateApiKey(model) {
   }
 
   if (!process.env[providerInfo.key]) {
+    const keyName = providerInfo.key;
+    const isWin = process.platform === 'win32';
+    const persist = isWin
+      ? `  - Persist it for new shells: setx ${keyName} <your-key>\n` +
+        `    (or add $env:${keyName} to your PowerShell $PROFILE)\n`
+      : `  - Persist it across shells: add 'export ${keyName}=<your-key>' to ~/.zshenv\n` +
+        '    (non-interactive shells like Claude Code and CI do not source ~/.zshrc)\n';
     return {
       valid: false,
-      error: `Error: ${providerInfo.key} not found.\n\n` +
-        'In non-interactive shells (Claude Code, CI), ~/.zshrc is not sourced.\n' +
+      error:
+        `Error: ${keyName} not found for ${providerInfo.name}.\n\n` +
         'Fix with one of:\n' +
-        '  - Run `sidecar setup` to store keys in sidecar\'s config\n' +
-        '  - Move your export to ~/.zshenv (sourced by all zsh shells)\n' +
-        '  - Add key to ~/.local/share/opencode/auth.json'
+        `  - Store it in Amicus (recommended): amicus key ${provider} <your-key>\n` +
+        persist +
+        '  - Or add it to ~/.local/share/opencode/auth.json\n',
     };
   }
 

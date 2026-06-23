@@ -175,8 +175,10 @@ describe('env-loader', () => {
       const result = validateApiKey('openrouter/google/gemini-2.5-flash');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('OPENROUTER_API_KEY not found');
-      expect(result.error).toContain('sidecar setup');
-      expect(result.error).toContain('~/.zshenv');
+      expect(result.error).toContain('amicus key openrouter');
+      expect(result.error).toMatch(
+        process.platform === 'win32' ? /setx OPENROUTER_API_KEY/ : /~\/\.zshenv/
+      );
     });
   });
 });
