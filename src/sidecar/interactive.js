@@ -151,14 +151,29 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
 
   const serverPort = new URL(server.url).port;
 
-  // Start idle watchdog for interactive mode (60-min default timeout)
+  // Start idle watchdog for interactive mode (60-min default timeout).
+  // The real teardown handler is installed BEFORE start() (closes the startup
+  // race) and references a closure that is assigned once Electron spawns.
   const { IdleWatchdog } = require('../utils/idle-watchdog');
+  const { createActivityPoller } = require('../utils/activity-poller');
+  const { getSessionStatus } = require('../opencode-client');
+  let electronProcess = null;
   const watchdog = new IdleWatchdog({
     mode: 'interactive',
     onTimeout: () => {
       logger.info('Interactive idle timeout - shutting down', { taskId });
+      if (electronProcess && !electronProcess.killed) {
+        electronProcess.kill('SIGTERM');
+      }
     },
   }).start();
+
+  // Keep the idle clock from killing an actively-working session: poll OpenCode
+  // session status and touch the watchdog on any non-idle (busy/retry) state.
+  const activityPoller = createActivityPoller({
+    getStatus: () => getSessionStatus(ocClient, sessionId),
+    onActivity: () => watchdog.touch(),
+  });
 
   return new Promise((resolve, _reject) => {
     const electronPath = getElectronPath();
@@ -170,40 +185,28 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       taskId, model, project, nodeModulesBin, existingPath,
       { agent, isResume, conversation, mcp, client }
     );
-
-    // Pass OpenCode server info to Electron
     env.AMICUS_OPENCODE_PORT = serverPort;
     env.AMICUS_SESSION_ID = sessionId;
 
     const debugPort = getCompatEnv('DEBUG_PORT') || '9222';
     logger.debug('Launching Electron', { taskId, model, debugPort, serverPort, sessionId });
 
-    const electronProcess = spawn(electronPath, [
+    electronProcess = spawn(electronPath, [
       `--remote-debugging-port=${debugPort}`,
       mainPath
     ], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
 
-    // Touch watchdog on Electron stdout activity
-    electronProcess.stdout.on('data', () => {
-      watchdog.touch();
-    });
+    // Belt-and-suspenders: also touch on raw Electron stdout activity.
+    electronProcess.stdout.on('data', () => { watchdog.touch(); });
 
-    // Update watchdog onTimeout now that electronProcess is available
-    watchdog.onTimeout = () => {
-      logger.info('Interactive idle timeout - shutting down', { taskId });
-      if (!electronProcess.killed) {
-        electronProcess.kill('SIGTERM');
-      }
-    };
-
-    // Clean up server when Electron exits
-    const originalResolve = resolve;
+    // Clean up server + timers when Electron exits.
     handleElectronProcess(electronProcess, taskId, (result) => {
       watchdog.cancel();
+      activityPoller.stop();
       server.close();
       logger.debug('OpenCode server closed after Electron exit');
       result.opencodeSessionId = sessionId;
-      originalResolve(result);
+      resolve(result);
     });
   });
 }
