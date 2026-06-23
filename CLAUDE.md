@@ -96,6 +96,7 @@ bin/
 src/
 ├── council/
 │   ├── findings.js
+│   ├── ledger.js
 │   ├── tally.js
 │   └── verdict.js
 ├── prompts/
@@ -252,6 +253,7 @@ evals/
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `decodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `council/findings.js` |  | `validateFindings()`, `SEVERITIES()` |
+| `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `LEDGER_FILE()`, `LEDGER_SCHEMA_VERSION()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
