@@ -263,7 +263,7 @@ function validateApiKey(model) {
       error:
         `Error: ${keyName} not found for ${providerInfo.name}.\n\n` +
         'Fix with one of:\n' +
-        `  - Store it in Amicus (recommended): amicus key ${provider} <your-key>\n` +
+        `  - Store it in Amicus (recommended): amicus key ${provider} <apikey>\n` +
         persist +
         '  - Or add it to ~/.local/share/opencode/auth.json\n',
     };

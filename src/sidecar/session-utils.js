@@ -122,9 +122,9 @@ function createHeartbeat(interval = HEARTBEAT_INTERVAL, sessionDir) {
     if (sessionDir) {
       const { readProgress } = require('./progress');
       const progress = readProgress(sessionDir);
-      process.stderr.write(`[sidecar] ${ts} | ${progress.messages} messages | ${progress.latest}\n`);
+      process.stderr.write(`[amicus] ${ts} | ${progress.messages} messages | ${progress.latest}\n`);
     } else {
-      process.stderr.write(`[sidecar] still running... ${ts} elapsed\n`);
+      process.stderr.write(`[amicus] still running... ${ts} elapsed\n`);
     }
   }, interval);
 

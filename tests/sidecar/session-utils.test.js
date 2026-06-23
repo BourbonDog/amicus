@@ -253,7 +253,7 @@ describe('Session Utils', () => {
       // Advance 1 second
       jest.advanceTimersByTime(1000);
       expect(stderrSpy).toHaveBeenCalledTimes(1);
-      expect(stderrSpy.mock.calls[0][0]).toMatch(/\[sidecar\] still running\.\.\. \d+s elapsed/);
+      expect(stderrSpy.mock.calls[0][0]).toMatch(/\[amicus\] still running\.\.\. \d+s elapsed/);
 
       // Advance another second
       jest.advanceTimersByTime(1000);
@@ -342,7 +342,7 @@ describe('Session Utils', () => {
       const output = stderrSpy.mock.calls[stderrSpy.mock.calls.length - 1][0];
       expect(output).toContain('2 messages');
       expect(output).toContain('Using Read src/auth/token.ts');
-      expect(output).toMatch(/\[sidecar\]/);
+      expect(output).toMatch(/\[amicus\]/);
 
       heartbeat.stop();
     });
