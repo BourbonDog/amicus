@@ -273,7 +273,7 @@ describe('Sidecar Config Module', () => {
       const result = config.tryResolveModel('nonexistent');
       expect(result.model).toBeUndefined();
       expect(result.error).toContain('nonexistent');
-      expect(result.error.toLowerCase()).toContain('sidecar setup');
+      expect(result.error.toLowerCase()).toContain('amicus setup');
     });
 
     it('should return error when no model and no default', () => {

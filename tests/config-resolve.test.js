@@ -57,14 +57,14 @@ describe('Sidecar Config Module - Model Resolution', () => {
       expect(result).toBe('openrouter/google/gemini-3-flash-preview');
     });
 
-    it('should throw Error mentioning sidecar setup for unknown alias', () => {
+    it('should throw Error mentioning amicus setup for unknown alias', () => {
       const data = {
         default: 'gemini',
         aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' }
       };
       fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
       const config = loadModule();
-      expect(() => config.resolveModel('unknownmodel')).toThrow(/sidecar setup/i);
+      expect(() => config.resolveModel('unknownmodel')).toThrow(/amicus setup/i);
     });
 
     it('should resolve default alias when modelArg is undefined', () => {
@@ -146,7 +146,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
 
     it('should still throw for truly unknown aliases not in defaults or user config', () => {
       const config = loadModule();
-      expect(() => config.resolveModel('notamodel')).toThrow(/sidecar setup/i);
+      expect(() => config.resolveModel('notamodel')).toThrow(/amicus setup/i);
     });
   });
 

@@ -97,7 +97,7 @@ async function handleAbort(args) {
 
   if (!taskId) {
     console.error('Error: task_id is required for abort');
-    console.error('Usage: sidecar abort <task_id>');
+    console.error('Usage: amicus abort <task_id>');
     process.exit(1);
   }
 

@@ -93,7 +93,7 @@ function getDefaultAliases() {
  * Resolution order:
  * 1. If modelArg contains '/' -> return as-is (full model string)
  * 2. If modelArg is a key in config.aliases -> return resolved string
- * 3. If modelArg is unknown alias -> throw Error mentioning 'sidecar setup'
+ * 3. If modelArg is unknown alias -> throw Error mentioning 'amicus setup'
  * 4. If modelArg is undefined and config.default exists -> resolve that alias
  * 5. If no default -> throw Error
  *
@@ -124,14 +124,14 @@ function resolveModel(modelArg) {
 
     // Unknown alias
     throw new Error(
-      `Unknown model alias '${modelArg}'. Run 'sidecar setup' to configure aliases.`
+      `Unknown model alias '${modelArg}'. Run 'amicus setup' to configure aliases.`
     );
   }
 
   // modelArg is undefined - use default
   if (!config || !config.default) {
     throw new Error(
-      'No model specified and no default configured. Run \'sidecar setup\' to set a default model.'
+      'No model specified and no default configured. Run \'amicus setup\' to set a default model.'
     );
   }
 
@@ -153,7 +153,7 @@ function resolveModel(modelArg) {
 
   // Default alias not found anywhere
   throw new Error(
-    `Default alias '${defaultValue}' not found in aliases. Run 'sidecar setup' to fix configuration.`
+    `Default alias '${defaultValue}' not found in aliases. Run 'amicus setup' to fix configuration.`
   );
 }
 

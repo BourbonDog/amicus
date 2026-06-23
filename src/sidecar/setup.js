@@ -168,7 +168,7 @@ async function runReadlineSetup() {
 
   try {
     console.log('');
-    console.log('=== Sidecar Setup Wizard ===');
+    console.log('=== Amicus Setup Wizard ===');
     console.log('');
 
     const keys = detectApiKeys();
@@ -181,7 +181,7 @@ async function runReadlineSetup() {
       console.log(`API keys detected: ${foundKeys.join(', ')}`);
     } else {
       console.log('No API keys detected.');
-      console.log('Set OPENROUTER_API_KEY to get started, or run: sidecar setup');
+      console.log('Set OPENROUTER_API_KEY to get started, or run: amicus setup');
     }
     console.log('');
 

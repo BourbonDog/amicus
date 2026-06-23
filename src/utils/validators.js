@@ -168,7 +168,7 @@ function validateExplicitSession(session, _projectPath) {
   if (!found) {
     return {
       valid: false,
-      error: `Error: --session '${session}' not found. Use 'sidecar list' to see available sessions or omit --session for most recent.`
+      error: `Error: --session '${session}' not found. Use 'amicus list' to see available sessions or omit --session for most recent.`
     };
   }
 

@@ -67,7 +67,7 @@ function autoRepairAlias(alias, config, defaultAliases, saveConfig) {
   }
   throw new Error(
     `Alias '${alias}' is configured but has no model value. ` +
-    `Fix with: sidecar setup --add-alias ${alias}=provider/model`
+    `Fix with: amicus setup --add-alias ${alias}=provider/model`
   );
 }
 

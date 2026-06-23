@@ -59,7 +59,7 @@ describe('MCP eager model validation', () => {
       expect(spawnCalled).toBe(false);
     });
 
-    test('returns isError with sidecar setup hint', async () => {
+    test('returns isError with amicus setup hint', async () => {
       writeConfig({
         default: 'gemini',
         aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' },
@@ -75,7 +75,7 @@ describe('MCP eager model validation', () => {
         );
 
         expect(result.isError).toBe(true);
-        expect(result.content[0].text.toLowerCase()).toContain('sidecar setup');
+        expect(result.content[0].text.toLowerCase()).toContain('amicus setup');
       });
     });
 
@@ -145,7 +145,7 @@ describe('MCP eager model validation', () => {
         );
 
         expect(result.isError).toBe(true);
-        expect(result.content[0].text.toLowerCase()).toContain('sidecar setup');
+        expect(result.content[0].text.toLowerCase()).toContain('amicus setup');
       });
       expect(spawnCalled).toBe(false);
     });
