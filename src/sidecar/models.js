@@ -61,9 +61,9 @@ async function runList(args) {
   }
   const marks = aliasMarks();
   // Effective aliases (alias-marked) rows first, then the rest.
-  const curated = filtered.filter(m => marks.has(m.id));
+  const marked = filtered.filter(m => marks.has(m.id));
   const rest = filtered.filter(m => !marks.has(m.id));
-  for (const m of [...curated, ...rest]) {
+  for (const m of [...marked, ...rest]) {
     process.stdout.write(fmtRow(m, marks) + '\n');
   }
   const when = fetchedAt ? new Date(fetchedAt).toISOString() : 'never';
