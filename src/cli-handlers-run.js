@@ -33,6 +33,11 @@ async function handleStart(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --json requires --no-ui' }));
   }
 
+  const mc = args['max-cost'];
+  if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc <= 0)) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
+  }
+
   const { model, alias } = resolveModelFromArgs(args);
   args.model = model;
   args.model = await validateFallbackModel(args, alias);
@@ -117,6 +122,10 @@ async function handleFanout(args) {
   }
   if (args.timeout !== undefined && args.timeout <= 0) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --timeout must be a positive number' }));
+  }
+  const mc = args['max-cost'];
+  if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc <= 0)) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
   const { parseModelsList } = require('./sidecar/fanout');
   if (parseModelsList(args.models).length === 0) {
