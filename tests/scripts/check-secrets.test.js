@@ -69,5 +69,33 @@ describe('check-secrets', () => {
       const results = scanForSecrets(content, '.env');
       expect(results.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('detects Google AI API keys', () => {
+      const results = scanForSecrets('KEY=' + 'AIza' + 'B'.repeat(35), '.env');
+      expect(results.some(r => r.pattern === 'AIza')).toBe(true);
+    });
+
+    it('detects OpenAI project keys', () => {
+      const results = scanForSecrets('OPENAI=' + 'sk-proj-' + 'a'.repeat(40), '.env');
+      expect(results.some(r => r.pattern === 'sk-proj-')).toBe(true);
+      expect(results.some(r => r.pattern === 'sk-')).toBe(false);
+    });
+
+    it('detects OpenAI-legacy / DeepSeek bare sk- keys', () => {
+      const legacy = scanForSecrets('OPENAI=' + 'sk-' + 'a'.repeat(48), '.env');
+      expect(legacy.some(r => r.pattern === 'sk-')).toBe(true);
+      const deepseek = scanForSecrets('DEEPSEEK=' + 'sk-' + 'b'.repeat(32), '.env');
+      expect(deepseek.some(r => r.pattern === 'sk-')).toBe(true);
+    });
+
+    it('does NOT cross-match sk-or- / sk-ant- as bare sk- keys', () => {
+      const orRes = scanForSecrets('K=sk-or-v1-abc123def456ghijkl', '.env');
+      expect(orRes.some(r => r.pattern === 'sk-or-')).toBe(true);
+      expect(orRes.some(r => r.pattern === 'sk-')).toBe(false);
+
+      const antRes = scanForSecrets('K=sk-ant-' + 'a'.repeat(40), '.env');
+      expect(antRes.some(r => r.pattern === 'sk-ant-')).toBe(true);
+      expect(antRes.some(r => r.pattern === 'sk-')).toBe(false);
+    });
   });
 });

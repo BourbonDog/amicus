@@ -20,6 +20,9 @@ const CONFIG = {
     { regex: /AKIA[0-9A-Z]{16}/g, name: 'AKIA', description: 'AWS access key' },
     { regex: /ghp_[A-Za-z0-9_]{10,}/g, name: 'ghp_', description: 'GitHub personal access token' },
     { regex: /-----BEGIN\s[\w\s]*?PRIVATE\sKEY-----/g, name: 'BEGIN.*KEY', description: 'Private key block' },
+    { regex: /AIza[0-9A-Za-z\-_]{35}/g, name: 'AIza', description: 'Google AI API key' },
+    { regex: /sk-proj-[A-Za-z0-9_-]{20,}/g, name: 'sk-proj-', description: 'OpenAI project API key' },
+    { regex: /sk-[A-Za-z0-9]{32,}/g, name: 'sk-', description: 'OpenAI/DeepSeek API key' },
   ],
   allowlistPaths: [
     'tests/**',
