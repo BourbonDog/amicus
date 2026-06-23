@@ -1,0 +1,3162 @@
+
+> amicus@1.1.0 test
+> jest
+
+PASS tests/mcp-tools.test.js
+  MCP Tool Definitions
+    √ exports TOOLS array with correct structure (8 ms)
+    √ has all required tools (1 ms)
+    √ has exactly 10 tools
+    √ tool names are unique
+    √ all tool names use snake_case with amicus_ prefix (1 ms)
+    √ all descriptions are non-empty
+    √ model description contains dynamic alias keys (1 ms)
+    √ amicus_start description does not contain brand or model names
+    √ model param description does not contain specific model IDs
+    √ amicus_guide guide text does not contain hardcoded model IDs in prose (1 ms)
+    amicus_start
+      √ has prompt in input schema
+      √ has model in input schema
+      √ has agent in input schema
+      √ has noUi in input schema
+      √ has thinking in input schema (1 ms)
+      √ has timeout in input schema
+      √ has contextTurns in input schema
+      √ has contextSince in input schema
+      √ has contextMaxTokens in input schema
+      √ has summaryLength in input schema
+      √ has includeContext in input schema
+      √ includeContext defaults to true
+      √ has parentSession in input schema (1 ms)
+      √ description contains mode routing guidance (1 ms)
+    amicus_status
+      √ has taskId in input schema
+    amicus_read
+      √ has taskId in input schema
+      √ has mode in input schema
+    amicus_list
+      √ has status in input schema
+    amicus_resume
+      √ has taskId in input schema (1 ms)
+      √ has noUi in input schema
+      √ has timeout in input schema
+    amicus_continue
+      √ has taskId in input schema
+      √ has prompt in input schema
+      √ has model in input schema
+      √ has noUi in input schema (1 ms)
+      √ has timeout in input schema
+      √ has contextTurns in input schema with correct description
+      √ has contextMaxTokens in input schema with correct description
+    amicus_setup
+      √ has empty input schema
+    amicus_guide
+      √ has empty input schema
+    amicus_abort
+      √ has taskId in input schema (1 ms)
+      √ description mentions abort
+    polling guidance in descriptions
+      √ amicus_start description mentions interactive and headless modes
+      √ amicus_status description mentions headless mode
+    getGuideText
+      √ returns non-empty string with key sections (2 ms)
+      √ contains workflow instructions
+      √ contains agent selection guidance (1 ms)
+      √ contains briefing guidance (1 ms)
+      √ contains full alias table with actual model IDs
+      √ contains context control guidance (1 ms)
+      √ contains parentSession guidance for Claude Code CLI (1 ms)
+    Input Validation (Security)
+      √ safeTaskId accepts valid IDs (1 ms)
+      √ safeTaskId rejects path traversal (13 ms)
+      √ safeTaskId rejects empty and too-long IDs (1 ms)
+      √ safeTaskId rejects special characters (1 ms)
+      √ safeModel accepts valid model strings
+      √ safeModel rejects flag injection
+      √ safeModel rejects shell metacharacters (1 ms)
+    MCP tool schemas include project param
+      √ amicus_start has optional project parameter
+      √ amicus_status has optional project parameter
+      √ amicus_read has optional project parameter
+      √ amicus_list has optional project parameter
+      √ amicus_resume has optional project parameter
+      √ amicus_continue has optional project parameter
+      √ amicus_abort has optional project parameter
+      √ amicus_setup does NOT have project parameter (1 ms)
+      √ amicus_guide does NOT have project parameter
+
+PASS tests/sidecar/session-utils.test.js
+  Session Utils
+    HEARTBEAT_INTERVAL
+      √ should be 15 seconds (3 ms)
+    SessionPaths
+      √ should return root sidecar sessions directory
+      √ should return session directory for a task
+      √ should return metadata.json path
+      √ should return conversation.jsonl path (1 ms)
+      √ should return summary.md path
+      √ should return initial_context.md path
+    saveInitialContext
+      √ should write system prompt and user message to initial_context.md (1 ms)
+    finalizeSession
+      √ should save summary and update metadata to complete (1 ms)
+      √ should detect conflicts and attach to metadata
+      √ routes conflict warning to stderr (not stdout) when quietStdout is true
+      √ routes conflict warning to stdout (console.log) when quietStdout is not set
+    outputSummary
+      √ should write summary to stdout
+    createHeartbeat
+      √ should write elapsed time to stderr at interval (2 ms)
+      √ should format minutes and seconds when elapsed > 60s (1 ms)
+      √ should stop when stop() is called
+      √ should default to HEARTBEAT_INTERVAL (15s) (1 ms)
+    createHeartbeat with progress
+      √ includes message count and latest activity in heartbeat (7 ms)
+      √ shows Starting up when no conversation exists (4 ms)
+      √ falls back to basic heartbeat when no sessionDir provided (3 ms)
+    executeMode
+      √ should call runHeadless in headless mode
+      √ should call runInteractive in interactive mode (1 ms)
+      √ should provide default summary when headless returns none
+      √ should pass extraOptions to headless runner
+  startOpenCodeServer client passthrough
+    √ passes client option to startServer when provided
+    √ does not set client when not provided
+    √ passes both mcp and client when both provided
+
+PASS tests/opencode-client.test.js
+  OpenCode Client Wrapper
+    parseModelString
+      √ should parse openrouter model string with nested path (5 ms)
+      √ should parse simple provider/model format
+      √ should default to openrouter provider for model-only string (1 ms)
+      √ should handle deeply nested model paths
+      √ should return object unchanged if already in SDK format
+      √ should handle empty string gracefully
+    createClient
+      ○ skipped should create a client with the specified base URL
+      ○ skipped should create a client with default URL if not specified
+    createSession
+      √ should create a session and return session ID
+      √ should throw if session creation fails (11 ms)
+      √ should handle nested session ID in response
+    sendPrompt
+      √ should send prompt with model specification (2 ms)
+      √ should include system prompt when provided (1 ms)
+      √ should include agent when provided (1 ms)
+      √ should include tools config when provided
+      √ should handle model as object (already parsed) (1 ms)
+      √ should include reasoning parameter when provided
+      √ should support all reasoning effort levels (1 ms)
+      √ should not include reasoning when not provided (1 ms)
+      √ should combine reasoning with other optional parameters (1 ms)
+    getMessages
+      √ should retrieve messages for a session (1 ms)
+      √ should return empty array if no messages
+    checkHealth
+      √ should return true when server is healthy (1 ms)
+      √ should return false when server is not responding
+    createChildSession
+      √ should create a child session with parent ID (2 ms)
+      √ should throw if child session creation fails (2 ms)
+    getChildren
+      √ should get child sessions for a parent
+      √ should return empty array if no children
+    listSessions
+      √ should list all sessions (1 ms)
+      √ should return empty array if no sessions
+      √ should return empty array on error
+    sendPromptAsync alias
+      √ should be the same function as sendPrompt
+    getSessionStatus
+      √ should get session status (1 ms)
+    loadMcpConfig
+      √ should return null if no config file exists (1 ms)
+      √ should load MCP config from global opencode.json (1 ms)
+      √ should load MCP config from custom config path (2 ms)
+      √ should return null if config has no mcp section (1 ms)
+      √ should return null if mcp section is empty (1 ms)
+      √ should handle JSON parse errors gracefully (1 ms)
+    parseMcpSpec
+      √ should parse remote server URL format (name=url)
+      √ should parse local server command format (name=command)
+      √ should parse JSON format (1 ms)
+      √ should handle http URLs as remote
+      √ should return null for invalid format (no =)
+      √ should return null for invalid JSON (1 ms)
+      √ should handle empty name gracefully
+  buildServerHandle (F3 #15)
+    √ captures goPid via findListenerPid and SIGKILLs it on close fallback (2 ms)
+    √ prefers sdkServer.pid over the port scan (3 ms)
+
+PASS tests/cli.test.js
+  CLI Argument Parser
+    parseArgs
+      √ should parse command as first positional argument (4 ms)
+      √ should parse --model option (1 ms)
+      √ should parse --prompt option
+      √ should parse --session-id option
+      √ should default session-id to "current" if not specified
+      √ should parse --cwd option
+      √ should default cwd to process.cwd() if not specified
+      √ should parse --context-turns option with default of 50
+      √ should override --context-turns when specified
+      √ should parse --context-since option
+      √ should parse --context-max-tokens with default of 80000
+      √ should override --context-max-tokens when specified
+      √ should parse --no-ui flag as boolean (1 ms)
+      √ should default --no-ui to false
+      √ should parse --position option
+      √ should parse --position left
+      √ should parse --position center
+      √ should default --position to "right"
+      √ should parse --timeout option with default of 15
+      √ should override --timeout when specified
+      √ should parse task_id as second positional for resume/continue/read
+      √ should parse --status filter for list command
+      √ should parse --all flag for list command (1 ms)
+      √ should parse --summary flag for read command
+      √ should parse --conversation flag for read command
+      √ should parse --json flag for list command
+      √ should parse --version flag
+      √ should parse --help flag
+      New v3 CLI flags
+        √ should parse --client option
+        √ should parse --session-dir option
+        √ should parse --setup as boolean flag
+        √ should parse --fold-shortcut option
+        √ should parse --opencode-port as numeric
+      --no-mcp and --exclude-mcp options
+        √ should parse --no-mcp as boolean flag
+        √ should default --no-mcp to undefined when not specified
+        √ should parse --exclude-mcp into array
+        √ should accumulate multiple --exclude-mcp values
+        √ should handle --exclude-mcp alongside other options
+      MCP server options
+        √ should parse --mcp option with name=url format
+        √ should parse --mcp option with name=command format
+        √ should parse --mcp-config option for custom config path
+        √ should default mcp to undefined if not specified
+      --mode and --agent options
+        √ should parse --mode build (1 ms)
+        √ should parse --mode plan
+        √ should parse --agent explore
+        √ should parse --agent general
+        √ should default mode to undefined when not specified
+      --no-context flag
+        √ should parse --no-context as boolean flag
+        √ should default --no-context to undefined when not specified (1 ms)
+        √ should parse --no-context alongside other options
+      --validate-model flag
+        √ should parse --validate-model as boolean flag
+        √ should not consume the next argument as a value
+      --thinking option
+        √ should parse --thinking option with valid effort level
+        √ should parse all valid --thinking effort levels (1 ms)
+        √ should default thinking to undefined if not specified
+        √ should parse --thinking alongside other options
+      --key=value syntax
+        √ should parse --model=gemini as model: "gemini"
+        √ should parse --timeout=30 as numeric
+        √ should handle values containing equals signs (1 ms)
+        √ should still support --model gemini (space-separated)
+    validateStartArgs
+      √ should pass validation when --model is not provided (resolved externally)
+      √ should validate model format when a resolved full model string is provided (1 ms)
+      √ should return error if --prompt is missing
+      √ should return valid if both --model and --prompt are present
+      √ should validate model format (provider/model)
+      √ should accept valid model formats (1 ms)
+      √ should validate --thinking with valid effort levels
+      √ should reject invalid --thinking effort level (1 ms)
+      √ should accept start command without --thinking (optional)
+      √ should validate --timeout is a positive number
+      √ should validate --context-turns is a positive number
+      √ should validate --context-since format (e.g., 2h, 30m, 1d) (1 ms)
+      √ should reject invalid --context-since format (1 ms)
+    validateStartArgs - comprehensive validation
+      --prompt content validation
+        √ should reject empty prompt (1 ms)
+        √ should reject whitespace-only prompt
+        √ should accept non-empty prompt (1 ms)
+      --cwd validation
+        √ should reject non-existent cwd path
+        √ should accept valid cwd path (1 ms)
+        √ should accept when cwd is not specified (uses default) (2 ms)
+      --session-id validation
+        √ should reject explicit session-id that does not exist (3 ms)
+        √ should accept "current" session-id (deferred resolution)
+        √ should accept undefined session-id (uses default) (1 ms)
+      --agent validation
+        √ should reject empty agent name
+        √ should accept OpenCode native agent: Build
+        √ should accept OpenCode native agent: Plan (1 ms)
+        √ should accept OpenCode native agent: General
+        √ should accept OpenCode native agent: Explore
+        √ should accept custom agent names (for user-defined OpenCode agents) (1 ms)
+        √ should accept when agent is not specified
+      headless agent validation (--no-ui + --agent)
+        √ should reject --agent chat with --no-ui
+        √ should reject --agent Chat (case-insensitive) with --no-ui
+        √ should accept --agent build with --no-ui (1 ms)
+        √ should accept --agent plan with --no-ui
+        √ should accept --agent explore with --no-ui (1 ms)
+        √ should accept --agent general with --no-ui
+        √ should accept custom agent with --no-ui (with warning) (1 ms)
+        √ should accept --agent chat without --no-ui (interactive is fine)
+        √ should accept no agent + --no-ui (defaults to build)
+      --client validation
+        √ should accept valid client values (non-web) (1 ms)
+        √ should reject invalid client value
+        √ should accept when client is not specified
+        √ should require --session-dir when client is code-web (1 ms)
+        √ should accept code-web with --session-dir
+      --mcp validation (optional, only if provided)
+        √ should pass when --mcp is not provided
+        √ should reject invalid MCP format when provided (1 ms)
+        √ should accept valid MCP URL format when provided
+        √ should accept valid MCP command format when provided (1 ms)
+      --mcp-config validation (optional, only if provided)
+        √ should pass when --mcp-config is not provided
+        √ should reject non-existent config file when provided
+      API key validation
+        √ should error when OPENROUTER_API_KEY is missing for openrouter model (2 ms)
+        √ should error when GOOGLE_GENERATIVE_AI_API_KEY is missing for google model
+        √ should error when OPENAI_API_KEY is missing for openai model (1 ms)
+        √ should error when ANTHROPIC_API_KEY is missing for anthropic model
+        √ should error when DEEPSEEK_API_KEY is missing for deepseek model (1 ms)
+        √ should pass when correct API key is set (1 ms)
+        √ should pass for unknown provider (let runtime handle it)
+    mcp command
+      √ parseArgs recognizes mcp as a command (1 ms)
+      √ mcp command appears in usage text as a command (1 ms)
+    abort command
+      √ parseArgs recognizes abort as a command
+    usage text includes new options
+      √ --no-mcp appears in usage
+      √ --exclude-mcp appears in usage
+      √ abort command appears in usage
+      √ --no-context appears in usage
+
+PASS tests/context.test.js
+  Context Filtering
+    parseDuration
+      √ should parse minutes (m) (6 ms)
+      √ should parse hours (h) (2 ms)
+      √ should parse days (d) (1 ms)
+      √ should return 0 for invalid format (4 ms)
+      √ should handle larger numbers (2 ms)
+    estimateTokens
+      √ should estimate tokens at ~4 chars per token (3 ms)
+      √ should handle empty string (2 ms)
+      √ should round down token count (3 ms)
+    takeLastNTurns
+      √ should return last N user turns with associated messages (3 ms)
+      √ should return all messages if fewer turns than requested (3 ms)
+      √ should handle empty messages array (3 ms)
+      √ should include tool_use messages between turns (4 ms)
+    filterContext
+      Turn-based filtering
+        √ should filter by number of turns (default 50) (22 ms)
+        √ should filter to last N turns (5 ms)
+        √ should count user messages as turns (6 ms)
+      Time-based filtering (--context-since)
+        √ should override turns when since is specified (6 ms)
+        √ should include all messages within time window (6 ms)
+      Token truncation
+        √ should truncate from start if over maxTokens limit (6 ms)
+        √ should prepend truncation notice when truncating (5 ms)
+        √ should not truncate if under token limit (4 ms)
+      Edge cases
+        √ should handle empty session file (6 ms)
+        √ should handle session file with only invalid JSON (6 ms)
+        √ should throw for non-existent file (21 ms)
+        √ should handle messages without timestamps gracefully (9 ms)
+      Output format
+        √ should format context per spec §5.3 (7 ms)
+        √ should separate messages with double newlines (5 ms)
+
+PASS tests/api-key-store.test.js
+  api-key-store
+    PROVIDER_ENV_MAP
+      √ should map provider IDs to env var names (7 ms)
+      √ should have exactly 5 providers (1 ms)
+    getEnvPath
+      √ should return path inside SIDECAR_ENV_DIR when set (4 ms)
+      √ should default to ~/.config/amicus/.env on a fresh machine (neither .env exists) (5 ms)
+      √ should return path inside AMICUS_ENV_DIR when set (5 ms)
+      √ AMICUS_ENV_DIR wins over legacy SIDECAR_ENV_DIR (6 ms)
+      √ falls back to legacy ~/.config/sidecar/.env when it exists and the amicus one does not (13 ms)
+      √ prefers ~/.config/amicus/.env when both exist (13 ms)
+    readApiKeys
+      √ should return all false when .env does not exist (3 ms)
+      √ should detect keys from .env file (4 ms)
+      √ should detect keys from process.env (3 ms)
+      √ should combine .env file and process.env (6 ms)
+      √ should handle empty .env file (5 ms)
+      √ should ignore comments and blank lines in .env (5 ms)
+      √ should detect deepseek key from process.env (3 ms)
+      √ should ignore keys with empty values (5 ms)
+    saveApiKey
+      √ should create .env file with the key (6 ms)
+      √ should create directory if it does not exist (10 ms)
+      √ should preserve existing keys when adding a new provider (7 ms)
+      √ should overwrite existing key for same provider (9 ms)
+      √ should set process.env after saving (7 ms)
+      √ should return success result (10 ms)
+      √ should preserve comments in .env file (9 ms)
+      √ should map provider to correct env var name (10 ms)
+      √ should save deepseek key with correct env var name (7 ms)
+      ○ skipped should set file permissions to 0o600 (POSIX only)
+    legacy key migration
+      √ should auto-migrate GEMINI_API_KEY to GOOGLE_GENERATIVE_AI_API_KEY (8 ms)
+      √ should not migrate when new key already exists (6 ms)
+
+warning: in the working copy of '.husky/pre-commit', LF will be replaced by CRLF the next time Git touches it
+PASS tests/drift.test.js
+  Context Drift Detection
+    countTurnsSince
+      √ should count user messages (turns) since a given time (10 ms)
+      √ should return 0 if no turns since session start (5 ms)
+      √ should only count user messages as turns (8 ms)
+      √ should handle empty session file (4 ms)
+      √ should handle non-existent file gracefully (4 ms)
+    isDriftSignificant
+      √ should return true if age > 10 minutes per spec §7.3 (3 ms)
+      √ should return true if turns > 5 per spec §7.3 (4 ms)
+      √ should return false if age <= 10 and turns <= 5 (4 ms)
+      √ should return true if both thresholds exceeded (7 ms)
+    calculateDrift
+      √ should return drift object with required fields per spec §7.3 (9 ms)
+      √ should calculate age in minutes (12 ms)
+      √ should count main session turns since start (11 ms)
+      √ should mark significant drift per spec §7.3 thresholds (16 ms)
+      √ should mark insignificant drift when under thresholds (10 ms)
+      √ should round ageMinutes (13 ms)
+    formatDriftWarning
+      √ should format drift warning per spec §7.3 (9 ms)
+      √ should include emoji indicator (9 ms)
+      √ should include drift warning for significant drift per spec §7.3 (9 ms)
+      √ should not include drift warning for insignificant drift (11 ms)
+      √ should handle zero values (12 ms)
+      √ should return empty string for null/undefined drift (9 ms)
+    Edge cases
+      √ should handle session that just started (0 age) (17 ms)
+      √ should handle very old sessions (16 ms)
+      √ should handle malformed JSONL in main session (13 ms)
+      √ should handle messages without timestamps (10 ms)
+      √ should accept sessionStartTime as ISO string (13 ms)
+
+PASS tests/sidecar/progress.test.js
+  Progress Reader
+    readProgress
+      √ returns defaults when conversation.jsonl does not exist (7 ms)
+      √ returns defaults when conversation.jsonl is empty (5 ms)
+      √ counts assistant messages and skips system/tool roles (5 ms)
+      √ extracts latest from assistant text (5 ms)
+      √ truncates latest to 80 chars (5 ms)
+      √ extracts latest from tool_use entry (5 ms)
+      √ uses last entry for latest, not first (6 ms)
+      √ computes relative lastActivity from file mtime (7 ms)
+      √ handles malformed JSONL lines gracefully (5 ms)
+    extractLatest
+      √ returns "Starting up..." for empty entries array (3 ms)
+      √ returns "Starting up..." when no assistant entries exist (2 ms)
+      √ returns tool_use format for toolCall entries (3 ms)
+      √ returns first line of text content (2 ms)
+      √ truncates text longer than 80 chars (2 ms)
+      √ uses the last assistant entry (1 ms)
+      √ returns "Executing tool call..." for tool_use entry with no toolCall.name (4 ms)
+      √ returns "Executing tool call..." for tool_use entry with undefined name (3 ms)
+      √ returns "Working..." for assistant entry with no content or toolCall (3 ms)
+      √ handles content that is only whitespace (3 ms)
+    readProgress with progress.json
+      √ uses progress.json stage label when no assistant entries exist (7 ms)
+      √ uses progress.json when conversation.jsonl does not exist (6 ms)
+      √ prefers assistant entries over progress.json for latest (6 ms)
+      √ uses progress.json latest for tool_use entries without toolCall.name (5 ms)
+      √ uses extractLatest when it returns something meaningful (7 ms)
+      √ uses messagesReceived from progress.json when conversation has no assistant entries (6 ms)
+      √ uses lastActivity from progress.json updatedAt when more recent (8 ms)
+      √ ignores malformed progress.json gracefully (7 ms)
+      √ returns all lifecycle stages correctly (13 ms)
+      √ defaults stage to undefined when no progress.json exists (4 ms)
+    lastActivityMs in readProgress
+      √ returns lastActivityMs based on file mtime (5 ms)
+      √ returns null lastActivityMs when no activity exists (5 ms)
+      √ uses progress.json updatedAt for lastActivityMs when more recent (7 ms)
+      √ returns large lastActivityMs for old activity (6 ms)
+    writeProgress
+      √ writes progress.json with stage and label (5 ms)
+      √ includes extra fields when provided (4 ms)
+      √ overwrites previous progress (5 ms)
+      √ handles unknown stage gracefully (5 ms)
+    computeLastActivity
+      √ returns "never" when mtime is null (3 ms)
+      √ returns "never" when mtime is undefined (2 ms)
+      √ returns seconds ago for recent times (3 ms)
+      √ returns minutes ago for older times (3 ms)
+      √ returns hours ago for much older times (4 ms)
+      √ returns "0s ago" for current time (5 ms)
+
+PASS tests/config.test.js
+  Sidecar Config Module
+    getConfigDir
+      √ should return SIDECAR_CONFIG_DIR when set (33 ms)
+      √ should return ~/.config/sidecar when env var is not set (4 ms)
+    getConfigPath
+      √ should return config.json inside config dir (3 ms)
+    loadConfig
+      √ should return null when config file does not exist (4 ms)
+      √ should return null when config file contains invalid JSON (5 ms)
+      √ should return parsed config when file is valid JSON (9 ms)
+      √ should return null for empty file (7 ms)
+    saveConfig
+      √ should write config data as JSON to config path (8 ms)
+      √ should create the config directory if it does not exist (11 ms)
+      √ should overwrite existing config (11 ms)
+      √ should write formatted JSON (2-space indent) (8 ms)
+    getDefaultAliases
+      √ should return an object with expected alias keys (6 ms)
+      √ should map gemini to openrouter/google/gemini-3.5-flash (4 ms)
+      √ should map claude to openrouter/anthropic/claude-sonnet-4.6 (6 ms)
+      √ should map opus to openrouter/anthropic/claude-opus-4.8 (7 ms)
+      √ should map gpt to openrouter/openai/gpt-5.5 (4 ms)
+      √ should map deepseek to openrouter/deepseek/deepseek-v4-pro (3 ms)
+      √ should map all qwen variants correctly (4 ms)
+      √ should map mistral and devstral correctly (5 ms)
+      √ should map remaining aliases correctly (5 ms)
+    getEffectiveAliases
+      √ should return defaults when no config exists (6 ms)
+      √ should merge user aliases with defaults (user wins) (6 ms)
+    formatAliasNames
+      √ should return comma-separated alias names (6 ms)
+    tryResolveModel
+      √ should return resolved model for valid alias (7 ms)
+      √ should return error for invalid alias (10 ms)
+      √ should return error when no model and no default (6 ms)
+      √ should return resolved for full model ID with slashes (4 ms)
+    Edge cases
+      √ should handle resolveModel with full model path containing multiple slashes (6 ms)
+      √ should handle resolveModel with single slash in model arg (8 ms)
+      √ should handle computeConfigHash with large config file (8 ms)
+      √ should handle saveConfig with special characters in values (9 ms)
+    buildProviderModels
+      √ should group aliases by provider with model IDs as keys (6 ms)
+      √ should include all default alias models (5 ms)
+      √ should include user-configured aliases (8 ms)
+      √ should handle non-openrouter providers (9 ms)
+      √ should deduplicate models pointed to by multiple aliases (4 ms)
+
+PASS tests/sidecar/context-builder.test.js
+  Context Builder
+    parseDuration
+      √ should parse minutes (3 ms)
+      √ should parse hours
+      √ should parse days
+      √ should return 0 for invalid input
+    applyContextFilters
+      √ should return empty array for empty input (1 ms)
+      √ should apply turn filter
+    buildContext with multi-environment
+      √ should accept sessionDir option for code-web client (19 ms)
+      √ should accept client option without breaking
+      √ should use sessionDir over default path resolution when both could apply (5 ms)
+      √ should handle missing sessionDir gracefully
+      √ should handle empty session file in sessionDir (4 ms)
+      √ should apply context filters when using sessionDir (5 ms)
+    buildContext default behavior
+      √ should return no-history message for nonexistent project (1 ms)
+    findCoworkSession
+      √ should return null when local-agent-mode-sessions dir does not exist
+      √ should return null when no sessions have audit.jsonl (22 ms)
+      √ should return the most recently modified audit.jsonl (25 ms)
+      √ should match by coworkProcess when provided (28 ms)
+      √ should return null when coworkProcess does not match any session (23 ms)
+      √ should only scan local_ prefixed directories (24 ms)
+    normalizeCoworkMessages
+      √ should filter to user and assistant messages only
+      √ should map _audit_timestamp to timestamp
+      √ should preserve existing timestamp over _audit_timestamp (1 ms)
+    buildContext with cowork client
+      √ should read from Cowork local-agent-mode-sessions (27 ms)
+      √ should return no-history when no Cowork sessions exist (5 ms)
+      √ should match correct session when coworkProcess is provided (27 ms)
+      √ should apply context filters to Cowork sessions (28 ms)
+
+PASS tests/mcp-model-validation.test.js
+  MCP eager model validation
+    amicus_start
+      √ returns isError for unknown alias (93 ms)
+      √ returns isError with amicus setup hint (15 ms)
+      √ proceeds to spawn with valid alias (73 ms)
+      √ proceeds to spawn with full model ID (22 ms)
+      √ returns isError when no model and no config default (14 ms)
+      √ proceeds when no model but config has default (26 ms)
+    amicus_continue
+      √ returns isError for invalid model override (16 ms)
+      √ proceeds when model override is valid (24 ms)
+      √ proceeds when no model override (uses original) (26 ms)
+
+PASS tests/sidecar/setup.test.js
+  Setup Wizard
+    addAlias
+      √ should add alias to existing config (39 ms)
+      √ should create config when none exists (13 ms)
+      √ should overwrite existing alias with same name (10 ms)
+    createDefaultConfig
+      √ should create config with all default aliases and chosen default (9 ms)
+      √ should have 20+ aliases (10 ms)
+      √ should accept any string as default model (9 ms)
+    detectApiKeys
+      √ should detect OpenRouter key from .env file (7 ms)
+      √ should detect Google key from .env file (7 ms)
+      √ should detect OpenAI key from .env file (9 ms)
+      √ should detect env var keys (OPENROUTER_API_KEY) (5 ms)
+      √ should detect env var keys (GOOGLE_GENERATIVE_AI_API_KEY) (8 ms)
+      √ should detect env var keys (OPENAI_API_KEY) (4 ms)
+      √ should detect env var keys (ANTHROPIC_API_KEY) (5 ms)
+      √ should return all false when no keys found (10 ms)
+      √ should handle malformed .env file gracefully (8 ms)
+      √ should combine env vars and .env file keys (10 ms)
+    runReadlineSetup
+      √ should be an exported async function (6 ms)
+      √ should create config when user picks option 1 (gemini) (17 ms)
+      √ should accept alias name as input (e.g., "opus") (11 ms)
+    runInteractiveSetup (Electron-first)
+      √ should be an async function (5 ms)
+      √ should attempt to launch Electron wizard first (12 ms)
+      √ should create config from Electron wizard result (11 ms)
+      √ should fall back to readline when Electron fails (12 ms)
+
+PASS tests/mcp-discovery.test.js
+  MCP Discovery
+    normalizeMcpJson
+      √ handles Format A (wrapped with mcpServers key) (11 ms)
+      √ handles Format B (flat — no mcpServers wrapper) (4 ms)
+      √ returns empty object for null input (3 ms)
+      √ returns empty object for undefined input (4 ms)
+      √ returns empty object for empty object (4 ms)
+      √ handles Format A with empty mcpServers (3 ms)
+      √ handles multiple servers in Format A (4 ms)
+    discoverClaudeCodeMcps
+      √ reads settings.json → installed_plugins.json → .mcp.json chain (16 ms)
+      √ skips disabled plugins (enabledPlugins value is false) (11 ms)
+      √ skips blocklisted plugins (14 ms)
+      √ handles Format A (wrapped) .mcp.json (16 ms)
+      √ returns null when no MCPs found (5 ms)
+      √ returns null when settings.json has no enabledPlugins (6 ms)
+      √ merges MCPs from multiple enabled plugins (17 ms)
+      √ silently skips malformed .mcp.json files (13 ms)
+    discoverClaudeCodeMcps — claude.json source
+      √ reads mcpServers from ~/.claude.json (16 ms)
+      √ claude.json mcpServers win on name collision with plugin (15 ms)
+      √ merges claude.json servers with plugin servers (15 ms)
+      √ excludes sidecar entry from claude.json (12 ms)
+      √ returns plugin servers when claude.json is absent (13 ms)
+      √ returns null when both claude.json absent and no enabled plugins (14 ms)
+    discoverCoworkMcps
+      √ reads Claude desktop config (8 ms)
+      √ returns null when config file does not exist (5 ms)
+      √ returns null when config has no mcpServers (7 ms)
+    discoverParentMcps
+      √ calls discoverClaudeCodeMcps for code-local client (5 ms)
+      √ calls discoverCoworkMcps for cowork client (3 ms)
+      √ defaults to Claude Code discovery when no clientType specified (4 ms)
+      √ returns null for unknown client type (1 ms)
+
+[fanout] leg 15d86f37-1 (openrouter/a/b): complete
+[fanout] leg 15d86f37-2 (openrouter/c/d): complete
+PASS tests/sidecar/config-change-flow.test.js
+  Config change detection flow
+    first run (no CLAUDE.md)
+      √ should detect change when config exists but CLAUDE.md does not (48 ms)
+      √ should not detect change when neither config nor CLAUDE.md exist (8 ms)
+    config unchanged (hash matches)
+      √ should not detect change when CLAUDE.md hash matches config hash (16 ms)
+      √ should not emit [AMICUS_CONFIG_UPDATE] to stderr (16 ms)
+    alias added (config modified)
+      √ should detect change when a new alias is added to config (20 ms)
+      √ should include the new hash in update data (18 ms)
+    default model changed
+      √ should detect change when default model is switched (19 ms)
+      √ should mark the new default in the alias table (19 ms)
+    config file deleted
+      √ should detect change when config file is removed (20 ms)
+    full round-trip with LLM update
+      √ should not detect change after LLM updates CLAUDE.md with new hash (21 ms)
+      √ should handle multiple sequential config modifications (26 ms)
+    update data format
+      √ should contain an amicus-config-hash HTML comment (14 ms)
+      √ should contain a markdown alias table with header row (14 ms)
+      √ should include all aliases in the update table (14 ms)
+      √ should have empty updateData when config is deleted (no aliases) (12 ms)
+    CLAUDE.md hash extraction edge cases
+      √ should extract hash from CLAUDE.md with other HTML comments (7 ms)
+      √ should return null when CLAUDE.md has no hash comment (6 ms)
+      √ should return null when CLAUDE.md does not exist (5 ms)
+      √ should not match malformed hash comments (6 ms)
+    stderr output format
+      √ should format [AMICUS_CONFIG_UPDATE] message correctly (12 ms)
+      √ should write to stderr (not stdout) when using process.stderr.write (29 ms)
+
+PASS tests/headless-poll-failures.test.js
+  consecutive poll-failure fast-exit (F4)
+    √ bails with an error after K consecutive getMessages failures (dead server) (47 ms)
+    √ classifies partial-output + dead-server as error (never complete), keeping the partial summary (79 ms)
+    √ resets the failure counter on a successful poll (47 ms)
+
+PASS tests/updater.test.js
+  Updater Module
+    getUpdateInfo()
+      √ should return null before initUpdateCheck is called (11 ms)
+      √ should return null when no update is available (3 ms)
+      √ should return update info when update is available (2 ms)
+    notifyUpdate()
+      √ should call notifier.notify() (2 ms)
+      √ should not throw if called before init (2 ms)
+    initUpdateCheck()
+      √ should initialize with package info (2 ms)
+      √ should use the module itself when there is no default export (2 ms)
+      √ should skip initialization in mock mode (1 ms)
+      √ should resolve without throwing when the loader fails (2 ms)
+    update-notifier-loader (real dynamic import)
+      √ loads update-notifier and exposes a callable constructor (179 ms)
+    performUpdate()
+      √ should resolve with success on exit code 0 (1 ms)
+      √ should resolve with failure on non-zero exit (3 ms)
+      √ should handle spawn errors (2 ms)
+    SIDECAR_MOCK_UPDATE env var
+      mode: "available"
+        √ should return fake update info from getUpdateInfo (1 ms)
+      mode: "success"
+        √ should make performUpdate resolve immediately with success (1 ms)
+        √ should return fake update info from getUpdateInfo (1 ms)
+      mode: "error"
+        √ should make performUpdate return failure (1 ms)
+      mode: "updating"
+        √ should return fake update info from getUpdateInfo (2 ms)
+
+PASS tests/conflict.test.js
+  File Conflict Detection
+    detectConflicts
+      √ should detect no conflicts when files unchanged since session start (14 ms)
+      √ should detect conflict when file modified after session start per spec §7.2 (13 ms)
+      √ should return conflict object with required fields per spec §7.2 (10 ms)
+      √ should detect multiple conflicts (13 ms)
+      √ should ignore files not in written list (11 ms)
+      √ should handle files that do not exist (new files created by sidecar) (8 ms)
+      √ should handle empty written files list (12 ms)
+      √ should handle undefined written files (9 ms)
+      √ should use Date object for sessionStartTime (13 ms)
+      √ should handle timestamp as ISO string (8 ms)
+    formatConflictWarning
+      √ should format warning per spec §7.2 (8 ms)
+      √ should include relative time for each conflict (7 ms)
+      √ should list all conflicting files (6 ms)
+      √ should include review instruction per spec §7.2 (7 ms)
+      √ should return empty string for no conflicts (6 ms)
+      √ should use emoji warning indicator (5 ms)
+    Edge cases
+      √ should handle deeply nested file paths (36 ms)
+      √ should handle files with special characters in name (11 ms)
+      √ should handle concurrent modifications (8 ms)
+
+PASS tests/mcp-project-dir.test.js
+  getProjectDir
+    √ returns explicit project path when valid directory (11 ms)
+    √ ignores explicit project path when directory does not exist (10 ms)
+    √ falls back to $HOME when cwd is root / (7 ms)
+    √ uses cwd when it is a valid writable directory (8 ms)
+    √ returns $HOME when no explicit project and cwd is root (7 ms)
+  MCP handler dispatch passes input.project
+    √ amicus_list uses input.project when provided (13 ms)
+    √ amicus_status uses input.project when no 2nd arg (11 ms)
+
+PASS tests/scripts/generate-docs.test.js
+  extractJSDocDescription
+    √ extracts the first line of a JSDoc comment (10 ms)
+    √ returns empty string when no JSDoc exists (6 ms)
+    √ handles single-line JSDoc (6 ms)
+    √ ignores non-JSDoc block comments (3 ms)
+  extractExports
+    √ extracts named exports from module.exports object (5 ms)
+    √ extracts exports.name = assignments (7 ms)
+    √ caps at 5 exports (5 ms)
+    √ returns empty array for files with no exports (6 ms)
+  buildDirectoryTree
+    √ builds a tree with files and directories (13 ms)
+    √ sorts directories before files (12 ms)
+    √ uses tree connectors (16 ms)
+    √ skips directories in SKIP_DIRS (12 ms)
+    √ skips dotfiles (11 ms)
+    √ includes JSDoc annotations for .js files (8 ms)
+    √ handles multiple top-level dirs (13 ms)
+  buildModuleIndex
+    √ builds a markdown table with module info (6 ms)
+    √ includes files in subdirectories (7 ms)
+    √ returns header-only table for empty src/ (3 ms)
+    √ handles files with no JSDoc gracefully (5 ms)
+  replaceMarkers
+    √ replaces content between markers (1 ms)
+    √ preserves content outside markers (2 ms)
+    √ handles multiple different markers (2 ms)
+    √ returns content unchanged if marker not found (2 ms)
+    √ handles empty new content (2 ms)
+  validateCrossLinks
+    √ returns no errors for valid links (4 ms)
+    √ reports broken links (3 ms)
+    √ skips http/https URLs (3 ms)
+    √ skips anchor-only links
+    √ handles links with subdirectory paths (3 ms)
+    √ strips anchor from file paths before checking (3 ms)
+  buildPlansIndex
+    √ lists plan files from docs/plans/ (8 ms)
+    √ lists plan files from docs/archive/plans/ (31 ms)
+    √ separates active and archived plans (14 ms)
+    √ returns empty message when no plans exist (3 ms)
+  checkMarkersAreCurrent
+    √ returns empty array when markers match (3 ms)
+    √ reports stale markers (4 ms)
+    √ checks multiple markers (4 ms)
+    √ reports marker as stale if not found in doc (2 ms)
+
+PASS tests/mcp-discovery-integration.test.js
+  MCP buildMcpConfig Integration
+    buildMcpConfig integration
+      √ discovery + file config merge (file overrides discovered) (54 ms)
+      √ CLI --mcp overrides all other sources (10 ms)
+      √ --no-mcp skips discovery but keeps file and CLI sources (7 ms)
+      √ --exclude-mcp removes specific servers from final result (6 ms)
+      √ excluding all servers returns null (7 ms)
+    CLI parsing integration
+      √ --no-mcp + --exclude-mcp parsed together (16 ms)
+      √ abort command is parsed as positional (5 ms)
+      √ abort with --cwd option (4 ms)
+      √ --exclude-mcp with no value does not consume next flag (3 ms)
+
+PASS tests/sidecar/start.test.js
+  Config change detection on start
+    √ should import checkConfigChanged without errors (1 ms)
+    √ should detect config change when hash differs (1 ms)
+    √ should return changed: false when hash matches (1 ms)
+    √ should emit config update to stderr when config has changed (2 ms)
+    √ should not emit to stderr when config hash matches (4 ms)
+    √ should extract hash from CLAUDE.md content when present
+    √ should return null hash when CLAUDE.md has no hash comment (1 ms)
+  buildMcpConfig with MCP discovery
+    √ should skip discovery when noMcp is true (38 ms)
+    √ should remove excluded servers via excludeMcp (4 ms)
+    √ should merge with correct priority: CLI > file > discovered (3 ms)
+  createSessionMetadata PID preservation
+    √ preserves pid from existing metadata written by MCP handler (18 ms)
+    √ works when no existing metadata (no pid to preserve) (13 ms)
+  startSidecar includeContext option
+    √ calls buildContext when includeContext is true (9 ms)
+    √ calls buildContext when includeContext is omitted (default true) (2 ms)
+    √ skips buildContext when includeContext is false (1 ms)
+    √ passes parent context to buildPrompts when includeContext is true (2 ms)
+
+PASS tests/session.test.js
+  Session Resolver
+    encodeProjectPath
+      √ should encode project path by replacing slashes with dashes
+      √ should handle root path (1 ms)
+      √ should handle paths with multiple consecutive slashes
+      √ should handle paths without leading slash
+      √ should handle Windows-style paths (drive colon + backslashes)
+      √ should convert underscores to dashes (matching Claude Code behavior)
+    decodeProjectPath
+      √ should decode encoded path back to original
+      √ should handle paths without leading dash
+    getSessionDirectory
+      √ should return the session directory path for a project
+      √ should handle custom home directory override
+    getSessionId
+      √ should extract session ID from filename
+      √ should handle filename without extension (1 ms)
+    resolveSession
+      Primary Resolution: Explicit Session ID
+        √ should resolve explicit session ID to file path (14 ms)
+        √ should handle session ID with .jsonl extension (14 ms)
+        √ should fall back to most recent if explicit session not found (10 ms)
+      Fallback Resolution: Most Recent File
+        √ should resolve "current" to most recently modified .jsonl file (10 ms)
+        √ should resolve undefined session to most recently modified file (9 ms)
+        √ should return null if no sessions found (8 ms)
+        √ should only consider .jsonl files (11 ms)
+      Ambiguity Warning: Multiple Recent Sessions
+        √ should warn if multiple sessions modified in last 5 minutes (10 ms)
+        √ should not warn if only one session is recent (31 ms)
+      Multi-Environment Session Resolution
+        √ should resolve session from explicit session-dir (12 ms)
+        √ should fall back to most recent when explicit session not found in session-dir (10 ms)
+        √ should resolve from arbitrary directory path (simulating code-web session root) (17 ms)
+      Edge Cases
+        √ should handle empty project directory (8 ms)
+        √ should handle non-existent project directory (7 ms)
+        √ should handle empty string session ID (9 ms)
+
+PASS tests/start-terminal-status.test.js
+  start.js terminal state classification
+    √ completed result → metadata status "complete" and exit code 0 (31 ms)
+    √ error result → metadata status "error" and exit code 1 (20 ms)
+    √ timed-out result → metadata status "timed-out" and exit code 2 (16 ms)
+    √ aborted result → metadata status "aborted" and exit code 2 (17 ms)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:170:13)
+
+  console.log
+    === Amicus Setup Wizard ===
+
+      at log (src/sidecar/setup.js:171:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:172:13)
+
+PASS tests/config-hash.test.js
+  Sidecar Config Module - Hashing & Alias Table
+    computeConfigHash
+      √ should return null when no config file exists (17 ms)
+      √ should return first 8 hex chars of SHA-256 hash (5 ms)
+      √ should return different hashes for different configs (30 ms)
+      √ should return same hash for same content (10 ms)
+    buildAliasTable
+      √ should return a markdown table (8 ms)
+      √ should mark the default alias with (default) (6 ms)
+      √ should include all aliases from config (6 ms)
+      √ should return empty string when no config exists (5 ms)
+      √ should return empty string when config has no aliases (8 ms)
+    checkConfigChanged
+      √ should return changed: false when hash matches (5 ms)
+      √ should return changed: true when hash differs (8 ms)
+      √ should return changed: true when no config exists and hash is provided (4 ms)
+      √ should return changed: false when no config exists and hash is null (4 ms)
+      √ should include newHash in result when changed (9 ms)
+      √ should include updateData with hash comment and alias table when changed (6 ms)
+
+  console.log
+    API keys detected: openrouter
+
+      at log (src/sidecar/setup.js:181:15)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:186:13)
+
+  console.log
+    Choose your default model:
+
+      at log (src/sidecar/setup.js:194:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:195:13)
+
+  console.log
+      1) gemini - Gemini Flash-class (fast, large context) → openrouter/google/gemini-9.9-flash
+
+      at log (src/sidecar/setup.js:198:15)
+          at Array.forEach (<anonymous>)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:200:13)
+
+  console.log
+    Refreshing model catalog...
+
+      at log (src/sidecar/setup.js:142:5)
+
+  console.log
+    Model catalog unavailable (offline?) — it will refresh on first start.
+
+      at log (src/sidecar/setup.js:152:3)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:229:13)
+
+  console.log
+    Default model set to: gemini
+
+      at log (src/sidecar/setup.js:230:13)
+
+  console.log
+    Config saved (2 aliases).
+
+      at log (src/sidecar/setup.js:231:13)
+
+  console.log
+    Config path: X:\cfg\config.json
+
+      at log (src/sidecar/setup.js:232:13)
+
+PASS tests/start-json.test.js
+  start --json (F4)
+    √ emits ONLY a parseable run document on stdout (47 ms)
+    √ emits a parseable error document when the run errors (18 ms)
+    √ non-json mode still prints the raw summary (back-compat) (14 ms)
+    √ emits a parseable error document even when runHeadless THROWS (12 ms)
+    √ non-json mode still propagates a runHeadless throw (unchanged behavior) (16 ms)
+  finalizeSession signature (source guard)
+    √ accepts an opts arg and uses process.stderr.write for quietStdout routing
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:170:13)
+
+  console.log
+    === Amicus Setup Wizard ===
+
+      at log (src/sidecar/setup.js:171:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:172:13)
+
+PASS tests/config-null-alias.test.js
+  Null Alias Defense
+    Layer 1: addAlias input validation
+      √ should reject null modelString (27 ms)
+      √ should reject undefined modelString (6 ms)
+      √ should reject empty string modelString (5 ms)
+      √ should reject literal string "null" (5 ms)
+      √ should reject null alias name (4 ms)
+      √ should reject empty alias name (4 ms)
+      √ should reject literal string "null" as alias name (3 ms)
+      √ should reject whitespace-only alias name (4 ms)
+      √ should reject whitespace-only model string (4 ms)
+      √ should trim whitespace from name and model (29 ms)
+      √ should still accept valid alias additions (9 ms)
+    Layer 2: resolveModel null alias handling
+      √ should auto-repair null alias when default exists (10 ms)
+      √ should throw clear error for null alias with no default available (9 ms)
+      √ should auto-repair null default alias and resolve correctly (12 ms)
+      √ should warn to stderr when auto-repairing (6 ms)
+    Layer 3: saveConfig sanitization
+      √ should strip null alias values on save (7 ms)
+      √ should strip "null" string alias values on save (6 ms)
+      √ should remove alias entries with key "null" (8 ms)
+      √ should warn to stderr when stripping invalid entries (6 ms)
+      √ should preserve valid aliases when stripping invalid ones (7 ms)
+      √ should not modify config when all aliases are valid (7 ms)
+
+PASS tests/config-resolve.test.js
+  Sidecar Config Module - Model Resolution
+    resolveModel
+      √ should return modelArg as-is when it contains a slash (10 ms)
+      √ should resolve an alias from config.aliases (8 ms)
+      √ should throw Error mentioning amicus setup for unknown alias (18 ms)
+      √ should resolve default alias when modelArg is undefined (9 ms)
+      √ should throw Error when modelArg is undefined and no default is configured (7 ms)
+      √ should throw Error when modelArg is undefined and no config exists (6 ms)
+      √ should handle default that is itself a full model string with slashes (8 ms)
+      √ should resolve default when default is an alias key (6 ms)
+      √ should handle config with empty aliases object (7 ms)
+      √ should resolve default alias (grok) when not in user config but exists in defaults (6 ms)
+      √ should resolve default alias (grok) with no config file at all (7 ms)
+      √ should resolve default from DEFAULT_ALIASES when user config default points to a built-in alias (8 ms)
+      √ should still throw for truly unknown aliases not in defaults or user config (5 ms)
+    resolveModel - all default aliases resolve without config file
+      √ resolves "gemini" → "openrouter/google/gemini-3.5-flash" (5 ms)
+      √ resolves "gemini-pro" → "openrouter/google/gemini-3.1-pro-preview" (7 ms)
+      √ resolves "gpt" → "openrouter/openai/gpt-5.5" (5 ms)
+      √ resolves "opus" → "openrouter/anthropic/claude-opus-4.8" (5 ms)
+      √ resolves "deepseek" → "openrouter/deepseek/deepseek-v4-pro" (4 ms)
+      √ resolves "gpt-pro" → "openrouter/openai/gpt-5.5-pro" (4 ms)
+      √ resolves "codex" → "openrouter/openai/gpt-5.3-codex" (5 ms)
+      √ resolves "claude" → "openrouter/anthropic/claude-sonnet-4.6" (4 ms)
+      √ resolves "sonnet" → "openrouter/anthropic/claude-sonnet-4.6" (4 ms)
+      √ resolves "haiku" → "openrouter/anthropic/claude-haiku-4.5" (4 ms)
+      √ resolves "qwen" → "openrouter/qwen/qwen3.7-max" (4 ms)
+      √ resolves "qwen-coder" → "openrouter/qwen/qwen3-coder-next" (6 ms)
+      √ resolves "qwen-flash" → "openrouter/qwen/qwen3.6-flash" (5 ms)
+      √ resolves "mistral" → "openrouter/mistralai/mistral-medium-3-5" (4 ms)
+      √ resolves "devstral" → "openrouter/mistralai/devstral-2512" (4 ms)
+      √ resolves "glm" → "openrouter/z-ai/glm-5.1" (3 ms)
+      √ resolves "minimax" → "openrouter/minimax/minimax-m2.7" (26 ms)
+      √ resolves "grok" → "openrouter/x-ai/grok-4.3" (5 ms)
+      √ resolves "kimi" → "openrouter/moonshotai/kimi-k2.6" (4 ms)
+      √ resolves "seed" → "openrouter/bytedance-seed/seed-2.0-lite" (3 ms)
+    resolveModel - direct API fallback
+      √ should fall back to google/ when GOOGLE_GENERATIVE_AI_API_KEY is set but OPENROUTER_API_KEY is not (6 ms)
+      √ should fall back to openai/ when OPENAI_API_KEY is set but OPENROUTER_API_KEY is not (5 ms)
+      √ should fall back to anthropic/ when ANTHROPIC_API_KEY is set but OPENROUTER_API_KEY is not (5 ms)
+      √ should fall back to deepseek/ when DEEPSEEK_API_KEY is set but OPENROUTER_API_KEY is not (7 ms)
+      √ should prefer OpenRouter when both OPENROUTER_API_KEY and direct key are set (3 ms)
+      √ should return openrouter path when neither key is set (4 ms)
+      √ should not apply fallback to explicit model strings with slash (5 ms)
+      √ should not apply fallback for providers without direct key mapping (5 ms)
+      √ should apply fallback to default alias resolution (4 ms)
+      √ should not apply fallback to explicit default model strings (7 ms)
+    detectFallback
+      √ should return true when alias resolved via fallback (5 ms)
+      √ should return false when alias resolved via OpenRouter (4 ms)
+      √ should return false for explicit model strings with slash (4 ms)
+      √ should return false for unknown aliases (3 ms)
+      √ should return false when alias is undefined (3 ms)
+
+  console.log
+    API keys detected: openrouter
+
+      at log (src/sidecar/setup.js:181:15)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:186:13)
+
+  console.log
+    Choose your default model:
+
+      at log (src/sidecar/setup.js:194:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:195:13)
+
+  console.log
+      1) gemini - Gemini Flash-class (fast, large context) → openrouter/google/gemini-9.9-flash
+
+      at log (src/sidecar/setup.js:198:15)
+          at Array.forEach (<anonymous>)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:200:13)
+
+  console.log
+    Warning: 'openrouter/x-ai/grok-4.3' not found in the model catalog (offline or new model) — using it anyway.
+
+      at log (src/sidecar/setup.js:97:15)
+
+  console.log
+    Refreshing model catalog...
+
+      at log (src/sidecar/setup.js:142:5)
+
+  console.log
+    Model catalog unavailable (offline?) — it will refresh on first start.
+
+      at log (src/sidecar/setup.js:152:3)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:229:13)
+
+  console.log
+    Default model set to: openrouter/x-ai/grok-4.3
+
+      at log (src/sidecar/setup.js:230:13)
+
+  console.log
+    Config saved (1 aliases).
+
+      at log (src/sidecar/setup.js:231:13)
+
+  console.log
+    Config path: X:\cfg\config.json
+
+      at log (src/sidecar/setup.js:232:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:170:13)
+
+  console.log
+    === Amicus Setup Wizard ===
+
+      at log (src/sidecar/setup.js:171:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:172:13)
+
+  console.log
+    API keys detected: openrouter
+
+      at log (src/sidecar/setup.js:181:15)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:186:13)
+
+  console.log
+    Choose your default model:
+
+      at log (src/sidecar/setup.js:194:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:195:13)
+
+  console.log
+      1) gemini - Gemini Flash-class (fast, large context) → openrouter/google/gemini-9.9-flash
+
+      at log (src/sidecar/setup.js:198:15)
+          at Array.forEach (<anonymous>)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:200:13)
+
+  console.log
+    Refreshing model catalog...
+
+      at log (src/sidecar/setup.js:142:5)
+
+  console.log
+    Model catalog unavailable (offline?) — it will refresh on first start.
+
+      at log (src/sidecar/setup.js:152:3)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:229:13)
+
+  console.log
+    Default model set to: gemini
+
+      at log (src/sidecar/setup.js:230:13)
+
+  console.log
+    Config saved (1 aliases).
+
+      at log (src/sidecar/setup.js:231:13)
+
+  console.log
+    Config path: X:\cfg\config.json
+
+      at log (src/sidecar/setup.js:232:13)
+
+PASS tests/read-json.test.js
+  read --json and wave-aware list (F4)
+    √ read --json on a run session emits a parseable run document (30 ms)
+    √ read --json on a wave emits the stored wave.json (10 ms)
+    √ non-json read of a wave prints the human aggregate (20 ms)
+    √ enumerateSessions carries type/parentWave; list shows a wave marker (15 ms)
+    √ read --json on a live wave (no wave.json) reports running, not error (14 ms)
+    √ read --json on corrupt metadata throws a contextual error (25 ms)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:170:13)
+
+  console.log
+    === Amicus Setup Wizard ===
+
+      at log (src/sidecar/setup.js:171:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:172:13)
+
+  console.log
+    API keys detected: openrouter
+
+      at log (src/sidecar/setup.js:181:15)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:186:13)
+
+  console.log
+    Choose your default model:
+
+      at log (src/sidecar/setup.js:194:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:195:13)
+
+  console.log
+      1) gemini - Gemini Flash-class (fast, large context) → openrouter/google/gemini-9.9-flash
+
+      at log (src/sidecar/setup.js:198:15)
+          at Array.forEach (<anonymous>)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:200:13)
+
+  console.log
+    Invalid choice: "xyz". Keeping configuration unchanged.
+
+      at log (src/sidecar/setup.js:207:15)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:170:13)
+
+  console.log
+    === Amicus Setup Wizard ===
+
+      at log (src/sidecar/setup.js:171:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:172:13)
+
+[fanout] leg cafe5555-1 (openrouter/a/b): aborted
+  console.log
+    API keys detected: openrouter
+
+      at log (src/sidecar/setup.js:181:15)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:186:13)
+
+  console.log
+    Choose your default model:
+
+      at log (src/sidecar/setup.js:194:13)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:195:13)
+
+  console.log
+      1) gemini - Gemini Flash-class (fast, large context) → openrouter/google/gemini-9.9-flash
+
+      at log (src/sidecar/setup.js:198:15)
+          at Array.forEach (<anonymous>)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:200:13)
+
+  console.log
+    Refreshing model catalog...
+
+      at log (src/sidecar/setup.js:142:5)
+
+  console.log
+    Model catalog unavailable (offline?) — it will refresh on first start.
+
+      at log (src/sidecar/setup.js:152:3)
+
+  console.log
+
+
+      at log (src/sidecar/setup.js:229:13)
+
+  console.log
+    Default model set to: gemini
+
+      at log (src/sidecar/setup.js:230:13)
+
+  console.log
+    Config saved (1 aliases).
+
+      at log (src/sidecar/setup.js:231:13)
+
+  console.log
+    Config path: X:\cfg\config.json
+
+      at log (src/sidecar/setup.js:232:13)
+
+PASS tests/setup-readline.test.js
+  runReadlineSetup (live picks, no clobber)
+    √ numbered pick on an existing config: sets default AND upgrades only that alias (40 ms)
+    √ free-form model id (contains /) becomes the default without touching aliases (9 ms)
+    √ first run (no config) seeds live aliases (6 ms)
+    √ invalid input does not write config (6 ms)
+    √ offline catalog (getCatalog rejects) still serves picks from fallbacks (6 ms)
+
+PASS tests/scripts/postinstall.test.js
+  postinstall skill installation
+    √ installSkill copies the chat skill to ~/.claude/skills/sidecar/ (8 ms)
+    √ COUNCIL_FILES declares overwrite semantics per file (3 ms)
+    √ fresh install copies all three council files (14 ms)
+    √ MODEL-NOTES.md is NEVER overwritten (user data) (11 ms)
+    √ SKILL.md and COUNCIL-DESIGN.md ARE overwritten on update (16 ms)
+    √ a missing source file warns but never throws (warn-don't-fail) (11 ms)
+
+[fanout] leg cafe5555-2 (openrouter/c/d): aborted
+PASS tests/helpers/cdp-client.test.js
+  CdpClient
+    √ getTargets returns parsed target list (11 ms)
+    √ findTarget filters by predicate (2 ms)
+    √ findTarget returns null when no match (1 ms)
+    √ connect + evaluate returns value (16 ms)
+    √ screenshot saves PNG to disk (9 ms)
+    √ close is safe to call multiple times (3 ms)
+    factory methods
+      √ CdpClient.toolbar connects to data: URL target (4 ms)
+      √ CdpClient.content connects to http: URL target (3 ms)
+
+PASS tests/sidecar/resume.test.js
+  Resume Operations
+    loadSessionMetadata
+      √ should load metadata from session directory (5 ms)
+      √ should throw if metadata file missing (22 ms)
+    loadInitialContext
+      √ should load initial context from file (10 ms)
+      √ should return empty string if file missing (1 ms)
+    checkFileDrift
+      √ should detect changed files (2 ms)
+      √ should not detect drift when no files changed (1 ms)
+      √ should handle empty filesRead (1 ms)
+    buildDriftWarning
+      √ should format drift warning with changed files (1 ms)
+    updateSessionStatus
+      √ should update session status and add resumedAt (4 ms)
+    buildResumeUserMessage
+      √ should include conversation excerpt and briefing (3 ms)
+      √ should skip conversation section when conversation is empty (1 ms)
+      √ should include resume instruction (1 ms)
+      √ should work with no briefing (1 ms)
+    OpenCode session ID in metadata
+      √ should persist opencodeSessionId when stored in metadata (2 ms)
+      √ should handle metadata without opencodeSessionId (legacy sessions) (4 ms)
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 1000 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 1800 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+PASS tests/mcp-tool-aliases.test.js
+  MCP tool naming + alias shim
+    √ canonical tools are amicus_* (3 ms)
+    √ handlers expose amicus_* keys
+    √ every canonical tool has a legacy sidecar_* alias (shim) (1 ms)
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 5000 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+PASS tests/setup-ui.test.js
+  setup-ui wizard
+    buildSetupHTML
+      √ should return a complete HTML document
+      √ should contain the amicus branding
+      √ should show plain "Amicus" for cowork client (1 ms)
+      √ should use the dark theme colors
+    progress bar
+      √ should contain 4 step indicators
+      √ should contain step labels
+      √ should use "Models" instead of "Default Model" for step 2
+    Step 1 - API Keys
+      √ should contain the keys step container
+      √ should contain provider options
+      √ should contain an API key input field
+      √ should contain a Save & Test button (1 ms)
+      √ should mark OpenRouter as recommended
+      √ should contain a password type input for masking
+    Step 2 - Model Selection
+      √ should contain the model step container
+      √ should contain model choices
+    Step 3 - Aliases
+      √ should contain the aliases step container
+      √ should contain the alias-editor section in step 3
+      √ should NOT contain alias-editor in step 2
+    Step 4 - Review
+      √ should contain the review step container
+      √ should contain review summary elements
+      √ should contain routing review section
+      √ should contain Setup Complete text
+    navigation
+      √ should contain Next button
+      √ should contain Back button
+      √ should contain Finish button (1 ms)
+      √ should contain the sidecar branding in footer
+    IPC references
+      √ should reference all required IPC channels (1 ms)
+    routing state
+      √ should initialize routingChoices object in script
+      √ should pass MODEL_CHOICES data to script as JSON
+      √ should pass PROVIDER_NAMES data to script as JSON
+      √ should handle route pill clicks
+      √ should pass aliasWrites to save-config (only touched aliases)
+    Step 3 - Alias Editor
+      √ should contain the alias-editor section
+      √ should contain the alias search input (1 ms)
+      √ should contain alias groups as details elements
+      √ should contain the Add Custom Alias button
+      √ should contain aliasEdits state in script
+      √ should contain alias-search handler reference
+    PROVIDERS export
+      √ should export 5 providers
+      √ should have openrouter as recommended
+      √ should have unique IDs
+  buildSetupHTML (resolved picks)
+    √ injects quickPicks as modelChoicesData and defaultAliases as static defaults (1 ms)
+    √ defaults to pinned fallbacks when no picks are provided
+    √ Step-3 visit no longer stamps card aliases into aliasEdits (1 ms)
+    √ init-loaded config deviations go to aliasDisplay, not aliasEdits
+    √ finish applies the quick-pick selection after the aliasEdits overlay
+
+  console.warn
+    Stuck stream detected, force-transitioning to IDLE { stuckMs: 3000 }
+
+    [0m [90m 202 |[39m     [36mif[39m ([36mthis[39m[33m.[39mstuckStreamTimeout [33m===[39m [33mInfinity[39m) { [36mreturn[39m[33m;[39m }
+     [90m 203 |[39m     [36mthis[39m[33m.[39m_stuckTimer [33m=[39m setTimeout(() [33m=>[39m {
+    [31m[1m>[22m[39m[90m 204 |[39m       [36mthis[39m[33m.[39mlogger[33m.[39mwarn[33m?[39m[33m.[39m([32m'Stuck stream detected, force-transitioning to IDLE'[39m[33m,[39m {
+     [90m     |[39m                       [31m[1m^[22m[39m
+     [90m 205 |[39m         stuckMs[33m:[39m [36mthis[39m[33m.[39mstuckStreamTimeout[33m,[39m
+     [90m 206 |[39m       })[33m;[39m
+     [90m 207 |[39m       [36mthis[39m[33m.[39mmarkIdle()[33m;[39m[0m
+
+      at src/utils/idle-watchdog.js:204:23
+      at callTimer (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:744:24)
+      at doTickInner (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:1312:29)
+      at doTick (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:1393:20)
+      at Object.tick (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:1401:20)
+      at FakeTimers.advanceTimersByTime (../amicus/node_modules/@jest/fake-timers/build/modernFakeTimers.js:94:19)
+      at Object.advanceTimersByTime (tests/idle-watchdog.test.js:131:12)
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 63000 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+  console.info
+    Shared server restarted successfully
+
+      at SharedServerManager._handleRestart (src/utils/shared-server.js:207:23)
+
+PASS tests/sidecar/fanout.test.js
+  fanout validation helpers
+    parseModelsList
+      √ splits, trims, drops empties (4 ms)
+      √ allows duplicates (distinct legs)
+      √ returns [] for empty/boolean input (1 ms)
+    deriveLegIds
+      √ derives <waveId>-1..N in order
+      √ derived ids satisfy the task-id pattern (24 ms)
+    validateFanoutModels
+      √ errors on an empty list (1 ms)
+      √ enforces the leg cap (default 10, env-overridable) (28 ms)
+      √ resolves every model and keeps the original input alongside (4 ms)
+      √ fails fast on a missing API key (1 ms)
+      √ fails fast on catalog rejection unless noValidateModel (4 ms)
+      √ fails fast on an unresolvable alias (3 ms)
+      √ treats invalid AMICUS_FANOUT_MAX_LEGS values as unset (default cap applies)
+  runFanout orchestrator
+    √ starts ONE server, runs N legs with the shared client/server, returns a complete wave (81 ms)
+    √ derives leg ids from the wave id and persists legs as ordinary sessions with parentWave (31 ms)
+    √ one leg failing yields partial results, sibling summaries intact, exit 2 (29 ms)
+    √ a leg that REJECTS becomes an error leg, never sinks siblings (27 ms)
+    √ builds context ONCE and reuses it across legs (32 ms)
+    √ writes wave.json and finalizes wave metadata (27 ms)
+    √ json mode (non-quiet): stdout carries EXACTLY one parseable JSON document (44 ms)
+    √ server start failure → error wave, exit 1, no legs launched (17 ms)
+    √ per-leg watchdog timeout marks ONLY that leg aborted (no process.exit, no server.close) (32 ms)
+    √ SIGINT mid-wave: finalizes an aborted wave document, exit 130, wave.json written (80 ms)
+    √ a leg finishing concurrently with an abort cannot demote the aborted marker (34 ms)
+    √ validation failure leaves no wave directory behind (2 ms)
+
+PASS tests/utils/result-schema.test.js
+  result-schema
+    buildRunResult
+      √ maps a clean result to status complete with schemaVersion and duration (1 ms)
+      √ maps result flags: error beats complete, timeout and aborted map to their statuses (1 ms)
+      √ without a result object, passes through metadata.status (read of a live/legacy session)
+      √ error field is null when complete, populated from result.error or metadata.reason otherwise
+      √ inherits waveId from metadata.parentWave when not given explicitly
+      √ durationMs is null (not NaN) for malformed timestamps
+    waveStatusFromLegs + waveExitCode
+      √ all complete → complete → exit 0
+      √ some complete → partial → exit 2 (1 ms)
+      √ none complete → error → exit 1
+      √ none complete but some aborted → aborted → exit 1
+      √ empty legs array → error (never complete) (1 ms)
+    buildWaveResult
+      √ assembles counts, status, prompt meta and timing (2 ms)
+      √ explicit status override wins over leg aggregation
+      √ legs defaults to empty array without throwing
+  result-schema session rebuilders
+    √ rebuilds a run doc from metadata + summary.md (15 ms)
+    √ returns null summary when summary.md is missing (9 ms)
+    √ throws for a missing session (30 ms)
+    √ wave: prefers stored wave.json when present (5 ms)
+    √ wave: rebuilds live from leg sessions when wave.json is missing (17 ms)
+    √ throws for a missing wave session (4 ms)
+    √ corrupt wave.json falls back to live rebuild from legs (15 ms)
+    √ waveStatusFromLegs: any running leg → running (3 ms)
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 15000 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+PASS tests/utils/model-catalog-v2.test.js
+  model-catalog schema v2
+    √ refreshCatalog writes a v2 cache with enriched rows (6 ms)
+    √ a v1 cache (no schemaVersion) reads as stale and is refreshed to v2 (5 ms)
+    √ a fresh v2 cache is served without refetching (4 ms)
+    √ v1 cache still serves as stale fallback when the refresh comes back empty (3 ms)
+    √ getCatalogInfo returns rows plus fetchedAt (6 ms)
+    √ writeCache is atomic: no .tmp file remains after refresh (4 ms)
+    √ floor-only refresh (offline) does not clobber an existing cache (4 ms)
+    √ floor-only refresh on a fresh machine writes nothing (2 ms)
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 13000 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+PASS tests/mcp-fanout.test.js
+  amicus_fanout MCP surface (F4)
+    √ defines the amicus_fanout tool with models array and prompt (2 ms)
+    √ handler writes briefing.md and spawns the CLI with --prompt-file, never inline prompt (1 ms)
+  wave crash detection in amicus_status
+    √ source: wave branch probes the fanout pid and cascades crashed to running legs
+    √ behavioral: wave with dead pid is marked crashed and running legs cascade (46 ms)
+  amicus_read on crashed wave without wave.json
+    √ amicus_read on a crashed wave without wave.json is honest about it (9 ms)
+
+  console.error
+    Max restarts exceeded, not restarting shared server { restarts: 3, windowMs: 300000 }
+
+    [0m [90m 196 |[39m     )[33m;[39m
+     [90m 197 |[39m     [36mif[39m ([36mthis[39m[33m.[39m_restartTimestamps[33m.[39mlength [33m>=[39m [33mMAX_RESTARTS[39m) {
+    [31m[1m>[22m[39m[90m 198 |[39m       [36mthis[39m[33m.[39mlogger[33m.[39merror[33m?[39m[33m.[39m([32m'Max restarts exceeded, not restarting shared server'[39m[33m,[39m {
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 199 |[39m         restarts[33m:[39m [36mthis[39m[33m.[39m_restartTimestamps[33m.[39mlength[33m,[39m
+     [90m 200 |[39m         windowMs[33m:[39m [33mRESTART_WINDOW[39m[33m,[39m
+     [90m 201 |[39m       })[33m;[39m[0m
+
+      at SharedServerManager._handleRestart (src/utils/shared-server.js:198:24)
+      at Object._handleRestart (tests/shared-server.test.js:173:32)
+
+PASS tests/index-exports.test.js
+  public API amicus aliases
+    √ exposes canonical *Amicus names
+    √ keeps legacy *Sidecar aliases pointing to the same fns (shim)
+  F4 exports
+    √ exposes runFanout on the public API (1 ms)
+
+PASS tests/shared-server.test.js
+  SharedServerManager
+    construction
+      √ constructs with default options (1 ms)
+      √ respects SIDECAR_MAX_SESSIONS env var
+      √ disabled when SIDECAR_SHARED_SERVER=0
+      √ disabled when AMICUS_SHARED_SERVER=0 (1 ms)
+      √ AMICUS_SHARED_SERVER wins over SIDECAR_SHARED_SERVER (AMICUS=1, SIDECAR=0 → enabled)
+    session tracking
+      √ addSession increments count and creates watchdog
+      √ removeSession decrements count
+      √ removeSession starts server watchdog when no sessions remain
+      √ addSession cancels server watchdog (1 ms)
+      √ addSession rejects when at max capacity (27 ms)
+      √ getSessionWatchdog returns watchdog for session
+    ensureServer
+      √ starts server on first call (1 ms)
+      √ reuses server on subsequent calls
+      √ deduplicates concurrent ensureServer calls (1 ms)
+    supervisor
+      √ _handleRestart restarts server (25 ms)
+      √ stops restarting after MAX_RESTARTS in window (15 ms)
+    shutdown
+      √ clears all sessions and closes server (1 ms)
+
+  console.warn
+    Stuck stream detected, force-transitioning to IDLE { stuckMs: 1000 }
+
+    [0m [90m 202 |[39m     [36mif[39m ([36mthis[39m[33m.[39mstuckStreamTimeout [33m===[39m [33mInfinity[39m) { [36mreturn[39m[33m;[39m }
+     [90m 203 |[39m     [36mthis[39m[33m.[39m_stuckTimer [33m=[39m setTimeout(() [33m=>[39m {
+    [31m[1m>[22m[39m[90m 204 |[39m       [36mthis[39m[33m.[39mlogger[33m.[39mwarn[33m?[39m[33m.[39m([32m'Stuck stream detected, force-transitioning to IDLE'[39m[33m,[39m {
+     [90m     |[39m                       [31m[1m^[22m[39m
+     [90m 205 |[39m         stuckMs[33m:[39m [36mthis[39m[33m.[39mstuckStreamTimeout[33m,[39m
+     [90m 206 |[39m       })[33m;[39m
+     [90m 207 |[39m       [36mthis[39m[33m.[39mmarkIdle()[33m;[39m[0m
+
+      at src/utils/idle-watchdog.js:204:23
+      at callTimer (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:744:24)
+      at doTickInner (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:1312:29)
+      at doTick (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:1393:20)
+      at Object.tick (../amicus/node_modules/@sinonjs/fake-timers/src/fake-timers-src.js:1401:20)
+      at FakeTimers.advanceTimersByTime (../amicus/node_modules/@jest/fake-timers/build/modernFakeTimers.js:94:19)
+      at Object.advanceTimersByTime (tests/idle-watchdog.test.js:241:12)
+
+  console.info
+    Idle timeout reached { mode: 'headless', uptimeMs: 3000 }
+
+      at src/utils/idle-watchdog.js:182:23
+
+PASS tests/idle-watchdog.test.js
+  IdleWatchdog
+    construction
+      √ creates with default headless timeout (1 ms)
+      √ creates with interactive timeout (1 ms)
+      √ creates with server timeout
+      √ custom timeout overrides mode default
+      √ timeout of 0 means Infinity (disabled)
+    state transitions
+      √ markBusy transitions to BUSY and suspends timer (1 ms)
+      √ markIdle transitions to IDLE and starts timer (29 ms)
+      √ touch resets idle timer without changing state (4 ms)
+      √ touch during BUSY does not start timer (2 ms)
+      √ multiple markBusy calls are idempotent (1 ms)
+      √ start() returns this for chaining
+    idle timeout
+      √ fires onTimeout after idle period (9 ms)
+      √ does not fire if Infinity timeout (1 ms)
+    stuck stream protection
+      √ force-transitions to IDLE after stuckStreamTimeout (6 ms)
+      √ markIdle before stuck timeout cancels stuck timer (1 ms)
+      √ cancel() clears all timers
+    env var resolution
+      √ per-mode env var takes highest precedence (2 ms)
+      √ blanket env var overrides option and default (2 ms)
+      √ SIDECAR_IDLE_TIMEOUT_INTERACTIVE applies to interactive mode (1 ms)
+      √ SIDECAR_IDLE_TIMEOUT_SERVER applies to server mode
+      √ env var 0 means Infinity (1 ms)
+      √ AMICUS_IDLE_TIMEOUT_HEADLESS is honored
+      √ AMICUS_IDLE_TIMEOUT_HEADLESS wins over SIDECAR_IDLE_TIMEOUT_HEADLESS (1 ms)
+    full lifecycle
+      √ start -> busy -> idle -> timeout (1 ms)
+      √ touch extends idle period during polling (5 ms)
+      √ stuck stream forces idle after stuckStreamTimeout (10 ms)
+  sendPrompt watchdog integration
+    √ opencode-client.js wraps sendPrompt with watchdog markBusy/markIdle (1 ms)
+
+PASS tests/api-key-store-validation.test.js
+  api-key-store validation
+    validateApiKey
+      √ should resolve valid for a successful API response (6 ms)
+      √ should resolve invalid for 401 response (2 ms)
+      √ should resolve invalid for network error (14 ms)
+      √ should reject empty key (2 ms)
+      √ should reject whitespace-only key (2 ms)
+      √ should reject unknown provider (1 ms)
+      √ should be aliased as validateOpenRouterKey for backwards compat (3 ms)
+      √ should handle 403 response as invalid (2 ms)
+      √ should handle unexpected status code (1 ms)
+      √ should treat anthropic non-401 response as valid (3 ms)
+      √ should treat anthropic 401 response as invalid (1 ms)
+      √ should treat anthropic 429 as invalid (rate limited) (1 ms)
+      √ should treat anthropic 500 as invalid (server error) (2 ms)
+      √ should validate deepseek key using correct endpoint (2 ms)
+      √ should use query param auth for google provider (3 ms)
+    VALIDATION_ENDPOINTS
+      √ should have endpoints for all known providers (2 ms)
+      √ should have url and authHeader for each endpoint (1 ms)
+      √ should return Bearer auth for openrouter (1 ms)
+      √ should return x-api-key for anthropic (1 ms)
+      √ should return empty headers for google (uses query param) (1 ms)
+      √ should have correct deepseek endpoint properties (2 ms)
+
+PASS tests/api-key-store-readwrite.test.js
+  api-key-store readwrite
+    readApiKeyHints
+      √ should return false for all providers when no keys exist (1 ms)
+      √ should return masked key hints from .env file (4 ms)
+      √ should return masked key hints from process.env (3 ms)
+      √ should handle short keys (< 8 chars) without masking (6 ms)
+      √ should return hint for deepseek key (2 ms)
+      √ should mask keys with exactly 8 chars (no bullets) (4 ms)
+    removeApiKey
+      √ should remove a key from .env file (10 ms)
+      √ should delete from process.env (3 ms)
+      √ should return success when .env file does not exist (3 ms)
+      √ should return error for unknown provider (3 ms)
+      √ should handle removing last key (empty file) (4 ms)
+      √ should preserve remaining content after removal (6 ms)
+      √ should return alsoInAuthJson: true when key exists in auth.json (6 ms)
+      √ should return alsoInAuthJson: false when key not in auth.json (5 ms)
+    readApiKeyValues
+      √ should return empty object when no keys exist (2 ms)
+      √ should return actual key strings from .env file (2 ms)
+      √ should return key strings from process.env (1 ms)
+      √ should prefer .env file over process.env (2 ms)
+      √ should skip empty values (3 ms)
+    saveApiKey error handling
+      √ should return error for unknown provider
+
+PASS tests/index.test.js
+  Index Module
+    generateTaskId
+      √ should generate an 8-character hex string
+      √ should generate unique IDs (1 ms)
+    Re-exports
+      √ should export all core sidecar operations
+      √ should export environment detection functions
+      √ should export context compression functions
+      √ should export FOLD_MARKER as [SIDECAR_FOLD]
+      √ should export COMPLETE_MARKER as [SIDECAR_FOLD]
+      √ should export formatFoldOutput
+      √ should export buildContext
+
+PASS tests/session-manager.test.js
+  Session Manager
+    getSessionDir
+      √ should return the session directory path (6 ms)
+    createSession
+      √ should create session directory structure per spec §8.1 (6 ms)
+      √ should create metadata.json with required fields per spec §7.4 (6 ms)
+      √ should initialize empty arrays for file tracking (12 ms)
+      √ should create empty conversation.jsonl file (8 ms)
+      √ should throw if session already exists (18 ms)
+      √ should save thinking level in metadata (11 ms)
+      √ should default thinking level to medium (13 ms)
+    updateSession
+      √ should update metadata fields (13 ms)
+      √ should add to filesRead array (12 ms)
+      √ should add to filesWritten array (14 ms)
+      √ should add conflicts per spec §7.4 (13 ms)
+      √ should update contextDrift per spec §7.4 (13 ms)
+      √ should preserve existing fields when updating (16 ms)
+      √ should throw for non-existent session (14 ms)
+    getSession
+      √ should return session metadata (14 ms)
+      √ should return null for non-existent session (12 ms)
+    saveConversation
+      √ should append message to conversation.jsonl per spec §8.2 (16 ms)
+      √ should append multiple messages (14 ms)
+      √ should add timestamp if not provided (15 ms)
+      √ should throw for non-existent session (13 ms)
+    saveSummary
+      √ should save summary to summary.md per spec §8.1 (18 ms)
+      √ should update status to complete (12 ms)
+      √ should set completedAt timestamp (12 ms)
+      √ should overwrite existing summary (12 ms)
+      √ should throw for non-existent session (10 ms)
+    SESSION_STATUS
+      √ should export status constants (2 ms)
+    Edge cases
+      √ should handle special characters in taskId (33 ms)
+      √ should create parent directories if they do not exist (13 ms)
+    Sub-agent Sessions
+      getSubagentDir
+        √ should return the sub-agent directory path (12 ms)
+      createSubagentSession
+        √ should create sub-agent directory structure (15 ms)
+        √ should write correct metadata (14 ms)
+      updateSubagentSession
+        √ should update sub-agent metadata (16 ms)
+        √ should throw if sub-agent not found (9 ms)
+      getSubagentSession
+        √ should return sub-agent metadata (37 ms)
+        √ should return null if sub-agent not found (6 ms)
+      listSubagents
+        √ should return empty array if no sub-agents (10 ms)
+        √ should list all sub-agents (17 ms)
+        √ should filter by status (18 ms)
+        √ should filter by agent type (15 ms)
+      saveSubagentSummary
+        √ should save summary and update status (16 ms)
+
+PASS tests/abort-all.test.js
+  enumerateSessions
+    √ returns only running sessions when filtered (20 ms)
+    √ returns [] when no sessions dir exists (2 ms)
+  handleAbort --all
+    √ marks every running session aborted (21 ms)
+    √ prints the no-op message when nothing is running (1 ms)
+    √ aborts a running session that lives only in the legacy sidecar_sessions dir (6 ms)
+
+PASS tests/model-validator.test.js
+  Model Validator
+    validateDirectModel
+      √ should return silently when model exists on provider (4 ms)
+      √ should return model as-is when no provider key is available (2 ms)
+      √ should return model as-is when fetch fails (network error) (2 ms)
+      √ should return model as-is when fetch returns empty list (2 ms)
+      √ should return model as-is for malformed model string (1 ms)
+      √ should throw in headless mode when model not found (22 ms)
+      √ should include available models in headless error (2 ms)
+      √ should include fix command in headless error (4 ms)
+      √ should throw when stdin is not a TTY (non-interactive) (6 ms)
+      √ should prompt user in interactive mode when model not found (5 ms)
+      √ should save selected model to config (3 ms)
+      √ should throw when config file exists but is malformed (2 ms)
+      √ should create new config when no config file exists (6 ms)
+      √ should throw when user cancels (empty input) (3 ms)
+      √ should throw when user enters invalid number (3 ms)
+    filterRelevantModels
+      √ should filter google models by gemini alias (3 ms)
+      √ should filter openai models by gpt alias (1 ms)
+      √ should return all models when alias has no matches (6 ms)
+      √ should sort results by name (4 ms)
+      √ should limit results to 15 (2 ms)
+      √ should use alias search term mapping for opus → claude (2 ms)
+
+PASS tests/start-helpers.test.js
+  validateAgainstCatalog
+    √ passes a model present in the catalog (7 ms)
+    √ throws with suggestions when an openrouter model is absent (headless) (8 ms)
+    √ is graceful (returns model) when the catalog is empty (1 ms)
+    √ is graceful when the catalog has no openrouter entries (fetch unavailable) (3 ms)
+    √ ignores non-openrouter models (handled by direct-API path) (2 ms)
+    √ handles an absent model with no alias (uses model tail as filter) (2 ms)
+  validateFallbackModel default-on
+    √ --no-validate-model short-circuits (no catalog call) (4 ms)
+    √ validates against the catalog by default (4 ms)
+
+PASS tests/scripts/mark-test-passed.test.js
+  mark-test-passed
+    getHeadSha
+      √ returns the trimmed SHA from the git runner (2 ms)
+      √ returns null when the git runner throws (not a repo / git missing) (1 ms)
+      √ returns null when the git runner yields only whitespace (1 ms)
+    markTestPassed
+      √ writes the SHA to the target path and returns true (3 ms)
+      √ returns false and writes nothing when the SHA is unavailable
+      √ never throws when the write fails (returns false) (2 ms)
+      √ writes a real 40-character hex SHA when run against the actual repo (48 ms)
+
+PASS tests/env-loader.test.js
+  env-loader
+    √ should load keys from amicus .env into process.env (27 ms)
+    √ should NOT overwrite existing process.env values (6 ms)
+    √ should load keys from auth.json when not in .env (5 ms)
+    √ should prefer .env over auth.json (8 ms)
+    √ should merge keys from different sources per-provider (6 ms)
+    √ should handle missing .env file gracefully (5 ms)
+    √ should handle missing auth.json gracefully (5 ms)
+    √ should migrate legacy GEMINI_API_KEY from process.env (3 ms)
+    √ should be idempotent (safe to call multiple times) (6 ms)
+    integration with validateApiKey
+      √ should pass validation when key comes from .env file (37 ms)
+      √ should fail with actionable error when key is truly missing (4 ms)
+
+PASS tests/setup-ui-aliases.test.js
+  setup-ui-aliases
+    ALIAS_GROUPS
+      √ should cover all 20 DEFAULT_ALIASES keys (1 ms)
+      √ should have no duplicate keys across groups
+      √ should have 7 groups
+      √ should have named groups with non-empty keys arrays (1 ms)
+    buildAliasEditorHTML
+      √ should return a string
+      √ should contain a search input with id alias-search
+      √ should render 7 details groups
+      √ should render all 20 alias rows with data-alias attributes (1 ms)
+      √ should contain alias names in each row
+      √ should contain model strings in each row
+      √ should contain arrow separators
+      √ should contain delete buttons
+      √ should contain an Add Custom Route button
+      √ should contain group summary elements with counts
+      √ should have a step-content wrapper
+      √ should have an alias-editor wrapper
+      √ should have a Model Routing heading
+      √ should have a subtitle with explanation (1 ms)
+      √ should have a routing example box with SVG icons
+      √ should NOT have an alias-divider
+    buildAliasScript – null alias guard
+      √ should guard against null/empty alias in delete handler
+      √ should use delete for custom alias cleanup instead of null assignment (1 ms)
+      √ should clean up aliasEdits when removing a committed custom row
+    buildAliasScript – model dropdown filtering
+      √ should pass alias name as filterKeyword to buildModelSelect on inline edit
+      √ should contain filterModels helper that filters by keyword
+      √ should match keyword against model id and name case-insensitively (1 ms)
+      √ should fall back to all models when no matches found
+
+PASS tests/sidecar/models-command.test.js
+  amicus models
+    √ default lists the catalog with context and pricing columns (25 ms)
+    √ --search filters by substring over id+name (4 ms)
+    √ --json list emits a parseable model-catalog document (2 ms)
+    √ --refresh refreshes and reports the count (1 ms)
+    √ --check clean → exit 0 (3 ms)
+    √ --check stale → exit = stale count, prints suggestions + paste-ready fix (2 ms)
+    √ --check --json emits an alias-audit document (1 ms)
+    √ --check with empty catalog → cannot check, exit 0 (1 ms)
+    √ exit code caps at 100 (2 ms)
+    √ bin routes the models command and lifecycle counts it one-shot (3 ms)
+    √ usage text documents the models command (5 ms)
+    √ marks rows using the user's effective aliases, not curated defaults (1 ms)
+    √ --search without a value errors instead of dumping the catalog (2 ms)
+    √ renders the -1 variable-pricing sentinel as — not a negative price (1 ms)
+    √ npm model scripts point at a live CLI entry (dangling-script regression guard) (1 ms)
+
+PASS tests/input-validation.test.js
+  validateStartInputs
+    prompt validation
+      √ rejects empty prompt
+      √ rejects whitespace-only prompt
+      √ rejects undefined prompt
+    model validation
+      √ rejects invalid model alias with suggestions (9 ms)
+      √ accepts valid model alias and resolves it (3 ms)
+      √ accepts undefined model (uses default) (1 ms)
+      √ accepts full model string as-is (1 ms)
+    timeout validation
+      √ rejects negative timeout (1 ms)
+      √ rejects zero timeout (1 ms)
+      √ rejects timeout exceeding 60 minutes (1 ms)
+      √ accepts valid timeout (1 ms)
+      √ accepts omitted timeout (1 ms)
+    agent + headless validation
+      √ accepts chat agent with noUi (handler auto-converts to build) (1 ms)
+      √ accepts build agent with noUi (1 ms)
+      √ accepts chat agent without noUi (1 ms)
+    error format
+      √ error has type field
+      √ error has field field
+      √ error has message field
+      √ error is JSON-serializable for MCP response (3 ms)
+      √ model error includes descriptive message with available aliases (2 ms)
+  findSimilar
+    √ finds prefix matches (2 ms)
+    √ finds reverse prefix matches
+    √ returns empty for null input
+    √ limits to 3 results
+
+PASS tests/environment.test.js
+  Environment Detection
+    VALID_CLIENTS
+      √ should export the three valid client types (2 ms)
+    inferClient
+      √ should return explicit --client when provided and valid
+      √ should return explicit --client code-web when provided
+      √ should return explicit --client code-local when provided
+      √ should throw for invalid --client value (8 ms)
+      √ should detect code-local on macOS (darwin) (1 ms)
+      √ should detect code-local when DISPLAY is set on linux
+      √ should detect code-local when WAYLAND_DISPLAY is set on linux
+      √ should detect code-web when no display on linux
+      √ should detect code-web on unknown platform without display
+    getSessionRoot
+      √ should return --session-dir when provided
+      √ should return Claude Code path for code-local (1 ms)
+      √ should encode cwd path separators as dashes for code-local
+      √ should use process.cwd() when cwd not provided for code-local
+      √ should throw for code-web without --session-dir
+      √ should return code-web session-dir when provided
+      √ should return Cowork path for cowork on macOS (1 ms)
+      √ should return Cowork path for cowork on Windows
+      √ should return Cowork path for cowork on Linux
+    detectEnvironment
+      √ should return client, hasDisplay, and sessionRoot (1 ms)
+      √ should set hasDisplay=false for code-web
+      √ should set hasDisplay=true for code-local (1 ms)
+      √ should set hasDisplay=true for cowork
+      √ should infer client when not explicitly provided
+      √ should compute sessionRoot based on inferred client (1 ms)
+
+PASS tests/opencode-client-cowork.test.js
+  buildServerOptions client-aware prompt
+    √ sets chat.prompt when client is cowork (15 ms)
+    √ does NOT set chat.prompt when client is code-local (1 ms)
+    √ does NOT set chat.prompt when client is undefined (1 ms)
+    √ preserves existing chat agent permissions when cowork (2 ms)
+  buildServerOptions systemPrompt on agent config
+    √ sets systemPrompt on the target agent (chat) (1 ms)
+    √ sets systemPrompt on build agent when agentName is build (1 ms)
+    √ sets systemPrompt on plan agent when agentName is plan (1 ms)
+    √ defaults to chat agent when agentName is not specified
+    √ appends systemPrompt to existing cowork prompt (1 ms)
+    √ does not set systemPrompt when not provided (1 ms)
+    √ handles case-insensitive agent names (1 ms)
+  buildServerOptions port handling
+    √ does not include port key when port is not specified
+    √ does not include port key when port is undefined (1 ms)
+    √ includes port when explicitly set (1 ms)
+    √ does not include signal key when signal is not specified (1 ms)
+  buildServerOptions provider model sync
+    √ includes provider models even when other options are set (1 ms)
+    ○ skipped includes provider.openrouter.models from sidecar aliases
+
+PASS tests/model-catalog.test.js
+  model-catalog
+    √ fetches and writes the cache on a cold miss (21 ms)
+    √ serves fresh cache without re-fetching (6 ms)
+    √ falls back to stale cache when a refresh returns nothing (3 ms)
+    √ refetches when the cache file is corrupt JSON (8 ms)
+
+PASS tests/session-lock.test.js
+  SessionLock
+    √ acquireLock creates lock file with correct contents (5 ms)
+    √ acquireLock throws if lock already held by live process (9 ms)
+    √ acquireLock succeeds if existing lock is stale (dead PID) (4 ms)
+    √ acquireLock succeeds if lock file is corrupt (6 ms)
+    √ releaseLock deletes lock file (3 ms)
+    √ releaseLock is safe when no lock exists (2 ms)
+    √ isLockStale returns true for dead PID (2 ms)
+    √ isLockStale returns false for live PID within time window (2 ms)
+    √ isLockStale returns true for live PID but very old timestamp (1 ms)
+
+PASS tests/session-dir-shim.test.js
+  session dir shim
+    √ getSessionDir returns the amicus_sessions path for writes (1 ms)
+    √ resolveExistingSessionDir prefers amicus_sessions (6 ms)
+    √ resolveExistingSessionDir falls back to legacy sidecar_sessions (8 ms)
+
+PASS tests/postinstall.test.js
+  Postinstall MCP registration
+    √ addMcpToConfigFile creates config file if it does not exist (4 ms)
+    √ addMcpToConfigFile preserves existing config entries (3 ms)
+    √ addMcpToConfigFile updates existing sidecar entry with new config (3 ms)
+    √ addMcpToConfigFile returns unchanged when config matches (2 ms)
+
+PASS tests/utils/config-dir.test.js
+  getConfigDir (amicus rebrand + shim)
+    √ defaults to ~/.config/amicus when no legacy dir exists (20 ms)
+    √ falls back to ~/.config/sidecar when it exists and amicus does not (7 ms)
+    √ prefers ~/.config/amicus when both exist (8 ms)
+    √ honors AMICUS_CONFIG_DIR override (3 ms)
+    √ honors the legacy SIDECAR_CONFIG_DIR override (shim) (3 ms)
+
+PASS tests/auth-json.test.js
+  readAuthJsonKeys
+    √ returns empty object when auth.json does not exist (1 ms)
+    √ reads openrouter key from .key field
+    √ reads openrouter key from .apiKey field (SKILL.md format) (1 ms)
+    √ prefers .key over .apiKey for openrouter
+    √ reads google key from .apiKey field
+    √ reads google key from .key field as fallback
+    √ reads multiple providers
+    √ ignores providers not in KNOWN_PROVIDERS
+    √ returns empty object for malformed auth.json (1 ms)
+    √ skips entries with empty key values
+  importFromAuthJson
+    √ returns imported keys not in existingKeys
+    √ returns empty imported when all keys already exist
+    √ returns empty imported when auth.json missing (1 ms)
+    √ imports multiple new keys at once
+    √ handles empty existingKeys
+  checkAuthJson
+    √ returns true when provider has key in auth.json
+    √ returns false when provider not in auth.json
+    √ returns false when auth.json missing
+    √ returns false for unknown provider
+  removeFromAuthJson
+    √ removes openrouter entry from auth.json
+    √ removes google entry from auth.json
+    √ removes anthropic entry from auth.json (1 ms)
+    √ no-op when auth.json missing
+    √ no-op when provider not in auth.json
+    √ does not throw on malformed auth.json
+
+PASS tests/utils/prompt-source.test.js
+  resolvePromptSource
+    √ errors when both --prompt and --prompt-file are given (3 ms)
+    √ errors when neither is given (2 ms)
+    √ errors when --prompt is a bare flag with no value (1 ms)
+    √ returns inline prompt with metadata (1 ms)
+    √ reads a prompt file, strips a UTF-8 BOM, resolves the path (2 ms)
+    √ handles files larger than the 32KB Windows arg cap (2 ms)
+    √ errors on a missing file
+    √ errors on an empty/whitespace-only file (6 ms)
+    √ errors on a BOM-only file (still empty after strip) (1 ms)
+
+PASS tests/sidecar/continue-resume-validation.test.js
+  warnIfNotInCatalog
+    √ writes a warning to stderr for a stale openrouter model (24 ms)
+    √ is silent for a valid model, an empty catalog, and non-openrouter models (6 ms)
+    √ never throws even if the catalog read explodes (16 ms)
+    √ is silent for non-string/empty models (legacy metadata) (4 ms)
+  wiring (source guards)
+    √ handleContinue resolves+validates an explicit --model like start
+    √ continueSidecar and resumeSidecar warn on inherited models (1 ms)
+
+PASS tests/jsonl-parser.test.js
+  JSONL Parser
+    parseJSONLLine
+      √ should parse a valid JSON line (1 ms)
+      √ should return null for invalid JSON
+      √ should return null for empty line
+      √ should return null for whitespace-only line
+      √ should handle nested JSON objects
+    readJSONL
+      √ should read and parse a JSONL file (2 ms)
+      √ should skip invalid lines and continue parsing (10 ms)
+      √ should handle empty file (5 ms)
+      √ should handle file with only empty lines (1 ms)
+      √ should throw error for non-existent file (11 ms)
+      √ should handle trailing newline (3 ms)
+    extractTimestamp
+      √ should extract timestamp from message object
+      √ should return null for missing timestamp
+      √ should return null for invalid timestamp (1 ms)
+    formatMessage
+      √ should format user message per spec §5.3 (11 ms)
+      √ should format assistant message with text content
+      √ should format assistant message with array content (Claude API format) (1 ms)
+      √ should format tool_use message per spec §5.3
+      √ should handle tool_use without input path
+      √ should return empty string for unknown message type
+      √ should handle missing message content gracefully (1 ms)
+    formatContext
+      √ should format multiple messages into context string
+      √ should separate messages with double newlines (1 ms)
+      √ should filter out empty formatted messages
+      √ should return empty string for empty messages array
+
+PASS tests/mcp-headless-lifecycle.test.js
+  MCP Headless Lifecycle Integration
+    Happy path: start -> poll -> complete -> read
+      √ full lifecycle from running to complete with summary (104 ms)
+    Progress via conversation read
+      √ conversation grows over time and is readable (31 ms)
+    Dead PID detection via abort
+      √ aborting a session with a dead PID still marks it aborted (22 ms)
+      √ status shows aborted after abort (22 ms)
+    Timeout scenario
+      √ completed session with timedOut flag reports complete status (27 ms)
+      √ timed-out session metadata is readable (24 ms)
+    Abort workflow: start -> abort -> verify
+      √ abort running session with live PID (26 ms)
+      √ abort a non-running session returns informational message (25 ms)
+      √ abort a nonexistent session returns error (12 ms)
+      √ abort persists abortedAt timestamp (25 ms)
+    PID preservation in metadata
+      √ createSessionMetadata preserves existing metadata layout (57 ms)
+    Debug log capture
+      √ debug.log file is created and readable in session directory (38 ms)
+    Progress tracking through amicus_status
+      √ status reflects progress.json lifecycle stages (42 ms)
+      √ status without progress.json falls back to conversation.jsonl (21 ms)
+    No conversation yet
+      √ session with no conversation file returns appropriate message (20 ms)
+      √ session with no summary file returns appropriate message (15 ms)
+    List filtering during lifecycle
+      √ list shows sessions across different statuses (39 ms)
+      √ list returns sorted by createdAt descending (25 ms)
+    Status elapsed time
+      √ elapsed time is calculated from createdAt (20 ms)
+    Read modes
+      √ default read mode returns summary (15 ms)
+      √ metadata mode returns JSON metadata (19 ms)
+      √ conversation mode returns JSONL content (18 ms)
+    Error handling
+      √ status for nonexistent session returns error (23 ms)
+      √ read for nonexistent session returns error (14 ms)
+
+PASS tests/abort-wave.test.js
+  abort <waveId> (F4)
+    √ marks the wave AND every running leg aborted; completed legs stay complete (20 ms)
+    √ plain session abort still works (8 ms)
+
+PASS tests/sidecar/setup-seeding.test.js
+  seedCatalog
+    √ refreshes and reports the count (6 ms)
+    √ reports offline gracefully and never throws (1 ms)
+    √ reports unavailable when the refresh returns empty (floor-only/offline) (2 ms)
+  --add-alias catalog warning
+    √ warns when the model is absent from a populated openrouter catalog (5 ms)
+    √ stays silent when the catalog is empty (cannot check) (2 ms)
+
+PASS tests/electron/setup-ui-model-search.test.js
+  buildModelSearchHTML
+    √ renders the search input, results container and refresh control (1 ms)
+  buildModelStepHTML embeds the search section
+    √ includes the search section after the quick-pick cards (1 ms)
+  wizard script round-trips a custom default
+    √ restores window.customDefaultModel from a full-id cfg.default (44 ms)
+
+PASS tests/utils/session-abort.test.js
+  markAborted
+    √ sets status=aborted and records reason + timestamp (5 ms)
+    √ is a no-op (no throw) when metadata is missing (3 ms)
+    √ is a no-op (no throw) when metadata is corrupt JSON (8 ms)
+    √ returns true on success and false when metadata is missing (2 ms)
+  installSignalAbort
+    √ invokes onAbort with the signal and uninstall removes the listener (1 ms)
+
+PASS tests/mcp-shared-server.test.js
+  MCP shared server integration
+    √ imports SharedServerManager
+    √ checks SIDECAR_SHARED_SERVER feature flag (1 ms)
+    √ has SIGTERM/SIGINT cleanup handlers
+  MCP shared server uses runHeadless
+    √ imports runHeadless
+
+PASS tests/quick-picks.test.js
+  compareIdsDesc
+    √ newer numeric version wins even when older is stable and newer is preview (1 ms)
+    √ within the same version the unmarked id beats its -preview variant
+    √ :free compound suffix: preview:free loses to its own base
+  pickCurrent
+    √ resolves the newest matching id in the openrouter namespace
+    √ resolves the direct namespace independently
+    √ returns null when nothing matches
+  resolveQuickPicks
+    √ live rows carry source live and catalog-resolved routes
+    √ empty catalog falls back to pinned routes, source fallback (1 ms)
+    √ unresolvable direct namespace uses the pinned direct fallback
+  toLiveSeedAliases
+    √ overlays live family openrouter routes on the static defaults
+    √ null/empty catalog returns the static defaults unchanged
+    √ family aliases that fell back to pinned are not overlaid
+
+PASS tests/sidecar/exit-handler.test.js
+  Crash Handler
+    √ writes error status to metadata on crash (5 ms)
+    √ does nothing if metadata does not exist
+    √ does nothing if status is already complete (5 ms)
+
+PASS tests/setup-ui-model.test.js
+  setup-ui-model
+    buildModelStepHTML
+      √ should return an HTML string (1 ms)
+      √ should contain radio inputs for each model choice
+      √ should contain model labels
+      √ should contain model alias names
+      √ should support pre-selecting a model via selectedAlias (1 ms)
+      √ should default to first choice when no selectedAlias given
+      √ should fall back to first choice for unknown selectedAlias
+      provider routing
+        √ should show route-toggle for models with multiple providers when keys configured
+        √ should show route-pill buttons for each available provider
+        √ should show static "via OpenRouter" when only openrouter key configured
+        √ should show route-toggle for deepseek when deepseek key is configured (1 ms)
+        √ should hide toggles when configuredKeys not provided
+        √ should include data-alias and data-provider attributes on pills
+        √ should mark openrouter pill as active by default
+        √ should disable model when no configured key matches any route (1 ms)
+        √ should not disable model when at least one route has a configured key
+        √ should show static text with available provider instead of first provider
+        √ should auto-select first available model when selectedAlias is unavailable
+        √ should show "No API key" message on unavailable models (1 ms)
+        √ should mark first available pill as active when openrouter key missing
+        √ deepseek toggle pill shows DeepSeek label
+    quick-pick fallback rows (replaces MODEL_CHOICES shape tests)
+      √ five families resolve in wizard display order
+      √ every row has label, blurb, source fallback, and a non-empty openrouter route (1 ms)
+      √ rows render through buildModelStepHTML without error (1 ms)
+    PROVIDER_NAMES
+      √ should be exported
+      √ should have display names for all providers
+      √ should include DeepSeek
+    buildModelStepHTML (v2 rows)
+      √ renders the resolved model id and a write-preview per row (1 ms)
+      √ fallback rows carry the offline badge
+      √ search section has no display:none gating and is labeled
+
+PASS tests/config-fallback.test.js
+  applyDirectApiFallback with persisted keys
+    √ should return openrouter model when OPENROUTER_API_KEY is in persisted keys (19 ms)
+    √ should fallback to direct API when provider key is in persisted keys (6 ms)
+    √ should still check process.env for OPENROUTER_API_KEY (4 ms)
+    √ should still check process.env for provider key fallback (18 ms)
+    √ should return model unchanged when neither env nor persisted keys exist (7 ms)
+  applyDirectApiFallback un-mocked integration
+    √ should fallback to direct API using real .env file with persisted key (14 ms)
+
+PASS tests/fanout-cli.test.js
+  fanout CLI surface
+    √ usage text documents fanout, --models, --prompt-file, --json and exit codes
+    √ fanout is a one-shot command (exit watchdog armed)
+    √ bin/amicus.js routes fanout and plumbs the exit code
+    √ handleFanout source guards timeout and empty model lists
+
+PASS tests/context-compression.test.js
+  Context Compression
+    estimateTokenCount
+      √ should return >0 and <10 for "Hello world" (1 ms)
+      √ should return 0 for empty string
+      √ should return 0 for null
+      √ should return 0 for undefined (1 ms)
+      √ should use Math.ceil(text.length / 4) heuristic
+      √ should return a number
+    buildPreamble
+      √ should include the cwd path
+      √ should start with "You are working in"
+      √ should end with double newline for separation
+      √ should contain "conversation" in the output
+    compressContext
+      √ should return compressed=false when under token limit
+      √ should include preamble in text when under limit
+      √ should return compressed=true and needsModelCompression=true when over limit
+      √ should work with custom tokenLimit set very low (1 ms)
+      √ should have default tokenLimit of 30000
+      √ should include estimatedTokens in the result
+      √ should use process.cwd() as default cwd
+      √ should include the full context text in the result even when over limit
+
+PASS evals/tests/result_writer.test.js
+  formatSummaryLine
+    √ formats passing eval (1 ms)
+    √ formats failing eval
+    √ formats summary line with MCP mode label (1 ms)
+    √ formats CLI mode summary with bash command
+  writeResults
+    √ writes result.json and transcript files to workspace dir (4 ms)
+
+PASS tests/electron/setup-ui-title.test.js
+  setup wizard window title
+    √ titles the window "Amicus Setup" with no Sidecar residue (2 ms)
+
+PASS tests/headless-watchdog.test.js
+  idleBackstopTeardown
+    √ marks timed-out, writes summary.md, calls server.close, returns 2 (5 ms)
+    √ does NOT call server.close when externalServer=true, still returns 2 (3 ms)
+
+PASS tests/model-validator-normalize.test.js
+  Model Validator — normalize
+    normalizeModelId
+      √ should prepend provider when id lacks prefix (25 ms)
+      √ should return as-is when id already has provider prefix (2 ms)
+      √ should handle nested model ids (provider/org/model) (2 ms)
+      √ should prepend provider for bare model name (1 ms)
+    normalize in headless error output
+      √ should normalize model IDs in headless error output (7 ms)
+    promptModelSelection saves normalized id
+      √ should normalize model id before saving to config (2 ms)
+
+PASS evals/tests/claude_runner.test.js
+  buildMcpConfig
+    √ generates valid MCP config pointing to sidecar binary (2 ms)
+  createSandbox
+    √ copies fixture to temp directory (10 ms)
+    √ throws if fixture does not exist (5 ms)
+  buildClaudeCommand
+    √ builds command with required flags
+    √ MCP mode includes --mcp-config flag (1 ms)
+    √ CLI mode omits --mcp-config, adds sidecar to PATH, and includes --allowedTools
+    √ MCP mode --allowedTools includes mcp__sidecar__*
+
+PASS tests/scripts/check-file-sizes.test.js
+  check-file-sizes
+    checkFileSize
+      √ passes for files under the limit (2 ms)
+      √ fails for files over the limit (1 ms)
+      √ passes for files exactly at the limit
+    checkFiles
+      √ returns empty array when all files pass
+      √ returns violations for files over limit
+      √ catches multiple violations
+    matchesPattern
+      √ matches top-level src files with src/**/*.js (zero directories) (1 ms)
+      √ matches files in src subdirectories
+      √ matches deeply nested files
+      √ does not match files outside src
+      √ treats the dot in .js as literal, not any-character
+    CONFIG
+      √ checks compliant src files at every depth (1 ms)
+      √ grandfathers top-level files that were over the limit before the glob fix (10 ms)
+      √ keeps the pre-existing src/utils/config.js exclusion (5 ms)
+    checkAllTracked
+      √ returns [] when passed a file not in include pattern (package.json)
+      √ returns [] for grandfathered and small files — proves include/exclude filtering (1 ms)
+      √ flags an oversized included src file end-to-end (3 ms)
+
+PASS tests/electron/preload.test.js
+  electron/preload.js
+    √ exposes the sidecar bridge without throwing when documentElement is null (4 ms)
+    √ defers branding CSS to DOMContentLoaded when documentElement is null (2 ms)
+    √ appends branding CSS immediately when documentElement already exists
+    √ a throwing DOM cannot kill the bridge exposure (1 ms)
+
+PASS tests/session-abort.test.js
+  markTerminal
+    √ writes the given status + reason + a timestamp (5 ms)
+    √ returns false when metadata.json is missing (1 ms)
+    √ markAborted still writes aborted/Aborted(reason)/abortedAt (unchanged) (3 ms)
+
+PASS evals/tests/evaluator.test.js
+  runProgrammaticChecks
+    √ tool_called passes when tool was called (1 ms)
+    √ tool_called fails when tool was not called
+    √ tool_param passes when param matches expected value
+    √ tool_param_matches passes on regex match
+    √ file_changed passes when file was modified (2 ms)
+    √ file_created passes when file matching pattern exists (1 ms)
+    √ file_contains passes when file has matching content (8 ms)
+    √ no_errors passes when transcript has no errors
+    √ no_errors fails when transcript has errors
+    √ bash_command_matches passes when command matches pattern (1 ms)
+    √ bash_command_matches fails when no command matches
+    √ bash_command_matches fails when bashCommands is empty
+    √ tool_called matches MCP-prefixed tool names
+    √ tool_called matches pipe-separated alternatives
+    √ tool_param matches MCP-prefixed tool names
+    √ tool_param_matches matches MCP-prefixed tool names (1 ms)
+    √ tool_result_matches passes when result contains matching pattern
+    √ tool_result_matches fails when result is empty or no output
+    √ bash_result_matches passes when bash command output matches pattern
+    √ bash_result_matches fails when output does not match
+    √ bash_result_matches fails when command not found (1 ms)
+    √ tool_result_matches fails when tool was never called
+  buildJudgePrompt
+    √ includes rubric items and transcript summary
+  parseJudgeResponse
+    √ extracts scores from JSON response (1 ms)
+    √ fails when average below threshold
+    √ handles JSON embedded in text
+
+PASS tests/curated-models.test.js
+  curated-models v2 (families)
+    √ getFamilies returns the five wizard families with required fields (2 ms)
+    √ getFamilies returns fresh copies (no shared mutable state) (1 ms)
+    √ toDefaultAliases stays static and covers families + cardless
+    √ listCuratedRoutes flattens family fallbacks and cardless routes (1 ms)
+    √ family openrouter fallbacks match their own idPattern (self-consistency)
+    √ config.getDefaultAliases() derives from this module (anti-drift) (8 ms)
+    √ readline quick-picks derive from getFamilies (anti-drift) (3 ms)
+
+PASS tests/electron/preload-allowlist.test.js
+  preload-setup allowlist
+    √ allows the catalog channels the Step 2 picker invokes
+    √ every sidecar: channel the wizard script invokes is allowlisted (5 ms)
+
+PASS tests/ipc-setup-save-config.test.js
+  sidecar:save-config (read-modify-write)
+    √ REGRESSION (2026-06-11 gemini downgrade): untouched aliases are never rewritten (1 ms)
+    √ null alias write deletes; deleted aliases do not resurrect
+    √ unknown config keys survive the round-trip (1 ms)
+    √ null/missing default leaves the existing default alone
+    √ first run (no config) seeds aliases live
+    √ first run with getCatalog rejection still seeds (pinned via empty catalog) (1 ms)
+
+PASS tests/agent-mapping.test.js
+  Agent Mapping
+    PRIMARY_AGENTS
+      √ should include chat, build, and plan (1 ms)
+    mapAgentToOpenCode
+      √ should default to chat when no agent specified
+      √ should map native agents case-insensitively (1 ms)
+      √ should pass through custom agent names as lowercase
+    isValidAgent
+      √ should return true for non-empty strings
+      √ should return false for empty/null/undefined
+    HEADLESS_SAFE_AGENTS
+      √ should contain build, plan, explore, general (1 ms)
+      √ should NOT contain chat
+    isHeadlessSafe
+      √ should return true for headless-safe agents
+      √ should be case-insensitive
+      √ should return false for chat agent
+      √ should return null for unknown/custom agents (1 ms)
+      √ should return null for empty/undefined
+
+PASS tests/scripts/check-secrets.test.js
+  check-secrets
+    scanForSecrets
+      √ detects OpenRouter API keys (1 ms)
+      √ detects Anthropic API keys (1 ms)
+      √ detects AWS access keys (1 ms)
+      √ detects GitHub personal access tokens
+      √ detects private key blocks
+      √ returns empty array for clean content (1 ms)
+      √ detects multiple secrets in one file
+      √ skips allowlisted patterns in test files
+      √ detects .env file patterns (1 ms)
+      √ detects Google AI API keys (1 ms)
+      √ detects OpenAI project keys
+      √ detects OpenAI-legacy / DeepSeek bare sk- keys
+      √ does NOT cross-match sk-or- / sk-ant- as bare sk- keys (1 ms)
+    scanAll
+      √ returns an array
+      √ detects a secret in a temp file outside the allowlist (18 ms)
+      √ returns [] when the injected file list is clean (5 ms)
+
+PASS tests/models-drift.test.js
+  buildFallbackDriftReport
+    √ reports families whose pinned openrouter fallback is behind the live pick
+    √ silent when fallbacks match the live resolution or catalog is empty (1 ms)
+  runCheck drift wiring
+    √ console path prints the drift header; --json path does not (3 ms)
+
+PASS tests/utils/model-fetcher-enrichment.test.js
+  keyless OpenRouter
+    √ openrouter authHeader omits Authorization when no key is given (1 ms)
+    √ openrouter authHeader includes bearer when a key is given
+    √ providersToFetch always includes openrouter even with no keys
+  enriched normalizers
+    √ openrouter normalize maps context_length and pricing, nulls when absent
+    √ google normalize maps inputTokenLimit to contextLength, pricing null (1 ms)
+    √ openai normalize and anthropic hardcoded rows carry null metadata
+
+PASS tests/electron/window-position.test.js
+  computeWindowPosition
+    right position (default)
+      √ places window flush against the right edge
+      √ places window at top of work area (5 ms)
+      √ respects non-zero work area x offset (e.g. secondary monitor)
+    left position
+      √ places window flush against the left edge
+      √ places window at top of work area
+    center position
+      √ centers the window horizontally
+      √ places window at top of work area
+    defaults
+      √ defaults to right when position is undefined (1 ms)
+      √ defaults to right for unknown position values
+    window taller than work area
+      √ clamps y to work area top when window height exceeds screen height
+
+PASS tests/sidecar/fanout-output.test.js
+  formatWaveHuman
+    √ renders one section per leg in order, plus a status footer (1 ms)
+    √ shows a placeholder for legs without a summary (1 ms)
+    √ renders a top-level wave error when present
+  fmtDuration
+    √ formats null, zero, seconds and minutes
+
+PASS tests/electron/load-failsafe.test.js
+  attachLoadFailsafe
+    √ fires onFail with load details when the main frame fails to load (12 ms)
+    √ ignores subframe load failures (1 ms)
+    √ ignores ERR_ABORTED (-3), which fires on benign in-page redirects (1 ms)
+    √ fires onFail with reason timeout when nothing resolves in time (1 ms)
+    √ defaults the timeout to 15s when not specified
+    √ cancel() disarms both the timer and later load failures
+    √ fires at most once: a load failure disarms the timeout (1 ms)
+  buildLoadErrorHTML
+    √ includes the failed URL and error description
+    √ HTML-escapes interpolated values (1 ms)
+
+PASS tests/process-lifecycle.test.js
+  process lifecycle helpers
+    isProcessAlive
+      √ returns true for current process PID
+      √ returns false for very high PID (almost certainly dead) (1 ms)
+      √ returns false for null PID
+      √ returns false for 0
+    checkSessionLiveness
+      √ returns alive when both PIDs are current process
+      √ returns dead when both PIDs are dead
+      √ returns server-dead when Node alive but Go dead
+      √ returns dead when PIDs are null
+  crash handler lock cleanup
+    √ crash-handler.js deletes session.lock on crash
+
+PASS tests/utils/lifecycle.test.js
+  isOneShotCommand
+    √ start/continue/resume/list/read/abort/fanout are one-shot (1 ms)
+    √ mcp is NOT one-shot (long-lived server)
+  armExitWatchdog
+    √ calls exit(code) after ms and logs (1 ms)
+    √ unref()s the timer so it does not hold the loop open (1 ms)
+
+PASS tests/setup-ui-keys.test.js
+  setup-ui-keys
+    buildKeysStepHTML
+      √ should return an HTML string
+      √ should contain provider buttons for all 5 providers (1 ms)
+      √ should mark OpenRouter as recommended
+      √ should contain checkmark indicator elements
+      √ should contain an API key input
+      √ should contain a Save & Test button
+      √ should contain status message area
+      √ should contain help link area
+      √ should contain provider descriptions
+    PROVIDERS
+      √ should export 5 providers (1 ms)
+      √ should have required fields on each provider (1 ms)
+      √ should have exactly one recommended provider
+
+PASS tests/mcp-normalization.test.js
+  buildServerOptions MCP type normalization
+    √ normalizes Claude Desktop format (no type) to local (5 ms)
+    √ normalizes type: "stdio" (Claude Code internal format) to local (4 ms)
+    √ normalizes type: "http" to remote (1 ms)
+    √ normalizes type: "sse" to remote (1 ms)
+    √ passes through already-normalized local config unchanged (1 ms)
+    √ passes through already-normalized remote config unchanged (1 ms)
+    √ handles multiple servers with mixed input formats (1 ms)
+    √ handles stdio server with no args (1 ms)
+    √ skips type:stdio server with no command (1 ms)
+    √ skips type:http server with no url (1 ms)
+    √ skips type:sse server with no url (1 ms)
+    √ preserves extra remote options during http/sse normalization (1 ms)
+    √ preserves explicit enabled:false during http/sse normalization
+    √ passes through unknown types with a warning (30 ms)
+
+PASS tests/sidecar/electron-guard.test.js
+  Electron lazy loading guard
+    √ checkElectronAvailable returns a boolean (7 ms)
+    √ checkElectronAvailable is exported as a function (1 ms)
+
+PASS tests/interactive-watchdog.test.js
+  interactive watchdog teardown
+    √ killIfAlive sends SIGTERM to a running process (1 ms)
+    √ killIfAlive does not call kill if process is already killed
+    √ killIfAlive does not throw when process is null
+    √ an active (busy) session touches the watchdog instead of being killed
+
+PASS tests/resume-lock.test.js
+  resume dead-process detection
+    √ resume.js imports session-lock and liveness helpers
+  session lock integration
+    √ start.js uses session lock (1 ms)
+    √ continue.js uses session lock
+
+PASS tests/electron/setup-ui-keys.test.js
+  PROVIDERS
+    √ deepseek provider is in the list
+    √ PROVIDERS has exactly 5 entries (1 ms)
+  buildKeysStepHTML
+    √ renders deepseek provider button
+
+PASS tests/utils/alias-audit.test.js
+  findStaleAliases
+    √ flags openrouter routes absent from the catalog
+    √ checks direct-provider routes only when that provider has rows (no false stales) (1 ms)
+    √ returns [] when the catalog is empty (cannot check)
+    √ ignores malformed catalog rows when building the provider index
+  suggestReplacements
+    √ suggests same-vendor candidates, newest-looking first, max 3
+    √ is deterministic and returns [] when no same-vendor rows exist
+    √ caps at n (default 3) when more same-vendor candidates exist (6 ms)
+    √ breaks equal-prefix ties numerically so grok-10 outranks grok-9 (1 ms)
+    √ ignores malformed catalog rows instead of throwing
+  collectAliasSources
+    √ includes defaults, user config aliases, and curated routes with source tags (1 ms)
+    √ dedupes identical (alias, model) pairs, first source wins (1 ms)
+
+PASS tests/finalize-session-status.test.js
+  √ finalizeSession defaults to complete (unchanged) (6 ms)
+  √ finalizeSession honors an explicit status (5 ms)
+
+PASS tests/sidecar/setup-window.test.js
+  setup-window
+    √ should spawn Electron with AMICUS_MODE=setup (1 ms)
+    √ should pass --remote-debugging-port when AMICUS_DEBUG_PORT is set
+    √ should parse enriched JSON with default model and keyCount (1 ms)
+    √ should handle legacy JSON without default/keyCount
+    √ should resolve with failure when Electron exits non-zero
+    √ should resolve with failure when Electron exits without output (1 ms)
+    √ should use getElectronPath() for electron binary
+    √ should resolve with failure when electron is not installed (2 ms)
+
+PASS tests/utils/activity-poller.test.js
+  createActivityPoller
+    √ calls onActivity when status is busy (4 ms)
+    √ does NOT call onActivity when status is idle (1 ms)
+    √ stop() halts further polling (1 ms)
+    √ swallows getStatus errors and keeps polling
+
+PASS evals/tests/transcript_parser.test.js
+  parseTranscript
+    √ extracts MCP tool calls from stream-json lines (1 ms)
+    √ extracts token usage from usage events (1 ms)
+    √ captures errors from tool results
+    √ handles empty input (1 ms)
+    √ skips malformed JSON lines gracefully
+    √ extracts bash commands from Bash tool calls
+    √ extracts bash commands from lowercase bash tool name
+    √ returns empty bashCommands when no bash tool calls
+    √ extracts tool calls when results come as user events
+    √ handles parallel tool calls with user event results (1 ms)
+    √ captures errors from user event tool results
+    √ extracts token usage from assistant message usage field
+    √ extracts token usage from result event usage field
+    √ prefers result event usage over accumulated assistant usage
+
+PASS tests/prompt-builder.test.js
+  Prompt Builder
+    buildSystemPrompt
+      √ should include TASK BRIEFING section with briefing content
+      √ should include CONVERSATION CONTEXT section with context content (1 ms)
+      √ should include ENVIRONMENT section with project path
+      √ should have sidecar session header
+      Interactive Mode (headless=false)
+        √ should include INTERACTIVE MODE section
+        √ should mention Fold button
+        √ should mention summary generation
+        √ should NOT include HEADLESS MODE section (1 ms)
+        √ should NOT include "Do NOT ask questions"
+      Headless Mode (headless=true)
+        √ should include HEADLESS MODE section
+        √ should include [SIDECAR_FOLD] marker instruction per spec §6.2
+        √ should include "Do NOT ask questions. Work independently." per spec §6.2
+        √ should instruct to make reasonable assumptions
+        √ should instruct to output summary when done (1 ms)
+        √ should include blocker handling instructions
+        √ should NOT include INTERACTIVE MODE section
+      Edge Cases
+        √ should handle empty context
+        √ should handle empty briefing
+        √ should handle special characters in briefing
+        √ should handle multiline context
+        √ should handle Windows-style paths (1 ms)
+    SUMMARY_TEMPLATE
+      √ should be exported
+      √ should include all required sections per spec §6.1 (1 ms)
+      √ should have explanation for Attempted Approaches (prevents repeating failed attempts)
+    getSummaryTemplate
+      √ should return the summary template
+      √ should be usable as a fold prompt
+    OpenCode Agent Framework Integration
+      buildEnvironmentSection - tool permissions delegated to OpenCode
+        √ should include project path in all modes
+        √ should note that permissions are managed by OpenCode (1 ms)
+        √ should not include mode-specific tool lists (OpenCode handles this)
+      buildPrompts with mode parameter
+        √ should pass mode to environment section (for reference)
+        √ should include project path regardless of mode
+      buildPrompts context placement
+        √ should put context in system prompt for interactive mode (hidden from UI) (1 ms)
+        √ should put context in userMessage for headless mode
+        √ should return just briefing as userMessage when no context
+        √ should keep headless system prompt lean (instructions only)
+      FOLD marker stripping from context
+        √ should strip [SIDECAR_FOLD] from context in headless mode (1 ms)
+        √ should strip [SIDECAR_FOLD] from context in interactive mode
+      buildSystemPrompt with mode parameter
+        √ should delegate tool restrictions to OpenCode
+        √ should work with all modes (tool handling is external) (1 ms)
+
+PASS tests/prompts/cowork-agent-prompt.test.js
+  buildCoworkAgentPrompt
+    √ returns a non-empty string (1 ms)
+    √ identifies as Sidecar
+    √ describes second-perspective and parallel-task purpose
+    √ includes tone and formatting guidance
+    √ includes evenhandedness guidance (1 ms)
+    √ includes mistake-handling guidance
+    √ describes general-purpose task execution
+    √ does not include SE-specific guidance
+    √ includes professional objectivity
+    √ includes task management guidance (1 ms)
+    √ includes tool usage guidance
+    √ includes clarification guidance
+    √ is under 5000 characters
+
+PASS tests/sidecar/interactive.test.js
+  buildElectronEnv - PATH
+    √ joins nodeModulesBin and the existing PATH with the platform delimiter (1 ms)
+  buildElectronEnv - window position
+    √ sets AMICUS_WINDOW_POSITION when windowPosition is provided
+    √ sets AMICUS_WINDOW_POSITION to left
+    √ sets AMICUS_WINDOW_POSITION to center
+    √ omits AMICUS_WINDOW_POSITION when not provided
+  getElectronPath
+    √ returns the path from require("electron") instead of hardcoded relative path (2 ms)
+    √ returns null when electron is not installed
+
+PASS tests/electron-headless-mode.test.js
+  Electron headless test mode
+    √ main.js checks SIDECAR_HEADLESS_TEST before showing window (1 ms)
+
+PASS tests/model-fetcher.test.js
+  model-fetcher
+    ANTHROPIC_MODELS
+      √ should be a non-empty array of { id, name } objects (1 ms)
+    fetchModelsFromProvider
+      √ should fetch and normalize OpenRouter models (1 ms)
+      √ should fetch and normalize Google models
+      √ should fetch and normalize OpenAI models
+      √ should return hardcoded models for anthropic (no API call) (1 ms)
+      √ should return empty array on network error
+      √ should return empty array on 401 response
+      √ should return empty array for unknown provider
+      √ should return empty array on malformed JSON (1 ms)
+    fetchAllModels
+      √ should always include anthropic models even with no keys
+      √ should fetch only from providers with keys (6 ms)
+      √ should handle all providers failing gracefully
+    groupModelsByFamily
+      √ should group models by provider prefix (1 ms)
+      √ should have correct family names
+      √ should return empty array for empty input (1 ms)
+      √ should preserve all models in groups
+      √ should label a deepseek model as family DeepSeek
+    DeepSeek provider
+      PROVIDER_FETCH_CONFIG.deepseek
+        √ exists and has the correct url
+        √ authHeader returns a Bearer Authorization header (1 ms)
+        √ normalize maps DeepSeek data array to correct shape
+        √ normalize returns [] on empty data array
+        √ deepseek normalize returns [] when data key is missing
+      PROVIDER_FAMILY_NAMES.deepseek
+        √ equals DeepSeek
+      fetchModelsFromProvider deepseek
+        √ returns normalized list on HTTP 200
+        √ returns [] on HTTP 401
+        √ returns [] on network error
+      fetchModelsFromProvider anthropic (no https.get)
+        √ returns ANTHROPIC_MODELS without calling https.get
+      fetchAllModels with deepseek key
+        √ includes deepseek/deepseek-chat in results (1 ms)
+  curated-models deepseek routes
+    √ deepseek CARD has a direct deepseek route
+    √ toDefaultAliases deepseek still prefers openrouter route
+
+PASS tests/utils/port-pid.test.js
+  findListenerPid
+    √ parses the LISTENING pid from netstat on win32 (1 ms)
+    √ parses the pid from lsof on unix
+    √ returns null when no listener is found
+    √ returns null when port is not listed on win32
+
+PASS tests/electron/ipc-catalog.test.js
+  catalog IPC
+    √ sidecar:get-catalog returns models + fetchedAt from the cache layer (3 ms)
+    √ sidecar:get-catalog degrades to empty on error (1 ms)
+    √ sidecar:refresh-catalog forces a refresh and returns the fresh info
+    √ sidecar:save-key fires a warm catalog refresh after a successful save (1 ms)
+    √ sidecar:save-key does NOT refresh when the save failed (1 ms)
+    √ sidecar:refresh-catalog reports the cache without a second fetch on failure
+
+PASS tests/cli-key.test.js
+  handleKey — list (no provider)
+    √ prints configured providers (1 ms)
+  handleKey — save
+    √ validates and saves a valid deepseek key (1 ms)
+    √ prints error and exits for invalid key (25 ms)
+    √ prints error and exits for unknown provider (2 ms)
+    √ prints error and exits when provider given but no key and no --remove
+    √ prints error and exits when saveApiKey fails after valid key (1 ms)
+  handleKey — remove
+    √ removes deepseek key
+
+PASS tests/toolbar.test.js
+  toolbar
+    getBrandName
+      √ should return "Amicus" for code-local client (1 ms)
+      √ should return "Amicus" for code-web client
+      √ should return "Amicus" for cowork client too
+      √ should default to "Amicus" when no client specified
+    buildToolbarHTML
+      √ should show "Amicus" by default (1 ms)
+      √ should show plain "Amicus" for cowork client
+      √ should show "Amicus" for code-local client
+      √ should show correct branding in setup mode for cowork
+      √ should show correct branding in setup mode for code-local
+    TOOLBAR_H
+      √ should be 40
+
+PASS tests/scripts/package-manifest.test.js
+  package.json launch identity
+    √ files includes skills/ so the council ships in the tarball
+    √ repository/bugs/homepage point at BourbonDog/amicus; author is Christian Wagner
+    √ keywords carry the council positioning
+
+PASS tests/utils/env-compat.test.js
+  getCompatEnv
+    √ returns the AMICUS_ value when set (1 ms)
+    √ falls back to the SIDECAR_ value and warns once
+    √ prefers AMICUS_ over SIDECAR_ when both are set
+    √ returns undefined when neither is set (1 ms)
+
+PASS tests/server-setup.test.js
+  server-setup
+    DEFAULT_PORT
+      √ should be 4096
+    getPortPid
+      √ should return PID when lsof finds a process (1 ms)
+      √ should return null when lsof returns non-numeric output
+      √ should return null when lsof throws (no process on port)
+      √ should return null for empty lsof output
+    isPortInUse
+      √ should return true when a process is on the port
+      √ should return false when no process is on the port
+    killPortProcess
+      √ should return true when port is already free (1 ms)
+      √ should kill the process and return true on success
+      √ should return false when process.kill throws
+    ensurePortAvailable
+      √ should return true immediately when port is free
+      √ should default to port 4096 (1 ms)
+      √ should accept a custom port
+      √ should kill stale process and return true when port is freed
+      √ should return false when kill fails and port stays occupied
+
+PASS tests/codex-alias.test.js
+  codex alias (#18)
+    √ resolves to a concrete openrouter codex model id
+    √ every default alias is a fully-qualified provider/model string (2 ms)
+
+PASS tests/headless-external-server.test.js
+  headless external server support
+    √ checks for externalServer flag
+    √ skips server.close() when externalServer is true
+    √ accepts options.sessionId
+    √ accepts options.watchdog
+
+warning: in the working copy of '.husky/pre-commit', LF will be replaced by CRLF the next time Git touches it
+PASS tests/utils/validators-apikey.test.js
+  validateApiKey missing-key message
+    √ leads with the in-product `amicus key <provider>` fix and drops legacy brand (1 ms)
+    √ shows Windows-correct persistence on win32 (setx, no ~/.zshrc)
+    √ shows shell-rc guidance on non-Windows
+
+PASS tests/session-finalize.test.js
+  resolveTerminalState
+    √ completed run → complete / 0
+    √ error wins over everything → error / 1
+    √ timed-out (no error) → timed-out / 2
+    √ external abort → aborted / 2
+    √ signal abort → aborted / 130 or 143
+    √ incomplete with no flags → error / 1
+    √ null/undefined result → error / 1
+
+PASS tests/scripts/validate-docs.test.js
+  validate-docs
+    extractSection
+      √ extracts a section by heading
+      √ returns empty string for missing section (1 ms)
+    findFilesInSection
+      √ extracts .js filenames from a code block
+      √ extracts filenames from markdown table rows
+      √ returns empty array for no matches
+    checkDrift
+      √ reports files on disk missing from docs
+      √ reports files in docs missing from disk (1 ms)
+      √ reports no drift when synced
+    checkStagedFilesDrift
+      √ warns when src/ files changed but CLAUDE.md not staged
+      √ does not warn when CLAUDE.md is also staged
+      √ does not warn for non-tracked directories
+      √ tracks bin/ and scripts/ changes
+
+PASS tests/mcp-server.test.js
+  MCP spawn arg building
+    √ amicus_start passes --task-id matching returned taskId (115 ms)
+    √ amicus_start auto-passes --client cowork (8 ms)
+    √ amicus_start passes --session-id when parentSession is provided (9 ms)
+    √ amicus_start passes --timeout when provided (5 ms)
+    √ amicus_continue returns a NEW taskId, not the parent taskId (7 ms)
+    √ amicus_continue passes --task-id matching the new returned taskId (8 ms)
+  safeSessionDir (shared validator)
+    √ allows valid task IDs
+    √ rejects path traversal attempts (22 ms)
+    √ rejects dot-dot within task ID (1 ms)
+    √ validateTaskId accepts valid IDs (1 ms)
+    √ validateTaskId rejects invalid IDs
+  MCP Server Handlers
+    √ exports handlers object (2 ms)
+    √ exports startMcpServer function (13 ms)
+    √ handlers has all expected tool names (13 ms)
+    amicus_guide
+      √ returns guide text with Amicus content (9 ms)
+      √ guide text contains workflow instructions (10 ms)
+    amicus_list
+      √ returns empty message for fresh project with no sessions (13 ms)
+      √ returns empty message when sessions dir exists but is empty (15 ms)
+      √ lists sessions with metadata (18 ms)
+      √ filters sessions by status (22 ms)
+      √ sorts sessions by createdAt descending (38 ms)
+    amicus_status
+      √ returns status for existing running session with progress (25 ms)
+      √ returns error for missing session (14 ms)
+    amicus_status enriched response
+      √ includes messages and lastActivity when running (23 ms)
+      √ returns Starting up when no conversation yet (20 ms)
+      √ detects crashed process and updates status (34 ms)
+      √ does not include latest/messages for completed sessions (20 ms)
+      √ includes reason for error/crashed sessions (22 ms)
+    amicus_status next_poll field
+      √ includes next_poll when headless:true and status:running (21 ms)
+      √ omits next_poll when headless is false (interactive) (42 ms)
+      √ omits next_poll when headless is missing (legacy sessions) (21 ms)
+      √ omits next_poll when headless:true but status:complete (18 ms)
+      √ next_poll hint contains at-least-30s guidance (24 ms)
+      √ headless running amicus_status includes system-reminder content block (18 ms)
+      √ interactive running amicus_status has no system-reminder (14 ms)
+    amicus_status stall detection
+      √ includes stalled: true when lastActivityMs exceeds threshold (75 ms)
+      √ does not include stalled flag when activity is recent (22 ms)
+      √ does not include stalled flag for interactive sessions even when idle (14 ms)
+      √ does not include stalled flag for completed sessions (9 ms)
+    amicus_status model field
+      √ includes model in status response when stored in metadata (8 ms)
+      √ omits model field when not stored in metadata (7 ms)
+    amicus_read
+      √ returns summary when available (8 ms)
+      √ summary prepends model when stored in metadata (8 ms)
+      √ summary works without model in metadata (8 ms)
+      √ returns metadata when mode is metadata (7 ms)
+      √ returns conversation when mode is conversation (10 ms)
+      √ returns message when no conversation file exists (7 ms)
+      √ returns message when no summary file exists (7 ms)
+      √ returns error for missing session (6 ms)
+    amicus_start
+      √ handler is an async function (5 ms)
+      √ returns interactive mode message when noUi is false (10 ms)
+      √ returns headless mode message with at-least-30s guidance when noUi is true (9 ms)
+      √ headless amicus_start response includes system-reminder content block (12 ms)
+      √ interactive amicus_start response has no system-reminder (9 ms)
+    amicus_resume
+      √ handler is an async function (6 ms)
+    amicus_continue
+      √ handler is an async function (8 ms)
+    amicus_setup
+      √ handler is an async function (9 ms)
+    amicus_abort PID killing
+      √ sends SIGTERM to process when PID is stored in metadata (8 ms)
+      √ marks aborted even if process already exited (SIGTERM throws ESRCH) (9 ms)
+      √ aborts a running session — status updated to aborted (7 ms)
+      √ returns informational message for non-running session (7 ms)
+      √ returns error for missing session (6 ms)
+  amicus_start context and summary args
+    √ passes --context-turns to CLI (8 ms)
+    √ passes --context-since to CLI (2 ms)
+    √ passes --context-max-tokens to CLI (3 ms)
+    √ passes --summary-length to CLI (2 ms)
+    √ passes --no-context to CLI when includeContext is false (3 ms)
+    √ does NOT pass --no-context when includeContext is true (2 ms)
+    √ does NOT pass --no-context when includeContext is omitted (3 ms)
+  amicus_continue context args
+    √ passes --context-turns to CLI (3 ms)
+    √ passes --context-max-tokens to CLI (3 ms)
+  amicus_start stderr capture
+    √ spawns process with stderr redirected to file (10 ms)
+    √ amicus_resume passes sessionDir for stderr capture (7 ms)
+    √ amicus_continue passes sessionDir for stderr capture (10 ms)
+
+warning: in the working copy of '.husky/pre-commit', LF will be replaced by CRLF the next time Git touches it
+fatal: not a git repository (or any of the parent directories): .git
+PASS tests/setup-hooks.test.js
+  scripts/setup-hooks.js
+    √ package.json wires setup-hooks.js as the prepare script (6 ms)
+    √ sets core.hooksPath to .husky in a normal clone (.git is a directory) (441 ms)
+    √ hooks resolve and fire inside a linked worktree (.git is a file) (592 ms)
+    √ running setup from inside a worktree also works (323 ms)
+    √ exits 0 outside a git checkout (52 ms)
+
+PASS tests/fold-nudge.test.js
+  Fold nudge message
+    √ shows nudge overlay after fold completes (2511 ms)
+
+[amicus] 15s | 0 messages | Starting OpenCode server...
+PASS tests/e2e.test.js (30.089 s)
+  End-to-End Sidecar Flow
+    Full Sidecar Workflow
+      √ should complete a full sidecar task and return summary (2078 ms)
+      √ should list sidecars after completing a task (2035 ms)
+      √ should read sidecar summary after completion (2013 ms)
+    Context Passing
+      √ should pass conversation context in user message, not system prompt (2021 ms)
+    Error Handling
+      √ should handle OpenCode server startup failure gracefully (15303 ms)
+      √ should handle session creation failure (5 ms)
+    Model Environment Configuration
+      √ should pass model to SDK sendPromptAsync call (2009 ms)
+    V3 API Names
+      √ should accept prompt/cwd/noUi instead of v2 names (2019 ms)
+      √ should pass sessionDir through to context building (2012 ms)
+    V3 Module Exports
+      √ should export environment detection functions (1 ms)
+      √ should export context compression functions (1 ms)
+      √ should export FOLD_MARKER as [SIDECAR_FOLD] (1 ms)
+      √ should export formatFoldOutput (2 ms)
+

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * File size enforcement script for pre-commit hook.
- * Blocks commits containing .js files in src/ that exceed the line limit.
+ * File size enforcement for the pre-commit hook and the whole-tree CI gate (--all).
+ * Blocks commits containing .js files in src/ that exceed the 300-line limit.
  *
  * Usage:
  *   node scripts/check-file-sizes.js          # Scans git staged files
+ *   node scripts/check-file-sizes.js --all    # Scans all tracked files (CI mode)
  *   const { checkFileSize } = require('./scripts/check-file-sizes');  # Library use
  */
 

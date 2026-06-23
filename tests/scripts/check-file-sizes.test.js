@@ -135,14 +135,18 @@ describe('check-file-sizes', () => {
       expect(result).toEqual([]);
     });
 
-    it('returns a violation for a file that is included and over the limit', () => {
-      // Inject a synthetic file list: create a temp file that looks like a src/**/*.js path
-      // by passing an array that maps to a real tiny-content path using the library directly
-      // We test the wiring via checkFiles directly (checkAllTracked delegates to it)
-      const oversizedFiles = [{ path: 'src/fake-big.js', content: 'x\n'.repeat(400) }];
-      const violations = checkFiles(oversizedFiles, CONFIG.maxLines);
-      expect(violations).toHaveLength(1);
-      expect(violations[0].file).toBe('src/fake-big.js');
+    it('flags an oversized included src file end-to-end', () => {
+      const fs = require('fs');
+      const tmp = 'src/__sizecheck_tmp__.js';
+      try {
+        fs.writeFileSync(tmp, 'const x = 1;\n'.repeat(400)); // > 300 lines, matches src/**/*.js, not excluded
+        const violations = checkAllTracked([tmp]);
+        expect(violations).toHaveLength(1);
+        expect(violations[0].file).toBe(tmp);
+        expect(violations[0].lines).toBeGreaterThan(300);
+      } finally {
+        if (fs.existsSync(tmp)) { fs.unlinkSync(tmp); }
+      }
     });
   });
 });

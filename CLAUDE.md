@@ -98,71 +98,71 @@ src/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
 │   ├── context-builder.js  # Context Builder Module
-│   ├── continue.js  # Load previous session data (metadata, summary, conversation)
+│   ├── continue.js  # Sidecar Continue Operations - Handles continuing from previous sessions
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
-│   ├── fanout-leg.js  # Map a runHeadless result to a leg metadata status.
-│   ├── fanout-output.js  # Format ms as "1m5s" / "42s".
-│   ├── fanout.js  # Default max legs per wave (env-overridable).
-│   ├── interactive.js  # Check if Electron is available (lazy loading guard)
-│   ├── models.js  # '0.000003' per token → '3.00' per Mtok; '—' when unknown or variable (-1)
-│   ├── progress.js  # Lifecycle stage labels
+│   ├── fanout-leg.js
+│   ├── fanout-output.js
+│   ├── fanout.js
+│   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
+│   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
+│   ├── progress.js  # Sidecar Progress Reader
 │   ├── read.js  # Sidecar Read Operations Module
-│   ├── resume.js  # Load session metadata from session directory
-│   ├── session-finalize.js  # Map a runHeadless result to the canonical terminal status + process exit code.
-│   ├── session-utils.js  # Standard heartbeat interval in milliseconds
+│   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
+│   ├── session-finalize.js
+│   ├── session-utils.js  # Sidecar Session Utilities - Shared functionality for session management
 │   ├── setup-window.js  # Setup Window Launcher
 │   ├── setup.js  # Sidecar Setup Wizard
-│   └── start.js  # Generate a unique 8-character hex task ID
+│   └── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
 ├── utils/
-│   ├── activity-poller.js  # SIGTERM a child process if it exists and isn't already killed.
-│   ├── agent-mapping.js  # * All OpenCode native agent names (lowercase)
-│   ├── alias-audit.js  # Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'.
+│   ├── activity-poller.js
+│   ├── agent-mapping.js  # Agent Mapping Module
+│   ├── alias-audit.js  # Alias Audit (F5) — report + suggest, never auto-repair.
 │   ├── alias-resolver.js  # Alias Resolver Utilities
-│   ├── api-key-store.js  # Maps provider IDs to environment variable names
-│   ├── api-key-validation.js  # Validation endpoints per provider
-│   ├── auth-json.js  # Known provider IDs that map to sidecar's PROVIDER_ENV_MAP
-│   ├── config.js  # Default model alias map — derived from the curated-models single source (F5)
+│   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
+│   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
+│   ├── auth-json.js  # Auth JSON Reader
+│   ├── config.js  # Amicus Config Module
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
 │   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
-│   ├── idle-watchdog.js  # @type {Object.<string, number>} Default timeouts per mode in milliseconds
-│   ├── input-validators.js  # MCP input validation with structured error responses.
-│   ├── lifecycle.js  # @param {string} command @returns {boolean}
+│   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
+│   ├── input-validators.js
+│   ├── lifecycle.js
 │   ├── logger.js  # Structured Logger Module
 │   ├── mcp-discovery.js  # MCP Discovery - Discovers MCP servers from parent LLM configuration
 │   ├── mcp-validators.js  # MCP Validators
-│   ├── model-catalog.js  # @returns {string} Absolute path to the catalog cache file
-│   ├── model-fetcher.js  # Hardcoded Anthropic models (no public listing endpoint)
-│   ├── model-validator.js  # Alias-to-search-term mapping for filtering provider model lists
-│   ├── path-setup.js  # Ensures that the project's node_modules/.bin directory is included in the PATH,
+│   ├── model-catalog.js  # OpenRouter model catalog cache (F3 #18 / F5 foundation).
+│   ├── model-fetcher.js  # Model Fetcher
+│   ├── model-validator.js  # Model Validator
+│   ├── path-setup.js
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
-│   ├── prompt-source.js  # Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4).
-│   ├── quick-picks.js  # Numeric-desc comparator; same-base marker variant sorts after its base.
-│   ├── result-schema.js  # Leg/run statuses that count as terminal for wave aggregation.
+│   ├── prompt-source.js
+│   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
+│   ├── result-schema.js
 │   ├── server-setup.js  # Server Setup Utilities
-│   ├── session-abort.js  # Mark a session aborted (preserves prior behavior).
-│   ├── session-lock.js  # Atomic session lock files to prevent concurrent resume/continue.
-│   ├── shared-server.js  # Manages a single shared OpenCode server for MCP sessions.
+│   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
+│   ├── session-lock.js
+│   ├── shared-server.js
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── thinking-validators.js  # Thinking Level Validators
 │   ├── update-notifier-loader.js  # update-notifier Loader
-│   ├── updater.js  # @type {import('update-notifier').UpdateNotifier|null}
-│   └── validators.js  # * Provider to API key mapping
+│   ├── updater.js  # Updater Module
+│   └── validators.js  # Input Validators
 ├── cli-handlers.js  # CLI Command Handlers
-├── cli.js  # * Default values per spec §4.1
+├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
 ├── context-compression.js  # Context Compression Module
 ├── context.js  # Context Filtering Module
 ├── drift.js  # Context Drift Detection Module
 ├── environment.js  # Environment Detection Module
-├── headless.js  # * Default timeout: 15 minutes per spec §6.2
+├── headless.js  # Headless Mode Runner
 ├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
-├── mcp-tools.js  # Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only)
+├── mcp-tools.js  # MCP Tool Definitions for Amicus
 ├── opencode-client.js  # OpenCode SDK Client Wrapper
 ├── prompt-builder.js  # System Prompt Builder
-├── session-manager.js  # * Session status constants
+├── session-manager.js  # Session Manager Module
 └── session.js  # Session Resolver
 electron/
 ├── assets/
@@ -170,14 +170,14 @@ electron/
 │   └── icon.svg
 ├── fold.js  # Fold Logic
 ├── ipc-setup.js  # IPC Setup Handlers
-├── load-failsafe.js  # @param {*} value @returns {string} HTML-escaped text
+├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
-├── setup-ui-aliases.js  # Grouping metadata for the 20 default aliases
+├── setup-ui-aliases.js  # Setup UI - Alias Editor
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
-├── setup-ui-keys.js  # Provider metadata for the setup form
+├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
@@ -186,22 +186,22 @@ electron/
 └── window-position.js  # Window Position Calculator
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
-├── benchmark-thinking.js  # * Run a single test with specified model and thinking level
-├── check-file-sizes.js  # List git-tracked files (whole-tree CI scan, no staging area).
+├── benchmark-thinking.js  # Benchmark Thinking Levels
+├── check-file-sizes.js  # File size enforcement for the pre-commit hook and the whole-tree CI gate (--all).
 ├── check-html.js
-├── check-secrets.js  # List git-tracked files (whole-tree CI scan, no staging area).
+├── check-secrets.js  # Secret detection for the pre-commit hook and the whole-tree CI gate (--all).
 ├── check-ui.js
 ├── debug-cdp.js
 ├── eval-with-monitoring.sh
 ├── generate-docs-helpers.js  # Helper functions for generate-docs.js.
-├── generate-docs.js  # @param {string} dirPath @returns {string[]} Sorted .md filenames
+├── generate-docs.js  # Auto-generate CLAUDE.md sections from source code.
 ├── generate-icon.js  # Generate app icon PNG from SVG source.
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
-├── postinstall.js  # Install the chat skill to ~/.claude/skills/sidecar/
+├── postinstall.js  # Post-install script for amicus
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
 ├── test-tools.sh
-├── validate-docs.js  # * Main entry point.
+├── validate-docs.js  # CLAUDE.md drift detection script.
 ├── validate-thinking.js
 └── validate-ui.js
 evals/
@@ -210,13 +210,13 @@ evals/
 │   ├── evaluator.test.js
 │   ├── result_writer.test.js
 │   └── transcript_parser.test.js
-├── claude_runner.js  # Recursively copy a directory
+├── claude_runner.js
 ├── eval_tasks.json
-├── evaluator.js  # Recursively find all files relative to baseDir
+├── evaluator.js
 ├── README.md
-├── result_writer.js  # Format token count as human-readable string (e.g., "15.7k tok").
-├── run_eval.js  # Load eval tasks
-└── transcript_parser.js  # Extract text from tool result content (string, array, or object)
+├── result_writer.js
+├── run_eval.js  # Sidecar Agentic Eval Runner
+└── transcript_parser.js  # Parse Claude Code stream-json output into structured transcript.
 <!-- /AUTO:tree -->
 
 ---
@@ -227,72 +227,72 @@ evals/
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
-| `cli.js` | * Default values per spec §4.1 | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `DEFAULTS()` |
+| `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `DEFAULTS()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
 | `context-compression.js` | Context Compression Module | `compressContext()`, `estimateTokenCount()`, `buildPreamble()`, `DEFAULT_TOKEN_LIMIT()` |
 | `context.js` | Context Filtering Module | `filterContext()`, `parseDuration()`, `estimateTokens()`, `takeLastNTurns()` |
 | `drift.js` | Context Drift Detection Module | `calculateDrift()`, `formatDriftWarning()`, `countTurnsSince()`, `isDriftSignificant()` |
 | `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS()` |
-| `headless.js` | * Default timeout: 15 minutes per spec §6.2 | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `formatFoldOutput()` |
+| `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `formatFoldOutput()` |
 | `index.js` | Amicus - Main Module | `startAmicus()`, `startSidecar()`, `listAmicus()`, `listSidecars()`, `resumeAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `LEGACY_TOOL_ALIASES()` |
-| `mcp-tools.js` | Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only) | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
+| `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `opencode-client.js` | OpenCode SDK Client Wrapper | `parseModelString()`, `createClient()`, `createSession()`, `createChildSession()`, `sendPrompt()` |
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE()` |
-| `session-manager.js` | * Session status constants | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
+| `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `decodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
-| `sidecar/continue.js` | Load previous session data (metadata, summary, conversation) | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
+| `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
-| `sidecar/fanout-leg.js` | Map a runHeadless result to a leg metadata status. | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
-| `sidecar/fanout-output.js` | Format ms as "1m5s" / "42s". | `formatWaveHuman()`, `fmtDuration()` |
-| `sidecar/fanout.js` | Default max legs per wave (env-overridable). | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
-| `sidecar/interactive.js` | Check if Electron is available (lazy loading guard) | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
-| `sidecar/models.js` | '0.000003' per token → '3.00' per Mtok; '—' when unknown or variable (-1) | `handleModels()`, `buildFallbackDriftReport()` |
-| `sidecar/progress.js` | Lifecycle stage labels | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
+| `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
+| `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
+| `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
+| `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
+| `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
+| `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
-| `sidecar/resume.js` | Load session metadata from session directory | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
-| `sidecar/session-finalize.js` | Map a runHeadless result to the canonical terminal status + process exit code. | `resolveTerminalState()` |
-| `sidecar/session-utils.js` | Standard heartbeat interval in milliseconds | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
+| `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
+| `sidecar/session-finalize.js` |  | `resolveTerminalState()` |
+| `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `detectApiKeys()`, `runInteractiveSetup()`, `runReadlineSetup()` |
-| `sidecar/start.js` | Generate a unique 8-character hex task ID | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
-| `utils/activity-poller.js` | SIGTERM a child process if it exists and isn't already killed. | `createActivityPoller()`, `killIfAlive()` |
-| `utils/agent-mapping.js` | * All OpenCode native agent names (lowercase) | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
-| `utils/alias-audit.js` | Catalog ids grouped by leading provider segment, e.g. 'openrouter', 'google'. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
+| `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
+| `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
+| `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
+| `utils/alias-audit.js` | Alias Audit (F5) — report + suggest, never auto-repair. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `applyDirectApiFallback()`, `autoRepairAlias()` |
-| `utils/api-key-store.js` | Maps provider IDs to environment variable names | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
-| `utils/api-key-validation.js` | Validation endpoints per provider | `validateApiKey()`, `validateOpenRouterKey()`, `VALIDATION_ENDPOINTS()` |
-| `utils/auth-json.js` | Known provider IDs that map to sidecar's PROVIDER_ENV_MAP | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
-| `utils/config.js` | Default model alias map — derived from the curated-models single source (F5) | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
+| `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
+| `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `VALIDATION_ENDPOINTS()` |
+| `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
+| `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `listCuratedRoutes()` |
 | `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
-| `utils/idle-watchdog.js` | @type {Object.<string, number>} Default timeouts per mode in milliseconds | `IdleWatchdog()`, `resolveTimeout()` |
-| `utils/input-validators.js` | MCP input validation with structured error responses. | `validateStartInputs()`, `findSimilar()` |
-| `utils/lifecycle.js` | @param {string} command @returns {boolean} | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
+| `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
+| `utils/input-validators.js` |  | `validateStartInputs()`, `findSimilar()` |
+| `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `normalizeMcpJson()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
-| `utils/model-catalog.js` | @returns {string} Absolute path to the catalog cache file | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `CATALOG_SCHEMA_VERSION()` |
-| `utils/model-fetcher.js` | Hardcoded Anthropic models (no public listing endpoint) | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
-| `utils/model-validator.js` | Alias-to-search-term mapping for filtering provider model lists | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()` |
-| `utils/path-setup.js` | Ensures that the project's node_modules/.bin directory is included in the PATH, | `ensureNodeModulesBinInPath()` |
+| `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `CATALOG_SCHEMA_VERSION()` |
+| `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
+| `utils/model-validator.js` | Model Validator | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()` |
+| `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
-| `utils/prompt-source.js` | Resolve the prompt for start/fanout from --prompt XOR --prompt-file (F4). | `resolvePromptSource()` |
-| `utils/quick-picks.js` | Numeric-desc comparator; same-base marker variant sorts after its base. | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
-| `utils/result-schema.js` | Leg/run statuses that count as terminal for wave aggregation. | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
+| `utils/prompt-source.js` |  | `resolvePromptSource()` |
+| `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
+| `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
-| `utils/session-abort.js` | Mark a session aborted (preserves prior behavior). | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
-| `utils/session-lock.js` | Atomic session lock files to prevent concurrent resume/continue. | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
-| `utils/shared-server.js` | Manages a single shared OpenCode server for MCP sessions. | `SharedServerManager()` |
+| `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
+| `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
+| `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
-| `utils/updater.js` | @type {import('update-notifier').UpdateNotifier|null} | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
-| `utils/validators.js` | * Provider to API key mapping | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
+| `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
+| `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 <!-- /AUTO:modules -->
 
 ---

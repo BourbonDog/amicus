@@ -16,6 +16,7 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'coverage', 'workspace', 'scr
 
 /**
  * Extract the first description line from a file's JSDoc comment.
+ * Looks for JSDoc that appears BEFORE any code statements (function, const, class, etc).
  * @param {string} filePath - Absolute path to a .js file
  * @returns {string} Description text, or empty string
  */
@@ -27,14 +28,19 @@ function extractJSDocDescription(filePath) {
     return '';
   }
 
+  // Extract only JSDoc that appears before any code statements.
+  // Remove shebang, skip leading blank lines, and normalize line endings.
+  const noShebang = content.replace(/^#![^\n]*[\n\r]*/m, '');
+  const cleaned = noShebang.replace(/\r\n/g, '\n').trim();
+
   // Single-line: /** desc */
-  const singleLine = content.match(/^\/\*\*\s+(.+?)\s*\*\//m);
+  const singleLine = cleaned.match(/^\/\*\*\s+(.+?)\s*\*\//);
   if (singleLine) {
     return singleLine[1].replace(/\s*\*\/$/, '').trim();
   }
 
   // Multi-line: first non-empty line after /**
-  const multiLine = content.match(/^\/\*\*\s*\n([\s\S]*?)\*\//m);
+  const multiLine = cleaned.match(/^\/\*\*\s*\n([\s\S]*?)\*\//);
   if (multiLine) {
     const lines = multiLine[1].split('\n');
     for (const line of lines) {

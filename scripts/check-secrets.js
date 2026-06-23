@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Secret detection script for pre-commit hook.
- * Scans staged files for API keys, tokens, and private key material.
+ * Secret detection for the pre-commit hook and the whole-tree CI gate (--all).
+ * Scans files for API keys, tokens, and private key material.
  *
  * Usage:
  *   node scripts/check-secrets.js                                    # Scans git staged files
+ *   node scripts/check-secrets.js --all                             # Scans all tracked files (CI mode)
  *   const { scanForSecrets } = require('./scripts/check-secrets');   # Library use
  */
 
