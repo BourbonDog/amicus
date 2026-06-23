@@ -100,4 +100,4 @@ async function getCatalogInfo(opts = {}) {
   return { models, fetchedAt: cache ? cache.fetchedAt : null };
 }
 
-module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, CATALOG_SCHEMA_VERSION };
+module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, readCache, CATALOG_SCHEMA_VERSION };

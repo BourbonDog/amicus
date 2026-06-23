@@ -137,6 +137,7 @@ src/
 │   ├── model-validator.js  # Model Validator
 │   ├── path-setup.js
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
+│   ├── pricing.js
 │   ├── prompt-source.js
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── result-schema.js
@@ -280,11 +281,12 @@ evals/
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `normalizeMcpJson()` |
 | `utils/mcp-validators.js` | MCP Validators | `validateMcpSpec()`, `validateMcpConfigFile()` |
-| `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `CATALOG_SCHEMA_VERSION()` |
+| `utils/model-catalog.js` | OpenRouter model catalog cache (F3 #18 / F5 foundation). | `getCatalog()`, `refreshCatalog()`, `catalogPath()`, `getCatalogInfo()`, `readCache()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
 | `utils/model-validator.js` | Model Validator | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
+| `utils/pricing.js` |  | `emptyUsageTotals()`, `sumPerMessageUsage()`, `lookupPricing()`, `resolveLegCost()`, `resolveUsage()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `statusFromResult()`, `buildRunResult()`, `buildWaveResult()` |
