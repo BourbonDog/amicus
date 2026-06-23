@@ -35,7 +35,7 @@ non-Claude chairman + per-model inspectable artifacts.
   chair) is prose workflow Claude performs while driving the `amicus` CLI. v3 note: the *transport*
   is now engine-native — each review wave is ONE `amicus fanout --json` call returning structured
   run documents — but scoring, tallying, anonymization, and synthesis remain Claude's manual work.
-  No backend, no parsing code beyond reading JSON fields.
+  No backend, no parsing code beyond reading JSON fields. Deterministic arithmetic/formatting/schema helpers under `amicus council` (findings validation, tier tally, street-cred, ledger) are sanctioned; judgment, synthesis, anonymization, and de-anonymization remain Claude's inline work.
 
 ## 3. What changes vs. v1
 
@@ -44,7 +44,7 @@ non-Claude chairman + per-model inspectable artifacts.
 | Independent reviews | ✅ Phase 2 parallel sidecars | ✅ Stage 1 — now emits a **structured findings list** |
 | Cross-review | ❌ none | ⭐ **Stage 2** — anonymized peer ranking **+** per-finding adjudication |
 | Synthesis | Claude synthesizes | ⭐ **Council-model chair** synthesizes; Claude only presents |
-| Decision tiers | Claude's consensus/divergence read | ⭐ **Peer-validated** tiers (Confirmed / Contested / Singleton) |
+| Decision tiers | Claude's consensus/divergence read | ⭐ **Peer-validated** tiers (Disputed / Confirmed / Contested / Singleton) |
 | Scoring | none | ⭐ Reviewer **street-cred** + per-finding **peer-confidence** |
 | Artifacts | reviewed copy + report | + per-model raw reviews, cross-review matrix, chair verdict (run folder) |
 | MODEL-NOTES | per-model quirks | + **reviewer-reliability** rolling table feeding recommendations |
@@ -106,11 +106,9 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 - Chair selection & fallback: §5.3.
 
 ### Stage 4 — Tiered decisions (peer-validated)
-- **Consensus tier** = **Confirmed** findings (peers agree) → offer one **bulk accept/deny**
-  (user may name exceptions).
-- **Judgment tier** = **Contested** (peers dispute/split) or **Singleton** (only the raiser)
-  findings → present **each individually**, showing the dissent and which model raised/disputed it.
-- Record every decision (accepted / denied / modified).
+- **Consensus tier** = **Confirmed** findings (≥ 2 peer agreements, agrees dominate) → offer one **bulk accept/deny** (user may name exceptions).
+- **Judgment tier** = **Disputed** (strong peer pushback), **Contested** (live dispute), or **Singleton** (only the raiser) → present **each individually**, showing the adjudication data and which model raised/disputed it.
+- Record every decision (accepted / denied / modified / deferred).
 
 ### Stage 5 — Outputs
 - **Editable source** → write `<stem>-reviewed.<ext>` next to the original (accepted changes
@@ -119,8 +117,8 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 
 ### Stage 6 — Capture lessons (compounding)
 - Reflect on failures/mitigations and briefing wording, as today.
-- **Additionally** update the per-model **reviewer-reliability** table (§7).
-- **Write the proposed MODEL-NOTES diff to a run-folder file and get approval before writing.**
+- **Ledger auto-appends** — `ledger.appendRun(record)` writes one row per (run × model) to `council-ledger.jsonl` automatically at finalize (shown in the run summary). No manual reliability-table update needed.
+- **Qualitative MODEL-NOTES update (approval-gated):** draft per-model quirk/conformance notes; write the proposed diff to `_tmp-proposed-model-notes-update.md`; present its path in the approval prompt; do not write until approved.
   The approval prompt carries the diff file's path; chat text alone is not sufficient (an approval
   dialog can hide the chat transcript). Keep it tight.
 
@@ -136,14 +134,23 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
   and judged blind by the council models. Claude never ranks/adjudicates (it holds the map) —
   the asymmetry detailed in §5.4.
 
-### 5.2 Scoring (Claude tallies by hand — no code required)
-- **Street cred** = each model's **average rank position** across all judges' `FINAL RANKING:`
-  blocks (lower = better), exactly as LLM Council's aggregate. Surface as a small table.
-- **Per-finding peer-confidence** = qualitative tier from the adjudications:
-  - **Confirmed** — agrees clearly outweigh disputes (and ≥2 judges engaged).
-  - **Contested** — meaningful split or explicit disputes.
-  - **Singleton** — only the original raiser; others neutral/silent.
-  These tiers drive Stage 4. Claude exercises judgment at the margins; no rigid formula.
+### 5.2 Scoring (`amicus council tally` computes; Claude may override at the margins)
+
+**Street cred** — computed two ways by `amicus council tally`:
+- **withSelf** = each model's mean rank position across **all** judges' `FINAL RANKING:` blocks (lower = better).
+- **peersOnly** = mean rank across judges **other than** that model (self-vote excluded).
+The cross-review matrix shows both; the ledger and Stage-0 bench recommendations consume **peersOnly** only.
+
+**Per-finding peer-confidence tier** — determined by a **peers-only** cascade: for a finding raised by model R, peers are all judges except R (the raiser's own adjudication is excluded — consistent with the peers-only street-cred rule). Let `a` = peer agrees, `d` = peer disputes. The cascade is exhaustive and mutually exclusive:
+
+| Priority | Tier | Rule | Meaning |
+|---|---|---|---|
+| 1 | **Disputed** | `d ≥ 2` and `d > a` | Strong peer pushback — the finding itself is likely wrong |
+| 2 | **Confirmed** | `a ≥ 2` and `a > d` | ≥ 2 independent corroborations, agrees dominate |
+| 3 | **Contested** | `d ≥ 1` (whatever remains) | At least one live dispute — in question |
+| 4 | **Singleton** | else (`d = 0` and `a < 2`) | At most one endorsement, no pushback — thin |
+
+`confidence` is `thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, and `(0,1)`. **Claude may override the tier at `thin` margins** (recorded as `tierOverride: {from, to, reason}` and surfaced in the matrix and `verdict.json`). These four tiers drive Stage 4. `amicus council tally` assigns them deterministically; judgment at the margins remains Claude's.
 
 ### 5.3 Chair selection & fallback
 - Default: Claude **recommends a non-Claude chair** from the council each run (often the
@@ -171,22 +178,16 @@ One tidy run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-counc
 - `review-<model>.md` ×N — raw Stage 1 reviews (plus `review-claude.md` when "Claude in the
   council" is on)
 - `crossreview-matrix.md` — adjudication grid + street-cred table (de-anonymized)
-- `verdict.md` — the chair's synthesis
+- `verdict.md` — the chair's synthesis (prose)
+- `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `buildVerdict(record, decisions)` at Stage 5
 - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared"
   readout when "Claude in the council" is on)
 - `<stem>-reviewed.<ext>` — written **next to the original**, as today (editable sources only)
 - Temp extracts get a clearly-temporary name and are cleaned up at the end.
 
 ## 7. MODEL-NOTES reviewer-reliability
-Add a compact rolling table consulted in Stage 0 and updated (with approval) in Stage 6:
 
-| model | runs | avg street-cred | confirm-rate | notes |
-|---|---|---|---|---|
-
-- **avg street-cred** — running average rank when peer-ranked.
-- **confirm-rate** — share of this model's findings that ended up **Confirmed** by peers.
-- Used to justify recommendations ("DeepSeek findings peer-confirm ~80% → strong default
-  reviewer"). Kept tight per the existing no-bloat rule; merge/prune rather than append.
+The append-only `council-ledger.jsonl` (consumed via `amicus council stats`) is the **authoritative source of quantitative reviewer-reliability data** — runs, avg peers-only street-cred, confirm-rate, fact-error rate, conformance distribution. `MODEL-NOTES.md` keeps only *qualitative* per-model quirks and structural-conformance notes (`clean` / `repaired` / `unstructured`); it may embed a snapshot generated from `amicus council stats --json` but is no longer hand-edited for numbers. Stage-6 reliability updates are written by the ledger auto-append; the MODEL-NOTES prose update remains approval-gated.
 
 ## 8. Gating, cost, degradation & failure handling
 
@@ -207,23 +208,22 @@ Add a compact rolling table consulted in Stage 0 and updated (with approval) in 
   - **Stage 3:** chair failure uses the same fallback chain (re-run → promote next-best non-Claude
     → Claude chairs with explicit disclosure).
 - **Run stats (v3):** `report.md` includes a per-leg table (model, status, durationMs) read from
-  the wave/run documents. The schema carries no cost data — never invent cost figures.
+  the wave/run documents. `durationMs` and `usage` are copied verbatim from the per-leg run docs; any leg with no run doc gets `durationMs: null` (and `usage: null`) — never invent a value. The schema carries no cost data — never invent cost figures.
 - **Transient failures:** provider 502s etc. → re-run the affected leg (solo `start --json`) or
   the wave; never present a half-finished run as an answer.
 
 ## 9. Non-goals (YAGNI)
 - No web UI, API server, or persistent conversation store (LLM Council's app shell).
-- No code/backend for scoring or parsing — Claude does it inline.
+- No code/backend for scoring or parsing — Claude does it inline. Deterministic arithmetic/formatting/schema helpers under `amicus council` (findings validation, tier tally, street-cred, ledger) are sanctioned; judgment, synthesis, anonymization, and de-anonymization remain Claude's inline work.
 - No automatic MODEL-NOTES writes — always approval-gated.
 - Claude is **not** a council member by default; it joins only via the opt-in toggle (§5.4),
   and even then it is judged-but-non-voting/non-chairing.
 
 ## 10. Open questions
 - None blocking. Possible later refinement: a numeric peer-confidence score instead of the
-  three qualitative tiers, if tiers prove too coarse in practice.
+  four qualitative tiers, if tiers prove too coarse in practice.
 
 ## 11. Implementation surface
-- `SKILL.md` — the Stage 0–6 council flow on the v3 transport.
-- `MODEL-NOTES.md` — reviewer-reliability table, per-model quirks, cost guardrail, Stage-2
-  briefing tips. Engine workarounds that F1/F2/F4 made obsolete were pruned at v3.
-- No other files.
+- `SKILL.md` — the Stage 0–6 council flow on the v3 transport (WS-3: findings contract, tally assembly recipe, `amicus council tally/stats`, `verdict.json`, ledger auto-append).
+- `MODEL-NOTES.md` — qualitative per-model quirks, structural-conformance notes, cost guardrail, Stage-2 briefing tips. Quantitative reliability data now generated by `amicus council stats` (ledger). Engine workarounds that F1/F2/F4 made obsolete were pruned at v3.
+- `src/council/` — the deterministic helpers (`findings.js`, `tally.js`, `verdict.js`, `ledger.js`). No other files.

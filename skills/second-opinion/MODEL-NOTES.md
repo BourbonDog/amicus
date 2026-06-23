@@ -33,7 +33,9 @@ _Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see chang
   names — so rankings are directly comparable (one fanout wave distributes it).
 - **Require a `FINAL RANKING:` block** at the end of the response (e.g. `1. Review C / 2. Review
   A …`), plus a per-finding `agree | dispute | neutral` verdict with a one-line reason for each
-  finding referenced by label+id (e.g. `A2`).
+  finding referenced by run-global label id (e.g. `A2` = Review A's 2nd finding).
+- After de-anonymizing, assemble the tally input (see SKILL.md Stage 2 assembly recipe) and run
+  `amicus council tally <input.json> --json` — do not hand-tally tiers or street-cred numbers.
 
 ## Per-model notes
 
@@ -59,24 +61,23 @@ _Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see chang
 - Opus / o-series etc. are reachable via amicus **if their API keys are configured**. Add notes
   here the first time each is used.
 
-## Reviewer-reliability table
+## Reviewer-reliability
 
-Consulted in Stage 0 (council selection) and updated with approval in Stage 6.
+Quantitative reliability data (runs, avg peers-only street-cred, confirm-rate, fact-error rate, conformance distribution) is now generated from the append-only `council-ledger.jsonl` via:
 
-- **avg street-cred** — rolling average of this model's per-run street-cred (mean rank position
-  across judges' `FINAL RANKING:` blocks; lower = better).
-- **confirm-rate** — share of this model's findings that reached the **Confirmed** tier (agrees
-  outweigh disputes, ≥ 2 judges engaged).
+```
+amicus council stats [--json]
+```
 
-| model | runs | avg street-cred | confirm-rate | notes |
-| --- | --- | --- | --- | --- |
-| deepseek | 1 | 2.33 | 100% (12/12) | strong synthesis, resilient; chaired well |
-| gpt | 1 | 2.67 | 92% (23/25) | thorough but verbose; self-ranked #1 → discount; OpenRouter |
-| gemini | 1 | 3.67 | 89% (8/9) | fast, large-context; more absolute/adversarial ("blocker" inflation); ranked lowest |
+**Do not hand-edit reliability numbers here.** The ledger is the authoritative source; `amicus council stats` aggregates it and flags low-N models (`runs < 3`). Consult `amicus council stats` in Stage 0 for bench recommendations. In Stage 6 the ledger row is appended automatically — no manual update needed.
 
-_Scale note: the 2026-06-04 run used a 4-review pool (Claude in-council), so street-cred is on a
-1–4 scale rather than 1–3 — treat these as run-1 baselines, not directly comparable to future
-3-model runs. Merge/prune rather than append._
+This section keeps only per-model **qualitative quirks** and **structural-conformance notes** (`clean` / `repaired` / `unstructured`), which cannot be captured by the ledger:
+
+### Qualitative notes (hand-curated)
+
+- **deepseek** — strong synthesis, resilient; occasional transient 502 → re-run the leg. Proven chair. Conforms cleanly.
+- **gpt** — thorough but verbose; peers have dinged it for volume-over-judgment. Self-ranked its own review #1 in the 2026-06-04 run → the peers-only street-cred rule (now enforced by `tally`) mitigates this. Conforms cleanly. Accessible via OpenRouter.
+- **gemini** — fast, very large context; tends toward absolute severity labels ("blocker" inflation vs peers). Conforms cleanly; watch for preamble narration — instruct it to emit the JSON block verbatim after the prose.
 
 ## Cost guardrail
 - The budget gate enforces this in code: a per-$/Mtok threshold (ON by default)

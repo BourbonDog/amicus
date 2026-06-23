@@ -54,7 +54,7 @@ in this run is written here. Use its absolute path in all `--prompt-file` argume
   `--prompt-file` — never inline a briefing as a CLI argument. All `_tmp-*` files are cleaned up
   after the run.
 
-**Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting the reviewer-reliability table in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — e.g.:
+**Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting both the reviewer-reliability data from `amicus council stats` (the authoritative quantitative source — runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — e.g.:
 
 > This run uses 3 council models across 2 fanout waves + 1 chair call (~7 model runs), ~10 min.
 
@@ -110,18 +110,32 @@ equivalent.
 
 **Required structured output from every model.** Instruct each council model to produce:
 
-1. A **findings list** — every finding contains:
-   - `id` — sequential integer within this review (1, 2, 3…)
-   - `claim` — the specific issue or observation
-   - `severity` — one of: `blocker | major | minor | nit`
-   - `location` — section heading or verbatim quote identifying where in the artifact
-   - `rationale` — why this is a problem or worth noting
+1. A **prose review** — the reviewer's full narrative assessment of the artifact.
 
-2. A **short overall take** — 2–4 sentences summarizing the reviewer's overall assessment.
+2. A **trailing fenced ` ```json ` block** immediately after the prose, containing:
+   ```json
+   {
+     "overall": "one-paragraph take",
+     "findings": [
+       { "id": 1, "severity": "blocker",
+         "claim": "…", "location": "…", "rationale": "…" }
+     ]
+   }
+   ```
+   - `id` — sequential integer within this review (`1..n`); at Stage-2 assembly Claude rewrites each into a **run-global label id** (`A1`, `B1`, …) by prefixing the review's anonymized label.
+   - `severity ∈ {blocker, major, minor, nit}`
+   - `claim`, `location`, `rationale` — non-empty strings.
 
-Instruct models to emit the structured output verbatim, without preamble, so it reads cleanly.
+Instruct models to emit the structured JSON verbatim after the prose, without preamble, so it parses cleanly.
 
-When the wave returns, save each leg's `summary` to the run folder as `review-<model>.md`
+**After the wave returns, validate each leg's findings block** using `validateFindings` (Unit A — `src/council/findings.js`). If a leg's JSON fails validation:
+1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` is **not** subject to the WS-2 fanout cost gate, so a repair cannot be refused mid-council.)
+2. If still malformed, retry **once more** (cap = **2** re-prompts total).
+3. If still malformed after 2 retries, mark the review `unstructured` and hand-parse its prose into the schema. The review proceeds — never dropped for a formatting miss.
+
+Record per-model **conformance** (`clean` | `repaired` | `unstructured`) for inclusion in the tally input's `runStats` and the Stage-6 MODEL-NOTES note.
+
+Save each leg's full output (prose + findings block) to the run folder as `review-<model>.md`
 (one file per reviewer) before moving on.
 
 **"Claude in the council" (when toggled on):** Claude also produces a **fresh** Stage-1 review on the artifact in the identical findings format — a new structured pass on the artifact, not a formalization of anything said upstream. This review is added to the bundle as one more anonymous entry. Claude does not rank or adjudicate in Stage 2 (it holds the label map), and does not chair in Stage 3. Save it as `review-claude.md`.
@@ -172,7 +186,21 @@ FINAL RANKING:
 
 **Task B — Adjudicate findings.** For every finding in the bundle, state: `agree | dispute | neutral` plus one-line reason. Reference each finding as **review-label + finding-id** — for example, `A2` means Review A's 2nd finding, `B1` means Review B's 1st finding. An "I missed this — it's valid" counts as `agree`.
 
-As each judge's ranking + adjudication response returns, collect it (the raw per-judge responses are working intermediates, not separate run-folder artifacts). Once all are in, de-anonymize and tally them into the single `crossreview-matrix.md` — the adjudication grid plus the street-cred table (see *Output & naming*). This de-anonymized data feeds Stage 3 (chair briefing), the scoring/street-cred table, and the cross-review matrix artifact — but is never re-anonymized or forwarded to any council model.
+As each judge's ranking + adjudication response returns, collect it (the raw per-judge responses are working intermediates, not separate run-folder artifacts). Once all are in, **assemble the de-anonymized tally input** and then call `amicus council tally`:
+
+**Stage-2 → tally assembly recipe (Claude's work before calling `tally`):**
+1. **Rewrite finding ids to run-global label ids.** Each Stage-1 review's local integer ids (`1`, `2`, `3`…) become `A1`, `A2`, `A3`… (where `A` is that review's anonymized label). The label↔model map (`Review A → deepseek`, etc.) is the key.
+2. **Build `adjudications`** — for every judge across all findings: `findingId` = run-global label id; `judge` = the model id (de-anonymized via the map); `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding. The raiser's own adjudication of its own finding is **included in the input** (the tally engine excludes it when computing peers-only tiers — do not pre-filter it).
+3. **Translate each judge's `FINAL RANKING:` block** — convert the label order (`1. Review C / 2. Review A / 3. Review B`) into a model `order` array via the same map (e.g. `{C→mistral, A→deepseek, B→gpt}` ⇒ `order: ["mistral","deepseek","gpt"]`). This is each entry in `rankings[]`.
+4. **Populate `runStats`** from the per-leg run documents emitted by `fanout --json` (and any solo red-team/chair `start --json` docs): copy `model`, `status`, `durationMs`, `usage` verbatim. Any leg with no run doc gets `durationMs: null` and `usage: null` — never invent a value. Attach `role` (`council` | `redteam` | `claude`), `wasChair`, and `conformance` (`clean` | `repaired` | `unstructured`) as council-domain labels.
+
+Then call:
+
+```
+amicus council tally <run-folder>/tally-input.json --json
+```
+
+The output `record` carries the deterministic tiers (Disputed / Confirmed / Contested / Singleton), `confidence` (`solid` | `thin`), both street-cred numbers (`withSelf` and `peersOnly`), the validated `runStats`, and `tierCounts`. **Claude may override a `thin`-confidence tier at the margins** before Stage 4 — record the override in `tierOverride: {from, to, reason}`; the matrix and `verdict.json` surface it. De-anonymize and write the tally results to `crossreview-matrix.md` — the adjudication grid plus the street-cred table. This data feeds Stage 3 (chair briefing) and is never re-anonymized or forwarded to any council model.
 
 ---
 
@@ -212,11 +240,11 @@ Save the chair's output to the run folder as `verdict.md`.
 
 ### Stage 4 — Tiered decisions (peer-validated)
 
-All findings from the bundle are sorted into two tiers based on the **peer-confidence tier derived from the Stage 2 adjudication data**. These tiers are **derived from the Stage 2 adjudications** — a judgment call, not a rigid formula (see *Key mechanics → §5.2 Scoring* for the full rule): a finding is **Confirmed** when agrees clearly outweigh disputes (≥ 2 judges engaged), **Contested** when there is a meaningful split or explicit disputes, and **Singleton** when only its original raiser stands behind it. Present the tiers in this order.
+All findings from the bundle are sorted into tiers based on the **peer-confidence tier assigned by `amicus council tally`** (see *Key mechanics → §5.2 Scoring* in COUNCIL-DESIGN.md for the full cascade): **Disputed** (strong peer pushback — `d ≥ 2` and `d > a`), **Confirmed** (≥ 2 peer agreements, agrees dominate), **Contested** (at least one live dispute), **Singleton** (at most one endorsement, no pushback). `confidence: thin` cells `(0,0)/(1,0)/(0,1)` are override-eligible (Claude records any override in `tierOverride`). Present the tiers in this order: Confirmed first (bulk decision), then Disputed and Contested and Singleton individually in the judgment tier.
 
 **Scale-down:** In a 1-model run, Stage 2 was skipped — there is no peer-confidence data, so present every finding individually for decision (no tiers). In a 2-model run, the Confirmed tier rests on thin cross-review (one ranker per review, per Stage 0) — say so when presenting it.
 
-**Consensus tier — Confirmed findings** (peers agree clearly outweigh disputes, with ≥ 2 judges engaged)
+**Consensus tier — Confirmed findings** (≥ 2 peer agreements, agrees dominate)
 
 - Present the full list in one block: id, claim, severity, and which models raised / endorsed it.
 - Offer one **bulk accept/deny decision** over the whole tier:
@@ -225,12 +253,13 @@ All findings from the bundle are sorted into two tiers based on the **peer-confi
 
 - The user may accept the block, deny the block, or enumerate exceptions. Handle exceptions individually before moving on.
 
-**Judgment tier — Contested and Singleton findings**
+**Judgment tier — Disputed, Contested, and Singleton findings**
 
-This is one tier with two sub-types presented separately. Present each finding individually. Handle the two sub-types distinctly:
+This is one tier with three sub-types presented separately. Present each finding individually. Handle the sub-types distinctly:
 
-- **Contested** (meaningful split or explicit disputes): For each finding show the claim and severity, which model raised it, who agreed, who disputed, and the one-line reasons from the adjudications. Ask for a decision before proceeding to the next: **accept / deny / modify**.
-- **Singleton** (only the original raiser; no other judge engaged — neutral or silent): For each finding show the claim and severity and that no other judge engaged with it. Name the sole raiser. Ask for a decision before proceeding to the next: **accept / deny / modify**.
+- **Disputed** (`d ≥ 2` and `d > a` — strong peer pushback, the finding itself may be wrong): For each finding show the claim, severity, which model raised it, which peers dispute it and why. Ask for a decision before proceeding to the next: **accept / deny / modify**.
+- **Contested** (`d ≥ 1` with a meaningful split): For each finding show the claim and severity, which model raised it, who agreed, who disputed, and the one-line reasons from the adjudications. Ask for a decision before proceeding to the next: **accept / deny / modify**.
+- **Singleton** (only the original raiser; all other judges were neutral or silent — `d = 0` and `a < 2`): For each finding show the claim and severity and that no other judge engaged with it. Name the sole raiser. Ask for a decision before proceeding to the next: **accept / deny / modify**.
 
 **Recording decisions.** Keep a running decision log throughout this stage — every finding's outcome (accepted / denied / modified, with any modification noted). This log feeds Stage 5 (only accepted changes go into the reviewed copy) and Stage 6 (the run-folder report).
 
@@ -249,10 +278,11 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
 - Do not attempt to produce a modified copy.
 - Write a **standalone reviewed report** instead: the full decision log, the chair's verdict, and clear callouts of what should be changed and where — formatted so the user can apply the changes manually.
 
-**Run-folder artifacts — always write these** regardless of source type. The full artifact set and naming conventions are defined in the *Output & naming* section of this skill; write every artifact specified there. The four canonical run-folder files are:
+**Run-folder artifacts — always write these** regardless of source type. The full artifact set and naming conventions are defined in the *Output & naming* section of this skill; write every artifact specified there. The canonical run-folder files are:
 - `review-<model>.md` × N (already saved in Stage 1)
 - `crossreview-matrix.md` — the de-anonymized adjudication grid and street-cred table
 - `verdict.md` (already saved in Stage 3)
+- `verdict.json` — write via `buildVerdict(record, decisions)` (`src/council/verdict.js`): pass the tally `record` from Stage 2 and the Stage-4 decision map (accepted / denied / modified / deferred per finding, plus any `duplicateOf` links Claude identified). This is the schema-stamped machine-readable record of the full run. Write it with an atomic tmp+rename to the run folder.
 - `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was
   applied (+ the "How Claude's review fared" readout when "Claude in the council" is on) + a
   **run-stats table**: one row per model call — **stage** (which stage you launched the call for)
@@ -260,7 +290,7 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
   block. Cost is `usage.cost.amount` (USD); mark it with its `usage.cost.source`
   — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
   invent a figure. Add a wave **total cost** row from the wave document's
-  `usage.cost` (`source: reported|estimated|mixed|unknown`).
+  `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`; never invent a value.
 
 Tell the user exactly which files were written and where.
 
@@ -277,10 +307,7 @@ This stage updates `MODEL-NOTES.md` to make future runs better. **Nothing is wri
 
 Draft new or updated entries for the per-model sections of `MODEL-NOTES.md` that capture what was learned.
 
-**Update the reviewer-reliability table.** After every completed council run, update the rolling table in `MODEL-NOTES.md` (the "Reviewer reliability" table) for each council model that participated:
-- **avg street-cred** — incorporate this run's rank position into each model's running average.
-- **confirm-rate** — incorporate this run's share of each model's findings that ended up Confirmed.
-- Merge into the existing row for that model; prune the notes column to stay tight.
+**Ledger auto-append (automatic — no approval required).** After `verdict.json` is written, the ledger row is appended automatically when the tally record is finalized — `ledger.appendRun(record)` writes one row per (run × model) to the append-only `council-ledger.jsonl` under `getConfigDir()`. The run summary shows the appended row. This is a deterministic, content-free model-level record (no finding text, no claim strings, no artifact body content). The quantitative reviewer-reliability data in `MODEL-NOTES.md` is now sourced entirely from `amicus council stats` (which aggregates the ledger) — **do not hand-edit reliability numbers in MODEL-NOTES**.
 
 **Compose the proposed MODEL-NOTES diff.** Combine the run-lessons updates and the reviewer-reliability table updates into a single proposed diff (old → new for every changed section). **Write the full diff to a file in the run folder** — `_tmp-proposed-model-notes-update.md` — so the user can open and review it before deciding. Presenting the diff as chat text alone is **not sufficient**: an approval dialog can hide the chat transcript, so the user may be asked to decide on a diff they never saw.
 
@@ -312,23 +339,21 @@ Claude **de-anonymizes only** at two points: when computing scores and when writ
 
 ### §5.2 Scoring
 
-Claude tallies two scoring signals from the Stage-2 outputs. No code is required; Claude works through the structured output directly.
+`amicus council tally` computes the two scoring signals from the assembled tally input. Claude's role is to assemble the input (Stage-2 assembly recipe in Stage 2 above) and to exercise judgment on `thin`-confidence overrides.
 
-**Street-cred** = each model's **average rank position** across all judges' `FINAL RANKING:` blocks (lower is better). For example, if three judges rank DeepSeek 1st, 2nd, and 1st, its street-cred score is 1.33. Surface this as a compact table in the cross-review matrix and report. Street-cred drives the chair's weighting of reviewer findings in Stage 3 and feeds the reviewer-reliability table updated in Stage 6.
+**Street-cred** — computed two ways:
+- **withSelf** = each model's mean rank position across **all** judges' `FINAL RANKING:` blocks (lower is better).
+- **peersOnly** = mean rank excluding the model's own ranking of itself.
 
-**Per-finding peer-confidence tier** = a qualitative label derived from the Stage-2 adjudications for each finding:
+Both are surfaced in `crossreview-matrix.md` and `report.md`. The ledger and Stage-0 bench recommendations use **peersOnly** only.
 
-- **Confirmed** — agrees clearly outweigh disputes, with at least 2 judges having engaged with the finding.
-- **Contested** — a meaningful split exists or explicit disputes were recorded.
-- **Singleton** — only the original raiser stands behind it; all other judges were neutral or silent.
-
-These three tiers drive the Stage-4 decision flow. Assigning a tier is a **judgment call, not a rigid formula** — Claude reads the adjudication signals and makes the call at the margins, especially when engagement is sparse or agreements and disputes are close in number. When in doubt, downgrade toward Contested or Singleton rather than overstate confidence.
+**Per-finding peer-confidence tier** — assigned by the peers-only cascade in `amicus council tally` (see COUNCIL-DESIGN.md §5.2 for the full table): **Disputed** → **Confirmed** → **Contested** → **Singleton**. The raiser's own adjudication is excluded from the cascade. `confidence: thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, `(0,1)`. **Claude may override a `thin` tier at the margins** before presenting Stage 4 — the override is recorded in `tierOverride: {from, to, reason}` and surfaced in the matrix and `verdict.json`.
 
 ---
 
 ### §5.3 Chair selection & fallback
 
-The default is for Claude to **recommend a non-Claude chair** from the council — typically the model with the strongest reasoning capability or the best reviewer-reliability score in `MODEL-NOTES.md` — and the user confirms this recommendation before the run launches (Stage 0). The chair **may** be a council member who already participated in Stages 1 and 2; it receives the full de-anonymized picture (all reviews with model attribution, all rankings, all adjudications) so it can synthesize from a complete view.
+The default is for Claude to **recommend a non-Claude chair** from the council — typically the model with the strongest reasoning capability or the best peers-only street-cred from `amicus council stats` — and the user confirms this recommendation before the run launches (Stage 0). The chair **may** be a council member who already participated in Stages 1 and 2; it receives the full de-anonymized picture (all reviews with model attribution, all rankings, all adjudications) so it can synthesize from a complete view.
 
 **Fallback chain if the chair call fails:**
 
@@ -349,8 +374,8 @@ Enabling this toggle lets the bench judge Claude's own take, so you can see how 
 **Always fresh.** When the toggle is on, Claude performs a new structured Stage-1 review on the artifact — a fresh pass in the required findings format, not a formalization or summary of anything said earlier in the main conversation. Upstream feedback does not seed or constrain this review.
 
 **"How Claude's review fared" readout.** Included in both `crossreview-matrix.md` and `report.md` when the toggle is on:
-- Claude's street-cred rank among peers (its average rank position in the judges' `FINAL RANKING:` blocks).
-- The Confirmed / Contested / Singleton split of Claude's findings — how many of its claims the bench endorsed, contested, or ignored.
+- Claude's street-cred rank among peers (its `peersOnly` average rank position in the judges' `FINAL RANKING:` blocks — `withSelf == peersOnly` for Claude since it never casts rankings).
+- The Disputed / Confirmed / Contested / Singleton split of Claude's findings — how many of its claims the bench pushed back on, endorsed, disputed, or ignored.
 
 **Integrity.** When Claude presents results — including the bench's assessment of its own review — it reports the verdict at face value. Claude does not defend, contextualize away, or re-litigate findings the bench disputed or ranked poorly. The point of the toggle is an honest external read on Claude's review; undermining that defeats the purpose.
 
@@ -358,14 +383,14 @@ Enabling this toggle lets the bench judge Claude's own take, so you can see how 
 
 ## Model-recommendation heuristics
 
-Use these together with the reviewer-reliability table in `MODEL-NOTES.md`, which holds live performance data from prior runs:
+Use these together with `amicus council stats` (the ledger — authoritative quantitative reliability data: runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`:
 
 - **Large or long material, broad coverage sweep** → favor a large-context model (e.g., Gemini) that won't truncate or degrade on the full source.
 - **Reasoning-heavy critique, structured argument evaluation, citations** → favor a strong reasoner (e.g., DeepSeek, GPT, Opus) that will interrogate claims rather than accept them.
 - **Code review** → favor a code-strong model (e.g., DeepSeek, GPT, Opus); general-purpose models often miss implementation-level issues.
 - **Independence matters** → pick models from **different families**; two models from the same family produce correlated opinions and reduce the value of the cross-review.
 - **Contrarian / red-team value** → when material is persuasive, consensus-prone, or high-stakes, assign one model an explicit red-team brief: argue against the others, hunt for what they will miss. This is especially valuable when the default council is likely to agree.
-- **Consult the reviewer-reliability table** in `MODEL-NOTES.md` — a model's historical confirm-rate and avg street-cred are the best predictors of council value for a given run type.
+- **Consult `amicus council stats`** — a model's historical confirm-rate and avg peers-only street-cred (from the ledger) are the best predictors of council value for a given run type.
 
 Always **rank recommendations by fit**, state the trade-off for each option, and surface the estimated cost (an estimate, not a guarantee; unpriced legs disclosed as "cost unknown"). Never present a single option without explanation.
 
@@ -376,13 +401,14 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 - Run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no `output/` exists), containing:
   - `review-<model>.md` ×N — raw Stage 1 reviews (plus `review-claude.md` when "Claude in the council" is on)
   - `crossreview-matrix.md` — adjudication grid + de-anonymized street-cred table
-  - `verdict.md` — the chair's synthesis
+  - `verdict.md` — the chair's synthesis (prose)
+  - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `buildVerdict(record, decisions)` at Stage 5
   - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on) + a
     **run-stats table**: one row per model call — **stage** (which stage you launched the call for) plus **model, status, durationMs, and cost** read from the wave/run JSON `usage`
     block. Cost is `usage.cost.amount` (USD); mark it with its `usage.cost.source`
     — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
     invent a figure. Add a wave **total cost** row from the wave document's
-    `usage.cost` (`source: reported|estimated|mixed|unknown`).
+    `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
 - Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet, proposed
   MODEL-NOTES diff) live in the run folder and are cleaned up at the end of the run — the proposed-diff file
@@ -392,6 +418,5 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 
 ## Files
 
-- `MODEL-NOTES.md` — operating rules, per-model quirks, cost guardrail, and the reviewer-reliability rolling table. **Read it before Stage 0 (council selection and launch); update it (with approval) in Stage 6.**
-- `COUNCIL-DESIGN.md` — the design spec this skill implements (v3). Consult it if a mechanics
-  question arises that the skill prose does not resolve.
+- `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file.
+- `COUNCIL-DESIGN.md` — the design spec this skill implements (v3 + WS-3). Consult it if a mechanics question arises that the skill prose does not resolve.
