@@ -97,6 +97,8 @@ src/
 ├── council/
 │   ├── findings.js
 │   ├── ledger.js
+│   ├── report-html.js
+│   ├── report.js
 │   ├── tally.js
 │   └── verdict.js
 ├── prompts/
@@ -261,6 +263,8 @@ evals/
 | `session.js` | Session Resolver | `encodeProjectPath()`, `decodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `council/findings.js` |  | `validateFindings()`, `SEVERITIES()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `LEDGER_FILE()`, `LEDGER_SCHEMA_VERSION()` |
+| `council/report-html.js` |  | `renderHtml()` |
+| `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
