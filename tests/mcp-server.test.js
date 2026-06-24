@@ -1333,3 +1333,44 @@ describe('amicus_start stderr capture', () => {
     expect(typeof capturedOpts.stdio[2]).toBe('number');
   });
 });
+
+describe('amicus_status wave per-leg enrichment', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const os = require('os');
+  const { getSessionDir } = require('../src/session-manager');
+  let handlers; let tmpDir;
+  beforeEach(() => {
+    handlers = require('../src/mcp-server').handlers;
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wave-status-'));
+  });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  function writeSession(taskId, meta, extra = {}) {
+    const dir = getSessionDir(tmpDir, taskId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify({ taskId, ...meta }));
+    if (extra.conversation) { fs.writeFileSync(path.join(dir, 'conversation.jsonl'), extra.conversation); }
+    if (extra.progress) { fs.writeFileSync(path.join(dir, 'progress.json'), JSON.stringify(extra.progress)); }
+    return dir;
+  }
+
+  test('running wave legs carry latestActivity + stalled', async () => {
+    writeSession('wv1-1', { model: 'gemini', status: 'running' }, {
+      conversation: JSON.stringify({ role: 'assistant', content: 'working' }),
+      progress: { stage: 'receiving', stageLabel: 'Generating response...', updatedAt: new Date().toISOString() },
+    });
+    writeSession('wv1-2', { model: 'deepseek', status: 'running' }); // no progress yet
+    writeSession('wv1', { type: 'wave', status: 'running', legs: ['wv1-1', 'wv1-2'],
+      models: ['gemini', 'deepseek'], pid: process.pid, createdAt: new Date().toISOString() });
+
+    const result = await handlers.amicus_status({ taskId: 'wv1' }, tmpDir);
+    const body = JSON.parse(result.content[0].text);
+    expect(body.legs).toHaveLength(2);
+    expect(body.legs[0]).toHaveProperty('latestActivity');
+    expect(body.legs[0]).toHaveProperty('stalled', false);
+    expect(body.legs[0].messages).toBe(1);
+    // leg with no progress.json still returns its base fields without throwing
+    expect(body.legs[1].model).toBe('deepseek');
+  });
+});

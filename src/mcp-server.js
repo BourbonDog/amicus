@@ -8,7 +8,7 @@ const os = require('os');
 const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
 const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
-const { readProgress } = require('./sidecar/progress');
+const { readProgress, isStalled } = require('./sidecar/progress');
 const { SharedServerManager } = require('./utils/shared-server');
 
 const sharedServer = new SharedServerManager({ logger });
@@ -264,7 +264,14 @@ const handlers = {
     if (metadata.type === 'wave') {
       const legs = (metadata.legs || []).map((legId) => {
         const m = readMetadata(legId, cwd);
-        return { taskId: legId, model: (m && m.model) || null, status: (m && m.status) || 'unknown' };
+        const leg = { taskId: legId, model: (m && m.model) || null, status: (m && m.status) || 'unknown' };
+        try {
+          const p = readProgress(getSessionDir(cwd, legId));
+          leg.messages = p.messages;
+          leg.latestActivity = p.latest;
+          leg.stalled = leg.status === 'running' && isStalled(p.lastActivityMs);
+        } catch { /* no progress yet — leave base fields only */ }
+        return leg;
       });
       const { TERMINAL_STATUSES } = require('./utils/result-schema');
       const done = legs.filter(l => TERMINAL_STATUSES.includes(l.status)).length;

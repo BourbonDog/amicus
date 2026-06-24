@@ -109,7 +109,8 @@ function writeWaveMetadata(waveDir, patch) {
 async function runFanout(options) {
   const { buildWaveResult, waveExitCode } = require('../utils/result-schema');
   const { generateTaskId, buildMcpConfig } = require('./start');
-  const { startOpenCodeServer, createHeartbeat, HEARTBEAT_INTERVAL } = require('./session-utils');
+  const { startOpenCodeServer, HEARTBEAT_INTERVAL } = require('./session-utils');
+  const { createWaveHeartbeat } = require('./wave-progress');
   const { buildContext } = require('./context-builder');
   const { buildPrompts } = require('../prompt-builder');
   const { installSignalAbort, markAborted } = require('../utils/session-abort');
@@ -223,7 +224,12 @@ async function runFanout(options) {
   });
 
   // 6. Launch all legs concurrently (runLeg never rejects)
-  const heartbeat = options.quiet ? { stop() {} } : createHeartbeat(HEARTBEAT_INTERVAL);
+  const heartbeat = options.quiet
+    ? { stop() {} }
+    : createWaveHeartbeat(
+        legs.map((leg, i) => ({ label: leg.modelInput || leg.model, dir: legDirs[i] })),
+        HEARTBEAT_INTERVAL
+      );
   const timeoutMs = (options.timeout || 15) * 60 * 1000;
   const reasoning = options.thinking ? { effort: options.thinking } : undefined;
   let legDocs;
