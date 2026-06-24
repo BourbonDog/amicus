@@ -48,3 +48,31 @@ describe('fmtDuration', () => {
     expect(fmtDuration(65000)).toBe('1m5s');
   });
 });
+
+describe('formatWaveHuman cost', () => {
+  const { formatWaveHuman } = require('../../src/sidecar/fanout-output');
+  const wave = {
+    waveId: 'wv1', status: 'complete', counts: { total: 2, complete: 2 }, durationMs: 12000,
+    legs: [
+      { taskId: 'wv1-1', modelInput: 'gemini', model: 'g', status: 'complete', durationMs: 6000, summary: 'ok',
+        usage: { cost: { amount: 0.0123, source: 'reported' } } },
+      { taskId: 'wv1-2', modelInput: 'deepseek', model: 'd', status: 'complete', durationMs: 6000, summary: 'ok',
+        usage: { cost: { amount: 0.002, source: 'estimated' } } },
+    ],
+    usage: { cost: { amount: 0.0143, source: 'mixed' } },
+  };
+  test('shows a per-leg cost cell with source markers', () => {
+    const out = formatWaveHuman(wave);
+    expect(out).toContain('$0.0123');   // reported
+    expect(out).toContain('~$0.0020');  // estimated
+  });
+  test('shows a wave total cost line', () => {
+    expect(formatWaveHuman(wave)).toMatch(/Wave cost: ~\$0\.0143/);
+  });
+  test('a leg with no usage renders an em dash, not a crash', () => {
+    const noUsage = { ...wave, legs: [{ taskId: 'x', modelInput: 'm', model: 'm', status: 'error', durationMs: 1 }],
+      usage: undefined };
+    expect(() => formatWaveHuman(noUsage)).not.toThrow();
+    expect(formatWaveHuman(noUsage)).toContain('—');
+  });
+});

@@ -1,5 +1,6 @@
 // src/sidecar/fanout-output.js
 'use strict';
+const { formatCost } = require('../utils/pricing');
 
 /**
  * @module fanout-output
@@ -36,9 +37,11 @@ function formatWaveHuman(wave) {
   lines.push('─'.repeat(40));
   const counts = wave.counts || { complete: '?', total: '?' };
   lines.push(`Wave ${wave.waveId}: ${wave.status} — ${counts.complete}/${counts.total} complete in ${fmtDuration(wave.durationMs)}`);
+  lines.push(`  Wave cost: ${formatCost(wave.usage && wave.usage.cost)}`);
   for (const leg of wave.legs) {
     const label = leg.modelInput || leg.model || leg.taskId;
-    lines.push(`  ${leg.taskId}  ${String(label).padEnd(12)} ${String(leg.status).padEnd(9)} ${fmtDuration(leg.durationMs)}`);
+    lines.push(`  ${leg.taskId}  ${String(label).padEnd(12)} ${String(leg.status).padEnd(9)} ` +
+      `${String(fmtDuration(leg.durationMs)).padEnd(7)} ${formatCost(leg.usage && leg.usage.cost)}`);
   }
   return lines.join('\n');
 }
