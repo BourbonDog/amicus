@@ -305,6 +305,7 @@ Commands:
   models      List/search the model catalog, refresh it, audit aliases
   council tally <input.json> [--json]   Tally council findings → tiers/street-cred
   council stats [--json]                Reviewer-reliability from the ledger
+  doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window

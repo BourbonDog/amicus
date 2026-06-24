@@ -101,6 +101,11 @@ async function main() {
         exitCode = await handleCouncil(args);
         break;
       }
+      case 'doctor': {
+        const { handleDoctor } = require('../src/cli-handlers-doctor');
+        exitCode = await handleDoctor(args);
+        break;
+      }
       case 'setup':
         await handleSetup(args);
         break;

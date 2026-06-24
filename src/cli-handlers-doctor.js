@@ -136,4 +136,38 @@ function runDoctorChecks(depsOverride = {}) {
   return checks;
 }
 
-module.exports = { runDoctorChecks, MAX_CATALOG_AGE_MS };
+const MARK = { ok: '✓', warn: '⚠', error: '✗' }; // ✓ ⚠ ✗
+
+function renderHuman(checks) {
+  let out = 'amicus doctor\n\n';
+  for (const c of checks) {
+    out += `${MARK[c.status] || '?'} ${c.name}: ${c.message}\n`;
+    if (c.hint && c.status !== 'ok') { out += `    → ${c.hint}\n`; }
+  }
+  const errors = checks.filter(c => c.status === 'error').length;
+  const warns = checks.filter(c => c.status === 'warn').length;
+  out += `\n${errors} error(s), ${warns} warning(s).\n`;
+  return out;
+}
+
+/**
+ * `amicus doctor [--json]`. Injectable `runChecks` for tests.
+ * @param {{_:string[], json?:boolean}} args
+ * @param {(deps?:object)=>Array} [runChecks]
+ * @returns {Promise<number>} exit code
+ */
+async function handleDoctor(args, runChecks = runDoctorChecks) {
+  const useJson = !!args.json;
+  const checks = runChecks();
+  if (useJson) {
+    const { buildDoctorDoc } = require('./utils/result-schema');
+    const VERSION = require('../package.json').version;
+    const doc = buildDoctorDoc({ version: VERSION, timestamp: new Date().toISOString(), checks });
+    process.stdout.write(JSON.stringify(doc, null, 2) + '\n');
+    return doc.ok ? 0 : 1;
+  }
+  process.stdout.write(renderHuman(checks));
+  return checks.some(c => c.status === 'error') ? 1 : 0;
+}
+
+module.exports = { runDoctorChecks, handleDoctor, MAX_CATALOG_AGE_MS };
