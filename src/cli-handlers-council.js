@@ -3,6 +3,7 @@
 const fs = require('fs');
 const { tally } = require('./council/tally');
 const { deriveReliability } = require('./council/ledger');
+const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 
 function runTally(inputPath, useJson) {
@@ -34,8 +35,10 @@ function runStats(useJson) {
 
 function renderRecord(r) {
   const t = r.tierCounts;
+  const cost = sumWaveUsage(r.runStats || []).cost;
   return `Council tally (${r.meta.runId})\n` +
-    `  Confirmed ${t.Confirmed}  Contested ${t.Contested}  Singleton ${t.Singleton}  Disputed ${t.Disputed}\n`;
+    `  Confirmed ${t.Confirmed}  Contested ${t.Contested}  Singleton ${t.Singleton}  Disputed ${t.Disputed}\n` +
+    `  Cost: ${formatCost(cost)}\n`;
 }
 function renderStats(agg) {
   if (!agg.length) { return 'No council runs recorded yet.\n'; }
