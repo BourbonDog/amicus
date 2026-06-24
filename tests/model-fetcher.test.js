@@ -379,7 +379,7 @@ describe('curated-models deepseek routes', () => {
     const routes = listCuratedRoutes();
     const direct = routes.find(r => r.alias === 'deepseek' && r.provider === 'deepseek');
     expect(direct).toBeDefined();
-    expect(direct.model).toBe('deepseek/deepseek-chat');
+    expect(direct.model).toBe('deepseek/deepseek-v4-pro');
   });
 
   test('toDefaultAliases deepseek still prefers openrouter route', () => {

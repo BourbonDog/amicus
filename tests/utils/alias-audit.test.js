@@ -32,6 +32,31 @@ describe('findStaleAliases', () => {
     expect(stale.map(s => s.alias)).toEqual(['gemini']);
   });
 
+  it('suppresses a stale curated-route when the alias resolves live via any source', () => {
+    // The default openrouter route is live; the stale direct curated route must be suppressed
+    // so that `amicus models --check` reports clean and `--add-alias` actually clears warnings.
+    const catalog = [{ id: 'openrouter/deepseek/deepseek-v4-pro' }];
+    const sources = [
+      { alias: 'deepseek', model: 'openrouter/deepseek/deepseek-v4-pro', source: 'defaults' },
+      { alias: 'deepseek', model: 'deepseek/deepseek-chat', source: 'curated-route (deepseek)' },
+    ];
+    expect(findStaleAliases(sources, catalog)).toEqual([]);
+  });
+
+  it('still reports a stale curated-route when no live resolution exists for that alias', () => {
+    // Include a deepseek direct row so the deepseek namespace is verifiable.
+    const catalog = [
+      { id: 'openrouter/deepseek/deepseek-v4-pro' },
+      { id: 'deepseek/deepseek-v4-pro' },
+    ];
+    const sources = [
+      { alias: 'deepseek', model: 'deepseek/deepseek-chat', source: 'curated-route (deepseek)' },
+    ];
+    const stale = findStaleAliases(sources, catalog);
+    expect(stale).toHaveLength(1);
+    expect(stale[0].source).toBe('curated-route (deepseek)');
+  });
+
   it('returns [] when the catalog is empty (cannot check)', () => {
     expect(findStaleAliases([{ alias: 'x', model: 'openrouter/a/b', source: 'defaults' }], [])).toEqual([]);
   });

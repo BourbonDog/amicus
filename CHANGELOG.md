@@ -5,6 +5,16 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-06-24
+
+### Fixed
+- **`amicus models --check` / `amicus doctor` stale deepseek warning is now clearable**: the
+  built-in deepseek direct fallback (`deepseek/deepseek-chat`) has been updated to
+  `deepseek/deepseek-v4-pro`. Additionally, stale curated-route warnings are now suppressed when
+  the same alias already resolves live via any other source (default openrouter route or a
+  user-set alias), so the suggested `--add-alias` fix actually clears the warning instead of
+  leaving it permanently unresolvable.
+
 ## [1.2.0] - 2026-06-24
 
 A post-launch enhancement program: reliability and cost made real, the council's

@@ -63,14 +63,14 @@ describe('resolveQuickPicks', () => {
     const deepseek = picks.find(r => r.alias === 'deepseek');
     expect(deepseek.source).toBe('fallback');
     expect(deepseek.routes.openrouter).toBe('openrouter/deepseek/deepseek-v4-pro');
-    expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-chat');
+    expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-v4-pro');
   });
   test('unresolvable direct namespace uses the pinned direct fallback', () => {
     const catalog = [row('openrouter/deepseek/deepseek-v9-pro')];
     const deepseek = resolveQuickPicks(catalog).find(r => r.alias === 'deepseek');
     expect(deepseek.source).toBe('live');
     expect(deepseek.routes.openrouter).toBe('openrouter/deepseek/deepseek-v9-pro');
-    expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-chat');
+    expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-v4-pro');
   });
 });
 

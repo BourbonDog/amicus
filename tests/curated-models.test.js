@@ -38,7 +38,7 @@ describe('curated-models v2 (families)', () => {
   test('listCuratedRoutes flattens family fallbacks and cardless routes', () => {
     const routes = listCuratedRoutes();
     expect(routes).toContainEqual(
-      { alias: 'deepseek', provider: 'deepseek', model: 'deepseek/deepseek-chat' });
+      { alias: 'deepseek', provider: 'deepseek', model: 'deepseek/deepseek-v4-pro' });
     expect(routes).toContainEqual(
       { alias: 'gemini', provider: 'openrouter', model: 'openrouter/google/gemini-3.5-flash' });
   });
@@ -48,7 +48,7 @@ describe('curated-models v2 (families)', () => {
       const or = f.fallback.openrouter;
       const ns = `openrouter/${f.vendorPath}/`;
       expect(or.startsWith(ns)).toBe(true);
-      // Direct fallbacks may be intentionally different ids (e.g. deepseek-chat);
+      // Direct fallbacks may be intentionally different from the openrouter pin;
       // only the openrouter pin must be a member of its own family.
       expect(f.idPattern.test(or.slice(ns.length))).toBe(true);
     }

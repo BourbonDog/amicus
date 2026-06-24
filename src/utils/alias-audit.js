@@ -57,17 +57,30 @@ function idsByProvider(catalog) {
  * Entries whose model is absent from the catalog. A model is only checkable
  * when its provider has rows in the catalog (unkeyed providers never produce
  * false stales). Empty catalog → [] (cannot check).
+ *
+ * Stale curated-route entries are suppressed when the same alias already has
+ * at least one live resolution from any other source. This ensures the
+ * suggested `--add-alias` fix actually clears the warning, and prevents
+ * permanently unclearable noise when the default openrouter route is live.
  * @param {Array<{alias,model,source}>} sources
  * @param {Array<{id:string}>} catalog
  */
 function findStaleAliases(sources, catalog) {
   if (!catalog || catalog.length === 0) { return []; }
   const byProvider = idsByProvider(catalog);
-  return sources.filter(({ model }) => {
-    const provider = model.split('/')[0];
-    const ids = byProvider.get(provider);
+  const isLive = model => {
+    const ids = byProvider.get(model.split('/')[0]);
+    return ids ? ids.has(model) : null;
+  };
+  const covered = new Set(
+    sources.filter(({ model }) => isLive(model) === true).map(({ alias }) => alias)
+  );
+  return sources.filter(({ alias, model, source }) => {
+    const ids = byProvider.get(model.split('/')[0]);
     if (!ids) { return false; } // provider unverifiable
-    return !ids.has(model);
+    if (ids.has(model)) { return false; } // live
+    if (source.startsWith('curated-route') && covered.has(alias)) { return false; }
+    return true;
   });
 }
 

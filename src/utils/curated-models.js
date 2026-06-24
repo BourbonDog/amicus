@@ -21,7 +21,7 @@
  * the direct route is omitted (no pinned guess is better than a wrong one).
  * `gpt`'s pattern intentionally matches any plain numeric flagship id
  * (gpt-5.5, gpt-6) and excludes suffixed variants (-pro/-mini/-codex).
- * Pinned ids verified against the live catalog 2026-06-11.
+ * Pinned ids verified against the live catalog 2026-06-24.
  */
 const FAMILIES = [
   { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
@@ -51,7 +51,7 @@ const FAMILIES = [
     idPattern: /^deepseek-v[\d.]+(-pro)?$/,
     directProviders: ['deepseek'],
     fallback: { openrouter: 'openrouter/deepseek/deepseek-v4-pro',
-                deepseek: 'deepseek/deepseek-chat' } },
+                deepseek: 'deepseek/deepseek-v4-pro' } },
 ];
 
 /**

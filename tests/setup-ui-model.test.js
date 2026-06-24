@@ -25,7 +25,7 @@ const MODEL_CHOICES = [
     routes: { openrouter: 'openrouter/anthropic/claude-opus-4.8', anthropic: 'anthropic/claude-opus-4-6' } },
   { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
     source: 'live',
-    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-chat' } },
+    routes: { openrouter: 'openrouter/deepseek/deepseek-v4-pro', deepseek: 'deepseek/deepseek-v4-pro' } },
 ];
 
 describe('setup-ui-model', () => {
