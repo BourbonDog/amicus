@@ -67,6 +67,16 @@ The postinstall step auto-configures everything — no manual registration:
 - Registers the **MCP server** in Claude Code and in Claude Desktop / Cowork, so the Amicus tools appear natively.
 - Installs **both skills** into `~/.claude/skills/` — `second-opinion` (the council) and `sidecar` (the chat skill).
 
+## Prerequisites & what it costs you
+
+Before your first run:
+
+- **Node.js ≥ 18** — `node --version` to check.
+- **An active Claude Code or Cowork session** — Amicus is orchestrated by Claude; it is not a standalone chatbot.
+- **At least one paid model API key** — OpenRouter (covers the most models) or a direct Google / OpenAI / Anthropic / DeepSeek key. Add one with `amicus setup` or `amicus key <provider> <key>`.
+
+**What a run costs.** A sidecar is a single model call. A full council is typically **~5–8 paid model calls** (e.g. 3 reviewers across 2 fan-out waves + 1 chair). Amicus shows an estimate before each council and enforces a built-in budget gate that refuses ultra-expensive models (o3-pro class) unless you opt in with `--no-cost-gate`. You pay your providers directly for the tokens; Amicus itself is free and open-source.
+
 **Configure:**
 
 ```bash

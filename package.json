@@ -24,7 +24,7 @@
     "url": "git+https://github.com/BourbonDog/amicus.git"
   },
   "bugs": "https://github.com/BourbonDog/amicus/issues",
-  "homepage": "https://github.com/BourbonDog/amicus#readme",
+  "homepage": "https://bourbondog.github.io/amicus/",
   "bin": {
     "amicus": "./bin/amicus.js",
     "am": "./bin/amicus.js",
