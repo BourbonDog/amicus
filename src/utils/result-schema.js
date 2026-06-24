@@ -249,6 +249,21 @@ function buildAuditDoc({ stale, catalogAvailable }) {
   };
 }
 
+/**
+ * Build a doctor health-check document (`doctor --json`).
+ * @param {{version: string, timestamp: string, checks: Array<{id,name,status,message,hint}>}} opts
+ */
+function buildDoctorDoc({ version, timestamp, checks }) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    type: 'doctor',
+    ok: checks.every(c => c.status !== 'error'),
+    version,
+    timestamp,
+    checks,
+  };
+}
+
 module.exports = {
   SCHEMA_VERSION,
   TERMINAL_STATUSES,
@@ -261,4 +276,5 @@ module.exports = {
   buildWaveResultFromSession,
   buildCatalogDoc,
   buildAuditDoc,
+  buildDoctorDoc,
 };
