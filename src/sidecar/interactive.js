@@ -7,10 +7,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const { startOpenCodeServer } = require('./session-utils');
-const { createSession, sendPromptAsync } = require('../opencode-client');
+const { createSession, sendPromptAsync, getMessages } = require('../opencode-client');
 const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { logger } = require('../utils/logger');
 const { getCompatEnv } = require('../utils/env-compat');
+const { startInteractiveMirror } = require('./interactive-mirror');
+const { getSessionDir } = require('../session-manager');
 
 /** Get the Electron binary path via require('electron').
  *  Works in all install contexts (global, local, npx hoisted).
@@ -173,6 +175,13 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     onActivity: () => watchdog.touch(),
   });
 
+  const sessionDir = getSessionDir(project, taskId);
+  const mirror = startInteractiveMirror({
+    getMessages: () => getMessages(ocClient, sessionId),
+    sessionDir,
+    onActivity: () => watchdog.touch(),
+  });
+
   return new Promise((resolve, _reject) => {
     const electronPath = getElectronPath();
     const mainPath = path.join(__dirname, '..', '..', 'electron', 'main.js');
@@ -198,9 +207,13 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     electronProcess.stdout.on('data', () => { watchdog.touch(); });
 
     // Clean up server + timers when Electron exits.
-    handleElectronProcess(electronProcess, taskId, (result) => {
+    handleElectronProcess(electronProcess, taskId, async (result) => {
       watchdog.cancel();
       activityPoller.stop();
+      try {
+        const { usage } = await mirror.stop();
+        if (usage) { result.usage = usage; }
+      } catch (err) { logger.debug('mirror stop failed', { error: err.message }); }
       server.close();
       logger.debug('OpenCode server closed after Electron exit');
       result.opencodeSessionId = sessionId;
