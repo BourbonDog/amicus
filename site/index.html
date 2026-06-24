@@ -444,16 +444,6 @@ h2.v .w-anim{opacity:1;transform:none}
 </div>
 </div>
 
-<!-- PREREQUISITES -->
-<section class="demo-section" id="prerequisites">
-  <div class="w">
-    <div class="tag rv">Before You Start</div>
-    <h2 class="rv">Prerequisites &amp; what it costs you</h2>
-    <p class="lead rv">Node.js 18+, an active Claude Code or Cowork session, and at least one paid model API key (OpenRouter, or a direct Google / OpenAI / Anthropic / DeepSeek key).</p>
-    <p class="rv">A sidecar is one model call. A full council is typically <strong>~5–8 paid model calls</strong> — Amicus estimates the cost up front and a budget gate blocks runaway spend. You pay your providers for tokens; Amicus is free and open-source.</p>
-  </div>
-</section>
-
 <!-- QUICK START -->
 <section class="demo-section" id="demo">
   <div class="w">
@@ -1162,6 +1152,41 @@ h2.v .w-anim{opacity:1;transform:none}
       <div class="g2-cell rv r2"><h4>MCP Tools &amp; Claude-Native</h4><p>Auto-registered MCP server and two installed skills (<code style="font-size:.78rem;color:var(--accent)">second-opinion</code>, <code style="font-size:.78rem;color:var(--accent)">sidecar</code>). Claude drives Amicus; you stay in your editor.</p></div>
       <div class="g2-cell rv r1"><h4>Context Sharing &amp; Safety</h4><p>Conversation history passed automatically. Conflict detection warns when files changed externally — a fold never silently overwrites newer work.</p></div>
       <div class="g2-cell rv r2"><h4>Session Persistence</h4><p>Every session is saved. List, resume, or chain new investigations on previous findings. Full JSON output for scripting and agent consumption.</p></div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- PREREQUISITES -->
+<section id="prerequisites">
+  <div class="w">
+    <div class="tag rv">Before You Start</div>
+    <h2 class="rv">Prerequisites<br><span>&amp; What It Costs.</span></h2>
+    <p class="lead rv">A few things to have in place — and an honest look at what a run actually costs you.</p>
+    <div class="grid2" style="margin-top:2.5rem">
+      <div class="g2-cell rv r1" style="padding:2.5rem">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.2rem">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:.75rem;color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase">Prerequisites</span>
+        </div>
+        <h4 style="font-size:1.15rem;margin-bottom:.9rem">What you need</h4>
+        <ul style="list-style:none;padding:0;margin:0;color:var(--t2);font-size:.88rem;line-height:1.7">
+          <li style="margin-bottom:.75rem"><strong style="color:var(--t1)">Node.js 18+</strong> — run <code style="color:var(--accent);font-size:.82rem">node --version</code> to check.</li>
+          <li style="margin-bottom:.75rem"><strong style="color:var(--t1)">An active Claude Code or Cowork session</strong> — Amicus is orchestrated by Claude; it is not a standalone chatbot.</li>
+          <li><strong style="color:var(--t1)">At least one paid model API key</strong> — OpenRouter, or a direct Google / OpenAI / Anthropic / DeepSeek key.</li>
+        </ul>
+      </div>
+      <div class="g2-cell rv r2" style="padding:2.5rem">
+        <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:1.2rem">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:.75rem;color:var(--accent);font-weight:600;letter-spacing:.08em;text-transform:uppercase">What It Costs</span>
+        </div>
+        <h4 style="font-size:1.15rem;margin-bottom:.9rem">~5–8 model calls per council</h4>
+        <p style="color:var(--t2);font-size:.88rem;line-height:1.7;margin:0 0 1rem">A sidecar is a single model call; a full council is typically <strong style="color:var(--t1)">~5–8 paid model calls</strong> (3 reviewers across 2 fan-out waves + 1 chair). Amicus estimates the cost up front and a budget gate blocks runaway spend.</p>
+        <p style="color:var(--t2);font-size:.88rem;line-height:1.7;margin:0 0 1.2rem">Want to try it for nothing? <strong style="color:var(--t1)">OpenRouter offers free model variants</strong> — route a council through those and you pay zero for tokens.</p>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.7rem .9rem;font-family:'IBM Plex Mono',monospace;font-size:.76rem;color:var(--t2)">You pay providers for tokens. <span style="color:var(--green)">Amicus is free &amp; open-source.</span></div>
+      </div>
     </div>
   </div>
 </section>
