@@ -9,7 +9,6 @@ jobs:
   test:
     name: test (${{ matrix.os }} / node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
     strategy:
       fail-fast: false
       matrix:
