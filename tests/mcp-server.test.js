@@ -1374,3 +1374,42 @@ describe('amicus_status wave per-leg enrichment', () => {
     expect(body.legs[1].model).toBe('deepseek');
   });
 });
+
+describe('council MCP handlers', () => {
+  const avInput = require('./council/fixtures/av-receiver-input');
+  let handlers;
+  beforeEach(() => { handlers = require('../src/mcp-server').handlers; });
+
+  test('amicus_council_tally returns a tally record as JSON content', async () => {
+    const res = await handlers.amicus_council_tally(avInput, process.cwd());
+    expect(res.isError).toBeFalsy();
+    const doc = JSON.parse(res.content[0].text);
+    expect(doc.tierCounts).toEqual({ Confirmed: 19, Contested: 2, Singleton: 11, Disputed: 3 });
+  });
+
+  test('amicus_verdict merges decisions into the verdict', async () => {
+    const tallyRes = await handlers.amicus_council_tally(avInput, process.cwd());
+    const record = JSON.parse(tallyRes.content[0].text);
+    const res = await handlers.amicus_verdict({ record, decisions: [{ id: 'A1', decision: 'accepted', applied: true }] }, process.cwd());
+    const v = JSON.parse(res.content[0].text);
+    expect(v.findings.find(f => f.id === 'A1').decision).toBe('accepted');
+  });
+
+  test('amicus_council_stats returns aggregated reliability', async () => {
+    jest.resetModules();
+    jest.doMock('../src/council/ledger', () => ({
+      deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4 }],
+    }));
+    const h = require('../src/mcp-server').handlers;
+    const res = await h.amicus_council_stats({}, process.cwd());
+    const agg = JSON.parse(res.content[0].text);
+    expect(agg[0].model).toBe('gpt');
+    jest.dontMock('../src/council/ledger');
+    jest.resetModules();
+  });
+
+  test('amicus_council_tally on malformed input returns isError', async () => {
+    const res = await handlers.amicus_council_tally({ meta: { models: [] } }, process.cwd());
+    expect(res.isError).toBe(true);
+  });
+});

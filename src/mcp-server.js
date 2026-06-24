@@ -581,6 +581,27 @@ const handlers = {
     return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
   },
 
+  async amicus_council_tally(input) {
+    try {
+      const { tally } = require('./council/tally');
+      return textResult(JSON.stringify(tally(input)));
+    } catch (err) { return textResult(`council tally failed: ${err.message}`, true); }
+  },
+
+  async amicus_council_stats() {
+    try {
+      const { deriveReliability } = require('./council/ledger');
+      return textResult(JSON.stringify(deriveReliability()));
+    } catch (err) { return textResult(`council stats failed: ${err.message}`, true); }
+  },
+
+  async amicus_verdict(input) {
+    try {
+      const { buildVerdict } = require('./council/verdict');
+      return textResult(JSON.stringify(buildVerdict(input.record, input.decisions || [])));
+    } catch (err) { return textResult(`verdict build failed: ${err.message}`, true); }
+  },
+
   async amicus_setup() {
     try { spawnSidecarProcess(['setup']); } catch (err) {
       return textResult(`Failed to launch setup: ${err.message}`, true);
