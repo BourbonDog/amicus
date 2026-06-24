@@ -9,7 +9,7 @@ describe('package.json launch identity', () => {
   test('repository/bugs/homepage point at BourbonDog/amicus; author is Christian Wagner', () => {
     expect(pkg.repository.url).toBe('git+https://github.com/BourbonDog/amicus.git');
     expect(pkg.bugs).toBe('https://github.com/BourbonDog/amicus/issues');
-    expect(pkg.homepage).toBe('https://github.com/BourbonDog/amicus#readme');
+    expect(pkg.homepage).toBe('https://bourbondog.github.io/amicus/');
     expect(pkg.author).toBe('Christian Wagner');
   });
   test('keywords carry the council positioning', () => {
