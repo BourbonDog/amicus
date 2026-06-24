@@ -1,0 +1,19 @@
+{
+  "name": "amicus",
+  "version": "1.1.0",
+  "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
+  "author": { "name": "Christian Wagner" },
+  "homepage": "https://bourbondog.github.io/amicus/",
+  "repository": "https://github.com/BourbonDog/amicus",
+  "bugs": "https://github.com/BourbonDog/amicus/issues",
+  "license": "MIT",
+  "keywords": ["claude-code", "multi-model", "llm", "council", "second-opinion", "sidecar", "gemini", "gpt", "deepseek"],
+  "skills": ["./skills/sidecar", "./skills/second-opinion"],
+  "mcpServers": {
+    "amicus": {
+      "command": "npx",
+      "args": ["-y", "amicus@latest", "mcp"],
+      "env": { "AMICUS_SKIP_POSTINSTALL": "1" }
+    }
+  }
+}

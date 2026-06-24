@@ -40,6 +40,7 @@
     "src/",
     "electron/",
     "skills/",
+    ".claude-plugin/",
     "CHANGELOG.md",
     "scripts/postinstall.js",
     "scripts/setup-hooks.js"
