@@ -105,6 +105,7 @@ src/
 │   ├── budget.js
 │   ├── context-builder.js  # Context Builder Module
 │   ├── continue.js  # Sidecar Continue Operations - Handles continuing from previous sessions
+│   ├── conversation-mirror.js
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
@@ -264,6 +265,7 @@ evals/
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
+| `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
