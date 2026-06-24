@@ -643,23 +643,31 @@ describe('Headless Mode Runner', () => {
     }, 15000);
 
     it('does not hang when getMessages never resolves — dies at --timeout', async () => {
-      // getMessages hangs forever. Without a per-call timeout the loop freezes
-      // on the await and never re-checks the deadline.
-      mockGetMessages.mockImplementation(() => new Promise(() => {}));
+      // getMessages hangs forever. Without a per-call timeout the loop would
+      // freeze on the await and never re-check the deadline. Driven with fake
+      // timers so termination is deterministic regardless of CI runner speed —
+      // a real-elapsed-time bound flakes badly on starved macOS/Windows runners
+      // (the headless suite runs ~3 min, and timers get delayed past any bound).
+      jest.useFakeTimers();
+      try {
+        mockGetMessages.mockImplementation(() => new Promise(() => {}));
 
-      const start = Date.now();
-      const result = await runHeadless(
-        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
-        300, // 300ms --timeout
-        'build', { pollIntervalMs: 5, pollCallTimeoutMs: 50 }
-      );
-      expect(result.timedOut).toBe(true);
-      expect(mockAbortSession).toHaveBeenCalled();
-      // Bounded, not infinite. The bound is generous because a starved CI runner
-      // (notably slow macOS) can delay real timers far past the 300ms --timeout;
-      // a genuine forever-hang regression still trips the jest cap below.
-      expect(Date.now() - start).toBeLessThan(15000);
-    }, 20000); // jest cap so a real hang fails as a bounded timeout, not a forever-hang
+        const p = runHeadless(
+          testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+          300, // 300ms --timeout (deadline in fake-clock terms)
+          'build', { pollIntervalMs: 5, pollCallTimeoutMs: 50 }
+        );
+        // Advance fake time well past the 300ms deadline; the async variant flushes
+        // microtasks between timer fires so the poll loop progresses to termination.
+        await jest.advanceTimersByTimeAsync(2000);
+        const result = await p;
+
+        expect(result.timedOut).toBe(true);
+        expect(mockAbortSession).toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    }, 10000); // real-time safety net only; a true forever-hang trips this
   });
 
   describe('Progress Updates', () => {
