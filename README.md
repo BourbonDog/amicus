@@ -462,7 +462,7 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 | [docs/publishing.md](./docs/publishing.md) | Release and publish process. |
 | [docs/SHIMS.md](./docs/SHIMS.md) | Legacy `SIDECAR_*` → `AMICUS_*` compatibility shims. |
 | [skills/second-opinion/SKILL.md](./skills/second-opinion/SKILL.md) | The LLM Council skill. |
-| [skill/SKILL.md](./skill/SKILL.md) | The `sidecar` chat skill. |
+| [skills/sidecar/SKILL.md](./skills/sidecar/SKILL.md) | The `sidecar` chat skill. |
 | [evals/README.md](./evals/README.md) | End-to-end eval harness for LLM interactions. |
 
 ---

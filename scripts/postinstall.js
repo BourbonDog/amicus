@@ -13,7 +13,7 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 
-const SKILL_SOURCE = path.join(__dirname, '..', 'skill', 'SKILL.md');
+const SKILL_SOURCE = path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md');
 const COUNCIL_SOURCE_DIR = path.join(__dirname, '..', 'skills', 'second-opinion');
 
 /** Council files + per-file install semantics: SKILL/COUNCIL-DESIGN are product code

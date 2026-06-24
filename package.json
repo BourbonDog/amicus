@@ -39,7 +39,6 @@
     "bin/",
     "src/",
     "electron/",
-    "skill/",
     "skills/",
     "CHANGELOG.md",
     "scripts/postinstall.js",
