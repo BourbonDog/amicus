@@ -291,6 +291,13 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
   — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
   invent a figure. Add a wave **total cost** row from the wave document's
   `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`; never invent a value.
+  - **Renderer:** once `verdict.json` is written, generate the human report with
+    `amicus council report <run-folder>/verdict.json --md > <run-folder>/report.md`
+    (use `--html` for a self-contained, shareable page). This emits the
+    adjudication matrix (finding × judge), the peers-only street-cred table, the
+    findings-by-tier groupings (Disputed-first), and the per-model + wave cost —
+    deterministic data only. Prefer it over hand-assembling the matrix; reserve
+    prose for the chair's synthesis and the decision log.
 
 Tell the user exactly which files were written and where.
 
