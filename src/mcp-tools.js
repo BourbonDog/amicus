@@ -282,6 +282,62 @@ function getTools() {
     },
   },
   {
+    name: 'amicus_council_tally',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      'Deterministic council tally over an ASSEMBLED, de-anonymized input ' +
+      '(meta + findings + adjudications + rankings). Peers-only tier cascade ' +
+      '(Confirmed/Contested/Disputed/Singleton) + street-cred. Pure + synchronous: ' +
+      'returns the tally record immediately. No subprocess, no polling. Claude ' +
+      'assembles the input and may override margin tiers afterward.',
+    inputSchema: {
+      meta: z.object({
+        runId: z.string(), runType: z.string().optional(), date: z.string().optional(),
+        models: z.array(z.string()).min(1), chair: z.string().optional(),
+        claudeInCouncil: z.boolean().optional(),
+      }).describe('Run metadata; meta.models lists every reviewed model.'),
+      findings: z.array(z.object({
+        id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),
+      })).describe('Run-global findings (ids already A1/B2/C3-prefixed by Claude).'),
+      adjudications: z.array(z.object({
+        judge: z.string(), findingId: z.string(), verdict: z.enum(['agree', 'dispute', 'neutral']),
+      })).describe('One row per (judge × finding).'),
+      rankings: z.array(z.object({
+        judge: z.string(), order: z.array(z.union([z.string(), z.array(z.string())])),
+      })).describe("Each judge's preference order over the reviews (ties = nested array)."),
+      runStats: z.array(z.record(z.any())).optional().describe('Optional per-model run stats (status/duration/usage).'),
+      project: z.string().optional().describe('Optional project directory path.'),
+    },
+  },
+  {
+    name: 'amicus_council_stats',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      'Per-model reviewer reliability derived from the append-only council ledger ' +
+      '(avg peers-only street-cred, lifetime confirm/fact-error rates). Read-only; ' +
+      'no inputs required.',
+    inputSchema: {
+      project: z.string().optional().describe('Optional project directory path.'),
+    },
+  },
+  {
+    name: 'amicus_verdict',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Merge a tally record with Claude's Stage-4 decisions into the verdict " +
+      'object (final tiers after overrides, decisions, applied flags). Pure + ' +
+      'synchronous; returns the verdict — does NOT write it to disk.',
+    inputSchema: {
+      record: z.record(z.any()).describe('A tally() output record (from amicus_council_tally).'),
+      decisions: z.array(z.object({
+        id: z.string(), decision: z.string().optional(), applied: z.boolean().optional(),
+        duplicateOf: z.string().nullable().optional(),
+        tierOverride: z.object({ from: z.string(), to: z.string(), reason: z.string() }).nullable().optional(),
+      })).optional().describe('Stage-4 per-finding decisions (default []).'),
+      project: z.string().optional().describe('Optional project directory path.'),
+    },
+  },
+  {
     name: 'amicus_guide',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:

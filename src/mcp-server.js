@@ -599,6 +599,9 @@ const LEGACY_TOOL_ALIASES = {
   amicus_setup: 'sidecar_setup', amicus_abort: 'sidecar_abort',
   amicus_fanout: 'sidecar_fanout',
   amicus_guide: 'sidecar_guide',
+  amicus_council_tally: 'sidecar_council_tally',
+  amicus_council_stats: 'sidecar_council_stats',
+  amicus_verdict: 'sidecar_verdict',
 };
 
 /** Start the MCP server on stdio transport */

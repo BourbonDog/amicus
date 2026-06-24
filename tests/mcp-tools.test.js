@@ -38,8 +38,8 @@ describe('MCP Tool Definitions', () => {
     expect(names).toContain('amicus_fanout');
   });
 
-  test('has exactly 10 tools', () => {
-    expect(TOOLS).toHaveLength(10);
+  test('has exactly 13 tools', () => {
+    expect(TOOLS).toHaveLength(13);
   });
 
   test('tool names are unique', () => {
@@ -403,5 +403,28 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_guide');
       expect(tool.inputSchema.project).toBeUndefined();
     });
+  });
+});
+
+describe('council MCP tool schemas', () => {
+  const { getTools } = require('../src/mcp-tools');
+  const byName = () => Object.fromEntries(getTools().map(t => [t.name, t]));
+  test('exposes the three council tools', () => {
+    const t = byName();
+    for (const name of ['amicus_council_tally', 'amicus_council_stats', 'amicus_verdict']) {
+      expect(t).toHaveProperty(name);
+      expect(typeof t[name].description).toBe('string');
+      expect(t[name].annotations).toHaveProperty('readOnlyHint', true);
+    }
+  });
+  test('tally schema requires findings, adjudications, rankings, meta', () => {
+    const tally = byName().amicus_council_tally;
+    for (const k of ['meta', 'findings', 'adjudications', 'rankings']) {
+      expect(tally.inputSchema).toHaveProperty(k);
+    }
+  });
+  test('stats schema has no required inputs', () => {
+    const stats = byName().amicus_council_stats;
+    expect(Object.keys(stats.inputSchema)).toEqual(expect.arrayContaining(['project']));
   });
 });
