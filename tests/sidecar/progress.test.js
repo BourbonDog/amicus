@@ -593,3 +593,18 @@ describe('Progress Reader', () => {
     });
   });
 });
+
+describe('isStalled', () => {
+  const { isStalled, STALL_MS } = require('../../src/sidecar/progress');
+  test('null / undefined idle is never stalled', () => {
+    expect(isStalled(null)).toBe(false);
+    expect(isStalled(undefined)).toBe(false);
+  });
+  test('idle at or under the threshold is not stalled', () => {
+    expect(isStalled(STALL_MS)).toBe(false);
+    expect(isStalled(STALL_MS - 1)).toBe(false);
+  });
+  test('idle over the threshold is stalled', () => {
+    expect(isStalled(STALL_MS + 1)).toBe(true);
+  });
+});

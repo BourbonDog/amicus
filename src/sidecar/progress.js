@@ -87,6 +87,19 @@ function computeLastActivity(mtime) {
   return `${diffHr}h ago`;
 }
 
+/** A leg with no new activity for longer than this (ms) is flagged stalled in rollups. */
+const STALL_MS = 60000;
+
+/**
+ * Is a leg stalled? True only when we have a real idle measurement that exceeds
+ * the threshold; an unknown / just-started leg (null) is never "stalled".
+ * @param {number|null|undefined} lastActivityMs ms since last activity
+ * @returns {boolean}
+ */
+function isStalled(lastActivityMs) {
+  return typeof lastActivityMs === 'number' && lastActivityMs > STALL_MS;
+}
+
 /**
  * Write a progress update to progress.json.
  *
@@ -214,5 +227,7 @@ module.exports = {
   writeProgress,
   extractLatest,
   computeLastActivity,
-  STAGE_LABELS
+  STAGE_LABELS,
+  STALL_MS,
+  isStalled
 };
