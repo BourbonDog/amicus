@@ -56,6 +56,26 @@ describe('sumWaveUsage', () => {
   });
 });
 
+describe('formatCost', () => {
+  const { formatCost } = require('../../src/utils/pricing');
+  test('reported renders a plain dollar figure', () => {
+    expect(formatCost({ amount: 0.0123, currency: 'USD', source: 'reported' })).toBe('$0.0123');
+    expect(formatCost({ amount: 25, currency: 'USD', source: 'reported' })).toBe('$25.00');
+  });
+  test('estimated and mixed get a ~ prefix', () => {
+    expect(formatCost({ amount: 0.02, source: 'estimated' })).toBe('~$0.0200');
+    expect(formatCost({ amount: 0.5, source: 'mixed' })).toBe('~$0.5000');
+  });
+  test('unknown source with null amount renders ?', () => {
+    expect(formatCost({ amount: null, source: 'unknown' })).toBe('?');
+  });
+  test('missing cost renders an em dash', () => {
+    expect(formatCost(null)).toBe('—');
+    expect(formatCost(undefined)).toBe('—');
+    expect(formatCost({ amount: null, source: 'reported' })).toBe('—');
+  });
+});
+
 describe('lookupPricing', () => {
   afterEach(() => jest.restoreAllMocks());
   it('returns numeric per-token pricing for a catalog row', () => {

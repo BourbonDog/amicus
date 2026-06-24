@@ -90,4 +90,19 @@ function sumWaveUsage(legs) {
   return { tokens, cost: { amount: anyAmount ? amount : null, currency: 'USD', source, reportedLegs, estimatedLegs, unpricedLegs } };
 }
 
-module.exports = { emptyUsageTotals, sumPerMessageUsage, lookupPricing, resolveLegCost, resolveUsage, sumWaveUsage };
+/**
+ * Render a resolved cost object for humans. Never invents precision: a null
+ * amount is '—' (or '?' when the source is explicitly 'unknown'); estimated /
+ * mixed costs are marked with '~' so they can't be read as authoritative.
+ * @param {{amount:number|null, source:string}|null|undefined} cost
+ * @returns {string}
+ */
+function formatCost(cost) {
+  if (!cost || cost.amount === null || cost.amount === undefined) {
+    return cost && cost.source === 'unknown' ? '?' : '—';
+  }
+  const dollars = cost.amount < 1 ? `$${cost.amount.toFixed(4)}` : `$${cost.amount.toFixed(2)}`;
+  return (cost.source === 'estimated' || cost.source === 'mixed') ? `~${dollars}` : dollars;
+}
+
+module.exports = { emptyUsageTotals, sumPerMessageUsage, lookupPricing, resolveLegCost, resolveUsage, sumWaveUsage, formatCost };
