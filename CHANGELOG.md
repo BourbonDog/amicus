@@ -5,6 +5,59 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-24
+
+A post-launch enhancement program: reliability and cost made real, the council's
+trust machinery turned from hand-math into deterministic code, plus first-run
+diagnostics, a Claude Code plugin, and an observable interactive surface.
+
+### Added
+- **`amicus doctor`**: a one-screen first-run health check — configured providers, default-model
+  resolution vs. the live catalog, catalog freshness, the OpenCode binary, Electron, installed
+  skills, and MCP registration. Each red line carries the exact fix command; `--json` lets skills
+  self-diagnose.
+- **Claude Code plugin**: Amicus is now installable from the marketplace —
+  `/plugin marketplace add BourbonDog/amicus` then `/plugin install amicus`. The plugin ships both
+  skills and the MCP server; npm stays the engine/CLI. (The plugin channel skips the global
+  postinstall via `AMICUS_SKIP_POSTINSTALL` so it can't double-register.)
+- **Per-leg cost & token telemetry**: the run/wave schema (now `schemaVersion: 2`) carries a
+  `usage` block — input/output/reasoning tokens and a `$` cost tagged by source (reported >
+  estimated > unknown). Surfaced in `fanout --json` and council run-stats.
+- **Enforced budget gate**: a per-`$/Mtok` threshold (on by default — blocks o3-pro-class models
+  before a wave launches) plus an optional `--max-cost` total ceiling. `--no-cost-gate` is the
+  explicit escape hatch.
+- **`amicus council tally|stats`**: deterministic council scoring — a structured findings
+  contract, a peers-only tier cascade with self-vote-corrected street-cred, a compounding
+  reviewer-reliability ledger, and a machine-readable `verdict.json`. The council stays a skill;
+  the engine owns only the arithmetic and schemas.
+- **Structured `--json` error envelope**: pre-flight failures now emit a typed
+  `{ ok: false, error: { code, message, hint } }` document on stdout (stable codes like
+  `MISSING_KEY`, `BAD_MODEL`, `BUDGET_EXCEEDED`) instead of bare text on stderr.
+
+### Changed
+- **Interactive GUI sessions now persist live**: `conversation.jsonl` and `progress.json` are
+  written as the session runs, so the CLI heartbeat, `amicus status`, and
+  `amicus read --conversation` work for GUI sessions — and **closing the window without folding no
+  longer loses the transcript**. Interactive runs also record token/cost usage. (Headless and
+  interactive now share one persistence transform.)
+- **Reliability**: a single source of truth for terminal state (exit code and `metadata.status`
+  always agree; the idle backstop no longer exits 0 with `running` metadata), and an
+  activity-driven interactive watchdog that won't kill an actively-working-but-quiet GUI session.
+- **CI**: a real matrix (Ubuntu / Windows / macOS × Node 18 / 20 / 22) plus lint, secret-scan, and
+  size-gate now gate every push and the publish.
+- Repo layout: the chat skill moved to `skills/sidecar/` (both skills live under `skills/`); npm
+  `homepage` now points at the live site; README and the landing page gained a "Prerequisites &
+  cost" section.
+
+### Fixed
+- **MCP stderr fd leak**: `spawnSidecarProcess` opened a `debug.log` descriptor for the child's
+  stderr but never closed the parent's copy — a descriptor leak that, on Windows, also held the
+  file open and blocked session-dir cleanup.
+- Platform-correct missing-key guidance (PowerShell `$PROFILE`/`setx` on Windows; leads with
+  `amicus key`); the committed-secret scan now knows all five providers; `amicus models` marks
+  your **actual** aliases (not curated defaults); OpenRouter's `-1` "variable pricing" sentinel
+  renders as `—` instead of a nonsense negative price.
+
 ## [1.1.0] - 2026-06-11
 
 ### Added
