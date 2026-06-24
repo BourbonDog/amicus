@@ -5,6 +5,32 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-24
+
+Making the mature council/fan-out engine legible: live per-leg progress, cost
+surfaced in human output, the deterministic council spine reachable over MCP,
+and a shareable verdict/disagreement report. Every change is presentation over
+data the engine already records — no schema change.
+
+### Added
+- **Live per-leg fan-out progress**: a running `amicus fanout` now prints a per-leg rollup on each
+  heartbeat — every model's stage, message count, and latest action — instead of a generic "still
+  running". `amicus_status` reports per-leg `latestActivity` plus a `stalled` flag, so you can see
+  at a glance which model is working, which is quiet, and which is wedged.
+- **Cost in human output**: the `amicus fanout` / `amicus read` human view now shows a per-leg `$`
+  cost cell and a `Wave cost:` total, and `amicus council tally` shows a run cost line. Each figure
+  is tagged by source (reported, `~` estimated, `?` unknown) so it can never be mistaken for an
+  authoritative number it isn't — surfaced straight from the existing usage telemetry.
+- **Council over MCP**: three new MCP tools — `amicus_council_tally`, `amicus_council_stats`, and
+  `amicus_verdict` — expose the deterministic council spine (peers-only tier cascade, street-cred,
+  the reliability ledger, and verdict merge) to Claude directly, with no Bash round-trip.
+- **`amicus council report`**: render a shareable disagreement + verdict report from a
+  `verdict.json` — the adjudication matrix (finding × judge), peers-only street-cred, findings
+  grouped by tier (Disputed first), and per-model + wave cost — as Markdown (`--md`, default) or a
+  self-contained HTML page (`--html`). Pass `--wave <wave.json>` to fold in the wave-level cost
+  total. The council skill's Stage-5 step now drives this renderer instead of hand-assembling the
+  report.
+
 ## [1.2.1] - 2026-06-24
 
 ### Fixed
