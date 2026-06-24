@@ -45,12 +45,32 @@ describe('Sidecar Config Module', () => {
       expect(config.getConfigDir()).toBe(tempDir);
     });
 
-    it('should return ~/.config/sidecar when env var is not set', () => {
+    it('defaults to ~/.config/amicus when no env override and neither config dir exists', () => {
       delete process.env.SIDECAR_CONFIG_DIR;
+      delete process.env.AMICUS_CONFIG_DIR;
+      // Point HOME at a fresh dir so the result is deterministic regardless of
+      // whatever ~/.config dirs exist on the test machine (a clean CI runner has
+      // neither; a dev box may have a leftover legacy ~/.config/sidecar). The
+      // post-rebrand default is the amicus dir.
+      const freshHome = path.join(tempDir, 'fresh-home');
+      fs.mkdirSync(freshHome, { recursive: true });
+      process.env.HOME = freshHome;
+      process.env.USERPROFILE = freshHome;
       jest.resetModules();
       const config = loadModule();
-      const homeDir = process.env.HOME || process.env.USERPROFILE;
-      expect(config.getConfigDir()).toBe(path.join(homeDir, '.config', 'sidecar'));
+      expect(config.getConfigDir()).toBe(path.join(freshHome, '.config', 'amicus'));
+    });
+
+    it('falls back to the legacy ~/.config/sidecar only when amicus is absent but the legacy dir exists', () => {
+      delete process.env.SIDECAR_CONFIG_DIR;
+      delete process.env.AMICUS_CONFIG_DIR;
+      const legacyHome = path.join(tempDir, 'legacy-home');
+      fs.mkdirSync(path.join(legacyHome, '.config', 'sidecar'), { recursive: true });
+      process.env.HOME = legacyHome;
+      process.env.USERPROFILE = legacyHome;
+      jest.resetModules();
+      const config = loadModule();
+      expect(config.getConfigDir()).toBe(path.join(legacyHome, '.config', 'sidecar'));
     });
   });
 

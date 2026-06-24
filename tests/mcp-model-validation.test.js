@@ -23,7 +23,9 @@ describe('MCP eager model validation', () => {
 
   afterEach(() => {
     process.env = originalEnv;
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    // maxRetries: Windows holds brief handles on freshly-written session files,
+    // so a plain recursive rm can hit ENOTEMPTY; retry a few times (no-op on POSIX).
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   function writeConfig(config) {

@@ -1268,7 +1268,9 @@ describe('amicus_start stderr capture', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    // maxRetries: Windows holds brief handles on freshly-written session files,
+    // so a plain recursive rm can hit ENOTEMPTY; retry a few times (no-op on POSIX).
+    fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   test('spawns process with stderr redirected to file', async () => {
