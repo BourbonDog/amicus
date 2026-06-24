@@ -66,6 +66,12 @@ function spawnSidecarProcess(args, sessionDir) {
     stdio: ['ignore', 'ignore', stderrFd],
     env: { ...process.env, AMICUS_DEBUG_PORT: '9223', LOG_LEVEL: process.env.LOG_LEVEL || 'info' },
   });
+  // The child inherited its own copy of the stderr fd during spawn; close the
+  // parent's copy so we don't leak a descriptor. On Windows an open fd also
+  // blocks deletion of debug.log (e.g. tests that mock spawn then rm the dir).
+  if (typeof stderrFd === 'number') {
+    try { fs.closeSync(stderrFd); } catch { /* best-effort */ }
+  }
   child.unref();
   return child;
 }

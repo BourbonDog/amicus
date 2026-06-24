@@ -655,8 +655,11 @@ describe('Headless Mode Runner', () => {
       );
       expect(result.timedOut).toBe(true);
       expect(mockAbortSession).toHaveBeenCalled();
-      expect(Date.now() - start).toBeLessThan(3000); // bounded, not infinite
-    }, 6000); // jest cap so a regression fails as a bounded timeout, not a forever-hang
+      // Bounded, not infinite. The bound is generous because a starved CI runner
+      // (notably slow macOS) can delay real timers far past the 300ms --timeout;
+      // a genuine forever-hang regression still trips the jest cap below.
+      expect(Date.now() - start).toBeLessThan(15000);
+    }, 20000); // jest cap so a real hang fails as a bounded timeout, not a forever-hang
   });
 
   describe('Progress Updates', () => {
