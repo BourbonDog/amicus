@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { handleCouncil } = require('../../src/cli-handlers-council');
 const avInput = require('./fixtures/av-receiver-input');
+const { tally } = require('../../src/council/tally');
 
 function capture(fn) {
   const out = []; const orig = process.stdout.write;
@@ -59,4 +60,37 @@ test('tally human render includes a cost line (sourced from runStats usage)', as
   expect(code).toBe(0);
   expect(out).toContain('Cost:');
   expect(out).toContain('$0.0600'); // 0.01+0.02+0.03 reported → toFixed(4)
+});
+
+const { buildVerdict } = require('../../src/council/verdict');
+
+function writeVerdict(dir) {
+  const v = buildVerdict(tally(avInput), [{ id: 'C6', decision: 'denied', applied: false }]);
+  const p = path.join(dir, 'verdict.json');
+  fs.writeFileSync(p, JSON.stringify(v));
+  return p;
+}
+
+test('report renders markdown from a verdict.json (default --md)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-rep-'));
+  const vp = writeVerdict(dir);
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'report', vp] }));
+  expect(code).toBe(0);
+  expect(out).toContain('# Council Report');
+  expect(out).toContain('Adjudication matrix');
+});
+
+test('report --html emits a self-contained document', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-rep-'));
+  const vp = writeVerdict(dir);
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'report', vp], html: true }));
+  expect(code).toBe(0);
+  expect(out).toContain('<!DOCTYPE html>');
+  expect(out).toContain('<table');
+});
+
+test('report with a missing path → BAD_ARGS envelope on stdout, exit 1', async () => {
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'report'], json: true }));
+  expect(code).toBe(1);
+  expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
 });

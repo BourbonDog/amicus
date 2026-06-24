@@ -113,6 +113,8 @@ function isBooleanFlag(key) {
      'no-validate-model',
      'remove',               // used by 'key' command only; other handlers ignore it
      'no-cost-gate',         // disable the budget gate for this run
+     'html',                 // council report: emit a self-contained HTML page
+     'md',                   // council report: emit Markdown (default)
    ];
   return booleanFlags.includes(key);
 }
@@ -305,6 +307,7 @@ Commands:
   models      List/search the model catalog, refresh it, audit aliases
   council tally <input.json> [--json]   Tally council findings → tiers/street-cred
   council stats [--json]                Reviewer-reliability from the ledger
+  council report <verdict.json> [--wave <wave.json>] [--md|--html]   Disagreement+verdict report
   doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
