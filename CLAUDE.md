@@ -120,7 +120,8 @@ src/
 │   ├── session-utils.js  # Sidecar Session Utilities - Shared functionality for session management
 │   ├── setup-window.js  # Setup Window Launcher
 │   ├── setup.js  # Sidecar Setup Wizard
-│   └── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
+│   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
+│   └── wave-progress.js
 ├── utils/
 │   ├── activity-poller.js
 │   ├── agent-mapping.js  # Agent Mapping Module
@@ -282,6 +283,7 @@ evals/
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `detectApiKeys()`, `runInteractiveSetup()`, `runReadlineSetup()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
+| `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest, never auto-repair. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
