@@ -12,6 +12,7 @@ const { ensureNodeModulesBinInPath } = require('./utils/path-setup');
 const { ensurePortAvailable } = require('./utils/server-setup');
 const { mapAgentToOpenCode } = require('./utils/agent-mapping');
 const { writeProgress } = require('./sidecar/progress');
+const { createMirrorState, mirrorMessages, logMessage } = require('./sidecar/conversation-mirror');
 
 /**
  * Fold marker that the agent outputs when done
@@ -295,13 +296,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       timeoutMs
     });
 
-    let output = '';
+    const mirror = createMirrorState();
     let completed = false;
     let timedOut = false;
     let aborted = false;
     let sessionError = null; // Captures model/SDK errors from assistant messages
-    const toolCalls = [];
-    const usageByMsg = new Map();
 
     // Poll for completion by checking messages
     const startTime = Date.now();
@@ -319,11 +318,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let stablePolls = 0; // Count polls where nothing has changed
     let lastToolCallCount = 0;
     let lastToolResultCount = 0;
-    const seenToolResultIds = new Set(); // deduplicate tool_result parts across polls
     let lastMessageCount = 0;
-    let receivingReported = false; // Track whether 'receiving' stage was reported
-    const seenTextParts = new Map(); // partId -> last captured text length
-    // seenPartIds reserved for future use (tracking processed non-text parts)
 
     while (!completed && (Date.now() - startTime) < timeoutMs) {
       watchdog.touch();
@@ -362,137 +357,35 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         consecutivePollFailures = 0;
         const messageCount = messages?.length || 0;
 
-        // Find the last assistant message to check if it's complete
-        let currentAssistantMsgId = null;
-        let assistantFinished = false;
-
-        if (messages && Array.isArray(messages)) {
-          for (const msg of messages) {
-            const role = msg.info?.role;
-
-            // Track assistant message state
-            if (role === 'assistant') {
-              currentAssistantMsgId = msg.info.id;
-              if (msg.info.tokens || typeof msg.info.cost === 'number') {
-                usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
-              }
-              // Check for errors — capture for result propagation
-              if (msg.info.error) {
-                sessionError = msg.info.error.data?.message
-                  || msg.info.error.name
-                  || 'Unknown model error';
-                logger.error('Session error detected in assistant message', {
-                  sessionId,
-                  error: msg.info.error.name,
-                  message: msg.info.error.data?.message
-                });
-              }
-            }
-
-            // Only process parts from assistant messages (skip user messages)
-            if (role !== 'assistant' || !msg.parts) {
-              continue;
-            }
-
-            for (const part of msg.parts) {
-              const partId = part.id || `${msg.info.id}:${part.type}:${msg.parts.indexOf(part)}`;
-
-              if (part.type === 'text' && part.text) {
-                const prevLen = seenTextParts.get(partId) || 0;
-                if (part.text.length > prevLen) {
-                  // Append only the new portion (handles streaming growth)
-                  const newText = part.text.slice(prevLen);
-                  output += newText;
-                  seenTextParts.set(partId, part.text.length);
-                  logMessage(conversationPath, {
-                    role: 'assistant',
-                    content: newText,
-                    timestamp: new Date().toISOString()
-                  });
-
-                  // Report 'receiving' stage on first text detection
-                  if (!receivingReported) {
-                    receivingReported = true;
-                    writeProgress(sessionDir, 'receiving', { messagesReceived: 1 });
-                  }
-                }
-              } else if ((part.type === 'tool_use' || part.type === 'tool') && !toolCalls.find(t => t.id === part.id)) {
-                const toolCall = {
-                  id: part.id,
-                  name: part.name,
-                  input: part.input
-                };
-                toolCalls.push(toolCall);
-                logger.debug('Tool call detected (polling)', {
-                  toolName: part.name,
-                  toolId: part.id,
-                  subagentType: part.input?.subagent_type,
-                  model: part.input?.model
-                });
-                logMessage(conversationPath, {
-                  role: 'assistant',
-                  type: 'tool_use',
-                  toolCall,
-                  timestamp: new Date().toISOString()
-                });
-
-                // Update progress on tool_use detection
-                const toolLabel = part.name
-                  ? `Calling tool: ${part.name}`
-                  : 'Executing tool call...';
-                writeProgress(sessionDir, 'receiving', {
-                  messagesReceived: toolCalls.length,
-                  latestTool: part.name || undefined,
-                  stageLabel: toolLabel
-                });
-                receivingReported = true;
-              } else if (part.type === 'tool_result') {
-                if (!seenToolResultIds.has(partId)) {
-                  seenToolResultIds.add(partId);
-                }
-                logger.debug('Tool result received (polling)', {
-                  toolUseId: part.tool_use_id,
-                  isError: part.is_error || false
-                });
-                logMessage(conversationPath, {
-                  role: 'tool',
-                  type: 'tool_result',
-                  toolUseId: part.tool_use_id,
-                  isError: part.is_error || false,
-                  content: part.content,
-                  timestamp: new Date().toISOString()
-                });
-              }
-            }
-          }
-
-          // assistantFinished = true only when the LAST assistant message is complete
-          // (earlier messages may finish while the model continues in new messages)
-          const lastAssistant = messages
-            .filter(m => m.info?.role === 'assistant')
-            .pop();
-          assistantFinished = !!(lastAssistant?.info?.time?.completed);
+        const mr = mirrorMessages(messages, mirror);
+        mr.appendLines.forEach(line => logMessage(conversationPath, line));
+        mr.progressUpdates.forEach(p => writeProgress(sessionDir, p.stage, p.extra));
+        const currentAssistantMsgId = mr.currentAssistantMsgId;
+        const assistantFinished = mr.assistantFinished;
+        if (mr.sessionError) {
+          sessionError = mr.sessionError;
+          logger.error('Session error detected in assistant message', { sessionId, message: mr.sessionError });
         }
 
         logger.debug('Poll status', {
           pollCount,
           messageCount,
           assistantFinished,
-          outputLength: output.length,
+          outputLength: mirror.output.length,
           elapsed: Date.now() - startTime
         });
 
         // Check for completion marker on its own line (not inline in prose).
         // Models may mention [SIDECAR_FOLD] when describing code — only treat
         // it as a signal when it appears as a standalone line.
-        if (/^\s*\[SIDECAR_FOLD\]\s*$/m.test(output)) {
+        if (/^\s*\[SIDECAR_FOLD\]\s*$/m.test(mirror.output)) {
           completed = true;
           break;
         }
 
         // If the model returned an error with no output, exit immediately
         // (don't wait for timeout — the model won't produce anything)
-        if (sessionError && !output && assistantFinished) {
+        if (sessionError && !mirror.output && assistantFinished) {
           logger.error('Model returned error with no output, exiting', {
             sessionError, pollCount
           });
@@ -502,7 +395,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // Authoritative idle signal from the OpenCode SDK (preferred over the heuristic).
         // Gate on real output so a pre-processing 'idle' cannot end the run early.
         // Best-effort: on any error, fall back to the activity heuristic below.
-        if (output.length > 0) {
+        if (mirror.output.length > 0) {
           try {
             const remainingForStatus = deadline - Date.now();
             const statusData = await withTimeout(
@@ -523,12 +416,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // Activity-aware idle detection: ANY of text growth, a new tool call, a new
         // tool result, a new message, or a new assistant message id counts as progress.
         // Only count toward completion when NOTHING changed (genuine idle).
-        const outputGrew = output.length > lastOutputLength;
-        lastOutputLength = output.length;
-        const toolActivity = toolCalls.length > lastToolCallCount;
-        lastToolCallCount = toolCalls.length;
-        const resultActivity = seenToolResultIds.size > lastToolResultCount;
-        lastToolResultCount = seenToolResultIds.size;
+        const outputGrew = mirror.output.length > lastOutputLength;
+        lastOutputLength = mirror.output.length;
+        const toolActivity = mirror.toolCalls.length > lastToolCallCount;
+        lastToolCallCount = mirror.toolCalls.length;
+        const resultActivity = mirror.seenToolResultIds.size > lastToolResultCount;
+        lastToolResultCount = mirror.seenToolResultIds.size;
         const messageActivity = messageCount > lastMessageCount;
         lastMessageCount = messageCount;
         const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
@@ -538,7 +431,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         if (!progressed) {
           // Require real output before counting toward completion — the SDK creates an
           // empty assistant-message placeholder on promptAsync that is NOT a finished response.
-          if (currentAssistantMsgId !== null && output.length > 0) {
+          if (currentAssistantMsgId !== null && mirror.output.length > 0) {
             stablePolls++;
             const threshold = assistantFinished ? stableFinishedPolls : stableIdlePolls;
             if (stablePolls >= threshold) {
@@ -547,7 +440,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             }
           } else {
             logger.debug('Waiting for model to produce output', {
-              pollCount, hasAssistantMsg: currentAssistantMsgId !== null, outputLength: output.length
+              pollCount, hasAssistantMsg: currentAssistantMsgId !== null, outputLength: mirror.output.length
             });
           }
         } else {
@@ -581,7 +474,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       aborted,
       pollCount,
       stablePolls,
-      outputLength: output.length,
+      outputLength: mirror.output.length,
       elapsed: Date.now() - startTime,
       hasAssistantMsg: lastAssistantMsgId !== null,
       sessionError: sessionError || null
@@ -607,11 +500,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (!externalServer) { server.close(); }
 
     // Log summary of tool calls for debugging
-    if (toolCalls.length > 0) {
+    if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
-        totalToolCalls: toolCalls.length,
-        taskToolCalls: toolCalls.filter(t => t.name === 'Task').length,
-        subagentTypes: toolCalls
+        totalToolCalls: mirror.toolCalls.length,
+        taskToolCalls: mirror.toolCalls.filter(t => t.name === 'Task').length,
+        subagentTypes: mirror.toolCalls
           .filter(t => t.name === 'Task' && t.input?.subagent_type)
           .map(t => ({ type: t.input.subagent_type, model: t.input.model || 'inherited' }))
       });
@@ -622,28 +515,28 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // and ALWAYS when the poll loop bailed on consecutive failures (F4: a dead
     // server must never classify as a complete leg, even with partial output).
     const { sumPerMessageUsage } = require('./utils/pricing');
-    const usage = sumPerMessageUsage(usageByMsg);
+    const usage = sumPerMessageUsage(mirror.usageByMsg);
 
-    if (sessionError && (!output || pollFailureBail)) {
+    if (sessionError && (!mirror.output || pollFailureBail)) {
       return {
-        summary: output ? extractSummary(output) : '',
+        summary: mirror.output ? extractSummary(mirror.output) : '',
         completed: false,
         timedOut,
         aborted,
         taskId,
-        toolCalls,
+        toolCalls: mirror.toolCalls,
         usage,
         error: sessionError
       };
     }
 
     return {
-      summary: extractSummary(output),
+      summary: extractSummary(mirror.output),
       completed,
       timedOut,
       aborted,
       taskId,
-      toolCalls, // Include tool calls in result for verification
+      toolCalls: mirror.toolCalls, // Include tool calls in result for verification
       usage,
       exitCode: 0
     };
@@ -724,17 +617,6 @@ function formatFoldOutput({ model, sessionId, client, cwd, mode, summary }) {
     '---',
     summary
   ].join('\n');
-}
-
-/**
- * Log a message to the conversation JSONL file
- * Spec Reference: §8.2 - Capture conversation to JSONL in real-time
- *
- * @param {string} conversationPath - Path to conversation.jsonl
- * @param {object} message - Message object with role, content, timestamp
- */
-function logMessage(conversationPath, message) {
-  fs.appendFileSync(conversationPath, JSON.stringify(message) + '\n', { mode: 0o600 });
 }
 
 module.exports = {
