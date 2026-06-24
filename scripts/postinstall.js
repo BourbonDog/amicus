@@ -172,12 +172,21 @@ function registerClaudeDesktop() {
   addMcpToConfigFile(configPath, 'sidecar', MCP_CONFIG);
 }
 
-function main() {
+function main(deps = {}) {
+  if (process.env.AMICUS_SKIP_POSTINSTALL === '1') {
+    console.log('[amicus] AMICUS_SKIP_POSTINSTALL set — skipping global setup (plugin channel handles registration).');
+    return;
+  }
+  const _installSkill = deps.installSkill || installSkill;
+  const _installCouncilSkill = deps.installCouncilSkill || installCouncilSkill;
+  const _registerClaudeCode = deps.registerClaudeCode || registerClaudeCode;
+  const _registerClaudeDesktop = deps.registerClaudeDesktop || registerClaudeDesktop;
+
   console.log('[amicus] Installing...');
-  installSkill();
-  installCouncilSkill();
-  registerClaudeCode();
-  registerClaudeDesktop();
+  _installSkill();
+  _installCouncilSkill();
+  _registerClaudeCode();
+  _registerClaudeDesktop();
 
   console.log('');
   console.log('[amicus] Setup:');
@@ -190,4 +199,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { addMcpToConfigFile, installSkill, installCouncilSkill, COUNCIL_FILES };
+module.exports = { main, addMcpToConfigFile, installSkill, installCouncilSkill, COUNCIL_FILES };
