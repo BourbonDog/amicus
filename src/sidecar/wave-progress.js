@@ -9,6 +9,8 @@
  * never a token firehose (all three council models flagged firehose noise).
  */
 
+const fs = require('fs');
+const path = require('path');
 const { readProgress, isStalled } = require('./progress');
 
 const WAVE_HEARTBEAT_INTERVAL = 15000;
@@ -34,8 +36,6 @@ function formatWaveProgress(legStates) {
  * @returns {{label:string, messages:number, latest:string, stage?:string, stalled:boolean}}
  */
 function readLegState(leg) {
-  const fs = require('fs');
-  const path = require('path');
   const progressPath = path.join(leg.dir, 'progress.json');
   const convPath = path.join(leg.dir, 'conversation.jsonl');
 

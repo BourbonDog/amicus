@@ -2,7 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { formatWaveProgress, readLegState } = require('../../src/sidecar/wave-progress');
+const { formatWaveProgress, readLegState, createWaveHeartbeat } = require('../../src/sidecar/wave-progress');
 
 describe('formatWaveProgress', () => {
   test('renders one terse line per leg with stage, msgs, latest', () => {
@@ -43,5 +43,42 @@ describe('readLegState', () => {
     expect(s.messages).toBe(1);
     expect(s.stage).toBe('receiving');
     expect(s.stalled).toBe(false);
+  });
+});
+
+describe('createWaveHeartbeat', () => {
+  let dir;
+  let stderrSpy;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wave-hb-'));
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    fs.rmSync(dir, { recursive: true, force: true });
+    jest.useRealTimers();
+  });
+
+  test('writes wave banner with leg label to stderr after one interval tick', () => {
+    const hb = createWaveHeartbeat([{ label: 'gemini', dir }], 15000);
+
+    // No write before the first tick
+    expect(stderrSpy).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(15000);
+
+    expect(stderrSpy).toHaveBeenCalled();
+    const written = stderrSpy.mock.calls.map((c) => String(c[0])).join('');
+    expect(written).toContain('[amicus] wave');
+    expect(written).toContain('gemini');
+
+    // stop() prevents further writes
+    hb.stop();
+    stderrSpy.mockClear();
+    jest.advanceTimersByTime(15000);
+    expect(stderrSpy).not.toHaveBeenCalled();
   });
 });
