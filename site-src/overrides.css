@@ -1,3 +1,7 @@
 /* Full-bleed for injected custom sections inside portable-docs' centered column */
 .pd-custom { max-width: none; width: 100%; margin-left: 0; margin-right: 0; }
-/* TOC-suppression selector is confirmed against the real DOM in Task 5 */
+
+/* Suppress the portable-docs landing section-nav (TOC rail) — a marketing
+   landing page reads as a page, not a navigable document. Confirmed against the
+   live DOM in Task 5: PD renders <nav class="section-nav-wrapper pd-no-print">. */
+.section-nav-wrapper { display: none !important; }

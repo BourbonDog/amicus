@@ -20,6 +20,8 @@ export function fuse(contentHtmlPath, outPath) {
 
   // 1) Head merge: restore favicons/OG/theme-color + override <title>
   html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${TITLE}</title>`);
+  // Strip the portable-docs default data-URI favicon so the Amicus favicons are the only ones
+  html = html.replace(/\s*<link\b[^>]*href=["']data:image\/svg\+xml[^>]*>/gi, '');
   html = html.replace(/<\/head>/i, `${headAssets}\n</head>`);
 
   // 2) Style merge: append custom + override CSS to the existing <style>
@@ -48,7 +50,7 @@ export function fuse(contentHtmlPath, outPath) {
     return null;
   }
   whenReady(function(root){
-    var content = root.querySelector(CFG.contentRootSelector) || root.firstElementChild || root;
+    var content = (CFG.contentRootSelector && root.querySelector(CFG.contentRootSelector)) || root.firstElementChild || root;
     var ph = root.querySelector(CFG.headerPlaceholderSelector); if(ph) ph.remove();
     content.insertAdjacentHTML('afterbegin', DEMO);
     content.insertAdjacentHTML('afterbegin', HERO);
