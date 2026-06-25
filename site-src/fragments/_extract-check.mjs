@@ -3,12 +3,16 @@ const read = (f) => readFileSync(new URL(`./${f}`, import.meta.url), 'utf8');
 const checks = [
   ['hero.html',  /pd-hero/],
   ['demo.html',  /id="demo"/],
+  ['demo.html',  /swarm-svg/],
+  ['demo.html',  /fork1/],
+  ['demo.html',  /01 &middot; Council|01 · Council/],
   ['badges.html',/pd-badges/],
   ['custom.css', /@keyframes\s+pulse-run/],
   ['custom.css', /\.pd-custom\s/],
   ['demo.js',    /__amicusRunDemo/],
   ['head-assets.html', /rel=["']icon["']/],
   ['head-assets.html', /og:title/],
+  ['head-assets.html', /og:description/],
 ];
 let ok = true;
 for (const [file, re] of checks) {

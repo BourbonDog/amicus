@@ -144,12 +144,112 @@
   display: block;
 }
 
-/* ─── Demo (Quick Start terminal block) ─────────────────────────────────────
-   Source region: <section class="demo-section" id="demo">
+/* ─── Demo (animated Council→Fork&Work→Fold + Swarm sections) ───────────────
+   Source region: #how + #swarm from site/index.html
    ─────────────────────────────────────────────────────────────────────────── */
 .pd-custom.pd-demo {
   text-align: center;
   padding: 4rem 2.5rem 5rem;
+}
+
+/* Content-width wrapper (mirrors site's .w rule) */
+.pd-custom .w {
+  max-width: var(--mw);
+  margin: 0 auto;
+}
+
+/* ─── How It Works step cards (#how .grid3 / .g-cell) ─────────────────────── */
+.pd-custom .grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 3.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pd-custom .g-cell {
+  padding: 2rem 2.2rem;
+  border-right: 1px solid var(--border);
+}
+
+.pd-custom .g-cell:nth-child(3n) {
+  border-right: none;
+}
+
+.pd-custom .g-cell h3 {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: .92rem;
+  margin-bottom: .35rem;
+  letter-spacing: -.01em;
+}
+
+.pd-custom .g-cell p {
+  color: #c5c5c3;
+  font-size: .85rem;
+  line-height: 1.6;
+}
+
+.pd-custom .g-cell svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 1.2rem;
+}
+
+/* ─── Swarm / parallel subagents (#swarm, .swarm-wrap, .swarm-desc) ─────── */
+.pd-custom .swarm-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: center;
+  margin-top: 2.5rem;
+}
+
+.pd-custom .swarm-desc h3 {
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin-bottom: .4rem;
+}
+
+.pd-custom .swarm-desc p {
+  color: #c5c5c3;
+  font-size: .88rem;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+.pd-custom .swarm-desc code {
+  font-size: .8rem;
+  color: var(--accent);
+  background: var(--asoft);
+  padding: .15rem .4rem;
+  border-radius: 4px;
+}
+
+.pd-custom .swarm-feats {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  margin-top: 1rem;
+}
+
+.pd-custom .swarm-feat {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .82rem;
+  color: #c5c5c3;
+}
+
+.pd-custom .swarm-feat::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
 }
 
 /* ─── Badges (provider grid) ────────────────────────────────────────────────
@@ -263,6 +363,9 @@
   .pd-custom.pd-badges {
     grid-template-columns: repeat(2, 1fr);
   }
+  .pd-custom .swarm-wrap {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 600px) {
@@ -275,5 +378,18 @@
   .pd-custom .hero-tag span {
     font-size: .65rem !important;
     padding: .25rem .55rem !important;
+  }
+  .pd-custom .grid3 {
+    grid-template-columns: 1fr;
+  }
+  .pd-custom .g-cell {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+  }
+  .pd-custom .g-cell:last-child {
+    border-bottom: none;
+  }
+  .pd-custom .g-cell svg {
+    max-height: 120px;
   }
 }

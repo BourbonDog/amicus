@@ -1,25 +1,153 @@
 <section class="pd-custom pd-demo" id="demo">
+  <!-- #how: Council / Fork & Work / Fold step cards -->
   <div class="w">
-    <div class="tag rv">Quick Start</div>
-    <h2 class="rv">Install. Configure. <span>Council.</span></h2>
-    <p class="lead rv" style="margin:0 auto">One install delivers both skills, the CLI, and the MCP server. No manual registration required.</p>
-    <div style="max-width:680px;margin:2.5rem auto 0;border-radius:10px;background:var(--bg);border:1px solid var(--border2);overflow:hidden" class="rv">
-      <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--border)">
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
+    <div class="tag rv">How It Works</div>
+    <h2 class="rv">Council. Or Fork.<br><span>You Choose the Depth.</span></h2>
+    <p class="lead rv">A full multi-model council for structured review, or a quick fork to one other model. Both share your full Claude context automatically.</p>
+    <div class="grid3">
+      <div class="g-cell rv r1">
+        <!-- Council illustration -->
+        <svg viewBox="0 0 280 120" fill="none">
+          <rect x="10" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#d97757" stroke-width="1"/>
+          <text x="42" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Gemini</text>
+          <text x="42" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
+          <rect x="90" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#10a37f" stroke-width="1"/>
+          <text x="122" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#10a37f">GPT</text>
+          <text x="122" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
+          <rect x="170" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#738ADB" stroke-width="1"/>
+          <text x="202" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#738ADB">DeepSeek</text>
+          <text x="202" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
+          <path d="M42 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
+          <path d="M122 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
+          <path d="M202 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
+          <rect x="50" y="80" width="145" height="32" rx="5" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
+          <text x="122" y="95" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Chair verdict</text>
+          <text x="122" y="106" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8a07c">Confirmed / Contested / Singleton</text>
+        </svg>
+        <h3>01 &middot; Council</h3>
+        <p>Say <em>council review this</em>. Independent reviews → anonymous cross-review → a non-Claude chair verdict. You accept or deny tiered findings.</p>
       </div>
-      <pre style="padding:1.4rem 1.6rem;font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:2.1;overflow-x:auto;margin:0"><span style="color:#555"># Install</span>
-<span style="color:var(--green)">npm install -g amicus</span>
+      <div class="g-cell rv r2">
+        <!-- Fork/Work illustration -->
+        <svg viewBox="0 0 280 120" fill="none">
+          <rect x="10" y="25" width="90" height="70" rx="6" fill="#161618" stroke="#222225"/>
+          <text x="55" y="50" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#555">Claude</text>
+          <text x="55" y="65" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#4ade80">working...</text>
+          <path d="M 100 60 L 140 60" stroke="#d97757" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <polygon points="138,56 146,60 138,64" fill="#d97757"/>
+          <rect x="150" y="25" width="120" height="70" rx="6" fill="#161618" stroke="#d97757" stroke-width="1.2"/>
+          <text x="210" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#d97757">Amicus</text>
+          <text x="210" y="62" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">Exploring...</text>
+          <text x="210" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">in parallel</text>
+          <text x="140" y="112" font-family="IBM Plex Mono,monospace" font-size="7" fill="#444" text-anchor="middle">simultaneous</text>
+        </svg>
+        <h3>02 &middot; Fork &amp; Work</h3>
+        <p>Or fork to a single model — Gemini, GPT, DeepSeek, any. It starts with your full Claude context. Work alongside it in a real window.</p>
+      </div>
+      <div class="g-cell rv r3">
+        <!-- Fold illustration -->
+        <svg viewBox="0 0 280 120" fill="none">
+          <rect x="10" y="25" width="120" height="70" rx="6" fill="#161618" stroke="#222225"/>
+          <text x="70" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#a1a1a0">Claude</text>
+          <rect x="22" y="56" width="96" height="28" rx="4" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
+          <text x="70" y="68" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">FOLD summary</text>
+          <text x="70" y="78" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#e8a07c">received</text>
+          <path d="M 210 60 L 140 60" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"/>
+          <polygon points="142,56 134,60 142,64" fill="#666"/>
+          <rect x="220" y="35" width="50" height="50" rx="6" fill="#161618" stroke="#222225"/>
+          <rect x="228" y="47" width="34" height="14" rx="3" fill="#d97757"/>
+          <text x="245" y="57" text-anchor="middle" font-family="Outfit,sans-serif" font-size="7.5" font-weight="600" fill="#fff">Fold</text>
+          <text x="245" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">click</text>
+        </svg>
+        <h3>03 &middot; Fold</h3>
+        <p>Click Fold and a structured summary flows back into Claude. Findings, recommendations, decisions. No context switching, no noise.</p>
+      </div>
+    </div>
+  </div>
 
-<span style="color:#555"># Configure API keys and default model</span>
-<span style="color:var(--green)">amicus setup</span>
+  <!-- #swarm: animated SVG subagents section -->
+  <div class="w" style="margin-top:4rem">
+    <div class="tag rv">Parallel Subagents</div>
+    <h2 class="rv">Spawn Subagents.<br><span>Claude Orchestrates.</span></h2>
+    <p class="lead rv">Amicus can also run headlessly as parallel subagents inside Claude Code or Cowork. Spawn multiple models at once. Each runs independently on its task. All results fold back into Claude.</p>
+    <div class="swarm-wrap">
+      <div class="rv">
+        <!-- Swarm SVG diagram -->
+        <svg class="swarm-svg" viewBox="0 0 460 340" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">
+          <!-- Claude Code / Cowork - orchestrator at top -->
+          <rect x="130" y="0" width="200" height="60" rx="8" fill="#111113" stroke="#f5f5f3" stroke-width="1.5"/>
+          <circle cx="145" cy="14" r="3" fill="#e25555" opacity=".6"/><circle cx="154" cy="14" r="3" fill="#e2a855" opacity=".6"/><circle cx="163" cy="14" r="3" fill="#55c255" opacity=".6"/>
+          <text x="230" y="17" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#a1a1a0">Claude Code / Cowork</text>
+          <text x="230" y="38" text-anchor="middle" font-family="Outfit,sans-serif" font-size="9.5" font-weight="600" fill="#f5f5f3">Orchestrator</text>
+          <text x="230" y="52" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#555">spawns headless Amicus instances</text>
 
-<span style="color:#555"># Then in Claude Code or Cowork, just say:</span>
-<span style="color:#c4a4dc">"council review this"</span>
+          <!-- Fork arrows down -->
+          <path class="fork1" d="M180 60 L60 110" stroke="#d97757" stroke-width="1.2"/><polygon class="farrow" points="62,107 56,113 65,113" fill="#d97757"/>
+          <path class="fork2" d="M230 60 L230 110" stroke="#d97757" stroke-width="1.2"/><polygon class="farrow" points="226,108 230,116 234,108" fill="#d97757"/>
+          <path class="fork3" d="M280 60 L400 110" stroke="#d97757" stroke-width="1.2"/><polygon class="farrow" points="395,107 404,113 398,107" fill="#d97757"/>
 
-<span style="color:#444">&gt; Amicus routes your doc through 3 models, cross-reviews, and presents a tiered verdict.</span>
-<span style="color:#444">&gt; You make the accept / deny calls.</span></pre>
+          <!-- Amicus 1: Gemini -->
+          <rect x="0" y="116" width="120" height="90" rx="8" fill="#111113" stroke="#4285F4" stroke-width="1.2"/>
+          <rect x="0" y="116" width="120" height="18" rx="8" fill="#4285F4" opacity=".08"/>
+          <rect x="0" y="128" width="120" height="6" fill="#111113"/>
+          <text x="60" y="130" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#4285F4">Gemini 3 Pro</text>
+          <rect x="10" y="142" width="100" height="18" rx="4" fill="#161618"/>
+          <text x="60" y="154" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#a1a1a0">"Review architecture"</text>
+          <rect class="run-badge" x="10" y="166" width="58" height="12" rx="6" fill="#4ade80" opacity=".1"/><text x="39" y="175" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#4ade80">running...</text>
+          <rect x="72" y="166" width="38" height="12" rx="6" fill="#161618"/><text x="91" y="175" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">--no-ui</text>
+          <text x="60" y="199" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#444">headless</text>
+
+          <!-- Amicus 2: GPT -->
+          <rect x="170" y="116" width="120" height="90" rx="8" fill="#111113" stroke="#10a37f" stroke-width="1.2"/>
+          <rect x="170" y="116" width="120" height="18" rx="8" fill="#10a37f" opacity=".08"/>
+          <rect x="170" y="128" width="120" height="6" fill="#111113"/>
+          <text x="230" y="130" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#10a37f">GPT-5</text>
+          <rect x="180" y="142" width="100" height="18" rx="4" fill="#161618"/>
+          <text x="230" y="154" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#a1a1a0">"Audit security"</text>
+          <rect class="run-badge" x="180" y="166" width="58" height="12" rx="6" fill="#4ade80" opacity=".1"/><text x="209" y="175" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#4ade80">running...</text>
+          <rect x="242" y="166" width="38" height="12" rx="6" fill="#161618"/><text x="261" y="175" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">--no-ui</text>
+          <text x="230" y="199" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#444">headless</text>
+
+          <!-- Amicus 3: DeepSeek -->
+          <rect x="340" y="116" width="120" height="90" rx="8" fill="#111113" stroke="#738ADB" stroke-width="1.2"/>
+          <rect x="340" y="116" width="120" height="18" rx="8" fill="#738ADB" opacity=".08"/>
+          <rect x="340" y="128" width="120" height="6" fill="#111113"/>
+          <text x="400" y="130" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#738ADB">DeepSeek R1</text>
+          <rect x="350" y="142" width="100" height="18" rx="4" fill="#161618"/>
+          <text x="400" y="154" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#a1a1a0">"Generate tests"</text>
+          <rect class="run-badge" x="350" y="166" width="58" height="12" rx="6" fill="#4ade80" opacity=".1"/><text x="379" y="175" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#4ade80">running...</text>
+          <rect x="412" y="166" width="38" height="12" rx="6" fill="#161618"/><text x="431" y="175" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">--no-ui</text>
+          <text x="400" y="199" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#444">headless</text>
+
+          <!-- Fold arrows back up to results -->
+          <path class="fold1" d="M60 210 L120 250" stroke="#666" stroke-width="1"/><polygon class="darrow" points="117,247 124,253 120,246" fill="#666"/>
+          <path class="fold2" d="M230 210 L230 250" stroke="#666" stroke-width="1"/><polygon class="darrow" points="226,248 230,256 234,248" fill="#666"/>
+          <path class="fold3" d="M400 210 L340 250" stroke="#666" stroke-width="1"/><polygon class="darrow" points="343,247 336,253 340,246" fill="#666"/>
+
+          <!-- Results collected -->
+          <rect class="results-glow" x="80" y="256" width="300" height="60" rx="8" fill="#111113" stroke="#d97757" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="230" y="275" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" font-weight="600" fill="#d97757">3 FOLD Summaries Received</text>
+          <text x="230" y="290" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#e8a07c">Architecture verified. 2 vulnerabilities found. 47 tests generated.</text>
+          <text x="230" y="305" text-anchor="middle" font-family="Outfit,sans-serif" font-size="7.5" fill="#555">All results flow back into Claude's context</text>
+
+          <!-- Fold labels -->
+          <text x="82" y="238" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">fold</text>
+          <text x="222" y="238" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">fold</text>
+          <text x="345" y="238" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">fold</text>
+        </svg>
+      </div>
+      <div class="swarm-desc rv">
+        <h3>Claude as orchestrator. Any model as a specialist.</h3>
+        <p>From inside Claude Code or Cowork, ask Claude to spawn headless Amicus instances using the MCP tool. Each subagent gets your full session context, works autonomously on its assigned task, and returns a structured summary. No window switching, no prompting each model yourself.</p>
+        <p>Run multiple Amicus instances simultaneously to split work across specialized models. One reviews architecture. Another audits security. A third generates tests. Claude collects every summary and synthesizes the results back into your main context.</p>
+        <div class="swarm-feats">
+          <div class="swarm-feat">Native MCP tool works inside Claude Code and Cowork</div>
+          <div class="swarm-feat">Each subagent gets full conversation context automatically</div>
+          <div class="swarm-feat">Runs autonomously with a configurable timeout</div>
+          <div class="swarm-feat">Structured summaries fold back into Claude's context</div>
+          <div class="swarm-feat">Conflict detection prevents subagents from overwriting each other</div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
