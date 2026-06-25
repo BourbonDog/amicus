@@ -69,3 +69,7 @@ test_output*.txt
 
 # Site redesign build scratch
 site-src/build/
+
+# SDD scratch — keep only the progress ledger
+.superpowers/sdd/*
+!.superpowers/sdd/progress.md
