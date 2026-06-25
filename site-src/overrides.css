@@ -1,0 +1,3 @@
+/* Full-bleed for injected custom sections inside portable-docs' centered column */
+.pd-custom { max-width: none; width: 100%; margin-left: 0; margin-right: 0; }
+/* TOC-suppression selector is confirmed against the real DOM in Task 5 */

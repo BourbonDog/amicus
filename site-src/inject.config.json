@@ -1,0 +1,5 @@
+{
+  "contentRootSelector": "#root > *",
+  "headerPlaceholderSelector": "[data-pd-header], header",
+  "modelAnchorRegex": "any model|model"
+}
