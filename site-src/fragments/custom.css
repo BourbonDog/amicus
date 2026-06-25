@@ -1,0 +1,279 @@
+/*
+ * custom.css — Amicus bespoke fragment styles
+ *
+ * All selectors are prefixed with .pd-custom so they only apply inside
+ * injected fragments and never collide with portable-docs tokens.
+ *
+ * @keyframes are intentionally global (referenced by name in JS animations).
+ *
+ * CSS custom properties from :root that these fragments depend on are
+ * declared here un-prefixed so they resolve when fragments are isolated.
+ */
+
+/* ─── Root variables the fragments depend on ─────────────────────────────── */
+:root {
+  --bg: #0a0a0a;
+  --s1: #111113;
+  --s2: #161618;
+  --s3: #1c1c1f;
+  --border: #222225;
+  --border2: #2c2c30;
+  --t1: #f5f5f3;
+  --t2: #a1a1a0;
+  --t3: #666;
+  --accent: #d97757;
+  --accent2: #e8a07c;
+  --asoft: rgba(217,119,87,.10);
+  --aglow: rgba(217,119,87,.05);
+  --green: #4ade80;
+  --mw: 1200px;
+}
+
+/* ─── Global keyframes (must stay un-prefixed — referenced by name in JS) ── */
+@keyframes pulse-run {
+  0%, 100% { opacity: .08 }
+  50%       { opacity: .28 }
+}
+@keyframes pulse-results {
+  0%, 100% { opacity: .04 }
+  60%       { opacity: .14 }
+}
+
+/* ─── Hero ──────────────────────────────────────────────────────────────────
+   Source region: .hero-wrap / .hero / .hero-text / .hero-visual
+   ─────────────────────────────────────────────────────────────────────────── */
+.pd-custom .hero-wrap {
+  position: relative;
+  overflow: hidden;
+  background-color: #0a0a0a;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E"),
+    radial-gradient(circle, rgba(255,255,255,.16) 1px, transparent 1px);
+  background-size: 200px 200px, 28px 28px;
+}
+
+/* 3-point color lighting */
+.pd-custom .hero-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 65% 90% at 18% 58%, rgba(217,119,87,.13) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 80% at 82% 40%, rgba(66,133,244,.16) 0%, transparent 55%),
+    radial-gradient(ellipse 45% 55% at 52% 108%, rgba(74,222,128,.06) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* vignette */
+.pd-custom .hero-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(217,119,87,.05) 0%, transparent 35%, transparent 65%, #0a0a0a 100%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, transparent 52%, rgba(0,0,0,.22) 100%);
+  pointer-events: none;
+}
+
+.pd-custom .hero {
+  position: relative;
+  z-index: 1;
+  max-width: var(--mw);
+  margin: 0 auto;
+  padding: 5rem 2.5rem 5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+
+.pd-custom .hero-text {
+  max-width: 480px;
+}
+
+.pd-custom .hero-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .7rem;
+  color: var(--t3);
+  margin-bottom: 1.8rem;
+  letter-spacing: .03em;
+  flex-wrap: wrap;
+}
+
+.pd-custom .hero-tag::before {
+  display: none;
+}
+
+.pd-custom #release-pill:hover {
+  background: rgba(217,119,87,.2);
+  border-color: rgba(217,119,87,.35);
+}
+
+.pd-custom .hero-sub {
+  font-size: clamp(1.5rem, 2.8vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1;
+  margin-bottom: 1.4rem;
+  color: var(--t1);
+}
+
+.pd-custom .hero-desc {
+  font-size: 1.05rem;
+  color: #c5c5c3;
+  line-height: 1.65;
+  margin-bottom: 2.2rem;
+}
+
+.pd-custom .hero-btns {
+  display: flex;
+  gap: .6rem;
+  flex-wrap: wrap;
+}
+
+.pd-custom .hero-visual {
+  position: relative;
+}
+
+.pd-custom .hero-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* ─── Demo (Quick Start terminal block) ─────────────────────────────────────
+   Source region: <section class="demo-section" id="demo">
+   ─────────────────────────────────────────────────────────────────────────── */
+.pd-custom.pd-demo {
+  text-align: center;
+  padding: 4rem 2.5rem 5rem;
+}
+
+/* ─── Badges (provider grid) ────────────────────────────────────────────────
+   Source region: .prov-grid inside #models section
+   ─────────────────────────────────────────────────────────────────────────── */
+.pd-custom.pd-badges {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-top: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.pd-custom .prov-card {
+  background: var(--bg);
+  padding: 1.8rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: .6rem;
+  transition: background .2s;
+}
+
+.pd-custom .prov-card:hover {
+  background: var(--s1);
+}
+
+.pd-custom .prov-card svg {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.pd-custom .prov-name {
+  font-weight: 600;
+  font-size: .88rem;
+  letter-spacing: -.01em;
+}
+
+.pd-custom .prov-models {
+  font-size: .72rem;
+  color: var(--t3);
+  font-family: 'IBM Plex Mono', monospace;
+  line-height: 1.5;
+}
+
+.pd-custom .prov-or {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  padding: 1.6rem;
+  background: var(--s1);
+}
+
+.pd-custom .prov-or svg {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.pd-custom .prov-or-text {
+  text-align: left;
+}
+
+.pd-custom .prov-or-text .prov-name {
+  font-size: .95rem;
+}
+
+.pd-custom .prov-or-text p {
+  font-size: .78rem;
+  color: var(--t3);
+  margin-top: .1rem;
+}
+
+/* ─── Swarm SVG animation helpers ───────────────────────────────────────────
+   Used by demo.js / __amicusRunDemo — initial hidden states for arrows
+   ─────────────────────────────────────────────────────────────────────────── */
+.pd-custom .swarm-svg .farrow,
+.pd-custom .swarm-svg .darrow {
+  opacity: 0;
+}
+
+/* ─── Responsive overrides ──────────────────────────────────────────────────*/
+@media (max-width: 960px) {
+  .pd-custom .hero {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    padding: 4rem 1.5rem 3rem;
+  }
+  .pd-custom .hero-visual {
+    max-width: 500px;
+  }
+  .pd-custom .hero-btns {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .pd-custom .hero-btns .cmd {
+    flex: 1;
+    min-width: 0;
+  }
+  .pd-custom .prov-card svg {
+    max-height: 140px;
+    object-fit: contain;
+  }
+  .pd-custom.pd-badges {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .pd-custom .hero {
+    padding: 3rem 1.2rem 2.5rem;
+  }
+  .pd-custom.pd-badges {
+    grid-template-columns: 1fr;
+  }
+  .pd-custom .hero-tag span {
+    font-size: .65rem !important;
+    padding: .25rem .55rem !important;
+  }
+}
