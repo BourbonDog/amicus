@@ -356,6 +356,7 @@ Options for 'start':
 
 Options for 'fanout':
   --models <a,b,c>             Required. Comma-separated aliases or provider/model IDs
+  --council <name>             Run a saved council instead of --models (e.g. free). Mutually exclusive with --models
   --prompt <text>              Task briefing (or use --prompt-file)
   --prompt-file <path>         Read the briefing from a UTF-8 file (avoids the
                                ~32KB Windows argument cap). Mutually exclusive

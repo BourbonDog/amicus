@@ -108,8 +108,30 @@ async function handleFanout(args) {
   if (promptRes.error) {
     process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error }));
   }
-  if (typeof args.models !== 'string' || !args.models.trim()) {
-    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --models is required (comma-separated aliases or provider/model IDs)' }));
+  // Council preset: expand a saved council into args.models (mutually exclusive with --models).
+  const hasModels = typeof args.models === 'string' && args.models.trim();
+  const hasCouncil = args.council !== undefined && args.council !== false;
+  if (hasModels && hasCouncil) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: pass exactly one of --models / --council, not both' }));
+  }
+  if (!hasModels && !hasCouncil) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --models is required (comma-separated aliases or provider/model IDs), or use --council <name>' }));
+  }
+  if (hasCouncil) {
+    if (typeof args.council !== 'string' || !args.council.trim()) {
+      process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --council requires a council name (e.g. --council free)' }));
+    }
+    const { resolveCouncilMembers } = require('./utils/config');
+    const { readCache } = require('./utils/model-catalog');
+    const catalog = (readCache() || {}).models || [];
+    const expanded = resolveCouncilMembers(args.council.trim(), catalog);
+    if (expanded.error) {
+      process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: ${expanded.error}` }));
+    }
+    if (expanded.dropped && expanded.dropped.length && !useJson) {
+      process.stderr.write(`Notice: dropped unavailable council member(s): ${expanded.dropped.join(', ')}\n`);
+    }
+    args.models = expanded.models.join(',');
   }
   if (args['wave-id']) {
     const check = validateTaskId(String(args['wave-id']));
