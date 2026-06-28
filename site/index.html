@@ -121,7 +121,8 @@ h2 span{color:#b5b5b3}
 
 /* BORDERED CONTAINER (Daytona-style) */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);margin-top:3.5rem;border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.g-cell{padding:2rem 2.2rem;border-right:1px solid var(--border)}
+.g-cell{padding:2rem 2.2rem;border-right:1px solid var(--border);transition:background .2s}
+.g-cell:hover{background:var(--s1)}
 .g-cell:nth-child(3n){border-right:none}
 .g-cell h3{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:.92rem;margin-bottom:.35rem;letter-spacing:-.01em}
 .g-cell p{color:#c5c5c3;font-size:.85rem;line-height:1.6}
@@ -129,7 +130,8 @@ h2 span{color:#b5b5b3}
 
 /* 2-col feature rows (Daytona pattern) */
 .grid2{display:grid;grid-template-columns:1fr 1fr;margin-top:3.5rem;border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.g2-cell{padding:2.5rem;border-bottom:1px solid var(--border);border-right:1px solid var(--border)}
+.g2-cell{padding:2.5rem;border-bottom:1px solid var(--border);border-right:1px solid var(--border);transition:background .2s}
+.g2-cell:hover{background:var(--s1)}
 .g2-cell:nth-child(even){border-right:none}
 .g2-cell:nth-last-child(-n+2){border-bottom:none}
 .g2-cell h4{font-weight:600;font-size:.95rem;margin-bottom:.2rem;letter-spacing:-.01em}
@@ -143,8 +145,9 @@ h2 span{color:#b5b5b3}
 .case-r h3{font-weight:600;font-size:.98rem;margin-bottom:.15rem}
 .case-r p{color:#c5c5c3;font-size:.86rem;line-height:1.6}
 .vig-grid{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:3rem}
-.vig-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--s1);transition:border-color .25s}
-.vig-card:hover{border-color:var(--border2)}
+.vig-card{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--s1);transition:border-color .25s,box-shadow .25s,transform .25s}
+.vig-card:hover{border-color:rgba(217,119,87,.4);box-shadow:0 16px 44px -18px rgba(217,119,87,.28);transform:translateY(-3px)}
+.vig-grid .vig-card{transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .3s cubic-bezier(.16,1,.3,1),border-color .25s ease,box-shadow .25s ease}
 .vig-card svg{display:block;width:100%;height:auto;border-bottom:1px solid var(--border)}
 .vig-body{padding:1.5rem 1.6rem}
 .vig-body h3{font-weight:600;font-size:1rem;margin-bottom:.25rem}
@@ -154,8 +157,8 @@ h2 span{color:#b5b5b3}
 
 /* MODELS - provider grid */
 .prov-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:2.5rem;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--border)}
-.prov-card{background:var(--bg);padding:1.8rem 1.6rem;display:flex;flex-direction:column;align-items:center;text-align:center;gap:.6rem;transition:background .2s}
-.prov-card:hover{background:var(--s1)}
+.prov-card{background:var(--bg);padding:1.8rem 1.6rem;display:flex;flex-direction:column;align-items:center;text-align:center;gap:.6rem;transition:background .2s,box-shadow .2s}
+.prov-card:hover{background:var(--s1);box-shadow:inset 0 0 0 1px rgba(217,119,87,.25)}
 .prov-card svg{width:32px;height:32px;flex-shrink:0}
 .prov-name{font-weight:600;font-size:.88rem;letter-spacing:-.01em}
 .prov-models{font-size:.72rem;color:var(--t3);font-family:'IBM Plex Mono',monospace;line-height:1.5}
@@ -171,6 +174,7 @@ h2 span{color:#b5b5b3}
 /* SWARM */
 .swarm-wrap{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center;margin-top:2.5rem}
 /* Swarm SVG animations: initial states set via JS (getTotalLength), classes trigger end state */
+.swarm-svg{border-radius:14px;box-shadow:0 30px 80px -30px rgba(0,0,0,.7),0 0 60px -18px rgba(217,119,87,.12)}
 .swarm-svg .farrow,.swarm-svg .darrow{opacity:0}
 @keyframes pulse-run{0%,100%{opacity:.08}50%{opacity:.28}}
 @keyframes pulse-results{0%,100%{opacity:.04}60%{opacity:.14}}
