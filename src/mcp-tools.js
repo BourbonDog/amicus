@@ -255,8 +255,11 @@ function getTools() {
       'document (per-leg summaries inside). Each leg is also an ordinary ' +
       'session readable by taskId.',
     inputSchema: {
-      models: z.array(safeModel).min(1).max(10).describe(
-        `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed.`
+      models: z.array(safeModel).min(1).max(10).optional().describe(
+        `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed. Omit when using 'council'.`
+      ),
+      council: z.string().optional().describe(
+        "Run a saved council by name (e.g. 'free') instead of 'models'. Expands to the council's members. Mutually exclusive with 'models'."
       ),
       prompt: z.string().describe(
         'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'
