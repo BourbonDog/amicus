@@ -40,19 +40,23 @@ function addAlias(name, modelString) {
 }
 
 /**
- * Create a new config with all default aliases and the chosen default model
+ * Ensure a config exists with the chosen default model. Read-modify-write:
+ * preserves every pre-existing top-level key (aliases, councils, …) and only
+ * fills in the default + any missing default aliases. Never clobbers.
  * @param {string} defaultModel - Default model alias or full model string
- * @returns {object} The created config object
+ * @returns {object} The resulting config object
  */
 function createDefaultConfig(defaultModel) {
+  const existing = loadConfig() || {};
   const cfg = {
-    default: defaultModel,
-    aliases: getDefaultAliases()
+    ...existing,
+    default: existing.default || defaultModel,
+    aliases: { ...getDefaultAliases(), ...(existing.aliases || {}) },
   };
   saveConfig(cfg);
-  logger.info('Default config created', {
-    default: defaultModel,
-    aliasCount: Object.keys(cfg.aliases).length
+  logger.info('Default config ensured', {
+    default: cfg.default,
+    aliasCount: Object.keys(cfg.aliases).length,
   });
   return cfg;
 }
