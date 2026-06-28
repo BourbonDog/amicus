@@ -77,3 +77,27 @@ describe('sidecar:save-config (read-modify-write)', () => {
     expect(saveConfig).toHaveBeenCalled();
   });
 });
+
+describe('sidecar:save-config (council picks)', () => {
+  test('councilPicks seeds councils.free and free-* aliases', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: { gemini: 'g' } });
+    const written = [];
+    saveConfig.mockImplementation(c => written.push(JSON.parse(JSON.stringify(c))));
+    await save('gemini', {}, ['openrouter/deepseek/deepseek-r1:free', 'openrouter/qwen/qwen3-coder:free']);
+    const final = written[written.length - 1];
+    expect(final.councils.free).toHaveLength(2);
+    const ids = final.councils.free.map(a => final.aliases[a]);
+    expect(ids).toEqual(expect.arrayContaining([
+      'openrouter/deepseek/deepseek-r1:free', 'openrouter/qwen/qwen3-coder:free',
+    ]));
+    expect(final.default).toBe('gemini'); // council never overrides default
+  });
+
+  test('no councilPicks → behaves exactly as before (no councils key added)', async () => {
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: { gemini: 'g' } });
+    const written = [];
+    saveConfig.mockImplementation(c => written.push(JSON.parse(JSON.stringify(c))));
+    await save('gemini', {});
+    expect(written[written.length - 1].councils).toBeUndefined();
+  });
+});

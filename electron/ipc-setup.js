@@ -97,7 +97,8 @@ function registerSetupHandlers(getMainWindow) {
 
   // Read-modify-write: never rewrite an alias the renderer didn't send.
   // aliasWrites values: string = set, null = delete. First run seeds live.
-  ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites) => {
+  // councilPicks (optional): when length >= 2, seeds the free council via seedFreeCouncil.
+  ipcMain.handle('sidecar:save-config', async (_event, defaultModel, aliasWrites, councilPicks) => {
     try {
       const { loadConfig, saveConfig } = require('../src/utils/config');
       let cfg = loadConfig();
@@ -119,6 +120,9 @@ function registerSetupHandlers(getMainWindow) {
         }
       }
       saveConfig(cfg);
+      if (Array.isArray(councilPicks) && councilPicks.length >= 2) {
+        require('../src/sidecar/setup').seedFreeCouncil(councilPicks);
+      }
       return { success: true };
     } catch (err) {
       logger.error('save-config handler error', { error: err.message });
@@ -191,6 +195,19 @@ function registerSetupHandlers(getMainWindow) {
       logger.error('refresh-catalog handler error', { error: err.message });
       return { models: [], fetchedAt: null };
     }
+  });
+
+  // Free OpenRouter council: returns all free models from the catalog,
+  // marking those in the vendor-diverse suggested set with suggested:true.
+  ipcMain.handle('sidecar:fetch-free-models', async () => {
+    try {
+      const { getCatalog } = require('../src/utils/model-catalog');
+      const { listFreeModels, suggestFreeCouncil } = require('../src/utils/free-models');
+      const catalog = await getCatalog();
+      const free = listFreeModels(catalog);
+      const suggested = new Set(suggestFreeCouncil(free, 3).map(r => r.id));
+      return free.map(r => ({ id: r.id, suggested: suggested.has(r.id) }));
+    } catch (_err) { return []; }
   });
 }
 
