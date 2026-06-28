@@ -36,7 +36,7 @@
   --t2:#a1a1a0;
   --t3:#666;
   --accent:#d97757;
-  --accent2:#e8a07c;
+  --accent2:#e8b24a;
   --asoft:rgba(217,119,87,.10);
   --aglow:rgba(217,119,87,.05);
   --green:#4ade80;
@@ -78,15 +78,15 @@ nav.nav-vis{transform:none}
 /* grain SVG: feTurbulence fractalNoise tiled 200×200, opacity .06 */
 .hero-wrap{position:relative;overflow:hidden;background-color:#0a0a0a;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E"),radial-gradient(circle,rgba(255,255,255,.16) 1px,transparent 1px);background-size:200px 200px,28px 28px}
 /* 3-point color lighting: orange left, blue right, green bottom */
-.hero-wrap::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 65% 90% at 18% 58%,rgba(217,119,87,.13) 0%,transparent 55%),radial-gradient(ellipse 60% 80% at 82% 40%,rgba(66,133,244,.16) 0%,transparent 55%),radial-gradient(ellipse 45% 55% at 52% 108%,rgba(74,222,128,.06) 0%,transparent 50%);pointer-events:none}
+.hero-wrap::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 65% 90% at 18% 58%,rgba(217,119,87,.16) 0%,transparent 55%),radial-gradient(ellipse 60% 80% at 82% 40%,rgba(66,133,244,.19) 0%,transparent 55%),radial-gradient(ellipse 45% 55% at 52% 108%,rgba(74,222,128,.07) 0%,transparent 50%);pointer-events:none}
 /* vignette: top warm gradient + edge darkening + bottom fade to black */
 .hero-wrap::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(217,119,87,.05) 0%,transparent 35%,transparent 65%,#0a0a0a 100%),radial-gradient(ellipse 120% 100% at 50% 50%,transparent 52%,rgba(0,0,0,.22) 100%);pointer-events:none}
-.hero{position:relative;z-index:1;max-width:var(--mw);margin:0 auto;padding:5rem 2.5rem 5rem;display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center}
-.hero-text{max-width:480px}
+.hero{position:relative;z-index:1;max-width:var(--mw);margin:0 auto;padding:6rem 2.5rem 5rem;display:grid;grid-template-columns:1fr 1.1fr;gap:4rem;align-items:center;min-height:88vh}
+.hero-text{max-width:520px}
 .hero-tag{display:inline-flex;align-items:center;gap:.45rem;font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:var(--t3);margin-bottom:1.8rem;letter-spacing:.03em;flex-wrap:wrap}
 .hero-tag::before{display:none}
 #release-pill:hover{background:rgba(217,119,87,.2);border-color:rgba(217,119,87,.35)}
-h1{font-weight:800;font-size:clamp(3.4rem,5.5vw,5.2rem);line-height:.92;letter-spacing:-.05em;margin-bottom:1.4rem}
+h1{font-weight:800;font-size:clamp(3.4rem,6vw,5.6rem);line-height:.92;letter-spacing:-.05em;margin-bottom:1.4rem}
 h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hero-sub{font-size:clamp(1.5rem,2.8vw,2.1rem);font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:1.4rem;color:var(--t1)}
 .hero-desc{font-size:1.05rem;color:#c5c5c3;line-height:1.65;margin-bottom:2.2rem}
@@ -102,7 +102,7 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--ac
 
 /* Hero SVG area */
 .hero-visual{position:relative}
-.hero-svg{width:100%;height:auto;display:block}
+.hero-svg{width:100%;height:auto;display:block;border-radius:14px;box-shadow:0 30px 80px -28px rgba(0,0,0,.7),0 0 60px -16px rgba(217,119,87,.13)}
 
 /* SECTIONS */
 section{padding:5rem 2.5rem}
@@ -284,7 +284,7 @@ h2.v .w-anim{opacity:1;transform:none}
 
 <nav>
   <div class="nav-i">
-    <a href="#" class="logo"><svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="16" height="16" rx="3" fill="#2D2B2A"/><path d="M3 2v12" stroke="#D97757" stroke-width="2" stroke-linecap="round"/><path d="M10 2v5c0 2-3 3-7 5" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/></svg>amicus</a>
+    <a href="#" class="logo"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#2D2B2A"/><g stroke="#D97757" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="miter"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/></g><path d="M19 8H28" stroke="#E8B24A" stroke-width="1.2" stroke-linecap="round"/></svg>amicus</a>
     <div class="nav-r">
       <a href="#demo">Demo</a>
       <a href="#how">How It Works</a>
@@ -312,6 +312,10 @@ h2.v .w-anim{opacity:1;transform:none}
 <div class="hero">
   <div class="hero-text">
     <div class="hero-tag rv" style="gap:.6rem">
+      <span style="display:inline-flex;align-items:center;gap:.4rem;font-family:'Outfit',sans-serif;font-weight:700;font-size:.82rem;color:var(--t1);letter-spacing:-.01em">
+        <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#2D2B2A"/><g stroke="#D97757" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="miter"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/></g><path d="M19 8H28" stroke="#E8B24A" stroke-width="1.2" stroke-linecap="round"/></svg>
+        Amicus
+      </span>
       <span style="display:inline-flex;align-items:center;gap:.35rem;background:rgba(251,191,36,.18);color:#fbbf24;padding:.3rem .7rem;border-radius:5px;font-weight:700;font-size:.72rem;letter-spacing:.06em;border:1px solid rgba(251,191,36,.25)">Open Beta</span>
       <span style="display:inline-flex;align-items:center;gap:.4rem;background:rgba(255,255,255,.08);padding:.3rem .7rem;border-radius:5px;font-weight:600;font-size:.72rem;border:1px solid rgba(255,255,255,.1)">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="#e5e5e3"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
@@ -326,8 +330,8 @@ h2.v .w-anim{opacity:1;transform:none}
         <span id="release-version"></span>
       </a>
     </div>
-    <h1 class="rv"><em>Amicus</em></h1>
-    <p class="hero-sub rv">LLM Council. <span style="background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Parallel window.</span></p>
+    <h1 class="rv">Every model.<br><em>One verdict.</em></h1>
+    <p class="hero-sub rv">LLM Council. Parallel window.</p>
     <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em>: Amicus routes it through models from different families, has them cross-review each other anonymously, and a non-Claude chair synthesizes the verdict. Or skip the ceremony — fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
     <div class="hero-btns rv">
       <div class="cmd" onclick="copyCmd(this)" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
