@@ -56,6 +56,22 @@ in this run is written here. Use its absolute path in all `--prompt-file` argume
 
 **Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting both the reviewer-reliability data from `amicus council stats` (the authoritative quantitative source — runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — e.g.:
 
+**Free council (zero-cost).** If the user asks for a "free council" / "zero-cost council",
+read `councils.free` from `~/.config/amicus/config.json` and run
+`amicus fanout --council free --prompt-file <briefing>`. Free-tier handling:
+- Cost ≈ $0 — skip the paid-run cost framing (the budget gate is a no-op at zero price).
+- No reliability history: free models have no `amicus council stats` / `MODEL-NOTES` record,
+  so don't rank on street-cred. Pick the most capable free model as chair and state lower confidence.
+- Weak structured output: small free models are less reliable at the strict findings JSON; expect
+  more `validateFindings` repair-loop hits.
+- Throttled/truncated legs: a mid-stream 429 can yield a leg marked `complete` with a truncated,
+  unparseable review. When a free-council leg is `complete` but `validateFindings` returns
+  `NO_FENCED_BLOCK`/`NOT_PARSEABLE`, treat it as suspect/throttled — don't burn the repair loop on the
+  same throttled model; disclose it and apply the ≥2-reviews-survive wave-degrade rule.
+- Prerequisite: free models require enabling data-sharing in OpenRouter privacy settings
+  (openrouter.ai/settings/privacy) or legs 404 at run time — catalog validation cannot catch this.
+  State this up front.
+
 > This run uses 3 council models across 2 fanout waves + 1 chair call (~7 model runs), ~10 min.
 
 Then **wait for confirmation**. Never launch without it. The budget gate enforces the cost guardrail in code: by default it refuses any leg whose price exceeds the per-$/Mtok threshold (the o3/o3-pro guard). To run an intentionally expensive model the user explicitly asked for by name, pass `--no-cost-gate`; to raise only the total ceiling, pass `--max-cost <$>`.
