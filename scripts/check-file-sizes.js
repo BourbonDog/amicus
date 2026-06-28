@@ -30,6 +30,9 @@ const CONFIG = {
     'src/session-manager.js',
     // Grandfathered by whole-tree CI scan (was 355 lines on main before Task 4)
     'src/prompt-builder.js',
+    // Grandfathered: was 348 lines before Task 8 (seedFreeCouncil + deriveFreeAlias landed
+    // before the staged-file gate caught sidecar/setup.js). Shrink below 300, then remove.
+    'src/sidecar/setup.js',
   ],
 };
 

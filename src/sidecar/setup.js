@@ -157,12 +157,69 @@ async function seedCatalog(print) {
 }
 
 /**
+ * Free OpenRouter council branch of the readline wizard. Requires
+ * OPENROUTER_API_KEY; lists free catalog models, lets the user multi-pick
+ * (Enter = the vendor-diverse default), seeds aliases + councils.free, and
+ * never touches config.default.
+ * @param {readline.Interface} rl
+ */
+async function runFreeCouncilBranch(rl) {
+  const keys = detectApiKeys();
+  if (!keys.openrouter) {
+    console.log('');
+    console.log('A free council needs OPENROUTER_API_KEY (free models route only through OpenRouter).');
+    console.log('Set OPENROUTER_API_KEY and re-run: amicus setup. No changes made.');
+    return;
+  }
+  const { getCatalog } = require('../utils/model-catalog');
+  const { listFreeModels, suggestFreeCouncil, PINNED_FREE_MODELS } = require('../utils/free-models');
+  let catalog = [];
+  try { catalog = await getCatalog(); } catch (_e) { /* offline */ }
+  let free = listFreeModels(catalog);
+  if (free.length === 0) {
+    console.log('Live free-model list unavailable (offline?) — using a small pinned set.');
+    free = PINNED_FREE_MODELS.map(id => ({ id }));
+  }
+  const defaults = new Set(suggestFreeCouncil(free, 3).map(r => r.id));
+  console.log('');
+  console.log('Free OpenRouter models (★ = default council):');
+  free.forEach((r, i) => {
+    const star = defaults.has(r.id) ? '★' : ' ';
+    console.log(`  ${star} ${i + 1}) ${r.id}`);
+  });
+  console.log('');
+  const answer = await askQuestion(rl,
+    'Pick members (comma-separated numbers, or Enter for the ★ default): ');
+  let pickIds;
+  if (!answer) {
+    pickIds = free.filter(r => defaults.has(r.id)).map(r => r.id);
+  } else {
+    pickIds = answer.split(',').map(s => parseInt(s.trim(), 10))
+      .filter(n => n >= 1 && n <= free.length).map(n => free[n - 1].id);
+  }
+  if (pickIds.length < 2) {
+    console.log('A council needs at least 2 models. No changes made.');
+    return;
+  }
+  const { council } = seedFreeCouncil(pickIds);
+  await seedCatalog();
+  console.log('');
+  console.log(`Free council saved: councils.free = [${council.join(', ')}]`);
+  console.log('Run it:   amicus fanout --council free --prompt "..."');
+  console.log('config.default left unchanged.');
+  console.log('');
+  console.log('Heads up (free tier): rate-limited & quality-variable; some models 404');
+  console.log('unless you enable data-sharing at openrouter.ai/settings/privacy.');
+}
+
+/**
  * Run the readline-based setup wizard (headless fallback)
  *
  * Guides the user through:
  * 1. API key detection
- * 2. Default model selection from live quick-picks (read-modify-write, no clobber)
- * 3. Config file save
+ * 2. Mode selection (standard or free council)
+ * 3. Default model selection from live quick-picks (read-modify-write, no clobber)
+ * 4. Config file save
  */
 async function runReadlineSetup() {
   const rl = readline.createInterface({
@@ -188,6 +245,13 @@ async function runReadlineSetup() {
       console.log('Set OPENROUTER_API_KEY to get started, or run: amicus setup');
     }
     console.log('');
+
+    const mode = await askQuestion(rl,
+      'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
+    if (mode === '2') {
+      await runFreeCouncilBranch(rl);
+      return;
+    }
 
     const { getCatalog } = require('../utils/model-catalog');
     const { resolveQuickPicks, toLiveSeedAliases } = require('../utils/quick-picks');
@@ -340,6 +404,7 @@ module.exports = {
   createDefaultConfig,
   deriveFreeAlias,
   detectApiKeys,
+  runFreeCouncilBranch,
   runInteractiveSetup,
   runReadlineSetup,
   runApiKeySetup,
