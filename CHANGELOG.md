@@ -5,6 +5,16 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- **Free OpenRouter council**: a new `amicus setup` option (readline wizard + Electron Models step)
+  that stands up a zero-cost council of free `:free` OpenRouter models, saved as a first-class
+  `councils` config primitive. Run it with `amicus fanout --council free` or the `amicus_fanout` MCP
+  `council` param; the second-opinion skill reads `councils.free`. Free-model picks are detected
+  live from the catalog (the `:free` suffix is authoritative), seeded under collision-safe `free-*`
+  aliases, and a delisted member degrades gracefully (dropped with a warning) instead of failing the
+  wave. Needs only an `OPENROUTER_API_KEY`; the wizard discloses the free-tier caveats (rate limits,
+  variable quality, the OpenRouter data-sharing prerequisite). `config.default` is left untouched.
+
 ## [1.3.0] - 2026-06-24
 
 Making the mature council/fan-out engine legible: live per-leg progress, cost
