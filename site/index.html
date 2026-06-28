@@ -109,6 +109,7 @@ section{padding:5rem 2.5rem}
 .w{max-width:var(--mw);margin:0 auto}
 .sep{border:none;border-top:1px solid var(--border);max-width:var(--mw);margin:0 auto}
 .tag{font-family:'IBM Plex Mono',monospace;font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--accent);font-weight:500;margin-bottom:.6rem}
+.tag::before{content:"";display:inline-block;width:34px;height:4px;background:var(--accent2);border-radius:2px;vertical-align:middle;margin:-2px 12px 0 0}
 h2{font-weight:700;font-size:clamp(1.9rem,3.5vw,2.6rem);letter-spacing:-.04em;line-height:1.08}
 h2 span{color:#b5b5b3}
 .lead{color:#c5c5c3;font-size:1rem;max-width:480px;line-height:1.7;margin-top:.5rem}
@@ -184,12 +185,12 @@ h2 span{color:#b5b5b3}
 
 /* CTA */
 .cta{text-align:center;padding:6rem 2.5rem;position:relative;overflow:hidden}
-.cta-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;height:300px;background:radial-gradient(ellipse,var(--aglow),transparent 60%);pointer-events:none}
+.cta-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:620px;height:360px;background:radial-gradient(ellipse,rgba(217,119,87,.13),rgba(232,178,74,.06) 45%,transparent 72%);pointer-events:none}
 .cta-i{position:relative;z-index:1}
 .cta h2{margin-bottom:.4rem}
 .cta .lead{margin:.4rem auto 2rem;text-align:center;max-width:400px}
-.btn-f{display:inline-flex;align-items:center;gap:.4rem;padding:.65rem 1.5rem;border-radius:7px;background:var(--t1);color:var(--bg);font-weight:700;font-size:.9rem;border:none;cursor:pointer;transition:opacity .15s}
-.btn-f:hover{opacity:.85}
+.btn-f{display:inline-flex;align-items:center;gap:.4rem;padding:.7rem 1.6rem;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--bg);font-weight:700;font-size:.9rem;border:none;cursor:pointer;transition:opacity .15s,box-shadow .2s,transform .15s;box-shadow:0 8px 24px -8px rgba(217,119,87,.5)}
+.btn-f:hover{opacity:.95;box-shadow:0 12px 32px -8px rgba(232,178,74,.55);transform:translateY(-1px)}
 .btn-f svg{width:14px;height:14px}
 
 /* BUILT ON OPENCODE */
@@ -312,8 +313,8 @@ h2.v .w-anim{opacity:1;transform:none}
 <div class="hero">
   <div class="hero-text">
     <div class="hero-tag rv" style="gap:.6rem">
-      <span style="display:inline-flex;align-items:center;gap:.4rem;font-family:'Outfit',sans-serif;font-weight:700;font-size:.82rem;color:var(--t1);letter-spacing:-.01em">
-        <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#2D2B2A"/><g stroke="#D97757" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="miter"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/></g><path d="M19 8H28" stroke="#E8B24A" stroke-width="1.2" stroke-linecap="round"/></svg>
+      <span style="display:inline-flex;align-items:center;gap:.6rem;font-family:'Outfit',sans-serif;font-weight:700;font-size:1.2rem;color:var(--t1);letter-spacing:-.01em">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#2D2B2A"/><g stroke="#D97757" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="miter"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/></g><path d="M19 8H28" stroke="#E8B24A" stroke-width="1.2" stroke-linecap="round"/></svg>
         Amicus
       </span>
       <span style="display:inline-flex;align-items:center;gap:.35rem;background:rgba(251,191,36,.18);color:#fbbf24;padding:.3rem .7rem;border-radius:5px;font-weight:700;font-size:.72rem;letter-spacing:.06em;border:1px solid rgba(251,191,36,.25)">Open Beta</span>
@@ -372,7 +373,7 @@ h2.v .w-anim{opacity:1;transform:none}
         <animate attributeName="opacity" values=".04;.12;.04" dur="4s" repeatCount="indefinite"/>
       </rect>
       <text x="22" y="146" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#d97757">FOLD Summary received</text>
-      <text x="22" y="158" font-family="IBM Plex Mono,monospace" font-size="7" fill="#e8a07c">Race condition found. Recommend mutex.</text>
+      <text x="22" y="158" font-family="IBM Plex Mono,monospace" font-size="7" fill="#e8b24a">Race condition found. Recommend mutex.</text>
       <text x="14" y="190" font-family="Outfit,sans-serif" font-size="8" fill="#555">Your main session</text>
 
       <!-- Fork arrow - animated flowing dash -->
@@ -501,7 +502,7 @@ h2.v .w-anim{opacity:1;transform:none}
           <path d="M202 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
           <rect x="50" y="80" width="145" height="32" rx="5" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
           <text x="122" y="95" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Chair verdict</text>
-          <text x="122" y="106" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8a07c">Confirmed / Contested / Singleton</text>
+          <text x="122" y="106" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8b24a">Confirmed / Contested / Singleton</text>
         </svg>
         <h3>01 &middot; Council</h3>
         <p>Say <em>council review this</em>. Independent reviews → anonymous cross-review → a non-Claude chair verdict. You accept or deny tiered findings.</p>
@@ -530,7 +531,7 @@ h2.v .w-anim{opacity:1;transform:none}
           <text x="70" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#a1a1a0">Claude</text>
           <rect x="22" y="56" width="96" height="28" rx="4" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
           <text x="70" y="68" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">FOLD summary</text>
-          <text x="70" y="78" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#e8a07c">received</text>
+          <text x="70" y="78" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#e8b24a">received</text>
           <path d="M 210 60 L 140 60" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"/>
           <polygon points="142,56 134,60 142,64" fill="#666"/>
           <rect x="220" y="35" width="50" height="50" rx="6" fill="#161618" stroke="#222225"/>
@@ -610,7 +611,7 @@ h2.v .w-anim{opacity:1;transform:none}
           <!-- Results collected -->
           <rect class="results-glow" x="80" y="256" width="300" height="60" rx="8" fill="#111113" stroke="#d97757" stroke-width="1" stroke-dasharray="4,2"/>
           <text x="230" y="275" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" font-weight="600" fill="#d97757">3 FOLD Summaries Received</text>
-          <text x="230" y="290" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#e8a07c">Architecture verified. 2 vulnerabilities found. 47 tests generated.</text>
+          <text x="230" y="290" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#e8b24a">Architecture verified. 2 vulnerabilities found. 47 tests generated.</text>
           <text x="230" y="305" text-anchor="middle" font-family="Outfit,sans-serif" font-size="7.5" fill="#555">All results flow back into Claude's context</text>
 
           <!-- Fold labels -->
