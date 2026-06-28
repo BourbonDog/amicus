@@ -193,6 +193,7 @@ electron/
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
 ├── setup-ui-aliases.js  # Setup UI - Alias Editor
+├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
