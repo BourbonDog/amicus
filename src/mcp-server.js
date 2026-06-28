@@ -531,9 +531,38 @@ const handlers = {
   async amicus_fanout(input, project) {
     const cwd = project || getProjectDir(input.project);
     const { generateTaskId } = require('./sidecar/start');
-    const { deriveLegIds } = require('./sidecar/fanout');
+    const { deriveLegIds, DEFAULT_MAX_LEGS } = require('./sidecar/fanout');
+
+    // Resolve a single effective models list (council OR models), validated
+    // BEFORE any wave dir / metadata is written so a bad request never strands
+    // a pid-less 'running' orphan wave.
+    const inputModels = Array.isArray(input.models) ? input.models : [];
+    const hasModels = inputModels.length > 0;
+    const hasCouncil = typeof input.council === 'string' && input.council.trim();
+    if (hasModels && hasCouncil) {
+      return textResult("Pass exactly one of 'models' / 'council', not both.", true);
+    }
+    let effectiveModels;
+    if (hasCouncil) {
+      const { resolveCouncilMembers } = require('./utils/config');
+      const { readCache } = require('./utils/model-catalog');
+      const catalog = (readCache() || {}).models || [];
+      const expanded = resolveCouncilMembers(input.council.trim(), catalog);
+      if (expanded.error) { return textResult(expanded.error, true); }
+      effectiveModels = expanded.models;
+    } else if (hasModels) {
+      effectiveModels = inputModels;
+    } else {
+      return textResult("Provide 'models' or 'council'.", true);
+    }
+    const envCap = Number(process.env.AMICUS_FANOUT_MAX_LEGS);
+    const maxLegs = (Number.isInteger(envCap) && envCap > 0) ? envCap : DEFAULT_MAX_LEGS;
+    if (effectiveModels.length > maxLegs) {
+      return textResult(`Council/model list exceeds the fan-out cap of ${maxLegs} legs.`, true);
+    }
+
     const waveId = generateTaskId();
-    const legIds = deriveLegIds(waveId, input.models.length);
+    const legIds = deriveLegIds(waveId, effectiveModels.length);
     const waveDir = getSessionDir(cwd, waveId);
 
     let briefingPath;
@@ -545,14 +574,14 @@ const handlers = {
       fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
       fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
-        models: input.models, headless: true, createdAt: new Date().toISOString(),
+        models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
       }, null, 2), { mode: 0o600 });
     } catch (err) {
       return textResult(`Failed to prepare fan-out wave: ${err.message}`, true);
     }
 
     const args = [
-      'fanout', '--models', input.models.join(','),
+      'fanout', '--models', effectiveModels.join(','),
       '--prompt-file', briefingPath, '--wave-id', waveId,
       '--json', '--client', 'cowork', '--cwd', cwd,
     ];
