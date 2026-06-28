@@ -79,6 +79,12 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
 - **gpt** — thorough but verbose; peers have dinged it for volume-over-judgment. Self-ranked its own review #1 in the 2026-06-04 run → the peers-only street-cred rule (now enforced by `tally`) mitigates this. Conforms cleanly. Accessible via OpenRouter.
 - **gemini** — fast, very large context; tends toward absolute severity labels ("blocker" inflation vs peers). Conforms cleanly; watch for preamble narration — instruct it to emit the JSON block verbatim after the prose.
 
+## Free-tier models (OpenRouter `:free`)
+- Heavily rate-limited (shared daily pool); a 3-leg parallel wave + cross-review can 429 mid-run.
+- Quality-variable; weaker at strict structured (findings JSON) output.
+- Some `:free` models 404 unless the account enables data-sharing at openrouter.ai/settings/privacy.
+- No reliability history — chair selection can't use `council stats`; pick the strongest free model and disclose lower confidence.
+
 ## Cost guardrail
 - The budget gate enforces this in code: a per-$/Mtok threshold (ON by default)
   refuses o3/o3-pro-class models before a wave launches. This replaces the old
