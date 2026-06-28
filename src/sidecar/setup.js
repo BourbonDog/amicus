@@ -286,12 +286,63 @@ async function runInteractiveSetup() {
 
 /* eslint-enable no-console */
 
+/**
+ * Collision-safe alias name from a free model id. Strips the openrouter/
+ * prefix and trailing :free, sanitizes '/'/':' to '-', prefixes 'free-',
+ * and disambiguates against `taken` with a numeric suffix.
+ * @param {string} id e.g. openrouter/deepseek/deepseek-r1:free
+ * @param {Set<string>} taken alias names already in use
+ * @returns {string} e.g. free-deepseek-deepseek-r1
+ */
+function deriveFreeAlias(id, taken) {
+  const base = 'free-' + id
+    .replace(/^openrouter\//, '')
+    .replace(/:free$/, '')
+    .replace(/[/:]/g, '-')
+    .replace(/-+/g, '-');
+  let name = base;
+  let n = 2;
+  while (taken.has(name)) { name = `${base}-${n++}`; }
+  taken.add(name);
+  return name;
+}
+
+/**
+ * Seed free-model aliases + councils.free from chosen catalog ids.
+ * Single atomic read-modify-write. Reuses an existing alias that already
+ * maps to the same id (idempotent re-runs); never touches config.default.
+ * @param {string[]} pickIds full openrouter/.../...:free ids
+ * @returns {{added: Array<{alias:string, model:string}>, council: string[]}}
+ */
+function seedFreeCouncil(pickIds) {
+  const cfg = loadConfig() || { aliases: {} };
+  if (!cfg.aliases) { cfg.aliases = {}; }
+  const taken = new Set(Object.keys(cfg.aliases));
+  const council = [];
+  const added = [];
+  for (const id of pickIds) {
+    const existing = Object.entries(cfg.aliases).find(([, m]) => m === id);
+    if (existing) { if (!council.includes(existing[0])) { council.push(existing[0]); } continue; }
+    const alias = deriveFreeAlias(id, taken);
+    cfg.aliases[alias] = id;
+    added.push({ alias, model: id });
+    council.push(alias);
+  }
+  if (!cfg.councils) { cfg.councils = {}; }
+  cfg.councils.free = Array.from(new Set(council));
+  saveConfig(cfg);
+  logger.info('Free council seeded', { count: cfg.councils.free.length });
+  return { added, council: cfg.councils.free };
+}
+
 module.exports = {
   addAlias,
   createDefaultConfig,
+  deriveFreeAlias,
   detectApiKeys,
   runInteractiveSetup,
   runReadlineSetup,
   runApiKeySetup,
   seedCatalog,
+  seedFreeCouncil,
 };
