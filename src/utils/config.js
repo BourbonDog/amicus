@@ -273,6 +273,57 @@ function detectFallback(alias, resolvedModel) {
   return !!(val && val.startsWith('openrouter/') && !resolvedModel.startsWith('openrouter/'));
 }
 
+/** @returns {Object<string,string[]>} the councils map (empty if none) */
+function getCouncils() {
+  const config = loadConfig();
+  return (config && config.councils) || {};
+}
+
+/** @param {string} name @returns {string[]|null} council members, or null if absent */
+function getCouncil(name) {
+  return getCouncils()[name] || null;
+}
+
+/**
+ * Expand a saved council into a runnable members list, degrading gracefully.
+ * Each member is resolved to its full model id (alias → id via effective
+ * aliases; a member containing '/' is taken as-is) and that id checked against
+ * the cached catalog. Unresolvable aliases and delisted ids are dropped with a
+ * warning rather than fail-fast-aborting the whole wave. The catalog check is
+ * skipped when the catalog is empty (offline). Returns members RAW (alias or
+ * id) — leg-time validation resolves them again.
+ * @param {string} name
+ * @param {Array<{id:string}>} [catalog]
+ * @returns {{models:string[], dropped:string[]} | {error:string}}
+ */
+function resolveCouncilMembers(name, catalog = []) {
+  const members = getCouncil(name);
+  if (!members) {
+    return { error: `Unknown council '${name}'. Run 'amicus setup' to create one.` };
+  }
+  if (!Array.isArray(members) || members.length === 0) {
+    return { error: `Council '${name}' is empty. Run 'amicus setup' to populate it.` };
+  }
+  const aliases = getEffectiveAliases();
+  const known = new Set((Array.isArray(catalog) ? catalog : []).map(m => m && m.id).filter(Boolean));
+  const models = [];
+  const dropped = [];
+  for (const member of members) {
+    const id = member.includes('/') ? member : aliases[member];
+    if (!id) { dropped.push(member); continue; }                 // alias no longer resolves
+    if (known.size > 0 && !known.has(id)) { dropped.push(member); continue; } // delisted model
+    models.push(member);
+  }
+  if (models.length < 2) {
+    return {
+      error: `Council '${name}' has fewer than 2 usable members` +
+        (dropped.length ? ` (dropped: ${dropped.join(', ')})` : '') +
+        `. Run 'amicus setup' to refresh it.`,
+    };
+  }
+  return { models, dropped };
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -288,4 +339,7 @@ module.exports = {
   formatAliasNames,
   tryResolveModel,
   buildProviderModels,
+  getCouncils,
+  getCouncil,
+  resolveCouncilMembers,
 };
