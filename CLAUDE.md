@@ -137,6 +137,7 @@ src/
 │   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
 │   ├── error-doc.js
+│   ├── free-models.js  # Free OpenRouter model detection (Unit A).
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
 │   ├── input-validators.js
 │   ├── lifecycle.js
@@ -285,7 +286,7 @@ evals/
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
-| `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `detectApiKeys()`, `runInteractiveSetup()`, `runReadlineSetup()` |
+| `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()`, `runInteractiveSetup()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
@@ -300,6 +301,7 @@ evals/
 | `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
+| `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `findSimilar()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
