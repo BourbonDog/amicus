@@ -318,7 +318,7 @@ function resolveCouncilMembers(name, catalog = []) {
     return {
       error: `Council '${name}' has fewer than 2 usable members` +
         (dropped.length ? ` (dropped: ${dropped.join(', ')})` : '') +
-        `. Run 'amicus setup' to refresh it.`,
+        '. Run \'amicus setup\' to refresh it.',
     };
   }
   return { models, dropped };
