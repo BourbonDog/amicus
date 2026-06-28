@@ -5,6 +5,7 @@ const { buildAliasEditorHTML } = require('./setup-ui-aliases');
 const { buildWizardCSS } = require('./setup-ui-styles');
 const { buildKeysScript } = require('./setup-ui-keys-script');
 const { buildAliasScript } = require('./setup-ui-alias-script');
+const { buildCouncilSectionHTML, buildCouncilScript } = require('./setup-ui-council');
 const { getDefaultAliases } = require('../src/utils/config');
 const { getBrandName } = require('./toolbar');
 const { resolveQuickPicks } = require('../src/utils/quick-picks');
@@ -36,7 +37,7 @@ function buildSetupHTML(options = {}) {
   <div class="progress-bar"><div class="progress-step active" id="step-1"><span class="progress-dot">1</span><span>API Keys</span></div><div class="progress-connector"></div><div class="progress-step" id="step-2"><span class="progress-dot">2</span><span>Models</span></div><div class="progress-connector"></div><div class="progress-step" id="step-3"><span class="progress-dot">3</span><span>Routing</span></div><div class="progress-connector"></div><div class="progress-step" id="step-4"><span class="progress-dot">4</span><span>Review</span></div></div>
   <div class="content">
     <div class="wizard-step visible" id="wizard-step-1"><div id="import-notice"></div>${keysHtml}</div>
-    <div class="wizard-step" id="wizard-step-2">${modelHtml}</div>
+    <div class="wizard-step" id="wizard-step-2">${modelHtml}${buildCouncilSectionHTML()}</div>
     <div class="wizard-step" id="wizard-step-3">${aliasHtml}</div>
     <div class="wizard-step" id="wizard-step-4">
       <div class="step-content">
@@ -57,6 +58,7 @@ ${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultA
 function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson) {
   const keysJs = buildKeysScript();
   const aliasJs = buildAliasScript();
+  const councilJs = buildCouncilScript();
   return `<script>
   window.onerror = function(msg, src, line, col, err) { console.error('WIZARD ERROR:', msg, 'at', src, line, col, err); };
   window.onunhandledrejection = function(e) { console.error('WIZARD UNHANDLED REJECTION:', e.reason); };
@@ -91,6 +93,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
           }
         });
         if (data.hints) { keyHints = data.hints; }
+        window.configuredKeys = configuredKeys;
+        window.refreshCouncilGating && window.refreshCouncilGating();
         updateNextState();
         if (data.imported && data.imported.length > 0) {
           var notice = document.getElementById('import-notice');
@@ -171,7 +175,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     nextBtn.style.display = step < 4 ? '' : 'none';
     finishBtn.style.display = step === 4 ? '' : 'none';
     if (step === 4) { buildReview(); }
-    if (step === 2) { updateRoutingPills(); ensureCatalogLoaded(); }
+    if (step === 2) { updateRoutingPills(); ensureCatalogLoaded(); window.refreshCouncilGating && window.refreshCouncilGating(); }
     if (step === 3) {
       updateAliasRoutes();
       if (!window.availableModels) { fetchAvailableModels(); }
@@ -383,7 +387,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
           if (routeId) { aliasWrites[mc.alias] = routeId; }
         }
       }
-      await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites);
+      await window.sidecarSetup.invoke('sidecar:save-config', dm, aliasWrites, (window.collectCouncilPicks && window.collectCouncilPicks()) || []);
       var kc = Object.values(configuredKeys).filter(function(v) { return v; }).length;
       await window.sidecarSetup.invoke('sidecar:setup-done', dm, kc);
     } catch (_e) { finishBtn.disabled = false; finishBtn.textContent = 'Finish'; }
@@ -512,6 +516,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   ${aliasJs}
 
   ${keysJs}
+
+  ${councilJs}
 </script>`;
 }
 
