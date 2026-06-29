@@ -5,6 +5,30 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-29
+
+A visual refresh plus a council-reliability fix and a config-dir consolidation.
+
+### Added
+- **Amicus design system**: the Electron app (setup wizard, toolbar, fold overlay), the council
+  HTML report, and the marketing site now render from one shared token layer (`src/design/tokens.css`
+  + a `src/design/tokens.js` loader) — the clay/gold rail-yard brand on a neutral-black ramp, with
+  bundled Outfit + IBM Plex Mono fonts. Previously each surface defined its own colors independently;
+  the site is pixel-identical to before, now bound to the shared tokens by a drift-guard test.
+
+### Fixed
+- **Council reliability ledger now persists.** `amicus council tally` (and the MCP
+  `amicus_council_tally`) computed the tally record but never wrote it, so `council-ledger.jsonl`
+  stayed empty and `amicus council stats` always reported "No council runs recorded yet." The tally
+  finalize step now auto-appends the row(s) — best-effort, so a ledger write failure never fails the
+  tally — and a new `--no-ledger` flag computes a record without recording it (e.g. a re-tally).
+
+### Changed
+- **Unified config directory.** On startup Amicus now migrates a legacy `~/.config/sidecar` directory
+  onto the canonical `~/.config/amicus` once, non-destructively (copy; the legacy dir is kept as a
+  backup). This collapses the two-directory split that could let config resolution flip between them
+  and orphan your config, catalog, and ledger. A `CONFIG_DIR` override opts out.
+
 ## [1.4.0] - 2026-06-28
 
 ### Added
