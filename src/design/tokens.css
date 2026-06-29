@@ -7,7 +7,7 @@
 
 /* ---- Webfonts (bundled, self-hosted) ---------------------------------- */
 /* Paths are relative to THIS file (src/design/tokens.css). The loader
-   rewrites them to absolute file:// URLs for the Electron app. */
+   rewrites them to absolute file-protocol URLs for the Electron app. */
 @font-face { font-family: 'Outfit'; font-style: normal; font-weight: 300; font-display: swap; src: url('./fonts/Outfit-300.ttf') format('truetype'); }
 @font-face { font-family: 'Outfit'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/Outfit-400.ttf') format('truetype'); }
 @font-face { font-family: 'Outfit'; font-style: normal; font-weight: 500; font-display: swap; src: url('./fonts/Outfit-500.ttf') format('truetype'); }
