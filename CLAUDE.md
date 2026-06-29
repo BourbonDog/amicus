@@ -102,16 +102,17 @@ src/
 │   ├── tally.js
 │   └── verdict.js
 ├── design/
-│   └── fonts/
-│       ├── IBMPlexMono-400.ttf
-│       ├── IBMPlexMono-500.ttf
-│       ├── IBMPlexMono-600.ttf
-│       ├── Outfit-300.ttf
-│       ├── Outfit-400.ttf
-│       ├── Outfit-500.ttf
-│       ├── Outfit-600.ttf
-│       ├── Outfit-700.ttf
-│       └── Outfit-800.ttf
+│   ├── fonts/
+│   │   ├── IBMPlexMono-400.ttf
+│   │   ├── IBMPlexMono-500.ttf
+│   │   ├── IBMPlexMono-600.ttf
+│   │   ├── Outfit-300.ttf
+│   │   ├── Outfit-400.ttf
+│   │   ├── Outfit-500.ttf
+│   │   ├── Outfit-600.ttf
+│   │   ├── Outfit-700.ttf
+│   │   └── Outfit-800.ttf
+│   └── tokens.css
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
