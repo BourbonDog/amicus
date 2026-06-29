@@ -62,3 +62,51 @@ describe('toolbar', () => {
     });
   });
 });
+
+describe('toolbar token adoption', () => {
+  const { TOKENS } = require('../src/design/tokens');
+
+  it('injects the shared token CSS (:root with clay accent)', () => {
+    const html = buildToolbarHTML({ mode: 'sidecar' });
+    expect(html).toContain(':root');
+    expect(html).toContain(TOKENS.accent); // #d97757
+  });
+
+  it('injects ABSOLUTE file:// font URLs so the bundled fonts resolve (data: URL context)', () => {
+    const html = buildToolbarHTML({ mode: 'sidecar' });
+    expect(html).toMatch(/url\('file:\/\/[^']*Outfit-400\.ttf'\)/);
+    expect(html).not.toContain("url('./fonts/");
+  });
+
+  it('drops the old warm-brown neutrals', () => {
+    const html = buildToolbarHTML({ mode: 'sidecar' });
+    expect(html).not.toContain('#2D2B2A');
+    expect(html).not.toContain('#3D3A38');
+    expect(html).not.toContain('#A09B96');
+    expect(html).not.toContain('#7A756F');
+    expect(html).not.toContain('#4D4A48');
+    expect(html).not.toContain('#D4D0CC');
+  });
+
+  it('styles chrome from token vars, not literal clay hex in CSS rules', () => {
+    const html = buildToolbarHTML({ mode: 'sidecar' });
+    expect(html).toContain('background: var(--surface-1)');
+    expect(html).toContain('border-top: 1px solid var(--border)');
+    expect(html).toContain('color: var(--accent)');
+    expect(html).toContain('font-family: var(--font-mono)');
+  });
+
+  it('drives the logo stroke from a CSS rule, hex-free markup (BLOCKER FIX #3)', () => {
+    const html = buildToolbarHTML({ mode: 'sidecar' });
+    expect(html).toMatch(/\.logo path\s*\{[^}]*stroke:\s*var\(--accent\)/);
+    expect(html).not.toContain('stroke="#D97757"');
+    expect(html).not.toContain('stroke="var(--accent)"');
+  });
+
+  it('keeps the brand + task id + Fold button markup', () => {
+    const html = buildToolbarHTML({ mode: 'sidecar', taskId: '01J9F2K3', foldShortcut: 'Cmd+Shift+F' });
+    expect(html).toContain('>Amicus<');
+    expect(html).toContain('task: 01J9F2K3');
+    expect(html).toContain('Fold (Cmd+Shift+F)');
+  });
+});
