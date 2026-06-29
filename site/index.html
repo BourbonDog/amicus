@@ -25,6 +25,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* Shared design tokens — single source of truth: src/design/tokens.js (TOKENS).
+   These values are CANONICAL: the loader (tokenCss) and the drift guard
+   (tests/design-site-drift.test.js) bind to them. Short names map to canonical
+   TOKENS keys: s1->surface1 s2->surface2 s3->surface3 border2->borderStrong
+   t1/t2/t3->text1/2/3 accent2->gold asoft->accentSoft aglow->accentGlow
+   green->running. Edit tokens.js + here together or the drift guard fails. */
 :root{
   --bg:#0a0a0a;
   --s1:#111113;
