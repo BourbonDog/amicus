@@ -9,8 +9,20 @@
 
 const { formatCost } = require('../utils/pricing');
 const { TIER_ORDER, SYMBOL } = require('./report');
+const { tokenCss } = require('../design/tokens');
 
-const TIER_COLOR = { Disputed: '#fde2e1', Contested: '#fef3c7', Confirmed: '#dcfce7', Singleton: '#e5e7eb' };
+const TIER_VAR = {
+  Disputed: 'var(--tier-disputed)',
+  Contested: 'var(--tier-contested)',
+  Confirmed: 'var(--tier-confirmed)',
+  Singleton: 'var(--tier-singleton)',
+};
+const TIER_INK = {
+  Disputed: 'var(--tier-disputed-ink)',
+  Contested: 'var(--tier-contested-ink)',
+  Confirmed: 'var(--tier-confirmed-ink)',
+  Singleton: 'var(--tier-singleton-ink)',
+};
 
 function esc(s) {
   return String(s === null || s === undefined ? '' : s)
@@ -27,9 +39,10 @@ function renderHtml(m) {
       const v = f.byJudge[j];
       return `<td class="c">${v ? SYMBOL[v] : ''}${j === f.raiser ? '<sup>*</sup>' : ''}</td>`;
     }).join('');
-    return `<tr style="background:${TIER_COLOR[f.tier] || '#fff'}">` +
+    return `<tr style="background:${TIER_VAR[f.tier] || '#fff'}">` +
       `<td>${esc(f.id)}</td><td>${esc(f.severity)}</td><td>${esc(f.raiser)}</td>${cells}` +
-      `<td>${esc(f.tier)}</td><td>${esc(f.decision || '')}</td></tr>`;
+      `<td style="color:${TIER_INK[f.tier] || 'inherit'};font-weight:600">${esc(f.tier)}</td>` +
+      `<td>${esc(f.decision || '')}</td></tr>`;
   }).join('');
   const credRows = m.streetCred.map(s =>
     `<tr><td>${esc(s.model)}</td><td>${num(s.peersOnly)}</td><td>${num(s.withSelf)}</td></tr>`).join('');
@@ -45,12 +58,29 @@ function renderHtml(m) {
 <html lang="en"><head><meta charset="utf-8">
 <title>Council Report — ${esc(h.runId)}</title>
 <style>
-  body { font: 14px/1.5 system-ui, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; }
-  h1 { font-size: 1.5rem; } h2 { margin-top: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: .25rem; }
-  table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
-  th, td { border: 1px solid #e5e7eb; padding: .35rem .5rem; text-align: left; }
-  th { background: #f9fafb; } td.c { text-align: center; } .meta { color: #6b7280; }
-  .legend { color: #6b7280; font-size: .85rem; }
+${tokenCss()}
+:root {
+  /* Council tiers — light-ground palette + ink. Intentionally re-declared
+     here with the SAME values tokenCss() emits (self-documenting + robust to
+     a loader refactor; the cascade resolves identically). */
+  --tier-confirmed: #d7ead0;
+  --tier-contested: #efe4c4;
+  --tier-disputed: #ecd4ec;
+  --tier-singleton: #e2e0ea;
+  --tier-confirmed-ink: #15803d;
+  --tier-contested-ink: #b45309;
+  --tier-disputed-ink: #a21caf;
+  --tier-singleton-ink: #4b5563;
+}
+body { font: 14px/1.6 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; background: #fff; }
+h1 { font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; }
+h2 { font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; margin-top: 2rem; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: .25rem; }
+table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+th, td { border: 1px solid #e5e7eb; padding: .35rem .5rem; text-align: left; }
+th { background: #f9fafb; font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif; font-weight: 600; }
+td.c { text-align: center; }
+.meta, .legend { color: #6b7280; font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.legend { font-size: .85rem; }
 </style></head><body>
 <h1>Council Report — ${esc(h.runType)} (${esc(h.runId)})</h1>
 <p class="meta">${meta}</p>
