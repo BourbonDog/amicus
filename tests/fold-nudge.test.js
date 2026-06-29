@@ -56,5 +56,27 @@ describe('Fold nudge message', () => {
     const allScripts = executedScripts.join(' ');
     expect(allScripts).toContain('Tell Claude');
     expect(allScripts).toContain('done with the Amicus session');
+    // token adoption: no hardcoded hex left in the injected overlay scripts
+    expect(allScripts).not.toContain('#E8E0D8');
+    expect(allScripts).not.toContain('#7A756F');
+    expect(allScripts).not.toContain('#D97757');
+    expect(allScripts).not.toContain('rgba(217,119,87,0.3)');
+    expect(allScripts).toContain('var(--text-1)');
+    expect(allScripts).toContain('var(--font-sans)');
+  });
+
+  test('overlay spinner + title use accent/text tokens', async () => {
+    const { showFoldOverlay } = require('../electron/fold');
+    const scripts = [];
+    const view = { webContents: { executeJavaScript: jest.fn((s) => { scripts.push(s); return Promise.resolve(); }) } };
+    const win = { webContents: { executeJavaScript: jest.fn((s) => { scripts.push(s); return Promise.resolve(); }) } };
+    showFoldOverlay(win, view);
+    const all = scripts.join(' ');
+    expect(all).toContain('var(--accent)');       // content spinner border-top
+    expect(all).toContain('var(--accent-line)');  // content spinner track
+    expect(all).toContain('var(--text-1)');       // overlay title
+    expect(all).toContain('var(--text-3)');       // overlay subtitle
+    expect(all).not.toContain('#D97757');
+    expect(all).not.toContain('rgba(217,119,87,0.3)');
   });
 });
