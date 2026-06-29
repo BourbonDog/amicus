@@ -73,7 +73,15 @@ function __rawWizardCSS() {
     display: flex; align-items: center; gap: 6px;
   }
   .provider-desc { color: var(--text-faint); font-size: 11px; }
-  .provider-check { position: absolute; top: 8px; right: 12px; font-size: 13px; color: var(--ok); }
+  .provider-check {
+    position: absolute; top: 9px; right: 12px;
+    min-width: 16px; height: 16px; padding: 0 2px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%; font-size: 10px; line-height: 1;
+    color: var(--accent-text); background: transparent;
+  }
+  .provider-btn.selected .provider-check,
+  .provider-check:not(:empty) { background: var(--ok); }
   .badge {
     font-size: 9px; background: var(--accent); color: var(--accent-text); padding: 1px 5px;
     border-radius: var(--r-3); font-weight: 500; text-transform: uppercase;
@@ -358,7 +366,23 @@ function __rawWizardCSS() {
   .alias-icon-accent .alias-icon-faint-path { stroke: var(--text-faint); }
   .alias-icon-faint-path { stroke: var(--text-faint); }
   .alias-icon-ok path { stroke: var(--ok); }
-  .alias-icon-ok circle { stroke: var(--ok); }`;
+  .alias-icon-ok circle { stroke: var(--ok); }
+
+  /* StatusDot — shared run-state pulse (kit parity; consumed by toolbar/fold too) */
+  @keyframes amicusPulse {
+    0% { transform: scale(1); opacity: 0.6; }
+    70% { transform: scale(2.6); opacity: 0; }
+    100% { opacity: 0; }
+  }
+  .live-dot {
+    position: relative; display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--ok);
+  }
+  .live-dot::after {
+    content: ''; position: absolute; inset: 0;
+    border-radius: 50%; background: var(--ok);
+    animation: amicusPulse 1.6s var(--ease-out) infinite;
+  }`;
 }
 
 function buildWizardCSS() {

@@ -51,3 +51,23 @@ describe('buildWizardCSS — token adoption', () => {
     expect(rules).not.toContain('Menlo');
   });
 });
+
+describe('buildWizardCSS — kit component treatments', () => {
+  let rules;
+  beforeAll(() => { rules = require('../../electron/setup-ui-styles').__rawWizardCSS(); });
+
+  test('defines the StatusDot pulse keyframes + a live-dot using the ok + ease-out tokens', () => {
+    expect(rules).toContain('@keyframes amicusPulse');
+    expect(rules).toContain('.live-dot');
+    expect(rules).toContain('var(--ease-out)');
+  });
+
+  // Finding #7: assert against the WHOLE rules string, one independent matcher
+  // per property — never an arbitrary byte-offset slice.
+  test('provider-check renders as a filled status dot (radius 50% + ok token fill)', () => {
+    // the base .provider-check rule is a circular chip
+    expect(rules).toMatch(/\.provider-check\s*\{[^}]*border-radius:\s*50%/);
+    // a separate selector fills it with the ok token once selected / non-empty
+    expect(rules).toMatch(/\.provider-check:not\(:empty\)\s*\{[^}]*background:\s*var\(--ok\)/);
+  });
+});
