@@ -1377,8 +1377,30 @@ describe('amicus_status wave per-leg enrichment', () => {
 
 describe('council MCP handlers', () => {
   const avInput = require('./council/fixtures/av-receiver-input');
+  const { deriveReliability } = require('../src/council/ledger');
   let handlers;
-  beforeEach(() => { handlers = require('../src/mcp-server').handlers; });
+  let prevConfigDir;
+  let ledgerDir;
+  beforeEach(() => {
+    handlers = require('../src/mcp-server').handlers;
+    // Isolate the reliability ledger so tally's auto-append uses a temp dir.
+    prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-council-cfg-'));
+    process.env.AMICUS_CONFIG_DIR = ledgerDir;
+  });
+  afterEach(() => {
+    if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+    else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+  });
+
+  test('amicus_council_tally auto-appends a ledger row visible to council stats', async () => {
+    expect(deriveReliability({ dir: ledgerDir })).toEqual([]);
+    const res = await handlers.amicus_council_tally(avInput, process.cwd());
+    expect(res.isError).toBeFalsy();
+    const gpt = deriveReliability({ dir: ledgerDir }).find(a => a.model === 'gpt');
+    expect(gpt).toBeDefined();
+    expect(gpt.runs).toBe(1);
+  });
 
   test('amicus_council_tally returns a tally record as JSON content', async () => {
     const res = await handlers.amicus_council_tally(avInput, process.cwd());

@@ -113,6 +113,7 @@ function isBooleanFlag(key) {
      'no-validate-model',
      'remove',               // used by 'key' command only; other handlers ignore it
      'no-cost-gate',         // disable the budget gate for this run
+     'no-ledger',            // council tally: compute the record without appending to the reliability ledger
      'html',                 // council report: emit a self-contained HTML page
      'md',                   // council report: emit Markdown (default)
    ];

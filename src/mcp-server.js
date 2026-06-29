@@ -613,7 +613,11 @@ const handlers = {
   async amicus_council_tally(input) {
     try {
       const { tally } = require('./council/tally');
-      return textResult(JSON.stringify(tally(input)));
+      const record = tally(input);
+      // Auto-append to the reliability ledger (parity with `amicus council
+      // tally`). Best-effort: a ledger write failure must not fail the tally.
+      try { require('./council/ledger').appendRun(record); } catch { /* best-effort */ }
+      return textResult(JSON.stringify(record));
     } catch (err) { return textResult(`council tally failed: ${err.message}`, true); }
   },
 

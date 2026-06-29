@@ -2,15 +2,15 @@
 'use strict';
 const fs = require('fs');
 const { tally } = require('./council/tally');
-const { deriveReliability } = require('./council/ledger');
+const { deriveReliability, appendRun } = require('./council/ledger');
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 
-function runTally(inputPath, useJson) {
+function runTally(inputPath, useJson, opts = {}) {
   if (!inputPath) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'council tally needs an <input.json> path',
-      hint: 'amicus council tally <input.json> [--json]' });
+      hint: 'amicus council tally <input.json> [--json] [--no-ledger]' });
   }
   let input;
   try { input = JSON.parse(fs.readFileSync(inputPath, 'utf-8')); }
@@ -23,6 +23,13 @@ function runTally(inputPath, useJson) {
   catch (e) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `malformed tally input: ${e.message}`,
       hint: 'input needs meta.models, findings[], adjudications[], rankings[]' });
+  }
+  // Auto-append the run to the reliability ledger (consumed by `amicus council
+  // stats`). Tally is the council's finalize step, so this is where the row is
+  // recorded. Best-effort: a ledger write failure must not fail the tally.
+  if (opts.append !== false) {
+    try { appendRun(record); }
+    catch (e) { process.stderr.write(`Notice: council ledger append failed: ${e.message}\n`); }
   }
   process.stdout.write(useJson ? JSON.stringify(record, null, 2) + '\n' : renderRecord(record));
   return 0;
@@ -84,7 +91,7 @@ function runReport(args, useJson) {
 async function handleCouncil(args) {
   const sub = args._[1];
   const useJson = !!args.json;
-  if (sub === 'tally') { return runTally(args._[2], useJson); }
+  if (sub === 'tally') { return runTally(args._[2], useJson, { append: !args['no-ledger'] }); }
   if (sub === 'stats') { return runStats(useJson); }
   if (sub === 'report') { return runReport(args, useJson); }
   return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
