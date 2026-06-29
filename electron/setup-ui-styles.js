@@ -350,7 +350,15 @@ function __rawWizardCSS() {
   .council-results { max-height: 160px; overflow-y: auto; margin-top: 6px; }
   .council-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; color: var(--text); font-family: var(--font-mono); }
   .council-row input[type="checkbox"] { accent-color: var(--accent); }
-  .council-note { font-size: 10px; color: var(--text-faint); margin-top: 6px; line-height: 1.4; }`;
+  .council-note { font-size: 10px; color: var(--text-faint); margin-top: 6px; line-height: 1.4; }
+
+  /* Alias example-icon strokes — driven by class rules (var() is invalid as an SVG attribute) */
+  .alias-icon-accent path { stroke: var(--accent); }
+  .alias-icon-accent rect { stroke: var(--accent); }
+  .alias-icon-accent .alias-icon-faint-path { stroke: var(--text-faint); }
+  .alias-icon-faint path { stroke: var(--text-faint); }
+  .alias-icon-ok path { stroke: var(--ok); }
+  .alias-icon-ok circle { stroke: var(--ok); }`;
 }
 
 function buildWizardCSS() {
