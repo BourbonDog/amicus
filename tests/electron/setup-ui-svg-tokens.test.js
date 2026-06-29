@@ -8,6 +8,10 @@ describe('wizard inline-SVG strokes are driven by CSS rules, hex-free markup (BL
     const html = buildSetupHTML();
     // the old hardcoded clay hex is gone from the document chrome
     expect(html).not.toContain('stroke="#D97757"');
+    expect(html).not.toContain('stroke="#5A5550"');
+    expect(html).not.toContain('stroke="#5a5550"');
+    expect(html).not.toContain('stroke="#6BBF6B"');
+    expect(html).not.toContain('stroke="#6bbf6b"');
     // var() must NEVER appear as a presentation attribute (it renders black/none)
     expect(html).not.toContain('stroke="var(--accent)"');
   });
@@ -22,7 +26,7 @@ describe('wizard inline-SVG strokes are driven by CSS rules, hex-free markup (BL
     const frag = buildAliasEditorHTML({ gemini: 'openrouter/google/gemini-3.5-flash' });
     expect(frag).toContain('alias-icon-accent');
     expect(frag).toContain('alias-icon-ok');
-    expect(frag).toContain('alias-icon-faint');
+    expect(frag).toContain('alias-icon-faint-path');
     for (const dead of ['#D97757', '#6BBF6B', '#5A5550']) {
       expect(frag).not.toContain(`stroke="${dead}"`);
     }
@@ -33,6 +37,6 @@ describe('wizard inline-SVG strokes are driven by CSS rules, hex-free markup (BL
     const rules = __rawWizardCSS();
     expect(rules).toMatch(/\.alias-icon-accent path\s*\{[^}]*stroke:\s*var\(--accent\)/);
     expect(rules).toMatch(/\.alias-icon-ok path\s*\{[^}]*stroke:\s*var\(--ok\)/);
-    expect(rules).toMatch(/\.alias-icon-faint path\s*\{[^}]*stroke:\s*var\(--text-faint\)/);
+    expect(rules).toMatch(/\.alias-icon-faint-path\s*\{[^}]*stroke:\s*var\(--text-faint\)/);
   });
 });

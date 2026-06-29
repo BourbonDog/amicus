@@ -356,7 +356,7 @@ function __rawWizardCSS() {
   .alias-icon-accent path { stroke: var(--accent); }
   .alias-icon-accent rect { stroke: var(--accent); }
   .alias-icon-accent .alias-icon-faint-path { stroke: var(--text-faint); }
-  .alias-icon-faint path { stroke: var(--text-faint); }
+  .alias-icon-faint-path { stroke: var(--text-faint); }
   .alias-icon-ok path { stroke: var(--ok); }
   .alias-icon-ok circle { stroke: var(--ok); }`;
 }
