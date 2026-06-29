@@ -8,6 +8,7 @@
 const { logger } = require('../src/utils/logger');
 const { requestSummaryFromModel } = require('./summary');
 const { getSummaryTemplate } = require('../src/prompt-builder');
+const { tokenCss } = require('../src/design/tokens');
 
 /**
  * Create a fold handler bound to the window state
@@ -59,11 +60,11 @@ function createFoldHandler(state) {
       if (contentView) {
         await contentView.webContents.executeJavaScript(`
           (function() {
-            var overlay = document.getElementById('sidecar-fold-overlay');
+            var overlay = document.getElementById('amicus-fold-overlay');
             if (overlay) {
               while (overlay.firstChild) { overlay.removeChild(overlay.firstChild); }
               var msg = document.createElement('div');
-              msg.style.cssText = 'color:#E8E0D8;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:500;text-align:center;max-width:320px;';
+              msg.style.cssText = 'color:var(--text-1);font-family:var(--font-sans),-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:500;text-align:center;max-width:320px;';
               msg.textContent = 'Summary saved. Tell Claude you\\u2019re done with the Amicus session so it can read the results.';
               overlay.appendChild(msg);
             }
@@ -110,7 +111,7 @@ function showFoldOverlay(mainWindow, contentView) {
           var span = document.createElement('span');
           span.style.cssText = 'display:inline-flex;align-items:center;gap:6px;';
           var spinner = document.createElement('span');
-          spinner.style.cssText = 'width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;';
+          spinner.style.cssText = 'width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:var(--on-accent);border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;';
           span.appendChild(spinner);
           span.appendChild(document.createTextNode('Generating summary\\u2026'));
           btn.appendChild(span);
@@ -128,6 +129,15 @@ function showFoldOverlay(mainWindow, contentView) {
     `).catch(() => {});
   }
   if (contentView) {
+    // Scope token vars to the overlay container so var(--x) resolves without
+    // touching OpenCode's own :root (which would clobber its CSS variables).
+    const rawCss = tokenCss({ absoluteFontUrls: true });
+    // Replace only the :root selector (not occurrences inside comments) so the
+    // custom properties are defined on #amicus-fold-overlay and inherited by
+    // its descendants. @font-face blocks are left at global scope (no selector).
+    const scopedCss = rawCss.replace(/:root\s*\{/, '#amicus-fold-overlay {');
+    contentView.webContents.insertCSS(scopedCss).catch(() => {});
+
     contentView.webContents.executeJavaScript(`
       (function() {
         if (!document.getElementById('fold-spin-style')) {
@@ -137,20 +147,20 @@ function showFoldOverlay(mainWindow, contentView) {
           document.head.appendChild(style);
         }
         var overlay = document.createElement('div');
-        overlay.id = 'sidecar-fold-overlay';
+        overlay.id = 'amicus-fold-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;';
 
         var spinDiv = document.createElement('div');
-        spinDiv.style.cssText = 'width:32px;height:32px;border:3px solid rgba(217,119,87,0.3);border-top-color:#D97757;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px;';
+        spinDiv.style.cssText = 'width:32px;height:32px;border:3px solid var(--accent-line);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px;';
         overlay.appendChild(spinDiv);
 
         var titleDiv = document.createElement('div');
-        titleDiv.style.cssText = 'color:#E8E0D8;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:500;';
+        titleDiv.style.cssText = 'color:var(--text-1);font-family:var(--font-sans),-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:500;';
         titleDiv.textContent = 'Generating summary\\u2026';
         overlay.appendChild(titleDiv);
 
         var subtitleDiv = document.createElement('div');
-        subtitleDiv.style.cssText = 'color:#7A756F;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;margin-top:6px;';
+        subtitleDiv.style.cssText = 'color:var(--text-3);font-family:var(--font-sans),-apple-system,BlinkMacSystemFont,sans-serif;font-size:12px;margin-top:6px;';
         subtitleDiv.textContent = 'Folding session back to Claude Code';
         overlay.appendChild(subtitleDiv);
 

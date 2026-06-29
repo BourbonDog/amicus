@@ -101,6 +101,19 @@ src/
 │   ├── report.js
 │   ├── tally.js
 │   └── verdict.js
+├── design/
+│   ├── fonts/
+│   │   ├── IBMPlexMono-400.ttf
+│   │   ├── IBMPlexMono-500.ttf
+│   │   ├── IBMPlexMono-600.ttf
+│   │   ├── Outfit-300.ttf
+│   │   ├── Outfit-400.ttf
+│   │   ├── Outfit-500.ttf
+│   │   ├── Outfit-600.ttf
+│   │   ├── Outfit-700.ttf
+│   │   └── Outfit-800.ttf
+│   ├── tokens.css
+│   └── tokens.js
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
@@ -197,7 +210,7 @@ electron/
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
-├── setup-ui-styles.js  # Setup UI - Shared CSS Styles
+├── setup-ui-styles.js  # Setup UI - Shared CSS Styles (clay/gold token-driven)
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API
 ├── toolbar.js  # Amicus Toolbar HTML Builder
@@ -269,6 +282,7 @@ evals/
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
+| `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |

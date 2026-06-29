@@ -5,6 +5,8 @@
  * Supports two modes: 'sidecar' (default) and 'setup'.
  */
 
+const { tokenCss } = require('../src/design/tokens');
+
 const TOOLBAR_H = 40;
 
 /**
@@ -36,6 +38,7 @@ function buildToolbarHTML(options = {}) {
   const brandName = getBrandName(client);
 
   const baseStyles = `
+  ${tokenCss({ absoluteFontUrls: true })}
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     position: fixed;
@@ -43,40 +46,41 @@ function buildToolbarHTML(options = {}) {
     left: 0;
     right: 0;
     height: ${TOOLBAR_H}px;
-    background: #2D2B2A;
+    background: var(--surface-1);
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 14px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    border-top: 1px solid #3D3A38;
+    font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    border-top: 1px solid var(--border);
     -webkit-app-region: no-drag;
     user-select: none;
   }
   .info {
-    color: #A09B96;
+    color: var(--text-2);
     font-size: 12px;
     display: flex;
     align-items: center;
     gap: 12px;
   }
   .brand {
-    color: #D97757;
+    color: var(--accent);
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.8px;
     text-transform: uppercase;
   }
-  .sep { color: #3D3A38; font-size: 14px; }
+  .logo path { stroke: var(--accent); }
+  .sep { color: var(--border-strong); font-size: 14px; }
   .detail, .timer {
-    color: #7A756F;
+    color: var(--text-3);
     font-size: 11px;
-    font-family: 'SF Mono', Menlo, Monaco, monospace;
+    font-family: var(--font-mono), 'SF Mono', Menlo, Monaco, monospace;
   }
   .action-btn {
     padding: 5px 14px;
-    background: #D97757;
-    color: #FFF;
+    background: var(--accent);
+    color: var(--on-accent);
     border: none;
     border-radius: 4px;
     font-size: 12px;
@@ -84,15 +88,15 @@ function buildToolbarHTML(options = {}) {
     cursor: pointer;
     transition: background 0.15s;
   }
-  .action-btn:hover { background: #C4623F; }
+  .action-btn:hover { background: var(--accent-hover); }
   .action-btn:disabled { opacity: 0.5; cursor: default; }
   .icon-btn {
-    background: none; border: 1px solid #3D3A38;
-    border-radius: 4px; color: #A09B96; cursor: pointer;
+    background: none; border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-2); cursor: pointer;
     font-size: 14px; padding: 3px 8px; transition: all 0.15s;
     display: flex; align-items: center;
   }
-  .icon-btn:hover { border-color: #D97757; color: #D97757; }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
   .right-actions { display: flex; align-items: center; gap: 8px; }
   .update-banner {
     position: fixed;
@@ -100,41 +104,41 @@ function buildToolbarHTML(options = {}) {
     left: 0;
     right: 0;
     height: 32px;
-    background: #3D3A38;
-    border-bottom: 1px solid #4D4A48;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border-strong);
     display: none;
     align-items: center;
     justify-content: center;
     gap: 10px;
     font-size: 12px;
-    color: #D4D0CC;
+    color: var(--text-1);
     z-index: 100;
   }
   .update-banner .update-btn {
     padding: 2px 10px;
-    background: #D97757;
-    color: #FFF;
+    background: var(--accent);
+    color: var(--on-accent);
     border: none;
     border-radius: 3px;
     font-size: 11px;
     cursor: pointer;
     transition: background 0.15s;
   }
-  .update-banner .update-btn:hover { background: #C4623F; }
+  .update-banner .update-btn:hover { background: var(--accent-hover); }
   .update-banner .update-btn:disabled { opacity: 0.5; cursor: default; }
   .update-banner .dismiss-btn {
     background: none;
     border: none;
-    color: #7A756F;
+    color: var(--text-3);
     cursor: pointer;
     font-size: 14px;
     padding: 0 4px;
   }
-  .update-banner .dismiss-btn:hover { color: #D4D0CC; }`;
+  .update-banner .dismiss-btn:hover { color: var(--text-1); }`;
 
-  const logoSvg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M3 2v12" stroke="#D97757" stroke-width="2" stroke-linecap="round"/>
-      <path d="M10 2v5c0 2-3 3-7 5" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
+  const logoSvg = `<svg class="logo" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M3 2v12" stroke-width="2" stroke-linecap="round"/>
+      <path d="M10 2v5c0 2-3 3-7 5" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
     </svg>`;
 
   if (mode === 'setup') {
