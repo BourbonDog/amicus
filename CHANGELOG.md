@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-28
+
 ### Added
 - **Free OpenRouter council**: a new `amicus setup` option (readline wizard + Electron Models step)
   that stands up a zero-cost council of free `:free` OpenRouter models, saved as a first-class

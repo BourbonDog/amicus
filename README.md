@@ -152,6 +152,16 @@ Then the council waits for your confirmation.
 
 The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**.
 
+**Free council (zero-cost).** Want the cross-examination without the model spend? `amicus setup` offers a **Free OpenRouter council** mode — readline wizard option 2, and the Electron **Models** step. It detects the free `:free` models live from the catalog, lets you multi-pick (Enter takes a vendor-diverse default), and saves them as `councils.free` — a first-class `councils` config primitive seeded under collision-safe `free-*` aliases. Your `config.default` is left untouched, and all you need is an `OPENROUTER_API_KEY`.
+
+Run it anywhere a council runs:
+
+```bash
+amicus fanout --council free --prompt "Review this design"
+```
+
+The `amicus_fanout` MCP tool takes the same `council` parameter, and the `second-opinion` skill reads `councils.free` automatically. A member that gets delisted is dropped with a warning — the council still runs as long as ≥2 survive. Free models are **rate-limited and quality-variable**, and some return 404 unless you enable data-sharing at [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy).
+
 ---
 
 ## The parallel window
@@ -246,7 +256,8 @@ amicus fanout --models gemini,deepseek,gpt --prompt "Review this design" --json
 
 Fanout runs one **headless wave**: every leg gets the **same** prompt (this is the shared-prompt model the council's review stages are built on). When all legs are terminal it prints **one** JSON wave document on stdout.
 
-- `--models <a,b,c>` — comma-separated aliases or `provider/model` IDs (required).
+- `--models <a,b,c>` — comma-separated aliases or `provider/model` IDs (required, unless `--council`).
+- `--council <name>` — run a saved council (e.g. `free`) instead of `--models`; mutually exclusive with `--models`.
 - `--prompt <text>` / `--prompt-file <path>` — the shared briefing. `--prompt-file` avoids the ~32 KB Windows argument cap and is mutually exclusive with `--prompt`.
 - `--wave-id <id>` — set the wave ID explicitly (leg IDs become `<id>-1..N`).
 - `--json` — emit the wave document.
