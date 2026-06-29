@@ -27,6 +27,7 @@ describe('Fold nudge message', () => {
 
   test('shows nudge overlay after fold completes', async () => {
     const executedScripts = [];
+    const injectedCss = [];
     const mockWindow = {
       close: jest.fn(),
       isDestroyed: () => false,
@@ -41,6 +42,10 @@ describe('Fold nudge message', () => {
       webContents: {
         executeJavaScript: jest.fn((script) => {
           executedScripts.push(script);
+          return Promise.resolve();
+        }),
+        insertCSS: jest.fn((css) => {
+          injectedCss.push(css);
           return Promise.resolve();
         }),
       },
@@ -63,12 +68,30 @@ describe('Fold nudge message', () => {
     expect(allScripts).not.toContain('rgba(217,119,87,0.3)');
     expect(allScripts).toContain('var(--text-1)');
     expect(allScripts).toContain('var(--font-sans)');
+
+    // (a) content-view insertCSS is scoped to #amicus-fold-overlay and contains a token var
+    const allCss = injectedCss.join(' ');
+    expect(allCss).toContain('#amicus-fold-overlay');
+    expect(allCss).toContain('--accent');
+    // (b) no bare global :root injected into the content view
+    expect(allCss).not.toMatch(/:root\s*\{/);
+    // (c) overlay element carries id="amicus-fold-overlay"
+    expect(allScripts).toContain("overlay.id = 'amicus-fold-overlay'");
+    // (d) overlay children still reference var(--accent) and var(--text-1)
+    expect(allScripts).toContain('var(--accent)');
+    expect(allScripts).toContain('var(--text-1)');
   });
 
   test('overlay spinner + title use accent/text tokens', async () => {
     const { showFoldOverlay } = require('../electron/fold');
     const scripts = [];
-    const view = { webContents: { executeJavaScript: jest.fn((s) => { scripts.push(s); return Promise.resolve(); }) } };
+    const cssBlocks = [];
+    const view = {
+      webContents: {
+        executeJavaScript: jest.fn((s) => { scripts.push(s); return Promise.resolve(); }),
+        insertCSS: jest.fn((css) => { cssBlocks.push(css); return Promise.resolve(); }),
+      },
+    };
     const win = { webContents: { executeJavaScript: jest.fn((s) => { scripts.push(s); return Promise.resolve(); }) } };
     showFoldOverlay(win, view);
     const all = scripts.join(' ');
@@ -78,5 +101,11 @@ describe('Fold nudge message', () => {
     expect(all).toContain('var(--text-3)');       // overlay subtitle
     expect(all).not.toContain('#D97757');
     expect(all).not.toContain('rgba(217,119,87,0.3)');
+    // scoped token injection assertions
+    const allCss = cssBlocks.join(' ');
+    expect(allCss).toContain('#amicus-fold-overlay'); // (a) scoped to overlay id
+    expect(allCss).toContain('--accent');             // (a) contains a token var
+    expect(allCss).not.toMatch(/:root\s*\{/);         // (b) no bare global :root
+    expect(all).toContain("overlay.id = 'amicus-fold-overlay'"); // (c) element has correct id
   });
 });

@@ -8,6 +8,7 @@
 const { logger } = require('../src/utils/logger');
 const { requestSummaryFromModel } = require('./summary');
 const { getSummaryTemplate } = require('../src/prompt-builder');
+const { tokenCss } = require('../src/design/tokens');
 
 /**
  * Create a fold handler bound to the window state
@@ -59,7 +60,7 @@ function createFoldHandler(state) {
       if (contentView) {
         await contentView.webContents.executeJavaScript(`
           (function() {
-            var overlay = document.getElementById('sidecar-fold-overlay');
+            var overlay = document.getElementById('amicus-fold-overlay');
             if (overlay) {
               while (overlay.firstChild) { overlay.removeChild(overlay.firstChild); }
               var msg = document.createElement('div');
@@ -128,6 +129,15 @@ function showFoldOverlay(mainWindow, contentView) {
     `).catch(() => {});
   }
   if (contentView) {
+    // Scope token vars to the overlay container so var(--x) resolves without
+    // touching OpenCode's own :root (which would clobber its CSS variables).
+    const rawCss = tokenCss({ absoluteFontUrls: true });
+    // Replace only the :root selector (not occurrences inside comments) so the
+    // custom properties are defined on #amicus-fold-overlay and inherited by
+    // its descendants. @font-face blocks are left at global scope (no selector).
+    const scopedCss = rawCss.replace(/:root\s*\{/, '#amicus-fold-overlay {');
+    contentView.webContents.insertCSS(scopedCss).catch(() => {});
+
     contentView.webContents.executeJavaScript(`
       (function() {
         if (!document.getElementById('fold-spin-style')) {
@@ -137,7 +147,7 @@ function showFoldOverlay(mainWindow, contentView) {
           document.head.appendChild(style);
         }
         var overlay = document.createElement('div');
-        overlay.id = 'sidecar-fold-overlay';
+        overlay.id = 'amicus-fold-overlay';
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;';
 
         var spinDiv = document.createElement('div');
