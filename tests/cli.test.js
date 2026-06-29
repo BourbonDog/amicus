@@ -100,6 +100,17 @@ describe('CLI Argument Parser', () => {
       expect(result['no-ui']).toBe(false);
     });
 
+    it('should parse --no-ledger as a boolean without swallowing the next positional', () => {
+      const result = parseArgs(['council', 'tally', '--no-ledger', 'in.json']);
+      expect(result['no-ledger']).toBe(true);
+      expect(result._).toContain('in.json'); // not consumed as the flag's value
+    });
+
+    it('should leave --no-ledger unset by default (ledger append on)', () => {
+      const result = parseArgs(['council', 'tally', 'in.json']);
+      expect(result['no-ledger']).toBeFalsy();
+    });
+
     it('should parse --position option', () => {
       const result = parseArgs(['start', '--position', 'right']);
       expect(result.position).toBe('right');
