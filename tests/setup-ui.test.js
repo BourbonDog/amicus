@@ -37,10 +37,12 @@ describe('setup-ui wizard', () => {
       expect(coworkHtml).not.toContain('Openwork');
     });
 
-    it('should use the dark theme colors', () => {
-      expect(html).toContain('#2D2B2A'); // background
-      expect(html).toContain('#D97757'); // accent
-      expect(html).toContain('#E8E0D8'); // text
+    it('should ride the shared clay/gold token layer (no warm-brown ramp)', () => {
+      const { TOKENS } = require('../src/design/tokens');
+      expect(html).toContain(TOKENS.accent);   // '#d97757' from the injected :root
+      expect(html).toContain('var(--bg)');      // wizard rules reference tokens
+      expect(html).toContain('var(--accent)');
+      expect(html).not.toContain('#2D2B2A');    // the old warm-brown background is gone
     });
   });
 
