@@ -62,6 +62,33 @@ describe('mirrorMessages', () => {
     const r = mirrorMessages([{ info: { role: 'user', id: 'u1' }, parts: [{ id: 'x', type: 'text', text: 'hi' }] }], st, { now: NOW });
     expect(r.appendLines).toEqual([]);
   });
+
+  test('promotes reasoning to output when a finished message has no text part (Gemini direct path)', () => {
+    const st = createMirrorState();
+    const streaming = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'PONG' }] };
+    const r1 = mirrorMessages([streaming], st, { now: NOW });
+    expect(st.output).toBe('');                  // not promoted while still streaming
+    expect(st.reasoningOutput).toBe('PONG');
+    expect(r1.assistantFinished).toBe(false);
+    const done = { info: { role: 'assistant', id: 'm1', time: { completed: 1 } }, parts: [{ id: 'm1:r', type: 'reasoning', text: 'PONG' }] };
+    const r2 = mirrorMessages([done], st, { now: NOW });
+    expect(st.output).toBe('PONG');              // promoted to output on completion
+    expect(r2.appendLines).toEqual([{ role: 'assistant', content: 'PONG', timestamp: NOW() }]);
+    const r3 = mirrorMessages([done], st, { now: NOW });
+    expect(r3.appendLines).toEqual([]);          // promoted only once
+  });
+
+  test('reasoning never pollutes output when a text part is also present', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: { completed: 1 } }, parts: [
+      { id: 'm1:r', type: 'reasoning', text: 'let me think hard about this' },
+      { id: 'm1:t', type: 'text', text: 'PONG' },
+    ] };
+    const r = mirrorMessages([msg], st, { now: NOW });
+    expect(st.output).toBe('PONG');              // text wins; thinking stays out of the answer
+    expect(st.reasoningOutput).toBe('let me think hard about this');
+    expect(r.appendLines).toEqual([{ role: 'assistant', content: 'PONG', timestamp: NOW() }]);
+  });
 });
 
 describe('logMessage', () => {

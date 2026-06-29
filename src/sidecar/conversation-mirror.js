@@ -17,6 +17,8 @@ function createMirrorState() {
     seenToolResultIds: new Set(),
     receivingReported: false,
     output: '',                 // accumulated assistant text
+    seenReasoningParts: new Map(), // partId -> last captured reasoning length
+    reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
   };
 }
@@ -101,6 +103,22 @@ function mirrorMessages(messages, state, opts = {}) {
             timestamp: now(),
           });
         }
+      } else if (part.type === 'reasoning' && part.text) {
+        // Some providers (e.g. Gemini 3.x on the direct Google path) return the
+        // answer as a reasoning part with no separate text part. Accumulate it in a
+        // dedicated buffer; it is promoted to `output` at finalization ONLY when no
+        // visible text part ever arrives (see below), so models that emit BOTH a
+        // reasoning part and a text part are unaffected (their thinking never
+        // pollutes the answer).
+        const prevLen = state.seenReasoningParts.get(partId) || 0;
+        if (part.text.length > prevLen) {
+          state.reasoningOutput += part.text.slice(prevLen);
+          state.seenReasoningParts.set(partId, part.text.length);
+          if (!state.receivingReported) {
+            state.receivingReported = true;
+            progressUpdates.push({ stage: 'receiving', extra: { messagesReceived: 1 } });
+          }
+        }
       }
     }
   }
@@ -109,6 +127,15 @@ function mirrorMessages(messages, state, opts = {}) {
   // (earlier messages may finish while the model continues in new messages)
   const lastAssistant = list.filter(m => m.info && m.info.role === 'assistant').pop();
   assistantFinished = !!(lastAssistant && lastAssistant.info.time && lastAssistant.info.time.completed);
+
+  // Reasoning-only fallback: if the assistant finished but emitted only reasoning
+  // parts (no visible text), promote the reasoning text to `output` so the headless
+  // completion gates fire and the answer isn't lost as "No Output". Runs once — once
+  // `output` is non-empty this is skipped on subsequent polls.
+  if (assistantFinished && !state.output && state.reasoningOutput) {
+    state.output = state.reasoningOutput;
+    appendLines.push({ role: 'assistant', content: state.reasoningOutput, timestamp: now() });
+  }
 
   return { appendLines, progressUpdates, state, currentAssistantMsgId, assistantFinished, sessionError, messageCount };
 }

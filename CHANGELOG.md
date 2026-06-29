@@ -5,6 +5,21 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-29
+
+A headless-reliability fix for reasoning-heavy models.
+
+### Fixed
+- **Gemini (and other reasoning-only models) no longer hang headless with "No Output."** On the
+  direct-Google provider path, Gemini 3.x returns its answer as a `reasoning` part with no separate
+  `text` part. The conversation mirror only accumulated `text` parts, so it captured zero output, the
+  headless completion gates (which key on `output.length > 0`) never fired, and the run burned the full
+  timeout — while still billing input/thinking tokens. The mirror now accumulates reasoning into a
+  dedicated buffer and promotes it to the output **only when a finished assistant message produced no
+  visible text**, so models that emit both a reasoning part and a text part are unaffected (their
+  thinking never pollutes the answer). Fixes `--model gemini` / `gemini-pro` and any direct `google/*`
+  alias in headless `start`, `fanout`, and council runs.
+
 ## [1.5.0] - 2026-06-29
 
 A visual refresh plus a council-reliability fix and a config-dir consolidation.
