@@ -172,6 +172,44 @@ function registerClaudeDesktop() {
   addMcpToConfigFile(configPath, 'sidecar', MCP_CONFIG);
 }
 
+/**
+ * Resolve the Electron binary path the same way src/sidecar/interactive.js
+ * getElectronPath() does: require('electron') returns the absolute path to the
+ * binary (or throws if the optionalDependency never installed/extracted).
+ * @returns {string|null} Path to the Electron binary, or null if unresolvable.
+ */
+function resolveElectron() {
+  try {
+    return require('electron');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * NON-FATAL verification that the OPTIONAL electron binary actually extracted.
+ * Electron is an optionalDependency: npm exits 0 even if its download/extract
+ * fails (or AV quarantines electron.exe), so without this the user only finds
+ * out the GUI is broken much later. Warn clearly that headless runs + the
+ * council still work, and point at `amicus doctor` / reinstall to get the GUI.
+ *
+ * This MUST never throw out of postinstall — the whole body is guarded so a
+ * resolver failure or a missing fs can never turn into a non-zero exit.
+ *
+ * @param {object} deps - { resolveElectron } override for testing.
+ */
+function verifyElectron(deps = {}) {
+  try {
+    const _resolve = deps.resolveElectron || resolveElectron;
+    const binPath = _resolve();
+    if (binPath && fs.existsSync(binPath)) { return; }
+    console.warn('[amicus] Warning: the Electron binary did not install — the interactive GUI / setup-wizard is unavailable.');
+    console.warn('[amicus] Headless runs and the council still work. Run `amicus doctor` to check, or `npm install -g amicus` to reinstall and add the GUI.');
+  } catch {
+    // Never let the electron check throw out of postinstall.
+  }
+}
+
 function main(deps = {}) {
   if (process.env.AMICUS_SKIP_POSTINSTALL === '1') {
     console.log('[amicus] AMICUS_SKIP_POSTINSTALL set — skipping global setup (plugin channel handles registration).');
@@ -187,6 +225,9 @@ function main(deps = {}) {
   _installCouncilSkill();
   _registerClaudeCode();
   _registerClaudeDesktop();
+
+  // Non-fatal: warn (only) if the optional Electron binary failed to extract.
+  verifyElectron(deps);
 
   console.log('');
   console.log('[amicus] Setup:');
@@ -217,4 +258,4 @@ if (require.main === module) {
   runCli();
 }
 
-module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, COUNCIL_FILES };
+module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, verifyElectron, resolveElectron, COUNCIL_FILES };
