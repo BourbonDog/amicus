@@ -194,9 +194,27 @@ function main(deps = {}) {
   console.log('  - API keys: OPENROUTER_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, OPENAI_API_KEY, etc.');
 }
 
-// Only run main when executed directly (not when required for testing)
-if (require.main === module) {
-  main();
+/**
+ * Top-level entry point. Wraps main() so a failure is never fatal: npm treats
+ * a non-zero postinstall as a reason to roll back / uninstall the ENTIRE global
+ * package, but skill-copy + MCP registration are optional — amicus itself still
+ * works without them. Warn clearly and exit 0 (mirrors scripts/setup-hooks.js).
+ */
+function runCli(deps = {}) {
+  try {
+    main(deps);
+  } catch (err) {
+    console.warn(`[amicus] Warning: optional post-install setup failed: ${err && err.message}`);
+    console.warn('[amicus] Skill install + MCP registration are optional — amicus itself still works.');
+    console.warn('[amicus] Run `amicus doctor` to check setup, or re-register manually later.');
+  }
+  // Always exit 0 so a failure here never rolls back the global install.
+  process.exit(0);
 }
 
-module.exports = { main, addMcpToConfigFile, installSkill, installCouncilSkill, COUNCIL_FILES };
+// Only run when executed directly (not when required for testing)
+if (require.main === module) {
+  runCli();
+}
+
+module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, COUNCIL_FILES };

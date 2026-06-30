@@ -292,10 +292,15 @@ function isValidDurationFormat(duration) {
 }
 
 /**
- * Get usage text
+ * Usage text, split into composable parts so 'amicus <cmd> --help' can print
+ * only the relevant block while bare 'amicus --help' still composes the full
+ * text byte-identically.
+ *
+ * Each value is a section of the original monolithic template; concatenating
+ * USAGE_HEADER + every USAGE_COMMAND_BLOCKS value (in insertion order) +
+ * USAGE_TRAILER reproduces the original string exactly.
  */
-function getUsage() {
-  return `
+const USAGE_HEADER = `
 Usage: amicus <command> [options]
 
 Commands:
@@ -320,7 +325,12 @@ Commands:
     (no args)                List all configured providers
   update      Update to latest version
   mcp         Start MCP server (stdio transport)
+`;
 
+// Per-command option blocks, keyed by the invoked subcommand. Insertion order
+// must match the original template so the composed full usage is unchanged.
+const USAGE_COMMAND_BLOCKS = {
+  start: `
 Options for 'start':
   --model <model>              Optional (uses config default). Model to use:
                                - Short aliases: gemini, opus, gpt (see 'amicus setup')
@@ -354,7 +364,8 @@ Options for 'start':
   --validate-model             (Deprecated: validation is on by default)
   --no-validate-model          Skip model-catalog validation before launch
   --position <pos>             Window position: right (default), left, center
-
+`,
+  fanout: `
 Options for 'fanout':
   --models <a,b,c>             Required. Comma-separated aliases or provider/model IDs
   --council <name>             Run a saved council instead of --models (e.g. free). Mutually exclusive with --models
@@ -369,27 +380,34 @@ Options for 'fanout':
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
-
+`,
+  models: `
 Options for 'models':
   --search <q>                 Filter by substring over model id and name
   --refresh                    Force-refresh the catalog from provider APIs
   --check                      Audit aliases against the catalog (exit = stale count)
   --json                       Machine-readable output
-
+`,
+  list: `
 Options for 'list':
   --status <filter>            Filter by status (running, complete)
   --all                        Show all projects
   --json                       Output as JSON
-
+`,
+  abort: `
 Options for 'abort':
   --all                        Abort all running sessions in this project
-
+`,
+  read: `
 Options for 'read':
   --summary                    Show summary (default)
   --conversation               Show full conversation
   --metadata                   Show session metadata
   --json                       Emit the run/wave result as stable JSON
+`
+};
 
+const USAGE_TRAILER = `
 OpenCode Agent Types:
     Chat       Reads auto, writes/bash ask permission (interactive default)
     Build      Full tool access (headless default)
@@ -409,6 +427,25 @@ Examples:
   amicus resume abc123
   amicus read abc123 --conversation
 `;
+
+/**
+ * Get usage text.
+ *
+ * @param {string} [command] When provided AND it has a dedicated options block,
+ *   returns the top-level header plus only that command's block (scoped --help).
+ *   When omitted, or when the command has no dedicated block, returns the full
+ *   composed usage (byte-identical to the original monolithic string).
+ */
+function getUsage(command) {
+  // Each part carries its own leading/trailing newlines exactly as they sat in
+  // the original single template literal, so plain concatenation reproduces the
+  // blank-line separators (the header's trailing "\n" + a block's leading "\n"
+  // form the blank line between them). Scoped help keeps the header + trailer
+  // and substitutes just the one command's block in place of all blocks.
+  const block = command && Object.prototype.hasOwnProperty.call(USAGE_COMMAND_BLOCKS, command)
+    ? USAGE_COMMAND_BLOCKS[command]
+    : Object.values(USAGE_COMMAND_BLOCKS).join('');
+  return USAGE_HEADER + block + USAGE_TRAILER;
 }
 
 module.exports = {

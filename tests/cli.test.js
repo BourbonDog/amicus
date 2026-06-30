@@ -944,4 +944,79 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('per-subcommand --help (#16)', () => {
+    test('bare getUsage() is unchanged when passing undefined', () => {
+      const { getUsage } = require('../src/cli');
+      // Passing undefined must be byte-identical to passing nothing.
+      expect(getUsage(undefined)).toBe(getUsage());
+    });
+
+    test("getUsage('start') prints only the start section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('start');
+      expect(usage).toContain("Options for 'start':");
+      // start-only flag present
+      expect(usage).toContain('--fold-shortcut');
+      // other subcommands' option blocks absent
+      expect(usage).not.toContain("Options for 'fanout':");
+      expect(usage).not.toContain("Options for 'read':");
+      expect(usage).not.toContain("Options for 'models':");
+    });
+
+    test("getUsage('fanout') prints only the fanout section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('fanout');
+      expect(usage).toContain("Options for 'fanout':");
+      expect(usage).toContain('--council');
+      expect(usage).not.toContain("Options for 'start':");
+      expect(usage).not.toContain("Options for 'list':");
+    });
+
+    test("getUsage('models') prints only the models section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('models');
+      expect(usage).toContain("Options for 'models':");
+      expect(usage).toContain('--refresh');
+      expect(usage).not.toContain("Options for 'start':");
+      expect(usage).not.toContain("Options for 'fanout':");
+    });
+
+    test("getUsage('list') prints only the list section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('list');
+      expect(usage).toContain("Options for 'list':");
+      expect(usage).toContain('--status');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test("getUsage('abort') prints only the abort section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('abort');
+      expect(usage).toContain("Options for 'abort':");
+      expect(usage).toContain('--all');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test("getUsage('read') prints only the read section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('read');
+      expect(usage).toContain("Options for 'read':");
+      expect(usage).toContain('--conversation');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test('every scoped help still shows the top-level Usage line', () => {
+      const { getUsage } = require('../src/cli');
+      for (const cmd of ['start', 'fanout', 'models', 'list', 'abort', 'read']) {
+        expect(getUsage(cmd)).toContain('Usage: amicus');
+      }
+    });
+
+    test('a command with no dedicated options block falls back to full usage', () => {
+      const { getUsage } = require('../src/cli');
+      // 'update' has no "Options for" block; scoped help should not be empty.
+      expect(getUsage('update')).toBe(getUsage());
+    });
+  });
+
 });
