@@ -5,6 +5,34 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-06-30
+
+Project-directory and session-addressing correctness — agents, sessions, and the interactive GUI now agree on which project they're in.
+
+### Added
+- **`AMICUS_PROJECT_DIR` + MCP `roots` support.** When the project is not passed explicitly, the MCP
+  server now resolves the working directory from the client's first `file://` workspace root (falling
+  back to `AMICUS_PROJECT_DIR`, then the process cwd) — so a stdio MCP server spawned by a desktop
+  client no longer roots agents in the app install directory where they can't see your files.
+- **Global session index.** `amicus_status` / `amicus_read` / `amicus_list` now consult a global
+  `taskId -> project` index on a per-project miss, so a session created in one project is still found
+  when looked up from another.
+- **Per-command help for the rest of the CLI.** `amicus council --help` (and `continue`, `resume`,
+  `doctor`, `setup`, `key`, `mcp`) now print their own scoped usage instead of the full global help.
+
+### Fixed
+- **Interactive `--cwd`: follow-up prompts no longer fail "unable to retrieve session."** When the
+  launch directory differs from `--cwd` (the normal sidecar-skill pattern), the OpenCode session is now
+  scoped to the project directory and the Electron Web-UI route is built from the **server-echoed**
+  session directory rather than a guessed one, so turn 2+ resolve correctly.
+- **Shared-server MCP sessions are scoped to the project directory** — every create and follow-up call
+  carries the directory, so headless MCP sessions are found on a server shared across projects.
+- **`amicus_read` surfaces the failure reason** for crashed / timed-out / aborted runs that wrote no
+  summary, instead of a bare "No summary available."
+- **`amicus_abort`'s "session not found"** now names the resolved project, matching `status` / `read`.
+- Internal: a single `canonicalProjectPath()` now normalizes project paths (slash direction, drive-letter
+  case, trailing slash, UNC shares) so creation and lookup always agree.
+
 ## [1.6.0] - 2026-06-30
 
 Install resilience and council-failure correctness — the first two blocks of the post-1.5 backlog program.
