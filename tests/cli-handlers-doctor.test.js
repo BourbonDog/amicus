@@ -52,6 +52,12 @@ describe('runDoctorChecks', () => {
     expect(hint).toMatch(/npm cache clean --force/);
   });
 
+  test('missing OpenCode binary hint includes the AV/quarantine note', async () => {
+    const checks = await runDoctorChecks({ ...allGood, hasOpencodeBinary: () => false });
+    const hint = byId(checks)['opencode-bin'].hint;
+    expect(hint).toMatch(/antivirus|quarantin|allow-list/i);
+  });
+
   test('missing Electron → warn only (headless still works)', async () => {
     const checks = await runDoctorChecks({ ...allGood, getElectronPath: () => null });
     expect(byId(checks).electron.status).toBe('warn');
@@ -142,9 +148,9 @@ describe('runDoctorChecks', () => {
   });
 
   describe('remediation hints are sourced from the shared helper', () => {
-    test('missing OpenCode binary renders the shared reinstallEngine hint', async () => {
+    test('missing OpenCode binary renders the shared reinstallEngineAv hint', async () => {
       const checks = await runDoctorChecks({ ...allGood, hasOpencodeBinary: () => false });
-      expect(byId(checks)['opencode-bin'].hint).toBe(HINTS.reinstallEngine);
+      expect(byId(checks)['opencode-bin'].hint).toBe(HINTS.reinstallEngineAv);
     });
 
     test('missing Electron points at the converged doctor --fix self-heal hint (#56)', async () => {

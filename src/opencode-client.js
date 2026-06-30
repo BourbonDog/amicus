@@ -565,6 +565,20 @@ function buildServerHandle(sdkServer, deps = {}) {
  * @returns {Promise<{client: object, server: {url: string, close: Function}}>}
  */
 async function startServer(options = {}) {
+  // Fail fast with a CLEAR, actionable error when the opencode engine binary
+  // is absent (skipped optionalDependency install or AV quarantine). Without
+  // this, createOpencodeServer → spawn('opencode') fails with an opaque ENOENT.
+  // Checked BEFORE the SDK is loaded so the message is the first thing the user
+  // sees. `_hasOpencodeBinary` is a test seam; default is the shared resolver
+  // (single source of truth with `amicus doctor`). NOTE: this does NOT
+  // auto-repair — re-running the opencode postinstall is the same flaky trap.
+  const hasOpencodeBinary = options._hasOpencodeBinary
+    || require('./utils/path-setup').hasOpencodeBinary;
+  if (!hasOpencodeBinary()) {
+    const HINTS = require('./utils/remediation-hints');
+    throw new Error(HINTS.engineMissing);
+  }
+
   const createOpencodeServer = await getCreateOpencodeServer();
   const serverOptions = buildServerOptions(options);
 

@@ -29,14 +29,10 @@ function realDeps() {
     collectAliasSources: () => require('./utils/alias-audit').collectAliasSources(),
     findStaleAliases: (s, c) => require('./utils/alias-audit').findStaleAliases(s, c),
     hasOpencodeBinary: () => {
-      const { ensureNodeModulesBinInPath } = require('./utils/path-setup');
+      // Single source of truth shared with the runtime server-start guard.
+      const { ensureNodeModulesBinInPath, hasOpencodeBinary } = require('./utils/path-setup');
       ensureNodeModulesBinInPath();
-      const root = path.join(__dirname, '..', 'node_modules');
-      const candidates = process.platform === 'win32'
-        ? [path.join(root, `opencode-windows-${os.arch() === 'arm64' ? 'arm64' : 'x64'}`, 'bin', 'opencode.exe'),
-           path.join(root, `opencode-windows-${os.arch() === 'arm64' ? 'arm64' : 'x64'}-baseline`, 'bin', 'opencode.exe')]
-        : [path.join(root, '.bin', 'opencode')];
-      return candidates.some(p => fs.existsSync(p));
+      return hasOpencodeBinary();
     },
     getElectronPath: () => require('./sidecar/interactive').getElectronPath(),
     // #56: self-heal primitive for `doctor --fix`. Pure probe (getElectronPath)
@@ -128,7 +124,7 @@ async function runDoctorChecks(depsOverride = {}) {
   checks.push(guard('opencode-bin', 'OpenCode binary', () => (
     d.hasOpencodeBinary()
       ? { id: 'opencode-bin', name: 'OpenCode binary', status: 'ok', message: 'found', hint: null }
-      : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: HINTS.reinstallEngine }
+      : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: HINTS.reinstallEngineAv }
   )));
 
   checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
