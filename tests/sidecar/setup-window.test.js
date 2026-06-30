@@ -16,8 +16,18 @@ jest.mock('../../src/sidecar/interactive', () => ({
   getElectronPath: () => '/mock/path/to/Electron',
   checkElectronAvailable: () => true,
 }));
+// #55: launchSetupWindow now lazily provisions electron via ensureElectron().
+// Mock it usable so the spawn path runs without any real provisioning.
+jest.mock('../../src/sidecar/electron-ensure', () => ({
+  ensureElectron: jest.fn(async () => ({ ok: true, path: '/mock/path/to/Electron' })),
+}));
 
 const { launchSetupWindow } = require('../../src/sidecar/setup-window');
+
+// ensureElectron() is awaited BEFORE spawn, so spawn + its listeners are wired
+// on a later microtask. Flush the queue so the synchronous callback lookups
+// below find the registered handlers (#55).
+const flush = () => new Promise((r) => setImmediate(r));
 
 describe('setup-window', () => {
   let mockProcess;
@@ -43,6 +53,7 @@ describe('setup-window', () => {
 
   it('should spawn Electron with AMICUS_MODE=setup', async () => {
     const promise = launchSetupWindow();
+    await flush();
 
     const dataCallback = mockProcess.stdout.on.mock.calls.find(c => c[0] === 'data')[1];
     dataCallback('{"status":"complete","default":"gemini","keyCount":2}\n');
@@ -69,6 +80,7 @@ describe('setup-window', () => {
     spawn.mockReturnValue(mockProcess);
 
     const promise = launchSetupWindow();
+    await flush();
 
     const dataCallback = mockProcess.stdout.on.mock.calls.find(c => c[0] === 'data')[1];
     dataCallback('{"status":"complete"}\n');
@@ -86,6 +98,7 @@ describe('setup-window', () => {
 
   it('should parse enriched JSON with default model and keyCount', async () => {
     const promise = launchSetupWindow();
+    await flush();
 
     const dataCallback = mockProcess.stdout.on.mock.calls.find(c => c[0] === 'data')[1];
     dataCallback('{"status":"complete","default":"gemini-pro","keyCount":3}\n');
@@ -102,6 +115,7 @@ describe('setup-window', () => {
 
   it('should handle legacy JSON without default/keyCount', async () => {
     const promise = launchSetupWindow();
+    await flush();
 
     const dataCallback = mockProcess.stdout.on.mock.calls.find(c => c[0] === 'data')[1];
     dataCallback('{"status":"complete"}\n');
@@ -118,6 +132,7 @@ describe('setup-window', () => {
 
   it('should resolve with failure when Electron exits non-zero', async () => {
     const promise = launchSetupWindow();
+    await flush();
 
     const closeCallback = mockProcess.on.mock.calls.find(c => c[0] === 'close')[1];
     closeCallback(1);
@@ -128,6 +143,7 @@ describe('setup-window', () => {
 
   it('should resolve with failure when Electron exits without output', async () => {
     const promise = launchSetupWindow();
+    await flush();
 
     const closeCallback = mockProcess.on.mock.calls.find(c => c[0] === 'close')[1];
     closeCallback(0);
@@ -136,14 +152,15 @@ describe('setup-window', () => {
     expect(result).toEqual({ success: false, error: 'Setup window closed without completing' });
   });
 
-  it('should use getElectronPath() for electron binary', () => {
+  it('should use the ensureElectron()-resolved path for the electron binary', async () => {
     launchSetupWindow();
+    await flush();
 
     const electronPath = spawn.mock.calls[0][0];
     expect(electronPath).toBe('/mock/path/to/Electron');
   });
 
-  it('should resolve with failure when electron is not installed', async () => {
+  it('should resolve with failure when electron cannot be provisioned (#55)', async () => {
     jest.resetModules();
     jest.mock('child_process');
     jest.mock('../../src/utils/logger', () => ({
@@ -152,6 +169,10 @@ describe('setup-window', () => {
     jest.mock('../../src/sidecar/interactive', () => ({
       getElectronPath: () => null,
       checkElectronAvailable: () => false,
+    }));
+    // ensureElectron() defers/fails — the GUI is unavailable.
+    jest.mock('../../src/sidecar/electron-ensure', () => ({
+      ensureElectron: jest.fn(async () => ({ ok: false, reason: 'Electron not installed' })),
     }));
     const { launchSetupWindow: freshLaunch } = require('../../src/sidecar/setup-window');
 

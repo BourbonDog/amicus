@@ -10,19 +10,24 @@ const { spawn } = require('child_process');
 const path = require('path');
 const { logger } = require('../utils/logger');
 const { getElectronPath } = require('./interactive');
+const { ensureElectron } = require('./electron-ensure');
 const { getCompatEnv } = require('../utils/env-compat');
 
 /**
- * Launch the Electron setup window for API key entry
+ * Launch the Electron setup window for API key entry.
+ * Lazily PROVISIONS electron on first GUI use (#55) via ensureElectron() — the
+ * one place network provisioning is allowed; getElectronPath() stays a pure probe.
  * @returns {Promise<{ success: boolean, error?: string }>}
  */
-function launchSetupWindow() {
+async function launchSetupWindow() {
+  const ensured = await ensureElectron();
+  if (!ensured.ok) {
+    return { success: false, error: ensured.reason || 'Electron not installed' };
+  }
   return new Promise((resolve) => {
-    const electronPath = getElectronPath();
-    if (!electronPath) {
-      resolve({ success: false, error: 'Electron not installed' });
-      return;
-    }
+    // Prefer the path ensureElectron() resolved: a same-process first-use
+    // provision can leave require('electron') cached as a stale null (#55).
+    const electronPath = ensured.path || getElectronPath();
     const mainPath = path.join(__dirname, '..', '..', 'electron', 'main.js');
 
     const env = {

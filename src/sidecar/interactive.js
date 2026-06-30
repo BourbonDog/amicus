@@ -14,6 +14,7 @@ const { getCompatEnv } = require('../utils/env-compat');
 const { startInteractiveMirror } = require('./interactive-mirror');
 const { getSessionDir } = require('../session-manager');
 const { canonicalProjectPath } = require('../utils/project-path');
+const { ensureElectron } = require('./electron-ensure');
 
 /** Get the Electron binary path via require('electron').
  *  Works in all install contexts (global, local, npx hoisted).
@@ -95,11 +96,15 @@ function handleElectronProcess(electronProcess, taskId, resolve) {
 
 /** Run sidecar in interactive mode (Electron GUI) */
 async function runInteractive(model, systemPrompt, userMessage, taskId, project, options = {}) {
-  if (!checkElectronAvailable()) {
-    logger.error('Electron not installed — interactive mode unavailable');
+  // Lazily PROVISION electron on FIRST GUI use (#55). ensureElectron() is the
+  // one place network provisioning is allowed; the probes stay pure. When it
+  // returns ok:false the GUI is unavailable — fail gracefully toward --no-ui.
+  const ensured = await ensureElectron();
+  if (!ensured.ok) {
+    logger.error('Electron not available — interactive mode unavailable', { reason: ensured.reason });
     return {
       summary: '', completed: false, timedOut: false, taskId,
-      error: 'Interactive mode requires electron. Install with: npm install -g amicus (or use --no-ui for headless mode)'
+      error: `Interactive mode requires electron. ${ensured.reason} (or use --no-ui for headless mode)`
     };
   }
 
@@ -197,7 +202,9 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
   });
 
   return new Promise((resolve, _reject) => {
-    const electronPath = getElectronPath();
+    // Prefer the path ensureElectron() resolved: a same-process first-use
+    // provision can leave require('electron') cached as a stale null (#55).
+    const electronPath = ensured.path || getElectronPath();
     const mainPath = path.join(__dirname, '..', '..', 'electron', 'main.js');
 
     const nodeModulesBin = path.join(__dirname, '..', '..', 'node_modules', '.bin');

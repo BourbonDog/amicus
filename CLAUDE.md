@@ -123,6 +123,7 @@ src/
 │   ├── conversation-mirror.js
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
 │   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
+│   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
@@ -301,6 +302,7 @@ evals/
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
+| `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `tests()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
