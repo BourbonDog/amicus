@@ -22,6 +22,7 @@ const { registerSetupHandlers } = require('./ipc-setup');
 const { computeWindowPosition } = require('./window-position');
 const { attachLoadFailsafe, buildLoadErrorHTML } = require('./load-failsafe');
 const { buildSessionRoute } = require('./session-route');
+const { TOKENS } = require('../src/design/tokens');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
@@ -98,7 +99,7 @@ function createAmicusWindow() {
     width: WIN_W, height: WIN_H, minWidth: 550, minHeight: 600,
     x: winX, y: winY,
     show: false,
-    frame: true, backgroundColor: '#2D2B2A',
+    frame: true, backgroundColor: TOKENS.bg,
     title: 'Amicus',
     icon: ICON_PATH,
     webPreferences: {
@@ -290,7 +291,7 @@ async function createSetupWindow() {
 
   mainWindow = new BrowserWindow({
     width: 560, height: 680, minWidth: 480, minHeight: 580,
-    frame: true, backgroundColor: '#2D2B2A',
+    frame: true, backgroundColor: TOKENS.bg,
     title: `${getBrandName(CLIENT)} Setup`,
     icon: ICON_PATH,
     resizable: false,
@@ -443,7 +444,7 @@ function createSettingsChildWindow() {
   const settingsWin = new BrowserWindow({
     width: 560, height: 680,
     parent: mainWindow, modal: false,
-    frame: true, backgroundColor: '#2D2B2A',
+    frame: true, backgroundColor: TOKENS.bg,
     title: `${getBrandName(CLIENT)} Settings`,
     icon: ICON_PATH,
     resizable: false,

@@ -34,7 +34,7 @@ function injectBrandingCss() {
   try {
     const style = document.createElement('style');
     style.textContent = [
-      'html, body { background-color: #2D2B2A !important; }',
+      'html, body { background-color: var(--bg, #0a0a0a) !important; }',
       '#root > div > header { display: none !important; }',
       'svg[viewBox="0 0 234 42"] { display: none !important; }',
     ].join('\n');
