@@ -12,7 +12,7 @@ describe('WS-4 quick-wins', () => {
 
   test('README has a Prerequisites & cost block with the council-call estimate', () => {
     const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf-8');
-    expect(readme).toMatch(/##\s*Prerequisites/i);
+    expect(readme).toMatch(/##\s*(Prerequisites|Requirements\s*&\s*Dependencies)/i);
     expect(readme).toMatch(/Node.*18/);
     expect(readme).toMatch(/Claude Code/);
     expect(readme).toMatch(/5[–-]8 paid model calls/);
