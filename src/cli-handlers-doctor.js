@@ -13,6 +13,13 @@ function realDeps() {
   return {
     nodeVersion: process.version,
     readApiKeys: () => require('./utils/api-key-store').readApiKeys(),
+    readApiKeyValues: () => require('./utils/api-key-store').readApiKeyValues(),
+    checkOpenRouterCredit: (key) => require('./utils/api-key-validation').checkOpenRouterCredit(key),
+    getCwd: () => process.cwd(),
+    readProjectMarkers: (dir) => {
+      const exists = (name) => { try { return fs.existsSync(path.join(dir, name)); } catch (_e) { return false; } };
+      return { hasGit: exists('.git'), hasPackageJson: exists('package.json'), hasClaude: exists('.claude') };
+    },
     getConfigDir: () => require('./utils/config').getConfigDir(),
     resolveModel: () => require('./utils/config').resolveModel(),
     readCache: () => require('./utils/model-catalog').readCache(),
@@ -45,12 +52,19 @@ function guard(id, name, fn) {
   catch (e) { return { id, name, status: 'error', message: e.message, hint: null }; }
 }
 
+/** Async variant of guard; a thrown/rejected fn becomes an error line. */
+async function guardAsync(id, name, fn) {
+  try { return await fn(); }
+  catch (e) { return { id, name, status: 'error', message: e.message, hint: null }; }
+}
+
 /**
- * Compose the health checks. Never throws.
+ * Compose the health checks. Never throws (async; awaits non-blocking
+ * network checks such as the OpenRouter credit probe).
  * @param {object} [depsOverride]
- * @returns {Array<{id,name,status,message,hint}>}
+ * @returns {Promise<Array<{id,name,status,message,hint}>>}
  */
-function runDoctorChecks(depsOverride = {}) {
+async function runDoctorChecks(depsOverride = {}) {
   const d = { ...realDeps(), ...depsOverride };
   const checks = [];
 
@@ -135,6 +149,31 @@ function runDoctorChecks(depsOverride = {}) {
     return { id: 'mcp', name: 'MCP registration', status: 'ok', message: `registered: Claude Code${extra}`, hint: null };
   }));
 
+  // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no key.
+  checks.push(await guardAsync('openrouter-credit', 'OpenRouter credit', async () => {
+    const values = d.readApiKeyValues() || {};
+    const key = values.openrouter;
+    if (!key) {
+      return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'ok', message: 'no OpenRouter key — skipped', hint: null };
+    }
+    // Reuses the #38 non-blocking probe; resolves warning:null on any failure.
+    const res = (await d.checkOpenRouterCredit(key)) || {};
+    if (res.warning) {
+      return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'warn', message: res.warning, hint: 'Add credit at openrouter.ai/credits, or build a free council (amicus setup → option 2).' };
+    }
+    const remaining = (typeof res.limitRemaining === 'number') ? ` ($${res.limitRemaining} remaining)` : '';
+    return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'ok', message: `credit ok${remaining}`, hint: null };
+  }));
+
+  // #43: project-root sanity — warns when cwd looks like an app/install dir or lacks project markers.
+  checks.push(guard('project-root', 'Project root', () => {
+    const dir = d.getCwd();
+    const markers = d.readProjectMarkers(dir);
+    const { assessProjectRoot } = require('./utils/project-root-sanity');
+    const r = assessProjectRoot(dir, markers);
+    return { id: 'project-root', name: 'Project root', status: r.status, message: r.message, hint: r.hint };
+  }));
+
   return checks;
 }
 
@@ -160,7 +199,7 @@ function renderHuman(checks) {
  */
 async function handleDoctor(args, runChecks = runDoctorChecks) {
   const useJson = !!args.json;
-  const checks = runChecks();
+  const checks = await runChecks();
   if (useJson) {
     const { buildDoctorDoc } = require('./utils/result-schema');
     const VERSION = require('../package.json').version;

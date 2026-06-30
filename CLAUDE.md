@@ -164,6 +164,7 @@ src/
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
 │   ├── pricing.js
 │   ├── project-path.js  # Canonical project-path helper.
+│   ├── project-root-sanity.js
 │   ├── prompt-source.js
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── remediation-hints.js
@@ -337,6 +338,7 @@ evals/
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/pricing.js` |  | `emptyUsageTotals()`, `sumPerMessageUsage()`, `lookupPricing()`, `resolveLegCost()`, `resolveUsage()` |
 | `utils/project-path.js` | Canonical project-path helper. | `canonicalProjectPath()` |
+| `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/remediation-hints.js` |  |  |
