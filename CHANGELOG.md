@@ -5,6 +5,31 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-06-30
+
+The Electron self-heal now tells the truth, heals the cases it can, and clearly explains the ones it can't.
+
+### Fixed
+- **The Electron self-heal no longer claims success when it didn't heal.** `repairElectron`'s
+  installer-fallback path always reported the GUI as "provisioned"/"fixed" even when the binary wasn't
+  actually on disk — so `amicus doctor --fix` and the install-time prewarm could falsely report
+  success. Every self-heal / provision path now declares success **only** when the Electron binary is
+  verified present on disk.
+
+### Changed
+- **The GUI repair is now controlled and introspectable.** Instead of blindly re-running Electron's own
+  installer (the postinstall npm had already silently suppressed), the repair downloads and extracts the
+  binary itself (via `@electron/get`) and verifies the result; a corrupt cached download is cleared and
+  re-fetched once.
+- **Antivirus quarantine is detected and explained, not retried forever.** When Windows Defender / AV
+  removes `electron.exe` right after extraction (the common Windows failure), amicus now tells you to
+  allow-list the binary and re-run `amicus doctor --fix`, instead of silently looping a repair that
+  cannot win.
+- **Clear, actionable error when the OpenCode engine binary is missing.** The engine ships via
+  per-platform binaries that npm can silently skip (or AV can quarantine); when it's absent, amicus now
+  surfaces a specific instruction (run `amicus doctor`, reinstall, allow-list `opencode.exe`) instead of
+  an opaque spawn failure.
+
 ## [1.7.1] - 2026-06-30
 
 ### Fixed
