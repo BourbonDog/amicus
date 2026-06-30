@@ -219,6 +219,7 @@ scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # Benchmark Thinking Levels
 ├── check-file-sizes.js  # File size enforcement for the pre-commit hook and the whole-tree CI gate (--all).
+├── check-global-install.js  # CI assertion (Windows install-smoke job, #35): after a REAL global install
 ├── check-html.js
 ├── check-secrets.js  # Secret detection for the pre-commit hook and the whole-tree CI gate (--all).
 ├── check-tarball-lifecycle.js  # CI guard: assert every script referenced by an npm *lifecycle* hook actually

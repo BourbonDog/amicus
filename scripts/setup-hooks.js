@@ -12,10 +12,14 @@
  * core.hooksPath at it makes hooks fire in the main clone and in every
  * worktree with no per-worktree setup.
  *
- * Runs automatically via npm's "prepare" lifecycle. If you install with
- * --ignore-scripts (recommended for this repo), run it once by hand:
+ * Runs automatically via the postinstall flow (scripts/postinstall.js) so a
+ * fresh dev `npm install` still wires hooks. It is NOT a "prepare" script:
+ * prepare also fires on the github: install path, where it triggers a nested
+ * devDependency install + re-pack that the registry path skips (#35) — the
+ * source of the Windows github: rollback. If you install with --ignore-scripts
+ * (recommended for this repo), run it once by hand:
  *
- *   node scripts/setup-hooks.js
+ *   npm run setup-hooks      # or: node scripts/setup-hooks.js
  *
  * Safe to run anywhere: exits 0 outside a git checkout (npm tarball
  * installs, exported archives) and never fails the install.

@@ -13,6 +13,8 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 
+const SETUP_HOOKS_SCRIPT = path.join(__dirname, 'setup-hooks.js');
+
 const SKILL_SOURCE = path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md');
 const COUNCIL_SOURCE_DIR = path.join(__dirname, '..', 'skills', 'second-opinion');
 
@@ -210,6 +212,41 @@ function verifyElectron(deps = {}) {
   }
 }
 
+/**
+ * Configure git hooks for DEVELOPERS, folded into postinstall (#35).
+ *
+ * Previously this ran via npm's "prepare" lifecycle. But "prepare" also fires
+ * on the github: install path (`npm install -g github:BourbonDog/amicus`),
+ * where npm clones the repo, runs prepare, does a NESTED devDependency install,
+ * and re-packs — a fragile pipeline the registry install SKIPS entirely. That
+ * divergence (plus a reusable corrupt cached artifact) is what made github:
+ * installs roll back, especially on Windows. Removing the consumer-facing
+ * prepare lifecycle makes the github: path behave identically to the registry
+ * path.
+ *
+ * Hook setup still needs to happen for devs, so we run setup-hooks.js here.
+ * It is a no-op for consumers: setup-hooks.js exits 0 outside a git checkout
+ * (the published tarball / github: export has no .git), so this changes
+ * nothing for end users while keeping `npm install` wiring hooks for devs.
+ *
+ * Best-effort and self-contained: never throws (a hook-setup failure must
+ * never roll back the install), so it is safe to call before the optional
+ * skill/MCP setup.
+ *
+ * @param {object} deps - { env } override for testing.
+ */
+function setupHooks(deps = {}) {
+  try {
+    execFileSync('node', [SETUP_HOOKS_SCRIPT], {
+      stdio: 'inherit',
+      env: deps.env || process.env,
+    });
+  } catch (err) {
+    // Hook setup is for devs only and must never fail the install.
+    console.warn(`[amicus] Warning: could not configure git hooks: ${err && err.message}`);
+  }
+}
+
 function main(deps = {}) {
   if (process.env.AMICUS_SKIP_POSTINSTALL === '1') {
     console.log('[amicus] AMICUS_SKIP_POSTINSTALL set — skipping global setup (plugin channel handles registration).');
@@ -219,8 +256,12 @@ function main(deps = {}) {
   const _installCouncilSkill = deps.installCouncilSkill || installCouncilSkill;
   const _registerClaudeCode = deps.registerClaudeCode || registerClaudeCode;
   const _registerClaudeDesktop = deps.registerClaudeDesktop || registerClaudeDesktop;
+  const _setupHooks = deps.setupHooks || setupHooks;
 
   console.log('[amicus] Installing...');
+  // Dev-only: configure git hooks (no-op for consumers). Folded in from the
+  // removed "prepare" lifecycle (#35) so github: installs run identically.
+  _setupHooks();
   _installSkill();
   _installCouncilSkill();
   _registerClaudeCode();
@@ -258,4 +299,4 @@ if (require.main === module) {
   runCli();
 }
 
-module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, verifyElectron, resolveElectron, COUNCIL_FILES };
+module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, setupHooks, verifyElectron, resolveElectron, COUNCIL_FILES };

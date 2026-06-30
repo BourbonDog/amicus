@@ -67,11 +67,16 @@ describe('scripts/setup-hooks.js', () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('package.json wires setup-hooks.js as the prepare script', () => {
+  test('package.json wires setup-hooks.js (postinstall + run-script, not prepare)', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf-8')
     );
-    expect(pkg.scripts.prepare).toBe('node scripts/setup-hooks.js');
+    // #35: prepare is removed (it triggered the github: clone -> nested-install
+    // dance the registry path skips). Hook setup is now folded into postinstall
+    // and also exposed as a named `npm run setup-hooks` for the manual dev path.
+    expect(pkg.scripts.prepare).toBeUndefined();
+    expect(pkg.scripts.postinstall).toBe('node scripts/postinstall.js');
+    expect(pkg.scripts['setup-hooks']).toBe('node scripts/setup-hooks.js');
   });
 
   test('sets core.hooksPath to .husky in a normal clone (.git is a directory)', () => {

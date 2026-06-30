@@ -63,7 +63,7 @@
     "generate-docs": "node scripts/generate-docs.js",
     "generate-docs:check": "node scripts/generate-docs.js --check",
     "validate-docs": "node scripts/validate-docs.js --full",
-    "prepare": "node scripts/setup-hooks.js",
+    "setup-hooks": "node scripts/setup-hooks.js",
     "check:secrets": "node scripts/check-secrets.js --all",
     "check:sizes": "node scripts/check-file-sizes.js --all",
     "check:tarball": "node scripts/check-tarball-lifecycle.js"

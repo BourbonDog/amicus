@@ -35,3 +35,31 @@ jobs:
       - run: npm run check:secrets
       - run: npm run check:sizes
       - run: npm run check:tarball
+
+  windows-install-smoke:
+    # #35: prove the github:/tarball global install runs IDENTICALLY on Windows
+    # (same MCP registration + same two skills as the registry install). This
+    # exercises the consumer install path — a packed tarball installed globally,
+    # which runs postinstall but NOT prepare (prepare is removed). The runner has
+    # no `claude` CLI, so postinstall takes its ~/.claude.json file-edit fallback,
+    # which is exactly what scripts/check-global-install.js asserts.
+    name: windows install smoke (github:/tarball runs identically)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      # Pack the consumer tarball (SAFE: pack does not run install scripts, and
+      # --ignore-scripts also blocks any pack-time hooks).
+      - name: Pack tarball
+        run: npm pack --ignore-scripts
+      # Real global install of the packed tarball. --omit=optional skips the
+      # Electron download (the GUI is non-fatal/optional; we only assert
+      # MCP + skills). postinstall runs here and registers everything.
+      - name: Global install (runs postinstall)
+        shell: bash
+        run: npm install -g --omit=optional ./amicus-*.tgz
+      # Assert MCP registered + both skills installed, identical to registry.
+      - name: Assert identical registration
+        run: node scripts/check-global-install.js

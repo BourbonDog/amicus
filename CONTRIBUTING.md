@@ -10,7 +10,7 @@ skill, and docs are all maintained in this monorepo.
 git clone https://github.com/BourbonDog/amicus.git
 cd amicus
 npm install --ignore-scripts --omit=optional   # IMPORTANT — see warning below
-node scripts/setup-hooks.js                    # wires git hooks (prepare is skipped by --ignore-scripts)
+npm run setup-hooks                            # wires git hooks (postinstall is skipped by --ignore-scripts)
 ```
 
 > **Why `--ignore-scripts`:** a bare `npm install` runs `scripts/postinstall.js`, which mutates
