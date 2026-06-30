@@ -30,7 +30,11 @@ function elapsedMs(metadata) {
 // Non-complete terminal statuses: a run that ended in one of these failed (or
 // was stopped) and may have no usable summary. amicus_read surfaces
 // metadata.reason for these instead of a bare "No summary available" (#36).
-const FAILED_TERMINAL_STATUSES = ['error', 'crashed', 'timeout', 'idle-timeout', 'aborted'];
+// 'timed-out' is the canonical single-session value persisted by
+// resolveTerminalState/finalizeHeadlessResult (session-finalize.js); 'timeout'
+// is the wave/leg value from statusFromResult (kept here for defensive
+// coverage); 'idle-timeout' is the shared-server idle-eviction value.
+const FAILED_TERMINAL_STATUSES = ['error', 'crashed', 'timeout', 'timed-out', 'idle-timeout', 'aborted'];
 
 const sharedServer = new SharedServerManager({ logger });
 

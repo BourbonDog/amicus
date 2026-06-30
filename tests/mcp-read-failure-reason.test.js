@@ -59,10 +59,14 @@ describe('amicus_read surfaces the failure reason when there is no summary (#36 
     expect(text).toContain('crashed');
   });
 
-  test('timeout run with no summary.md surfaces the reason', async () => {
-    const taskId = 'timeout-no-summary';
+  // Single-session finalize (resolveTerminalState/finalizeHeadlessResult)
+  // persists the canonical hyphenated 'timed-out' status — NOT 'timeout'
+  // (which is only the wave/leg value from statusFromResult, never written to a
+  // single session's metadata.json). Assert on the value the real path writes.
+  test('timed-out run with no summary.md surfaces the reason', async () => {
+    const taskId = 'timed-out-no-summary';
     writeSession(taskId, {
-      status: 'timeout', model: 'gpt',
+      status: 'timed-out', model: 'gpt',
       reason: 'session exceeded the 600s wall-clock limit',
     });
 
@@ -70,6 +74,20 @@ describe('amicus_read surfaces the failure reason when there is no summary (#36 
     const text = getText(result);
     expect(text).not.toContain('No summary available');
     expect(text).toContain('600s');
+  });
+
+  // Shared-server idle eviction persists status 'idle-timeout' (mcp-server.js).
+  test('idle-timeout run with no summary.md surfaces the reason', async () => {
+    const taskId = 'idle-timeout-no-summary';
+    writeSession(taskId, {
+      status: 'idle-timeout', model: 'gemini',
+      reason: 'evicted after idle timeout',
+    });
+
+    const result = await handlers.amicus_read({ taskId }, tmpDir);
+    const text = getText(result);
+    expect(text).not.toContain('No summary available');
+    expect(text).toContain('evicted after idle');
   });
 
   test('aborted run with an empty summary.md surfaces the reason', async () => {
