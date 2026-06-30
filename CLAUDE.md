@@ -205,6 +205,7 @@ electron/
 ├── main.js  # Amicus Electron Shell - v3
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
 ├── preload.js  # Sidecar Preload - v3 Minimal
+├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
 ├── setup-ui-aliases.js  # Setup UI - Alias Editor
 ├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
