@@ -8,6 +8,7 @@
  */
 
 const { attachLoadFailsafe, buildLoadErrorHTML } = require('../../electron/load-failsafe');
+const { tokenCss } = require('../../src/design/tokens');
 
 /** Minimal stand-in for Electron's webContents event emitter */
 function fakeWebContents() {
@@ -130,5 +131,34 @@ describe('buildLoadErrorHTML', () => {
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<b>');
     expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('inlines the design-token CSS with absolute font URLs (renders in a data: URL after everything failed)', () => {
+    const html = buildLoadErrorHTML({
+      url: 'http://localhost:4096/x', errorCode: -102, errorDescription: 'ERR'
+    });
+    // The whole token :root{} + @font-face block is prepended inline.
+    expect(html).toContain(tokenCss({ absoluteFontUrls: true }));
+    // Absolute font URLs are required: relative ./fonts/*.ttf would never resolve
+    // in a data: URL context.
+    expect(html).toMatch(/url\('file:\/\/.*\/fonts\//);
+    expect(html).not.toMatch(/url\('\.\/fonts\//);
+  });
+
+  it('drives colors and fonts off token vars, not hardcoded hex/system fonts', () => {
+    const html = buildLoadErrorHTML({
+      url: 'http://localhost:4096/x', errorCode: -102, errorDescription: 'ERR'
+    });
+    expect(html).toContain('var(--bg)');
+    expect(html).toContain('var(--text-1)');
+    expect(html).toContain('var(--text-2)');
+    expect(html).toContain('var(--accent)');
+    expect(html).toContain('var(--font-sans)');
+    expect(html).toContain('var(--font-mono)');
+    // No leftover hardcoded page-rule palette from the pre-token version. (The
+    // inlined token :root{} block legitimately defines the accent hex, so we
+    // only assert the page's own rules no longer hardcode the old palette.)
+    expect(html).not.toMatch(/background:\s*#2D2B2A/i);
+    expect(html).not.toMatch(/#D4D0CC|#A09B96/i);
   });
 });

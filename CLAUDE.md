@@ -211,6 +211,7 @@ electron/
 ├── ipc-setup.js  # IPC Setup Handlers
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
+├── opencode-theme.js
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).

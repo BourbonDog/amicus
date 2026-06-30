@@ -22,6 +22,8 @@ const { registerSetupHandlers } = require('./ipc-setup');
 const { computeWindowPosition } = require('./window-position');
 const { attachLoadFailsafe, buildLoadErrorHTML } = require('./load-failsafe');
 const { buildSessionRoute } = require('./session-route');
+const { buildOpencodeThemeCSS } = require('./opencode-theme');
+const { TOKENS } = require('../src/design/tokens');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
@@ -98,7 +100,7 @@ function createAmicusWindow() {
     width: WIN_W, height: WIN_H, minWidth: 550, minHeight: 600,
     x: winX, y: winY,
     show: false,
-    frame: true, backgroundColor: '#2D2B2A',
+    frame: true, backgroundColor: TOKENS.bg,
     title: 'Amicus',
     icon: ICON_PATH,
     webPreferences: {
@@ -148,13 +150,14 @@ function createAmicusWindow() {
     url: OPENCODE_URL, sessionId: OPENCODE_SESSION_ID, taskId: TASK_ID
   });
 
-  // Use Electron's insertCSS API on dom-ready to hide OpenCode branding.
-  // This is more reliable than preload DOM injection in BrowserView.
+  // Use Electron's insertCSS API on dom-ready to hide OpenCode branding AND
+  // theme the embedded chat surface to the clay/gold tokens (#49). The theme
+  // is token-driven — it inlines tokenCss() and remaps OpenCode's own :root
+  // custom properties — so it tracks the toolbar without brittle class
+  // selectors. insertCSS is more reliable than preload DOM injection in a
+  // BrowserView. NOTE: the live visual match is a user-side CDP/manual check.
   contentView.webContents.on('dom-ready', () => {
-    contentView.webContents.insertCSS(`
-      #root > div > header { display: none !important; }
-      svg[viewBox="0 0 234 42"] { visibility: hidden !important; }
-    `).catch(() => {});
+    contentView.webContents.insertCSS(buildOpencodeThemeCSS()).catch(() => {});
   });
 
   // Navigate directly to the session URL to bypass the project selection screen.
@@ -290,7 +293,7 @@ async function createSetupWindow() {
 
   mainWindow = new BrowserWindow({
     width: 560, height: 680, minWidth: 480, minHeight: 580,
-    frame: true, backgroundColor: '#2D2B2A',
+    frame: true, backgroundColor: TOKENS.bg,
     title: `${getBrandName(CLIENT)} Setup`,
     icon: ICON_PATH,
     resizable: false,
@@ -443,7 +446,7 @@ function createSettingsChildWindow() {
   const settingsWin = new BrowserWindow({
     width: 560, height: 680,
     parent: mainWindow, modal: false,
-    frame: true, backgroundColor: '#2D2B2A',
+    frame: true, backgroundColor: TOKENS.bg,
     title: `${getBrandName(CLIENT)} Settings`,
     icon: ICON_PATH,
     resizable: false,
