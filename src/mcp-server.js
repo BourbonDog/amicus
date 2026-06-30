@@ -14,6 +14,7 @@ const { durationBetween } = require('./utils/result-schema');
 const { canonicalProjectPath } = require('./utils/project-path');
 const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
+const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
 
 /**
  * Elapsed run duration: time between createdAt and the run's end, bounding the
@@ -140,6 +141,17 @@ function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
   if (isError) { result.isError = true; }
   return result;
+}
+
+/**
+ * Append a stale-version warning content block (#33) when the on-disk
+ * package.json has been upgraded under the running process. No-op when in
+ * sync or unreadable (versionWarning() returns null). Mutates `content`.
+ */
+function appendVersionWarning(content) {
+  const warn = versionWarning();
+  if (warn) { content.push({ type: 'text', text: warn }); }
+  return content;
 }
 
 /**
@@ -429,15 +441,17 @@ const handlers = {
         taskId: metadata.taskId, type: 'wave', status: metadata.status,
         legsComplete: done, legsTotal: legs.length, legs,
         elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
+        version: RUNNING_VERSION,
       };
       if (metadata.status === 'crashed' || metadata.status === 'error') {
         response.reason = metadata.reason || 'Unknown error';
       }
-      const responseText = JSON.stringify(response);
+      const content = [{ type: 'text', text: JSON.stringify(response) }];
+      appendVersionWarning(content);
       if (metadata.status === 'running') {
-        return { content: [{ type: 'text', text: responseText }, { type: 'text', text: HEADLESS_STATUS_REMINDER }] };
+        content.push({ type: 'text', text: HEADLESS_STATUS_REMINDER });
       }
-      return textResult(responseText);
+      return { content };
     }
 
     if (metadata.status === 'running' && metadata.pid) {
@@ -455,6 +469,7 @@ const handlers = {
     const response = {
       taskId: metadata.taskId, status: metadata.status,
       elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
+      version: RUNNING_VERSION,
     };
     if (metadata.model) { response.model = metadata.model; }
 
@@ -479,11 +494,12 @@ const handlers = {
     if (metadata.status === 'crashed' || metadata.status === 'error') {
       response.reason = metadata.reason || 'Unknown error';
     }
-    const responseText = JSON.stringify(response);
+    const content = [{ type: 'text', text: JSON.stringify(response) }];
+    appendVersionWarning(content);
     if (metadata.status === 'running' && metadata.headless) {
-      return { content: [{ type: 'text', text: responseText }, { type: 'text', text: HEADLESS_STATUS_REMINDER }] };
+      content.push({ type: 'text', text: HEADLESS_STATUS_REMINDER });
     }
-    return textResult(responseText);
+    return { content };
   },
 
   async amicus_read(input, project) {
@@ -729,6 +745,10 @@ const handlers = {
     if (input.timeout)       { args.push('--timeout', String(input.timeout)); }
     if (input.summaryLength) { args.push('--summary-length', input.summaryLength); }
     if (input.includeContext === false) { args.push('--no-context'); }
+    // #10: forward cowork session pinning to the legs (parity with amicus_start),
+    // so context-inheriting fanout launched from Cowork resolves the right parent.
+    if (input.coworkProcess) { args.push('--cowork-process', input.coworkProcess); }
+    if (input.parentSession) { args.push('--session-id', input.parentSession); }
 
     try { spawnSidecarProcess(args, waveDir); } catch (err) {
       // Best-effort: never leave a pid-less wave record claiming 'running'

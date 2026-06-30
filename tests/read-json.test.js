@@ -86,6 +86,29 @@ describe('read --json and wave-aware list (F4)', () => {
     expect(doc.legs[0].status).toBe('running');
   });
 
+  it('wave counts: crashed/idle-timeout legs count toward total only (remainder rule, #14)', async () => {
+    // Live rebuild (no wave.json) so buildWaveResult computes counts from leg metadata.
+    writeSession('feed7777', {
+      type: 'wave', status: 'partial',
+      legs: ['feed7777-1', 'feed7777-2', 'feed7777-3', 'feed7777-4'],
+      createdAt: '2026-06-09T10:00:00.000Z', completedAt: '2026-06-09T10:01:00.000Z',
+    });
+    writeSession('feed7777-1', { model: 'a/b', status: 'complete', parentWave: 'feed7777' }, 'ok');
+    writeSession('feed7777-2', { model: 'c/d', status: 'crashed', parentWave: 'feed7777', reason: 'boom' });
+    writeSession('feed7777-3', { model: 'e/f', status: 'idle-timeout', parentWave: 'feed7777' });
+    writeSession('feed7777-4', { model: 'g/h', status: 'error', parentWave: 'feed7777' });
+
+    await readSidecar({ taskId: 'feed7777', json: true, project });
+    const doc = JSON.parse(logSpy.mock.calls[0][0]);
+    const c = doc.counts;
+    expect(c.total).toBe(4);
+    const named = c.complete + c.error + c.timeout + c.aborted;
+    // crashed + idle-timeout are reflected only in `total` — total exceeds the named sum.
+    expect(named).toBe(2);
+    expect(c.total - named).toBe(2);
+    expect(c.total).toBeGreaterThan(named);
+  });
+
   it('read --json on corrupt metadata throws a contextual error', async () => {
     const dir = writeSession('feed6666', { status: 'complete' });
     fs.writeFileSync(path.join(dir, 'metadata.json'), '{ not json');

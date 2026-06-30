@@ -902,6 +902,154 @@ describe('MCP Server Handlers', () => {
     });
   });
 
+  describe('amicus_status version field (#33)', () => {
+    test('includes the running amicus version in the status payload', async () => {
+      const runningVersion = require('../package.json').version;
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-ver-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'ver1');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'ver1', status: 'complete',
+        createdAt: new Date().toISOString(),
+      }));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'ver1' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.version).toBe(runningVersion);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('includes version on a wave status payload too', async () => {
+      const runningVersion = require('../package.json').version;
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verw-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verw');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'verw', type: 'wave', status: 'complete', legs: [],
+        createdAt: new Date().toISOString(),
+      }));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'verw' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.version).toBe(runningVersion);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('appends a stale-version warning when on-disk package.json is newer', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verstale-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verstale');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'verstale', status: 'complete',
+        createdAt: new Date().toISOString(),
+      }));
+      try {
+        await jest.isolateModulesAsync(async () => {
+          jest.doMock('fs', () => {
+            const real = jest.requireActual('fs');
+            return {
+              ...real,
+              readFileSync: jest.fn((p, ...rest) => {
+                // Only intercept the on-disk package.json re-read; pass through
+                // every other read (metadata.json, etc.) to the real fs.
+                if (String(p).endsWith('package.json')) {
+                  return JSON.stringify({ version: '99.99.99' });
+                }
+                return real.readFileSync(p, ...rest);
+              }),
+            };
+          });
+          const { handlers: h } = require('../src/mcp-server');
+          const result = await h.amicus_status({ taskId: 'verstale' }, tmpDir);
+          const allText = result.content.map(c => c.text).join('\n');
+          expect(allText).toContain('99.99.99');
+          expect(allText.toLowerCase()).toContain('restart');
+        });
+      } finally {
+        jest.dontMock('fs');
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('emits no stale warning when on-disk version matches running', async () => {
+      const runningVersion = require('../package.json').version;
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verok-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verok');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'verok', status: 'complete',
+        createdAt: new Date().toISOString(),
+      }));
+      try {
+        await jest.isolateModulesAsync(async () => {
+          jest.doMock('fs', () => {
+            const real = jest.requireActual('fs');
+            return {
+              ...real,
+              readFileSync: jest.fn((p, ...rest) => {
+                if (String(p).endsWith('package.json')) {
+                  return JSON.stringify({ version: runningVersion });
+                }
+                return real.readFileSync(p, ...rest);
+              }),
+            };
+          });
+          const { handlers: h } = require('../src/mcp-server');
+          const result = await h.amicus_status({ taskId: 'verok' }, tmpDir);
+          const allText = result.content.map(c => c.text).join('\n');
+          expect(allText.toLowerCase()).not.toContain('restart your mcp client');
+        });
+      } finally {
+        jest.dontMock('fs');
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('does not crash when the on-disk version re-read throws', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verthrow-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verthrow');
+      fs.mkdirSync(sessDir, { recursive: true });
+      const metaPath = path.join(sessDir, 'metadata.json');
+      fs.writeFileSync(metaPath, JSON.stringify({
+        taskId: 'verthrow', status: 'complete',
+        createdAt: new Date().toISOString(),
+      }));
+      const metaContent = fs.readFileSync(metaPath, 'utf-8');
+      try {
+        await jest.isolateModulesAsync(async () => {
+          jest.doMock('fs', () => {
+            const real = jest.requireActual('fs');
+            return {
+              ...real,
+              readFileSync: jest.fn((p, ...rest) => {
+                if (String(p).endsWith('package.json')) {
+                  throw new Error('disk gone');
+                }
+                if (String(p).endsWith('metadata.json')) {
+                  return metaContent;
+                }
+                return real.readFileSync(p, ...rest);
+              }),
+            };
+          });
+          const { handlers: h } = require('../src/mcp-server');
+          const result = await h.amicus_status({ taskId: 'verthrow' }, tmpDir);
+          const parsed = JSON.parse(result.content[0].text);
+          expect(parsed.status).toBe('complete');
+          const allText = result.content.map(c => c.text).join('\n');
+          expect(allText.toLowerCase()).not.toContain('restart your mcp client');
+        });
+      } finally {
+        jest.dontMock('fs');
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+  });
+
   describe('amicus_read', () => {
     test('returns summary when available', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));

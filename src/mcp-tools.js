@@ -115,7 +115,7 @@ function getTools() {
   },
   {
     name: 'amicus_status',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
       'Check the status of a running Amicus session. Returns status ' +
       '(running/complete), elapsed time, and progress info. Primarily ' +
@@ -279,6 +279,14 @@ function getTools() {
       includeContext: z.boolean().optional().default(true).describe(
         'Include parent conversation context (built once, shared by all legs). Set false for self-contained briefings.'
       ),
+      coworkProcess: z.string().optional().describe(
+        'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +
+        'Extract from CWD: /sessions/<name>/. Required for parent context loading from Cowork.'
+      ),
+      parentSession: z.string().optional().describe(
+        'Claude Code session UUID for exact context matching. ' +
+        'Prevents ambiguity when multiple sessions are active in the same project.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -360,12 +368,20 @@ function getTools() {
  */
 function getGuideText() {
   const { getEffectiveAliases } = require('./utils/config');
+  const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
   const aliases = getEffectiveAliases();
   const aliasRows = Object.entries(aliases)
     .map(([name, model]) => `| ${name} | ${model} |`)
     .join('\n');
+  // #33: surface the running version (and a call-time staleness warning) so a
+  // post-upgrade agent session can tell it's running old code.
+  const warn = versionWarning();
+  const versionLine = `**Running amicus version:** ${RUNNING_VERSION}`
+    + (warn ? `\n\n> ⚠️ ${warn}` : '');
 
   return `# Amicus Usage Guide
+
+${versionLine}
 
 ## What Is Amicus?
 Amicus spawns parallel conversations with different LLMs and folds results back into your context.

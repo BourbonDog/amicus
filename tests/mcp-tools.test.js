@@ -173,6 +173,12 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_status');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
+
+    test('is not annotated read-only/idempotent (it mutates on crash detection)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_status');
+      expect(tool.annotations.readOnlyHint).toBe(false);
+      expect(tool.annotations.idempotentHint).toBe(false);
+    });
   });
 
   describe('amicus_read', () => {
@@ -274,6 +280,22 @@ describe('MCP Tool Definitions', () => {
     });
   });
 
+  describe('amicus_fanout', () => {
+    let fanoutTool;
+
+    beforeAll(() => {
+      fanoutTool = TOOLS.find(t => t.name === 'amicus_fanout');
+    });
+
+    test('has coworkProcess in input schema (#10)', () => {
+      expect(fanoutTool.inputSchema).toHaveProperty('coworkProcess');
+    });
+
+    test('has parentSession in input schema (#10)', () => {
+      expect(fanoutTool.inputSchema).toHaveProperty('parentSession');
+    });
+  });
+
   describe('polling guidance in descriptions', () => {
     test('amicus_start description mentions interactive and headless modes', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_start');
@@ -336,6 +358,12 @@ describe('MCP Tool Definitions', () => {
       const guide = getGuideText();
       expect(guide).toContain('parentSession');
       expect(guide).toContain('Claude Code CLI');
+    });
+
+    test('surfaces the running amicus version (#33)', () => {
+      const guide = getGuideText();
+      const runningVersion = require('../package.json').version;
+      expect(guide).toContain(runningVersion);
     });
 
   });
