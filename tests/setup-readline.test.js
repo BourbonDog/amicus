@@ -74,6 +74,20 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     expect(saveConfig).not.toHaveBeenCalled();
   });
 
+  test('no API keys detected → guidance points at amicus doctor', async () => {
+    mockReadline('xyz'); // invalid mode/pick → no config write; we only assert the printed guidance
+    const { readApiKeys } = require('../src/utils/api-key-store');
+    readApiKeys.mockReturnValue({ openrouter: false, google: false, openai: false, anthropic: false, deepseek: false });
+    const { loadConfig } = require('../src/utils/config');
+    loadConfig.mockReturnValue({ default: 'gemini', aliases: {} });
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const { runReadlineSetup } = require('../src/sidecar/setup');
+    await runReadlineSetup();
+    const printed = logSpy.mock.calls.map(c => c.join(' ')).join('\n');
+    logSpy.mockRestore();
+    expect(printed).toMatch(/amicus doctor/);
+  });
+
   test('offline catalog (getCatalog rejects) still serves picks from fallbacks', async () => {
     mockReadline('1');
     const { getCatalog } = require('../src/utils/model-catalog');

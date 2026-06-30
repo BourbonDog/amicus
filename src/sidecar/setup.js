@@ -266,8 +266,10 @@ async function runReadlineSetup() {
     if (foundKeys.length > 0) {
       console.log(`API keys detected: ${foundKeys.join(', ')}`);
     } else {
+      const { runDoctor } = require('../utils/remediation-hints');
       console.log('No API keys detected.');
       console.log('Set OPENROUTER_API_KEY to get started, or run: amicus setup');
+      console.log(`Not sure what's wrong? ${runDoctor}`);
     }
     console.log('');
 

@@ -1,6 +1,8 @@
 // src/cli-handlers-doctor.js
 'use strict';
 
+const HINTS = require('./utils/remediation-hints');
+
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
 /** Default real helpers; tests override via deps. */
@@ -105,19 +107,19 @@ function runDoctorChecks(depsOverride = {}) {
   checks.push(guard('opencode-bin', 'OpenCode binary', () => (
     d.hasOpencodeBinary()
       ? { id: 'opencode-bin', name: 'OpenCode binary', status: 'ok', message: 'found', hint: null }
-      : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: 'npm install -g amicus  (a transient install error can roll back the engine binaries — re-run, or: npm cache clean --force && npm install -g amicus)' }
+      : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: HINTS.reinstallEngine }
   )));
 
   checks.push(guard('electron', 'Electron (interactive GUI)', () => (
     d.getElectronPath()
       ? { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed', hint: null }
-      : { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: 'npm install -g amicus  (reinstall to add Electron)' }
+      : { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.reinstallElectron }
   )));
 
   checks.push(guard('skills', 'Skills installed', () => (
     d.skillInstalled()
       ? { id: 'skills', name: 'Skills installed', status: 'ok', message: '~/.claude/skills/{sidecar,second-opinion}', hint: null }
-      : { id: 'skills', name: 'Skills installed', status: 'warn', message: 'one or both skills missing', hint: 'npm install -g amicus  (re-runs the skill install)' }
+      : { id: 'skills', name: 'Skills installed', status: 'warn', message: 'one or both skills missing', hint: `${HINTS.reinstall}  (re-runs the skill install)` }
   )));
 
   checks.push(guard('mcp', 'MCP registration', () => {
@@ -127,7 +129,7 @@ function runDoctorChecks(depsOverride = {}) {
     const inCowork = !!(cowork && cowork.amicus);
     // Primary signal: Claude Code MCP registration. Cowork/Desktop is reported as bonus only.
     if (!inCode) {
-      return { id: 'mcp', name: 'MCP registration', status: 'warn', message: 'not registered in Claude Code', hint: 'npm install -g amicus  (or install the amicus plugin)' };
+      return { id: 'mcp', name: 'MCP registration', status: 'warn', message: 'not registered in Claude Code', hint: `${HINTS.reinstall}  (or install the amicus plugin)` };
     }
     const extra = inCowork ? ', Cowork/Desktop' : '';
     return { id: 'mcp', name: 'MCP registration', status: 'ok', message: `registered: Claude Code${extra}`, hint: null };

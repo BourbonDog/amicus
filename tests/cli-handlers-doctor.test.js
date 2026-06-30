@@ -1,6 +1,7 @@
 // tests/cli-handlers-doctor.test.js
 'use strict';
 const { runDoctorChecks } = require('../src/cli-handlers-doctor');
+const HINTS = require('../src/utils/remediation-hints');
 
 const allGood = {
   nodeVersion: 'v20.0.0',
@@ -67,5 +68,27 @@ describe('runDoctorChecks', () => {
   test('unregistered MCP → warn with install hint', () => {
     const checks = runDoctorChecks({ ...allGood, discoverClaudeCodeMcps: () => null });
     expect(byId(checks).mcp.status).toBe('warn');
+  });
+
+  describe('remediation hints are sourced from the shared helper', () => {
+    test('missing OpenCode binary renders the shared reinstallEngine hint', () => {
+      const checks = runDoctorChecks({ ...allGood, hasOpencodeBinary: () => false });
+      expect(byId(checks)['opencode-bin'].hint).toBe(HINTS.reinstallEngine);
+    });
+
+    test('missing Electron renders the shared reinstallElectron hint', () => {
+      const checks = runDoctorChecks({ ...allGood, getElectronPath: () => null });
+      expect(byId(checks).electron.hint).toBe(HINTS.reinstallElectron);
+    });
+
+    test('unregistered MCP hint references the shared reinstall command', () => {
+      const checks = runDoctorChecks({ ...allGood, discoverClaudeCodeMcps: () => null });
+      expect(byId(checks).mcp.hint).toContain(HINTS.reinstall);
+    });
+
+    test('missing skills hint references the shared reinstall command', () => {
+      const checks = runDoctorChecks({ ...allGood, skillInstalled: () => false });
+      expect(byId(checks).skills.hint).toContain(HINTS.reinstall);
+    });
   });
 });
