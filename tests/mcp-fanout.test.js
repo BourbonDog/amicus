@@ -23,6 +23,20 @@ describe('amicus_fanout MCP surface (F4)', () => {
     // wave-aware status + read
     expect(src).toMatch(/type === 'wave'/);
   });
+
+  it('forwards --cowork-process and --session-id to the spawned fanout legs (#10)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../src/mcp-server.js'), 'utf-8');
+    // Scope to the amicus_fanout handler body
+    const start = src.indexOf('async amicus_fanout(');
+    const end = src.indexOf('async amicus_council_tally(', start);
+    const handler = src.slice(start, end);
+    expect(handler).toContain("'--cowork-process'");
+    expect(handler).toContain('input.coworkProcess');
+    expect(handler).toContain("'--session-id'");
+    expect(handler).toContain('input.parentSession');
+  });
 });
 
 describe('wave crash detection in amicus_status', () => {

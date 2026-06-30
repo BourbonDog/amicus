@@ -279,6 +279,14 @@ function getTools() {
       includeContext: z.boolean().optional().default(true).describe(
         'Include parent conversation context (built once, shared by all legs). Set false for self-contained briefings.'
       ),
+      coworkProcess: z.string().optional().describe(
+        'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +
+        'Extract from CWD: /sessions/<name>/. Required for parent context loading from Cowork.'
+      ),
+      parentSession: z.string().optional().describe(
+        'Claude Code session UUID for exact context matching. ' +
+        'Prevents ambiguity when multiple sessions are active in the same project.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),

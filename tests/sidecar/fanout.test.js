@@ -234,6 +234,19 @@ describe('runFanout orchestrator', () => {
     expect(mockBuildContext).toHaveBeenCalledTimes(1);
   });
 
+  it('forwards coworkProcess + sessionId into the (single) buildContext call (#10)', async () => {
+    await runFanout({
+      ...baseOpts(),
+      includeContext: true,
+      sessionId: 'parent-uuid-123',
+      coworkProcess: 'modest-laughing-goodall',
+    });
+    expect(mockBuildContext).toHaveBeenCalledTimes(1);
+    const [, sessionArg, optsArg] = mockBuildContext.mock.calls[0];
+    expect(sessionArg).toBe('parent-uuid-123');
+    expect(optsArg.coworkProcess).toBe('modest-laughing-goodall');
+  });
+
   it('writes wave.json and finalizes wave metadata', async () => {
     const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafe9999' });
     const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', 'cafe9999');

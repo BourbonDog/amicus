@@ -102,6 +102,7 @@ function writeWaveMetadata(waveDir, patch) {
  * Run a fan-out wave. Spec §4.3.
  * @param {object} options - models, prompt, promptMeta, waveId?, project, agent?,
  *   thinking?, timeout? (minutes), summaryLength?, includeContext?, sessionId?,
+ *   coworkProcess? (#10: Cowork parent-session pin, forwarded to buildContext),
  *   contextTurns?, contextSince?, contextMaxTokens?, mcp?, mcpConfig?, noMcp?,
  *   excludeMcp?, noValidateModel?, json?, client?, quiet? (suppress stdout — tests)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
@@ -183,6 +184,8 @@ async function runFanout(options) {
     ? buildContext(project, options.sessionId || 'current', {
         contextTurns: options.contextTurns, contextSince: options.contextSince,
         contextMaxTokens: options.contextMaxTokens, client: options.client,
+        // #10: pin the right Cowork parent session for every leg (built once).
+        coworkProcess: options.coworkProcess,
       })
     : '[Context excluded by caller - briefing is self-contained]';
   const { system: systemPrompt, userMessage } = buildPrompts(

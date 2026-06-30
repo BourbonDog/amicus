@@ -745,6 +745,10 @@ const handlers = {
     if (input.timeout)       { args.push('--timeout', String(input.timeout)); }
     if (input.summaryLength) { args.push('--summary-length', input.summaryLength); }
     if (input.includeContext === false) { args.push('--no-context'); }
+    // #10: forward cowork session pinning to the legs (parity with amicus_start),
+    // so context-inheriting fanout launched from Cowork resolves the right parent.
+    if (input.coworkProcess) { args.push('--cowork-process', input.coworkProcess); }
+    if (input.parentSession) { args.push('--session-id', input.parentSession); }
 
     try { spawnSidecarProcess(args, waveDir); } catch (err) {
       // Best-effort: never leave a pid-less wave record claiming 'running'

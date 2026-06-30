@@ -280,6 +280,22 @@ describe('MCP Tool Definitions', () => {
     });
   });
 
+  describe('amicus_fanout', () => {
+    let fanoutTool;
+
+    beforeAll(() => {
+      fanoutTool = TOOLS.find(t => t.name === 'amicus_fanout');
+    });
+
+    test('has coworkProcess in input schema (#10)', () => {
+      expect(fanoutTool.inputSchema).toHaveProperty('coworkProcess');
+    });
+
+    test('has parentSession in input schema (#10)', () => {
+      expect(fanoutTool.inputSchema).toHaveProperty('parentSession');
+    });
+  });
+
   describe('polling guidance in descriptions', () => {
     test('amicus_start description mentions interactive and headless modes', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_start');
