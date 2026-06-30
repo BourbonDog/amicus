@@ -13,7 +13,12 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 
+const { repairElectron } = require('../src/sidecar/electron-install');
+
 const SETUP_HOOKS_SCRIPT = path.join(__dirname, 'setup-hooks.js');
+
+/** Short cache-only provision budget: a slow disk must never hang the install. */
+const PROVISION_TIMEOUT_MS = 15000;
 
 const SKILL_SOURCE = path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md');
 const COUNCIL_SOURCE_DIR = path.join(__dirname, '..', 'skills', 'second-opinion');
@@ -175,40 +180,36 @@ function registerClaudeDesktop() {
 }
 
 /**
- * Resolve the Electron binary path the same way src/sidecar/interactive.js
- * getElectronPath() does: require('electron') returns the absolute path to the
- * binary (or throws if the optionalDependency never installed/extracted).
- * @returns {string|null} Path to the Electron binary, or null if unresolvable.
- */
-function resolveElectron() {
-  try {
-    return require('electron');
-  } catch {
-    return null;
-  }
-}
-
-/**
- * NON-FATAL verification that the OPTIONAL electron binary actually extracted.
- * Electron is an optionalDependency: npm exits 0 even if its download/extract
- * fails (or AV quarantines electron.exe), so without this the user only finds
- * out the GUI is broken much later. Warn clearly that headless runs + the
- * council still work, and point at `amicus doctor` / reinstall to get the GUI.
+ * NON-FATAL, CACHE-ONLY provisioning of the OPTIONAL electron binary (#57,
+ * supersedes #30's warn-only verifyElectron). Electron is an optionalDependency:
+ * npm exits 0 even if its download/extract failed (or AV quarantined
+ * electron.exe), so without this the user only finds out the GUI is broken much
+ * later.
  *
- * This MUST never throw out of postinstall — the whole body is guarded so a
- * resolver failure or a missing fs can never turn into a non-zero exit.
+ * We heal from the LOCAL cache via repairElectron({cacheOnly:true}) — NO network
+ * during install. When a cached zip extracts cleanly the GUI just works. When
+ * there is no cache (or the repair defers/contends), we emit a clear notice that
+ * the GUI provisions on first use and that headless runs + the council already
+ * work, then point at `amicus doctor --fix` (#56) — NOT a reinstall, which can
+ * loop. A short timeout keeps a slow disk from ever hanging the install.
  *
- * @param {object} deps - { resolveElectron } override for testing.
+ * This MUST never throw out of postinstall — the whole body (sync setup, the
+ * awaited repair, and a synchronous-throw resolver) is guarded so nothing here
+ * can turn into a non-zero exit (#29 always-exit-0 guard preserved).
+ *
+ * @param {object} deps - { repairElectron } override for testing.
+ * @returns {Promise<void>}
  */
-function verifyElectron(deps = {}) {
+async function provisionElectron(deps = {}) {
   try {
-    const _resolve = deps.resolveElectron || resolveElectron;
-    const binPath = _resolve();
-    if (binPath && fs.existsSync(binPath)) { return; }
-    console.warn('[amicus] Warning: the Electron binary did not install — the interactive GUI / setup-wizard is unavailable.');
-    console.warn('[amicus] Headless runs and the council still work. Run `amicus doctor` to check, or `npm install -g amicus` to reinstall and add the GUI.');
+    const _repair = deps.repairElectron || repairElectron;
+    const result = await _repair({ cacheOnly: true, timeoutMs: PROVISION_TIMEOUT_MS });
+    if (result && (result.repaired || result.usable)) { return; }
+    // No cache hit (deferred), contended, or otherwise not provisioned now.
+    console.warn('[amicus] Note: the Electron GUI binary is not provisioned yet — it will download on first use of the interactive GUI / setup-wizard.');
+    console.warn('[amicus] Headless runs and the council already work. Run `amicus doctor --fix` to provision the GUI now.');
   } catch {
-    // Never let the electron check throw out of postinstall.
+    // Never let provisioning throw out of postinstall.
   }
 }
 
@@ -247,7 +248,7 @@ function setupHooks(deps = {}) {
   }
 }
 
-function main(deps = {}) {
+async function main(deps = {}) {
   if (process.env.AMICUS_SKIP_POSTINSTALL === '1') {
     console.log('[amicus] AMICUS_SKIP_POSTINSTALL set — skipping global setup (plugin channel handles registration).');
     return;
@@ -257,6 +258,7 @@ function main(deps = {}) {
   const _registerClaudeCode = deps.registerClaudeCode || registerClaudeCode;
   const _registerClaudeDesktop = deps.registerClaudeDesktop || registerClaudeDesktop;
   const _setupHooks = deps.setupHooks || setupHooks;
+  const _provisionElectron = deps.provisionElectron || provisionElectron;
 
   console.log('[amicus] Installing...');
   // Dev-only: configure git hooks (no-op for consumers). Folded in from the
@@ -267,8 +269,9 @@ function main(deps = {}) {
   _registerClaudeCode();
   _registerClaudeDesktop();
 
-  // Non-fatal: warn (only) if the optional Electron binary failed to extract.
-  verifyElectron(deps);
+  // Non-fatal, cache-only: heal the optional Electron binary from local cache
+  // or emit a deferred notice (GUI provisions on first use). Never throws.
+  await _provisionElectron(deps);
 
   console.log('');
   console.log('[amicus] Setup:');
@@ -282,9 +285,9 @@ function main(deps = {}) {
  * package, but skill-copy + MCP registration are optional — amicus itself still
  * works without them. Warn clearly and exit 0 (mirrors scripts/setup-hooks.js).
  */
-function runCli(deps = {}) {
+async function runCli(deps = {}) {
   try {
-    main(deps);
+    await main(deps);
   } catch (err) {
     console.warn(`[amicus] Warning: optional post-install setup failed: ${err && err.message}`);
     console.warn('[amicus] Skill install + MCP registration are optional — amicus itself still works.');
@@ -299,4 +302,4 @@ if (require.main === module) {
   runCli();
 }
 
-module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, setupHooks, verifyElectron, resolveElectron, COUNCIL_FILES };
+module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, setupHooks, provisionElectron, COUNCIL_FILES };

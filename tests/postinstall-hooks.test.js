@@ -25,16 +25,17 @@ describe('postinstall folds in dev hook-setup (#35)', () => {
     expect(typeof postinstall.setupHooks).toBe('function');
   });
 
-  test('main() invokes the injected setupHooks dependency', () => {
+  test('main() invokes the injected setupHooks dependency', async () => {
     const calls = [];
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      postinstall.main({
+      await postinstall.main({
         installSkill: () => calls.push('skill'),
         installCouncilSkill: () => calls.push('council'),
         registerClaudeCode: () => calls.push('code'),
         registerClaudeDesktop: () => calls.push('desktop'),
         setupHooks: () => calls.push('hooks'),
+        provisionElectron: () => {},
       });
     } finally {
       logSpy.mockRestore();
@@ -42,18 +43,19 @@ describe('postinstall folds in dev hook-setup (#35)', () => {
     expect(calls).toContain('hooks');
   });
 
-  test('a throwing setupHooks does not break the install (#29 non-fatal)', () => {
+  test('a throwing setupHooks does not break the install (#29 non-fatal)', async () => {
     const exits = [];
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => { exits.push(code); });
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      postinstall.runCli({
+      await postinstall.runCli({
         installSkill: () => {},
         installCouncilSkill: () => {},
         registerClaudeCode: () => {},
         registerClaudeDesktop: () => {},
         setupHooks: () => { throw new Error('boom: hook setup failed'); },
+        provisionElectron: () => {},
       });
     } finally {
       exitSpy.mockRestore();

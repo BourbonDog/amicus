@@ -16,7 +16,7 @@ describe('postinstall top-level invocation is non-fatal (#29)', () => {
     expect(typeof postinstall.runCli).toBe('function');
   });
 
-  test('runCli exits 0 and warns when main() throws', () => {
+  test('runCli exits 0 and warns when main() throws', async () => {
     const warnings = [];
     const exits = [];
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation((...a) => warnings.push(a.join(' ')));
@@ -24,8 +24,9 @@ describe('postinstall top-level invocation is non-fatal (#29)', () => {
 
     try {
       // Inject a throwing dependency via the existing deps param on main().
-      postinstall.runCli({
+      await postinstall.runCli({
         installSkill: () => { throw new Error('boom: MODULE_NOT_FOUND'); },
+        provisionElectron: () => {},
       });
     } finally {
       warnSpy.mockRestore();
@@ -40,18 +41,19 @@ describe('postinstall top-level invocation is non-fatal (#29)', () => {
     expect(text).toMatch(/doctor/i);
   });
 
-  test('runCli exits 0 (no warning, no rollback) on the happy path', () => {
+  test('runCli exits 0 (no warning, no rollback) on the happy path', async () => {
     const exits = [];
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => { exits.push(code); });
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const calls = [];
 
     try {
-      postinstall.runCli({
+      await postinstall.runCli({
         installSkill: () => calls.push('skill'),
         installCouncilSkill: () => calls.push('council'),
         registerClaudeCode: () => calls.push('code'),
         registerClaudeDesktop: () => calls.push('desktop'),
+        provisionElectron: () => {},
       });
     } finally {
       exitSpy.mockRestore();
