@@ -21,6 +21,7 @@ const { createFoldHandler } = require('./fold');
 const { registerSetupHandlers } = require('./ipc-setup');
 const { computeWindowPosition } = require('./window-position');
 const { attachLoadFailsafe, buildLoadErrorHTML } = require('./load-failsafe');
+const { buildSessionRoute } = require('./session-route');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
@@ -51,6 +52,11 @@ const MODE = getCompatEnv('MODE') || 'sidecar';
 const TASK_ID = getCompatEnv('TASK_ID') || 'unknown';
 const MODEL = getCompatEnv('MODEL') || 'unknown';
 const CWD = getCompatEnv('CWD') || process.cwd();
+// The directory the OpenCode session was actually scoped to (#45). Set by the
+// interactive launcher as canonicalProjectPath(--cwd) so the Web-UI route is
+// built from the SAME directory createSession used. Falls back to CWD for
+// back-compat with launchers that predate this env var.
+const SESSION_DIRECTORY = getCompatEnv('SESSION_DIRECTORY') || CWD;
 const CLIENT = getCompatEnv('CLIENT') || 'code-local';
 const OPENCODE_PORT = parseInt(getCompatEnv('OPENCODE_PORT') || '4096', 10);
 const OPENCODE_SESSION_ID = getCompatEnv('SESSION_ID');
@@ -152,10 +158,10 @@ function createAmicusWindow() {
   });
 
   // Navigate directly to the session URL to bypass the project selection screen.
-  // OpenCode's router format: /<base64url(projectPath)>/session/<sessionId>
-  const contentUrl = OPENCODE_SESSION_ID
-    ? `${OPENCODE_URL}/${Buffer.from(CWD).toString('base64url')}/session/${OPENCODE_SESSION_ID}`
-    : OPENCODE_URL;
+  // Build the route from SESSION_DIRECTORY — the directory the session was
+  // actually scoped to — NOT a fresh base64url(CWD) guess, so Web-UI follow-up
+  // prompts resolve the session even when process cwd != --cwd (#45).
+  const contentUrl = buildSessionRoute(OPENCODE_URL, OPENCODE_SESSION_ID, SESSION_DIRECTORY);
 
   // The window only becomes visible on the success path below. Without this
   // failsafe, a failed/stalled UI load leaves an invisible window and a

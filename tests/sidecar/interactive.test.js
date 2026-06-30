@@ -50,6 +50,18 @@ describe('buildElectronEnv - window position', () => {
   });
 });
 
+describe('buildElectronEnv - session directory (#45)', () => {
+  it('sets AMICUS_SESSION_DIRECTORY when sessionDirectory is provided', () => {
+    const env = buildElectronEnv(...BASE_ARGS, { sessionDirectory: 'C:/Users/me/project' });
+    expect(env.AMICUS_SESSION_DIRECTORY).toBe('C:/Users/me/project');
+  });
+
+  it('omits AMICUS_SESSION_DIRECTORY when not provided', () => {
+    const env = buildElectronEnv(...BASE_ARGS, {});
+    expect(env.AMICUS_SESSION_DIRECTORY).toBeUndefined();
+  });
+});
+
 describe('getElectronPath', () => {
   // This assertion needs a real electron install (it inspects require('electron')'s
   // binary path). Local dev omits electron via --omit=optional, so skip it when

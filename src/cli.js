@@ -404,6 +404,56 @@ Options for 'read':
   --conversation               Show full conversation
   --metadata                   Show session metadata
   --json                       Emit the run/wave result as stable JSON
+`,
+  continue: `
+Options for 'continue':
+  <task_id>                    Required. Session to build on (positional)
+  --prompt <text>              Required. Briefing for the new session
+  --model <model>              Optional. Override the model (alias or provider/model)
+  --cwd <path>                 Project directory (default: cwd)
+  --no-ui                      Run without GUI (autonomous mode)
+  --timeout <minutes>          Headless timeout (default: 15)
+  --context-turns <N>          Max conversation turns (default: 50)
+  --context-max-tokens <N>     Max context tokens (default: 80000)
+`,
+  resume: `
+Options for 'resume':
+  <task_id>                    Required. Session to reopen (positional)
+  --cwd <path>                 Project directory (default: cwd)
+  --no-ui                      Run without GUI (autonomous mode)
+  --timeout <minutes>          Headless timeout (default: 15)
+`,
+  council: `
+Subcommands for 'council':
+  tally <input.json>           Tally findings → tiers/street-cred (appends to ledger)
+    --no-ledger                Compute the record without appending to the ledger
+    --json                     Machine-readable output
+  stats                        Reviewer-reliability aggregates from the ledger
+    --json                     Machine-readable output
+  report <verdict.json>        Disagreement + verdict report
+    --wave <wave.json>         Include per-leg run stats from a wave file
+    --md                       Emit Markdown (default)
+    --html                     Emit a self-contained HTML page
+`,
+  doctor: `
+Options for 'doctor':
+  --json                       Machine-readable output
+`,
+  setup: `
+Options for 'setup':
+  (no args)                    Run the interactive setup wizard
+  --api-keys                   Open the API key setup window
+  --add-alias <name=model>     Add a model alias without the full wizard
+`,
+  key: `
+Usage for 'key':
+  key <provider> <apikey>      Validate and save a key
+  key <provider> --remove      Remove a saved key
+  key                          List all configured providers
+`,
+  mcp: `
+Usage for 'mcp':
+  mcp                          Start the MCP server (stdio transport)
 `
 };
 

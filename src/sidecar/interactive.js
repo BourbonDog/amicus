@@ -13,6 +13,7 @@ const { logger } = require('../utils/logger');
 const { getCompatEnv } = require('../utils/env-compat');
 const { startInteractiveMirror } = require('./interactive-mirror');
 const { getSessionDir } = require('../session-manager');
+const { canonicalProjectPath } = require('../utils/project-path');
 
 /** Get the Electron binary path via require('electron').
  *  Works in all install contexts (global, local, npx hoisted).
@@ -32,7 +33,7 @@ function checkElectronAvailable() {
 
 /** Build environment variables for Electron process */
 function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, options = {}) {
-  const { agent, isResume, conversation, mcp, client, windowPosition } = options;
+  const { agent, isResume, conversation, mcp, client, windowPosition, sessionDirectory } = options;
   const env = {
     ...process.env,
     PATH: `${nodeModulesBin}${path.delimiter}${existingPath}`,
@@ -43,6 +44,10 @@ function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, 
 
   if (client) { env.AMICUS_CLIENT = client; }
   if (windowPosition) { env.AMICUS_WINDOW_POSITION = windowPosition; }
+  // The directory the OpenCode session is scoped to (#45). Electron builds the
+  // Web-UI route from THIS, not a fresh base64url(CWD) guess, so follow-up
+  // prompts resolve the session when process cwd != --cwd.
+  if (sessionDirectory) { env.AMICUS_SESSION_DIRECTORY = sessionDirectory; }
 
   if (agent) {
     const agentConfig = mapAgentToOpenCode(agent);
@@ -100,6 +105,14 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
 
   const { agent, isResume, conversation, mcp, reasoning, opencodeSessionId, client } = options;
 
+  // Scope the OpenCode session to the project/--cwd (#45). The SDK Session
+  // object echoes a `directory`, but createSession() returns only the id, so we
+  // use the canonicalized --cwd CONSISTENTLY for BOTH the create scope and the
+  // Web-UI route — the documented fallback that keeps them matching even when
+  // the amicus process cwd != --cwd. undefined when project is falsy → calls
+  // stay byte-for-byte identical to before.
+  const sessionDirectory = canonicalProjectPath(project);
+
   // Start OpenCode server with system prompt baked into agent config.
   // Agent config prompts are hidden from the UI, unlike promptAsync's system field.
   const agentConfig = mapAgentToOpenCode(agent);
@@ -126,14 +139,15 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       sessionId = opencodeSessionId;
       logger.info('Reconnecting to existing session', { sessionId });
     } else {
-      // New session: create and send initial prompt
-      sessionId = await createSession(ocClient);
+      // New session: create and send initial prompt, scoped to --cwd (#45).
+      sessionId = await createSession(ocClient, sessionDirectory);
 
       // System prompt is set on agent config (hidden from UI).
       // Do NOT pass system here — promptAsync's system field is visible in the UI.
       const promptOptions = {
         model,
-        parts: [{ type: 'text', text: userMessage }]
+        parts: [{ type: 'text', text: userMessage }],
+        directory: sessionDirectory
       };
 
       // Always set agent — defaults to 'chat' when not specified
@@ -171,13 +185,13 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
   // Keep the idle clock from killing an actively-working session: poll OpenCode
   // session status and touch the watchdog on any non-idle (busy/retry) state.
   const activityPoller = createActivityPoller({
-    getStatus: () => getSessionStatus(ocClient, sessionId),
+    getStatus: () => getSessionStatus(ocClient, sessionId, sessionDirectory),
     onActivity: () => watchdog.touch(),
   });
 
   const sessionDir = getSessionDir(project, taskId);
   const mirror = startInteractiveMirror({
-    getMessages: () => getMessages(ocClient, sessionId),
+    getMessages: () => getMessages(ocClient, sessionId, sessionDirectory),
     sessionDir,
     onActivity: () => watchdog.touch(),
   });
@@ -190,7 +204,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     const existingPath = process.env.PATH || '';
     const env = buildElectronEnv(
       taskId, model, project, nodeModulesBin, existingPath,
-      { agent, isResume, conversation, mcp, client }
+      { agent, isResume, conversation, mcp, client, sessionDirectory }
     );
     env.AMICUS_OPENCODE_PORT = serverPort;
     env.AMICUS_SESSION_ID = sessionId;
