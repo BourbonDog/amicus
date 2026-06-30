@@ -33,7 +33,7 @@ function buildSetupHTML(options = {}) {
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Amicus Setup</title>
 <style>${css}</style></head><body>
-  <div class="header"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 2v12" stroke-width="2" stroke-linecap="round"/><path d="M10 2v5c0 2-3 3-7 5" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/></svg><span class="header-title">${brandName} Setup</span></div>
+  <div class="header"><svg width="18" height="18" viewBox="0 0 32 32" fill="none"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/><path class="brand-main" d="M19 8H28"/></svg><span class="header-title">${brandName} Setup</span></div>
   <div class="progress-bar"><div class="progress-step active" id="step-1"><span class="progress-dot">1</span><span>API Keys</span></div><div class="progress-connector"></div><div class="progress-step" id="step-2"><span class="progress-dot">2</span><span>Models</span></div><div class="progress-connector"></div><div class="progress-step" id="step-3"><span class="progress-dot">3</span><span>Routing</span></div><div class="progress-connector"></div><div class="progress-step" id="step-4"><span class="progress-dot">4</span><span>Review</span></div></div>
   <div class="content">
     <div class="wizard-step visible" id="wizard-step-1"><div id="import-notice"></div>${keysHtml}</div>
@@ -50,7 +50,7 @@ function buildSetupHTML(options = {}) {
       </div>
     </div>
   </div>
-  <div class="footer"><div class="footer-brand"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2v12" stroke-width="2" stroke-linecap="round"/><path d="M10 2v5c0 2-3 3-7 5" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/></svg> ${brandName}</div><div class="footer-nav"><button class="nav-btn" id="back-btn" style="display:none">Back</button><button class="nav-btn primary" id="next-btn" disabled>Next</button><button class="nav-btn primary" id="finish-btn" style="display:none">Finish</button></div></div>
+  <div class="footer"><div class="footer-brand"><svg width="15" height="15" viewBox="0 0 32 32" fill="none"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/><path class="brand-main" d="M19 8H28"/></svg> ${brandName}</div><div class="footer-nav"><button class="nav-btn" id="back-btn" style="display:none">Back</button><button class="nav-btn primary" id="next-btn" disabled>Next</button><button class="nav-btn primary" id="finish-btn" style="display:none">Finish</button></div></div>
 ${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson)}
 </body></html>`;
 }

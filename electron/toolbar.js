@@ -70,7 +70,8 @@ function buildToolbarHTML(options = {}) {
     letter-spacing: 0.8px;
     text-transform: uppercase;
   }
-  .logo path { stroke: var(--accent); }
+  .logo path { stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: miter; }
+  .logo path.brand-main { stroke: var(--gold-400); }
   .sep { color: var(--border-strong); font-size: 14px; }
   .detail, .timer {
     color: var(--text-3);
@@ -136,9 +137,10 @@ function buildToolbarHTML(options = {}) {
   }
   .update-banner .dismiss-btn:hover { color: var(--text-1); }`;
 
-  const logoSvg = `<svg class="logo" width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M3 2v12" stroke-width="2" stroke-linecap="round"/>
-      <path d="M10 2v5c0 2-3 3-7 5" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
+  const logoSvg = `<svg class="logo" width="16" height="16" viewBox="0 0 32 32" fill="none">
+      <path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/>
+      <path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/>
+      <path class="brand-main" d="M19 8H28"/>
     </svg>`;
 
   if (mode === 'setup') {

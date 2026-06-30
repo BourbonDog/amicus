@@ -18,7 +18,8 @@ function __rawWizardCSS() {
     padding: 10px 20px; border-bottom: 1px solid var(--border);
   }
   .header svg { flex-shrink: 0; }
-  .header svg path { stroke: var(--accent); }
+  .header svg path { stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: miter; }
+  .header svg path.brand-main { stroke: var(--gold-400); }
   .header-title {
     color: var(--accent); font-size: 12px; font-weight: 600;
     letter-spacing: 0.8px; text-transform: uppercase;
@@ -319,7 +320,8 @@ function __rawWizardCSS() {
     letter-spacing: 0.8px; text-transform: uppercase;
     display: flex; align-items: center; gap: 6px;
   }
-  .footer-brand svg path { stroke: var(--accent); }
+  .footer-brand svg path { stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: miter; }
+  .footer-brand svg path.brand-main { stroke: var(--gold-400); }
   .footer-nav { display: flex; gap: 6px; }
   .nav-btn {
     padding: 6px 16px; border: 1px solid var(--border);
