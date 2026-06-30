@@ -298,7 +298,7 @@ evals/
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
-| `sidecar/session-finalize.js` |  | `resolveTerminalState()` |
+| `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()`, `runFreeCouncilBranch()` |

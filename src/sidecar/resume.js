@@ -202,8 +202,10 @@ async function resumeSidecar(options) {
     // Output summary
     outputSummary(summary);
 
-    // Finalize session (use updatedMetadata which has resumedAt)
-    finalizeSession(sessionDir, summary, project, updatedMetadata);
+    // Finalize session (use updatedMetadata which has resumedAt). Pass status
+    // explicitly to preserve the pre-#36 default ('complete') and stay out of
+    // the empty-summary guard — interactive resume legitimately has no summary.
+    finalizeSession(sessionDir, summary, project, updatedMetadata, { status: 'complete' });
   } finally {
     if (heartbeat) { heartbeat.stop(); }
     releaseLock(sessionDir);

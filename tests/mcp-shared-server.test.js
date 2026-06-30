@@ -31,6 +31,8 @@ describe('MCP shared server uses runHeadless', () => {
   test('imports runHeadless', () => {
     expect(src).toContain('runHeadless');
     expect(src).toContain('buildContext');
-    expect(src).toContain('finalizeSession');
+    // #36: the shared-server .then must route through finalizeHeadlessResult
+    // (resolveTerminalState) so failed runs never default to 'complete'.
+    expect(src).toContain('finalizeHeadlessResult');
   });
 });

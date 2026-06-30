@@ -90,8 +90,14 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   // Save summary
   fs.writeFileSync(SessionPaths.summaryFile(sessionDir), summary, { mode: 0o600 });
 
-  // Update metadata to the resolved terminal status (default complete).
-  metadata.status = opts.status || 'complete';
+  // Update metadata to the resolved terminal status. Callers that know the
+  // terminal state (CLI start.js, shared-server finalizeHeadlessResult) pass it
+  // explicitly via opts.status — that always wins, so they are never
+  // re-classified. Defense-in-depth (#36): when NO status is supplied, an empty
+  // summary must never silently default to 'complete' — that hid errored/empty
+  // shared-server runs behind a 0-byte summary and a false success.
+  const hasSummary = typeof summary === 'string' && summary.trim().length > 0;
+  metadata.status = opts.status || (hasSummary ? 'complete' : 'error');
   metadata.completedAt = new Date().toISOString();
   fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
 

@@ -124,7 +124,7 @@ const handlers = {
         const { buildContext } = require('./sidecar/context-builder');
         const { buildPrompts } = require('./prompt-builder');
         const { runHeadless } = require('./headless');
-        const { finalizeSession } = require('./sidecar/session-utils');
+        const { finalizeHeadlessResult } = require('./sidecar/session-finalize');
         // resolvedModel is already available from validateStartInputs() above
 
         sessionId = await createSession(client);
@@ -185,10 +185,12 @@ const handlers = {
             mcp: undefined, // shared server already has MCP config
           }
         ).then((result) => {
-          // Session complete - finalize and remove from tracking
+          // Session done — route through resolveTerminalState (same single source
+          // of truth as the CLI start.js path) so an errored/timed-out/aborted run
+          // can never silently default to 'complete' with a 0-byte summary (#36).
           try {
             const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            finalizeSession(sessionDir, result.summary || '', cwd, meta);
+            finalizeHeadlessResult(sessionDir, result, cwd, meta);
           } catch (finErr) {
             logger.warn('Failed to finalize session', { error: finErr.message });
           }
@@ -413,6 +415,13 @@ const handlers = {
     })();
     const summaryText = fs.readFileSync(summaryPath, 'utf-8');
     const header = metaForRead.model ? `**Model:** ${metaForRead.model}\n\n` : '';
+    // A failed shared-server run writes an EXISTING 0-byte summary.md (so we hit
+    // this file-exists branch, not "No summary available"). Surface the failure
+    // reason instead of returning an empty/uninformative body (#36).
+    if ((metaForRead.status === 'error' || metaForRead.status === 'crashed') && !summaryText.trim()) {
+      const reason = metaForRead.reason || 'Unknown error';
+      return textResult(`${header}**Status:** ${metaForRead.status}\n**Reason:** ${reason}\n\n(No summary — the session ended with an error.)`);
+    }
     return textResult(header + summaryText);
   },
 

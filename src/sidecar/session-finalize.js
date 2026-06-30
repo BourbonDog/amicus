@@ -23,4 +23,44 @@ function resolveTerminalState(result, signal) {
   return { status: 'error', exitCode: 1 };
 }
 
-module.exports = { resolveTerminalState };
+/**
+ * Finalize a headless run by routing through resolveTerminalState — the single
+ * source of truth shared with the CLI start.js path. An errored run writes
+ * status='error' + reason (and an EXISTING 0-byte summary.md so amicus_read hits
+ * its file-exists branch); every other state persists the (possibly partial)
+ * summary with the correct terminal status. Never defaults a failed run to
+ * 'complete'. Used by the shared-server MCP .then handler (#36).
+ *
+ * @param {string} sessionDir
+ * @param {{completed?:boolean,timedOut?:boolean,aborted?:boolean,error?:any,summary?:string}|null} result
+ * @param {string} project
+ * @param {object} metadata - mutated + persisted to metadata.json
+ */
+function finalizeHeadlessResult(sessionDir, result, project, metadata) {
+  // Lazy require to avoid a circular dependency (session-utils requires nothing
+  // here, but keep symmetry with start.js which also lazy-requires).
+  const fs = require('fs');
+  const path = require('path');
+  const { finalizeSession, SessionPaths } = require('./session-utils');
+
+  const terminal = resolveTerminalState(result);
+  if (terminal.status === 'error') {
+    // Write an existing (0-byte) summary so amicus_read hits the file-exists
+    // branch and surfaces metadata.reason rather than "No summary available".
+    fs.writeFileSync(SessionPaths.summaryFile(sessionDir), result && result.summary ? result.summary : '', { mode: 0o600 });
+    metadata.status = 'error';
+    metadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    metadata.completedAt = new Date().toISOString();
+    fs.writeFileSync(
+      path.join(sessionDir, 'metadata.json'),
+      JSON.stringify(metadata, null, 2),
+      { mode: 0o600 }
+    );
+    return;
+  }
+  // complete / timed-out / aborted: persist the (possibly partial) summary with
+  // the resolved status. Explicit status means the #36 guard won't re-classify.
+  finalizeSession(sessionDir, (result && result.summary) || '', project, metadata, { status: terminal.status });
+}
+
+module.exports = { resolveTerminalState, finalizeHeadlessResult };

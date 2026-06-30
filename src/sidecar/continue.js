@@ -200,8 +200,9 @@ async function continueSidecar(options) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
-  // Finalize session
-  finalizeSession(sessionDir, summary, project, meta);
+  // Finalize session. Interactive mode legitimately returns an empty summary,
+  // so pass status explicitly to stay out of the #36 empty-summary guard.
+  finalizeSession(sessionDir, summary, project, meta, { status: 'complete' });
 }
 
 module.exports = {
