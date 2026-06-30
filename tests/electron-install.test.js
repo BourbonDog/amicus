@@ -277,14 +277,19 @@ describe('repairElectron (#53)', () => {
     expect(secondRes.contended || secondRes.deferred).toBe(true);
   });
 
-  test('force (no cache, !cacheOnly): drives the installer via injected spawn (two-attempt ladder)', async () => {
+  test('controlled (no cache, !cacheOnly): CONTROLLED download via downloadArtifact + extract, never spawns install.js', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
+    const dlZip = path.join(mkTmp('amicus-dl-'), 'electron-v28.3.3-win32-x64.zip');
+    fs.writeFileSync(dlZip, 'PKzip');
 
-    // spawn simulates electron's install.js succeeding (materializes exe).
-    const spawn = jest.fn(() => {
-      fs.writeFileSync(path.join(distDir, exeName), 'MZfromInstaller');
-      return { status: 0 };
+    // downloadArtifact fetches the zip ourselves (the SAME api install.js uses).
+    const downloadArtifact = jest.fn(async () => dlZip);
+    // extract materializes the exe in the dist dir.
+    const extract = jest.fn(async (_zip, opts) => {
+      fs.writeFileSync(path.join(opts.dir, exeName), 'MZdownloaded');
     });
+    // spawn MUST NOT be used as the primary provision path anymore.
+    const spawn = jest.fn(() => { throw new Error('install.js spawn must NOT be the controlled provision path'); });
 
     const res = await ei.repairElectron({
       force: true,
@@ -295,29 +300,36 @@ describe('repairElectron (#53)', () => {
       arch: 'x64',
       deps: {
         cachedZip: () => null,
-        extract: jest.fn(),
+        downloadArtifact,
+        extract,
         spawn,
         acquireLock: () => ({ release: () => {} }),
       },
     });
 
-    expect(spawn).toHaveBeenCalled();
-    // force_no_cache semantics surfaced to the installer env.
-    const spawnEnv = spawn.mock.calls[spawn.mock.calls.length - 1][2]?.env || {};
-    expect(spawnEnv.force_no_cache).toBe('true');
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+    const dlOpts = downloadArtifact.mock.calls[0][0];
+    expect(dlOpts.version).toBe('28.3.3');
+    expect(dlOpts.artifactName).toBe('electron');
+    expect(dlOpts.force).toBe(true);
+    expect(dlOpts.platform).toBe('win32');
+    expect(dlOpts.arch).toBe('x64');
+    expect(typeof dlOpts.cacheRoot).toBe('string');
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(extract.mock.calls[0][0]).toBe(dlZip);
+    expect(spawn).not.toHaveBeenCalled();
     expect(res.repaired).toBe(true);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
   });
 
-  test('installer-fallback: a silently-failed installer (no usable exe) reports repaired:false', async () => {
+  test('controlled download that yields NO usable exe reports repaired:false (no false success)', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
+    const dlZip = path.join(mkTmp('amicus-dl-'), 'electron-v28.3.3-win32-x64.zip');
+    fs.writeFileSync(dlZip, 'PKzip');
 
-    // spawn simulates electron's install.js "running" but producing NO exe
-    // (e.g. interrupted extract / AV quarantine). The installer-fallback path
-    // must report the REAL isElectronUsable() result — repaired:false here.
-    // Regression guard for the trailing `|| isElectronUsable() || true` bug that
-    // made the installer path ALWAYS report repaired:true (#53).
-    const spawn = jest.fn(() => ({ status: 0 }));
+    const downloadArtifact = jest.fn(async () => dlZip);
+    // Extract "runs" but never materializes the exe (interrupted unzip / AV).
+    const extract = jest.fn(async () => { /* no exe written */ });
 
     const res = await ei.repairElectron({
       force: true,
@@ -328,15 +340,63 @@ describe('repairElectron (#53)', () => {
       arch: 'x64',
       deps: {
         cachedZip: () => null,
-        extract: jest.fn(),
-        spawn,
+        downloadArtifact,
+        extract,
+        spawn: jest.fn(),
         acquireLock: () => ({ release: () => {} }),
       },
     });
 
-    expect(spawn).toHaveBeenCalled();
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
     // No exe materialized → repaired MUST be false (no false success).
     expect(res.repaired).toBe(false);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(false);
+  });
+
+  test('corrupt cached zip: extract throws → delete bad zip + forced re-download + extract', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
+    // The CACHED zip is corrupt — extracting it throws.
+    const badZip = path.join(mkTmp('amicus-bad-'), 'electron-v28.3.3-win32-x64.zip');
+    fs.writeFileSync(badZip, 'CORRUPT');
+    // The re-downloaded zip is good.
+    const goodZip = path.join(mkTmp('amicus-good-'), 'electron-v28.3.3-win32-x64.zip');
+    fs.writeFileSync(goodZip, 'PKzip');
+
+    let extractCalls = 0;
+    const extract = jest.fn(async (zip, opts) => {
+      extractCalls += 1;
+      if (zip === badZip) {
+        const e = new Error('end of central directory record signature not found');
+        throw e;
+      }
+      fs.writeFileSync(path.join(opts.dir, exeName), 'MZredownloaded');
+    });
+    const downloadArtifact = jest.fn(async () => goodZip);
+
+    const res = await ei.repairElectron({
+      cacheOnly: false,
+      electronDir: dir,
+      platform: 'win32',
+      version: '28.3.3',
+      arch: 'x64',
+      deps: {
+        cachedZip: () => badZip, // cache HIT, but corrupt
+        downloadArtifact,
+        extract,
+        spawn: jest.fn(),
+        acquireLock: () => ({ release: () => {} }),
+      },
+    });
+
+    // First extract attempt was on the corrupt cached zip and threw.
+    expect(extractCalls).toBe(2);
+    // The bad cached zip was DELETED.
+    expect(fs.existsSync(badZip)).toBe(false);
+    // A forced fresh download was attempted.
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+    expect(downloadArtifact.mock.calls[0][0].force).toBe(true);
+    // Re-extract materialized the exe → repaired true.
+    expect(res.repaired).toBe(true);
+    expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
   });
 });

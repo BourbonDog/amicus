@@ -154,6 +154,32 @@ async function extractFromCache({ zip, electronDir, platform, extract, fs }) {
   writePathTxt({ electronDir, platform, fs });
 }
 
+/** Best-effort cache root for downloadArtifact (first resolved root). */
+function cacheRootFor(env = process.env) {
+  return resolveCacheRoots(env)[0];
+}
+
+/**
+ * CONTROLLED provision: fetch the zip ourselves with the SAME @electron/get
+ * api install.js uses (downloadArtifact, force:true), extract offline, and let
+ * the caller verify isElectronUsable(). No blind install.js spawn.
+ * @returns {Promise<void>}
+ */
+async function controlledProvision({
+  electronDir, platform, arch, version, downloadArtifact, extract, fs, env = process.env,
+}) {
+  const zip = await downloadArtifact({
+    version,
+    artifactName: 'electron',
+    force: true,
+    cacheRoot: cacheRootFor(env),
+    platform,
+    arch,
+    checksums: undefined,
+  });
+  await extractFromCache({ zip, electronDir, platform, extract, fs });
+}
+
 /** Drive electron's own install.js with force_no_cache semantics. */
 function runInstaller({ electronDir, force, spawn }) {
   const installScript = path.join(electronDir, 'install.js');
@@ -190,6 +216,7 @@ async function repairElectron({
   const spawn = deps.spawn || ((cmd, args, o) => spawnSync(cmd, args, { ...o, timeout: timeoutMs }));
   const findZip = deps.cachedZip || ((o) => cachedZip(o));
   const acquireLock = deps.acquireLock || ((o) => defaultAcquireLock({ ...o, fs }));
+  const downloadArtifact = deps.downloadArtifact || require('@electron/get').downloadArtifact;
 
   if (!version) {
     try {
@@ -214,21 +241,43 @@ async function repairElectron({
     // Attempt 1: extract from cache (always preferred, fully offline).
     const zip = findZip({ version, platform, arch, env: process.env, fs });
     if (zip) {
-      await extractFromCache({ zip, electronDir, platform, extract, fs });
-      return { repaired: isElectronUsable({ electronDir, platform, fs }) };
-    }
-
-    if (cacheOnly) {
+      try {
+        await extractFromCache({ zip, electronDir, platform, extract, fs });
+        return { repaired: isElectronUsable({ electronDir, platform, fs }) };
+      } catch (extractErr) {
+        // Corrupt cached artifact: delete the bad zip so it can't poison the
+        // cache, then fall through to a forced fresh download (unless offline).
+        try { fs.rmSync(zip, { force: true }); } catch { /* ignore */ }
+        if (cacheOnly) {
+          return {
+            repaired: false,
+            reason: `Cached electron zip for v${version} (${platform}-${arch}) was corrupt and removed; deferring re-download.${avHint(platform)}`,
+          };
+        }
+        // else: drop into the controlled download below.
+      }
+    } else if (cacheOnly) {
       return {
         deferred: true,
         reason: `No cached electron zip found for v${version} (${platform}-${arch}); deferring download.${avHint(platform)}`,
       };
     }
 
-    // Attempt 2: drive electron's installer (force_no_cache when forced).
-    // Report the REAL post-install usability — a structurally-successful install
-    // that produced no usable exe is a FAILURE (no false success; #53).
-    runInstaller({ electronDir, force, spawn });
+    // Attempt 2 (online): CONTROLLED download+extract instead of a blind
+    // install.js spawn. Fetch the zip ourselves via the SAME @electron/get api
+    // install.js uses, extract offline, then report the REAL usability — a
+    // structurally-successful download that produced no usable exe is a FAILURE
+    // (no false success; #53).
+    try {
+      await controlledProvision({
+        electronDir, platform, arch, version, downloadArtifact, extract, fs, env: process.env,
+      });
+    } catch {
+      // Controlled download/extract failed (network, checksum, unzip). Try the
+      // installer as a LAST resort — it can NEVER short-circuit the honest
+      // verify below; we always return isElectronUsable().
+      try { runInstaller({ electronDir, force, spawn }); } catch { /* ignore */ }
+    }
     return { repaired: isElectronUsable({ electronDir, platform, fs }) };
   } finally {
     try { lock.release(); } catch { /* ignore */ }

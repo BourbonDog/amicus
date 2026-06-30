@@ -270,14 +270,21 @@ describe('#58 ensureElectron drives the REAL repair on first GUI use', () => {
 // doctor --fix over the REAL repairElectron
 // ---------------------------------------------------------------------------
 describe('#58 doctor --fix heals through the REAL repairElectron', () => {
-  function realRepairOverPackage(dir, { extract = jest.fn(), cachedZip = () => null, spawn = jest.fn() } = {}) {
+  function realRepairOverPackage(dir, {
+    extract = jest.fn(),
+    cachedZip = () => null,
+    spawn = jest.fn(),
+    // downloadArtifact is ALWAYS injected so the controlled path never hits the
+    // real @electron/get network. Default: reject (simulates an offline fetch).
+    downloadArtifact = jest.fn(async () => { throw new Error('network blocked in test'); }),
+  } = {}) {
     return (opts) => ei.repairElectron({
       ...opts,
       electronDir: dir,
       platform: 'win32',
       version: '28.0.0',
       arch: 'x64',
-      deps: { cachedZip, extract, spawn, ...noopLock() },
+      deps: { cachedZip, extract, spawn, downloadArtifact, ...noopLock() },
     });
   }
 
@@ -302,22 +309,31 @@ describe('#58 doctor --fix heals through the REAL repairElectron', () => {
     expect(ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' })).toBe(true);
   });
 
-  test('--fix with NO cache: real repair drives the installer (spawn) and NEVER errors', async () => {
+  test('--fix with NO cache: real repair drives the CONTROLLED download (downloadArtifact) and NEVER errors', async () => {
     // doctor --fix allows the network (no cacheOnly), so with no cache the REAL
-    // repairElectron falls through to its installer (spawn) ladder. The smoke
-    // guarantee: the installer path is actually driven, and the check never
-    // degrades to a hard error (headless still works).
+    // repairElectron does a CONTROLLED provision: fetch the zip ourselves via
+    // downloadArtifact (the SAME api install.js uses), extract, then verify.
+    // The smoke guarantee: the controlled path is actually driven (NOT a blind
+    // install.js spawn), and the check never degrades to a hard error.
     const dir = fakeElectronDir({ withExe: false });
-    const spawn = jest.fn(); // installer is a no-op stub (no real child process)
+    const dlZip = path.join(mkTmp('amicus-dl-smoke-'), 'electron-v28.0.0-win32-x64.zip');
+    fs.writeFileSync(dlZip, 'PKzip');
+    const downloadArtifact = jest.fn(async () => dlZip);
+    const extract = jest.fn(async (_zip, opts) => {
+      fs.writeFileSync(path.join(opts.dir, WIN_EXE), 'MZdownloaded');
+    });
+    const spawn = jest.fn(() => { throw new Error('install.js spawn must NOT be the controlled provision path'); });
     const doctor = require('../src/cli-handlers-doctor');
     const checks = await doctor.runDoctorChecks({
       getElectronPath: () => null,
       fix: true,
-      repairElectron: realRepairOverPackage(dir, { spawn }),
+      repairElectron: realRepairOverPackage(dir, { downloadArtifact, extract, spawn }),
     });
     const electron = checks.find((c) => c.id === 'electron');
-    expect(spawn).toHaveBeenCalledTimes(1); // installer ladder was driven
+    expect(downloadArtifact).toHaveBeenCalledTimes(1); // controlled download driven
+    expect(spawn).not.toHaveBeenCalled(); // no blind install.js spawn
     expect(electron.status).not.toBe('error');
+    expect(ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' })).toBe(true);
   });
 
   test('--fix maps an INJECTED {deferred} to WARN, not error (no-cache classification)', async () => {
