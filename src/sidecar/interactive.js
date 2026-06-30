@@ -16,18 +16,23 @@ const { getSessionDir } = require('../session-manager');
 const { canonicalProjectPath } = require('../utils/project-path');
 const { ensureElectron } = require('./electron-ensure');
 
-/** Get the Electron binary path via require('electron').
- *  Works in all install contexts (global, local, npx hoisted).
- *  @returns {string|null} Full path to Electron binary, or null if not installed */
+/** Resolve the Electron binary path ONLY when the exe actually exists on disk.
+ *  #54: path.txt surviving (require('electron') resolving) is NOT enough — a
+ *  quarantined/missing dist/<exe> must read as not-installed. Delegates to the
+ *  stat-the-exe probe so the runtime check matches postinstall's strictness.
+ *  Stays a PURE PROBE: no download/extract side-effect.
+ *  @returns {string|null} Full path to a usable Electron binary, or null. */
 function getElectronPath() {
   try {
-    return require('electron');
+    const { isElectronUsable, resolveElectronBinary } = require('./electron-install');
+    return isElectronUsable() ? resolveElectronBinary() : null;
   } catch {
     return null;
   }
 }
 
-/** Check if Electron is available (lazy loading guard) */
+/** Check if Electron is available (lazy loading guard). Pure probe — stats the
+ *  exe via getElectronPath(), never provisions. */
 function checkElectronAvailable() {
   return getElectronPath() !== null;
 }
