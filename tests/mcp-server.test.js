@@ -1040,13 +1040,9 @@ describe('MCP Server Handlers', () => {
     });
 
     test('returns interactive mode message when noUi is false', async () => {
-      let _capturedArgs;
       await jest.isolateModulesAsync(async () => {
         jest.doMock('child_process', () => ({
-          spawn: jest.fn((_cmd, args) => {
-            _capturedArgs = args;
-            return { pid: 12345, unref: jest.fn() };
-          }),
+          spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
         const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
@@ -1058,13 +1054,9 @@ describe('MCP Server Handlers', () => {
     });
 
     test('returns headless mode message with at-least-30s guidance when noUi is true', async () => {
-      let _capturedArgs;
       await jest.isolateModulesAsync(async () => {
         jest.doMock('child_process', () => ({
-          spawn: jest.fn((_cmd, args) => {
-            _capturedArgs = args;
-            return { pid: 12345, unref: jest.fn() };
-          }),
+          spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
         const result = await h.amicus_start({ prompt: 'implement feature', noUi: true, model: 'google/gemini-test' }, '/tmp');
