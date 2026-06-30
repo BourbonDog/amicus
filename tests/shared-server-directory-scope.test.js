@@ -141,21 +141,40 @@ describe('shared-server runHeadless scopes every per-session call to the directo
   });
 
   test('abortSession on timeout is scoped to the directory', async () => {
-    mockCreateSession.mockResolvedValue('sess-1');
-    mockSendPromptAsync.mockResolvedValue(undefined);
-    // Never completes → timeout path aborts the session.
-    mockGetMessages.mockResolvedValue([{
-      info: { role: 'assistant', id: 'm1', time: {} },
-      parts: [{ id: 'p1', type: 'text', text: 'still working...' }],
-    }]);
-    mockAbortSession.mockResolvedValue(undefined);
+    // Driven with fake timers so the timeout fires deterministically regardless of
+    // CI runner speed — a real-elapsed-time deadline flakes on starved runners
+    // (the established headless.test.js "dies at --timeout" pattern).
+    jest.useFakeTimers();
+    try {
+      mockCreateSession.mockResolvedValue('sess-1');
+      mockSendPromptAsync.mockResolvedValue(undefined);
+      // Output GROWS every poll so the idle-completion heuristic never fires — a
+      // model that's genuinely still streaming never goes idle. That leaves the
+      // timeout deadline as the only exit, which is the abort path under test.
+      // (A constant message would let the ~30-stable-poll idle break end the run
+      // BEFORE the 200ms deadline, so the timeout-abort never ran — that race is
+      // exactly what flaked on CI.)
+      let chunk = 0;
+      mockGetMessages.mockImplementation(() => Promise.resolve([{
+        info: { role: 'assistant', id: 'm1', time: {} },
+        parts: [{ id: 'p1', type: 'text', text: 'still working' + '.'.repeat(++chunk) }],
+      }]));
+      mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+      mockAbortSession.mockResolvedValue(undefined);
 
-    await runHeadless(model, systemPrompt, userMessage, taskId, PROJECT, 200, 'build', {
-      client: mockClient, server: mockServer, directory: PROJECT,
-      pollIntervalMs: 5,
-    });
+      const p = runHeadless(model, systemPrompt, userMessage, taskId, PROJECT, 200, 'build', {
+        client: mockClient, server: mockServer, directory: PROJECT,
+        pollIntervalMs: 5,
+      });
+      // Advance the fake clock past the 200ms deadline; the async variant flushes
+      // microtasks between timer fires so the poll loop reaches the timeout-abort path.
+      await jest.advanceTimersByTimeAsync(2000);
+      await p;
 
-    expect(mockAbortSession).toHaveBeenCalledWith(mockClient, 'sess-1', PROJECT);
+      expect(mockAbortSession).toHaveBeenCalledWith(mockClient, 'sess-1', PROJECT);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('a preexisting (already-scoped) sessionId still polls scoped to the directory', async () => {
