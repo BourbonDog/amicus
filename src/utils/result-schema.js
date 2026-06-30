@@ -106,9 +106,19 @@ function waveExitCode(waveStatus) {
  * @param {object} opts
  * @param {string} opts.waveId
  * @param {Array<object>} opts.legs - run documents (in --models order)
- * Counts track the four primary terminal statuses (complete/error/timeout/aborted);
- * legs with other statuses (e.g. 'crashed', 'running' in a rebuilt wave) count toward
- * `total` only, so total may exceed the sum of the named buckets.
+ *
+ * COUNTS REMAINDER RULE (stable, no schemaVersion bump): `counts` exposes four
+ * NAMED terminal buckets — complete, error, timeout, aborted — plus `total`
+ * (= legs.length). The remaining TERMINAL_STATUSES ('crashed', 'idle-timeout')
+ * and any non-terminal status (e.g. 'running' in a live-rebuilt wave) are
+ * deliberately NOT given their own bucket; they are reflected ONLY in `total`.
+ * Therefore a consumer must treat the unnamed remainder as
+ *   total − (complete + error + timeout + aborted)
+ * and must NOT assume the named buckets sum to `total`. Adding new buckets
+ * would change the document shape and REQUIRES bumping SCHEMA_VERSION.
+ * This agrees with the MCP wave path (mcp-server.js), which counts a leg as
+ * "done" iff its status is in TERMINAL_STATUSES — including 'crashed' — so a
+ * crashed leg is done/total there exactly as it is total-only here.
  * @param {{source: string, file: string|null, chars: number}|null} [opts.promptMeta]
  * @param {string|null} [opts.createdAt]
  * @param {string|null} [opts.completedAt]
@@ -117,6 +127,9 @@ function waveExitCode(waveStatus) {
  */
 function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null }) {
   const { sumWaveUsage } = require('./pricing');
+  // Named buckets only (see "COUNTS REMAINDER RULE" above). 'crashed' and
+  // 'idle-timeout' legs are intentionally NOT bucketed — they land in `total`
+  // only, so total may exceed complete+error+timeout+aborted.
   const counts = {
     total: legs.length,
     complete: legs.filter(l => l.status === 'complete').length,

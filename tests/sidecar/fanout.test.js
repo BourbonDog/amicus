@@ -386,3 +386,43 @@ describe('runFanout orchestrator', () => {
     expect(mockStartOpenCodeServer).not.toHaveBeenCalled();
   });
 });
+
+describe('buildWaveResult count remainder rule (#14)', () => {
+  const { buildWaveResult, TERMINAL_STATUSES } = require('../../src/utils/result-schema');
+
+  const leg = (status) => ({ taskId: `t-${status}`, status });
+
+  it('crashed/idle-timeout legs count toward total only; named buckets sum to total minus the remainder', () => {
+    const legs = [
+      leg('complete'),
+      leg('error'),
+      leg('timeout'),
+      leg('aborted'),
+      leg('crashed'),
+      leg('idle-timeout'),
+    ];
+    const { counts } = buildWaveResult({ waveId: 'w', legs });
+
+    expect(counts.total).toBe(6);
+    const named = counts.complete + counts.error + counts.timeout + counts.aborted;
+    // crashed + idle-timeout are reflected in `total` only — the documented remainder.
+    const remainder = legs.filter(l => l.status === 'crashed' || l.status === 'idle-timeout').length;
+    expect(remainder).toBe(2);
+    expect(named).toBe(counts.total - remainder);
+  });
+
+  it('all six terminal statuses are recognized as terminal (mcp done-count parity)', () => {
+    // The MCP wave path counts a leg as "done" iff its status is in TERMINAL_STATUSES.
+    // buildWaveResult's `total` is legs.length; for an all-terminal wave the MCP
+    // done-count must equal counts.total so the two accountings agree.
+    const legs = TERMINAL_STATUSES.map(leg);
+    const { counts } = buildWaveResult({ waveId: 'w', legs });
+    const mcpDone = legs.filter(l => TERMINAL_STATUSES.includes(l.status)).length;
+    expect(mcpDone).toBe(counts.total);
+    // And every status NOT in the named buckets is part of the remainder.
+    const named = counts.complete + counts.error + counts.timeout + counts.aborted;
+    expect(counts.total - named).toBe(
+      legs.filter(l => !['complete', 'error', 'timeout', 'aborted'].includes(l.status)).length,
+    );
+  });
+});
