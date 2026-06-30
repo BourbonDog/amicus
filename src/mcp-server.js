@@ -274,7 +274,10 @@ const handlers = {
     const cwd = project || getProjectDir(input.project);
     const sessionDir = safeSessionDir(cwd, input.taskId);
     const metadata = readMetadata(input.taskId, cwd);
-    if (!metadata) { return textResult(`Session ${input.taskId} not found.`, true); }
+    if (!metadata) {
+      return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
+        'If you ran it in a different project, pass the original "project".', true);
+    }
 
     if (metadata.type === 'wave') {
       const legs = (metadata.legs || []).map((legId) => {
@@ -387,7 +390,8 @@ const handlers = {
     const cwd = project || getProjectDir(input.project);
     const sessionDir = safeSessionDir(cwd, input.taskId);
     if (!fs.existsSync(sessionDir)) {
-      return textResult(`Session ${input.taskId} not found.`, true);
+      return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
+        'If you ran it in a different project, pass the original "project".', true);
     }
 
     const readMeta = (() => {

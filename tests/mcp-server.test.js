@@ -359,6 +359,17 @@ describe('MCP Server Handlers', () => {
         fs.rmSync(tmpDir, { recursive: true });
       }
     });
+
+    test('not-found message names the resolved project (#41)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'nonexistent' }, tmpDir);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(tmpDir);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
   });
 
   describe('amicus_status enriched response', () => {
@@ -957,6 +968,17 @@ describe('MCP Server Handlers', () => {
         const result = await handlers.amicus_read({ taskId: 'nope' }, tmpDir);
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('not found');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('not-found message names the resolved project (#41)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+      try {
+        const result = await handlers.amicus_read({ taskId: 'nope' }, tmpDir);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(tmpDir);
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
       }
