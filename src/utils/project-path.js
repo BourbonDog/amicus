@@ -10,6 +10,8 @@
  * Canonical form (documented contract):
  *   - forward slashes ('/'), never backslashes
  *   - duplicate/mixed separators collapsed to a single '/'
+ *   - a leading UNC double-slash is preserved ('\\\\server\\share' -> '//server/share')
+ *     so a network share never collapses into (and collides with) a local path
  *   - Windows drive letter upper-cased (c: -> C:)
  *   - no trailing slash, EXCEPT a bare root is preserved ('C:/' and '/')
  *
@@ -29,8 +31,17 @@ function canonicalProjectPath(p) {
     return p;
   }
 
-  // 1. Backslashes -> forward slashes, then collapse duplicate separators.
-  let out = p.replace(/\\/g, '/').replace(/\/+/g, '/');
+  // 1. Backslashes -> forward slashes.
+  let out = p.replace(/\\/g, '/');
+  // A leading UNC double-slash (\\server\share) must survive the separator
+  // collapse below — flattening it to a single '/' would turn a network share
+  // into a local-looking path that could collide with one. Remember it, collapse
+  // duplicate/mixed separators, then restore the UNC prefix.
+  const isUnc = out.startsWith('//');
+  out = out.replace(/\/+/g, '/');
+  if (isUnc) {
+    out = `/${out}`;
+  }
 
   // 2. Upper-case a leading Windows drive letter (c: -> C:).
   out = out.replace(/^([a-z]):/, (_m, d) => `${d.toUpperCase()}:`);

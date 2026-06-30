@@ -103,4 +103,25 @@ describe('canonicalProjectPath', () => {
       expect(canonicalProjectPath(once)).toBe(once);
     });
   });
+
+  describe('UNC network paths', () => {
+    it('preserves the leading UNC double-slash (backslash and forward forms converge)', () => {
+      const back = canonicalProjectPath('\\\\server\\share\\code\\amicus');
+      const fwd = canonicalProjectPath('//server/share/code/amicus');
+      expect(back).toBe(fwd);
+      expect(back).toBe('//server/share/code/amicus');
+    });
+
+    it('does not collapse a UNC share into a colliding local path', () => {
+      const unc = canonicalProjectPath('\\\\server\\share\\dir');
+      const local = canonicalProjectPath('/server/share/dir');
+      expect(unc).not.toBe(local);
+      expect(unc).toBe('//server/share/dir');
+    });
+
+    it('is idempotent for UNC paths', () => {
+      const once = canonicalProjectPath('\\\\server\\share\\code\\amicus\\');
+      expect(canonicalProjectPath(once)).toBe(once);
+    });
+  });
 });
