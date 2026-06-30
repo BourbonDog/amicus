@@ -10,6 +10,19 @@ const { safeSessionDir } = require('./utils/validators');
 const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
 const { readProgress, isStalled } = require('./sidecar/progress');
 const { SharedServerManager } = require('./utils/shared-server');
+const { durationBetween } = require('./utils/result-schema');
+
+/**
+ * Elapsed run duration: time between createdAt and the run's end, bounding the
+ * end by completedAt/abortedAt/crashedAt so a delayed poll of a finished run
+ * reports the run duration, not time-since-start. Falls back to now() while
+ * still running. Returns 0 if createdAt is missing/malformed.
+ */
+function elapsedMs(metadata) {
+  const end = metadata.completedAt || metadata.abortedAt || metadata.crashedAt
+    || new Date().toISOString();
+  return durationBetween(metadata.createdAt, end) ?? 0;
+}
 
 const sharedServer = new SharedServerManager({ logger });
 
@@ -308,7 +321,7 @@ const handlers = {
         }
       }
 
-      const ms = Date.now() - new Date(metadata.createdAt).getTime();
+      const ms = elapsedMs(metadata);
       const response = {
         taskId: metadata.taskId, type: 'wave', status: metadata.status,
         legsComplete: done, legsTotal: legs.length, legs,
@@ -335,7 +348,7 @@ const handlers = {
       }
     }
 
-    const ms = Date.now() - new Date(metadata.createdAt).getTime();
+    const ms = elapsedMs(metadata);
     const response = {
       taskId: metadata.taskId, status: metadata.status,
       elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,

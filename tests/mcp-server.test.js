@@ -475,6 +475,97 @@ describe('MCP Server Handlers', () => {
     });
   });
 
+  describe('amicus_status elapsed bound by end timestamp (#42)', () => {
+    const { durationBetween } = require('../src/utils/result-schema');
+
+    function fmt(ms) {
+      return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+    }
+
+    // A run that started 10 minutes ago but finished 2.1s after it started.
+    // Buggy code reports ~10m (now - createdAt); correct code reports 0m 2s.
+    const createdAt = new Date(Date.now() - 600000).toISOString();
+    const endAt = new Date(new Date(createdAt).getTime() + 2100).toISOString();
+
+    test('single-session: elapsed reflects completedAt, not now', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-elapsed-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'fin1');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'fin1', status: 'complete', createdAt, completedAt: endAt,
+      }));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'fin1' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.elapsed).toBe(fmt(durationBetween(createdAt, endAt)));
+        expect(parsed.elapsed).toBe('0m 2s');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('single-session: aborted run bounds elapsed by abortedAt', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-elapsed-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'abo1');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'abo1', status: 'aborted', reason: 'user abort',
+        createdAt, abortedAt: endAt,
+      }));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'abo1' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.elapsed).toBe('0m 2s');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('wave: completed wave bounds elapsed by completedAt', async () => {
+      const { getSessionDir } = require('../src/session-manager');
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-elapsed-'));
+      const legDir = getSessionDir(tmpDir, 'wfin-1');
+      fs.mkdirSync(legDir, { recursive: true });
+      fs.writeFileSync(path.join(legDir, 'metadata.json'),
+        JSON.stringify({ taskId: 'wfin-1', status: 'complete', model: 'gemini' }));
+      const waveDir = getSessionDir(tmpDir, 'wfin');
+      fs.mkdirSync(waveDir, { recursive: true });
+      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: 'wfin', type: 'wave', status: 'complete', legs: ['wfin-1'],
+        models: ['gemini'], createdAt, completedAt: endAt,
+      }));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'wfin' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.elapsed).toBe('0m 2s');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('wave: crashed wave bounds elapsed by crashedAt', async () => {
+      const { getSessionDir } = require('../src/session-manager');
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-elapsed-'));
+      const legDir = getSessionDir(tmpDir, 'wcr-1');
+      fs.mkdirSync(legDir, { recursive: true });
+      fs.writeFileSync(path.join(legDir, 'metadata.json'),
+        JSON.stringify({ taskId: 'wcr-1', status: 'crashed', model: 'gemini' }));
+      const waveDir = getSessionDir(tmpDir, 'wcr');
+      fs.mkdirSync(waveDir, { recursive: true });
+      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: 'wcr', type: 'wave', status: 'crashed', legs: ['wcr-1'],
+        models: ['gemini'], reason: 'crash', createdAt, crashedAt: endAt,
+      }));
+      try {
+        const result = await handlers.amicus_status({ taskId: 'wcr' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.elapsed).toBe('0m 2s');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+  });
+
   describe('amicus_status next_poll field', () => {
     test('includes next_poll when headless:true and status:running', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));

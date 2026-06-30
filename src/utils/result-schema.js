@@ -267,6 +267,7 @@ function buildDoctorDoc({ version, timestamp, checks }) {
 module.exports = {
   SCHEMA_VERSION,
   TERMINAL_STATUSES,
+  durationBetween,
   statusFromResult,
   buildRunResult,
   buildWaveResult,
