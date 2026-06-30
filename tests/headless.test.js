@@ -1043,6 +1043,47 @@ describe('Headless Mode Runner', () => {
       expect(result.summary).toBe('');
     }, 15000);
 
+    it('surfaces a 402 provider error even when NO assistant message is emitted (#37)', async () => {
+      // 402 at the client boundary: sendPromptAsync reports providerError, but the
+      // server emits no assistant message (getMessages stays empty). Without the
+      // boundary detection this run would look idle/empty rather than errored.
+      mockSendPromptAsync.mockResolvedValue({
+        response: { status: 402 },
+        error: { message: 'Payment Required' },
+        providerError: 'Insufficient credits',
+      });
+      mockGetMessages.mockResolvedValue([]);
+
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5 }
+      );
+      expect(result.completed).toBe(false);
+      expect(result.error).toBe('Insufficient credits');
+      expect(result.summary).toBe('');
+    }, 15000);
+
+    it('still completes normally when a benign assistant warning is present (no regression)', async () => {
+      // sendPromptAsync returns a benign informational error (no non-2xx status) →
+      // no providerError → the loop must "continue to poll" and complete normally.
+      mockSendPromptAsync.mockResolvedValue({
+        response: { status: 200 },
+        error: { message: 'informational model warning' },
+      });
+      mockGetMessages.mockResolvedValue([{
+        info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+        parts: [{ id: 'p1', type: 'text', text: `All good\n${COMPLETE_MARKER}` }]
+      }]);
+
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5 }
+      );
+      expect(result.completed).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(result.summary).toBe('All good');
+    }, 15000);
+
     it('should reset stablePolls when output grows', async () => {
       // Simulate streaming: same part ID, text grows each poll then stabilizes
       let callCount = 0;

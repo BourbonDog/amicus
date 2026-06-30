@@ -289,7 +289,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       agent: promptOptions.agent,
       userMessageLength: userMessage.length
     });
-    await sendPromptAsync(client, sessionId, promptOptions);
+    const promptResult = await sendPromptAsync(client, sessionId, promptOptions);
     writeProgress(sessionDir, 'prompt_sent');
     logger.info('Prompt sent successfully, entering polling loop', {
       sessionId,
@@ -301,6 +301,16 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let timedOut = false;
     let aborted = false;
     let sessionError = null; // Captures model/SDK errors from assistant messages
+
+    // Hard provider failure detected at the client boundary (#37): a non-2xx /
+    // 402 from promptAsync surfaces here even when the server never emits an
+    // assistant message carrying info.error. Seed sessionError so the loop's
+    // "error with no output" gate ends the run promptly with a usable reason.
+    const boundaryProviderError = !!(promptResult && promptResult.providerError);
+    if (boundaryProviderError) {
+      sessionError = promptResult.providerError;
+      logger.error('Provider error at client boundary', { taskId, sessionId, reason: sessionError });
+    }
 
     // Poll for completion by checking messages
     const startTime = Date.now();
@@ -380,6 +390,17 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // it as a signal when it appears as a standalone line.
         if (/^\s*\[SIDECAR_FOLD\]\s*$/m.test(mirror.output)) {
           completed = true;
+          break;
+        }
+
+        // Hard provider failure at the client boundary (#37): the request was
+        // rejected (e.g., 402) so no assistant message will ever arrive. Exit as
+        // soon as we confirm nothing streamed — don't wait for assistantFinished
+        // (which never flips here) or the full timeout.
+        if (boundaryProviderError && !mirror.output) {
+          logger.error('Provider error at boundary with no output, exiting', {
+            sessionError, pollCount
+          });
           break;
         }
 

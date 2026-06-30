@@ -28,6 +28,40 @@ async function getCreateOpencodeServer() {
 }
 
 /**
+ * Shared reason string for an HTTP 402 from the provider.
+ * Exported so #36 and a later pre-flight credit check can reuse the exact phrasing
+ * instead of re-deriving it.
+ */
+const INSUFFICIENT_CREDITS_REASON = 'Insufficient credits';
+
+/**
+ * Map an SDK request result to a propagated provider-failure reason.
+ *
+ * Keys on the actual HTTP status (result.response.status, falling back to
+ * result.error.status) so benign informational `error` payloads that ride on a
+ * 2xx response stay "continue to poll" — only a real non-2xx status becomes a
+ * session error.
+ *
+ *   402            -> 'Insufficient credits'
+ *   other non-2xx  -> 'Provider error: <status>'
+ *   2xx / unknown  -> null
+ *
+ * @param {{response?: {status?: number}, error?: {status?: number}}} [result]
+ * @returns {string|null} Reason string, or null when there is no hard failure.
+ */
+function providerErrorReason(result) {
+  if (!result) { return null; }
+  const status = (result.response && result.response.status)
+    || (result.error && result.error.status);
+  // No usable status — cannot distinguish a benign warning from a failure, so
+  // do not regress the "continue to poll" behavior.
+  if (typeof status !== 'number') { return null; }
+  if (status >= 200 && status < 300) { return null; }
+  if (status === 402) { return INSUFFICIENT_CREDITS_REASON; }
+  return `Provider error: ${status}`;
+}
+
+/**
  * Parse a model string into SDK format
  *
  * Converts from sidecar format (e.g., 'openrouter/google/gemini-2.5-flash')
@@ -159,11 +193,25 @@ async function sendPrompt(client, sessionId, options) {
     }
   }
 
-  // Log but don't throw on promptAsync errors.
-  // promptAsync is fire-and-forget: the server queues the prompt for async
-  // processing. Errors here may be informational (e.g., model config warnings)
-  // rather than fatal. The polling loop will detect real failures via timeout.
-  if (result.error) {
+  // Detect a hard provider failure at the client boundary (#37). A non-2xx /
+  // 402 here must surface as a session error EVEN WHEN the server emits no
+  // assistant message carrying info.error — otherwise the run looks idle/empty.
+  // Keyed on HTTP status so benign informational errors (model config warnings
+  // on a 2xx) keep the fire-and-forget "continue to poll" behavior below.
+  const reason = providerErrorReason(result);
+  if (reason) {
+    result.providerError = reason;
+    const { logger } = require('./utils/logger');
+    logger.error('promptAsync returned a hard provider error', {
+      reason,
+      status: (result.response && result.response.status) || (result.error && result.error.status),
+      sessionId
+    });
+  } else if (result.error) {
+    // Log but don't throw on benign promptAsync errors.
+    // promptAsync is fire-and-forget: the server queues the prompt for async
+    // processing. These errors are informational (e.g., model config warnings)
+    // rather than fatal. The polling loop will detect real failures via timeout.
     const { logger } = require('./utils/logger');
     logger.error('promptAsync returned error (continuing to poll)', {
       error: result.error.message || JSON.stringify(result.error),
@@ -595,6 +643,8 @@ function parseMcpSpec(spec) {
 }
 
 module.exports = {
+  INSUFFICIENT_CREDITS_REASON,
+  providerErrorReason,
   parseModelString,
   createClient,
   createSession,

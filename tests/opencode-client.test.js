@@ -791,3 +791,96 @@ describe('buildServerHandle (F3 #15)', () => {
     expect(server.goPid).toBe(111);
   });
 });
+
+describe('provider error detection (#37)', () => {
+  const {
+    providerErrorReason,
+    INSUFFICIENT_CREDITS_REASON,
+    sendPrompt,
+  } = require('../src/opencode-client');
+
+  describe('providerErrorReason', () => {
+    it('maps HTTP 402 to "Insufficient credits"', () => {
+      expect(providerErrorReason({ response: { status: 402 }, error: { message: 'Payment Required' } }))
+        .toBe('Insufficient credits');
+      expect(INSUFFICIENT_CREDITS_REASON).toBe('Insufficient credits');
+    });
+
+    it('maps other non-2xx statuses to a generic "Provider error: <status>"', () => {
+      expect(providerErrorReason({ response: { status: 503 }, error: { message: 'down' } }))
+        .toBe('Provider error: 503');
+    });
+
+    it('returns null for 2xx responses (no provider failure)', () => {
+      expect(providerErrorReason({ response: { status: 200 }, data: { parts: [] } })).toBeNull();
+    });
+
+    it('returns null when there is no status and no error (benign result)', () => {
+      expect(providerErrorReason({ data: { parts: [] } })).toBeNull();
+      expect(providerErrorReason(undefined)).toBeNull();
+    });
+
+    it('does NOT flag a benign informational error that carries no non-2xx status', () => {
+      // promptAsync sometimes returns an informational error (model config warning)
+      // with a 2xx (or absent) status — this must remain "continue to poll".
+      expect(providerErrorReason({ response: { status: 200 }, error: { message: 'model warning' } }))
+        .toBeNull();
+    });
+  });
+
+  describe('sendPrompt propagates provider error reason', () => {
+    it('attaches "Insufficient credits" on a 402 result', async () => {
+      const mockClient = {
+        session: {
+          promptAsync: jest.fn().mockResolvedValue({
+            response: { status: 402 },
+            error: { message: 'Payment Required' },
+          }),
+        },
+      };
+
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/google/gemini-2.5-flash',
+        parts: [{ type: 'text', text: 'Hello' }],
+      });
+
+      expect(result.providerError).toBe('Insufficient credits');
+    });
+
+    it('attaches a generic provider error on other non-2xx results', async () => {
+      const mockClient = {
+        session: {
+          promptAsync: jest.fn().mockResolvedValue({
+            response: { status: 500 },
+            error: { message: 'boom' },
+          }),
+        },
+      };
+
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/google/gemini-2.5-flash',
+        parts: [{ type: 'text', text: 'Hello' }],
+      });
+
+      expect(result.providerError).toBe('Provider error: 500');
+    });
+
+    it('does NOT attach a provider error on a successful (2xx) result', async () => {
+      const mockClient = {
+        session: {
+          promptAsync: jest.fn().mockResolvedValue({
+            response: { status: 200 },
+            data: { parts: [] },
+          }),
+        },
+      };
+
+      const result = await sendPrompt(mockClient, 'session-123', {
+        model: 'openrouter/google/gemini-2.5-flash',
+        parts: [{ type: 'text', text: 'Hello' }],
+      });
+
+      expect(result.providerError).toBeUndefined();
+    });
+  });
+});
