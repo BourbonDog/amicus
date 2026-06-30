@@ -221,6 +221,7 @@ scripts/
 ├── check-file-sizes.js  # File size enforcement for the pre-commit hook and the whole-tree CI gate (--all).
 ├── check-html.js
 ├── check-secrets.js  # Secret detection for the pre-commit hook and the whole-tree CI gate (--all).
+├── check-tarball-lifecycle.js  # CI guard: assert every script referenced by an npm *lifecycle* hook actually
 ├── check-ui.js
 ├── debug-cdp.js
 ├── eval-with-monitoring.sh

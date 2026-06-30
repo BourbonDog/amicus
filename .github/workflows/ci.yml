@@ -34,3 +34,4 @@ jobs:
       - run: npm run lint
       - run: npm run check:secrets
       - run: npm run check:sizes
+      - run: npm run check:tarball
