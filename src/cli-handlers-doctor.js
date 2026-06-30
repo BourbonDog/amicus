@@ -105,7 +105,7 @@ function runDoctorChecks(depsOverride = {}) {
   checks.push(guard('opencode-bin', 'OpenCode binary', () => (
     d.hasOpencodeBinary()
       ? { id: 'opencode-bin', name: 'OpenCode binary', status: 'ok', message: 'found', hint: null }
-      : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: 'npm install -g amicus' }
+      : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: 'npm install -g amicus  (a transient install error can roll back the engine binaries — re-run, or: npm cache clean --force && npm install -g amicus)' }
   )));
 
   checks.push(guard('electron', 'Electron (interactive GUI)', () => (

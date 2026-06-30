@@ -39,6 +39,14 @@ describe('runDoctorChecks', () => {
     expect(byId(checks)['opencode-bin'].status).toBe('error');
   });
 
+  test('missing OpenCode binary hint includes transient-rollback retry guidance', () => {
+    const checks = runDoctorChecks({ ...allGood, hasOpencodeBinary: () => false });
+    const hint = byId(checks)['opencode-bin'].hint;
+    expect(hint).toMatch(/transient/i);
+    expect(hint).toMatch(/npm install -g amicus/);
+    expect(hint).toMatch(/npm cache clean --force/);
+  });
+
   test('missing Electron → warn only (headless still works)', () => {
     const checks = runDoctorChecks({ ...allGood, getElectronPath: () => null });
     expect(byId(checks).electron.status).toBe('warn');
