@@ -308,4 +308,35 @@ describe('repairElectron (#53)', () => {
     expect(res.repaired).toBe(true);
     expect(fs.existsSync(path.join(distDir, exeName))).toBe(true);
   });
+
+  test('installer-fallback: a silently-failed installer (no usable exe) reports repaired:false', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
+
+    // spawn simulates electron's install.js "running" but producing NO exe
+    // (e.g. interrupted extract / AV quarantine). The installer-fallback path
+    // must report the REAL isElectronUsable() result — repaired:false here.
+    // Regression guard for the trailing `|| isElectronUsable() || true` bug that
+    // made the installer path ALWAYS report repaired:true (#53).
+    const spawn = jest.fn(() => ({ status: 0 }));
+
+    const res = await ei.repairElectron({
+      force: true,
+      cacheOnly: false,
+      electronDir: dir,
+      platform: 'win32',
+      version: '28.3.3',
+      arch: 'x64',
+      deps: {
+        cachedZip: () => null,
+        extract: jest.fn(),
+        spawn,
+        acquireLock: () => ({ release: () => {} }),
+      },
+    });
+
+    expect(spawn).toHaveBeenCalled();
+    // No exe materialized → repaired MUST be false (no false success).
+    expect(res.repaired).toBe(false);
+    expect(fs.existsSync(path.join(distDir, exeName))).toBe(false);
+  });
 });

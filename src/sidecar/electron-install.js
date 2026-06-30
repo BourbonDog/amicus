@@ -226,8 +226,10 @@ async function repairElectron({
     }
 
     // Attempt 2: drive electron's installer (force_no_cache when forced).
+    // Report the REAL post-install usability — a structurally-successful install
+    // that produced no usable exe is a FAILURE (no false success; #53).
     runInstaller({ electronDir, force, spawn });
-    return { repaired: isElectronUsable({ electronDir, platform, fs }) || true };
+    return { repaired: isElectronUsable({ electronDir, platform, fs }) };
   } finally {
     try { lock.release(); } catch { /* ignore */ }
   }

@@ -73,6 +73,26 @@ describe('postinstall opt-in AMICUS_PREFETCH_ELECTRON prewarm (#60)', () => {
     expect(forcedCalls.length).toBeGreaterThanOrEqual(1);
   });
 
+  test('prewarm (force:true) does NOT print prewarmed/success when repair fails', async () => {
+    process.env.AMICUS_PREFETCH_ELECTRON = '1';
+    // Installer ran but produced no usable exe → honest repaired:false.
+    const repairElectron = jest.fn().mockResolvedValue({ repaired: false });
+    const logs = [];
+    const warnings = [];
+    const logSpy = jest.spyOn(console, 'log').mockImplementation((...a) => logs.push(a.join(' ')));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation((...a) => warnings.push(a.join(' ')));
+    try {
+      await postinstall.provisionElectron({ repairElectron });
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+    // No false success: must NOT claim the GUI binary was prewarmed.
+    expect(logs.join('\n')).not.toMatch(/prewarmed/i);
+    // Must surface the "provisions on first use" deferral notice instead.
+    expect(warnings.join('\n')).toMatch(/first use/i);
+  });
+
   test('AMICUS_PREFETCH_ELECTRON other than 1 does NOT force', async () => {
     process.env.AMICUS_PREFETCH_ELECTRON = '0';
     const repairElectron = jest.fn().mockResolvedValue({ repaired: true });

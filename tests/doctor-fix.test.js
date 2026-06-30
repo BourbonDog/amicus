@@ -56,6 +56,18 @@ describe('runDoctorChecks --fix electron self-heal (#56)', () => {
     expect(electron.status).toBe('ok');
   });
 
+  test('--fix reports failure (not provisioned) when repairElectron returns repaired:false', async () => {
+    // The installer-fallback ran but produced no usable exe → honest repaired:false.
+    // doctor --fix must NOT claim ok/self-healed (no false success).
+    const repairElectron = jest.fn().mockResolvedValue({ repaired: false });
+    const checks = await doctor.runDoctorChecks(brokenElectronDeps({ fix: true, repairElectron }));
+    const electron = findCheck(checks, 'electron');
+
+    expect(electron.status).not.toBe('ok');
+    expect(electron.message).not.toMatch(/self-healed/i);
+    expect(electron.message).toMatch(/not provisioned/i);
+  });
+
   test('--fix maps {deferred} to WARN (not error)', async () => {
     const repairElectron = jest.fn().mockResolvedValue({
       deferred: true,
