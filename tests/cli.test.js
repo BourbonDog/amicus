@@ -1019,4 +1019,101 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('per-command --help for council + remaining commands (follow-up to #16)', () => {
+    const { getUsage } = require('../src/cli');
+
+    test("getUsage('council') prints only the council section", () => {
+      const usage = getUsage('council');
+      expect(usage).toContain("Subcommands for 'council':");
+      // documents its real subcommands
+      expect(usage).toContain('tally');
+      expect(usage).toContain('stats');
+      expect(usage).toContain('report');
+      // council-only flag present (from the real surface)
+      expect(usage).toContain('--no-ledger');
+      // other subcommands' option blocks absent
+      expect(usage).not.toContain("Options for 'start':");
+      expect(usage).not.toContain("Options for 'fanout':");
+      expect(usage).not.toContain("Options for 'read':");
+    });
+
+    test("getUsage('continue') prints only the continue section", () => {
+      const usage = getUsage('continue');
+      expect(usage).toContain("Options for 'continue':");
+      expect(usage).toContain('--prompt');
+      expect(usage).not.toContain("Options for 'start':");
+      expect(usage).not.toContain("Options for 'fanout':");
+    });
+
+    test("getUsage('resume') prints only the resume section", () => {
+      const usage = getUsage('resume');
+      expect(usage).toContain("Options for 'resume':");
+      expect(usage).toContain('--no-ui');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test("getUsage('doctor') prints only the doctor section", () => {
+      const usage = getUsage('doctor');
+      expect(usage).toContain("Options for 'doctor':");
+      expect(usage).toContain('--json');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test("getUsage('setup') prints only the setup section", () => {
+      const usage = getUsage('setup');
+      expect(usage).toContain("Options for 'setup':");
+      expect(usage).toContain('--api-keys');
+      expect(usage).toContain('--add-alias');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test("getUsage('key') prints only the key section", () => {
+      const usage = getUsage('key');
+      expect(usage).toContain("Usage for 'key':");
+      expect(usage).toContain('--remove');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test("getUsage('mcp') prints only the mcp section", () => {
+      const usage = getUsage('mcp');
+      expect(usage).toContain("Usage for 'mcp':");
+      expect(usage).toContain('stdio');
+      expect(usage).not.toContain("Options for 'start':");
+    });
+
+    test('every newly-covered command still shows the top-level Usage line', () => {
+      for (const cmd of ['council', 'continue', 'resume', 'doctor', 'setup', 'key', 'mcp']) {
+        expect(getUsage(cmd)).toContain('Usage: amicus');
+      }
+    });
+
+    test('the original 6 blocks (#16) are unchanged in scoped output', () => {
+      expect(getUsage('start')).toContain("Options for 'start':");
+      expect(getUsage('start')).toContain('--fold-shortcut');
+      expect(getUsage('fanout')).toContain('--council');
+      expect(getUsage('models')).toContain('--refresh');
+      expect(getUsage('list')).toContain('--status');
+      expect(getUsage('abort')).toContain('--all');
+      expect(getUsage('read')).toContain('--conversation');
+    });
+
+    test('bare getUsage() still composes every block (header + all blocks + trailer)', () => {
+      const full = getUsage();
+      // existing #16 blocks
+      expect(full).toContain("Options for 'start':");
+      expect(full).toContain("Options for 'fanout':");
+      // newly added blocks
+      expect(full).toContain("Subcommands for 'council':");
+      expect(full).toContain("Options for 'continue':");
+      expect(full).toContain("Options for 'resume':");
+      expect(full).toContain("Options for 'doctor':");
+      expect(full).toContain("Options for 'setup':");
+      expect(full).toContain("Usage for 'key':");
+      expect(full).toContain("Usage for 'mcp':");
+      // header + trailer still present
+      expect(full).toContain('Usage: amicus <command> [options]');
+      expect(full).toContain('OpenCode Agent Types:');
+    });
+  });
+
 });
