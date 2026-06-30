@@ -622,7 +622,10 @@ const handlers = {
   async amicus_abort(input, project) {
     const cwd = project || getProjectDir(input.project);
     const metadata = readMetadata(input.taskId, cwd);
-    if (!metadata) { return textResult(`Session ${input.taskId} not found.`, true); }
+    if (!metadata) {
+      return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
+        'If you ran it in a different project, pass the original "project".', true);
+    }
     if (metadata.status !== 'running') {
       return textResult(`Session ${input.taskId} is not running (status: ${metadata.status}).`);
     }

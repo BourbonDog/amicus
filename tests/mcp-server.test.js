@@ -1218,6 +1218,18 @@ describe('MCP Server Handlers', () => {
         fs.rmSync(tmpDir, { recursive: true });
       }
     });
+
+    test('not-found message names the resolved project (#41)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+      try {
+        const result = await handlers.amicus_abort({ taskId: 'nonexistent' }, tmpDir);
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(tmpDir);
+        expect(result.content[0].text).toContain('pass the original "project"');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
   });
 });
 
