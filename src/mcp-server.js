@@ -222,7 +222,12 @@ const handlers = {
         const { finalizeHeadlessResult } = require('./sidecar/session-finalize');
         // resolvedModel is already available from validateStartInputs() above
 
-        sessionId = await createSession(client);
+        // #47: the shared OpenCode server is shared across projects, so the
+        // session must be created scoped to the resolved project directory
+        // (cwd, already canonicalized by getProjectDir/#39) — otherwise it is
+        // found by id but NOT by a ?directory= query. runHeadless then scopes
+        // every follow-up call to the SAME directory (passed via options.directory).
+        sessionId = await createSession(client, cwd);
 
         // Write initial metadata (MCP handler owns this, runHeadless skips it)
         fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
@@ -277,6 +282,7 @@ const handlers = {
         runHeadless(resolvedModel, systemPrompt, userMessage, taskId, cwd,
           timeoutMs, agent, {
             client, server, watchdog, sessionId,
+            directory: cwd, // #47: scope every per-session follow-up call to the project
             mcp: undefined, // shared server already has MCP config
           }
         ).then((result) => {

@@ -99,6 +99,17 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   const sessionDir = getSessionDir(project, taskId);
   const conversationPath = path.join(sessionDir, 'conversation.jsonl');
 
+  // #47: scope every per-session SDK call to the project directory so a SHARED
+  // OpenCode server (one server, many projects) files and finds this session
+  // under the right ?directory=. `dirArgs` is the trailing arg list for the
+  // positional client wrappers (createSession/getMessages/getSessionStatus/
+  // abortSession) and is EMPTY when no directory is supplied — so the un-scoped
+  // (owned-server) call shape stays byte-for-byte identical. A scoped create
+  // with un-scoped follow-ups reproduces the identical "session not found"
+  // failure, so ALL of them must carry it.
+  const { directory } = options;
+  const dirArgs = directory === undefined ? [] : [directory];
+
   // Ensure session directory exists
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
@@ -204,7 +215,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       logger.debug('Using existing session', { sessionId });
     } else {
       try {
-        sessionId = await createSession(client);
+        sessionId = await createSession(client, ...dirArgs);
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
         if (!externalServer) { server.close(); }
@@ -242,7 +253,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           markAborted(sessionDir, signal);
           try {
             const { abortSession } = require('./opencode-client');
-            abortSession(client, sessionId).catch(() => {});
+            abortSession(client, sessionId, ...dirArgs).catch(() => {});
           } catch { /* best-effort */ }
           try { server.close(); } catch { /* best-effort */ }
           const { resolveTerminalState } = require('./sidecar/session-finalize');
@@ -272,6 +283,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       system: systemPrompt,
       parts: [{ type: 'text', text: userMessage }]
     };
+    // #47: scope the prompt to the project on a shared server. Only set when a
+    // directory was supplied so the owned-server options object is unchanged.
+    if (directory !== undefined) { promptOptions.directory = directory; }
 
     // Default to 'build' in headless mode — 'chat' stalls without user interaction
     const agentConfig = mapAgentToOpenCode(agent || 'build');
@@ -344,7 +358,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             logger.info('External abort signal received', { taskId });
             try {
               const { abortSession } = require('./opencode-client');
-              await abortSession(client, sessionId);
+              await abortSession(client, sessionId, ...dirArgs);
             } catch (abortErr) {
               logger.warn('Failed to abort OpenCode session', { error: abortErr.message });
             }
@@ -360,7 +374,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       try {
         const remaining = deadline - Date.now();
         const messages = await withTimeout(
-          getMessages(client, sessionId),
+          getMessages(client, sessionId, ...dirArgs),
           Math.min(pollCallTimeoutMs, remaining),
           'getMessages'
         );
@@ -420,7 +434,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           try {
             const remainingForStatus = deadline - Date.now();
             const statusData = await withTimeout(
-              getSessionStatus(client, sessionId),
+              getSessionStatus(client, sessionId, ...dirArgs),
               Math.min(pollCallTimeoutMs, remainingForStatus),
               'getSessionStatus'
             );
@@ -509,7 +523,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // Abort the OpenCode session on timeout (agent keeps running otherwise)
       try {
         const { abortSession } = require('./opencode-client');
-        await abortSession(client, sessionId);
+        await abortSession(client, sessionId, ...dirArgs);
         logger.info('Session aborted after timeout', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after timeout', { error: abortErr.message });
@@ -572,7 +586,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (sessionId) {
       try {
         const { abortSession } = require('./opencode-client');
-        await abortSession(client, sessionId);
+        await abortSession(client, sessionId, ...dirArgs);
       } catch {
         // Ignore abort errors during error handling
       }
