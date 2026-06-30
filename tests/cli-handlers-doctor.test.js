@@ -147,9 +147,9 @@ describe('runDoctorChecks', () => {
       expect(byId(checks)['opencode-bin'].hint).toBe(HINTS.reinstallEngine);
     });
 
-    test('missing Electron renders the shared reinstallElectron hint', async () => {
+    test('missing Electron points at the converged doctor --fix self-heal hint (#56)', async () => {
       const checks = await runDoctorChecks({ ...allGood, getElectronPath: () => null });
-      expect(byId(checks).electron.hint).toBe(HINTS.reinstallElectron);
+      expect(byId(checks).electron.hint).toBe(HINTS.doctorFix);
     });
 
     test('unregistered MCP hint references the shared reinstall command', async () => {

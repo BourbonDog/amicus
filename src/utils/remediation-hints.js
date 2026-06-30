@@ -38,6 +38,14 @@ const REMEDIATION_HINTS = Object.freeze({
 
   /** Point the user at the single recovery hub. */
   runDoctor: 'run: amicus doctor  (diagnoses config, keys, engine & MCP, with copy-paste fixes)',
+
+  /**
+   * Self-heal the optional Electron GUI in place (#56). This is the convergence
+   * target for the three "reinstall to fix Electron" hints — it provisions the
+   * binary from cache (or downloads on demand) WITHOUT a global reinstall, so it
+   * can't loop the way `npm install -g amicus` could when the rollback recurs.
+   */
+  doctorFix: 'amicus doctor --fix  (self-heal the Electron GUI in place — provisions the binary; no reinstall, so it can\'t loop)',
 });
 
 module.exports = REMEDIATION_HINTS;

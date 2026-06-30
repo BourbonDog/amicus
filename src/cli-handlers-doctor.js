@@ -5,6 +5,9 @@ const HINTS = require('./utils/remediation-hints');
 
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
+/** #56: keep `doctor --fix`'s electron self-heal from ever hanging on a slow disk/network. */
+const FIX_TIMEOUT_MS = 90 * 1000;
+
 /** Default real helpers; tests override via deps. */
 function realDeps() {
   const fs = require('fs');
@@ -36,6 +39,10 @@ function realDeps() {
       return candidates.some(p => fs.existsSync(p));
     },
     getElectronPath: () => require('./sidecar/interactive').getElectronPath(),
+    // #56: self-heal primitive for `doctor --fix`. Pure probe (getElectronPath)
+    // stays separate; repair only runs when fix is requested.
+    repairElectron: (opts) => require('./sidecar/electron-install').repairElectron(opts),
+    fix: false,
     discoverClaudeCodeMcps: () => require('./utils/mcp-discovery').discoverClaudeCodeMcps(),
     discoverCoworkMcps: () => require('./utils/mcp-discovery').discoverCoworkMcps(),
     skillInstalled: () => {
@@ -124,11 +131,35 @@ async function runDoctorChecks(depsOverride = {}) {
       : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: HINTS.reinstallEngine }
   )));
 
-  checks.push(guard('electron', 'Electron (interactive GUI)', () => (
-    d.getElectronPath()
-      ? { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed', hint: null }
-      : { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.reinstallElectron }
-  )));
+  checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
+    if (d.getElectronPath()) {
+      return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed', hint: null };
+    }
+    // Broken (missing / quarantined). With --fix, self-heal in place (#56):
+    // repairElectron provisions the binary; {deferred} (no cache, no network)
+    // maps to WARN — a deferred download is not a failure. Without --fix, just
+    // point the user at `amicus doctor --fix`.
+    if (d.fix) {
+      let res;
+      try {
+        res = await d.repairElectron({ timeoutMs: FIX_TIMEOUT_MS });
+      } catch (e) {
+        return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `repair failed: ${e.message} — headless still works`, hint: HINTS.doctorFix };
+      }
+      res = res || {};
+      if (res.repaired || res.usable) {
+        return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null };
+      }
+      const why = res.reason ? ` — ${res.reason}` : '';
+      const detail = res.deferred
+        ? `deferred${why}`
+        : res.contended
+          ? `repair already in progress${why}`
+          : `not provisioned${why}`;
+      return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint: HINTS.doctorFix };
+    }
+    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.doctorFix };
+  }));
 
   checks.push(guard('skills', 'Skills installed', () => (
     d.skillInstalled()
@@ -192,14 +223,18 @@ function renderHuman(checks) {
 }
 
 /**
- * `amicus doctor [--json]`. Injectable `runChecks` for tests.
- * @param {{_:string[], json?:boolean}} args
+ * `amicus doctor [--json] [--fix]`. Injectable `runChecks` for tests.
+ * `--fix` (#56) self-heals fixable checks in place (electron via repairElectron).
+ * @param {{_:string[], json?:boolean, fix?:boolean}} args
  * @param {(deps?:object)=>Array} [runChecks]
  * @returns {Promise<number>} exit code
  */
 async function handleDoctor(args, runChecks = runDoctorChecks) {
   const useJson = !!args.json;
-  const checks = await runChecks();
+  // #56: --fix flows into runDoctorChecks as a dep so fixable checks (electron)
+  // self-heal in place. Omitted (not false) when absent so the injected
+  // test-double sees a clean "no fix" call.
+  const checks = await runChecks(args.fix ? { fix: true } : undefined);
   if (useJson) {
     const { buildDoctorDoc } = require('./utils/result-schema');
     const VERSION = require('../package.json').version;

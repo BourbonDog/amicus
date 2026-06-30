@@ -16,6 +16,7 @@ const {
   resolveElectronBinary: defaultResolve,
   repairElectron: defaultRepair,
 } = require('./electron-install');
+const HINTS = require('../utils/remediation-hints');
 
 /**
  * Module-level single-flight guard. Holds the in-flight (or last SUCCESSFUL)
@@ -74,7 +75,7 @@ function ensureElectron({ deps = {}, repairOptions = {} } = {}) {
       return { ok: true, path: resolve() };
     }
     const reason = (result && result.reason)
-      || 'Electron could not be provisioned; the GUI is unavailable. Run `amicus doctor --fix` or use --no-ui.';
+      || `Electron could not be provisioned; the GUI is unavailable. ${HINTS.doctorFix} (or use --no-ui).`;
     return { ok: false, reason };
   })().then((r) => {
     // Only memoize SUCCESS; a failure clears the guard so a later launch retries.

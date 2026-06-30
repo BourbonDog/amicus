@@ -116,6 +116,7 @@ function isBooleanFlag(key) {
      'no-ledger',            // council tally: compute the record without appending to the reliability ledger
      'html',                 // council report: emit a self-contained HTML page
      'md',                   // council report: emit Markdown (default)
+     'fix',                  // doctor: self-heal fixable checks in place (#56)
    ];
   return booleanFlags.includes(key);
 }
@@ -438,6 +439,8 @@ Subcommands for 'council':
   doctor: `
 Options for 'doctor':
   --json                       Machine-readable output
+  --fix                        Self-heal fixable checks in place (provisions the
+                               Electron GUI binary; no global reinstall)
 `,
   setup: `
 Options for 'setup':

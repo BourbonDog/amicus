@@ -14,6 +14,7 @@ const os = require('os');
 const { execFileSync } = require('child_process');
 
 const { repairElectron } = require('../src/sidecar/electron-install');
+const HINTS = require('../src/utils/remediation-hints');
 
 const SETUP_HOOKS_SCRIPT = path.join(__dirname, 'setup-hooks.js');
 
@@ -207,7 +208,7 @@ async function provisionElectron(deps = {}) {
     if (result && (result.repaired || result.usable)) { return; }
     // No cache hit (deferred), contended, or otherwise not provisioned now.
     console.warn('[amicus] Note: the Electron GUI binary is not provisioned yet — it will download on first use of the interactive GUI / setup-wizard.');
-    console.warn('[amicus] Headless runs and the council already work. Run `amicus doctor --fix` to provision the GUI now.');
+    console.warn(`[amicus] Headless runs and the council already work. To provision the GUI now: ${HINTS.doctorFix}`);
   } catch {
     // Never let provisioning throw out of postinstall.
   }
