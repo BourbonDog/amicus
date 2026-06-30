@@ -5,6 +5,14 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-06-30
+
+### Fixed
+- **The Electron GUI now shows the current rail-yard brand mark.** The window/taskbar icon, the setup
+  wizard's header and footer, and the session toolbar were still rendering the pre-redesign squiggle
+  mark; they now use the shipped clay→gold rail-yard mark (matching the site favicon). The inline
+  glyphs stay token-bound (clay tracks / gold mainline) so they follow the design system.
+
 ## [1.7.0] - 2026-06-30
 
 Electron self-heal, a real `amicus doctor`, and the GUI on the design system — plus MCP/diagnostics correctness.
