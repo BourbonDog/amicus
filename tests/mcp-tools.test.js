@@ -173,6 +173,12 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_status');
       expect(tool.inputSchema).toHaveProperty('taskId');
     });
+
+    test('is not annotated read-only/idempotent (it mutates on crash detection)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_status');
+      expect(tool.annotations.readOnlyHint).toBe(false);
+      expect(tool.annotations.idempotentHint).toBe(false);
+    });
   });
 
   describe('amicus_read', () => {

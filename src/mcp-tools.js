@@ -115,7 +115,7 @@ function getTools() {
   },
   {
     name: 'amicus_status',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
       'Check the status of a running Amicus session. Returns status ' +
       '(running/complete), elapsed time, and progress info. Primarily ' +
