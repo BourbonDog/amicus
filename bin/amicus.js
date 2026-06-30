@@ -75,9 +75,10 @@ async function main() {
     process.exit(0);
   }
 
-  // Handle --help or no command
+  // Handle --help or no command. 'amicus <cmd> --help' scopes the usage to that
+  // subcommand; bare 'amicus --help' (or no command) prints the full usage.
   if (args.help || args._.length === 0) {
-    console.log(getUsage());
+    console.log(getUsage(args.help ? command : undefined));
     process.exit(0);
   }
 
