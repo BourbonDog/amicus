@@ -108,14 +108,33 @@ async function createClient(baseUrl) {
 }
 
 /**
+ * Build an optional `query: { directory }` fragment to spread into an SDK call.
+ *
+ * Returns an EMPTY object when no directory is supplied so spreading it is a
+ * true no-op — the emitted request is byte-for-byte identical to a call that
+ * never knew about `directory`. Only when a directory IS passed does a
+ * `query: { directory }` key appear on the wire (the SDK accepts
+ * `query?: { directory?: string }` on every session endpoint).
+ *
+ * @param {string} [directory] - Optional project directory to scope the call to.
+ * @returns {{query?: {directory: string}}} Fragment to spread into SDK args.
+ */
+function directoryQuery(directory) {
+  return directory === undefined ? {} : { query: { directory } };
+}
+
+/**
  * Create a new session
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
+ * @param {string} [directory] - Optional project directory to scope the session
+ *   to (threaded to the SDK as query.directory). Omitting it keeps the call
+ *   byte-for-byte identical to before.
  * @returns {Promise<string>} Session ID
  * @throws {Error} If session creation fails
  */
-async function createSession(client) {
-  const result = await client.session.create({});
+async function createSession(client, directory) {
+  const result = await client.session.create({ ...directoryQuery(directory) });
 
   if (result.error) {
     throw new Error(result.error.message || 'Failed to create session');
@@ -145,10 +164,13 @@ async function createSession(client) {
  * @param {object} [options.reasoning] - Reasoning/thinking configuration
  * @param {string} [options.reasoning.effort] - Effort level: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'none'
  * @param {object} [options.watchdog] - IdleWatchdog instance to signal busy/idle around the API call
+ * @param {string} [options.directory] - Optional project directory to scope the
+ *   call to (threaded to the SDK as query.directory). Omitting it keeps the
+ *   call byte-for-byte identical to before.
  * @returns {Promise<object>} API response
  */
 async function sendPrompt(client, sessionId, options) {
-  const { model, system, parts, agent, tools, reasoning, watchdog } = options;
+  const { model, system, parts, agent, tools, reasoning, watchdog, directory } = options;
 
   // Parse model string to SDK format
   const modelSpec = parseModelString(model);
@@ -185,7 +207,8 @@ async function sendPrompt(client, sessionId, options) {
   try {
     result = await client.session.promptAsync({
       path: { id: sessionId },
-      body
+      body,
+      ...directoryQuery(directory)
     });
   } finally {
     if (watchdog) {
@@ -227,11 +250,15 @@ async function sendPrompt(client, sessionId, options) {
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} sessionId - Session ID
+ * @param {string} [directory] - Optional project directory to scope the call to
+ *   (threaded to the SDK as query.directory). Omitting it keeps the call
+ *   byte-for-byte identical to before.
  * @returns {Promise<Array>} Array of messages
  */
-async function getMessages(client, sessionId) {
+async function getMessages(client, sessionId, directory) {
   const result = await client.session.messages({
-    path: { id: sessionId }
+    path: { id: sessionId },
+    ...directoryQuery(directory)
   });
 
   return result.data || [];
@@ -314,10 +341,13 @@ async function listSessions(client) {
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} sessionId - Session ID to abort
+ * @param {string} [directory] - Optional project directory to scope the call to
+ *   (threaded to the SDK as query.directory). Omitting it keeps the call
+ *   byte-for-byte identical to before.
  * @returns {Promise<void>}
  */
-async function abortSession(client, sessionId) {
-  await client.session.abort({ path: { id: sessionId } });
+async function abortSession(client, sessionId, directory) {
+  await client.session.abort({ path: { id: sessionId }, ...directoryQuery(directory) });
 }
 
 /**
@@ -325,11 +355,15 @@ async function abortSession(client, sessionId) {
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} sessionId - Session ID
+ * @param {string} [directory] - Optional project directory to scope the call to
+ *   (threaded to the SDK as query.directory). Omitting it keeps the call
+ *   byte-for-byte identical to before.
  * @returns {Promise<Object>} Session status
  */
-async function getSessionStatus(client, sessionId) {
+async function getSessionStatus(client, sessionId, directory) {
   const result = await client.session.status({
-    path: { id: sessionId }
+    path: { id: sessionId },
+    ...directoryQuery(directory)
   });
 
   return result.data || {};

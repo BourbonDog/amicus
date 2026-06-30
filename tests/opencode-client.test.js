@@ -578,6 +578,157 @@ describe('OpenCode Client Wrapper', () => {
     });
   });
 
+  describe('directory threading (#48)', () => {
+    // The optional `directory` param defaults to undefined. When no caller
+    // passes it, every session call MUST be byte-for-byte identical to today —
+    // NO `query` key may appear in the args object (adding `query: {}` or
+    // `query: { directory: undefined }` would change the wire shape).
+    // When a caller DOES pass directory, it must surface as `query.directory`.
+
+    describe('createSession', () => {
+      const makeClient = () => ({
+        session: {
+          create: jest.fn().mockResolvedValue({ data: { id: 's1' } })
+        }
+      });
+
+      it('omits query entirely when no directory is passed (no-op)', async () => {
+        const client = makeClient();
+        const { createSession } = require('../src/opencode-client');
+        await createSession(client);
+        // Identical to the pre-#48 shape: create({}) with no query.
+        expect(client.session.create).toHaveBeenCalledWith({});
+        expect(client.session.create.mock.calls[0][0]).not.toHaveProperty('query');
+      });
+
+      it('includes query.directory when a directory is passed', async () => {
+        const client = makeClient();
+        const { createSession } = require('../src/opencode-client');
+        await createSession(client, '/proj/dir');
+        expect(client.session.create).toHaveBeenCalledWith({
+          query: { directory: '/proj/dir' }
+        });
+      });
+    });
+
+    describe('sendPrompt', () => {
+      const makeClient = () => ({
+        session: {
+          promptAsync: jest.fn().mockResolvedValue({ data: { parts: [] } })
+        }
+      });
+
+      it('omits query entirely when no directory is passed (no-op)', async () => {
+        const client = makeClient();
+        const { sendPrompt } = require('../src/opencode-client');
+        await sendPrompt(client, 's1', {
+          model: 'anthropic/claude-3-5-sonnet',
+          parts: [{ type: 'text', text: 'hi' }]
+        });
+        const args = client.session.promptAsync.mock.calls[0][0];
+        expect(args).not.toHaveProperty('query');
+        expect(Object.keys(args).sort()).toEqual(['body', 'path']);
+      });
+
+      it('includes query.directory when a directory is passed', async () => {
+        const client = makeClient();
+        const { sendPrompt } = require('../src/opencode-client');
+        await sendPrompt(client, 's1', {
+          model: 'anthropic/claude-3-5-sonnet',
+          parts: [{ type: 'text', text: 'hi' }],
+          directory: '/proj/dir'
+        });
+        const args = client.session.promptAsync.mock.calls[0][0];
+        expect(args.query).toEqual({ directory: '/proj/dir' });
+        expect(args.path).toEqual({ id: 's1' });
+      });
+    });
+
+    describe('getMessages', () => {
+      const makeClient = () => ({
+        session: {
+          messages: jest.fn().mockResolvedValue({ data: [] })
+        }
+      });
+
+      it('omits query entirely when no directory is passed (no-op)', async () => {
+        const client = makeClient();
+        const { getMessages } = require('../src/opencode-client');
+        await getMessages(client, 's1');
+        expect(client.session.messages).toHaveBeenCalledWith({
+          path: { id: 's1' }
+        });
+        expect(client.session.messages.mock.calls[0][0]).not.toHaveProperty('query');
+      });
+
+      it('includes query.directory when a directory is passed', async () => {
+        const client = makeClient();
+        const { getMessages } = require('../src/opencode-client');
+        await getMessages(client, 's1', '/proj/dir');
+        expect(client.session.messages).toHaveBeenCalledWith({
+          path: { id: 's1' },
+          query: { directory: '/proj/dir' }
+        });
+      });
+    });
+
+    describe('getSessionStatus', () => {
+      const makeClient = () => ({
+        session: {
+          status: jest.fn().mockResolvedValue({ data: {} })
+        }
+      });
+
+      it('omits query entirely when no directory is passed (no-op)', async () => {
+        const client = makeClient();
+        const { getSessionStatus } = require('../src/opencode-client');
+        await getSessionStatus(client, 's1');
+        expect(client.session.status).toHaveBeenCalledWith({
+          path: { id: 's1' }
+        });
+        expect(client.session.status.mock.calls[0][0]).not.toHaveProperty('query');
+      });
+
+      it('includes query.directory when a directory is passed', async () => {
+        const client = makeClient();
+        const { getSessionStatus } = require('../src/opencode-client');
+        await getSessionStatus(client, 's1', '/proj/dir');
+        expect(client.session.status).toHaveBeenCalledWith({
+          path: { id: 's1' },
+          query: { directory: '/proj/dir' }
+        });
+      });
+    });
+
+    describe('abortSession', () => {
+      const makeClient = () => ({
+        session: {
+          abort: jest.fn().mockResolvedValue({ data: true })
+        }
+      });
+
+      it('omits query entirely when no directory is passed (no-op)', async () => {
+        const client = makeClient();
+        const { abortSession } = require('../src/opencode-client');
+        await abortSession(client, 's1');
+        expect(client.session.abort).toHaveBeenCalledWith({
+          path: { id: 's1' }
+        });
+        expect(client.session.abort.mock.calls[0][0]).not.toHaveProperty('query');
+      });
+
+      it('includes query.directory when a directory is passed', async () => {
+        const client = makeClient();
+        const { abortSession } = require('../src/opencode-client');
+        await abortSession(client, 's1', '/proj/dir');
+        expect(client.session.abort).toHaveBeenCalledWith({
+          path: { id: 's1' },
+          query: { directory: '/proj/dir' }
+        });
+      });
+    });
+  });
+
   describe('loadMcpConfig', () => {
     const fs = require('fs');
     const os = require('os');

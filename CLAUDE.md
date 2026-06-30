@@ -163,6 +163,7 @@ src/
 │   ├── path-setup.js
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
 │   ├── pricing.js
+│   ├── project-path.js  # Canonical project-path helper.
 │   ├── prompt-source.js
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── result-schema.js
@@ -331,6 +332,7 @@ evals/
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/pricing.js` |  | `emptyUsageTotals()`, `sumPerMessageUsage()`, `lookupPricing()`, `resolveLegCost()`, `resolveUsage()` |
+| `utils/project-path.js` | Canonical project-path helper. | `canonicalProjectPath()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
