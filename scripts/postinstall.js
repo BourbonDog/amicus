@@ -198,12 +198,32 @@ function registerClaudeDesktop() {
  * awaited repair, and a synchronous-throw resolver) is guarded so nothing here
  * can turn into a non-zero exit (#29 always-exit-0 guard preserved).
  *
+ * OPT-IN PREWARM (#60): when AMICUS_PREFETCH_ELECTRON=1 the user has asked to
+ * aggressively prewarm the GUI at install time. We additionally drive a full
+ * (possibly-networked) fetch via repairElectron({force:true}). This is the ONLY
+ * path that may hit the network during install; it stays opt-in and non-fatal
+ * (a throw here is swallowed and exit 0 is preserved). The DEFAULT remains
+ * cache-only (#57).
+ *
  * @param {object} deps - { repairElectron } override for testing.
  * @returns {Promise<void>}
  */
 async function provisionElectron(deps = {}) {
   try {
     const _repair = deps.repairElectron || repairElectron;
+
+    // Opt-in aggressive prewarm (#60): full fetch if needed. Non-fatal.
+    if (process.env.AMICUS_PREFETCH_ELECTRON === '1') {
+      console.log('[amicus] AMICUS_PREFETCH_ELECTRON=1 — prewarming the Electron GUI binary (may download)...');
+      const forced = await _repair({ force: true });
+      if (forced && (forced.repaired || forced.usable)) {
+        console.log('[amicus] Electron GUI binary prewarmed.');
+        return;
+      }
+      console.warn('[amicus] Note: Electron prewarm did not complete now — the GUI provisions on first use.');
+      return;
+    }
+
     const result = await _repair({ cacheOnly: true, timeoutMs: PROVISION_TIMEOUT_MS });
     if (result && (result.repaired || result.usable)) { return; }
     // No cache hit (deferred), contended, or otherwise not provisioned now.
