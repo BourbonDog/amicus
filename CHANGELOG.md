@@ -5,6 +5,45 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-06-30
+
+Install resilience and council-failure correctness — the first two blocks of the post-1.5 backlog program.
+
+### Added
+- **Per-subcommand help.** `amicus <command> --help` now prints only that command's options instead of
+  the full global usage; bare `amicus --help` is unchanged.
+- **Zero-credit OpenRouter key warning at setup.** Setup now does a non-blocking `GET /api/v1/key`
+  check and warns when a key is free-tier or has no remaining credit, so a credit-less key is flagged
+  up front instead of 402-ing on the first paid model call.
+- **`amicus doctor` engine-recovery guidance.** The opencode-engine check now explains the
+  transient install-rollback failure mode and gives copy-paste recovery steps.
+- **Postinstall verifies the Electron binary.** When the optional Electron download/extract fails (or
+  AV quarantines the binary), the install now prints a clear non-fatal notice that headless runs and
+  the council still work — instead of silently leaving a broken GUI to discover later.
+- **CI tarball guard.** A new `check:tarball` step asserts every lifecycle-referenced script actually
+  ships in the published package, so a future packaging change can't silently drop it.
+- **README "Requirements & Dependencies" section** consolidating Node, git, OpenRouter credits, API-key
+  env vars, the optional Electron GUI, the bundled opencode engine, and OS support.
+
+### Fixed
+- **Council / headless runs no longer report success when every model call fails.** On the shared-server
+  MCP path, a run whose calls all errored (e.g. an OpenRouter 402) was finalized as `complete` with a
+  0-byte summary, so `amicus_status` showed success and the error was lost. Non-2xx/402 responses are
+  now detected at the OpenCode client boundary even when no assistant message is emitted, the
+  shared-server finalize routes through the same terminal-state classifier as the CLI, and a failed run
+  can never silently default to `complete`; `amicus_read` surfaces the failure reason.
+- **`amicus_status` elapsed time** is now bounded by the run's completed/aborted/crashed timestamp
+  instead of wall-clock-since-start, so a finished run reports its real duration.
+- **`amicus_setup` (MCP)** no longer claims an Electron window appeared when Electron is unavailable —
+  it pre-flights and returns an honest error directing you to the headless terminal wizard.
+- **Clearer "session not found"** — the message now names the resolved project so you know to pass the
+  original `project`.
+- **Non-fatal postinstall.** An internal skill-copy / MCP-registration failure no longer exits non-zero
+  and rolls back the entire global install; it warns and continues.
+- **`github:` install on Windows now runs identically to the registry install.** Removed the
+  consumer-facing `prepare` lifecycle that triggered npm's clone→prepare→nested-install→cached-pack
+  path (the rollback source); git hooks are still configured for contributors via `postinstall`.
+
 ## [1.5.1] - 2026-06-29
 
 A headless-reliability fix for reasoning-heavy models.
