@@ -27,6 +27,11 @@ function elapsedMs(metadata) {
   return durationBetween(metadata.createdAt, end) ?? 0;
 }
 
+// Non-complete terminal statuses: a run that ended in one of these failed (or
+// was stopped) and may have no usable summary. amicus_read surfaces
+// metadata.reason for these instead of a bare "No summary available" (#36).
+const FAILED_TERMINAL_STATUSES = ['error', 'crashed', 'timeout', 'idle-timeout', 'aborted'];
+
 const sharedServer = new SharedServerManager({ logger });
 
 /**
@@ -514,21 +519,25 @@ const handlers = {
     }
     // Default: summary
     const summaryPath = path.join(sessionDir, 'summary.md');
-    if (!fs.existsSync(summaryPath)) {
-      return textResult('No summary available (session may still be running or was not folded).');
-    }
     const metaForRead = (() => {
       try { return JSON.parse(fs.readFileSync(path.join(sessionDir, 'metadata.json'), 'utf-8')); }
       catch { return {}; }
     })();
-    const summaryText = fs.readFileSync(summaryPath, 'utf-8');
+    const summaryText = fs.existsSync(summaryPath)
+      ? fs.readFileSync(summaryPath, 'utf-8')
+      : '';
     const header = metaForRead.model ? `**Model:** ${metaForRead.model}\n\n` : '';
-    // A failed shared-server run writes an EXISTING 0-byte summary.md (so we hit
-    // this file-exists branch, not "No summary available"). Surface the failure
-    // reason instead of returning an empty/uninformative body (#36).
-    if ((metaForRead.status === 'error' || metaForRead.status === 'crashed') && !summaryText.trim()) {
+    // A run that ended in a failed terminal status may have no usable summary:
+    // a crashed/timed-out run never writes summary.md, and a fast-failed
+    // shared-server run writes an EXISTING 0-byte summary.md. In both cases
+    // surface metadata.reason instead of a bare "No summary available" or an
+    // empty body (#36). Complete/partial-summary runs are unaffected.
+    if (FAILED_TERMINAL_STATUSES.includes(metaForRead.status) && !summaryText.trim()) {
       const reason = metaForRead.reason || 'Unknown error';
-      return textResult(`${header}**Status:** ${metaForRead.status}\n**Reason:** ${reason}\n\n(No summary — the session ended with an error.)`);
+      return textResult(`${header}**Status:** ${metaForRead.status}\n**Reason:** ${reason}\n\n(No summary — the session ended in status '${metaForRead.status}'.)`);
+    }
+    if (!summaryText.trim()) {
+      return textResult('No summary available (session may still be running or was not folded).');
     }
     return textResult(header + summaryText);
   },
