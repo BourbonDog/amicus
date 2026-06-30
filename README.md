@@ -23,6 +23,7 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 
 - [What is Amicus](#what-is-amicus)
 - [Quick start](#quick-start)
+- [Requirements & Dependencies](#requirements--dependencies)
 - [The Council](#the-council)
 - [The parallel window](#the-parallel-window)
 - [Commands](#commands)
@@ -67,16 +68,6 @@ The postinstall step auto-configures everything — no manual registration:
 - Registers the **MCP server** in Claude Code and in Claude Desktop / Cowork, so the Amicus tools appear natively.
 - Installs **both skills** into `~/.claude/skills/` — `second-opinion` (the council) and `sidecar` (the chat skill).
 
-## Prerequisites & what it costs you
-
-Before your first run:
-
-- **Node.js ≥ 18** — `node --version` to check.
-- **An active Claude Code or Cowork session** — Amicus is orchestrated by Claude; it is not a standalone chatbot.
-- **At least one paid model API key** — OpenRouter (covers the most models) or a direct Google / OpenAI / Anthropic / DeepSeek key. Add one with `amicus setup` or `amicus key <provider> <key>`.
-
-**What a run costs.** A sidecar is a single model call. A full council is typically **~5–8 paid model calls** (e.g. 3 reviewers across 2 fan-out waves + 1 chair). Amicus shows an estimate before each council and enforces a built-in budget gate that refuses ultra-expensive models (o3-pro class) unless you opt in with `--no-cost-gate`. You pay your providers directly for the tokens; Amicus itself is free and open-source.
-
 **Configure:**
 
 ```bash
@@ -110,15 +101,52 @@ A window opens alongside your editor with Gemini ready, pre-loaded with your con
 
 ### Install from GitHub
 
-The npm package is the primary path. To install straight from the repo instead (the postinstall runs identically — same MCP registration, same two skills):
+The npm package is the primary path. To install straight from the repo instead — the postinstall runs **identically** (same MCP registration, same two skills) — you just need `git` on your `PATH`:
 
 ```bash
 npm install -g github:BourbonDog/amicus
 ```
 
+See [Requirements & Dependencies](#requirements--dependencies) for the full prerequisite list.
+
 ### Contributor setup
 
 Cloning to develop Amicus? See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the dev setup, git-hook wiring, and test commands.
+
+---
+
+## Requirements & Dependencies
+
+Everything you need before your first run, and what's optional.
+
+**Runtime**
+
+- **Node.js ≥ 18** — `node --version` to check. This is the only hard runtime prerequisite.
+- **An active Claude Code or Cowork session** — Amicus is orchestrated by Claude; it is not a standalone chatbot.
+
+**Install path & the git toolchain**
+
+- **From the npm registry (recommended):** `npm install -g amicus`. No build toolchain required — the package ships prebuilt.
+- **From GitHub:** `npm install -g github:BourbonDog/amicus` runs **identically** — same MCP registration, same two skills, same postinstall. The one extra requirement is a working **git** on your `PATH`, since npm clones the repo to install it (`git --version` to check).
+
+**Model API keys** — at least one is required
+
+- **OpenRouter** covers the most models with one key, or use a **direct Google / OpenAI / Anthropic / DeepSeek** key. Add one with `amicus setup` or `amicus key <provider> <key>`; keys live in `~/.config/amicus/.env`. The supported env vars are `OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` (the legacy `GEMINI_API_KEY` is still accepted), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `DEEPSEEK_API_KEY`.
+- ⚠️ **OpenRouter keys need purchased credits.** A brand-new, zero-credit key *passes* setup's live validation but then fails at runtime with a **402** on the first real call. Buy a small amount of credit before you run a council.
+
+**Electron — optional (GUI only)**
+
+- Electron is an **optional** dependency. It powers the graphical setup wizard and the parallel sidecar window. **Headless runs and the full council work without it** — if Electron is absent or can't open a window, `amicus setup` falls back to a readline wizard and sidecars run headless. `amicus doctor` reports Electron's presence accurately and never treats its absence as fatal.
+
+**The OpenCode engine**
+
+- The bundled **`opencode-ai`** engine (the conversation runtime) installs automatically as a normal dependency — you don't install it separately. Its own postinstall lays down ~11 per-platform binaries; a **transient** failure there (a spawn `ENOENT`, or an antivirus file-lock) can roll back the atomic install. If install fails partway or `amicus doctor` reports the OpenCode binary "not found", just **re-run** `npm install -g amicus` (clear the cache first if it persists: `npm cache clean --force`).
+
+**OS support**
+
+- **Windows 11, macOS, and Linux** are all supported; Amicus is first-class on **Windows** (developed and tested there, no WSL required). See the [Windows](#windows) section for platform specifics.
+
+**What a run costs.** A sidecar is a single model call. A full council is typically **~5–8 paid model calls** (e.g. 3 reviewers across 2 fan-out waves + 1 chair). Amicus shows an estimate before each council and enforces a built-in budget gate that refuses ultra-expensive models (o3-pro class) unless you opt in with `--no-cost-gate`. You pay your providers directly for the tokens; Amicus itself is free and open-source.
 
 ---
 
