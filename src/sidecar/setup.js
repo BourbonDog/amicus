@@ -71,6 +71,31 @@ function detectApiKeys() {
 }
 
 /**
+ * #38 — Non-blocking OpenRouter credit warning. Reads the OpenRouter key
+ * value, calls checkOpenRouterCredit, and prints a WARNING (never blocks) when
+ * the key is zero-credit or free tier. Any failure is swallowed silently — a
+ * credit probe must never stop setup from completing.
+ */
+/* eslint-disable no-console -- CLI wizard requires direct console output */
+async function warnOnLowOpenRouterCredit() {
+  try {
+    const { readApiKeyValues } = require('../utils/api-key-store');
+    const { checkOpenRouterCredit } = require('../utils/api-key-validation');
+    const values = readApiKeyValues();
+    const key = values && values.openrouter;
+    if (!key) { return; }
+    const { warning } = await checkOpenRouterCredit(key);
+    if (warning) {
+      console.log(`Warning: ${warning}`);
+      console.log('');
+    }
+  } catch (err) {
+    logger.debug('OpenRouter credit check skipped', { error: err.message });
+  }
+}
+/* eslint-enable no-console */
+
+/**
  * Prompt the user with a question via readline
  * @param {readline.Interface} rl - Readline interface
  * @param {string} prompt - Question text
@@ -246,6 +271,12 @@ async function runReadlineSetup() {
     }
     console.log('');
 
+    // #38 — non-blocking zero-credit / free-tier OpenRouter warning. Never
+    // blocks: free-tier councils against free models are legitimate.
+    if (keys.openrouter) {
+      await warnOnLowOpenRouterCredit();
+    }
+
     const mode = await askQuestion(rl,
       'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
     if (mode === '2') {
@@ -410,4 +441,5 @@ module.exports = {
   runApiKeySetup,
   seedCatalog,
   seedFreeCouncil,
+  warnOnLowOpenRouterCredit,
 };
