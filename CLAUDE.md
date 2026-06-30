@@ -122,6 +122,8 @@ src/
 │   ├── continue.js  # Sidecar Continue Operations - Handles continuing from previous sessions
 │   ├── conversation-mirror.js
 │   ├── crash-handler.js  # Crash Handler - Updates metadata to 'error' on uncaught exceptions
+│   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
+│   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
 │   ├── fanout.js
@@ -298,6 +300,8 @@ evals/
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
+| `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
+| `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `tests()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
