@@ -215,7 +215,7 @@ async function repairElectron({
     const zip = findZip({ version, platform, arch, env: process.env, fs });
     if (zip) {
       await extractFromCache({ zip, electronDir, platform, extract, fs });
-      return { repaired: isElectronUsable({ electronDir, platform, fs }) || true };
+      return { repaired: isElectronUsable({ electronDir, platform, fs }) };
     }
 
     if (cacheOnly) {

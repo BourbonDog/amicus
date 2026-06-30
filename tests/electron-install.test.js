@@ -156,6 +156,38 @@ describe('repairElectron (#53)', () => {
     expect(res.repaired).toBe(true);
   });
 
+  test('cacheOnly: a silently-failed extract (no usable exe) reports repaired:false', async () => {
+    const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
+    const zipPath = path.join(mkTmp('amicus-cz-'), 'electron-v28.3.3-win32-x64.zip');
+    fs.writeFileSync(zipPath, 'PKzip');
+
+    // Extract runs but does NOT materialize the exe (interrupted unzip / AV quarantine).
+    const extract = jest.fn(async () => { /* no exe written */ });
+    const spawn = jest.fn(() => { throw new Error('network must NOT be hit in cacheOnly'); });
+
+    const res = await ei.repairElectron({
+      cacheOnly: true,
+      electronDir: dir,
+      platform: 'win32',
+      version: '28.3.3',
+      arch: 'x64',
+      deps: {
+        cachedZip: () => zipPath,
+        extract,
+        spawn,
+        acquireLock: () => ({ release: () => {} }),
+      },
+    });
+
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(spawn).not.toHaveBeenCalled();
+    // The exe never landed → repaired must be FALSE. Regression guard for the
+    // `|| true` bug that reported every repair as successful even when the exe
+    // was missing (which #57's postinstall message trusts).
+    expect(fs.existsSync(path.join(distDir, exeName))).toBe(false);
+    expect(res.repaired).toBe(false);
+  });
+
   test('cacheOnly with NO cache returns {deferred:true, reason} and never downloads', async () => {
     const { dir } = fakeElectronDir({ withExe: false, platform: 'win32' });
     const extract = jest.fn();
