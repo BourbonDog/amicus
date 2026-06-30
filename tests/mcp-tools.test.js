@@ -338,6 +338,12 @@ describe('MCP Tool Definitions', () => {
       expect(guide).toContain('Claude Code CLI');
     });
 
+    test('surfaces the running amicus version (#33)', () => {
+      const guide = getGuideText();
+      const runningVersion = require('../package.json').version;
+      expect(guide).toContain(runningVersion);
+    });
+
   });
 
   describe('Input Validation (Security)', () => {

@@ -360,12 +360,20 @@ function getTools() {
  */
 function getGuideText() {
   const { getEffectiveAliases } = require('./utils/config');
+  const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
   const aliases = getEffectiveAliases();
   const aliasRows = Object.entries(aliases)
     .map(([name, model]) => `| ${name} | ${model} |`)
     .join('\n');
+  // #33: surface the running version (and a call-time staleness warning) so a
+  // post-upgrade agent session can tell it's running old code.
+  const warn = versionWarning();
+  const versionLine = `**Running amicus version:** ${RUNNING_VERSION}`
+    + (warn ? `\n\n> ⚠️ ${warn}` : '');
 
   return `# Amicus Usage Guide
+
+${versionLine}
 
 ## What Is Amicus?
 Amicus spawns parallel conversations with different LLMs and folds results back into your context.

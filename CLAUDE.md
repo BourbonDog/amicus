@@ -177,7 +177,8 @@ src/
 │   ├── thinking-validators.js  # Thinking Level Validators
 │   ├── update-notifier-loader.js  # update-notifier Loader
 │   ├── updater.js  # Updater Module
-│   └── validators.js  # Input Validators
+│   ├── validators.js  # Input Validators
+│   └── version-info.js  # After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
@@ -350,6 +351,7 @@ evals/
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
+| `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
 <!-- /AUTO:modules -->
 
 ---
