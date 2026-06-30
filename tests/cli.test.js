@@ -1041,6 +1041,9 @@ describe('CLI Argument Parser', () => {
       const usage = getUsage('continue');
       expect(usage).toContain("Options for 'continue':");
       expect(usage).toContain('--prompt');
+      // continue does NOT support --prompt-file (handleContinue reads only
+      // args.prompt/args.briefing); the block must not advertise it.
+      expect(usage).not.toContain('--prompt-file');
       expect(usage).not.toContain("Options for 'start':");
       expect(usage).not.toContain("Options for 'fanout':");
     });

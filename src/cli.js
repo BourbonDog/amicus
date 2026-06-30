@@ -409,7 +409,6 @@ Options for 'read':
 Options for 'continue':
   <task_id>                    Required. Session to build on (positional)
   --prompt <text>              Required. Briefing for the new session
-  --prompt-file <path>         Read the briefing from a UTF-8 file (XOR --prompt)
   --model <model>              Optional. Override the model (alias or provider/model)
   --cwd <path>                 Project directory (default: cwd)
   --no-ui                      Run without GUI (autonomous mode)
