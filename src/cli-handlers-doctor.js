@@ -143,7 +143,7 @@ async function runDoctorChecks(depsOverride = {}) {
         return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `repair failed: ${e.message} — headless still works`, hint: HINTS.doctorFix };
       }
       res = res || {};
-      if (res.repaired || res.usable) {
+      if (res.repaired) {
         return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null };
       }
       const why = res.reason ? ` — ${res.reason}` : '';

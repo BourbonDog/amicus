@@ -216,8 +216,13 @@ async function provisionElectron(deps = {}) {
     if (process.env.AMICUS_PREFETCH_ELECTRON === '1') {
       console.log('[amicus] AMICUS_PREFETCH_ELECTRON=1 — prewarming the Electron GUI binary (may download)...');
       const forced = await _repair({ force: true });
-      if (forced && (forced.repaired || forced.usable)) {
+      if (forced && forced.repaired) {
         console.log('[amicus] Electron GUI binary prewarmed.');
+        return;
+      }
+      if (forced && forced.quarantined) {
+        console.warn(`[amicus] Note: the Electron GUI binary could not be installed — ${forced.reason || 'antivirus quarantine.'}`);
+        console.warn('[amicus] Headless runs and the council already work without the GUI.');
         return;
       }
       console.warn('[amicus] Note: Electron prewarm did not complete now — the GUI provisions on first use.');
@@ -225,7 +230,7 @@ async function provisionElectron(deps = {}) {
     }
 
     const result = await _repair({ cacheOnly: true, timeoutMs: PROVISION_TIMEOUT_MS });
-    if (result && (result.repaired || result.usable)) { return; }
+    if (result && result.repaired) { return; }
     // AV quarantine (electron.exe deleted right after extract) needs ACTION, not
     // a generic "provisions on first use" notice — re-extracting can never win,
     // so print the allow-list instruction verbatim instead. (No retry loop.)
