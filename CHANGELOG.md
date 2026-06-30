@@ -5,6 +5,37 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-06-30
+
+Electron self-heal, a real `amicus doctor`, and the GUI on the design system — plus MCP/diagnostics correctness.
+
+### Added
+- **Electron self-heal.** Amicus now detects a broken or quarantined Electron install (a half-extracted
+  or AV-removed binary) and repairs it from the local download cache — **fully offline**. New
+  `amicus doctor --fix` heals in place, the GUI lazily provisions itself on first use, and an opt-in
+  `AMICUS_PREFETCH_ELECTRON=1` aggressively prewarms it. Install-time provisioning is cache-only (no
+  network during `npm install`) and never fails the install.
+- **`amicus doctor` is now a recovery hub.** Checks carry copy-paste remediation hints, report
+  OpenRouter credit/free-tier status, and warn when the resolved project root looks like an app/install
+  directory rather than your repo.
+- **Running version in MCP responses.** `amicus_status` / `amicus_guide` now report the running amicus
+  version and warn when the on-disk package is newer (restart your MCP client to load it).
+- **The GUI is on the design system.** The embedded OpenCode session UI is themed to the clay/gold
+  tokens, the load-failsafe error page and window backgrounds are token-driven, and a drift guard keeps
+  new hardcoded colors/fonts out of `electron/`.
+
+### Fixed
+- **Electron no longer reads "installed" when the binary is missing.** Runtime checks (including
+  `amicus doctor` and the GUI launch path) now stat the actual executable instead of trusting
+  `path.txt`, so a quarantined/half-extracted Electron is correctly detected — the root cause of the
+  silently-broken setup wizard.
+- **`amicus_fanout` forwards Cowork session pinning** (`--cowork-process` / parent session) to its
+  spawned legs, so context-inheriting fan-outs pin the right parent.
+- **`amicus_status` annotation corrected** — it is no longer declared read-only/idempotent, since its
+  wave branch updates metadata during crash detection.
+- **Wave counts account for crashed / idle-timeout legs** (documented remainder rule), so consumers
+  summing the named buckets no longer mismatch the total.
+
 ## [1.6.1] - 2026-06-30
 
 Project-directory and session-addressing correctness — agents, sessions, and the interactive GUI now agree on which project they're in.
