@@ -11,6 +11,8 @@ const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-
 const { readProgress, isStalled } = require('./sidecar/progress');
 const { SharedServerManager } = require('./utils/shared-server');
 const { durationBetween } = require('./utils/result-schema');
+const { canonicalProjectPath } = require('./utils/project-path');
+const { fileURLToPath } = require('url');
 
 /**
  * Elapsed run duration: time between createdAt and the run's end, bounding the
@@ -26,13 +28,93 @@ function elapsedMs(metadata) {
 
 const sharedServer = new SharedServerManager({ logger });
 
-/** Resolve the project directory with smart fallback. */
+/**
+ * Resolve the project directory synchronously.
+ *
+ * Resolution order (the MCP-roots step is async and lives in resolveProjectDir,
+ * which slots between the env override and the cwd fallback here):
+ *   explicit project arg → AMICUS_PROJECT_DIR env → process.cwd() → $HOME.
+ *
+ * A stdio MCP server spawned by a desktop app inherits the APP INSTALL DIR as
+ * cwd, so AMICUS_PROJECT_DIR lets the launcher pin the real project before the
+ * cwd fallback ever fires. The resolved path is canonicalized so it matches
+ * however a later lookup spells the same directory.
+ */
 function getProjectDir(explicitProject) {
-  if (explicitProject && fs.existsSync(explicitProject)) { return explicitProject; }
+  if (explicitProject && fs.existsSync(explicitProject)) {
+    return canonicalProjectPath(explicitProject);
+  }
+  const envProject = process.env.AMICUS_PROJECT_DIR;
+  if (envProject && fs.existsSync(envProject)) {
+    return canonicalProjectPath(envProject);
+  }
   const cwd = process.cwd();
-  if (cwd !== '/' && fs.existsSync(cwd)) { return cwd; }
+  if (cwd !== '/' && fs.existsSync(cwd)) { return canonicalProjectPath(cwd); }
   if (cwd === '/') { logger.warn('cwd is root (/), falling back to $HOME'); }
-  return os.homedir();
+  return canonicalProjectPath(os.homedir());
+}
+
+// Cache the client's roots/list result once per server so concurrent tool
+// calls don't each pay a round-trip. Keyed by the McpServer wrapper so distinct
+// servers (e.g. across tests) don't share state.
+const _rootsCache = new WeakMap();
+
+/**
+ * Fetch the client's first file:// root via a roots/list round-trip, cached.
+ * Returns a canonical path string, or null when roots are unavailable
+ * (no client, no roots capability, empty list, non-file roots, or an error).
+ * @param {object} mcpServer - the McpServer wrapper exposing `.server`.
+ * @returns {Promise<string|null>}
+ */
+async function getClientRoot(mcpServer) {
+  const core = mcpServer && mcpServer.server;
+  if (!core || typeof core.listRoots !== 'function') { return null; }
+  if (_rootsCache.has(mcpServer)) { return _rootsCache.get(mcpServer); }
+
+  let resolved = null;
+  try {
+    const caps = typeof core.getClientCapabilities === 'function'
+      ? core.getClientCapabilities() : undefined;
+    if (caps && caps.roots) {
+      const { roots } = await core.listRoots();
+      const fileRoot = Array.isArray(roots)
+        ? roots.find((r) => r && typeof r.uri === 'string' && r.uri.startsWith('file:'))
+        : null;
+      if (fileRoot) {
+        const p = fileURLToPath(fileRoot.uri);
+        if (fs.existsSync(p)) { resolved = canonicalProjectPath(p); }
+      }
+    }
+  } catch (err) {
+    logger.warn('roots/list failed, falling back to cwd', { error: err.message });
+  }
+  _rootsCache.set(mcpServer, resolved);
+  return resolved;
+}
+
+/**
+ * Resolve the project directory, consulting the MCP client's roots when no
+ * explicit project / env override is given.
+ *
+ * Order: explicit project arg → AMICUS_PROJECT_DIR env → client first file://
+ * root → process.cwd() → $HOME. All branches are canonicalized.
+ * @param {string|undefined} explicitProject
+ * @param {object} [mcpServer] - the McpServer wrapper (for the roots round-trip).
+ * @returns {Promise<string>}
+ */
+async function resolveProjectDir(explicitProject, mcpServer) {
+  if (explicitProject && fs.existsSync(explicitProject)) {
+    return canonicalProjectPath(explicitProject);
+  }
+  const envProject = process.env.AMICUS_PROJECT_DIR;
+  if (envProject && fs.existsSync(envProject)) {
+    return canonicalProjectPath(envProject);
+  }
+  if (mcpServer) {
+    const root = await getClientRoot(mcpServer);
+    if (root) { return root; }
+  }
+  return getProjectDir(undefined);
 }
 
 /** Read session metadata from disk, or null if not found */
@@ -697,14 +779,22 @@ const LEGACY_TOOL_ALIASES = {
 async function startMcpServer() {
   const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
   const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-  const server = new McpServer({ name: 'amicus', version: require('../package.json').version });
+  const server = new McpServer(
+    { name: 'amicus', version: require('../package.json').version },
+    // Declare the `roots` capability so the client advertises its roots and we
+    // can request them (roots/list) when no explicit project is supplied.
+    { capabilities: { roots: {} } }
+  );
 
   for (const tool of getTools()) {
     const register = (name) => server.registerTool(
       name,
       { description: tool.description, inputSchema: tool.inputSchema, annotations: tool.annotations },
       async (input) => {
-        try { return await handlers[tool.name](input, getProjectDir(input.project)); }
+        try {
+          const project = await resolveProjectDir(input.project, server);
+          return await handlers[tool.name](input, project);
+        }
         catch (err) {
           logger.error(`MCP tool error: ${name}`, { error: err.message });
           return textResult(`Error: ${err.message}`, true);
@@ -727,4 +817,7 @@ async function startMcpServer() {
   process.stderr.write('[amicus] MCP server running on stdio\n');
 }
 
-module.exports = { handlers, startMcpServer, getProjectDir, LEGACY_TOOL_ALIASES };
+module.exports = {
+  handlers, startMcpServer, getProjectDir, resolveProjectDir, getClientRoot,
+  LEGACY_TOOL_ALIASES,
+};

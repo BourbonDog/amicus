@@ -1,16 +1,25 @@
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const { canonicalProjectPath } = require('../src/utils/project-path');
 
 describe('getProjectDir', () => {
+  let savedEnv;
   beforeEach(() => {
     jest.resetModules();
+    // Resolution now consults AMICUS_PROJECT_DIR before cwd; isolate these tests.
+    savedEnv = process.env.AMICUS_PROJECT_DIR;
+    delete process.env.AMICUS_PROJECT_DIR;
+  });
+  afterEach(() => {
+    if (savedEnv === undefined) { delete process.env.AMICUS_PROJECT_DIR; }
+    else { process.env.AMICUS_PROJECT_DIR = savedEnv; }
   });
 
-  test('returns explicit project path when valid directory', () => {
+  test('returns explicit project path (canonicalized) when valid directory', () => {
     const { getProjectDir } = require('../src/mcp-server');
     const result = getProjectDir(os.tmpdir());
-    expect(result).toBe(os.tmpdir());
+    expect(result).toBe(canonicalProjectPath(os.tmpdir()));
   });
 
   test('ignores explicit project path when directory does not exist', () => {
@@ -26,7 +35,7 @@ describe('getProjectDir', () => {
       jest.resetModules();
       const { getProjectDir } = require('../src/mcp-server');
       const result = getProjectDir();
-      expect(result).toBe(os.homedir());
+      expect(result).toBe(canonicalProjectPath(os.homedir()));
     } finally {
       process.cwd = originalCwd;
     }
@@ -39,7 +48,7 @@ describe('getProjectDir', () => {
       jest.resetModules();
       const { getProjectDir } = require('../src/mcp-server');
       const result = getProjectDir();
-      expect(result).toBe(os.tmpdir());
+      expect(result).toBe(canonicalProjectPath(os.tmpdir()));
     } finally {
       process.cwd = originalCwd;
     }
@@ -52,7 +61,7 @@ describe('getProjectDir', () => {
       jest.resetModules();
       const { getProjectDir } = require('../src/mcp-server');
       const result = getProjectDir(undefined);
-      expect(result).toBe(os.homedir());
+      expect(result).toBe(canonicalProjectPath(os.homedir()));
     } finally {
       process.cwd = originalCwd;
     }
