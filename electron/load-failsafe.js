@@ -14,6 +14,8 @@
 
 'use strict';
 
+const { tokenCss } = require('../src/design/tokens');
+
 const DEFAULT_TIMEOUT_MS = 15000;
 const ERR_ABORTED = -3; // benign: fires on in-page redirects/navigation replacement
 
@@ -62,14 +64,19 @@ function escapeHTML(value) {
  * @returns {string} full HTML document
  */
 function buildLoadErrorHTML({ url, errorCode, errorDescription }) {
+  // This page renders after the OpenCode UI definitively failed to load, in a
+  // data: URL context. Inline the design tokens with absolute font URLs so the
+  // bundled webfonts resolve and var(--x) references work with no external CSS.
   return `<!DOCTYPE html>
 <html><head><style>
-  body { background: #2D2B2A; color: #D4D0CC; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+${tokenCss({ absoluteFontUrls: true })}
+  body { background: var(--bg); color: var(--text-2);
+         font-family: var(--font-sans);
          display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
   .box { max-width: 440px; padding: 24px; }
-  h1 { color: #D97757; font-size: 16px; margin: 0 0 12px; }
-  p { font-size: 13px; line-height: 1.5; color: #A09B96; margin: 0 0 10px; }
-  code { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; color: #D4D0CC;
+  h1 { color: var(--accent); font-size: 16px; margin: 0 0 12px; }
+  p { font-size: 13px; line-height: 1.5; color: var(--text-2); margin: 0 0 10px; }
+  code { font-family: var(--font-mono); font-size: 11px; color: var(--text-1);
          word-break: break-all; }
 </style></head><body>
   <div class="box">
