@@ -113,6 +113,11 @@ function createSession(projectDir, taskId, metadata) {
 
   // Create empty conversation.jsonl
   fs.writeFileSync(path.join(sessionDir, 'conversation.jsonl'), '', { mode: 0o600 });
+
+  // #40: record the taskId -> project mapping in the global index so a later
+  // lookup that defaults to a DIFFERENT project can still find this session.
+  // Best-effort: recordSession never throws.
+  require('./utils/session-index').recordSession(taskId, metadata.project || projectDir);
 }
 
 /**

@@ -12,6 +12,7 @@ const { readProgress, isStalled } = require('./sidecar/progress');
 const { SharedServerManager } = require('./utils/shared-server');
 const { durationBetween } = require('./utils/result-schema');
 const { canonicalProjectPath } = require('./utils/project-path');
+const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 
 /**
@@ -231,6 +232,7 @@ const handlers = {
 
         // Write initial metadata (MCP handler owns this, runHeadless skips it)
         fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+        recordSession(taskId, cwd); // #40: global index for cross-project lookup
         const metaPath = path.join(sessionDir, 'metadata.json');
         const serverPort = server.url ? new URL(server.url).port : null;
         fs.writeFileSync(metaPath, JSON.stringify({
@@ -334,6 +336,7 @@ const handlers = {
 
     if (child && child.pid) {
       fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+      recordSession(taskId, cwd); // #40: global index for cross-project lookup
       const metaPath = path.join(sessionDir, 'metadata.json');
       if (!fs.existsSync(metaPath)) {
         fs.writeFileSync(metaPath, JSON.stringify({
@@ -609,6 +612,7 @@ const handlers = {
     try { spawnSidecarProcess(args, sessionDir); } catch (err) {
       return textResult(`Failed to continue: ${err.message}`, true);
     }
+    recordSession(newTaskId, cwd); // #40: global index for cross-project lookup
     return textResult(JSON.stringify({
       taskId: newTaskId, status: 'running',
       message: 'Continuation started. Use amicus_status to check progress.',
@@ -690,6 +694,10 @@ const handlers = {
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
         models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
       }, null, 2), { mode: 0o600 });
+      // #40: index the wave AND each leg so status/read of any leg resolves the
+      // project even when the default later defaults to a different one.
+      recordSession(waveId, cwd);
+      for (const legId of legIds) { recordSession(legId, cwd); }
     } catch (err) {
       return textResult(`Failed to prepare fan-out wave: ${err.message}`, true);
     }

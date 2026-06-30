@@ -169,7 +169,9 @@ src/
 │   ├── result-schema.js
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
+│   ├── session-index.js  # Global session index (issue #40).
 │   ├── session-lock.js
+│   ├── session-path.js  # Session path resolution.
 │   ├── shared-server.js
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── thinking-validators.js  # Thinking Level Validators
@@ -338,7 +340,9 @@ evals/
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
+| `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME()`, `recordSession()`, `lookupSessionProject()` |
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
+| `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
