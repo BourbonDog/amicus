@@ -662,6 +662,15 @@ const handlers = {
   },
 
   async amicus_setup() {
+    const { checkElectronAvailable } = require('./sidecar/interactive');
+    if (!checkElectronAvailable()) {
+      return textResult(
+        'The setup GUI cannot open because Electron is not installed, so no '
+        + 'window appeared. Run `amicus setup` in your terminal instead — it '
+        + 'falls back to a headless (readline) wizard for API key configuration.',
+        true
+      );
+    }
     try { spawnSidecarProcess(['setup']); } catch (err) {
       return textResult(`Failed to launch setup: ${err.message}`, true);
     }

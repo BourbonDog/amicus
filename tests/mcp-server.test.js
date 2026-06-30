@@ -125,6 +125,55 @@ describe('MCP spawn arg building', () => {
   });
 });
 
+describe('amicus_setup Electron pre-flight', () => {
+  test('pre-flights checkElectronAvailable and returns isError message routing to headless setup when Electron is absent', async () => {
+    await jest.isolateModulesAsync(async () => {
+      const spawnSpy = jest.fn(() => ({
+        pid: 12345, unref: jest.fn(),
+        stdout: { on: jest.fn() }, stderr: { on: jest.fn() },
+      }));
+      jest.doMock('child_process', () => ({ spawn: spawnSpy }));
+      const checkSpy = jest.fn(() => false);
+      jest.doMock('../src/sidecar/interactive', () => ({
+        ...jest.requireActual('../src/sidecar/interactive'),
+        checkElectronAvailable: checkSpy,
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const result = await h.amicus_setup();
+      expect(checkSpy).toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      const text = result.content[0].text;
+      // Must not claim a window appeared
+      expect(text).not.toMatch(/window should appear/i);
+      // Must route the user to the headless terminal-based setup
+      expect(text).toMatch(/headless|terminal|amicus setup/i);
+      // Must NOT have spawned the detached GUI setup process
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  test('spawns the setup process and reports accurately when Electron is present', async () => {
+    await jest.isolateModulesAsync(async () => {
+      let capturedArgs;
+      const spawnSpy = jest.fn((cmd, args) => {
+        capturedArgs = args;
+        return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+      });
+      jest.doMock('child_process', () => ({ spawn: spawnSpy }));
+      jest.doMock('../src/sidecar/interactive', () => ({
+        ...jest.requireActual('../src/sidecar/interactive'),
+        checkElectronAvailable: jest.fn(() => true),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const result = await h.amicus_setup();
+      expect(result.isError).toBeUndefined();
+      expect(spawnSpy).toHaveBeenCalled();
+      expect(capturedArgs).toContain('setup');
+      expect(result.content[0].text).toMatch(/window should appear/i);
+    });
+  });
+});
+
 describe('safeSessionDir (shared validator)', () => {
   const { safeSessionDir, validateTaskId } = require('../src/utils/validators');
 
