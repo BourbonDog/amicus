@@ -151,11 +151,16 @@ async function runDoctorChecks(depsOverride = {}) {
         return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null };
       }
       const why = res.reason ? ` — ${res.reason}` : '';
-      const detail = res.deferred
-        ? `deferred${why}`
-        : res.contended
-          ? `repair already in progress${why}`
-          : `not provisioned${why}`;
+      // Quarantine (AV deleted electron.exe post-extract) is NOT a deferral and
+      // must NEVER be silently retried: surface the allow-list instruction as a
+      // WARN and STOP. No re-run of repairElectron here (no loop).
+      const detail = res.quarantined
+        ? `antivirus quarantine${why}`
+        : res.deferred
+          ? `deferred${why}`
+          : res.contended
+            ? `repair already in progress${why}`
+            : `not provisioned${why}`;
       return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint: HINTS.doctorFix };
     }
     return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.doctorFix };

@@ -15,9 +15,7 @@
  *   node_modules/electron/dist/<exe>  -> the actual binary
  * #59: when ELECTRON_OVERRIDE_DIST_PATH is set, the exe lives in that dir
  * instead of <pkg>/dist (mirrors electron/index.js + install.js semantics).
- *
- * Cache layout (@electron/get):
- *   <cacheRoot>/<sha256>/electron-v<ver>-<platform>-<arch>.zip
+ * Cache layout (@electron/get): <cacheRoot>/<sha256>/electron-v<ver>-<platform>-<arch>.zip
  */
 
 'use strict';
@@ -28,6 +26,7 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 
 const { resolveCacheRoots } = require('./electron-cache');
+const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 
 /** Default on-disk location of the installed electron package. */
 function defaultElectronDir() {
@@ -116,15 +115,6 @@ function cachedZip({ version, platform = process.platform, arch = process.arch, 
   return null;
 }
 
-/** Quarantine / AV note appended to win32 deferral reasons. */
-function avHint(platform) {
-  if (platform === 'win32') {
-    return ' Windows Defender / antivirus may have quarantined electron.exe; '
-      + 'allow it and re-run, or reinstall.';
-  }
-  return '';
-}
-
 /**
  * Single-flight lockfile: only one caller may extract/install at a time, so
  * concurrent callers don't double-extract (Windows EBUSY). Throws an
@@ -178,6 +168,15 @@ async function controlledProvision({
     checksums: undefined,
   });
   await extractFromCache({ zip, electronDir, platform, extract, fs });
+}
+
+/** Bind the fs-aware probes for the post-extract AV-quarantine verify. */
+function verifyExtractOutcome({ electronDir, platform, fs }) {
+  return verifyQuarantine({
+    isElectronUsable: () => isElectronUsable({ electronDir, platform, fs }),
+    resolveExe: () => resolveElectronBinary({ electronDir, platform, fs }),
+    platform,
+  });
 }
 
 /** Drive electron's own install.js with force_no_cache semantics. */
@@ -243,7 +242,8 @@ async function repairElectron({
     if (zip) {
       try {
         await extractFromCache({ zip, electronDir, platform, extract, fs });
-        return { repaired: isElectronUsable({ electronDir, platform, fs }) };
+        // Non-throwing extract w/ absent exe = the AV-quarantine signature.
+        return verifyExtractOutcome({ electronDir, platform, fs });
       } catch (extractErr) {
         // Corrupt cached artifact: delete the bad zip so it can't poison the
         // cache, then fall through to a forced fresh download (unless offline).
@@ -264,20 +264,25 @@ async function repairElectron({
     }
 
     // Attempt 2 (online): CONTROLLED download+extract instead of a blind
-    // install.js spawn. Fetch the zip ourselves via the SAME @electron/get api
-    // install.js uses, extract offline, then report the REAL usability — a
-    // structurally-successful download that produced no usable exe is a FAILURE
-    // (no false success; #53).
+    // install.js spawn — fetch via the SAME @electron/get api install.js uses,
+    // extract offline, then report the REAL usability. A structurally-successful
+    // download that produced no usable exe is a FAILURE (no false success; #53).
+    let controlledExtracted = false;
     try {
       await controlledProvision({
         electronDir, platform, arch, version, downloadArtifact, extract, fs, env: process.env,
       });
+      controlledExtracted = true; // download + extract returned without throwing
     } catch {
       // Controlled download/extract failed (network, checksum, unzip). Try the
       // installer as a LAST resort — it can NEVER short-circuit the honest
       // verify below; we always return isElectronUsable().
       try { runInstaller({ electronDir, force, spawn }); } catch { /* ignore */ }
     }
+    // A NON-throwing controlled extract that left no usable exe is the
+    // AV-quarantine signature — surface it actionably (no false success, no
+    // loop). A controlled FAILURE only reports plain repaired:false.
+    if (controlledExtracted) { return verifyExtractOutcome({ electronDir, platform, fs }); }
     return { repaired: isElectronUsable({ electronDir, platform, fs }) };
   } finally {
     try { lock.release(); } catch { /* ignore */ }

@@ -226,6 +226,14 @@ async function provisionElectron(deps = {}) {
 
     const result = await _repair({ cacheOnly: true, timeoutMs: PROVISION_TIMEOUT_MS });
     if (result && (result.repaired || result.usable)) { return; }
+    // AV quarantine (electron.exe deleted right after extract) needs ACTION, not
+    // a generic "provisions on first use" notice — re-extracting can never win,
+    // so print the allow-list instruction verbatim instead. (No retry loop.)
+    if (result && result.quarantined) {
+      console.warn(`[amicus] Note: the Electron GUI binary could not be installed — ${result.reason || 'antivirus quarantine.'}`);
+      console.warn('[amicus] Headless runs and the council already work without the GUI.');
+      return;
+    }
     // No cache hit (deferred), contended, or otherwise not provisioned now.
     console.warn('[amicus] Note: the Electron GUI binary is not provisioned yet — it will download on first use of the interactive GUI / setup-wizard.');
     console.warn(`[amicus] Headless runs and the council already work. To provision the GUI now: ${HINTS.doctorFix}`);
