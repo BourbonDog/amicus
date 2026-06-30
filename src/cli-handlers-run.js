@@ -173,6 +173,10 @@ async function handleFanout(args) {
     contextTurns: args['context-turns'],
     contextSince: args['context-since'],
     contextMaxTokens: args['context-max-tokens'],
+    // #10: forward the Cowork parent so MCP-spawned fanout legs pin the right
+    // session (mirrors handleStart's coworkProcess plumbing). Without this the
+    // spawned `--cowork-process` flag is dropped and buildContext gets null.
+    coworkProcess: args['cowork-process'],
     mcp: args.mcp,
     mcpConfig: args['mcp-config'],
     noMcp: args['no-mcp'],
