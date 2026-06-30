@@ -613,7 +613,7 @@ describe('Headless Mode Runner', () => {
 
       // On second poll, simulate metadata.status = 'aborted'
       const originalReadFileSync = fs.readFileSync;
-      fs.readFileSync = jest.fn((filePath, encoding) => {
+      fs.readFileSync = jest.fn((filePath, _encoding) => {
         if (typeof filePath === 'string' && filePath.includes('metadata.json') && pollCount >= 2) {
           return JSON.stringify({ status: 'aborted' });
         }
@@ -951,7 +951,7 @@ describe('Headless Mode Runner', () => {
     it('should trigger fold when [SIDECAR_FOLD] is on its own line', async () => {
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ id: 'p1', type: 'text', text: `Summary content\n[SIDECAR_FOLD]` }]
+        parts: [{ id: 'p1', type: 'text', text: 'Summary content\n[SIDECAR_FOLD]' }]
       }]);
 
       const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 10000);
