@@ -5,6 +5,45 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.6] - 2026-07-01
+
+A second independent review (GLM 5.2), adversarially verified against source, then fixed across 11 lanes.
+20 of 22 confirmed findings fixed; 2 partial (deferred as follow-ups). Full unit suite green.
+
+### Security
+- **The `project`/`cwd` MCP input is now sandboxed.** Previously any caller could pass an arbitrary directory
+  (e.g. a system path) and Amicus would create session files and spawn a sidecar there. A new project-root
+  allow-list rejects out-of-bounds paths **before** any filesystem write or spawn, while still allowing paths
+  under your home directory, the current working directory, `AMICUS_PROJECT_DIR`/`AMICUS_PROJECT_ROOTS`, or the
+  MCP client's advertised root — so legitimate `--cwd` use is unaffected.
+- **Folded-back sidecar summaries are fenced as untrusted output.** `amicus_read`'s returned summary — produced
+  by an arbitrary model — is now wrapped in a read-only fence (mirroring the outbound conversation fence), so
+  model prose entering the orchestrator's context is marked as data, not instructions.
+- **The Electron content view no longer shares the privileged bridge.** The embedded OpenCode web view gets a
+  minimal preload that exposes nothing privileged, and IPC handlers validate the sender, so only the toolbar can
+  trigger update/settings actions.
+
+### Fixed
+- **A crashed OpenCode server is now detected.** The shared-server crash/restart machinery was unreachable (no
+  exit listener was ever attached); a server exit is now wired to the restart path.
+- **Session metadata is written atomically** (temp file + rename), so a crash mid-write can no longer corrupt
+  `metadata.json` and silently mask an abort marker.
+- **Port lookup works on Windows.** The stale-process cleanup used a hardcoded `lsof` (a no-op on Windows); it
+  now uses the cross-platform `netstat`-based lookup.
+- **A fan-out leg whose setup throws no longer sinks the whole wave** — the leg is turned into an error result
+  and `wave.json` is still written.
+- **The setup window can't hang on a spawn failure** — a spawn error now resolves cleanly instead of leaving the
+  launch promise pending forever, and the Electron child is killed on parent exit.
+- **Project-scoped `opencode.json` resolves against the target project**, not the launcher's working directory.
+- Smaller correctness/cleanup fixes: single-peer-agreed council findings now count as corroborated; unknown
+  council verdicts are guarded; tool-call turns render a summary instead of blank; quote-aware `--mcp` command
+  parsing; a model-object shape guard; a single shared duration formatter; timed mirror teardown; a lock on the
+  continuation session; and canonical session-route separators.
+
+### Known follow-ups
+- Fencing `amicus_council_tally`/`amicus_verdict` (they return JSON records, so they need a field-level fence).
+- Removing the now-dead top-level `tool_use` formatter branch (blocked on an unrelated test assertion).
+
 ## [1.7.5] - 2026-07-01
 
 A batch of fixes from an independent DeepSeek V4 Pro code review, each verified against source.
