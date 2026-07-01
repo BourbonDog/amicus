@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — Amicus</title>
+<meta name="description" content="Amicus privacy policy: a local-first developer tool with no telemetry. Your data stays on your machine; prompts go only to the AI providers you configure with your own keys.">
+<meta name="robots" content="index,follow">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;
+  --s1:#111113;
+  --border:#222225;
+  --border2:#2c2c30;
+  --t1:#f5f5f3;
+  --t2:#a1a1a0;
+  --t3:#666;
+  --accent:#d97757;
+  --accent2:#e8b24a;
+  --green:#4ade80;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Outfit',system-ui,sans-serif;color:var(--t1);background:var(--bg);-webkit-font-smoothing:antialiased;line-height:1.65;overflow-x:hidden}
+::selection{background:var(--accent);color:#fff}
+a{color:var(--accent);text-decoration:none;transition:color .15s}
+a:hover{color:var(--accent2)}
+code{font-family:'IBM Plex Mono',monospace;font-size:.86em;background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:.08em .38em;color:var(--t1)}
+
+/* top bar */
+.bar{max-width:820px;margin:0 auto;padding:1.6rem 1.6rem .4rem;display:flex;align-items:center;justify-content:space-between}
+.brand{display:inline-flex;align-items:center;gap:.6rem;font-weight:700;font-size:1.05rem;color:var(--t1)}
+.brand:hover{color:var(--t1)}
+.back{font-size:.85rem;color:var(--t2)}
+.back:hover{color:var(--accent2)}
+
+/* content */
+main{max-width:820px;margin:0 auto;padding:2rem 1.6rem 5rem}
+h1{font-size:2.4rem;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:.5rem}
+.eyebrow{color:var(--t3);font-family:'IBM Plex Mono',monospace;font-size:.8rem;letter-spacing:.03em;margin-bottom:2rem}
+h2{font-size:1.25rem;font-weight:700;letter-spacing:-.01em;margin:2.6rem 0 .8rem;padding-top:1.6rem;border-top:1px solid var(--border)}
+p{color:var(--t2);margin:0 0 1rem}
+ul{color:var(--t2);margin:0 0 1rem;padding-left:1.3rem}
+li{margin:.4rem 0}
+strong{color:var(--t1);font-weight:600}
+.lead{color:var(--t1);font-size:1.05rem}
+
+/* TL;DR callout */
+.callout{background:var(--s1);border:1px solid var(--border2);border-left:3px solid var(--accent);border-radius:8px;padding:1.1rem 1.3rem;margin:0 0 2rem}
+.callout h2{border:0;padding:0;margin:0 0 .6rem;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent2);font-family:'IBM Plex Mono',monospace}
+.callout ul{margin:0}
+
+footer{max-width:820px;margin:0 auto;padding:2rem 1.6rem 3rem;border-top:1px solid var(--border);color:var(--t3);font-size:.85rem;display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center}
+footer a{color:var(--t2)}
+footer a:hover{color:var(--accent2)}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <a class="brand" href="./">
+    <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="7" fill="#2D2B2A"/><g stroke="#D97757" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="miter"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/></g><path d="M19 8H28" stroke="#E8B24A" stroke-width="1.2" stroke-linecap="round"/></svg>
+    Amicus
+  </a>
+  <a class="back" href="./">← Back to site</a>
+</div>
+
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="eyebrow">Effective date: July 1, 2026</p>
+
+  <p class="lead">Amicus is an open-source, local-first developer tool — a CLI, an MCP server, and a Claude Code plugin — that runs entirely on your own machine. This policy explains what happens to your data when you use it.</p>
+
+  <div class="callout">
+    <h2>The short version</h2>
+    <ul>
+      <li>Amicus does <strong>not</strong> collect, transmit, or store any of your data on servers operated by the author. There is <strong>no telemetry, analytics, or tracking</strong> of any kind.</li>
+      <li>Everything Amicus stores stays <strong>on your machine</strong>.</li>
+      <li>When you run a council or fork a conversation, Amicus sends your prompts and context to the <strong>third-party AI providers you choose</strong>, using <strong>your own API keys</strong>. That data is then handled under <em>those providers'</em> privacy policies — not this one.</li>
+    </ul>
+  </div>
+
+  <h2>Who operates Amicus</h2>
+  <p>Amicus is maintained by Christian Wagner as an open-source project, distributed via npm and GitHub. You install and run it locally. There is <strong>no</strong> Amicus-operated server, account system, login, or backend.</p>
+
+  <h2>What Amicus does NOT do</h2>
+  <ul>
+    <li>No telemetry, usage analytics, or crash reporting.</li>
+    <li>No tracking or advertising identifiers.</li>
+    <li>No collection of personal information.</li>
+    <li>No transmission of your prompts, code, files, or conversations to the author or to any Amicus-operated service (there is none).</li>
+  </ul>
+
+  <h2>Data stored locally on your machine</h2>
+  <p>Amicus writes the following to your local filesystem <strong>only</strong>. None of it is transmitted to the author.</p>
+  <ul>
+    <li><strong>Session transcripts and metadata</strong> — saved under <code>.claude/amicus_sessions/</code> in your working directory so you can resume, read, and fold conversations.</li>
+    <li><strong>Configuration</strong> — your model preferences and settings.</li>
+    <li><strong>API keys</strong> — the provider keys you supply are stored locally (for example in a <code>.env</code> file or your local config) and are used only to authenticate your requests to the providers you selected. They are never sent anywhere except the corresponding provider's own API.</li>
+  </ul>
+  <p>You can delete this data at any time by removing the relevant files.</p>
+
+  <h2>Third-party AI providers (where your content goes)</h2>
+  <p>Amicus's core purpose is to route your prompts and context to AI models. When you run a council, a fork, or a fan-out, the content you provide — which may include prompts, source code, documents, and prior conversation — is sent, using <strong>your</strong> API keys, to whichever providers you have configured. That content is then subject to each provider's own privacy policy and data-usage terms.</p>
+  <p>Common providers and their policies:</p>
+  <ul>
+    <li><strong>OpenAI</strong> (GPT) — <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">openai.com/policies/privacy-policy</a></li>
+    <li><strong>Google</strong> (Gemini) — <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a></li>
+    <li><strong>Anthropic</strong> (Claude) — <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">anthropic.com/legal/privacy</a></li>
+    <li><strong>DeepSeek</strong> — <a href="https://www.deepseek.com/" target="_blank" rel="noopener">deepseek.com</a></li>
+    <li><strong>OpenRouter</strong> (gateway to many models) — <a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">openrouter.ai/privacy</a></li>
+    <li><strong>Any other provider you configure</strong> — refer to that provider's policy.</li>
+  </ul>
+  <p>If you use a <strong>local</strong> model provider (for example, Ollama), the content sent to that provider stays on your own machine and is not transmitted to any third party.</p>
+  <p>You are responsible for reviewing and accepting the terms of the providers you enable, and for not sending a provider data you are not permitted to share.</p>
+
+  <h2>Update checks</h2>
+  <p>Amicus uses the <code>update-notifier</code> library to check the public <strong>npm registry</strong> for a newer released version. That request goes to npm — not to the author — and does not include your prompts or personal data. You can disable it by setting the environment variable <code>NO_UPDATE_NOTIFIER=1</code>.</p>
+
+  <h2>Children's privacy</h2>
+  <p>Amicus is a developer tool, is not directed to children under 13, and does not knowingly collect information from anyone.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>This policy may be updated as Amicus evolves. Changes are published on this page and in the <a href="https://github.com/BourbonDog/amicus/blob/main/PRIVACY.md" target="_blank" rel="noopener">repository</a>, and the effective date above is updated accordingly.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or concerns? Open an issue at <a href="https://github.com/BourbonDog/amicus/issues" target="_blank" rel="noopener">github.com/BourbonDog/amicus/issues</a>.</p>
+</main>
+
+<footer>
+  <a href="./">Amicus</a>
+  <a href="https://github.com/BourbonDog/amicus" target="_blank" rel="noopener">GitHub</a>
+  <a href="https://www.npmjs.com/package/amicus" target="_blank" rel="noopener">npm</a>
+  <span>© 2026 Christian Wagner · MIT License</span>
+</footer>
+
+</body>
+</html>
