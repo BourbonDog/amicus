@@ -5,6 +5,18 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-06-30
+
+### Fixed
+- **The Electron self-heal no longer wedges itself.** A repair that was killed or hung mid-run (or a
+  pre-1.7.3 build) could leave an orphaned single-flight lockfile, after which *every* subsequent repair
+  — including `amicus doctor --fix` and the GUI launch — reported "another electron repair is already in
+  progress" and did nothing. The lock now records the holder's PID + timestamp and reclaims an orphaned
+  lock (dead holder, older than a 15-minute TTL, or the old empty format), so the GUI can self-heal
+  again; a live, recent holder still yields honest contention (no double-extract). The controlled
+  download is time-boxed (and the last-resort installer bounded) so a stalled fetch can't recreate the
+  stuck lock. **After upgrading, an already-stuck lock clears itself on the next repair.**
+
 ## [1.7.2] - 2026-06-30
 
 The Electron self-heal now tells the truth, heals the cases it can, and clearly explains the ones it can't.
