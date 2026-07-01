@@ -5,6 +5,43 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-07-01
+
+A batch of fixes from an independent DeepSeek V4 Pro code review, each verified against source.
+
+### Fixed
+- **Long prompts no longer truncate on Windows.** The `amicus_start` and `amicus_continue` MCP
+  handlers passed the full prompt inline on the spawned command line, which silently truncated once
+  it crossed Windows's ~32 KB argument cap — so a sidecar could run against a corrupted briefing with
+  no error. Both paths now write the prompt to a `briefing.md` in the session directory and pass
+  `--prompt-file`, matching the existing fanout handler; the CLI `continue` command learned
+  `--prompt-file` as well.
+- **`getMessages` no longer masks SDK error responses.** An error-shaped response with no `data`
+  array was indistinguishable from "zero messages" in the poll loop; it now logs a warning carrying
+  the session id and surfaced error while still returning `[]`.
+- **`getSessionDir` rejects path-traversal task ids.** A defense-in-depth containment guard (the same
+  check style used elsewhere in the codebase) throws on a task id that would escape the sessions dir.
+- **Cross-platform `auth.json` discovery.** The one-time OpenCode key-import path was hardcoded to the
+  Unix XDG location; it now probes `$XDG_DATA_HOME`, `~/.local/share`, and `%APPDATA%` (Windows) and
+  uses the first that exists.
+
+### Changed
+- **The fold-completion marker is harder to spoof.** A bare `[SIDECAR_FOLD]` echoed mid-output (e.g. a
+  model reproducing these instructions or summarizing a prior sidecar session) no longer forces a
+  premature fold — the marker now completes a run only when it is the final non-empty line of output,
+  with the existing idle/timeout fallbacks unchanged so a run can never hang.
+- **The conversation-mirror tool-call buffer is bounded.** Capped at 2000 entries with a separate
+  dedup set, so a very long tool-heavy session can't grow it without limit.
+- **Unknown `--no-*` flags are treated as boolean.** They no longer swallow the following positional
+  argument (`--no-x=value` still records its inline value; allowlisted flags are unchanged).
+- **`--prompt-file` validation is order-independent.** `validateStartArgs` now resolves the prompt
+  source itself, so validation no longer depends on the handler having resolved it first.
+
+### Docs
+- **Corrected the `tiktoken` dependency note.** It is declared but unused; token sizing uses a
+  `length/4` heuristic. Added caveat comments at both estimators. (Removing the unused dependency is
+  tracked as a follow-up.)
+
 ## [1.7.4] - 2026-06-30
 
 ### Fixed
