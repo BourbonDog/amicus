@@ -125,6 +125,7 @@ src/
 │   ├── electron-cache.js  # Electron download-cache root resolution (#53 helper).
 │   ├── electron-ensure.js  # ensureElectron() — lazy first-GUI provisioning (#55).
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
+│   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
@@ -306,6 +307,7 @@ evals/
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `tests()` |
+| `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |

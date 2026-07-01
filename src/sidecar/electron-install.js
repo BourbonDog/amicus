@@ -22,11 +22,11 @@
 
 const fsDefault = require('fs');
 const path = require('path');
-const os = require('os');
 const { spawnSync } = require('child_process');
 
 const { resolveCacheRoots } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
+const { acquireRepairLock } = require('./electron-lock');
 
 /** Default on-disk location of the installed electron package. */
 function defaultElectronDir() {
@@ -115,22 +115,6 @@ function cachedZip({ version, platform = process.platform, arch = process.arch, 
   return null;
 }
 
-/**
- * Single-flight lockfile: only one caller may extract/install at a time, so
- * concurrent callers don't double-extract (Windows EBUSY). Throws an
- * EEXIST-coded error when another holder is active.
- */
-function defaultAcquireLock({ electronDir, fs = fsDefault }) {
-  const lockPath = path.join(os.tmpdir(), `amicus-electron-repair-${Buffer.from(electronDir).toString('hex').slice(0, 16)}.lock`);
-  const fd = fs.openSync(lockPath, 'wx'); // EEXIST if held
-  return {
-    release() {
-      try { fs.closeSync(fd); } catch { /* ignore */ }
-      try { fs.rmSync(lockPath, { force: true }); } catch { /* ignore */ }
-    },
-  };
-}
-
 /** Restore path.txt so electron/index.js resolves the freshly-extracted exe. */
 function writePathTxt({ electronDir, platform, fs }) {
   fs.writeFileSync(path.join(electronDir, 'path.txt'), platformExe(platform));
@@ -166,6 +150,10 @@ async function controlledProvision({
     platform,
     arch,
     checksums: undefined,
+    // Bound the fetch so a stalled/blocked network aborts (got v11 timeouts:
+    // socket = inactivity, request = total) instead of hanging the repair —
+    // a hung-then-killed download is what orphaned the single-flight lock.
+    downloadOptions: { timeout: { socket: 60000, request: 480000 } },
   });
   await extractFromCache({ zip, electronDir, platform, extract, fs });
 }
@@ -212,9 +200,12 @@ async function repairElectron({
 } = {}) {
   const fs = deps.fs || fsDefault;
   const extract = deps.extract || require('extract-zip');
-  const spawn = deps.spawn || ((cmd, args, o) => spawnSync(cmd, args, { ...o, timeout: timeoutMs }));
+  // Default-bound the last-resort installer spawn (8 min) so a first-GUI-use
+  // provision that reaches runInstaller without an explicit timeoutMs can't hang
+  // the holder — the caller's timeoutMs still wins when provided.
+  const spawn = deps.spawn || ((cmd, args, o) => spawnSync(cmd, args, { ...o, timeout: timeoutMs || 480000 }));
   const findZip = deps.cachedZip || ((o) => cachedZip(o));
-  const acquireLock = deps.acquireLock || ((o) => defaultAcquireLock({ ...o, fs }));
+  const acquireLock = deps.acquireLock || ((o) => acquireRepairLock({ ...o, fs }));
   const downloadArtifact = deps.downloadArtifact || require('@electron/get').downloadArtifact;
 
   if (!version) {
