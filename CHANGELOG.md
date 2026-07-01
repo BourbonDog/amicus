@@ -5,6 +5,21 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-06-30
+
+### Fixed
+- **The Electron GUI self-heal survives a stalled `extract-zip` on Node 24.** On some Node 24 boxes the
+  bundled `extract-zip@2.0.1` (its latest release — it cannot be bumped) stalls mid-extract: its promise
+  never resolves *and* never rejects. Because the self-heal `await`s it, the event loop drains and the
+  process exits `0` with a half-extracted `dist/` and **no `electron.exe`** — so the repair looked like it
+  "did nothing." Extraction is now hardened two ways: `extract-zip` is bounded by an idle + max timer (a
+  stall becomes a caught error instead of a silent hang, and the live timer prevents the premature exit),
+  and if it stalls, throws, or produces no files, amicus falls back to a **native OS unzip** (Windows:
+  bundled `bsdtar`, then PowerShell `Expand-Archive`; macOS: `ditto`, then `unzip`; Linux: `unzip`, then
+  `tar`) — each verified to extract the exact Electron zip that `extract-zip` choked on. Success is still
+  reported **only** when the real binary lands on disk (the existing exe-stat verify is unchanged), so no
+  path can claim a false repair.
+
 ## [1.7.3] - 2026-06-30
 
 ### Fixed
