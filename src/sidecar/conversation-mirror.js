@@ -9,11 +9,20 @@
  * except the injectable `now`.
  */
 
+// Bound the unbounded toolCalls accumulator (BL-4). This array holds {id,name,input}
+// objects whose `input` can be large; it is the only mirror-state member that grows
+// per tool call with no natural bound and carries heavy payloads. Keep the most recent
+// N, dropping the oldest. Dedup identity lives in the separate seenToolCallIds Set so
+// dropping an old array entry never causes a re-append or a spurious toolCalls.length
+// bump in the headless idle detector.
+const MAX_TOOL_CALLS = 2000;
+
 /** Fresh cursor for a session's mirror. */
 function createMirrorState() {
   return {
     seenTextParts: new Map(),   // partId -> last captured text length
-    toolCalls: [],              // [{id,name,input}]
+    toolCalls: [],              // [{id,name,input}] — capped at MAX_TOOL_CALLS (most-recent-N)
+    seenToolCallIds: new Set(), // stable dedup identity for tool calls (survives the cap)
     seenToolResultIds: new Set(),
     receivingReported: false,
     output: '',                 // accumulated assistant text
@@ -75,9 +84,13 @@ function mirrorMessages(messages, state, opts = {}) {
             progressUpdates.push({ stage: 'receiving', extra: { messagesReceived: 1 } });
           }
         }
-      } else if ((part.type === 'tool_use' || part.type === 'tool') && !state.toolCalls.find(t => t.id === part.id)) {
+      } else if ((part.type === 'tool_use' || part.type === 'tool') && !state.seenToolCallIds.has(part.id)) {
         const toolCall = { id: part.id, name: part.name, input: part.input };
+        state.seenToolCallIds.add(part.id);
         state.toolCalls.push(toolCall);
+        // Bound growth: keep the most recent N tool-call payloads (BL-4). Dedup is the
+        // Set above, so dropping the oldest here never causes a re-append.
+        if (state.toolCalls.length > MAX_TOOL_CALLS) { state.toolCalls.shift(); }
         appendLines.push({ role: 'assistant', type: 'tool_use', toolCall, timestamp: now() });
 
         // Update progress on tool_use detection

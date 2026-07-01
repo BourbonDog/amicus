@@ -211,7 +211,17 @@ const handlers = {
     const { generateTaskId } = require('./sidecar/start');
     const taskId = generateTaskId();
 
-    const args = ['start', '--prompt', input.prompt, '--task-id', taskId, '--client', 'cowork'];
+    // New session → canonical amicus dir (writes).
+    const sessionDir = getSessionDir(cwd, taskId);
+
+    // BL-1: the prompt goes via file, not inline. A long prompt passed as a CLI
+    // arg silently truncates/corrupts on Windows (~32KB command-line cap). Mirror
+    // the amicus_fanout briefing-file pattern; the spawn command line must NOT
+    // carry the prompt. --prompt-file is resolved by handleStart/resolvePromptSource.
+    // The file itself is written just before the spawn fallback below (the
+    // shared-server path passes the prompt in-process and never reads args).
+    const briefingPath = path.join(sessionDir, 'briefing.md');
+    const args = ['start', '--prompt-file', briefingPath, '--task-id', taskId, '--client', 'cowork'];
     if (resolvedModel) { args.push('--model', resolvedModel); }
     const agent = (input.noUi && (!input.agent || input.agent.toLowerCase() === 'chat'))
       ? 'build' : input.agent;
@@ -228,9 +238,6 @@ const handlers = {
     if (input.parentSession)    { args.push('--session-id', input.parentSession); }
     if (input.windowPosition)   { args.push('--position', input.windowPosition); }
     args.push('--cwd', cwd);
-
-    // New session → canonical amicus dir (writes).
-    const sessionDir = getSessionDir(cwd, taskId);
 
     if (sharedServer.enabled && input.noUi) {
       // Shared server path: headless only, delegates to runHeadless()
@@ -349,14 +356,20 @@ const handlers = {
       }
     }
 
-    // Feature flag disabled (or shared server failed): fall back to per-process spawn
+    // Feature flag disabled (or shared server failed): fall back to per-process spawn.
+    // BL-1: create the session dir and write the prompt to briefing.md BEFORE the
+    // spawn so --prompt-file (built above) resolves to a real file, keeping the
+    // full prompt off the ~32KB-capped Windows command line.
     let child;
-    try { child = spawnSidecarProcess(args, sessionDir); } catch (err) {
+    try {
+      fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
+      child = spawnSidecarProcess(args, sessionDir);
+    } catch (err) {
       return textResult(`Failed to start Amicus: ${err.message}`, true);
     }
 
     if (child && child.pid) {
-      fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
       recordSession(taskId, cwd); // #40: global index for cross-project lookup
       const metaPath = path.join(sessionDir, 'metadata.json');
       if (!fs.existsSync(metaPath)) {
@@ -631,14 +644,22 @@ const handlers = {
     // New continuation session → canonical amicus dir (writes).
     const sessionDir = getSessionDir(cwd, newTaskId);
 
-    const args = ['continue', input.taskId, '--prompt', input.prompt,
+    // BL-1: the follow-up prompt goes via file, not inline, so a long prompt is
+    // never truncated by the ~32KB Windows command-line cap. handleContinue reads
+    // --prompt-file. The briefing is written into the NEW session dir below.
+    const briefingPath = path.join(sessionDir, 'briefing.md');
+    const args = ['continue', input.taskId, '--prompt-file', briefingPath,
       '--task-id', newTaskId, '--client', 'cowork', '--cwd', cwd];
     if (input.model) { args.push('--model', input.model); }
     if (input.noUi) { args.push('--no-ui', '--agent', 'build'); }
     if (input.timeout) { args.push('--timeout', String(input.timeout)); }
     if (input.contextTurns)     { args.push('--context-turns', String(input.contextTurns)); }
     if (input.contextMaxTokens) { args.push('--context-max-tokens', String(input.contextMaxTokens)); }
-    try { spawnSidecarProcess(args, sessionDir); } catch (err) {
+    try {
+      fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
+      spawnSidecarProcess(args, sessionDir);
+    } catch (err) {
       return textResult(`Failed to continue: ${err.message}`, true);
     }
     recordSession(newTaskId, cwd); // #40: global index for cross-project lookup

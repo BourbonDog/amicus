@@ -72,6 +72,12 @@ describe('Context Filtering', () => {
       const text = 'a'.repeat(10); // 10 chars = 2.5 tokens -> 2
       expect(estimateTokens(text)).toBe(2);
     });
+
+    it('should use floor rounding (intentionally differs from context-compression ceil)', () => {
+      // 9 chars = 2.25 tokens -> floor 2. Guards against anyone "unifying"
+      // this with context-compression's estimateTokenCount (which uses ceil).
+      expect(estimateTokens('a'.repeat(9))).toBe(2);
+    });
   });
 
   describe('takeLastNTurns', () => {

@@ -49,6 +49,17 @@ describe('Session Manager', () => {
 
       expect(result).toBe(path.join(projectDir, '.claude', 'amicus_sessions', taskId));
     });
+
+    it('should throw when taskId escapes the sessions directory (path traversal)', () => {
+      expect(() => getSessionDir(projectDir, path.join('..', '..', 'etc'))).toThrow(/path traversal/);
+    });
+
+    it('should return the expected path for a normal taskId', () => {
+      const taskId = 'wave-abc123-1';
+      expect(getSessionDir(projectDir, taskId)).toBe(
+        path.join(projectDir, '.claude', 'amicus_sessions', taskId)
+      );
+    });
   });
 
   describe('createSession', () => {

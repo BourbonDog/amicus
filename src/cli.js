@@ -16,6 +16,7 @@ const {
   validateApiKey,
   validateThinkingLevel
 } = require('./utils/validators');
+const { resolvePromptSource } = require('./utils/prompt-source');
 const { logger } = require('./utils/logger');
 
 /**
@@ -75,6 +76,14 @@ function parseArgs(argv) {
         result['exclude-mcp'] = result['exclude-mcp'] || [];
         result['exclude-mcp'].push(next);
         i++;
+        continue;
+      }
+
+      // Unknown negation flags: known --no-* flags are already handled by
+      // isBooleanFlag() above; treat any *unregistered* --no-* token as a
+      // boolean so it can never swallow the following positional as a value.
+      if (key.startsWith('no-')) {
+        result[key] = true;
         continue;
       }
 
@@ -153,6 +162,19 @@ function parseValue(key, value) {
  * @returns {{ valid: boolean, error?: string }}
  */
 function validateStartArgs(args) {
+  // Resolve the prompt source (--prompt XOR --prompt-file) here so validation
+  // is self-contained and order-independent: a caller need not have run
+  // resolvePromptSource() first. Skipped when args.prompt is already a plain
+  // string (the classic path / already-resolved by handleStart), so the empty
+  // '' case still falls through to the presence/content checks below.
+  if (args['prompt-file'] !== undefined || args.prompt === undefined || args.prompt === true) {
+    const res = resolvePromptSource(args);
+    if (res.error) {
+      return { valid: false, code: 'MISSING_PROMPT', error: res.error };
+    }
+    args.prompt = res.prompt;
+  }
+
   // Required: --prompt (presence check)
   if (!args.prompt) {
     return { valid: false, error: 'Error: --prompt is required' };

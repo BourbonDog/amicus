@@ -28,6 +28,10 @@ async function handleStart(args) {
     const promptRes = resolvePromptSource(args);
     if (promptRes.error) { process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error })); }
     args.prompt = promptRes.prompt;
+    // Drop --prompt-file now that it's resolved: validateStartArgs' self-contained
+    // guard would otherwise re-run resolvePromptSource with both prompt and
+    // prompt-file set and trip its mutually-exclusive branch.
+    delete args['prompt-file'];
   }
   if (args.json && !args['no-ui']) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --json requires --no-ui' }));

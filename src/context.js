@@ -52,7 +52,8 @@ function estimateTokens(text) {
   if (!text || typeof text !== 'string') {
     return 0;
   }
-  // Spec specifies ~4 chars per token
+  // Intentional cheap heuristic (spec §5.3: ~4 chars/token). Not a real BPE
+  // tokenizer — under/over-counts for CJK, code, and punctuation-dense text.
   return Math.floor(text.length / 4);
 }
 

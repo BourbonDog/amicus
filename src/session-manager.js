@@ -37,7 +37,15 @@ const LEGACY_SESSIONS_DIR = 'sidecar_sessions';
  * // Returns: '/path/to/project/.claude/amicus_sessions/abc123'
  */
 function getSessionDir(projectDir, taskId) {
-  return path.join(projectDir, '.claude', SESSIONS_DIR, taskId);
+  const sessionDir = path.join(projectDir, '.claude', SESSIONS_DIR, taskId);
+  // Defense-in-depth: reject a taskId that would escape the sessions dir
+  // (path separators / '..'). Callers pre-validate today; this is a backstop.
+  const base = path.resolve(projectDir, '.claude', SESSIONS_DIR);
+  const resolved = path.resolve(sessionDir);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+    throw new Error('Invalid task ID: path traversal detected');
+  }
+  return sessionDir;
 }
 
 /**

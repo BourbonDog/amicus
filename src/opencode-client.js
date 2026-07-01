@@ -261,7 +261,21 @@ async function getMessages(client, sessionId, directory) {
     ...directoryQuery(directory)
   });
 
-  return result.data || [];
+  // A well-formed response carries a data array (possibly empty). If it's
+  // absent, the SDK returned an error shape (e.g. a 5xx with { error }) that
+  // would otherwise be indistinguishable from "0 messages" — surface it so the
+  // poll loop's diagnostics aren't blind. Return contract unchanged: an array.
+  if (!Array.isArray(result.data)) {
+    const { logger } = require('./utils/logger');
+    logger.warn('getMessages: SDK response had no data array', {
+      sessionId,
+      status: (result.response && result.response.status) || (result.error && result.error.status),
+      error: result.error && (result.error.message || JSON.stringify(result.error))
+    });
+    return [];
+  }
+
+  return result.data;
 }
 
 /**

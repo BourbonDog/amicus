@@ -125,6 +125,87 @@ describe('MCP spawn arg building', () => {
   });
 });
 
+describe('BL-1: prompt goes via --prompt-file, never inline (Windows ~32KB cap)', () => {
+  const bigPrompt = 'X'.repeat(40000); // exceeds the ~32KB command-line cap
+
+  test('amicus_start writes briefing.md and spawns --prompt-file, not inline --prompt', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bl1-start-'));
+    let capturedArgs;
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('child_process', () => ({
+          spawn: jest.fn((cmd, args) => {
+            capturedArgs = args;
+            return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+          }),
+        }));
+        // Disable the shared-server path so we exercise the spawn fallback.
+        const prev = process.env.SIDECAR_SHARED_SERVER;
+        process.env.SIDECAR_SHARED_SERVER = '0';
+        try {
+          const { handlers: h } = require('../src/mcp-server');
+          const result = await h.amicus_start(
+            { prompt: bigPrompt, noUi: true, model: 'google/gemini-test' }, tmpDir);
+          const { taskId } = JSON.parse(result.content[0].text);
+
+          // The spawn command line must NOT carry the prompt inline.
+          expect(capturedArgs).not.toContain('--prompt');
+          expect(capturedArgs).not.toContain(bigPrompt);
+
+          // It must pass --prompt-file pointing at the session's briefing.md.
+          const idx = capturedArgs.indexOf('--prompt-file');
+          expect(idx).toBeGreaterThan(-1);
+          const briefingPath = capturedArgs[idx + 1];
+          expect(briefingPath).toContain(taskId);
+          expect(briefingPath.endsWith('briefing.md')).toBe(true);
+
+          // The prompt must be written to that file, in full.
+          expect(fs.existsSync(briefingPath)).toBe(true);
+          expect(fs.readFileSync(briefingPath, 'utf-8')).toBe(bigPrompt);
+        } finally {
+          if (prev === undefined) { delete process.env.SIDECAR_SHARED_SERVER; }
+          else { process.env.SIDECAR_SHARED_SERVER = prev; }
+        }
+      });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('amicus_continue writes briefing.md and spawns --prompt-file, not inline --prompt', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bl1-cont-'));
+    let capturedArgs;
+    try {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('child_process', () => ({
+          spawn: jest.fn((cmd, args) => {
+            capturedArgs = args;
+            return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+          }),
+        }));
+        const { handlers: h } = require('../src/mcp-server');
+        const result = await h.amicus_continue(
+          { taskId: 'parent-1', prompt: bigPrompt, noUi: true }, tmpDir);
+        const { taskId: newTaskId } = JSON.parse(result.content[0].text);
+
+        expect(capturedArgs).not.toContain('--prompt');
+        expect(capturedArgs).not.toContain(bigPrompt);
+
+        const idx = capturedArgs.indexOf('--prompt-file');
+        expect(idx).toBeGreaterThan(-1);
+        const briefingPath = capturedArgs[idx + 1];
+        expect(briefingPath).toContain(newTaskId);
+        expect(briefingPath.endsWith('briefing.md')).toBe(true);
+
+        expect(fs.existsSync(briefingPath)).toBe(true);
+        expect(fs.readFileSync(briefingPath, 'utf-8')).toBe(bigPrompt);
+      });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('amicus_setup Electron pre-flight', () => {
   test('pre-flights checkElectronAvailable and returns isError message routing to headless setup when Electron is absent', async () => {
     await jest.isolateModulesAsync(async () => {

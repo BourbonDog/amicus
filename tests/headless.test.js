@@ -46,7 +46,7 @@ jest.mock('../src/utils/logger', () => ({
   }
 }));
 
-const { runHeadless, extractSummary, COMPLETE_MARKER, FOLD_MARKER, formatFoldOutput, DEFAULT_TIMEOUT } = require('../src/headless');
+const { runHeadless, extractSummary, findTrailingFoldMarker, COMPLETE_MARKER, FOLD_MARKER, formatFoldOutput, DEFAULT_TIMEOUT } = require('../src/headless');
 
 describe('Headless Mode Runner', () => {
   let mockClient;
@@ -416,6 +416,52 @@ describe('Headless Mode Runner', () => {
     it('should trim whitespace', () => {
       const output = '  Summary  \n  [SIDECAR_FOLD]';
       expect(extractSummary(output)).toBe('Summary');
+    });
+
+    it('splits on a TRAILING marker even with blank lines after it (#BL-7)', () => {
+      const output = 'Summary content\n[SIDECAR_FOLD]\n\n  ';
+      expect(extractSummary(output)).toBe('Summary content');
+    });
+
+    it('does NOT strip a marker echoed mid-output — only the trailing one (#BL-7)', () => {
+      // A bare marker on its own line followed by MORE content is echoed prose,
+      // not the delimiter — it must survive in the extracted summary.
+      const output = 'Reproducing the format:\n[SIDECAR_FOLD]\nthen more analysis';
+      expect(extractSummary(output)).toBe(output.trim());
+    });
+
+    it('splits on the trailing marker when an earlier one is echoed (#BL-7)', () => {
+      const output = 'See [SIDECAR_FOLD] usage above\nrest of summary\n[SIDECAR_FOLD]';
+      expect(extractSummary(output)).toBe('See [SIDECAR_FOLD] usage above\nrest of summary');
+    });
+  });
+
+  describe('findTrailingFoldMarker (#BL-7)', () => {
+    it('matches a marker that is the final non-empty line', () => {
+      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD]')).toBeGreaterThanOrEqual(0);
+      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD]\n\n')).toBeGreaterThanOrEqual(0);
+      expect(findTrailingFoldMarker('   [SIDECAR_FOLD]   ')).toBeGreaterThanOrEqual(0);
+    });
+
+    it('does NOT match a marker echoed inline in prose', () => {
+      expect(findTrailingFoldMarker('splits on the [SIDECAR_FOLD] marker')).toBe(-1);
+    });
+
+    it('does NOT match a standalone marker followed by more content', () => {
+      // The core hardening: an own-line marker mid-output is not a completion signal.
+      expect(findTrailingFoldMarker('here:\n[SIDECAR_FOLD]\nmore work')).toBe(-1);
+    });
+
+    it('returns the TRAILING marker index when several appear', () => {
+      const out = 'a\n[SIDECAR_FOLD]\nb\n[SIDECAR_FOLD]';
+      // Index points at the last marker line (after "b\n"), not the first.
+      expect(findTrailingFoldMarker(out)).toBe(out.lastIndexOf('[SIDECAR_FOLD]'));
+    });
+
+    it('returns -1 for empty/absent', () => {
+      expect(findTrailingFoldMarker('')).toBe(-1);
+      expect(findTrailingFoldMarker(null)).toBe(-1);
+      expect(findTrailingFoldMarker('no marker here')).toBe(-1);
     });
   });
 
@@ -957,6 +1003,43 @@ describe('Headless Mode Runner', () => {
       const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 10000);
       expect(result.completed).toBe(true);
       expect(result.summary).toBe('Summary content');
+    }, 15000);
+
+    // #BL-7 CORE SECURITY PROPERTY: a bare [SIDECAR_FOLD] emitted on its own
+    // line but followed by MORE content (echoing these instructions, a prior
+    // sidecar summary, or scraped text) must NOT trigger a premature fold — the
+    // model is still working. Only a marker that is the FINAL non-empty line folds.
+    it('does NOT fold on a standalone [SIDECAR_FOLD] that is followed by more content (#BL-7)', async () => {
+      const echoed = 'To finish I would emit:\n[SIDECAR_FOLD]\n...but I am not done yet, continuing analysis';
+      mockGetMessages.mockResolvedValue([{
+        info: { role: 'assistant', id: 'msg-1', time: {} },
+        parts: [{ id: 'p1', type: 'text', text: echoed }]
+      }]);
+
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 3 }
+      );
+      // Ended via the idle fallback, NOT the fold marker.
+      expect(result.completed).toBe(false);
+      // The echoed marker is preserved as content (never treated as a delimiter).
+      expect(result.summary).toContain('[SIDECAR_FOLD]');
+      expect(result.summary).toContain('continuing analysis');
+    }, 20000);
+
+    it('DOES fold once the [SIDECAR_FOLD] becomes the final non-empty line (#BL-7)', async () => {
+      // Same content, but the model has now genuinely finished — marker is last.
+      mockGetMessages.mockResolvedValue([{
+        info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+        parts: [{ id: 'p1', type: 'text', text: 'All analysis complete.\n[SIDECAR_FOLD]\n' }]
+      }]);
+
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+        10000, 'build', { pollIntervalMs: 5 }
+      );
+      expect(result.completed).toBe(true);
+      expect(result.summary).toBe('All analysis complete.');
     }, 15000);
 
     it('completes via the idle fallback after stableIdlePolls without assistantFinished', async () => {

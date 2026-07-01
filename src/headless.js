@@ -22,6 +22,27 @@ const FOLD_MARKER = '[SIDECAR_FOLD]';
 const COMPLETE_MARKER = FOLD_MARKER; // backward compat
 
 /**
+ * #BL-7: the fold marker is the fixed public string [SIDECAR_FOLD]. A model can
+ * legitimately emit it on its own line mid-output — summarizing a prior sidecar,
+ * reproducing these instructions, or from scraped content — which used to force a
+ * PREMATURE fold. Harden by requiring the marker to be the FINAL non-empty line
+ * of the output: a standalone marker followed by MORE content is treated as
+ * echoed prose, not a completion signal. Only the true trailing marker folds.
+ *
+ * @param {string} output - Accumulated assistant output
+ * @returns {number} char index where the trailing marker line begins, or -1
+ */
+function findTrailingFoldMarker(output) {
+  if (!output) { return -1; }
+  // The marker must be the last non-empty line: it sits alone on its line
+  // (only intra-line whitespace around it) and NOTHING but whitespace follows
+  // to the end of the string. The `(?![\s\S]*\S)` lookahead pins it to the true
+  // end — a bare marker followed by more prose is echoed content, not a signal.
+  const m = /^[^\S\r\n]*\[SIDECAR_FOLD\][^\S\r\n]*$(?![\s\S]*\S)/m.exec(output);
+  return m ? m.index : -1;
+}
+
+/**
  * Default timeout: 15 minutes per spec §6.2
  */
 const DEFAULT_TIMEOUT = 15 * 60 * 1000;
@@ -399,10 +420,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           elapsed: Date.now() - startTime
         });
 
-        // Check for completion marker on its own line (not inline in prose).
-        // Models may mention [SIDECAR_FOLD] when describing code — only treat
-        // it as a signal when it appears as a standalone line.
-        if (/^\s*\[SIDECAR_FOLD\]\s*$/m.test(mirror.output)) {
+        // Check for the completion marker as the FINAL non-empty line (#BL-7).
+        // Models may emit [SIDECAR_FOLD] on its own line mid-output (echoing a
+        // prior sidecar, these instructions, or scraped content) — only treat
+        // it as a completion signal when nothing but blank lines follow it.
+        if (findTrailingFoldMarker(mirror.output) !== -1) {
           completed = true;
           break;
         }
@@ -608,7 +630,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 }
 
 /**
- * Extract summary from output (everything before [SIDECAR_FOLD])
+ * Extract summary from output (everything before the trailing [SIDECAR_FOLD])
  * Spec Reference: §6.2 - Return summary (everything before [SIDECAR_FOLD])
  *
  * @param {string} output - Raw output from OpenCode
@@ -619,13 +641,13 @@ function extractSummary(output) {
     return '';
   }
 
-  // Split on the fold marker only when it appears on its own line.
-  // Models may mention [SIDECAR_FOLD] inline when describing code —
-  // only treat it as a delimiter when standalone.
-  const markerRegex = /^\s*\[SIDECAR_FOLD\]\s*$/m;
-  const match = output.match(markerRegex);
-  if (match) {
-    return output.slice(0, match.index).trim();
+  // Split on the fold marker only when it is the FINAL non-empty line (#BL-7).
+  // A [SIDECAR_FOLD] echoed mid-output (describing code, reproducing these
+  // instructions, or from scraped content) is NOT a delimiter — keep it as
+  // content. Only the true trailing marker is stripped.
+  const idx = findTrailingFoldMarker(output);
+  if (idx !== -1) {
+    return output.slice(0, idx).trim();
   }
   return output.trim();
 }
@@ -659,6 +681,7 @@ module.exports = {
   waitForServer,
   withTimeout,
   extractSummary,
+  findTrailingFoldMarker,
   formatFoldOutput,
   DEFAULT_TIMEOUT,
   FOLD_MARKER,

@@ -28,6 +28,8 @@ function estimateTokenCount(text) {
     return 0;
   }
 
+  // Intentional cheap heuristic — not a real BPE tokenizer; under/over-counts
+  // for CJK, code, and punctuation-dense text. (ceil, vs floor in context.js.)
   return Math.ceil(text.length / 4);
 }
 

@@ -402,6 +402,42 @@ describe('OpenCode Client Wrapper', () => {
       const messages = await getMessages(mockClient, 'session-123');
       expect(messages).toEqual([]);
     });
+
+    it('logs and returns [] when the SDK response has no data array (error branch)', async () => {
+      const { logger } = require('../src/utils/logger');
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+      const mockClient = {
+        session: {
+          messages: jest.fn().mockResolvedValue({
+            response: { status: 500 },
+            error: { message: 'boom' }
+            // note: no `data` key
+          })
+        }
+      };
+
+      const messages = await getMessages(mockClient, 'session-err');
+      expect(messages).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      // context should carry the sessionId + surfaced error for diagnostics
+      expect(warnSpy.mock.calls[0][1]).toMatchObject({ sessionId: 'session-err' });
+      warnSpy.mockRestore();
+    });
+
+    it('does NOT log when the session genuinely has zero messages (data: [])', async () => {
+      const { logger } = require('../src/utils/logger');
+      const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+      const mockClient = {
+        session: {
+          messages: jest.fn().mockResolvedValue({ data: [] })
+        }
+      };
+
+      const messages = await getMessages(mockClient, 'session-empty');
+      expect(messages).toEqual([]);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
   });
 
   describe('checkHealth', () => {

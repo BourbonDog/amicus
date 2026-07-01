@@ -39,6 +39,12 @@ describe('Context Compression', () => {
       expect(estimateTokenCount('abcdefghijklm')).toBe(4);
     });
 
+    it('should use ceil rounding (intentionally differs from context.js floor)', () => {
+      // 9 chars = 2.25 tokens -> ceil 3. Guards against anyone "unifying"
+      // this with context.js's estimateTokens (which uses floor).
+      expect(estimateTokenCount('a'.repeat(9))).toBe(3);
+    });
+
     it('should return a number', () => {
       const result = estimateTokenCount('some text here');
       expect(typeof result).toBe('number');

@@ -267,4 +267,16 @@ describe('CLI Process: resume/continue validation', () => {
     expect(code).toBe(1);
     expect(stderr).toContain('--prompt');
   });
+
+  // BL-1: continue must accept --prompt-file (mirrors start) so the MCP handler
+  // can pass a long follow-up prompt via file, dodging the ~32KB Windows cap.
+  it('continue accepts --prompt-file (unreadable path errors via resolvePromptSource, not the --prompt guard)', async () => {
+    const missing = path.join(os.tmpdir(), 'does-not-exist-bl1-briefing.md');
+    const { stderr, code } = await runCli(['continue', 'some-task', '--prompt-file', missing]);
+    expect(code).toBe(1);
+    // Proves the flag is wired: the error is the prompt-file read failure, not
+    // the "--prompt is required" fallback that fires when the flag is ignored.
+    expect(stderr).toContain('--prompt-file');
+    expect(stderr).not.toContain('--prompt is required');
+  });
 });

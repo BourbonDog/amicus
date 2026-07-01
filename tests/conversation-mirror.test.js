@@ -31,6 +31,24 @@ describe('mirrorMessages', () => {
     expect(r2.appendLines).toEqual([]); // not re-appended
   });
 
+  test('caps toolCalls at the most-recent-N without breaking dedup', () => {
+    const st = createMirrorState();
+    const parts = Array.from({ length: 2100 }, (_, i) => ({ id: `tc${i}`, type: 'tool_use', name: 'Bash', input: { i } }));
+    const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts };
+    const r = mirrorMessages([msg], st, { now: NOW });
+    // Cap holds: the array retains only the most-recent 2000 payloads.
+    expect(st.toolCalls.length).toBe(2000);
+    expect(st.toolCalls[0].id).toBe('tc100');                       // oldest dropped
+    expect(st.toolCalls[st.toolCalls.length - 1].id).toBe('tc2099'); // newest kept
+    // Append is not capped — every distinct tool call is logged exactly once.
+    expect(r.appendLines.filter(l => l.type === 'tool_use')).toHaveLength(2100);
+    // Dedup survives the cap: re-mirroring the same message re-appends nothing and
+    // does not re-grow the array (a dropped-oldest entry is NOT re-added).
+    const r2 = mirrorMessages([msg], st, { now: NOW });
+    expect(r2.appendLines).toEqual([]);
+    expect(st.toolCalls.length).toBe(2000);
+  });
+
   test('tool_result appended once (dedup by partId)', () => {
     const st = createMirrorState();
     const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [{ id: 'tr1', type: 'tool_result', tool_use_id: 'tc1', is_error: false, content: 'ok' }] };

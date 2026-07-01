@@ -215,6 +215,19 @@ async function handleContinue(args) {
     process.exit(1);
   }
 
+  // BL-1: accept --prompt-file (XOR --prompt) so the MCP handler can pass a long
+  // follow-up prompt via file, dodging the ~32KB Windows command-line cap.
+  if (args['prompt-file'] !== undefined) {
+    const { resolvePromptSource } = require('../src/utils/prompt-source');
+    const promptRes = resolvePromptSource(args);
+    if (promptRes.error) {
+      console.error(promptRes.error);
+      process.exit(1);
+    }
+    args.prompt = promptRes.prompt;
+    delete args['prompt-file'];
+  }
+
   if (!args.prompt && !args.briefing) {
     console.error('Error: --prompt is required for continue');
     process.exit(1);

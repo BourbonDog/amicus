@@ -5,6 +5,9 @@
  * Tests the argument parsing for all sidecar commands.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { parseArgs, validateStartArgs } = require('../src/cli');
 
 describe('CLI Argument Parser', () => {
@@ -109,6 +112,17 @@ describe('CLI Argument Parser', () => {
     it('should leave --no-ledger unset by default (ledger append on)', () => {
       const result = parseArgs(['council', 'tally', 'in.json']);
       expect(result['no-ledger']).toBeFalsy();
+    });
+
+    it('should treat an unknown --no-* flag as boolean without swallowing the next token', () => {
+      const result = parseArgs(['start', '--no-frobnicate', 'positional-value']);
+      expect(result['no-frobnicate']).toBe(true);
+      expect(result._).toContain('positional-value'); // not consumed as the flag's value
+    });
+
+    it('should still honor an inline value on an unknown --no-* flag', () => {
+      const result = parseArgs(['start', '--no-frobnicate=off']);
+      expect(result['no-frobnicate']).toBe('off');
     });
 
     it('should parse --position option', () => {
@@ -532,6 +546,34 @@ describe('CLI Argument Parser', () => {
       it('should accept non-empty prompt', () => {
         const result = validateStartArgs({ model: 'openrouter/google/gemini-2.5-flash', prompt: 'Debug the auth issue' });
         expect(result.valid).toBe(true);
+      });
+
+      it('should resolve --prompt-file itself so validation is order-independent', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-cli-prompt-'));
+        try {
+          const f = path.join(tmp, 'briefing.md');
+          fs.writeFileSync(f, 'briefing text');
+          const args = { model: 'openrouter/google/gemini-2.5-flash', 'prompt-file': f };
+          const result = validateStartArgs(args);
+          expect(result.valid).toBe(true);
+          expect(args.prompt).toBe('briefing text');
+        } finally {
+          fs.rmSync(tmp, { recursive: true, force: true });
+        }
+      });
+
+      it('should reject an empty --prompt-file with MISSING_PROMPT', () => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-cli-prompt-'));
+        try {
+          const f = path.join(tmp, 'empty.md');
+          fs.writeFileSync(f, '   \n');
+          const result = validateStartArgs({ model: 'openrouter/google/gemini-2.5-flash', 'prompt-file': f });
+          expect(result.valid).toBe(false);
+          expect(result.code).toBe('MISSING_PROMPT');
+          expect(result.error).toMatch(/empty/);
+        } finally {
+          fs.rmSync(tmp, { recursive: true, force: true });
+        }
       });
     });
 

@@ -11,7 +11,43 @@ const os = require('os');
 const path = require('path');
 const { logger } = require('./logger');
 
-const AUTH_JSON_PATH = path.join(os.homedir(), '.local', 'share', 'opencode', 'auth.json');
+/**
+ * Ordered, de-duplicated candidate locations for OpenCode's auth.json, most
+ * specific first. OpenCode uses XDG-style data dirs; on Windows it still writes
+ * to ~/.local/share/opencode (verified), so that path stays FIRST after XDG.
+ * Mirrors the cross-platform precedence pattern in src/sidecar/electron-cache.js.
+ * @param {NodeJS.ProcessEnv} [env] - Environment (injectable for tests)
+ * @returns {string[]}
+ */
+function authJsonCandidates(env = process.env) {
+  const home = os.homedir();
+  const candidates = [];
+  if (env.XDG_DATA_HOME) { candidates.push(path.join(env.XDG_DATA_HOME, 'opencode', 'auth.json')); }
+  candidates.push(path.join(home, '.local', 'share', 'opencode', 'auth.json'));
+  if (process.platform === 'win32') {
+    const appData = env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    candidates.push(path.join(appData, 'opencode', 'auth.json'));
+  }
+  return [...new Set(candidates)];
+}
+
+/**
+ * Resolve the auth.json path to use: first existing candidate, else the primary
+ * (~/.local/share) path so callers/writers have a stable default.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
+function resolveAuthJsonPath(env = process.env) {
+  const candidates = authJsonCandidates(env);
+  for (const c of candidates) {
+    if (fs.existsSync(c)) { return c; }
+  }
+  const localShare = path.join('.local', 'share');
+  return candidates.find((c) => c.includes(localShare)) || candidates[0];
+}
+
+// Backward-compat export: the resolved path at module load time.
+const AUTH_JSON_PATH = resolveAuthJsonPath();
 
 /** Known provider IDs that map to sidecar's PROVIDER_ENV_MAP */
 const KNOWN_PROVIDERS = ['openrouter', 'google', 'openai', 'anthropic', 'deepseek'];
@@ -37,10 +73,11 @@ function extractKey(entry) {
  * @returns {Object<string, string>} Map of provider -> key string (only providers with keys)
  */
 function readAuthJsonKeys() {
-  if (!fs.existsSync(AUTH_JSON_PATH)) { return {}; }
+  const authPath = resolveAuthJsonPath();
+  if (!fs.existsSync(authPath)) { return {}; }
   let parsed;
   try {
-    parsed = JSON.parse(fs.readFileSync(AUTH_JSON_PATH, 'utf-8'));
+    parsed = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
   } catch (_err) {
     logger.debug('auth.json is malformed, skipping import');
     return {};
@@ -89,11 +126,12 @@ function checkAuthJson(provider) {
  */
 function removeFromAuthJson(provider) {
   try {
-    if (!fs.existsSync(AUTH_JSON_PATH)) { return; }
-    const parsed = JSON.parse(fs.readFileSync(AUTH_JSON_PATH, 'utf-8'));
+    const authPath = resolveAuthJsonPath();
+    if (!fs.existsSync(authPath)) { return; }
+    const parsed = JSON.parse(fs.readFileSync(authPath, 'utf-8'));
     if (!parsed[provider]) { return; }
     delete parsed[provider];
-    fs.writeFileSync(AUTH_JSON_PATH, JSON.stringify(parsed, null, 2), 'utf-8');
+    fs.writeFileSync(authPath, JSON.stringify(parsed, null, 2), 'utf-8');
   } catch (_err) {
     logger.debug('Failed to remove provider from auth.json', { provider });
   }
@@ -105,5 +143,7 @@ module.exports = {
   checkAuthJson,
   removeFromAuthJson,
   AUTH_JSON_PATH,
-  KNOWN_PROVIDERS
+  KNOWN_PROVIDERS,
+  resolveAuthJsonPath,
+  authJsonCandidates
 };

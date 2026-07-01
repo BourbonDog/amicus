@@ -28,7 +28,10 @@ function mockAuthJsonMissing() {
   fs.existsSync.mockReturnValue(false);
 }
 
-const { readAuthJsonKeys, importFromAuthJson, checkAuthJson, removeFromAuthJson } = require('../src/utils/auth-json');
+const {
+  readAuthJsonKeys, importFromAuthJson, checkAuthJson, removeFromAuthJson,
+  resolveAuthJsonPath, authJsonCandidates
+} = require('../src/utils/auth-json');
 
 describe('readAuthJsonKeys', () => {
   beforeEach(() => {
@@ -234,5 +237,74 @@ describe('removeFromAuthJson', () => {
     fs.existsSync.mockReturnValue(true);
     fs.readFileSync.mockReturnValue('invalid json');
     expect(() => removeFromAuthJson('openrouter')).not.toThrow();
+  });
+});
+
+describe('resolveAuthJsonPath / candidate lookup', () => {
+  const HOME = os.homedir();
+  const XDG_PATH = path.join('/xdg', 'opencode', 'auth.json');
+  const LOCAL_SHARE_PATH = path.join(HOME, '.local', 'share', 'opencode', 'auth.json');
+  const APPDATA_PATH = path.join('/appdata', 'opencode', 'auth.json');
+
+  let originalPlatform;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    fs.existsSync = jest.fn().mockReturnValue(false);
+    originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  });
+
+  afterEach(() => {
+    if (originalPlatform) { Object.defineProperty(process, 'platform', originalPlatform); }
+  });
+
+  function stubPlatform(value) {
+    Object.defineProperty(process, 'platform', { value, configurable: true });
+  }
+
+  test('honors XDG_DATA_HOME first when that file exists', () => {
+    fs.existsSync.mockImplementation((p) => p === XDG_PATH);
+    const env = { XDG_DATA_HOME: '/xdg' };
+    expect(resolveAuthJsonPath(env)).toBe(XDG_PATH);
+  });
+
+  test('falls back to ~/.local/share when XDG unset and that file exists', () => {
+    fs.existsSync.mockImplementation((p) => p === LOCAL_SHARE_PATH);
+    const result = resolveAuthJsonPath({});
+    expect(result).toBe(LOCAL_SHARE_PATH);
+  });
+
+  test('resolves win32 %APPDATA% candidate when only it exists', () => {
+    stubPlatform('win32');
+    fs.existsSync.mockImplementation((p) => p === APPDATA_PATH);
+    const env = { APPDATA: '/appdata' };
+    expect(resolveAuthJsonPath(env)).toBe(APPDATA_PATH);
+  });
+
+  test('returns the ~/.local/share fallback path when none exist', () => {
+    fs.existsSync.mockReturnValue(false);
+    expect(resolveAuthJsonPath({})).toBe(LOCAL_SHARE_PATH);
+    // and readAuthJsonKeys still tolerates a missing file
+    expect(readAuthJsonKeys()).toEqual({});
+  });
+
+  test('authJsonCandidates orders XDG, ~/.local/share, then win32 %APPDATA%', () => {
+    stubPlatform('win32');
+    const env = { XDG_DATA_HOME: '/xdg', APPDATA: '/appdata' };
+    expect(authJsonCandidates(env)).toEqual([XDG_PATH, LOCAL_SHARE_PATH, APPDATA_PATH]);
+  });
+
+  test('authJsonCandidates omits win32 %APPDATA% on non-win32', () => {
+    stubPlatform('linux');
+    const env = { XDG_DATA_HOME: '/xdg' };
+    expect(authJsonCandidates(env)).toEqual([XDG_PATH, LOCAL_SHARE_PATH]);
+  });
+
+  test('authJsonCandidates de-dupes when candidates collide', () => {
+    stubPlatform('win32');
+    // XDG_DATA_HOME pointed at the same base as the ~/.local/share path collapses to one entry
+    const env = { XDG_DATA_HOME: path.join(HOME, '.local', 'share'), APPDATA: '/appdata' };
+    const candidates = authJsonCandidates(env);
+    expect(candidates).toEqual([LOCAL_SHARE_PATH, APPDATA_PATH]);
   });
 });
