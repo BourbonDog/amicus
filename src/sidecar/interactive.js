@@ -229,11 +229,23 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       mainPath
     ], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
 
+    // Best-effort: if the parent amicus process dies (exit / Ctrl-C / SIGTERM)
+    // before Electron exits, SIGTERM the orphaned child so it doesn't linger.
+    // Guarded against double-kill via killIfAlive(); removed in teardown below so
+    // the normal close path stays the sole owner of shutdown.
+    const killChildOnParentDeath = () => killIfAlive(electronProcess);
+    process.on('exit', killChildOnParentDeath);
+    process.on('SIGINT', killChildOnParentDeath);
+    process.on('SIGTERM', killChildOnParentDeath);
+
     // Belt-and-suspenders: also touch on raw Electron stdout activity.
     electronProcess.stdout.on('data', () => { watchdog.touch(); });
 
     // Clean up server + timers when Electron exits.
     handleElectronProcess(electronProcess, taskId, async (result) => {
+      process.removeListener('exit', killChildOnParentDeath);
+      process.removeListener('SIGINT', killChildOnParentDeath);
+      process.removeListener('SIGTERM', killChildOnParentDeath);
       watchdog.cancel();
       activityPoller.stop();
       try {

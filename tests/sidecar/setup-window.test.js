@@ -6,7 +6,6 @@
  */
 
 const { spawn } = require('child_process');
-const path = require('path');
 
 jest.mock('child_process');
 jest.mock('../../src/utils/logger', () => ({
@@ -150,6 +149,20 @@ describe('setup-window', () => {
 
     const result = await promise;
     expect(result).toEqual({ success: false, error: 'Setup window closed without completing' });
+  });
+
+  it('should resolve (not hang) when spawn emits an error (ENOENT/EACCES)', async () => {
+    const promise = launchSetupWindow();
+    await flush();
+
+    // A spawn failure emits 'error' and NEVER 'close'. Without an error handler
+    // this Promise would hang forever; assert it resolves with a clear failure.
+    const errorCallback = mockProcess.on.mock.calls.find(c => c[0] === 'error')[1];
+    errorCallback(Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' }));
+
+    const result = await promise;
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('spawn ENOENT');
   });
 
   it('should use the ensureElectron()-resolved path for the electron binary', async () => {

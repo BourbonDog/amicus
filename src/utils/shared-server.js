@@ -73,6 +73,7 @@ class SharedServerManager {
       this.server = server;
       this.client = client;
       this._starting = null;
+      this._wireCrashListener(server);
       this._serverWatchdog = new IdleWatchdog({
         mode: 'server',
         onTimeout: () => {
@@ -167,6 +168,36 @@ class SharedServerManager {
       this.server = null;
       this.client = null;
     }
+  }
+
+  /**
+   * Wire crash detection onto a freshly started server handle so an unexpected
+   * exit triggers _onServerCrash (and the restart machinery). The OpenCode
+   * server handle is a plain wrapper; it may surface lifecycle events either on
+   * itself or on an underlying child `process`. Attach to whichever is an event
+   * emitter, guarding against double-wiring across restarts.
+   *
+   * @param {object} server - Server handle returned by _doStartServer
+   */
+  _wireCrashListener(server) {
+    const emitter = (server && typeof server.on === 'function')
+      ? server
+      : (server && server.process && typeof server.process.on === 'function')
+        ? server.process
+        : null;
+    if (!emitter || emitter._amicusCrashWired) {
+      return;
+    }
+    emitter._amicusCrashWired = true;
+    const onExit = (code) => {
+      // Ignore exits from a stale handle we have already replaced/closed.
+      if (this.server !== server) {
+        return;
+      }
+      this._onServerCrash(code);
+    };
+    emitter.on('exit', onExit);
+    emitter.on('close', onExit);
   }
 
   /**

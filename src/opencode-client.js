@@ -71,8 +71,15 @@ function providerErrorReason(result) {
  * @returns {{providerID: string, modelID: string}} SDK model specification
  */
 function parseModelString(modelString) {
-  // If already an object, return as-is
+  // If already an object, validate the expected SDK shape and return as-is.
+  // A malformed object (e.g. `{}` or missing providerID/modelID) would reach
+  // the SDK and come back as an opaque 400 — throw a clear error here instead.
   if (typeof modelString === 'object' && modelString !== null) {
+    if (typeof modelString.providerID !== 'string' || typeof modelString.modelID !== 'string') {
+      throw new Error(
+        `Invalid model object: expected { providerID, modelID } strings, got ${JSON.stringify(modelString)}`
+      );
+    }
     return modelString;
   }
 
@@ -612,9 +619,13 @@ async function startServer(options = {}) {
  * Load MCP configuration from user's opencode.json
  *
  * @param {string} [configPath] - Optional path to config file
+ * @param {string} [projectDir] - Project directory to resolve the project-scoped
+ *   `opencode.json` against. Falls back to `process.cwd()` only when omitted.
+ *   Callers launched by Claude Code/MCP/Cowork must pass the --cwd target here,
+ *   since the process cwd is NOT the project directory in those environments.
  * @returns {object|null} MCP configuration or null if not found
  */
-function loadMcpConfig(configPath) {
+function loadMcpConfig(configPath, projectDir) {
   const fs = require('fs');
   const path = require('path');
   const os = require('os');
@@ -629,8 +640,9 @@ function loadMcpConfig(configPath) {
   // Global config location
   paths.push(path.join(os.homedir(), '.config', 'opencode', 'opencode.json'));
 
-  // Project-level config (cwd)
-  paths.push(path.join(process.cwd(), 'opencode.json'));
+  // Project-level config — resolved against the passed project dir when known,
+  // falling back to cwd only if no project dir was threaded through.
+  paths.push(path.join(projectDir || process.cwd(), 'opencode.json'));
 
   for (const configFile of paths) {
     try {
@@ -650,12 +662,41 @@ function loadMcpConfig(configPath) {
 }
 
 /**
+ * Tokenize a shorthand command string into [command, ...args].
+ *
+ * A minimal shell-like split: whitespace separates tokens, but single- or
+ * double-quoted segments are kept intact so a command path containing spaces
+ * (e.g. "C:\Program Files\node\node.exe" server.js) survives as ONE token.
+ * Unquoted whitespace runs are collapsed. This is deliberately simple — it does
+ * not handle escapes or nested quotes; the JSON form remains the escape hatch
+ * for anything more elaborate.
+ *
+ * @param {string} value - Raw shorthand command string
+ * @returns {string[]} Tokenized command + args
+ */
+function tokenizeCommand(value) {
+  const tokens = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let match;
+  while ((match = re.exec(value)) !== null) {
+    // Prefer whichever capture group matched (double-quoted, single-quoted, bare).
+    tokens.push(match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[3]));
+  }
+  return tokens;
+}
+
+/**
  * Parse MCP server specification from CLI format
  *
  * Supports formats:
  *   - name=url (remote server)
  *   - name=command (local server with simple command)
  *   - JSON string (full config)
+ *
+ * The shorthand command form tokenizes on whitespace but respects single/double
+ * quotes, so a command PATH containing spaces must be quoted
+ * (e.g. name="C:\Program Files\node\node.exe" server.js). For anything more
+ * elaborate, use the JSON form.
  *
  * @param {string} spec - MCP server specification
  * @returns {{name: string, config: object}|null} Parsed MCP config or null
@@ -690,12 +731,13 @@ function parseMcpSpec(spec) {
       };
     }
 
-    // Otherwise treat as local command
+    // Otherwise treat as local command. Tokenize with quote-awareness so a
+    // command path containing spaces (when quoted) is not shredded into args.
     return {
       name,
       config: {
         type: 'local',
-        command: value.split(' '),
+        command: tokenizeCommand(value),
         enabled: true
       }
     };

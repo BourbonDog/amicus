@@ -1,6 +1,7 @@
 // src/sidecar/fanout-output.js
 'use strict';
 const { formatCost } = require('../utils/pricing');
+const { formatDuration } = require('../utils/format-duration');
 
 /**
  * @module fanout-output
@@ -8,12 +9,9 @@ const { formatCost } = require('../utils/pricing');
  * `amicus fanout` stdout and `amicus read <waveId>`).
  */
 
-/** Format ms as "1m5s" / "42s". */
+/** Format ms as "1m5s" / "42s" (shared helper; "-" placeholder for null). */
 function fmtDuration(ms) {
-  if (ms === null || ms === undefined) { return '-'; }
-  const s = Math.round(ms / 1000);
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}m${s % 60}s` : `${s}s`;
+  return formatDuration(ms, '-');
 }
 
 /**

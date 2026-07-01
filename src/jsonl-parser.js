@@ -94,11 +94,40 @@ function extractContent(message) {
     return content;
   }
 
-  // Array content (Claude API format with text blocks)
+  // Array content (Claude API format with text/tool blocks). Text blocks pass
+  // through; non-text blocks (tool_use / tool_result) are summarized instead of
+  // dropped, so tool-only assistant turns don't render as an empty string.
   if (Array.isArray(content)) {
     return content
-      .map(block => block.text || '')
+      .map(block => summarizeBlock(block))
       .join('');
+  }
+
+  return '';
+}
+
+/**
+ * Summarize a single content block to a display string.
+ * Text blocks return their text; tool_use/tool_result blocks return a short
+ * placeholder so they aren't silently collapsed to '' by extractContent.
+ * @param {object} block - A Claude API content block
+ * @returns {string} Display text for the block
+ */
+function summarizeBlock(block) {
+  if (!block || typeof block !== 'object') {
+    return '';
+  }
+
+  if (typeof block.text === 'string') {
+    return block.text;
+  }
+
+  if (block.type === 'tool_use') {
+    return `[tool_use: ${block.name || 'unknown'}]`;
+  }
+
+  if (block.type === 'tool_result') {
+    return '[tool_result]';
   }
 
   return '';

@@ -56,4 +56,19 @@ describe('startInteractiveMirror', () => {
     await expect(mirror.stop()).resolves.toBeTruthy();
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test('stop() resolves even when the final flush poll hangs', async () => {
+    const dir = tmpSessionDir();
+    // getMessages never resolves — a wedged server. stop() must not hang.
+    const mirror = startInteractiveMirror({
+      getMessages: () => new Promise(() => {}),
+      sessionDir: dir,
+      intervalMs: 100000, // don't let the scheduled tick fire during the test
+      stopFlushTimeoutMs: 20,
+    });
+    const start = Date.now();
+    await expect(mirror.stop()).resolves.toBeTruthy();
+    expect(Date.now() - start).toBeLessThan(2000);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

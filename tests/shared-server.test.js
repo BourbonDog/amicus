@@ -162,6 +162,57 @@ describe('SharedServerManager', () => {
       expect(startCount).toBe(2);
     });
 
+    test('wires crash listener so a server exit triggers _onServerCrash', async () => {
+      const { EventEmitter } = require('events');
+      const mgr = new SharedServerManager();
+      const proc = new EventEmitter();
+      const mockServer = { url: 'http://localhost:4096', close: jest.fn(), process: proc };
+      mgr._doStartServer = jest.fn().mockResolvedValue({
+        server: mockServer,
+        client: { session: {} },
+      });
+      const crashSpy = jest.spyOn(mgr, '_onServerCrash');
+      await mgr.ensureServer();
+      // Simulate the underlying process exiting unexpectedly.
+      proc.emit('exit', 1);
+      expect(crashSpy).toHaveBeenCalledWith(1);
+    });
+
+    test('server exit schedules a restart via the backoff timer', async () => {
+      const { EventEmitter } = require('events');
+      const mgr = new SharedServerManager();
+      const proc = new EventEmitter();
+      let startCount = 0;
+      mgr._doStartServer = jest.fn().mockImplementation(() => {
+        startCount++;
+        return Promise.resolve({
+          server: { url: 'http://localhost:4096', close: jest.fn(), process: proc },
+          client: { session: {} },
+        });
+      });
+      await mgr.ensureServer();
+      expect(startCount).toBe(1);
+      proc.emit('exit', 1);
+      // _onServerCrash schedules _handleRestart after RESTART_BACKOFF.
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(startCount).toBe(2);
+    });
+
+    test('crash listener is wired only once per server handle', async () => {
+      const { EventEmitter } = require('events');
+      const mgr = new SharedServerManager();
+      const proc = new EventEmitter();
+      const mockServer = { url: 'http://localhost:4096', close: jest.fn(), process: proc };
+      mgr._doStartServer = jest.fn().mockResolvedValue({
+        server: mockServer,
+        client: { session: {} },
+      });
+      await mgr.ensureServer();
+      // ensureServer returns cached handle without re-wiring.
+      await mgr.ensureServer();
+      expect(proc.listenerCount('exit')).toBe(1);
+    });
+
     test('stops restarting after MAX_RESTARTS in window', async () => {
       const mgr = new SharedServerManager();
       mgr._doStartServer = jest.fn().mockResolvedValue({

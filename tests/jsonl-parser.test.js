@@ -193,28 +193,54 @@ describe('JSONL Parser', () => {
       expect(result).toContain('Part two.');
     });
 
-    it('should format tool_use message per spec §5.3', () => {
+    it('should summarize a tool-only assistant turn instead of rendering empty', () => {
+      // Real Claude Code JSONL wraps tool_use inside the assistant message's
+      // content[] array — there is no top-level type:'tool_use' record.
       const message = {
-        type: 'tool_use',
-        tool: 'Read',
-        input: { path: 'src/auth/TokenManager.ts' },
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', id: 't1', name: 'Read', input: { path: 'a.ts' } }
+          ]
+        },
         timestamp: '2025-01-25T10:32:00Z'
       };
 
       const result = formatMessage(message);
-      expect(result).toBe('[Tool: Read src/auth/TokenManager.ts]');
+      expect(result).toMatch(/\[Assistant @ \d{1,2}:\d{2}/);
+      expect(result).toContain('[tool_use: Read]');
     });
 
-    it('should handle tool_use without input path', () => {
+    it('should summarize mixed text + tool_use assistant content', () => {
       const message = {
-        type: 'tool_use',
-        tool: 'Bash',
-        input: { command: 'npm test' },
-        timestamp: '2025-01-25T10:32:00Z'
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Let me check. ' },
+            { type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'ls' } }
+          ]
+        },
+        timestamp: '2025-01-25T10:33:00Z'
       };
 
       const result = formatMessage(message);
-      expect(result).toBe('[Tool: Bash]');
+      expect(result).toContain('Let me check.');
+      expect(result).toContain('[tool_use: Bash]');
+    });
+
+    it('should summarize tool_result blocks in user content', () => {
+      const message = {
+        type: 'user',
+        message: {
+          content: [
+            { type: 'tool_result', tool_use_id: 't1', content: 'ok' }
+          ]
+        },
+        timestamp: '2025-01-25T10:34:00Z'
+      };
+
+      const result = formatMessage(message);
+      expect(result).toContain('[tool_result]');
     });
 
     it('should return empty string for unknown message type', () => {
@@ -248,14 +274,13 @@ describe('JSONL Parser', () => {
         },
         {
           type: 'assistant',
-          message: { content: 'I\'ll examine the authentication flow...' },
+          message: {
+            content: [
+              { type: 'text', text: 'I\'ll examine the authentication flow...' },
+              { type: 'tool_use', id: 't1', name: 'Read', input: { path: 'src/auth/TokenManager.ts' } }
+            ]
+          },
           timestamp: '2025-01-25T10:31:00Z'
-        },
-        {
-          type: 'tool_use',
-          tool: 'Read',
-          input: { path: 'src/auth/TokenManager.ts' },
-          timestamp: '2025-01-25T10:32:00Z'
         }
       ];
 
@@ -265,7 +290,7 @@ describe('JSONL Parser', () => {
       expect(result).toContain('Can you look at the auth service?');
       expect(result).toContain('[Assistant @');
       expect(result).toContain('I\'ll examine the authentication flow...');
-      expect(result).toContain('[Tool: Read src/auth/TokenManager.ts]');
+      expect(result).toContain('[tool_use: Read]');
     });
 
     it('should separate messages with double newlines', () => {

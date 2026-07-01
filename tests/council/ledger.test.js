@@ -13,7 +13,7 @@ test('buildLedgerRows computes raw rates and carries role/wasChair/conformance',
   const rows = buildLedgerRows(record);
   const gpt = rows.find(r => r.model === 'gpt');
   expect(gpt.findingsRaised).toBe(12);
-  expect(gpt.confirmRate).toBeCloseTo(7 / 12);   // raw, not de-duped
+  expect(gpt.confirmRate).toBeCloseTo(12 / 12);  // raw, not de-duped; lone-peer agrees now count as Confirmed
   expect(gpt.factErrorRate).toBe(0);
   expect(gpt.bySeverity).toEqual({ blocker: 1, major: 5, minor: 5, nit: 1 });
   const ds = rows.find(r => r.model === 'deepseek');

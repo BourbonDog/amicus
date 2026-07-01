@@ -166,6 +166,25 @@ describe('buildMcpConfig with MCP discovery', () => {
     expect(result['file-only']).toBeDefined();
     expect(result['discovery-only']).toBeDefined();
   });
+
+  it('threads projectDir into loadMcpConfig (M8)', () => {
+    jest.mock('../../src/utils/mcp-discovery', () => ({
+      discoverParentMcps: jest.fn(() => null)
+    }));
+
+    jest.mock('../../src/opencode-client', () => ({
+      loadMcpConfig: jest.fn(() => null),
+      parseMcpSpec: jest.fn(() => null)
+    }));
+
+    const { buildMcpConfig } = require('../../src/sidecar/start');
+    const { loadMcpConfig } = require('../../src/opencode-client');
+    buildMcpConfig({ projectDir: '/target/project', mcpConfig: undefined });
+
+    // The project-scoped opencode.json must be resolved against the target dir,
+    // not process.cwd() — so loadMcpConfig must receive it as the 2nd arg.
+    expect(loadMcpConfig).toHaveBeenCalledWith(undefined, '/target/project');
+  });
 });
 
 describe('createSessionMetadata PID preservation', () => {

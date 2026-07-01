@@ -10,6 +10,7 @@
  */
 
 const { formatCost, sumWaveUsage } = require('../utils/pricing');
+const { formatDuration } = require('../utils/format-duration');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
@@ -49,7 +50,7 @@ function toModel(verdict, wave) {
 }
 
 function fmtNum(v) { return (v === null || v === undefined) ? '—' : v.toFixed(2); }
-function fmtDur(ms) { return (ms === null || ms === undefined) ? '—' : `${Math.round(ms / 1000)}s`; }
+function fmtDur(ms) { return formatDuration(ms, '—'); }
 
 function renderMd(m) {
   const h = m.header;

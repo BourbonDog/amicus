@@ -27,17 +27,6 @@ function encodeProjectPath(projectPath) {
 }
 
 /**
- * Decode an encoded path back to original format
- *
- * @param {string} encodedPath - Encoded path (e.g., -Users-john-myproject)
- * @returns {string} Decoded path with dashes converted back to slashes
- */
-function decodeProjectPath(encodedPath) {
-  // Replace dashes with slashes
-  return encodedPath.replace(/-/g, '/');
-}
-
-/**
  * Get the session directory path for a project
  * Spec Reference: §5.2 Claude Code Conversation Storage
  *
@@ -173,7 +162,6 @@ function findMostRecentSession(projectDir) {
 
 module.exports = {
   encodeProjectPath,
-  decodeProjectPath,
   getSessionDirectory,
   getSessionId,
   resolveSession

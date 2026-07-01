@@ -26,6 +26,15 @@ describe('buildSessionRoute', () => {
     expect(route).toBe(`${BASE}/${expectedSeg}/session/ses_abc`);
   });
 
+  it('canonicalizes separators so \\ and / yield the same route segment', () => {
+    const back = buildSessionRoute(BASE, 'ses_1', 'C:\\Users\\me\\project');
+    const fwd = buildSessionRoute(BASE, 'ses_1', 'C:/Users/me/project');
+    expect(back).toBe(fwd);
+    // And it matches the canonical encoding, not the raw-backslash encoding.
+    const canonicalSeg = Buffer.from('C:/Users/me/project').toString('base64url');
+    expect(back).toBe(`${BASE}/${canonicalSeg}/session/ses_1`);
+  });
+
   it('encodes the directory exactly (a CWD-derived route would not match)', () => {
     // The session was scoped to --cwd; the process cwd is something ELSE.
     const sessionDir = 'C:/Users/me/--cwd-target';

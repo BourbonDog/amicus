@@ -60,7 +60,7 @@ test('tally reads input.json and prints a record on --json', async () => {
   const { code, out } = await capture(() => handleCouncil({ _: ['council', 'tally', file], json: true }));
   expect(code).toBe(0);
   const doc = JSON.parse(out);
-  expect(doc.tierCounts).toEqual({ Confirmed: 19, Contested: 2, Singleton: 11, Disputed: 3 });
+  expect(doc.tierCounts).toEqual({ Confirmed: 29, Contested: 2, Singleton: 1, Disputed: 3 });
 });
 
 test('tally with a missing file emits a BAD_ARGS envelope on stdout, exit 1', async () => {

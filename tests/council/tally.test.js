@@ -13,7 +13,7 @@ describe('assignTier (peers-only cascade)', () => {
     [1, 2, 'Disputed', 'solid'],
     [1, 1, 'Contested', 'solid'],
     [0, 1, 'Contested', 'thin'],
-    [1, 0, 'Singleton', 'thin'],
+    [1, 0, 'Confirmed', 'thin'],  // lone corroborating peer, no dispute → Confirmed (thin), not Singleton
     [0, 0, 'Singleton', 'thin'],
     [2, 2, 'Contested', 'solid'], // large-bench tie → Contested
   ];
@@ -70,11 +70,20 @@ describe('tally() — av-receiver golden fixture', () => {
   const tierOf = id => record.findings.find(f => f.id === id).tier;
 
   test('tierCounts match the verified peers-only result', () => {
-    expect(record.tierCounts).toEqual({ Confirmed: 19, Contested: 2, Singleton: 11, Disputed: 3 });
+    expect(record.tierCounts).toEqual({ Confirmed: 29, Contested: 2, Singleton: 1, Disputed: 3 });
   });
 
-  test('the eight self-agree downgrades land as Singleton', () => {
-    for (const id of ['A3','A6','B7','B8','B10','B11','B12','C9']) { expect(tierOf(id)).toBe('Singleton'); }
+  test('lone-corroborating-peer findings (a=1,d=0) are Confirmed with thin confidence', () => {
+    for (const id of ['A3','A6','B7','B8','B10','B11','B12','C9']) {
+      const f = record.findings.find(x => x.id === id);
+      expect(f.tier).toBe('Confirmed');
+      expect(f.confidence).toBe('thin');
+    }
+  });
+
+  test('only the true no-signal finding (a=0,d=0) stays Singleton', () => {
+    expect(tierOf('A7')).toBe('Singleton');
+    expect(record.findings.find(f => f.id === 'A7').basis).toEqual({ a: 0, d: 0, n: 2 });
   });
 
   test('C2 stays Contested (engine removes the grid/summary contradiction)', () => {
@@ -100,5 +109,41 @@ describe('tally() — av-receiver golden fixture', () => {
 
   test('schemaVersion is the council version, independent of WS-2', () => {
     expect(record.schemaVersion).toBe(1);
+  });
+});
+
+describe('tally() — defensive basis handling', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['x', 'y'], chair: 'x', claudeInCouncil: false },
+    findings: [{ id: 'F1', raiser: 'x', severity: 'minor', claim: 'c' }],
+    rankings: [],
+    runStats: [],
+  };
+
+  test('unknown verdict strings are skipped, not counted as NaN (L9)', () => {
+    const record = tally({
+      ...baseInput,
+      adjudications: [
+        { judge: 'y', findingId: 'F1', verdict: 'agree' },
+        { judge: 'z', findingId: 'F1', verdict: 'bogus' },
+      ],
+    });
+    const f = record.findings[0];
+    expect(f.basis).toEqual({ a: 1, d: 0, n: 0 });   // 'bogus' ignored, no basis.undefined / NaN
+    expect(Object.keys(f.basis)).toEqual(['a', 'd', 'n']);
+    expect(f.tier).toBe('Confirmed');                 // (a=1,d=0)
+  });
+
+  test('an unset raiser does not silently drop a peer vote (L8)', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', severity: 'minor', claim: 'c' }], // raiser undefined
+      adjudications: [
+        { judge: 'x', findingId: 'F1', verdict: 'agree' },
+        { judge: 'y', findingId: 'F1', verdict: 'agree' },
+      ],
+    });
+    // With no raiser, every vote is a peer vote (nothing excluded).
+    expect(record.findings[0].basis).toEqual({ a: 2, d: 0, n: 0 });
   });
 });

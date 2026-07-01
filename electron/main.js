@@ -24,6 +24,11 @@ const { attachLoadFailsafe, buildLoadErrorHTML } = require('./load-failsafe');
 const { buildSessionRoute } = require('./session-route');
 const { buildOpencodeThemeCSS } = require('./opencode-theme');
 const { TOKENS } = require('../src/design/tokens');
+const {
+  isPrivilegedSender,
+  isAllowedContentNavigation,
+  handleFatalException,
+} = require('./ipc-guard');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
@@ -39,8 +44,10 @@ process.stderr.on('error', (err) => {
   if (err.code === 'EPIPE') { return; }
 });
 process.on('uncaughtException', (err) => {
-  if (err.code === 'EPIPE') { return; }
-  console.error('Uncaught exception:', err);
+  // EPIPE stays a benign no-op; any other uncaught exception is logged and then
+  // quits the app so a genuinely unexpected error cannot leave a wedged,
+  // invisible shell hanging in the background (L10).
+  handleFatalException(err, { quit: () => app.quit() });
 });
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason);
@@ -135,13 +142,26 @@ function createAmicusWindow() {
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toolbarHtml)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 
-  // BrowserView for OpenCode content
+  // BrowserView for OpenCode content. It uses a MINIMAL preload that exposes no
+  // privileged bridge — the OpenCode page must not be able to reach the fold /
+  // settings / update IPC (M9). The toolbar window keeps preload.js.
   contentView = new BrowserView({
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload-content.js'),
       contextIsolation: true, nodeIntegration: false,
     }
   });
+
+  // Pin the content view to the OpenCode localhost origin: block any attempt to
+  // navigate it off-origin or open new windows (defense-in-depth, M9). data:
+  // URLs (the in-app load-error page) are still allowed by the guard.
+  contentView.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!isAllowedContentNavigation(targetUrl, OPENCODE_URL)) {
+      logger.warn('Blocked content-view navigation', { targetUrl });
+      event.preventDefault();
+    }
+  });
+  contentView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   // Load OpenCode off-screen first; only attach BrowserView after rebranding
   // to prevent the OpenCode logo/splash from flashing during load.
   mainWindow.on('resize', updateContentBounds);
@@ -400,25 +420,35 @@ function rebrandUI() {
 // IPC Handlers
 // ============================================================================
 
+// These handlers are privileged (fold/settings/update/resize). Only the toolbar
+// window may invoke them — the OpenCode content BrowserView must not (M9). The
+// content view no longer gets a bridge preload, but we still validate the
+// sender as belt-and-suspenders in case a future preload change reintroduces one.
+const fromToolbar = (event) => isPrivilegedSender(event, () => mainWindow);
+
 // Amicus mode: fold
-ipcMain.handle('sidecar:fold', () => {
+ipcMain.handle('sidecar:fold', (event) => {
+  if (!fromToolbar(event)) { return; }
   return foldHandler.triggerFold(mainWindow, contentView);
 });
 
 // Amicus mode: open settings in a child window
-ipcMain.handle('sidecar:open-settings', () => {
+ipcMain.handle('sidecar:open-settings', (event) => {
+  if (!fromToolbar(event)) { return; }
   createSettingsChildWindow();
 });
 
 // Update check
-ipcMain.handle('sidecar:get-update-info', async () => {
+ipcMain.handle('sidecar:get-update-info', async (event) => {
+  if (!fromToolbar(event)) { return null; }
   const { getUpdateInfo, initUpdateCheck } = require('../src/utils/updater');
   await initUpdateCheck();
   return getUpdateInfo();
 });
 
 // Perform update
-ipcMain.handle('sidecar:perform-update', async () => {
+ipcMain.handle('sidecar:perform-update', async (event) => {
+  if (!fromToolbar(event)) { return { success: false, error: 'unauthorized' }; }
   const { performUpdate } = require('../src/utils/updater');
   const result = await performUpdate();
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -428,7 +458,8 @@ ipcMain.handle('sidecar:perform-update', async () => {
 });
 
 // Resize toolbar area (called when update banner shows/hides)
-ipcMain.handle('sidecar:resize-toolbar', (_event, height) => {
+ipcMain.handle('sidecar:resize-toolbar', (event, height) => {
+  if (!fromToolbar(event)) { return; }
   currentToolbarH = height;
   updateContentBounds();
 });

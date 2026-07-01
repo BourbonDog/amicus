@@ -11,6 +11,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./atomic-write');
 
 /**
  * Synchronously write a terminal status to a session's metadata. Best-effort: never throws.
@@ -28,7 +29,8 @@ function markTerminal(sessionDir, status, reason) {
     meta.status = status;
     meta.reason = reason;
     meta[status === 'aborted' ? 'abortedAt' : 'completedAt'] = new Date().toISOString();
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+    // Atomic (temp + rename): a crash mid-write must not corrupt the marker.
+    writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     return true;
   } catch {
     return false;

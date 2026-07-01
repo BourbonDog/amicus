@@ -12,7 +12,6 @@ const os = require('os');
 // Module under test - will be created after tests fail
 const {
   encodeProjectPath,
-  decodeProjectPath,
   getSessionDirectory,
   resolveSession,
   getSessionId
@@ -51,20 +50,6 @@ describe('Session Resolver', () => {
     it('should convert underscores to dashes (matching Claude Code behavior)', () => {
       const result = encodeProjectPath('/Users/john/my-project_v2');
       expect(result).toBe('-Users-john-my-project-v2');
-    });
-  });
-
-  describe('decodeProjectPath', () => {
-    it('should decode encoded path back to original', () => {
-      const encoded = '-Users-john-myproject';
-      const result = decodeProjectPath(encoded);
-      expect(result).toBe('/Users/john/myproject');
-    });
-
-    it('should handle paths without leading dash', () => {
-      const encoded = 'Users-john-myproject';
-      const result = decodeProjectPath(encoded);
-      expect(result).toBe('Users/john/myproject');
     });
   });
 

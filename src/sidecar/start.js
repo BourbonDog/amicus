@@ -79,10 +79,12 @@ function createSessionMetadata(taskId, project, options) {
  * @param {string} [options.clientType] - Parent client type for discovery
  * @param {boolean} [options.noMcp] - Skip MCP inheritance from parent
  * @param {string[]} [options.excludeMcp] - Server names to exclude
+ * @param {string} [options.projectDir] - Target project directory used to resolve
+ *   a project-scoped opencode.json (NOT process.cwd() under Claude Code/MCP/Cowork)
  * @returns {object|null} MCP server configs or null
  */
 function buildMcpConfig(options) {
-  const { mcp, mcpConfig, clientType, noMcp, excludeMcp } = options;
+  const { mcp, mcpConfig, clientType, noMcp, excludeMcp, projectDir } = options;
   let mcpServers = null;
 
   // Layer 1: Discover parent MCPs (unless --no-mcp)
@@ -94,8 +96,10 @@ function buildMcpConfig(options) {
     }
   }
 
-  // Layer 2: File config (opencode.json) overrides discovered
-  const fileConfig = loadMcpConfig(mcpConfig);
+  // Layer 2: File config (opencode.json) overrides discovered.
+  // Resolve the project-scoped opencode.json against the target project dir,
+  // not process.cwd() (which differs under Claude Code/MCP/Cowork).
+  const fileConfig = loadMcpConfig(mcpConfig, projectDir);
   if (fileConfig) {
     mcpServers = mcpServers ? { ...mcpServers, ...fileConfig } : { ...fileConfig };
     logger.debug('Loaded MCP config from file', { serverCount: Object.keys(fileConfig).length });
@@ -154,7 +158,9 @@ async function startSidecar(options) {
   const effectiveSession = sessionId || session;
   const effectiveProject = cwd || project;
   const effectiveHeadless = noUi !== undefined ? noUi : headless;
-  const mcpServers = buildMcpConfig({ mcp, mcpConfig, clientType: client, noMcp, excludeMcp });
+  const mcpServers = buildMcpConfig({
+    mcp, mcpConfig, clientType: client, noMcp, excludeMcp, projectDir: effectiveProject
+  });
   const taskId = options.taskId || generateTaskId();
   const reasoning = thinking ? { effort: thinking } : undefined;
 

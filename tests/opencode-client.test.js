@@ -92,6 +92,18 @@ describe('OpenCode Client Wrapper', () => {
         modelID: ''
       });
     });
+
+    it('throws a descriptive error for an empty object (L5)', () => {
+      // A bare {} would otherwise reach the SDK and return an opaque 400.
+      expect(() => parseModelString({})).toThrow(/Invalid model object/);
+      expect(() => parseModelString({})).toThrow(/providerID, modelID/);
+    });
+
+    it('throws when the object is missing providerID or modelID (L5)', () => {
+      expect(() => parseModelString({ providerID: 'openrouter' })).toThrow(/Invalid model object/);
+      expect(() => parseModelString({ modelID: 'gemini' })).toThrow(/Invalid model object/);
+      expect(() => parseModelString({ providerID: 1, modelID: 2 })).toThrow(/Invalid model object/);
+    });
   });
 
   describe('createClient', () => {
@@ -862,6 +874,49 @@ describe('OpenCode Client Wrapper', () => {
 
       expect(result).toBeNull();
     });
+
+    it('resolves the project opencode.json against the passed projectDir, not cwd (M8)', () => {
+      const projectDir = path.join(path.sep, 'target', 'project');
+      const projectConfigPath = path.join(projectDir, 'opencode.json');
+      const cwdConfigPath = path.join(process.cwd(), 'opencode.json');
+      const mcpConfig = {
+        'proj-server': { type: 'local', command: ['node', 'srv.js'], enabled: true }
+      };
+
+      // Only the project-dir config exists — NOT the cwd one.
+      fs.existsSync.mockImplementation((p) => p === projectConfigPath);
+      fs.readFileSync.mockImplementation((p) => {
+        if (p === projectConfigPath) { return JSON.stringify({ mcp: mcpConfig }); }
+        throw new Error(`unexpected read: ${p}`);
+      });
+
+      const { loadMcpConfig } = require('../src/opencode-client');
+      const result = loadMcpConfig(undefined, projectDir);
+
+      expect(result).toEqual(mcpConfig);
+      // Must have probed the project-dir path, and must NOT have found config via cwd.
+      expect(fs.existsSync).toHaveBeenCalledWith(projectConfigPath);
+      // Guard: if cwd differs from projectDir, the cwd path was not the source.
+      if (cwdConfigPath !== projectConfigPath) {
+        expect(fs.existsSync).not.toHaveBeenCalledWith(cwdConfigPath);
+      }
+    });
+
+    it('falls back to process.cwd() for the project config when projectDir is omitted', () => {
+      const cwdConfigPath = path.join(process.cwd(), 'opencode.json');
+      const mcpConfig = {
+        'cwd-server': { type: 'local', command: ['node', 'srv.js'], enabled: true }
+      };
+
+      fs.existsSync.mockImplementation((p) => p === cwdConfigPath);
+      fs.readFileSync.mockReturnValue(JSON.stringify({ mcp: mcpConfig }));
+
+      const { loadMcpConfig } = require('../src/opencode-client');
+      const result = loadMcpConfig();
+
+      expect(result).toEqual(mcpConfig);
+      expect(fs.existsSync).toHaveBeenCalledWith(cwdConfigPath);
+    });
   });
 
   describe('parseMcpSpec', () => {
@@ -947,6 +1002,28 @@ describe('OpenCode Client Wrapper', () => {
       const result = parseMcpSpec('=https://mcp.example.com');
 
       expect(result).toBeNull();
+    });
+
+    it('keeps a quoted command path with spaces as one token (L4)', () => {
+      const { parseMcpSpec } = require('../src/opencode-client');
+      const result = parseMcpSpec('my-server="C:\\Program Files\\node\\node.exe" server.js');
+
+      expect(result).toEqual({
+        name: 'my-server',
+        config: {
+          type: 'local',
+          command: ['C:\\Program Files\\node\\node.exe', 'server.js'],
+          enabled: true
+        }
+      });
+    });
+
+    it('still splits an unquoted command on whitespace (L4 back-compat)', () => {
+      const { parseMcpSpec } = require('../src/opencode-client');
+      const result = parseMcpSpec('my-server=npx  my-mcp-server --flag');
+
+      // Collapses the double space and keeps every bare token.
+      expect(result.config.command).toEqual(['npx', 'my-mcp-server', '--flag']);
     });
   });
 });

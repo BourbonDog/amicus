@@ -4,8 +4,8 @@
  * Handles port management and cleanup for the OpenCode server.
  */
 
-const { execFileSync } = require('child_process');
 const { logger } = require('./logger');
+const { findListenerPid } = require('./port-pid');
 
 const DEFAULT_PORT = 4096;
 
@@ -15,18 +15,9 @@ const DEFAULT_PORT = 4096;
  * @returns {number|null} PID or null if not in use
  */
 function getPortPid(port) {
-  try {
-    // Use execFileSync with arguments array (safe from injection)
-    const result = execFileSync('lsof', ['-ti', `:${port}`], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    const pid = parseInt(result.trim(), 10);
-    return isNaN(pid) ? null : pid;
-  } catch {
-    // lsof returns non-zero if no process found
-    return null;
-  }
+  // Delegate to the cross-platform lookup (netstat on Windows, lsof elsewhere)
+  // so the port-in-use check and kill path work off Unix too.
+  return findListenerPid(port);
 }
 
 /**

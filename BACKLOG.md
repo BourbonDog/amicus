@@ -74,3 +74,69 @@ _Result: 8 fixed · 1 partially hardened (BL-7) · 1 deferred (BL-2) · 1 refute
 - **BL-2**: async-ify `buildContext` + MCP metadata writes (needs broader refactor).
 - **BL-7 full nonce**: land it once `tests/e2e.test.js` can be adjusted to emit the nonced marker (or lower its poll interval).
 - **BL-10 dep removal**: drop `tiktoken` from `package.json` + regenerate the lockfile.
+
+---
+
+## Second review (GLM 5.2, verified 2026-07-01)
+
+Independent review by **GLM 5.2** (of the v1.7.5 source), each finding **adversarially verified by Claude
+against source** (13 parallel lanes). GLM's original IDs kept for traceability. Of ~42 raised: 25 confirmed,
+14 partial, 3 refuted (C3/H4/M10 — misreads, not tracked). Severity is Claude's post-verification rating.
+
+> **Status (2026-07-01):** fixed via an 11-lane workflow. **20 of 22 fully fixed · 2 partial (H9, L2).**
+> Full suite **2662 passed / 0 failed**, eslint + size gates green, adversarial review `clean`. 36 files
+> +732/−141 plus 5 new helpers (`project-root-allowlist.js`, `utils/atomic-write.js`, `utils/format-duration.js`,
+> `electron/preload-content.js`, `electron/ipc-guard.js`). **Uncommitted.**
+
+### Recommended (10) — confirmed real, worth fixing
+
+- [x] **H10 · High · `project`/`cwd` MCP input is unsandboxed** — **DONE.** New `src/project-root-allowlist.js`;
+  `resolveProjectDir` now **throws before any mkdir/spawn** on an out-of-bounds explicit project. Allows paths under
+  `$HOME`, `cwd`, `AMICUS_PROJECT_DIR`/`AMICUS_PROJECT_ROOTS`, or the MCP client root; rejects `C:/Windows`, `/etc`.
+  Legit `--cwd` under home still passes (verified). Files: `src/mcp-server.js` (+ new helper).
+- [x] **H7 · High · `_onServerCrash` dead code** — **DONE.** Emitter-aware `_wireCrashListener` in `ensureServer`
+  attaches `exit`/`close` → `_onServerCrash` → restart machinery, idempotent + stale-handle-guarded. *Note: today's
+  server handle exposes no `.process`/exit event, so this activates once the handle emits lifecycle events; the live
+  SDK exit signal wasn't verifiable in unit tests.* Files: `src/utils/shared-server.js`.
+- [x] **H3 · Medium · Non-atomic metadata writes** — **DONE.** New `src/utils/atomic-write.js` (`writeFileAtomic`,
+  tmp+rename, mode preserved); the three live metadata writes routed through it. Files: `src/session-manager.js`, `src/utils/session-abort.js`.
+- [~] **H9 · Medium · No prompt-injection fence on fold-back** — **PARTIAL.** `amicus_read`'s summary (the genuine
+  untrusted-prose path) is now wrapped in an `<untrusted_sidecar_output>` read-only fence. `amicus_council_tally`/
+  `amicus_verdict` **deferred**: they return JSON records callers `JSON.parse`, so a prose fence would break the data
+  contract + tests. Follow-up: fence a free-text field only, or a separate presentation wrapper. Files: `src/mcp-server.js`.
+- [x] **H8 · Medium · `server-setup.js` hardcodes `lsof`** — **DONE.** `getPortPid` delegates to `port-pid.js`
+  `findListenerPid` (netstat on win32). Files: `src/utils/server-setup.js`.
+- [x] **M9 · Medium · Electron content view shares the privileged preload** — **DONE.** New minimal
+  `electron/preload-content.js` for the BrowserView + `electron/ipc-guard.js` sender validation + navigation guard;
+  toolbar keeps its bridge. *Not runtime-verified (GUI); unit suite green.* Files: `electron/main.js` (+ 2 new).
+- [x] **M8 · Medium · `loadMcpConfig` uses `process.cwd()`** — **DONE.** `projectDir` threaded through
+  `buildMcpConfig`→`loadMcpConfig`; project `opencode.json` resolves against the target. Files: `src/opencode-client.js`, `src/sidecar/start.js`.
+- [x] **M1 · Medium · `assignTier(1,0)→Singleton`** — **DONE.** `(a=1,d=0)` now `Confirmed/thin` (broadened `Confirmed`
+  rather than a new tier, to keep `ledger.js`/consumers stable). Files: `src/council/tally.js`.
+- [x] **C1 · Medium · Fanout pre-`try` throw skips `wave.json`** — **DONE.** Pre-try setup moved inside the try → an
+  error run doc, so the wave still writes. Files: `src/sidecar/fanout-leg.js`.
+- [x] **H5 · Medium · `setup-window.js` no `proc.on('error')`** — **DONE.** Added the error handler (resolves instead
+  of hanging) + best-effort parent-side kill of the Electron child. Files: `src/sidecar/setup-window.js`, `src/sidecar/interactive.js`.
+
+### Low / cosmetic (12) — confirmed, tracked for cleanup
+
+- [~] **L2** — **PARTIAL.** `extractContent` now summarizes non-text blocks (`[tool_use: name]`) instead of dropping
+  them; the dead top-level `tool_use` branch removal was **deferred** (an out-of-lane `tests/context.test.js:312`
+  asserts the old format). Files: `src/jsonl-parser.js`.
+- [x] **L3** — DONE. Dead `decodeProjectPath` + its test deleted. `src/session.js`.
+- [x] **L4** — DONE. Quote-aware `tokenizeCommand` in `parseMcpSpec`. `src/opencode-client.js`.
+- [x] **L5** — DONE. `parseModelString` validates `{providerID, modelID}` and throws a clear error. `src/opencode-client.js`.
+- [x] **L6** — DONE. Dead `runLeg`/`writeWaveMetadata` re-exports dropped. `src/sidecar/fanout.js`.
+- [x] **L7** — DONE. Consolidated into `src/utils/format-duration.js`; all three call sites use it.
+- [x] **L8** — DONE. Hardened in `tally.js` (skip self-vote only when `raiser` truthy) — the correct layer.
+- [x] **L9** — DONE. Unknown verdict guarded (no `basis['undefined']=NaN`). `src/council/tally.js`.
+- [x] **L10** — DONE. `uncaughtException` now `app.quit()`s on non-EPIPE errors. `electron/main.js`.
+- [x] **L11** — DONE. `stop()` races the final `pollOnce()` against a timeout. `src/sidecar/interactive-mirror.js`.
+- [x] **L12** — DONE. Continuation session dir now locked (acquire/release). `src/sidecar/continue.js`.
+- [x] **L13** — DONE. `buildSessionRoute` canonicalizes separators before base64url. `electron/session-route.js`.
+
+_Excluded: L1 (token estimators) — already covered by BL-10. C3/H4/M10 — refuted misreads._
+
+### Second-review follow-ups
+- **H9 tally/verdict fencing** — needs a JSON-safe mechanism (fence a free-text field or a presentation wrapper) + coordinated council/test update.
+- **L2 dead-branch removal** — needs a lane that also owns `tests/context.test.js:312`.

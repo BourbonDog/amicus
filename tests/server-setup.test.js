@@ -28,9 +28,20 @@ const {
   DEFAULT_PORT
 } = require('../src/utils/server-setup');
 
+const realPlatform = process.platform;
+function setPlatform(p) {
+  Object.defineProperty(process, 'platform', { value: p, configurable: true });
+}
+
 describe('server-setup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Pin a Unix platform so getPortPid's cross-platform delegate uses lsof.
+    setPlatform('linux');
+  });
+
+  afterEach(() => {
+    setPlatform(realPlatform);
   });
 
   describe('DEFAULT_PORT', () => {
@@ -45,7 +56,20 @@ describe('server-setup', () => {
       const pid = getPortPid(4096);
       expect(pid).toBe(12345);
       expect(execFileSync).toHaveBeenCalledWith(
-        'lsof', ['-ti', ':4096'],
+        'lsof', ['-ti', ':4096', '-sTCP:LISTEN'],
+        expect.objectContaining({ encoding: 'utf8' })
+      );
+    });
+
+    it('should resolve the LISTENING PID from netstat on Windows', () => {
+      setPlatform('win32');
+      execFileSync.mockReturnValue(
+        '\r\n  Proto  Local Address      Foreign Address    State        PID\r\n' +
+        '  TCP    127.0.0.1:4096     0.0.0.0:0          LISTENING    4321\r\n'
+      );
+      expect(getPortPid(4096)).toBe(4321);
+      expect(execFileSync).toHaveBeenCalledWith(
+        'netstat', ['-ano', '-p', 'TCP'],
         expect.objectContaining({ encoding: 'utf8' })
       );
     });
@@ -128,7 +152,7 @@ describe('server-setup', () => {
       execFileSync.mockImplementation(() => { throw new Error('exit 1'); });
       ensurePortAvailable();
       expect(execFileSync).toHaveBeenCalledWith(
-        'lsof', ['-ti', ':4096'],
+        'lsof', ['-ti', ':4096', '-sTCP:LISTEN'],
         expect.anything()
       );
     });
@@ -137,7 +161,7 @@ describe('server-setup', () => {
       execFileSync.mockImplementation(() => { throw new Error('exit 1'); });
       ensurePortAvailable(8080);
       expect(execFileSync).toHaveBeenCalledWith(
-        'lsof', ['-ti', ':8080'],
+        'lsof', ['-ti', ':8080', '-sTCP:LISTEN'],
         expect.anything()
       );
     });

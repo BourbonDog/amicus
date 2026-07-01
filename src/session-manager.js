@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./utils/atomic-write');
 
 /**
  * Session status constants
@@ -112,8 +113,9 @@ function createSession(projectDir, taskId, metadata) {
     contextDrift: null
   };
 
-  // Write metadata.json
-  fs.writeFileSync(
+  // Write metadata.json atomically (temp + rename) so a crash mid-write can't
+  // corrupt it and mask session state from the headless poll loop.
+  writeFileAtomic(
     path.join(sessionDir, 'metadata.json'),
     JSON.stringify(sessionMetadata, null, 2),
     { mode: 0o600 }
@@ -165,8 +167,9 @@ function updateSession(projectDir, taskId, updates) {
   // Apply remaining updates
   Object.assign(metadata, updates);
 
-  // Write updated metadata
-  fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+  // Write updated metadata atomically (temp + rename) so a crash mid-write
+  // can't corrupt it and mask an abort/terminal marker.
+  writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
 }
 
 /**

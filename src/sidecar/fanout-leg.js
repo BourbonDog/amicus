@@ -46,31 +46,38 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   const { buildRunResult } = require('../utils/result-schema');
   const { createSessionMetadata } = require('./start');
 
-  const legDir = createSessionMetadata(legId, project, {
-    model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
-  });
-  writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
-  saveInitialContext(legDir, systemPrompt, userMessage);
-
-  // Per-leg watchdog: a BACKSTOP strictly behind runHeadless's own deadline
-  // (timeoutMs + 60s), so it only fires if the poll loop itself wedges. Its
-  // timeout aborts ONLY this leg, and only while the leg is still running.
-  // NEVER server.close()/process.exit() — shared server.
-  const watchdog = new IdleWatchdog({
-    mode: 'headless',
-    timeout: timeoutMs + 60000,
-    onTimeout: () => {
-      let current = {};
-      try { current = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8')); } catch { /* unreadable */ }
-      if (current.status === 'running') {
-        logger.warn('Leg watchdog backstop fired — aborting leg', { legId });
-        markAborted(legDir, 'leg watchdog backstop');
-      }
-    },
-  }).start();
-
+  // Setup + run under ONE try so ANY throw (session record creation, initial
+  // context write, watchdog arm, or the poll loop itself) becomes an error run
+  // document — the wave still aggregates and writes wave.json. This function
+  // must NEVER throw / reject for a leg error (fanout.js relies on this in its
+  // Promise.all so one leg cannot sink the whole wave).
+  let legDir = null;
+  let watchdog = null;
   let result;
   try {
+    legDir = createSessionMetadata(legId, project, {
+      model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
+    });
+    writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
+    saveInitialContext(legDir, systemPrompt, userMessage);
+
+    // Per-leg watchdog: a BACKSTOP strictly behind runHeadless's own deadline
+    // (timeoutMs + 60s), so it only fires if the poll loop itself wedges. Its
+    // timeout aborts ONLY this leg, and only while the leg is still running.
+    // NEVER server.close()/process.exit() — shared server.
+    watchdog = new IdleWatchdog({
+      mode: 'headless',
+      timeout: timeoutMs + 60000,
+      onTimeout: () => {
+        let current = {};
+        try { current = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8')); } catch { /* unreadable */ }
+        if (current.status === 'running') {
+          logger.warn('Leg watchdog backstop fired — aborting leg', { legId });
+          markAborted(legDir, 'leg watchdog backstop');
+        }
+      },
+    }).start();
+
     result = await runHeadless(
       leg.model, systemPrompt, userMessage, legId, project,
       timeoutMs, agent || 'build',
@@ -79,22 +86,28 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   } catch (err) {
     result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: legId };
   } finally {
-    watchdog.cancel();
+    if (watchdog) { watchdog.cancel(); }
   }
 
   const status = legStatusFromResult(result);
   const summary = result.summary || null;
-  if (summary) {
-    fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
-  }
   const { resolveUsage } = require('../utils/pricing');
   const usage = result && result.usage ? resolveUsage({ model: leg.model, usageTotals: result.usage }) : null;
-  const finalMeta = writeLegPatch(legDir, {
+  // If setup threw before the session dir existed, there is nothing on disk to
+  // finalize — still resolve to an error run document so the wave aggregates.
+  const legPatch = {
     status,
     reason: result.error || undefined,
     completedAt: new Date().toISOString(),
     usage: usage || undefined,
-  });
+  };
+  let finalMeta = legPatch;
+  if (legDir) {
+    if (summary) {
+      fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
+    }
+    finalMeta = writeLegPatch(legDir, legPatch);
+  }
   const effectiveResult = finalMeta.status === 'aborted'
     ? { ...result, aborted: true }
     : result;

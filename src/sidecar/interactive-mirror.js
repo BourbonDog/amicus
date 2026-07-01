@@ -7,6 +7,9 @@ const { writeProgress } = require('./progress');
 const { sumPerMessageUsage } = require('../utils/pricing');
 const { logger } = require('../utils/logger');
 
+// Cap on the final flush poll during stop() so a wedged server cannot hang teardown.
+const STOP_FLUSH_TIMEOUT_MS = 3000;
+
 /**
  * Poll the OpenCode session and mirror it to conversation.jsonl + progress.json
  * live, exactly like headless. Best-effort and non-blocking — a poll/write error
@@ -18,9 +21,10 @@ const { logger } = require('../utils/logger');
  * @param {number} [opts.intervalMs=2000]
  * @param {() => void} [opts.onActivity]
  * @param {() => string} [opts.now]
+ * @param {number} [opts.stopFlushTimeoutMs=3000] - cap on the final flush poll in stop()
  * @returns {{ stop: () => Promise<{usage: object|null}> }}
  */
-function startInteractiveMirror({ getMessages, sessionDir, intervalMs = 2000, onActivity, now }) {
+function startInteractiveMirror({ getMessages, sessionDir, intervalMs = 2000, onActivity, now, stopFlushTimeoutMs = STOP_FLUSH_TIMEOUT_MS }) {
   const state = createMirrorState();
   const conversationPath = path.join(sessionDir, 'conversation.jsonl');
   let timer = null;
@@ -54,7 +58,15 @@ function startInteractiveMirror({ getMessages, sessionDir, intervalMs = 2000, on
     async stop() {
       stopped = true;
       if (timer) { clearTimeout(timer); timer = null; }
-      await pollOnce(); // final flush
+      // Final flush, but never let a wedged server hang teardown: race the poll
+      // against a short timeout so stop() always resolves promptly.
+      await Promise.race([
+        pollOnce(),
+        new Promise(resolve => {
+          const t = setTimeout(resolve, stopFlushTimeoutMs);
+          if (t.unref) { t.unref(); }
+        }),
+      ]);
       try { writeProgress(sessionDir, 'complete'); } catch { /* best-effort */ }
       let usage = null;
       try { usage = sumPerMessageUsage(state.usageByMsg); } catch { /* best-effort */ }

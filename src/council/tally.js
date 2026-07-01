@@ -5,6 +5,13 @@
  * Peers-only tier cascade. a/d are agree/dispute counts among PEER judges
  * (the raiser's own adjudication is excluded by the caller).
  * Exhaustive and mutually exclusive over all (a,d).
+ *
+ * Uncontested agreement is Confirmed: either a strong majority (a>=2 && a>d)
+ * or a lone corroborating peer with no dispute (a=1 && d===0). The latter must
+ * not rank weaker than a lone disputing peer (a=0,d=1, which is Contested); the
+ * `confidence` flag ('thin' when a+d<=1) is what separates single-peer
+ * corroboration from a multi-peer majority. Singleton is now reserved for the
+ * no-signal case (a=0,d=0).
  * @param {number} a - peer agree count
  * @param {number} d - peer dispute count
  * @returns {{tier:string, confidence:'thin'|'solid'}}
@@ -12,7 +19,7 @@
 function assignTier(a, d) {
   let tier;
   if (d >= 2 && d > a) { tier = 'Disputed'; }
-  else if (a >= 2 && a > d) { tier = 'Confirmed'; }
+  else if ((a >= 2 && a > d) || (a === 1 && d === 0)) { tier = 'Confirmed'; }
   else if (d >= 1) { tier = 'Contested'; }
   else { tier = 'Singleton'; }
   const confidence = (a + d <= 1) ? 'thin' : 'solid';
@@ -82,9 +89,17 @@ function tally(input) {
   }
   const outFindings = findings.map(f => {
     const votes = byFinding.get(f.id) || [];
-    const peers = votes.filter(v => v.judge !== f.raiser);
+    // Only exclude the raiser's own vote when a raiser is known; the raiser is
+    // populated by the orchestrator (not the reviewer JSON), so an unset raiser
+    // must not silently drop a real peer vote (L8).
+    const peers = f.raiser ? votes.filter(v => v.judge !== f.raiser) : votes;
     const basis = { a: 0, d: 0, n: 0 };
-    for (const v of peers) { basis[VERDICTS[v.verdict]] += 1; }
+    // Skip unknown verdict strings so a stray value can't corrupt the basis via
+    // basis[undefined] = NaN (L9).
+    for (const v of peers) {
+      const key = VERDICTS[v.verdict];
+      if (key !== undefined) { basis[key] += 1; }
+    }
     const { tier, confidence } = assignTier(basis.a, basis.d);
     return { id: f.id, raiser: f.raiser, severity: f.severity, tier, basis, confidence,
              tierOverride: null, adjudications: votes };

@@ -150,12 +150,14 @@ src/
 │   ├── alias-resolver.js  # Alias Resolver Utilities
 │   ├── api-key-store.js  # API Key Store — reading, saving, and validating API keys.
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
+│   ├── atomic-write.js  # Atomic file write helper.
 │   ├── auth-json.js  # Auth JSON Reader
 │   ├── config.js  # Amicus Config Module
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
 │   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
 │   ├── error-doc.js
+│   ├── format-duration.js
 │   ├── free-models.js  # Free OpenRouter model detection (Unit A).
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
 │   ├── input-validators.js
@@ -203,6 +205,7 @@ src/
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
 ├── mcp-tools.js  # MCP Tool Definitions for Amicus
 ├── opencode-client.js  # OpenCode SDK Client Wrapper
+├── project-root-allowlist.js  # The MCP `project` / cwd input becomes the session-store parent AND the spawned
 ├── prompt-builder.js  # System Prompt Builder
 ├── session-manager.js  # Session Manager Module
 └── session.js  # Session Resolver
@@ -211,10 +214,12 @@ electron/
 │   ├── icon.png
 │   └── icon.svg
 ├── fold.js  # Fold Logic
+├── ipc-guard.js  # IPC Guard Helpers
 ├── ipc-setup.js  # IPC Setup Handlers
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
 ├── opencode-theme.js
+├── preload-content.js  # Content Preload - OpenCode BrowserView (minimal, no privileged bridge)
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
@@ -289,9 +294,10 @@ evals/
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `opencode-client.js` | OpenCode SDK Client Wrapper | `INSUFFICIENT_CREDITS_REASON()`, `providerErrorReason()`, `parseModelString()`, `createClient()`, `createSession()` |
+| `project-root-allowlist.js` | The MCP `project` / cwd input becomes the session-store parent AND the spawned | `isAllowedProjectRoot()`, `isPathInside()`, `allowedRoots()` |
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE()` |
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
-| `session.js` | Session Resolver | `encodeProjectPath()`, `decodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
+| `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `council/findings.js` |  | `validateFindings()`, `SEVERITIES()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `LEDGER_FILE()`, `LEDGER_SCHEMA_VERSION()` |
 | `council/report-html.js` |  | `renderHtml()` |
@@ -332,12 +338,14 @@ evals/
 | `utils/alias-resolver.js` | Alias Resolver Utilities | `applyDirectApiFallback()`, `autoRepairAlias()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
+| `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `migrateLegacyConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `listCuratedRoutes()` |
 | `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
+| `utils/format-duration.js` |  | `formatDuration()` |
 | `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `findSimilar()` |

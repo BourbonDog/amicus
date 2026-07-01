@@ -268,5 +268,5 @@ async function runFanout(options) {
 
 module.exports = {
   parseModelsList, deriveLegIds, validateFanoutModels, DEFAULT_MAX_LEGS,
-  runFanout, runLeg, writeWaveMetadata,
+  runFanout,
 };

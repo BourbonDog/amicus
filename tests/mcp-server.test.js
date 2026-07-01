@@ -1801,7 +1801,7 @@ describe('council MCP handlers', () => {
     const res = await handlers.amicus_council_tally(avInput, process.cwd());
     expect(res.isError).toBeFalsy();
     const doc = JSON.parse(res.content[0].text);
-    expect(doc.tierCounts).toEqual({ Confirmed: 19, Contested: 2, Singleton: 11, Disputed: 3 });
+    expect(doc.tierCounts).toEqual({ Confirmed: 29, Contested: 2, Singleton: 1, Disputed: 3 });
   });
 
   test('amicus_verdict merges decisions into the verdict', async () => {

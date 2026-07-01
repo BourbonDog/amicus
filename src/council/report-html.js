@@ -8,6 +8,7 @@
  */
 
 const { formatCost } = require('../utils/pricing');
+const { formatDuration } = require('../utils/format-duration');
 const { TIER_ORDER, SYMBOL } = require('./report');
 const { tokenCss } = require('../design/tokens');
 
@@ -29,7 +30,7 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function num(v) { return (v === null || v === undefined) ? '—' : v.toFixed(2); }
-function dur(ms) { return (ms === null || ms === undefined) ? '—' : `${Math.round(ms / 1000)}s`; }
+function dur(ms) { return formatDuration(ms, '—'); }
 
 function renderHtml(m) {
   const h = m.header;

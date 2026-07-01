@@ -161,6 +161,10 @@ async function continueSidecar(options) {
     model, briefing, headless, agent: effectiveAgent
   }, oldTaskId);
 
+  // Lock the NEW continuation session dir too — not just the previous one — so a
+  // concurrent operation on the new session is blocked for its whole lifetime.
+  acquireLock(sessionDir, headless ? 'headless' : 'interactive');
+
   saveInitialContext(sessionDir, systemPrompt, userMessage);
 
   // Start heartbeat
@@ -190,6 +194,7 @@ async function continueSidecar(options) {
     }
   } finally {
     heartbeat.stop();
+    releaseLock(sessionDir);
     releaseLock(prevSessionDir);
   }
 

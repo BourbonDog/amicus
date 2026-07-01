@@ -229,6 +229,31 @@ describe('runFanout orchestrator', () => {
     expect(exitCode).toBe(2);
   });
 
+  it('a leg whose SETUP throws becomes an error leg — wave still writes wave.json, never rejects', async () => {
+    // Pre-try setup (createSessionMetadata) throwing must NOT propagate through
+    // Promise.all past runFanout's finally — it would skip wave.json and the
+    // documented "runLeg never throws / never rejects" contract. The failing
+    // leg should resolve to an error run document and the wave aggregates.
+    const startMod = require('../../src/sidecar/start');
+    const realCreate = startMod.createSessionMetadata;
+    const spy = jest.spyOn(startMod, 'createSessionMetadata')
+      .mockImplementationOnce(() => { throw new Error('setup boom'); })
+      .mockImplementation((...args) => realCreate(...args));
+    try {
+      const { wave, exitCode } = await runFanout({ ...baseOpts(), waveId: 'cafe2222' });
+      expect(wave.legs[0].status).toBe('error');
+      expect(wave.legs[0].error).toMatch(/setup boom/);
+      expect(wave.legs[1].status).toBe('complete');
+      expect(exitCode).toBe(2);
+      // wave.json still persisted despite the leg-setup throw
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafe2222', 'wave.json'), 'utf-8'));
+      expect(stored.status).toBe('partial');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('builds context ONCE and reuses it across legs', async () => {
     await runFanout({ ...baseOpts(), includeContext: true });
     expect(mockBuildContext).toHaveBeenCalledTimes(1);

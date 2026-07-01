@@ -55,6 +55,14 @@ async function launchSetupWindow() {
       logger.debug('Setup window stderr', { data: chunk.trim() });
     });
 
+    // A spawn failure (ENOENT/EACCES) emits 'error' and NEVER 'close'. Without
+    // this listener the Promise would hang forever and Node would treat the
+    // unhandled child 'error' as a crash. Resolve with a clear failure instead.
+    proc.on('error', (err) => {
+      logger.error('Setup window failed to spawn', { error: err.message });
+      resolve({ success: false, error: `Failed to start setup window: ${err.message}` });
+    });
+
     proc.on('close', (code) => {
       logger.info('Setup window closed', { code });
 
