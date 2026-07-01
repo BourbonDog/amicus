@@ -1,0 +1,3 @@
+# Shell installers must stay LF so `curl … | sh` works regardless of a
+# contributor's core.autocrlf setting (a CRLF install.sh breaks under sh).
+*.sh text eol=lf
