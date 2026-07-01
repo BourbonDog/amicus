@@ -27,6 +27,12 @@ const { spawnSync } = require('child_process');
 const { resolveCacheRoots } = require('./electron-cache');
 const { avHint, verifyExtractOutcome: verifyQuarantine } = require('./electron-quarantine');
 const { acquireRepairLock } = require('./electron-lock');
+const { robustExtract } = require('./unzip');
+
+/** Self-heal progress line to stderr (visible during first-GUI provision). */
+function stderrLog(msg) {
+  try { process.stderr.write(`${msg}\n`); } catch { /* stderr closed */ }
+}
 
 /** Default on-disk location of the installed electron package. */
 function defaultElectronDir() {
@@ -199,7 +205,9 @@ async function repairElectron({
   deps = {},
 } = {}) {
   const fs = deps.fs || fsDefault;
-  const extract = deps.extract || require('extract-zip');
+  // Default extract: extract-zip bounded (idle/max) + native-unzip fallback (extract-zip-node24 stall).
+  const extract = deps.extract
+    || ((zipPath, o) => robustExtract(zipPath, { ...o, platform, deps: { fs, log: stderrLog } }));
   // Default-bound the last-resort installer spawn (8 min) so a first-GUI-use
   // provision that reaches runInstaller without an explicit timeoutMs can't hang
   // the holder — the caller's timeoutMs still wins when provided.
