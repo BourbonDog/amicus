@@ -49,6 +49,9 @@ tests/screenshots/*
 # Claude Code local settings (personal permission grants)
 .claude/settings.local.json
 
+# Local dev-server launch config (machine-specific absolute paths)
+.claude/launch.json
+
 # Agent instruction files (local development only)
 CLAUDE.md
 GEMINI.md
