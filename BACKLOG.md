@@ -140,3 +140,31 @@ _Excluded: L1 (token estimators) — already covered by BL-10. C3/H4/M10 — ref
 ### Second-review follow-ups
 - **H9 tally/verdict fencing** — needs a JSON-safe mechanism (fence a free-text field or a presentation wrapper) + coordinated council/test update.
 - **L2 dead-branch removal** — needs a lane that also owns `tests/context.test.js:312`.
+
+---
+
+## Distribution & docs
+
+From a verified distribution-channels research pass (2026-07-01). **Every recommended channel WRAPS `npm i -g amicus` —
+none need a built artifact** (unlike winget, abandoned). Ranked by leverage:
+
+- [x] **README + Pages: feature the Claude Code plugin install as a headline method, equal to `npm i -g amicus`.**
+  amicus already ships `.claude-plugin/marketplace.json` (marketplace `bourbondog-amicus`); the plugin path also sidesteps
+  the mutating postinstall (`plugin.json` sets `AMICUS_SKIP_POSTINSTALL=1`). Add an equally-prominent block:
+  `/plugin marketplace add BourbonDog/amicus` → `/plugin install amicus@bourbondog-amicus` → `/reload-plugins`.
+  (Verified against code.claude.com docs. Caveats: first MCP launch cold-downloads the ~165 MB opencode binary; the GUI stays npm-only.)
+- [x] **Universal install script** — `install.sh` + `install.ps1` (check Node ≥18 → `npm i -g amicus` → `amicus setup`).
+  Trivial, all 3 OSes, no gatekeeper, preserves the `~/.claude` integration. Highest-leverage non-npm move.
+- [ ] **Submit to Anthropic's COMMUNITY plugin marketplace** via the web form at clau.de/plugin-directory-submission
+  (NOT a PR — PRs auto-close; the *official* marketplace is invite-only). Needs the repo public + passing safety screening.
+- [ ] **Official MCP Registry** (registry.modelcontextprotocol.io) — add `"mcpName": "io.github.BourbonDog/amicus"` to
+  package.json + a `server.json` (`mcp-publisher init`) pointing at the npm package's `mcp` subcommand + GitHub-OAuth publish.
+  Metadata-only, wraps npm, cascades to third-party directories. ⚠️ Registry is in PREVIEW (schema churn) — re-verify first.
+- [ ] **(Optional, Windows) Chocolatey** — `chocolateyInstall.ps1` runs `npm i -g amicus` with `<dependency id="nodejs-lts">`;
+  no embedded binary ⇒ no VERIFICATION.txt. Medium effort (moderation latency). Preferred over Scoop (whose contained buckets reject the npm-wrapper form).
+- [ ] **(Optional) Third-party MCP directories** — Glama (auto-indexes; just claim), PulseMCP + mcp.so (Submit form),
+  Smithery (`smithery mcp publish`), + a PR to `punkpeye/awesome-mcp-servers`. Pure discovery; most ingest the official registry.
+
+**Skip:** winget (needs a built artifact), Homebrew-core (notability gate ≥30 forks/watchers or ≥75 stars + postinstall-mutation
+friction; a personal tap is possible but low-payoff), Scoop official buckets, and AUR/Nix/Snap/Flatpak/Docker/mise
+(sandboxed/relocatable assumptions fight amicus's host-config mutation + native binary).

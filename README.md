@@ -57,13 +57,37 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ## Quick start
 
-**Install:**
+**Install** — pick whichever fits; all deliver the same CLI, MCP server, and both skills:
+
+**As a Claude Code plugin** — the most native path if you use Claude Code:
+
+```text
+/plugin marketplace add BourbonDog/amicus
+/plugin install amicus@bourbondog-amicus
+/reload-plugins
+```
+
+Claude Code registers the MCP server and both skills for you — nothing to configure. (The standalone Electron window is npm-only, and the first council/sidecar call downloads the OpenCode engine.)
+
+**With the install script** — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/BourbonDog/amicus/main/install.sh | sh
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/BourbonDog/amicus/main/install.ps1 | iex
+```
+
+**With npm** — the canonical path (needs [Node.js](https://nodejs.org) ≥ 18):
 
 ```bash
 npm install -g amicus
 ```
 
-The postinstall step auto-configures everything — no manual registration:
+For the **npm** and **install-script** paths, a postinstall auto-configures everything — no manual registration:
 
 - Registers the **MCP server** in Claude Code and in Claude Desktop / Cowork, so the Amicus tools appear natively.
 - Installs **both skills** into `~/.claude/skills/` — `second-opinion` (the council) and `sidecar` (the chat skill).

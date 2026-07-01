@@ -345,8 +345,13 @@ h2.v .w-anim{opacity:1;transform:none}
     <p class="hero-sub rv">LLM Council. Parallel window.</p>
     <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em>: Amicus routes it through models from different families, has them cross-review each other anonymously, and a non-Claude chair synthesizes the verdict. Or skip the ceremony — fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
     <div class="hero-btns rv">
-      <div class="cmd" onclick="copyCmd(this)" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
-        <span class="d" style="color:#4ade80">$</span><span style="color:#4ade80;font-weight:600">npm install -g amicus</span><span class="cp" style="border-color:rgba(74,222,128,.3);color:rgba(74,222,128,.6)">copy</span>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:.5rem">
+        <div class="cmd" onclick="copyCmd(this)" data-cmd="/plugin marketplace add BourbonDog/amicus" style="background:rgba(196,164,220,.07);border-color:rgba(196,164,220,.25)">
+          <span class="d" style="color:#c4a4dc">/</span><span style="color:#c4a4dc;font-weight:600">plugin marketplace add BourbonDog/amicus</span><span class="cp" style="border-color:rgba(196,164,220,.3);color:rgba(196,164,220,.6)">copy</span>
+        </div>
+        <div class="cmd" onclick="copyCmd(this)" data-cmd="npm install -g amicus" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
+          <span class="d" style="color:#4ade80">$</span><span style="color:#4ade80;font-weight:600">npm install -g amicus</span><span class="cp" style="border-color:rgba(74,222,128,.3);color:rgba(74,222,128,.6)">copy</span>
+        </div>
       </div>
       <a href="https://github.com/BourbonDog/amicus" class="btn-o">
         <svg viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 016.02 0c2.28-1.55 3.29-1.23 3.29-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.82.58A12.01 12.01 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -464,24 +469,28 @@ h2.v .w-anim{opacity:1;transform:none}
   <div class="w">
     <div class="tag rv">Quick Start</div>
     <h2 class="rv">Install. Configure. <span>Council.</span></h2>
-    <p class="lead rv" style="margin:0 auto">One install delivers both skills, the CLI, and the MCP server. No manual registration required.</p>
+    <p class="lead rv" style="margin:0 auto">Install as a Claude Code plugin, via one script, or with npm — each delivers both skills, the CLI, and the MCP server. No manual registration required.</p>
     <div style="max-width:680px;margin:2.5rem auto 0;border-radius:10px;background:var(--bg);border:1px solid var(--border2);overflow:hidden" class="rv">
       <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--border)">
         <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
         <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
         <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
       </div>
-      <pre style="padding:1.4rem 1.6rem;font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:2.1;overflow-x:auto;margin:0"><span style="color:#555"># Install</span>
+      <pre style="padding:1.4rem 1.6rem;font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:2.1;overflow-x:auto;margin:0"><span style="color:#555"># Install as a Claude Code plugin — most native</span>
+<span style="color:var(--green)">/plugin marketplace add BourbonDog/amicus</span>
+<span style="color:var(--green)">/plugin install amicus@bourbondog-amicus</span>
+
+<span style="color:#555"># …or one line (macOS / Linux — needs Node 18+)</span>
+<span style="color:var(--green)">curl -fsSL https://raw.githubusercontent.com/BourbonDog/amicus/main/install.sh | sh</span>
+
+<span style="color:#555"># …or with npm (any OS with Node 18+)</span>
 <span style="color:var(--green)">npm install -g amicus</span>
 
 <span style="color:#555"># Configure API keys and default model</span>
 <span style="color:var(--green)">amicus setup</span>
 
 <span style="color:#555"># Then in Claude Code or Cowork, just say:</span>
-<span style="color:#c4a4dc">"council review this"</span>
-
-<span style="color:#444">&gt; Amicus routes your doc through 3 models, cross-reviews, and presents a tiered verdict.</span>
-<span style="color:#444">&gt; You make the accept / deny calls.</span></pre>
+<span style="color:#c4a4dc">"council review this"</span></pre>
     </div>
   </div>
 </section>
@@ -1248,9 +1257,12 @@ h2.v .w-anim{opacity:1;transform:none}
   <div class="cta-i">
     <div class="tag rv">Get Started</div>
     <h2 class="rv">Install in 30 Seconds.</h2>
-    <p class="lead rv">One npm install. Gets you the CLI, Claude Code skill, and MCP server.</p>
+    <p class="lead rv">A Claude Code plugin, one script, or one npm install — each gets you the CLI, both skills, and the MCP server.</p>
     <div class="rv" style="display:flex;flex-direction:column;align-items:center;gap:1rem">
-      <div class="cmd" onclick="copyCmd(this)" style="font-size:.88rem">
+      <div class="cmd" onclick="copyCmd(this)" data-cmd="/plugin marketplace add BourbonDog/amicus" style="font-size:.88rem">
+        <span class="d">/</span>plugin marketplace add BourbonDog/amicus<span class="cp">copy</span>
+      </div>
+      <div class="cmd" onclick="copyCmd(this)" data-cmd="npm install -g amicus" style="font-size:.88rem">
         <span class="d">$</span>npm install -g amicus<span class="cp">copy</span>
       </div>
       <a href="https://github.com/BourbonDog/amicus" class="btn-f">
@@ -1288,7 +1300,7 @@ h2.v .w-anim{opacity:1;transform:none}
 </footer>
 
 <script>
-function copyCmd(e){navigator.clipboard.writeText('npm install -g amicus').then(()=>{const t=e.querySelector('.cp');t.textContent='copied!';setTimeout(()=>t.textContent='copy',2e3)})}
+function copyCmd(e){const cmd=e.dataset.cmd||'npm install -g amicus';navigator.clipboard.writeText(cmd).then(()=>{const t=e.querySelector('.cp');t.textContent='copied!';setTimeout(()=>t.textContent='copy',2e3)})}
 /* Nav scroll reveal */
 const navEl=document.querySelector('nav');
 window.addEventListener('scroll',()=>{navEl.classList.toggle('nav-vis',window.scrollY>80)},{passive:true});
