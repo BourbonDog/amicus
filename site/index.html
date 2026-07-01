@@ -97,10 +97,11 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--ac
 .hero-sub{font-size:clamp(1.5rem,2.8vw,2.1rem);font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:1.4rem;color:var(--t1)}
 .hero-desc{font-size:1.05rem;color:#c5c5c3;line-height:1.65;margin-bottom:2.2rem}
 .hero-btns{display:flex;gap:.6rem;flex-wrap:wrap}
-.cmd{display:flex;align-items:center;gap:.5rem;padding:.55rem .9rem;border-radius:7px;background:var(--s1);border:1px solid var(--border2);font-family:'IBM Plex Mono',monospace;font-size:.82rem;color:var(--t1);cursor:pointer;transition:border-color .15s}
+.cmd{display:flex;align-items:center;gap:.6rem;padding:.55rem .9rem;border-radius:7px;background:var(--s1);border:1px solid var(--border2);font-family:'IBM Plex Mono',monospace;font-size:.82rem;color:var(--t1);cursor:pointer;transition:border-color .15s}
 .cmd:hover{border-color:var(--t3)}
+.cmd .cmd-txt{min-width:0;white-space:nowrap}
 .cmd .d{color:var(--t3);user-select:none}
-.cmd .cp{font-size:.6rem;color:var(--t3);padding:.12rem .35rem;border:1px solid var(--border);border-radius:3px;font-family:'IBM Plex Mono',monospace;transition:color .15s}
+.cmd .cp{flex-shrink:0;margin-left:auto;font-size:.6rem;color:var(--t3);padding:.12rem .35rem;border:1px solid var(--border);border-radius:3px;font-family:'IBM Plex Mono',monospace;transition:color .15s}
 .cmd:hover .cp{color:var(--t2)}
 .btn-o{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1rem;border-radius:7px;border:1px solid var(--border2);font-size:.82rem;font-weight:600;transition:background .15s}
 .btn-o:hover{background:var(--s1)}
@@ -274,6 +275,8 @@ h2.v .w-anim{opacity:1;transform:none}
   /* Keep npm + Docs on same row */
   .hero-btns{flex-wrap:nowrap;align-items:center}
   .hero-btns .cmd{flex:1;min-width:0}
+  /* Long slash-command wraps instead of overflowing the narrow mobile row */
+  .cmd .cmd-txt{white-space:normal;overflow-wrap:anywhere}
   /* Code blocks: scroll instead of overflow, smaller font on mobile */
   pre,code,[style*="font-family:'IBM Plex Mono'"]{overflow-x:auto;max-width:100%}
   pre{font-size:.68rem!important;padding:1rem 1.1rem!important}
@@ -345,12 +348,12 @@ h2.v .w-anim{opacity:1;transform:none}
     <p class="hero-sub rv">LLM Council. Parallel window.</p>
     <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em>: Amicus routes it through models from different families, has them cross-review each other anonymously, and a non-Claude chair synthesizes the verdict. Or skip the ceremony — fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
     <div class="hero-btns rv">
-      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:.5rem">
+      <div style="flex:1;display:flex;flex-direction:column;gap:.5rem">
         <div class="cmd" onclick="copyCmd(this)" data-cmd="/plugin marketplace add BourbonDog/amicus" style="background:rgba(196,164,220,.07);border-color:rgba(196,164,220,.25)">
-          <span class="d" style="color:#c4a4dc">/</span><span style="color:#c4a4dc;font-weight:600">plugin marketplace add BourbonDog/amicus</span><span class="cp" style="border-color:rgba(196,164,220,.3);color:rgba(196,164,220,.6)">copy</span>
+          <span class="cmd-txt" style="color:#c4a4dc;font-weight:600"><span class="d" style="color:#c4a4dc">/</span>plugin marketplace add BourbonDog/amicus</span><span class="cp" style="border-color:rgba(196,164,220,.3);color:rgba(196,164,220,.6)">copy</span>
         </div>
         <div class="cmd" onclick="copyCmd(this)" data-cmd="npm install -g amicus" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
-          <span class="d" style="color:#4ade80">$</span><span style="color:#4ade80;font-weight:600">npm install -g amicus</span><span class="cp" style="border-color:rgba(74,222,128,.3);color:rgba(74,222,128,.6)">copy</span>
+          <span class="cmd-txt" style="color:#4ade80;font-weight:600"><span class="d" style="color:#4ade80">$</span>&nbsp;npm install -g amicus</span><span class="cp" style="border-color:rgba(74,222,128,.3);color:rgba(74,222,128,.6)">copy</span>
         </div>
       </div>
       <a href="https://github.com/BourbonDog/amicus" class="btn-o">
@@ -1260,10 +1263,10 @@ h2.v .w-anim{opacity:1;transform:none}
     <p class="lead rv">A Claude Code plugin, one script, or one npm install — each gets you the CLI, both skills, and the MCP server.</p>
     <div class="rv" style="display:flex;flex-direction:column;align-items:center;gap:1rem">
       <div class="cmd" onclick="copyCmd(this)" data-cmd="/plugin marketplace add BourbonDog/amicus" style="font-size:.88rem">
-        <span class="d">/</span>plugin marketplace add BourbonDog/amicus<span class="cp">copy</span>
+        <span class="cmd-txt"><span class="d">/</span>plugin marketplace add BourbonDog/amicus</span><span class="cp">copy</span>
       </div>
       <div class="cmd" onclick="copyCmd(this)" data-cmd="npm install -g amicus" style="font-size:.88rem">
-        <span class="d">$</span>npm install -g amicus<span class="cp">copy</span>
+        <span class="cmd-txt"><span class="d">$</span>&nbsp;npm install -g amicus</span><span class="cp">copy</span>
       </div>
       <a href="https://github.com/BourbonDog/amicus" class="btn-f">
         Read the Docs
