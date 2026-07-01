@@ -10,10 +10,13 @@
  *   ALLOW a path under any of —
  *     - os.homedir()
  *     - process.cwd()
+ *     - os.tmpdir() (scratch space — session dirs/sidecars here are harmless, and
+ *       it keeps behaviour consistent across platforms where tmp is NOT under home
+ *       e.g. /tmp on Linux vs %USERPROFILE%\AppData\...\Temp on Windows)
  *     - AMICUS_PROJECT_DIR (single path)
  *     - AMICUS_PROJECT_ROOTS (path-list, os.delimiter-separated)
  *     - any extra root the caller passes (e.g. the MCP client's advertised root)
- *   REJECT anything outside all of the above.
+ *   REJECT anything outside all of the above (e.g. C:/Windows, /etc).
  *
  * Pure(ish): only reads os/env/cwd for the default allow-list; never touches the
  * filesystem and never throws.
@@ -47,7 +50,7 @@ function isPathInside(child, parent) {
  * @returns {string[]} canonical, de-duplicated, non-empty roots.
  */
 function allowedRoots(extraRoots = []) {
-  const roots = [os.homedir(), process.cwd()];
+  const roots = [os.homedir(), process.cwd(), os.tmpdir()];
   if (process.env.AMICUS_PROJECT_DIR) { roots.push(process.env.AMICUS_PROJECT_DIR); }
   if (process.env.AMICUS_PROJECT_ROOTS) {
     for (const r of process.env.AMICUS_PROJECT_ROOTS.split(path.delimiter)) {
