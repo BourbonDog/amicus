@@ -4,6 +4,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 const { startOpenCodeServer } = require('./session-utils');
@@ -16,6 +17,7 @@ const { startAbortWatch, markResultAborted, readAbortedMarker } = require('./int
 const { getSessionDir } = require('../session-manager');
 const { canonicalProjectPath } = require('../utils/project-path');
 const { ensureElectron } = require('./electron-ensure');
+const { writeProgress } = require('./progress');
 
 /** Resolve the Electron binary path ONLY when the exe actually exists on disk.
  *  #54: path.txt surviving (require('electron') resolving) is NOT enough — a
@@ -116,6 +118,14 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
 
   const { agent, isResume, conversation, mcp, reasoning, opencodeSessionId, client } = options;
 
+  // F6c: mirror headless's lifecycle stages (best-effort — a write failure must
+  // never break the GUI) so the heartbeat/status never read "Starting up...".
+  const sessionDir = getSessionDir(project, taskId);
+  const progressStage = (stage) => {
+    try { fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 }); writeProgress(sessionDir, stage); } catch { /* best-effort */ }
+  };
+  progressStage('initializing');
+
   // Scope the OpenCode session to the project/--cwd (#45). The SDK Session
   // object echoes a `directory`, but createSession() returns only the id, so we
   // use the canonicalized --cwd CONSISTENTLY for BOTH the create scope and the
@@ -134,6 +144,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     });
     ocClient = result.client;
     server = result.server;
+    progressStage('server_ready');
   } catch (error) {
     logger.error('Failed to start OpenCode server', { error: error.message });
     return {
@@ -149,9 +160,11 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       // Resume: reconnect to existing OpenCode session
       sessionId = opencodeSessionId;
       logger.info('Reconnecting to existing session', { sessionId });
+      progressStage('session_created');
     } else {
       // New session: create and send initial prompt, scoped to --cwd (#45).
       sessionId = await createSession(ocClient, sessionDirectory);
+      progressStage('session_created');
 
       // System prompt is set on agent config (hidden from UI).
       // Do NOT pass system here — promptAsync's system field is visible in the UI.
@@ -166,6 +179,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       if (reasoning) { promptOptions.reasoning = reasoning; }
 
       await sendPromptAsync(ocClient, sessionId, promptOptions);
+      progressStage('prompt_sent');
     }
     logger.debug('Interactive session ready', { sessionId, isResume: !!isResume });
   } catch (error) {
@@ -200,7 +214,6 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     onActivity: () => watchdog.touch(),
   });
 
-  const sessionDir = getSessionDir(project, taskId);
   const mirror = startInteractiveMirror({
     getMessages: () => getMessages(ocClient, sessionId, sessionDirectory),
     sessionDir,
