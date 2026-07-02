@@ -9,7 +9,7 @@ const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
 const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
 const { readProgress, isStalled } = require('./sidecar/progress');
-const { deriveStage } = require('./sidecar/progress-fields');
+const { deriveStage, sanitizePreview } = require('./sidecar/progress-fields');
 const { SharedServerManager } = require('./utils/shared-server');
 const { durationBetween } = require('./utils/result-schema');
 const { canonicalProjectPath } = require('./utils/project-path');
@@ -694,7 +694,7 @@ const handlers = {
           const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
           const entry = {
             id: d, model: meta.model, status: meta.status, agent: meta.agent,
-            briefing: (String(meta.briefing || '')).slice(0, 80),
+            briefing: sanitizePreview(String(meta.briefing || ''), 80),
             createdAt: meta.createdAt,
             mode: meta.mode
               || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),

@@ -1,6 +1,3 @@
-// src/cli-handlers-status.js
-'use strict';
-
 /**
  * `amicus status <task_id>` — one-shot human/JSON status for a session or wave.
  * Reads the SAME sources as the MCP amicus_status handler by calling it
@@ -8,6 +5,8 @@
  * only loaded inside startMcpServer()). Zero duplicated status logic — this
  * inherits crash detection, wave leg rollup, and P6-3 enrichment for free.
  */
+
+'use strict';
 
 const { validateTaskId } = require('./utils/validators');
 

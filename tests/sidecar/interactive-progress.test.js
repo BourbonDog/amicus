@@ -66,4 +66,20 @@ describe('interactive lifecycle progress (F6c)', () => {
     expect(stages).toContain('session_created');
     expect(stages).not.toContain('prompt_sent');
   });
+
+  // Contract: progressStage() wraps mkdirSync+writeProgress in a try/catch
+  // that must NEVER break the GUI — a progress-write failure is best-effort
+  // only. Deleting that try/catch would make this test fail (runInteractive
+  // would reject instead of resolving normally).
+  test('progress write failures never break the GUI: runInteractive still resolves when writeProgress throws', async () => {
+    writeProgress.mockImplementation(() => { throw new Error('disk full'); });
+
+    const result = await runInteractive('m', 'sys', 'hi', 'task-3', 'C:/proj', {});
+
+    expect(result.completed).toBe(true);
+    expect(result.error).toBeUndefined();
+    // Other stages were still attempted despite each write throwing.
+    const stages = writeProgress.mock.calls.map(c => c[1]);
+    expect(stages).toEqual(expect.arrayContaining(['initializing', 'server_ready', 'session_created', 'prompt_sent']));
+  });
 });

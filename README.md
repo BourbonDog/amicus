@@ -259,6 +259,7 @@ amicus update
 | `amicus resume` | Reopen a previous session with full history. |
 | `amicus continue` | Start a new session building on a previous one. |
 | `amicus read` | Output a session's summary / conversation / metadata. |
+| `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
@@ -328,6 +329,10 @@ amicus read <id>                     # summary (default)
 amicus read <id> --conversation      # full conversation
 amicus read <id> --metadata          # session metadata
 amicus read <id> --json              # stable JSON (run or wave document)
+
+amicus status <id>                   # one-shot status for a session or wave
+amicus status --wave <id>            # alternative spelling for a wave ID
+amicus status <id> --json            # machine-readable output
 
 amicus resume <id>                   # reopen with full history
 amicus continue <id> --prompt "..."  # new session, previous one as read-only context

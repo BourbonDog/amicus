@@ -88,4 +88,15 @@ describe('amicus_status enrichment (F6)', () => {
     expect(done.phase).toBeUndefined();
     expect(done.lastActivityAt).toBeUndefined();
   });
+
+  test('amicus_list: briefing is sanitized (fence/tag chars stripped, newlines collapsed) and truncated at 80', async () => {
+    const dirty = 'Line one with `backticks` and <tags>\nLine two continues on and on to push past eighty characters total length here';
+    createSession(tmpDir, 'ls-dirty', { status: 'complete', mode: 'interactive', briefing: dirty });
+    const body = parse(await handlers.amicus_list({}, tmpDir));
+    const row = body.find(s => s.id === 'ls-dirty');
+    expect(row.briefing).not.toMatch(/[`<>]/);
+    expect(row.briefing).not.toMatch(/\n/);
+    expect(row.briefing.length).toBeLessThanOrEqual(81); // 80 chars + ellipsis
+    expect(row.briefing.endsWith('…')).toBe(true);
+  });
 });

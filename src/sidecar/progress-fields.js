@@ -1,11 +1,11 @@
-'use strict';
-
 /**
  * @module progress-fields
  * Derived, agent-facing progress fields shared by the MCP status/list
  * handlers, the `amicus status` CLI, and readProgress(): a sanitized preview
  * of the newest assistant text, and a coarse lifecycle stage.
  */
+
+'use strict';
 
 /** Coarse stages surfaced to agents. */
 const COARSE_STAGES = ['starting', 'generating', 'folding', 'terminal'];
