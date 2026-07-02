@@ -6,10 +6,19 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Spy on writeFileAtomic while keeping its real temp+rename behavior, so the
+// module-under-test's destructured reference (bound at its own require time)
+// is the same jest.fn() this file asserts against.
+jest.mock('../src/utils/atomic-write', () => {
+  const actual = jest.requireActual('../src/utils/atomic-write');
+  return { writeFileAtomic: jest.fn(actual.writeFileAtomic) };
+});
+
 const {
   inspectLegacySidecarEntry, removeLegacySidecarEntry,
   inspectAllLegacySidecarEntries, migrateLegacySidecar,
 } = require('../src/utils/legacy-mcp-migration');
+const { writeFileAtomic } = require('../src/utils/atomic-write');
 
 const AMICUS_MCP = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };  // postinstall.js:40 MCP_CONFIG
 const CUSTOM_MCP = { command: 'npx', args: ['-y', 'some-other-mcp'] };
@@ -41,6 +50,15 @@ describe('legacy-mcp-migration', () => {
       expect(cfg.mcpServers.amicus).toEqual(AMICUS_MCP); // the 'amicus' entry stays
       expect(cfg.otherKey).toBe('preserved');            // rest of the file untouched
     }
+  });
+
+  test('writes via the atomic temp+rename helper, not a plain writeFileSync (crash-safety, 4.1 review)', () => {
+    writeConfig(codePath, { amicus: AMICUS_MCP, sidecar: AMICUS_MCP });
+    writeFileAtomic.mockClear();
+    const result = removeLegacySidecarEntry(codePath);
+    expect(result).toBe('removed');
+    expect(writeFileAtomic).toHaveBeenCalledTimes(1);
+    expect(writeFileAtomic).toHaveBeenCalledWith(codePath, expect.any(String), { mode: 0o600 });
   });
 
   test('preserves a customized sidecar entry (not an amicus invocation)', () => {

@@ -24,6 +24,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { writeFileAtomic } = require('./atomic-write');
 
 /** ~/.claude.json — where BOTH Claude Code registration paths (CLI + file fallback) land. */
 function claudeCodeConfigPath() {
@@ -80,8 +81,10 @@ function removeLegacySidecarEntry(configPath, deps = {}) {
   try {
     const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     delete parsed.mcpServers.sidecar;
-    // 0o600 is a no-op on NTFS; kept for parity with addMcpToConfigFile.
-    fs.writeFileSync(configPath, JSON.stringify(parsed, null, 2), { mode: 0o600 });
+    // Atomic temp+rename write — a crash mid-write must never corrupt the
+    // user's main Claude Code state file. 0o600 is a no-op on NTFS; kept for
+    // parity with addMcpToConfigFile.
+    writeFileAtomic(configPath, JSON.stringify(parsed, null, 2), { mode: 0o600 });
     return 'removed';
   } catch {
     return 'write-failed';
