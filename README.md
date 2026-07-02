@@ -306,7 +306,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 ### `amicus fanout` — same prompt, many models
 
 ```bash
-amicus fanout --models gemini,deepseek,gpt --prompt "Review this design" --json
+amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --json
 ```
 
 Fanout runs one **headless wave**: every leg gets the **same** prompt (this is the shared-prompt model the council's review stages are built on). When all legs are terminal it prints **one** JSON wave document on stdout.

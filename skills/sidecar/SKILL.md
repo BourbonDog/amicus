@@ -301,7 +301,7 @@ amicus start --model gemini --prompt "Task"
 ### Fan Out One Prompt to N Models
 
 ```bash
-amicus fanout --models gemini,gpt,deepseek --prompt-file ./briefing.md --json
+amicus fanout --models "gemini,gpt,deepseek" --prompt-file ./briefing.md --json
 ```
 
 Runs the same prompt on every listed model in parallel (one shared engine server, headless),

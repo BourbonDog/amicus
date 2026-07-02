@@ -8,7 +8,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 # Core workflow
 amicus start --model <model> --prompt "<task>"
 amicus start --model <model> --prompt-file briefing.md --no-ui --json
-amicus fanout --models gemini,deepseek,gpt --prompt "Review this" --json
+amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this" --json
 amicus list [--status <filter>] [--all] [--json]
 amicus resume <task_id>
 amicus continue <task_id> --prompt "Next step..."
@@ -62,8 +62,8 @@ See `amicus start --help` or the README for the full option list (context, MCP, 
 Fanout runs one headless wave: every leg receives the **same** prompt concurrently (this is the shared-prompt model that the council's review stages are built on). When all legs settle, Amicus emits a single JSON wave document on stdout.
 
 ```bash
-amicus fanout --models gemini,deepseek,gpt --prompt "Review this design" --json
-amicus fanout --models gemini,opus --prompt-file briefing.md --json --wave-id my-wave-1
+amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --json
+amicus fanout --models "gemini,opus" --prompt-file briefing.md --json --wave-id my-wave-1
 ```
 
 **Key options:**

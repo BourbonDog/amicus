@@ -55,6 +55,10 @@ in this run is written here. Use its absolute path in all `--prompt-file` argume
 - Write every briefing to a temp file (`_tmp-*.md` in the run folder) and pass it with
   `--prompt-file` — never inline a briefing as a CLI argument. All `_tmp-*` files are cleaned up
   after the run.
+- **Inject the current date into every briefing when the artifact is time-sensitive** (resumes, dated
+  plans, anything with start/end dates or 'present' ranges). Headless council models do not reliably
+  know "today" and have raised false "future-dated" blockers; state the date explicitly, e.g.
+  "Today's date is YYYY-MM-DD."
 
 **Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting both the reviewer-reliability data from `amicus council stats` (the authoritative quantitative source — runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — e.g.:
 
@@ -99,9 +103,11 @@ Each council model reviews **the artifact** independently. Write one Stage-1 bri
 (`_tmp-briefing-stage1.md` in the run folder) and launch the whole wave as ONE background call:
 
 ```
-amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
+amicus fanout --models "<m1,m2,m3>" --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
   --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
+
+Always quote the `--models` list — unquoted, PowerShell splits on commas and the CLI receives one mangled alias (instant arg-parse failure).
 
 Run it in the background (`run_in_background: true`); you are notified on completion — do not
 poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
@@ -184,7 +190,7 @@ Each model **unknowingly ranks and adjudicates its own review** — this is the 
 model. Write the bundle + judging instructions to `_tmp-bundle-stage2.md` and launch one wave:
 
 ```
-amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
+amicus fanout --models "<m1,m2,m3>" --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
   --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
@@ -324,15 +330,17 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
   — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
   invent a figure. Add a wave **total cost** row from the wave document's
   `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`; never invent a value.
-  - **Renderer:** once `verdict.json` is written, generate the human report with
-    `amicus council report <run-folder>/verdict.json --md > <run-folder>/report.md`
-    (use `--html` for a self-contained, shareable page). This emits the
+  - **Renderer:** once `verdict.json` is written, generate BOTH renderings:
+    `amicus council report <run-folder>/verdict.json --md > <run-folder>/report.md` and
+    `amicus council report <run-folder>/verdict.json --html > <run-folder>/report.html`.
+    **`report.html` is the default final artifact to hand the user** — a self-contained,
+    shareable page. This emits the
     adjudication matrix (finding × judge), the peers-only street-cred table, the
     findings-by-tier groupings (Disputed-first), and the per-model + wave cost —
     deterministic data only. Prefer it over hand-assembling the matrix; reserve
     prose for the chair's synthesis and the decision log.
 
-Tell the user exactly which files were written and where.
+Tell the user exactly which files were written and where, leading with `report.html`, **and present the verdict inline in chat** — the chair's overall assessment (verbatim or lightly trimmed) plus the tier counts (Confirmed/Disputed/Contested/Singleton) and what was applied. Never hand over only file paths.
 
 ---
 
@@ -449,6 +457,7 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
     — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
     invent a figure. Add a wave **total cost** row from the wave document's
     `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`.
+  - `report.html` — the same report rendered as a self-contained page (`amicus council report <verdict.json> --html`); the default artifact to share.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
 - Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet, proposed
   MODEL-NOTES diff) live in the run folder and are cleaned up at the end of the run — the proposed-diff file
