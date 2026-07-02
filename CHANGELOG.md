@@ -18,6 +18,8 @@ All notable changes to Amicus are documented here. Format follows
 - **`amicus abort` now actually stops interactive sessions and wave legs.** Marker-first, honest output — reports
   what really happened including the unkillable-pid case — and no-ops cleanly with a clear message when the
   target isn't running.
+- **Legacy-MCP remediation's `claude mcp add-json` (CLI) path no longer drops a user's custom `env`** on
+  re-registration — it now merges the previous registration's `env` the same way the file-fallback path already did.
 
 ### Changed
 - **Legacy `sidecar_*` MCP tool aliases are now opt-in** via `AMICUS_LEGACY_ALIASES=1` (breaking-adjacent —

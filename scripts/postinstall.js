@@ -15,6 +15,7 @@ const { execFileSync } = require('child_process');
 
 const { repairElectron } = require('../src/sidecar/electron-install');
 const HINTS = require('../src/utils/remediation-hints');
+const { isAmicusMcpConfig } = require('../src/utils/mcp-self-identity');
 
 const SETUP_HOOKS_SCRIPT = path.join(__dirname, 'setup-hooks.js');
 
@@ -70,7 +71,6 @@ function addMcpToConfigFile(configPath, name, config) {
   if (!existing.mcpServers) { existing.mcpServers = {}; }
 
   const prev = existing.mcpServers[name];
-  const { isAmicusMcpConfig } = require('../src/utils/mcp-self-identity');
   const nextConfig = (prev && isAmicusMcpConfig(prev)) ? { ...prev, ...config } : config;
   const status = !prev ? 'added' : JSON.stringify(prev) !== JSON.stringify(nextConfig) ? 'updated' : 'unchanged';
 
@@ -124,11 +124,36 @@ function installCouncilSkill(sourceDir = COUNCIL_SOURCE_DIR) {
   }
 }
 
+/**
+ * Read the previous 'amicus' entry from ~/.claude.json, if any — used by the
+ * CLI add-json path to merge env the same way the file-fallback path does.
+ * Never throws: a missing/unreadable file just means "no previous entry".
+ * @returns {object|undefined}
+ */
+function readPrevClaudeCodeAmicusEntry() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf-8'));
+    return parsed && parsed.mcpServers ? parsed.mcpServers.amicus : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Register MCP server in Claude Code config */
 function registerClaudeCode() {
   // Try the CLI first
   try {
-    const mcpJson = JSON.stringify(MCP_CONFIG);
+    // Merge the PREVIOUS registration's env into the add-json payload — same
+    // merge semantics as addMcpToConfigFile's file-fallback path (`{ ...prev,
+    // ...config }`: prev env keys survive, canonical MCP_CONFIG keys win on
+    // collision). Without this, a user's custom env (API key, AMICUS_* tuning
+    // knobs) on the old registration was silently dropped whenever the
+    // `claude` CLI was present, because the CLI path built its JSON payload
+    // from the bare MCP_CONFIG and delegated overwrite semantics to the
+    // claude binary — which has no idea about the user's previous entry.
+    const prev = readPrevClaudeCodeAmicusEntry();
+    const nextConfig = (prev && isAmicusMcpConfig(prev)) ? { ...prev, ...MCP_CONFIG } : MCP_CONFIG;
+    const mcpJson = JSON.stringify(nextConfig);
     execFileSync('claude', ['mcp', 'add-json', 'amicus', mcpJson, '--scope', 'user'], {
       stdio: 'pipe',
       timeout: 10000,

@@ -52,6 +52,56 @@ describe('postinstall no longer registers a legacy sidecar MCP server', () => {
     expect(registeredNames).toEqual(['amicus']); // exactly one registration, no shim
   });
 
+  // Pre-v1.8.0 fix: the CLI path built its add-json payload from the bare
+  // MCP_CONFIG only, never looking at the previous registration's `env`. The
+  // file-fallback path already merges (`{ ...prev, ...config }` in
+  // addMcpToConfigFile) so a user's custom env (API key, AMICUS_* tuning
+  // knobs) survived a file-fallback re-registration but was silently dropped
+  // whenever the `claude` CLI was present — delegating overwrite semantics to
+  // the claude binary, which has no idea about the user's previous entry.
+  describe('CLI path: previous env is merged into the add-json payload', () => {
+    test('prev amicus-shaped entry WITH env → env is preserved in the add-json JSON payload', () => {
+      const existingWithEnv = { ...MCP_CONFIG, env: { AMICUS_LEGACY_ALIASES: '1' } };
+      fs.writeFileSync(path.join(tmpHome, '.claude.json'), JSON.stringify({
+        mcpServers: { amicus: existingWithEnv },
+      }, null, 2));
+      execFileSync.mockImplementation(() => Buffer.from('')); // CLI "succeeds"
+
+      registerClaudeCode();
+
+      const call = execFileSync.mock.calls.find(([cmd, args]) => cmd === 'claude' && args[1] === 'add-json');
+      const payload = JSON.parse(call[1][3]);
+      expect(payload.env).toEqual({ AMICUS_LEGACY_ALIASES: '1' });
+      expect(payload.command).toBe(MCP_CONFIG.command);
+      expect(payload.args).toEqual(MCP_CONFIG.args);
+    });
+
+    test('collision → canonical/new MCP_CONFIG keys win over the previous entry', () => {
+      const stalePrev = { command: 'npx', args: ['-y', 'amicus@1.0.0', 'mcp'], env: { FOO: 'bar' } };
+      fs.writeFileSync(path.join(tmpHome, '.claude.json'), JSON.stringify({
+        mcpServers: { amicus: stalePrev },
+      }, null, 2));
+      execFileSync.mockImplementation(() => Buffer.from(''));
+
+      registerClaudeCode();
+
+      const call = execFileSync.mock.calls.find(([cmd, args]) => cmd === 'claude' && args[1] === 'add-json');
+      const payload = JSON.parse(call[1][3]);
+      expect(payload.args).toEqual(MCP_CONFIG.args); // canonical args win, not the stale ones
+      expect(payload.env).toEqual({ FOO: 'bar' });    // prev env still carried forward
+    });
+
+    test('no previous entry → add-json payload is identical to today (unchanged)', () => {
+      execFileSync.mockImplementation(() => Buffer.from(''));
+
+      registerClaudeCode();
+
+      const call = execFileSync.mock.calls.find(([cmd, args]) => cmd === 'claude' && args[1] === 'add-json');
+      const payload = JSON.parse(call[1][3]);
+      expect(payload).toEqual(MCP_CONFIG);
+    });
+  });
+
   test('file-fallback path: ~/.claude.json gains amicus and NO sidecar entry', () => {
     registerClaudeCode(); // execFileSync throws → file fallback
     const config = JSON.parse(fs.readFileSync(path.join(tmpHome, '.claude.json'), 'utf-8'));
