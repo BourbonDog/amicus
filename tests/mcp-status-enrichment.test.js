@@ -49,6 +49,11 @@ describe('amicus_status enrichment (F6)', () => {
     const body = parse(await handlers.amicus_status({ taskId: 'enrich-2' }, tmpDir));
     expect(body.phase).toBe('terminal');
     expect(body.mode).toBe('headless');
+    // Terminal path must NOT read progress — none of the progress-derived
+    // fields may appear on a terminal single-session response.
+    expect(body.messageCount).toBeUndefined();
+    expect(body.latestPreview).toBeUndefined();
+    expect(body.stage).toBeUndefined();
   });
 
   test('wave legs carry phase + latestPreview + lastActivityAt', async () => {
@@ -74,8 +79,13 @@ describe('amicus_status enrichment (F6)', () => {
     expect(run.messageCount).toBe(1);
     expect(run.latestPreview).toBe('working');
     expect(run.phase).toBe('starting');
+    expect(new Date(run.lastActivityAt).getTime()).toBeGreaterThan(0);
     expect(done.mode).toBe('interactive');
+    // Enrichment is gated on status === 'running' — a terminal row must carry
+    // NONE of the live-progress fields (pins the running-only cost gate).
     expect(done.messageCount).toBeUndefined();
     expect(done.latestPreview).toBeUndefined();
+    expect(done.phase).toBeUndefined();
+    expect(done.lastActivityAt).toBeUndefined();
   });
 });
