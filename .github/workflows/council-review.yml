@@ -1,0 +1,182 @@
+name: Council Review
+
+# v1 is fanout-only: N independent model reviews + one synthesis comment.
+# The adjudicated verdict subcommands need the skill-orchestrated Stage-2
+# cross-review (adjudications/rankings), which a code-only pipeline cannot
+# produce — adjudicated verdicts are deferred to v2.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_call:
+    inputs:
+      models:
+        description: Comma-separated amicus model aliases (cheap bench default)
+        type: string
+        default: 'deepseek,gemini,glm'
+      max_cost:
+        description: Soft wave cost ceiling in USD (advisory on cold runners)
+        type: string
+        default: '1.00'
+      diff_cap_bytes:
+        description: Max bytes of PR diff fed to the council
+        type: string
+        default: '120000'
+      require_label:
+        description: Require the council-review label on the PR
+        type: boolean
+        default: true
+    secrets:
+      OPENROUTER_API_KEY:
+        required: true
+
+concurrency:
+  group: council-review-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  council:
+    # Opt-in via label. Fork PRs never receive secrets; the runtime gate below
+    # soft-skips in that case rather than failing the check.
+    # STRING-SAFE label waiver: on plain pull_request events `inputs.*` is empty,
+    # and GitHub's loose equality coerces null→0 and false→0 — a bare
+    # `require_label == false` comparison would be TRUE on every same-repo PR
+    # and bypass the label gate. format() yields '' there ('' != 'false'), so
+    # the label is ALWAYS required on pull_request; only workflow_call callers
+    # can waive it by passing require_label: false.
+    if: >
+      github.event.pull_request != null &&
+      (format('{0}', inputs.require_label) == 'false' ||
+       contains(github.event.pull_request.labels.*.name, 'council-review'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      GH_REPO: ${{ github.repository }}
+      MODELS: ${{ inputs.models || 'deepseek,gemini,glm' }}
+      MAX_COST: ${{ inputs.max_cost || '1.00' }}
+      DIFF_CAP: ${{ inputs.diff_cap_bytes || '120000' }}
+    steps:
+      - name: Gate on secret availability (soft-skip fork PRs)
+        id: gate
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::OPENROUTER_API_KEY unavailable (fork PR or unset secret) — council review skipped."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v6
+        if: steps.gate.outputs.available == 'true'
+        with:
+          node-version: 22
+
+      - name: Install amicus (no checkout — PR code is never executed)
+        if: steps.gate.outputs.available == 'true'
+        env:
+          AMICUS_SKIP_POSTINSTALL: '1'
+        run: npm install -g --omit=optional amicus@latest
+
+      - name: Build review briefing from the PR diff
+        if: steps.gate.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          gh pr diff "$PR_NUMBER" --repo "$GH_REPO" > full.diff
+          head -c "$DIFF_CAP" full.diff > capped.diff
+          TRUNC=""
+          if [ "$(wc -c < full.diff)" -gt "$DIFF_CAP" ]; then
+            TRUNC="(diff truncated to ${DIFF_CAP} bytes — review what is shown; do not guess about elided hunks)"
+          fi
+          PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
+          {
+            echo "You are one of several independent reviewers on a code-review council."
+            echo "Review the following pull request diff for correctness bugs, security"
+            echo "issues, and risky design choices. Do NOT nitpick style or formatting."
+            echo "Output format (markdown): one-line VERDICT (approve / request-changes /"
+            echo "comment), then a numbered findings list — each with severity"
+            echo "(critical/major/minor), file, and a concrete failure scenario. If you"
+            echo "find nothing substantive, say so plainly. Your final message must be"
+            echo "the complete review."
+            echo
+            echo "## PR: ${PR_TITLE}"
+            echo "${PR_BODY}"
+            echo
+            echo "## Diff ${TRUNC}"
+            echo '```diff'
+            cat capped.diff
+            echo '```'
+          } > briefing.md
+
+      - name: Run the review wave (amicus fanout, headless)
+        if: steps.gate.outputs.available == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set +e
+          amicus fanout --models "$MODELS" --prompt-file briefing.md \
+            --no-context --no-validate-model --summary-length verbose \
+            --timeout 10 --max-cost "$MAX_COST" --json > wave.json
+          EC=$?
+          set -e
+          # 0 = all legs complete, 2 = partial (still useful). Anything else fails.
+          if [ "$EC" -ne 0 ] && [ "$EC" -ne 2 ]; then
+            echo '::error::fanout failed'; cat wave.json; exit "$EC"
+          fi
+
+      - name: Synthesize the reviews (one cheap leg)
+        if: steps.gate.outputs.available == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          jq -r '.legs[] | "## Review by \(.modelInput // .model) [\(.status)]\n\n\((.summary // "(no output)")[:12000])\n"' wave.json > reviews.md
+          {
+            echo "Below are $(jq '.legs | length' wave.json) independent AI code reviews of the same pull request."
+            echo "Synthesize them in under 400 words: (1) findings raised by 2+ reviewers,"
+            echo "(2) notable singletons worth a human look, (3) an overall verdict line."
+            echo "Do not invent findings that no reviewer raised."
+            echo
+            cat reviews.md
+          } > synth-briefing.md
+          amicus fanout --models deepseek --prompt-file synth-briefing.md \
+            --no-context --no-validate-model --summary-length verbose \
+            --timeout 10 --json > synth.json || true
+
+      - name: Post sticky PR comment
+        if: steps.gate.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          MARKER="<!-- council-review-sticky -->"
+          SYNTH=$(jq -r '(.legs[0].summary // "(synthesis unavailable)")[:12000]' synth.json 2>/dev/null || echo '(synthesis unavailable)')
+          COST=$(jq -r '.usage.cost // "unknown"' wave.json)
+          STATUS=$(jq -r '"\(.counts.complete)/\(.counts.total) legs complete (\(.status))"' wave.json)
+          {
+            echo "$MARKER"
+            echo "## Council Review (v1 — independent reviews + synthesis)"
+            echo
+            echo "### Synthesis"
+            echo "$SYNTH"
+            echo
+            echo "<details><summary>Individual model reviews</summary>"
+            echo
+            cat reviews.md
+            echo "</details>"
+            echo
+            echo "---"
+            echo "_${STATUS} · wave cost: \$${COST} · models: ${MODELS} · not an adjudicated council verdict (v2)_"
+          } > comment.md
+          EXISTING=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api "repos/${GH_REPO}/issues/comments/$EXISTING" -X PATCH -F body=@comment.md
+          else
+            gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" -F body=@comment.md
+          fi
