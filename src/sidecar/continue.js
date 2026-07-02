@@ -108,7 +108,10 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
   return sessionDir;
 }
 
-/** Continue from a previous sidecar session - Spec Reference: §4.4, §8.5 */
+/**
+ * Continue from a previous sidecar session - Spec Reference: §4.4, §8.5
+ * @returns {Promise<number>} process exit code
+ */
 async function continueSidecar(options) {
   const {
     taskId: oldTaskId,
@@ -171,10 +174,11 @@ async function continueSidecar(options) {
   const heartbeat = createHeartbeat();
 
   let summary;
+  let result;
 
   try {
     if (headless) {
-      const result = await runHeadless(
+      result = await runHeadless(
         model, systemPrompt, userMessage, newTaskId, project,
         timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers }
       );
@@ -185,7 +189,7 @@ async function continueSidecar(options) {
       if (result.error) { logger.error('Continuation task error', { taskId: newTaskId, error: result.error }); }
     } else {
       logger.info('Launching interactive continue', { taskId: newTaskId, model });
-      const result = await runInteractive(
+      result = await runInteractive(
         model, systemPrompt, userMessage, newTaskId, project,
         { agent: effectiveAgent, mcp: mcpServers }
       );
@@ -205,9 +209,23 @@ async function continueSidecar(options) {
   const metaPath = SessionPaths.metadataFile(sessionDir);
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
 
-  // Finalize session. Interactive mode legitimately returns an empty summary,
-  // so pass status explicitly to stay out of the #36 empty-summary guard.
-  finalizeSession(sessionDir, summary, project, meta, { status: 'complete' });
+  // Map the run result to the canonical terminal status + exit code — mirrors
+  // start.js; resolveTerminalState is the single source of truth. Passing the
+  // status explicitly also preserves the interactive empty-summary carve-out:
+  // a clean interactive run finalizes 'complete' without tripping the #36
+  // empty-summary guard.
+  const { resolveTerminalState } = require('./session-finalize');
+  const terminal = resolveTerminalState(result);
+  if (terminal.status === 'error') {
+    meta.status = 'error';
+    meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+    meta.completedAt = new Date().toISOString();
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+    logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
+  } else {
+    finalizeSession(sessionDir, summary, project, meta, { status: terminal.status });
+  }
+  return terminal.exitCode;
 }
 
 module.exports = {
