@@ -49,4 +49,30 @@ describe('failJson', () => {
     expect(outSpy).not.toHaveBeenCalled();
     expect(errSpy.mock.calls[0][0]).toContain('bad flag');
   });
+
+  it('prints the hint on a second stderr arrow line in human mode', () => {
+    failJson(false, {
+      code: ERROR_CODES.BUDGET_EXCEEDED,
+      message: 'Error: budget gate refused the run',
+      hint: 'raise --max-cost or trim the model list',
+    });
+    expect(outSpy).not.toHaveBeenCalled();
+    const stderrText = errSpy.mock.calls.map(c => c[0]).join('');
+    expect(stderrText).toBe(
+      'Error: budget gate refused the run\n  → raise --max-cost or trim the model list\n'
+    );
+  });
+
+  it('omits the arrow line when there is no hint', () => {
+    failJson(false, { code: ERROR_CODES.BAD_ARGS, message: 'bad flag' });
+    const stderrText = errSpy.mock.calls.map(c => c[0]).join('');
+    expect(stderrText).toBe('bad flag\n');
+    expect(stderrText).not.toContain('→');
+  });
+
+  it('json mode is unchanged: hint stays in the envelope, stderr untouched', () => {
+    failJson(true, { code: ERROR_CODES.BAD_ARGS, message: 'bad', hint: 'try --help' });
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(JSON.parse(outSpy.mock.calls[0][0]).error.hint).toBe('try --help');
+  });
 });
