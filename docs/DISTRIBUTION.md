@@ -22,8 +22,11 @@ CHANGELOG's Unreleased section).
 
 ## 2. Claude Code community marketplace (claude-community)
 
-**Status: not yet submitted.** (Update this line when the human step below
-happens: `Status: submitted <date> / approved <date> / listed <date>`.)
+**Status: submitted 2026-07-01 — awaiting Anthropic review.** (Update this
+line as the process advances: `submitted <date> / approved <date> / listed <date>`.
+Note: the submission predates the Phase-9 polish on `main` — reviewers pulling
+the repo see the current surface, including `commands/` and a clean
+`claude plugin validate . --strict`.)
 
 Two Anthropic-run marketplaces exist:
 - **`claude-plugins-official`** — curated by Anthropic, no application process.
