@@ -5,7 +5,29 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-07-02
+
+Docs & skills accuracy sprint from the Phase-8 whole-branch review — no engine changes. Every item fixed a claim
+that actively misdirected Claude or users, plus one headless completion-state bugfix.
+
+### Changed
+- **`report.html` is now the default final council artifact**, and an inline verdict summary in chat is
+  MANDATORY at Stage 5 of the second-opinion skill.
+- **The `sidecar` skill's frontmatter dropped the "second opinion from another model" trigger** — those requests
+  now route to the `second-opinion` skill instead.
+- **MODEL-NOTES seed updated** with durable lessons from council runs 4-7 (new Grok/Kimi/Mistral/Claude-in-council
+  sections; shipped/local split defined). Existing installs: the machine-local copy is installed only-if-missing —
+  merge/refresh manually by pointing at the shipped file.
+- **Council mechanics hardened:** mandatory no-tools preamble for judges and chair (plus scratch-cwd advice);
+  `--max-cost` / `--no-cost-gate` pass-through documented for repair and chair calls (the false solo-start
+  cost-gate exemption was removed); `--models` lists quoted in every example; current-date injection rule for
+  time-sensitive artifacts.
+
 ### Fixed
+- **Plugin quick-start now states the truth:** plugin installs do not put `amicus` on `PATH`; use
+  `npx -y amicus@latest <cmd>`. Both skills gained an npx-fallback/transport rule.
+- **README/usage now document `doctor`, `key`, and `council`;** troubleshooting leads with `amicus doctor`; the
+  false "`amicus list` shows active servers" claim is replaced with real `netstat`/`lsof` guidance.
 - **Headless runs that finish via idle detection no longer write `status:"error"` / `reason:"Incomplete"` to
   `metadata.json`.** The poll loop's two genuine idle-completion exits — the SDK-authoritative `session.status`
   idle signal and the stable-poll activity heuristic (both gated on real output, F1 #16) — broke out of the loop
