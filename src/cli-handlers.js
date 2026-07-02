@@ -147,6 +147,28 @@ async function handleAbort(args) {
 
   markAborted(sessionDir, 'manual abort');
   console.log(`Session ${taskId} marked as aborted.`);
+
+  // Phase 3: fallback direct-kill for a session that does not honor the
+  // marker. Headless loops poll the marker every ~2s and the interactive
+  // abort watch does too, so the normal outcome is a graceful exit during
+  // the grace window; only a wedged/legacy process gets SIGTERM. The wait is
+  // awaited on purpose — bin/amicus.js arms its force-exit watchdog only
+  // after this handler returns.
+  if (meta.pid) {
+    const { waitThenKill, abortGraceMs } = require('./utils/abort-coordinator');
+    const graceSec = Math.ceil(abortGraceMs() / 1000);
+    console.log(`Waiting up to ${graceSec}s for the session process (pid ${meta.pid}) to exit gracefully...`);
+    const { killed, exited } = await waitThenKill(meta.pid);
+    if (killed.length > 0) {
+      console.log(`Process ${meta.pid} did not exit in time — sent SIGTERM (a hard kill on Windows).`);
+    } else if (exited.length > 0) {
+      console.log('Process exited cleanly.');
+    } else {
+      // 3.1 contract: an EPERM-unkillable pid lands in NEITHER array —
+      // it is still alive and we could not signal it. Say so honestly.
+      console.log(`Process ${meta.pid} is still running — could not signal it (insufficient permission). It may require manual termination.`);
+    }
+  }
 }
 
 /**
