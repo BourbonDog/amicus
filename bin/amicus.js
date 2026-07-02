@@ -94,6 +94,11 @@ async function main() {
       case 'list':
         await handleList(args);
         break;
+      case 'status': {
+        const { handleStatus } = require('../src/cli-handlers-status');
+        exitCode = await handleStatus(args);
+        break;
+      }
       case 'resume':
         exitCode = await handleResume(args);
         break;

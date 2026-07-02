@@ -197,6 +197,7 @@ src/
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
+├── cli-handlers-status.js
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
@@ -288,6 +289,7 @@ evals/
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
+| `cli-handlers-status.js` |  | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `DEFAULTS()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
