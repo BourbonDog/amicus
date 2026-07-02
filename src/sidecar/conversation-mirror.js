@@ -44,6 +44,7 @@ function mirrorMessages(messages, state, opts = {}) {
   let currentAssistantMsgId = null;
   let assistantFinished = false;
   let sessionError = null;
+  let reasoningActivity = false;
   const list = Array.isArray(messages) ? messages : [];
   const messageCount = list.length;
 
@@ -127,13 +128,25 @@ function mirrorMessages(messages, state, opts = {}) {
         if (part.text.length > prevLen) {
           state.reasoningOutput += part.text.slice(prevLen);
           state.seenReasoningParts.set(partId, part.text.length);
-          if (!state.receivingReported) {
-            state.receivingReported = true;
-            progressUpdates.push({ stage: 'receiving', extra: { messagesReceived: 1 } });
-          }
+          reasoningActivity = true; // F6d: growth this poll = the model is thinking
         }
       }
     }
+  }
+
+  // F6d: thinking IS activity. Emit ONE progress tick per poll with reasoning
+  // growth (only when no text/tool update already fired) so heartbeat/status
+  // show "Thinking…" and the stall detector resets during long pre-text
+  // reasoning — while a poll with NO growth still writes nothing, keeping
+  // genuine-stall detection intact. OpenCode's getMessages() exposes these
+  // deltas as growing part.type === 'reasoning' text.
+  if (reasoningActivity && progressUpdates.length === 0) {
+    const assistantCount = list.filter(m => m.info && m.info.role === 'assistant').length;
+    progressUpdates.push({
+      stage: 'receiving',
+      extra: { messagesReceived: Math.max(assistantCount, 1), stageLabel: 'Thinking…' },
+    });
+    state.receivingReported = true;
   }
 
   // assistantFinished = true only when the LAST assistant message is complete

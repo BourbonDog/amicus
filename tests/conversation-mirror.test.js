@@ -109,6 +109,35 @@ describe('mirrorMessages', () => {
   });
 });
 
+describe('reasoning-delta progress (F6d)', () => {
+  const reasoningMsg = (id, text) => ({
+    info: { role: 'assistant', id, time: {} },
+    parts: [{ id: `${id}:r`, type: 'reasoning', text }],
+  });
+
+  test('every reasoning-growth poll emits a Thinking tick; no growth emits nothing', () => {
+    const st = createMirrorState();
+    const r1 = mirrorMessages([reasoningMsg('m1', 'hmm')], st, { now: NOW });
+    expect(r1.progressUpdates).toEqual([
+      { stage: 'receiving', extra: { messagesReceived: 1, stageLabel: 'Thinking…' } },
+    ]);
+    const r2 = mirrorMessages([reasoningMsg('m1', 'hmm, deeper thought')], st, { now: NOW });
+    expect(r2.progressUpdates).toHaveLength(1); // growth again → another tick
+    const r3 = mirrorMessages([reasoningMsg('m1', 'hmm, deeper thought')], st, { now: NOW });
+    expect(r3.progressUpdates).toHaveLength(0); // NO growth → no tick (stall detection intact)
+  });
+
+  test('text update wins over the Thinking tick in the same poll', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'm1:r', type: 'reasoning', text: 'thinking' },
+      { id: 'm1:t', type: 'text', text: 'PONG' },
+    ] };
+    const r = mirrorMessages([msg], st, { now: NOW });
+    expect(r.progressUpdates).toEqual([{ stage: 'receiving', extra: { messagesReceived: 1 } }]);
+  });
+});
+
 describe('logMessage', () => {
   const { logMessage } = require('../src/sidecar/conversation-mirror');
   const fs = require('fs');
