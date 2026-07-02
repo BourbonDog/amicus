@@ -60,6 +60,10 @@ describe('amicus_abort ordering (Phase 3)', () => {
     expect(status.status).toBe('aborted');
     expect(status.legs.every(l => l.status !== 'running')).toBe(true);
     expect(status.legs[0].status).toBe('aborted');
+    // Drain the fire-and-forget waitThenKill poll (grace 60ms + one 250ms poll
+    // cycle + slack) — same as the sibling tests — so the real-timer interval
+    // never leaks past mockRestore()/jest.resetModules() below.
+    await sleep(500);
   });
 
   test('single session: marker immediate, wedged pid killed only after grace', async () => {

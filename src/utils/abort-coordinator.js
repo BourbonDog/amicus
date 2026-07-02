@@ -17,7 +17,12 @@
 
 const { logger } = require('./logger');
 
-/** Grace window before the fallback SIGTERM. Env-overridable (tests). */
+/**
+ * Grace window before the fallback SIGTERM. Env-overridable (tests).
+ * AMICUS_ABORT_GRACE_MS='0' is treated as UNSET and falls back to the 5000ms
+ * default — Number.isFinite(0) && 0 > 0 is false, so an explicit "no grace"
+ * is not currently expressible via this env var (adjudicated deviation, 3.3).
+ */
 function abortGraceMs() {
   const n = Number(process.env.AMICUS_ABORT_GRACE_MS);
   return (Number.isFinite(n) && n > 0) ? n : 5000;

@@ -80,4 +80,33 @@ function markResultAborted(result, wasAborted) {
   return result;
 }
 
-module.exports = { startAbortWatch, markResultAborted, DEFAULT_INTERVAL_MS };
+/**
+ * Best-effort, ONE-SHOT read of metadata.json to check for a durable
+ * 'aborted' marker written by `amicus abort` / MCP amicus_abort.
+ *
+ * Closes a race the poll-based startAbortWatch cannot: the marker can land
+ * and Electron can exit naturally before the watch's next ~2s tick (or the
+ * close handler can already be past markResultAborted, awaiting
+ * mirror.stop()). In that window abortWatch.wasAborted() reads false even
+ * though the session WAS aborted, so resolveTerminalState resolves
+ * 'complete' and finalizeSession clobbers the on-disk 'aborted' status.
+ * Callers should OR this into their aborted flag immediately before
+ * markResultAborted. Missing/corrupt metadata reads as false (best-effort,
+ * matches startAbortWatch's own error handling).
+ *
+ * @param {string} sessionDir
+ * @returns {boolean} true iff metadata.json exists and status === 'aborted'
+ */
+function readAbortedMarker(sessionDir) {
+  try {
+    const metaPath = path.join(sessionDir, 'metadata.json');
+    if (!fs.existsSync(metaPath)) { return false; }
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    return meta.status === 'aborted';
+  } catch (err) {
+    logger.debug('readAbortedMarker: metadata read failed (best-effort)', { error: err.message });
+    return false;
+  }
+}
+
+module.exports = { startAbortWatch, markResultAborted, readAbortedMarker, DEFAULT_INTERVAL_MS };

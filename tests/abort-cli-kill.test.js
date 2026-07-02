@@ -95,4 +95,16 @@ describe('abort <taskId> fallback kill (Phase 3)', () => {
     expect(readStatus('beef0013')).toBe('aborted');
     expect(readStatus('beef0013-1')).toBe('aborted');
   });
+
+  it('a completed session is refused — no kill, no re-mark, honest not-running message (phase-3 final review)', async () => {
+    killSpy.mockImplementation(() => { throw new Error('kill must not be called'); });
+    writeSession('beef0015', { status: 'complete', pid: 54321 });
+
+    await handleAbort({ _: ['abort', 'beef0015'], cwd: project });
+
+    expect(readStatus('beef0015')).toBe('complete');   // metadata untouched
+    expect(killSpy).not.toHaveBeenCalled();             // terminal pid never signalled
+    expect(output()).toContain('is not running (status: complete)');
+    expect(output()).not.toContain('marked as aborted');
+  });
 });

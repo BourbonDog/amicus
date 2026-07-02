@@ -123,6 +123,16 @@ async function handleAbort(args) {
     console.error(`Session ${taskId} has malformed metadata`);
     process.exit(1);
   }
+  // Guard against a completed/terminal session: without this, metadata.pid
+  // still holds a value forever and `amicus abort <completed-task>` would
+  // wait the grace window then TerminateProcess whatever unrelated process
+  // now owns that (possibly recycled) pid. Mirrors MCP's amicus_abort guard
+  // (src/mcp-server.js) — same wording, no re-mark, no kill.
+  if (meta.status !== 'running') {
+    console.log(`Session ${taskId} is not running (status: ${meta.status}).`);
+    return;
+  }
+
   const { markAborted } = require('./utils/session-abort');
 
   // F4: aborting a wave aborts every still-running leg too.

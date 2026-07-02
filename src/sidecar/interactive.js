@@ -12,7 +12,7 @@ const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { logger } = require('../utils/logger');
 const { getCompatEnv } = require('../utils/env-compat');
 const { startInteractiveMirror } = require('./interactive-mirror');
-const { startAbortWatch, markResultAborted } = require('./interactive-abort');
+const { startAbortWatch, markResultAborted, readAbortedMarker } = require('./interactive-abort');
 const { getSessionDir } = require('../session-manager');
 const { canonicalProjectPath } = require('../utils/project-path');
 const { ensureElectron } = require('./electron-ensure');
@@ -259,7 +259,12 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       watchdog.cancel();
       activityPoller.stop();
       abortWatch.stop();
-      markResultAborted(result, abortWatch.wasAborted());
+      // Close a race the poll-based watch can miss: the marker can land and
+      // Electron can exit naturally before the next ~2s tick. Re-read the
+      // on-disk marker ONCE here and OR it in so a durable 'aborted' status
+      // is never clobbered to 'complete' below (phase-3 final review, FIX 2).
+      const wasAborted = abortWatch.wasAborted() || readAbortedMarker(sessionDir);
+      markResultAborted(result, wasAborted);
       try {
         const { usage } = await mirror.stop();
         if (usage) { result.usage = usage; }
