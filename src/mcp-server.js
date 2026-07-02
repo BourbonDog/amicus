@@ -323,6 +323,12 @@ const handlers = {
           goPid: server.goPid || null,
           createdAt: new Date().toISOString(),
           headless: true, model: resolvedModel,
+          // F6: agent-visible provenance at creation. The CLI path writes these
+          // via createSessionMetadata; the shared-server path has no CLI child,
+          // so without them status/list/read show a briefing-less, mode-less run.
+          mode: 'headless',
+          agent: agent || 'build',
+          briefing: input.prompt,
         }, null, 2), { mode: 0o600 });
 
         // Build context from parent conversation (unless --no-context)
@@ -440,6 +446,10 @@ const handlers = {
         fs.writeFileSync(metaPath, JSON.stringify({
           taskId, status: 'running', pid: child.pid, createdAt: new Date().toISOString(),
           headless: !!input.noUi,
+          // Seed briefing/mode so list/status are informative even before the
+          // CLI child's createSessionMetadata overwrite (or if it crashes first).
+          mode: input.noUi ? 'headless' : 'interactive',
+          briefing: input.prompt,
         }, null, 2), { mode: 0o600 });
       }
     }
