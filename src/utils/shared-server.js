@@ -49,6 +49,10 @@ class SharedServerManager {
 
     /** @type {NodeJS.Timeout|null} goPid liveness poll (H7) */
     this._crashPoll = null;
+
+    /** @type {NodeJS.Timeout|null} Pending crash-restart backoff timer */
+    this._restartTimer = null;
+
     /** Pid-liveness probe (test seam). Lazy default keeps construction light. */
     this._isProcessAlive = options.isProcessAlive
       || ((pid) => require('../sidecar/session-utils').isProcessAlive(pid));
@@ -171,6 +175,7 @@ class SharedServerManager {
       this._serverWatchdog = null;
     }
     this._stopCrashPoll();
+    if (this._restartTimer) { clearTimeout(this._restartTimer); this._restartTimer = null; }
     if (this.server) {
       this.server.close();
       this.server = null;
@@ -238,7 +243,8 @@ class SharedServerManager {
     }
     this.server = null;
     this.client = null;
-    setTimeout(() => this._handleRestart(), RESTART_BACKOFF);
+    this._restartTimer = setTimeout(() => this._handleRestart(), RESTART_BACKOFF);
+    if (this._restartTimer.unref) { this._restartTimer.unref(); }
   }
 
   /**

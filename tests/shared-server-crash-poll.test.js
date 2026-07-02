@@ -69,4 +69,22 @@ describe('SharedServerManager goPid crash poll (H7)', () => {
     await jest.advanceTimersByTimeAsync(20000);
     expect(crashSpy).not.toHaveBeenCalled();
   });
+
+  test('shutdown during the restart backoff window cancels the pending restart (spawn-after-shutdown race)', async () => {
+    let alive = true;
+    const mgr = new SharedServerManager({ logger: quiet, isProcessAlive: () => alive });
+    mgr._doStartServer = jest.fn().mockResolvedValue({ server: makeRealHandle(557), client: {} });
+    await mgr.ensureServer();
+    // Engine dies: crash poll detects it and schedules a restart after RESTART_BACKOFF (2000ms).
+    alive = false;
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(mgr.server).toBeNull();
+    expect(mgr._doStartServer).toHaveBeenCalledTimes(1);
+    // Manager is shut down while the restart timer is still pending.
+    mgr.shutdown();
+    // Let the original 2s backoff (and then some) elapse.
+    await jest.advanceTimersByTimeAsync(2500);
+    // The pending restart must NOT fire a fresh server spawn after shutdown.
+    expect(mgr._doStartServer).toHaveBeenCalledTimes(1);
+  });
 });
