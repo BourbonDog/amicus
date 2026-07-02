@@ -130,6 +130,7 @@ src/
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
 │   ├── fanout.js
+│   ├── interactive-abort.js
 │   ├── interactive-mirror.js
 │   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
@@ -321,6 +322,7 @@ evals/
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
+| `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `DEFAULT_INTERVAL_MS()` |
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
