@@ -9,6 +9,7 @@ const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
 const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
 const { readProgress, isStalled } = require('./sidecar/progress');
+const { deriveStage } = require('./sidecar/progress-fields');
 const { SharedServerManager } = require('./utils/shared-server');
 const { durationBetween } = require('./utils/result-schema');
 const { canonicalProjectPath } = require('./utils/project-path');
@@ -487,6 +488,10 @@ const handlers = {
           leg.messages = p.messages;
           leg.latestActivity = p.latest;
           leg.stalled = leg.status === 'running' && isStalled(p.lastActivityMs);
+          leg.stage = p.stage;                                  // raw lifecycle stage
+          leg.phase = deriveStage(leg.status, p.stage);         // coarse: starting|generating|folding|terminal
+          leg.latestPreview = p.latestPreview;
+          leg.lastActivityAt = p.lastActivityAt;
         } catch { /* no progress yet — leave base fields only */ }
         return leg;
       });
@@ -560,9 +565,17 @@ const handlers = {
     };
     if (metadata.model) { response.model = metadata.model; }
 
+    // F6: agent-visible mode (headless|interactive). metadata.mode is written at
+    // creation (CLI createSessionMetadata; MCP paths since F6); fall back to the
+    // headless boolean for records created before that.
+    if (metadata.mode) { response.mode = metadata.mode; }
+    else if (metadata.headless !== undefined) { response.mode = metadata.headless ? 'headless' : 'interactive'; }
+
     if (metadata.status === 'running') {
       const progress = readProgress(sessionDir);
-      Object.assign(response, progress);
+      Object.assign(response, progress); // messages/latest/lastActivity/lastActivityMs/lastActivityAt/latestPreview/stage
+      response.messageCount = progress.messages;                       // stable agent-facing alias
+      response.phase = deriveStage(metadata.status, progress.stage);   // coarse lifecycle
 
       // Stall detection: flag when no activity for 2+ minutes
       const STALL_THRESHOLD_MS = 120000;
@@ -577,6 +590,8 @@ const handlers = {
       if (metadata.headless) {
         response.next_poll = computeNextPoll();
       }
+    } else {
+      response.phase = deriveStage(metadata.status, undefined);        // 'terminal'
     }
     if (metadata.status === 'crashed' || metadata.status === 'error') {
       response.reason = metadata.reason || 'Unknown error';
@@ -677,11 +692,25 @@ const handlers = {
         if (!fs.existsSync(metaPath)) { continue; }
         try {
           const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-          byId.set(d, {
+          const entry = {
             id: d, model: meta.model, status: meta.status, agent: meta.agent,
             briefing: (String(meta.briefing || '')).slice(0, 80),
             createdAt: meta.createdAt,
-          });
+            mode: meta.mode
+              || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
+          };
+          // Live-progress enrichment for RUNNING sessions only — readProgress
+          // parses conversation.jsonl, so terminal rows stay cheap.
+          if (meta.status === 'running') {
+            try {
+              const p = readProgress(path.join(root, d));
+              entry.phase = deriveStage(meta.status, p.stage);
+              entry.messageCount = p.messages;
+              entry.lastActivityAt = p.lastActivityAt;
+              entry.latestPreview = p.latestPreview;
+            } catch { /* progress optional */ }
+          }
+          byId.set(d, entry);
         } catch {
           // Skip unreadable metadata
         }
