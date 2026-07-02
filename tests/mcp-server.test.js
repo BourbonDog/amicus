@@ -1340,7 +1340,7 @@ describe('MCP Server Handlers', () => {
   });
 
   describe('amicus_abort PID killing', () => {
-    test('sends SIGTERM to process when PID is stored in metadata', async () => {
+    test('sends SIGTERM to process when PID is stored in metadata (marker-first: kill only after the grace window)', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-abort-pid-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'killme1');
       fs.mkdirSync(sessDir, { recursive: true });
@@ -1350,13 +1350,26 @@ describe('MCP Server Handlers', () => {
         createdAt: new Date().toISOString(),
       }));
 
+      // Marker-first ordering (Phase 3): the SIGTERM is a fallback that only
+      // fires after the grace window. Fake timers + a short grace let us
+      // drain that window deterministically; the mock MUST stay installed
+      // until every grace-kill timer is cleared, or a pending timer fires
+      // the real process.kill after mockRestore.
       const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
+      jest.useFakeTimers();
+      process.env.AMICUS_ABORT_GRACE_MS = '60';
       try {
         const result = await handlers.amicus_abort({ taskId: 'killme1' }, tmpDir);
         expect(result.isError).toBeUndefined();
+        expect(killSpy).not.toHaveBeenCalledWith(99999, 'SIGTERM');
+
+        await jest.advanceTimersByTimeAsync(1000);
         expect(killSpy).toHaveBeenCalledWith(99999, 'SIGTERM');
       } finally {
+        jest.clearAllTimers();
+        jest.useRealTimers();
         killSpy.mockRestore();
+        delete process.env.AMICUS_ABORT_GRACE_MS;
         fs.rmSync(tmpDir, { recursive: true });
       }
     });
