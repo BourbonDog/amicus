@@ -76,6 +76,19 @@ describe('startMcpServer tool registration (Phase 4 de-bloat)', () => {
   });
 });
 
+describe('docs reflect the opt-in alias behavior (no drift)', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+
+  test.each(['docs/usage.md', 'README.md'])('%s documents AMICUS_LEGACY_ALIASES and drops the always-on claim', (file) => {
+    const doc = read(file);
+    expect(doc).toContain('AMICUS_LEGACY_ALIASES');
+    expect(doc).not.toMatch(/still registered as aliases/);
+    expect(doc).toMatch(/no longer registered by default/);
+  });
+});
+
 // Run: npx jest tests/mcp-server-legacy-aliases.test.js
 // Failing-first: on current code the default-env test fails (sidecar_* twins
 // registered unconditionally) and legacyAliasesEnabled does not exist.
