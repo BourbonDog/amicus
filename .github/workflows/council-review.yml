@@ -160,12 +160,15 @@ jobs:
           # hijack the next run's PATCH, (2) forge the footer disclosure, or
           # (3) open/close <details> and break out of the workflow's own
           # wrapper. The real footer is echoed LAST, after all model text —
-          # unforgeable by position.
+          # unforgeable by position. Rules are case-insensitive (I) and
+          # whitespace-tolerant: </DETAILS>, < details >, </ details > and
+          # <!--council-review-sticky--> bypass exact-string/case-sensitive
+          # rules. Openers never match closers (the / is not [[:space:]]).
           neutralize() {
-            sed -e 's/<!-- council-review-sticky -->/[model text removed: sticky marker]/g' \
+            sed -e 's/<!--[[:space:]]*council-review-sticky[[:space:]]*-->/[model text removed: sticky marker]/gI' \
                 -e 's/not an adjudicated/not-an-adjudicated (model text)/gI' \
-                -e 's|</details|[/details|g' \
-                -e 's|<details|[details|g'
+                -e 's|<[[:space:]]*/[[:space:]]*details|[/details|gI' \
+                -e 's|<[[:space:]]*details|[details|gI'
           }
           neutralize < reviews.md > reviews-safe.md
           SYNTH=$(jq -r '(.legs[0].summary // "(synthesis unavailable)")[:12000]' synth.json 2>/dev/null || echo '(synthesis unavailable)')

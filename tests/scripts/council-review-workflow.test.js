@@ -86,11 +86,55 @@ describe('council-review workflow (Phase 10 v1)', () => {
     const y = yml();
     // Untrusted model text must not be able to forge the sticky marker
     // (comment hijack on the next run), forge the footer disclosure, or
-    // close the workflow's own <details> wrapper.
+    // close the workflow's own <details> wrapper. The tag/marker rules must
+    // be case-insensitive AND whitespace-tolerant: `</DETAILS>`, `< details >`,
+    // `</ details >` and `<!--council-review-sticky-->` are confirmed
+    // bypasses of exact-string / case-sensitive rules.
     expect(y).toContain('neutralize()');
-    expect(y).toContain('s/<!-- council-review-sticky -->/');
+    expect(y).toContain('s/<!--[[:space:]]*council-review-sticky[[:space:]]*-->/');
     expect(y).toContain('s/not an adjudicated/');
-    expect(y).toContain('s|</details|');
+    expect(y).toContain('s|<[[:space:]]*/[[:space:]]*details|');
+    expect(y).toContain('s|<[[:space:]]*details|');
     expect(y).toContain('reviews-safe.md');
+  });
+
+  test('neutralization survives case + whitespace bypass variants (behavioral pin on the actual sed rules)', () => {
+    const y = yml();
+    // Extract the REAL sed substitution rules out of neutralize() and apply
+    // them in JS. The translation is faithful for the shapes used there
+    // (literal text + [[:space:]]* + g/I flags); sed is line-based and every
+    // fixture variant below is single-line, so the semantics match.
+    const rules = [...y.matchAll(/-e\s+'(s[/|][^']+)'/g)].map((m) => {
+      const s = m[1];
+      const d = s[1];
+      const [, pattern, replacement, flags] = s.split(d);
+      const jsPattern = pattern.replace(/\[\[:space:\]\]/g, '[ \\t\\r\\n\\f\\v]');
+      return { re: new RegExp(jsPattern, 'g' + (flags.includes('I') ? 'i' : '')), replacement };
+    });
+    expect(rules.length).toBeGreaterThanOrEqual(4);
+    const fixture = [
+      'a <!-- council-review-sticky --> b',
+      'tight <!--council-review-sticky--> c',
+      'wide <!--  council-review-sticky  --> d',
+      'upper </DETAILS> e',
+      'spaced-open < details > f',
+      'spaced-close </ details > g',
+      'mixed <DeTaIlS open> h',
+      'plain <details><summary>x</summary> i',
+      'plain-close </details> j',
+      'forged: this is not an adjudicated verdict / NOT AN ADJUDICATED',
+    ].join('\n');
+    const out = rules.reduce((t, r) => t.replace(r.re, r.replacement), fixture);
+    // no marker shape survives (any internal spacing, any case)
+    expect(out).not.toMatch(/<!--\s*council-review-sticky\s*-->/i);
+    // no details tag shape survives (any case, any internal spacing)
+    expect(out).not.toMatch(/<\s*\/?\s*details/i);
+    // no footer-sentinel phrase survives (any case)
+    expect(out).not.toMatch(/not an adjudicated/i);
+    // and the neutralized placeholders actually landed
+    expect(out).toContain('[model text removed: sticky marker]');
+    expect(out).toContain('[/details');
+    expect(out).toContain('[details');
+    expect(out).toContain('not-an-adjudicated (model text)');
   });
 });
