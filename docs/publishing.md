@@ -43,3 +43,14 @@ Provenance is implied under trusted publishing.
   publishing access on npmjs.com to require trusted publishing.
 - The upstream `jrenaldi79/sidecar` repo had its own npm trusted-publisher
   config; it never applied to this repository.
+
+## Release checklist
+
+Run top-to-bottom before `npm version`:
+
+1. **MODEL-NOTES fold-back:** diff the machine-local ledger (`~/.claude/skills/second-opinion/MODEL-NOTES.md`) against the shipped seed (`skills/second-opinion/MODEL-NOTES.md`); port durable, machine-independent lessons into the shipped file (merge/prune, keep it tight — no run-ledger numbers, those live in `amicus council stats`).
+2. `npm test` green; `npm run lint` clean.
+3. `npm run generate-docs:check` passes (CLAUDE.md markers + cross-links).
+4. Bump `.claude-plugin/plugin.json` `version` to match `package.json` (no script syncs it).
+5. Update `CHANGELOG.md` (move Unreleased → the new version).
+6. `npm version <x.y.z> --no-git-tag-version` + plugin.json lockstep, single `chore(release): vX.Y.Z` commit, then push main + tag (publish.yml does the rest — see the canonical ritual in Phase 2 of the 2026-07-01 review-execution plan).

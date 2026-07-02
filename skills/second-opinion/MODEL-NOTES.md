@@ -4,7 +4,8 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see changelog)._
+_Last updated: 2026-07-02 (runs 4-7 folded back from the field ledger: PowerShell quoting, date
+injection, long-read failures, judge tool-wander; see changelog)._
 
 ## Global operating rules (all models)
 - **Council runs are headless by design** (autonomous batch work): `fanout` is headless by
@@ -26,6 +27,18 @@ _Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see chang
   model-specific signals. Never present a half-finished run as an answer.
 - **Credentials:** keys live in `~/.config/amicus/.env` (legacy `~/.config/sidecar/.env` still
   read). Configure with `amicus setup`.
+- **PowerShell `--models` quoting (Windows):** always quote comma-separated model lists —
+  `--models "gemini,gpt,deepseek"`. Unquoted, PowerShell splits on commas and amicus receives one
+  mangled alias → instant arg-parse failure. (Now baked into every SKILL.md example.)
+- **Inject the current date into briefings for time-sensitive artifacts** (resumes, dated plans).
+  Headless models don't reliably know "today": one run produced a false "future-dated" blocker two
+  judges then confirmed. (Now a Stage-0 rule in SKILL.md.)
+- **Very long artifacts (80k+ words) break the agent-reads-the-file transport for some models.**
+  gpt/deepseek/grok have handled 82k-word agentic reads; gemini(-flash) and kimi stalled (narrate-
+  stall / 25-min timeout / poller "Incomplete"). Pre-select proven long-read models or inline the
+  text for large-context models.
+- **Stage-6 approvals:** write the proposed MODEL-NOTES diff to a run-folder file and put that path
+  in the approval prompt — chat-text diffs can be hidden behind the approval dialog.
 
 ## Stage-2 cross-review briefing tips
 
@@ -36,6 +49,11 @@ _Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see chang
   finding referenced by run-global label id (e.g. `A2` = Review A's 2nd finding).
 - After de-anonymizing, assemble the tally input (see SKILL.md Stage 2 assembly recipe) and run
   `amicus council tally <input.json> --json` — do not hand-tally tiers or street-cred numbers.
+- Telling judges that **material severity inflation can justify a `dispute`** sharpens adjudications.
+- **Plan-agent judges can wander to tools** (reading run-folder files = anonymization leak). The
+  no-tools preamble is now mandatory in SKILL.md Stage 2/3 — keep it verbatim.
+- The tally input needs **all five keys** (`meta` incl. `meta.models`, `findings`, `adjudications`,
+  `rankings`, `runStats`) — see the SKILL.md Stage-2 recipe step 0.
 
 ## Per-model notes
 
@@ -45,17 +63,44 @@ _Last updated: 2026-06-10 (v3 migration: engine workarounds pruned — see chang
   structured output verbatim, without preamble. (Historical: its narrate-then-glob habit used to
   trip the old headless poller; the engine handles tool-call gaps now — F1.)
 - Don't trust its self-reported version string ("I am gemini-X") as ground truth.
+- **Red-team:** takes an adversarial brief well — high variance by design; use when consensus risk is high.
+- **Blind self-votes are inconsistent** (self-#1 in some runs, self-last in others) → discount self-votes either way.
+- Alias has resolved to **flash** tiers: fast, shallowest coverage, yet a recurring sharp fact/consistency checker (it alone refuted a bench-wide date error). Cheap cross-check value.
+- **Unreliable on long agentic reads** (see global rule) — inline the text or swap models for book-length material.
 
 ### DeepSeek  (`--model deepseek` → via OpenRouter)
 - **Strengths:** resilient; produces strong, well-structured, well-cited critical analysis. A good
   default reviewer and a proven chair.
 - **Quirk:** occasional transient 502 mid-run → re-run the leg.
+- Proven chair (5 clean chairings) — decisive, well-structured synthesis.
+- As a Stage-1 reviewer of human-facing documents it **over-escalates severity** (typos/tenure → "blocker"); discount its blocker labels against peers. Prune its self-retractions when tallying.
+- **"Agree-with-the-adversary" lean:** it has been the lone endorser of a red-team's harshest claims, turning them Contested — cross-check before treating its lone agreements as consensus.
 
 ### GPT  (`--model gpt` → via OpenRouter)
 - **Strengths:** reachable via the OpenRouter key; resilient; very thorough structured critique
   (25 findings on a 1-page framework). Cleanly separates the review criteria.
 - **Quirks:** verbose — peers dinged it for volume-over-judgment (good coverage, lower
   discrimination); **self-ranked its own review #1** in cross-review → discount self-votes.
+- Ranked genuine #1 by all judges (incl. non-self) in one run — thoroughness is real, not a self-vote artifact. Handled an 82k-word agentic read cleanly.
+- **Asserts context-dependent facts (dates, "is this future?") without verifying** — and self-confirms them in adjudication. Cross-check any time-dependent claim it raises.
+- A good calibration anchor in cross-review: confirms observational findings, disputes interpretive overreach.
+
+### Grok  (`--model grok` → via OpenRouter)
+- Very fast legs; credible judge and chair (rejected its own weak findings as chair; honest blind self-rank).
+- Strong red-team fit; handled an 82k-word agentic read. Weight its **observational** catches heavily and its **interpretive** verdicts cautiously (bench pattern: the former confirmed, the latter disputed).
+- Stage-1 non-red-team reviews skew to scope-inflated "missing content" majors.
+
+### Kimi  (`--model kimi` → via OpenRouter)
+- The bench's sharpest adjudicator (caught strawmen and misreads other judges waved through).
+- **Very slow legs (5-7 min)** — it gates wave wall-clock; budget timeouts around it.
+- Stalls on long agentic reads (poller "Incomplete" with only a preamble). Reserve for short-artifact adjudication.
+
+### Mistral  (`--model mistral` → via OpenRouter)
+- Fast, broad coverage, catches real issues.
+- **Hallucination risk is real:** has invented non-existent product models/specs, disputed independently by two judges. Cross-check every specific model number or product claim it introduces.
+
+### Claude  (in-council, when toggle on)
+- Consistently the most *calibrated* reviewer (no severity inflation; findings overwhelmingly Confirmed; bench-best street-cred in recent runs) but sometimes the least *original* — it can miss the boldest single catch. Treat as a reliability floor, not a discovery engine.
 
 ### (others — add as used)
 - Opus / o-series etc. are reachable via amicus **if their API keys are configured**. Add notes
@@ -114,3 +159,4 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
   cap (superseded by `--prompt-file`), the absolute-path/cwd trap (fixed by F2), and the
   GUI-hangs-on-this-machine rule (resolved 2026-06-10; headless stays the council default by
   design). Config path updated to `~/.config/amicus/.env`.
+- **2026-07-02** — Folded back field lessons from runs 4-7 (AV-receiver, pork-shoulder, resume, novel ×2 councils): PowerShell `--models` quoting; current-date injection; long-read model selection; judge no-tools preamble; severity-inflation-justifies-dispute; five-keys tally schema; new Grok/Kimi/Mistral/Claude-in-council sections. Quantitative history stays in the ledger (`amicus council stats`).

@@ -348,6 +348,8 @@ Tell the user exactly which files were written and where, leading with `report.h
 
 This stage updates `MODEL-NOTES.md` to make future runs better. **Nothing is written until the user approves a specific diff.**
 
+The `MODEL-NOTES.md` **next to this file** is your machine-local run ledger: npm updates never overwrite it (it is installed only if missing), so lessons accumulate per machine. Durable, machine-independent lessons get folded back into the version-controlled copy in the amicus repo at release time (see the release checklist in `docs/publishing.md`).
+
 **Reflect on this run.** Review the run for:
 - Failures, near-misses, and mitigations that worked (poller traps, empty responses, timeout issues, briefing problems)
 - Briefing wording that produced **richer or poorer** structured output than expected
@@ -467,5 +469,5 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 
 ## Files
 
-- `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file.
+- `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file. This copy is machine-local (never overwritten on update); the shipped seed lives in the amicus repo and absorbs durable lessons at release time.
 - `COUNCIL-DESIGN.md` — the design spec this skill implements (v3 + WS-3). Consult it if a mechanics question arises that the skill prose does not resolve.
