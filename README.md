@@ -263,6 +263,9 @@ amicus update
 | `amicus read` | Output a session's summary / conversation / metadata. |
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
+| `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
+| `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
+| `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`. |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |

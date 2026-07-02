@@ -26,6 +26,11 @@ amicus models --refresh                   # Force-fetch from provider APIs
 amicus models --check                     # Audit aliases against catalog
 amicus mcp                                # Start MCP server (stdio transport)
 amicus update                             # Update to latest version
+amicus doctor [--json] [--fix]            # Diagnose setup; --fix self-heals (e.g. Electron)
+amicus key <provider> <key>               # Validate + save one API key (also: --remove / bare list)
+amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+ ledger append)
+amicus council stats [--json]             # Reviewer reliability from the ledger
+amicus council report <verdict.json> [--md|--html]   # Render the council run report
 ```
 
 ---
@@ -132,7 +137,7 @@ amicus abort --all                   # Stop all running sessions in this project
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `amicus_start`, `amicus_status`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
 
