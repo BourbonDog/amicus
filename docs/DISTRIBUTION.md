@@ -132,9 +132,49 @@ end-to-end against the real submission.)*
 
 ## 3. MCP Registry
 
-**Status: not started (Phase 9c).** No `server.json` exists in this repo yet
-and `.github/workflows/publish.yml` has no MCP Registry publish step as of
-this writing — both are Phase 9c scope, not this task's. Per the Phase 9
-plan, publish to the MCP Registry only after the tool-surface de-bloat lands
-(14 tools: 13 + `amicus_wait`), so the registry entry describes the
-post-de-bloat surface rather than something we immediately have to revise.
+**Status: wired, not yet published (Phase 9c).** `server.json` (repo root)
+and the `mcpName` field in `package.json` now exist, and
+`.github/workflows/publish.yml` publishes to the MCP Registry
+(`registry.modelcontextprotocol.io`) as the last two steps before the GitHub
+Release, on every `v*` tag push. This has not fired yet — the first tag
+push after this merge is the first real publish attempt.
+
+**Namespace:** `io.github.BourbonDog/amicus` (case-sensitive — the registry
+grants `io.github.<Login>/*` using the exact-case GitHub login/repository
+owner). Confirmed unclaimed via
+`https://registry.modelcontextprotocol.io/v0.1/servers?search=amicus`
+(0 results, checked 2026-07-02).
+
+**Flow:** npm publish (existing, OIDC) succeeds first → `mcp-publisher`
+binary installed → `mcp-publisher login github-oidc` (no secret needed, uses
+the same `id-token: write` OIDC permission as the npm Trusted Publishing
+step) → `server.json` version synced from the tag via `jq` (belt-and-braces;
+the in-repo `server.json`/`package.json`/`packages[0]` versions are also
+kept in lockstep by hand at release time and enforced by
+`tests/scripts/package-manifest.test.js`) → `mcp-publisher publish`, retried
+up to 5 times (npm propagation lag) before hard-failing the job. The registry
+steps run strictly after `npm publish` because npm-side ownership validation
+reads `mcpName` from the *published* `package.json`.
+
+**Release-order dependency (carried over from the Phase 9 plan):** cut the
+first post-merge `v*` tag only after the Phase 4 tool-surface de-bloat lands
+(14 tools: 13 + `amicus_wait`) — today the live server also registers 13
+`sidecar_*` aliases that Phase 4 removes, and the first registry publish
+snapshots whatever tool surface exists at that time.
+
+**Registry preview caveat:** the MCP Registry is still in preview per its
+own docs (breaking changes/data resets possible before general
+availability). The publish steps are additive to the existing npm/GitHub
+Release flow and do not touch it; a registry publish failure after 5 retries
+does fail the workflow job (hard `exit 1`), which means the 'Create GitHub
+Release' step does not run on that path. If that trade-off proves unwanted
+in practice, add `continue-on-error: true` to the 'Publish to MCP Registry'
+step.
+
+**First-publish de-risk:** before relying on CI for the first real publish,
+run once locally: download `mcp-publisher` (Windows: the tarball flow from
+the quickstart docs), `mcp-publisher login github` (device-flow auth as
+BourbonDog), then `mcp-publisher publish` — to fail fast on any
+namespace/validation error outside of CI. If publish returns "You do not
+have permission…", the error message states the granted pattern; align
+`server.json`'s `name` casing to it exactly.
