@@ -51,6 +51,6 @@ Run top-to-bottom before `npm version`:
 1. **MODEL-NOTES fold-back:** diff the machine-local ledger (`~/.claude/skills/second-opinion/MODEL-NOTES.md`) against the shipped seed (`skills/second-opinion/MODEL-NOTES.md`); port durable, machine-independent lessons into the shipped file (merge/prune, keep it tight — no run-ledger numbers, those live in `amicus council stats`).
 2. `npm test` green; `npm run lint` clean.
 3. `npm run generate-docs:check` passes (CLAUDE.md markers + cross-links).
-4. Bump `.claude-plugin/plugin.json` `version` to match `package.json` (no script syncs it).
+4. Bump `.claude-plugin/plugin.json` `version` to match `package.json` (no script syncs it). Also bump `server.json` — both `.version` and `.packages[0].version` — to the same value (no script syncs this either).
 5. Update `CHANGELOG.md` (move Unreleased → the new version).
-6. `npm version <x.y.z> --no-git-tag-version` + plugin.json lockstep, single `chore(release): vX.Y.Z` commit, then push main + tag (publish.yml does the rest — see the canonical ritual in Phase 2 of the 2026-07-01 review-execution plan).
+6. `npm version <x.y.z> --no-git-tag-version` + plugin.json lockstep + server.json lockstep (`.version` and `.packages[0].version`), single `chore(release): vX.Y.Z` commit, then push main + tag (publish.yml does the rest — see the canonical ritual in Phase 2 of the 2026-07-01 review-execution plan). If you forget the server.json bump, `tests/scripts/package-manifest.test.js` fails the suite (`server.json versions stay in lockstep with package.json`) — that's your safety net, but don't rely on it; do the bump.

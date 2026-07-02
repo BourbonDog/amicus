@@ -34,9 +34,13 @@ jobs:
       # Auth: GitHub OIDC (id-token: write above) → publish rights on
       # io.github.BourbonDog/*. npm-side ownership validation reads "mcpName"
       # from the PUBLISHED package.json, so these steps MUST follow npm publish.
+      # Hard-fail semantics below: if this block fails, a workflow RE-RUN
+      # will NOT recover (npm publish would EPUBLISHCONFLICT first). See
+      # "If the registry publish fails in CI" in docs/DISTRIBUTION.md §3.
       - name: Install mcp-publisher
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          # pinned 2026-07-02 to registry release v1.7.9; bump deliberately
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Sync server.json version from tag
         env:

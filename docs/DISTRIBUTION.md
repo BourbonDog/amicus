@@ -15,9 +15,10 @@ log + diff since the previous tag.
 Postinstall (`scripts/postinstall.js`) registers the MCP server in Claude
 Code / Claude Desktop / Cowork and copies both skills (`sidecar`,
 `second-opinion`) into `~/.claude/skills/`. It does **not** copy
-`commands/council.md` — that only ships via the plugin channel below (see
-Task 9a report, "Concerns" #2 — a known, accepted gap for npm/install-script
-users).
+`commands/council.md` — that only ships via the plugin channel below. This
+is a known, accepted gap for npm/install-script users (slash commands are
+plugin-channel-only by design; see the npm-vs-plugin note at the top of the
+CHANGELOG's Unreleased section).
 
 ## 2. Claude Code community marketplace (claude-community)
 
@@ -64,15 +65,10 @@ npm test
 - `npm test` must be green, specifically `tests/plugin-manifest.test.js`
   and `tests/plugin-commands.test.js`.
 
-**Known current-tree preflight result (checked 2026-07-02, commit range
-based on `p9/distribution` at 249a8cc):** `claude plugin validate . --strict`
-reports one warning — `plugin.json → bugs: Unknown field 'bugs'`. This is
-pre-existing (present since v1.8.1, predates Phase 9), harmless (Claude Code
-ignores unrecognized fields at load time — the tool says so directly), and
-out of scope for this task since `.claude-plugin/plugin.json` isn't in this
-task's file list. Fix it in a follow-up before submitting for real, or accept
-it — either way `--strict` will report it until then, so don't mistake the
-resulting non-zero preflight exit as a `commands/` or metadata regression.
+**Known current-tree preflight result (checked 2026-07-02, `p9/distribution`
+at a1bea3c):** `claude plugin validate . --strict` passes clean, exit 0.
+(History: `--strict` previously flagged an unknown `plugin.json → bugs`
+field; that field was removed in commit `4207485`, so the warning is gone.)
 
 ### Submit
 
@@ -122,7 +118,7 @@ setup/registration flow. This paragraph is the answer if a reviewer asks.
    submitted/approved/listed dates.
 4. Optionally add an "Install as a Claude Code plugin" section to
    `README.md` referencing `@claude-community` (not done as part of this
-   task — premature before approval; see Task 9b report).
+   task — premature before approval, since the listing doesn't exist yet).
 
 *(Everything in this subsection past "search 'amicus' in
 `marketplace.json`" is unverified as of 2026-07-02 in the sense that we
@@ -135,7 +131,7 @@ end-to-end against the real submission.)*
 **Status: wired, not yet published (Phase 9c).** `server.json` (repo root)
 and the `mcpName` field in `package.json` now exist, and
 `.github/workflows/publish.yml` publishes to the MCP Registry
-(`registry.modelcontextprotocol.io`) as the last two steps before the GitHub
+(`registry.modelcontextprotocol.io`) as the last three steps before the GitHub
 Release, on every `v*` tag push. This has not fired yet — the first tag
 push after this merge is the first real publish attempt.
 
@@ -178,3 +174,19 @@ BourbonDog), then `mcp-publisher publish` — to fail fast on any
 namespace/validation error outside of CI. If publish returns "You do not
 have permission…", the error message states the granted pattern; align
 `server.json`'s `name` casing to it exactly.
+
+**If the registry publish fails in CI:** the registry steps run with
+hard-fail semantics strictly after `npm publish` succeeds. A workflow
+**re-run will NOT work** — re-running the job re-attempts `npm publish` on a
+version already on the registry, which fails immediately with
+`EPUBLISHCONFLICT` before the registry steps are ever reached. Recover
+manually instead:
+1. **Registry publish:** run the same local de-risk flow above for real —
+   `mcp-publisher login github` (device-flow login as BourbonDog), sync
+   `server.json`'s `.version` and `.packages[0].version` to the tag that
+   already published to npm, then `mcp-publisher publish`.
+2. **GitHub Release:** the workflow's 'Create GitHub Release' step never ran
+   (it's downstream of the failed registry step), so cut it by hand:
+   `gh release create <tag> --generate-notes --latest`. The "Generate release
+   notes with Claude" step is optional polish — skip it or run it manually
+   against the API.
