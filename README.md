@@ -57,7 +57,7 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ## Quick start
 
-**Install** — pick whichever fits; all deliver the same CLI, MCP server, and both skills:
+**Install** — pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
 
 **As a Claude Code plugin** — the most native path if you use Claude Code:
 
@@ -67,7 +67,7 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 /reload-plugins
 ```
 
-Claude Code registers the MCP server and both skills for you — nothing to configure. (The standalone Electron window is npm-only, and the first council/sidecar call downloads the OpenCode engine.)
+Claude Code registers the MCP server and both skills for you — nothing to configure. (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
 
 **With the install script** — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
 
@@ -96,6 +96,8 @@ For the **npm** and **install-script** paths, a postinstall auto-configures ever
 
 ```bash
 amicus setup
+# plugin-only install (no CLI on PATH):
+npx -y amicus@latest setup
 ```
 
 This opens a graphical wizard:
@@ -113,7 +115,7 @@ This opens a graphical wizard:
 
 > *council review this*
 
-Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill installed in the previous step is what teaches Claude to recognize this — if nothing happens, confirm it landed in `~/.claude/skills/second-opinion/`.)
+Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill is what teaches Claude to recognize this — if nothing happens, run `amicus doctor` (or `npx -y amicus@latest doctor`). npm/install-script installs place the skill at `~/.claude/skills/second-opinion/`; plugin installs keep it inside the plugin itself — check `/plugin` in Claude Code to confirm amicus is enabled.)
 
 **Your first sidecar.** The sidecar is the lower-level path — you can invoke it by phrase through Claude too, but the CLI gives you the flags directly:
 

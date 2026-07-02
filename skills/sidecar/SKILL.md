@@ -30,6 +30,7 @@ These rules are mandatory for every amicus invocation in this skill:
 5. **When the user asks to query MULTIPLE LLMs simultaneously** (e.g., "ask Gemini AND ChatGPT", "compare Gemini vs GPT"), ALWAYS use `--no-ui` (headless) for all of them unless the user explicitly requests interactive. Opening multiple Electron windows at once is disruptive. Launch them all in parallel with `run_in_background: true`.
 6. **When the SAME prompt should go to N models, use `amicus fanout --models "a,b,c" --prompt-file <path> --json`** (one headless wave, one JSON result) instead of N separate start calls. Different prompts per model → separate parallel `amicus start --no-ui` calls.
 7. **For a SINGLE-model sidecar, DEFAULT to interactive** — omit `--no-ui` so the Electron UI opens and the user can watch, converse, and click Fold. Use `--no-ui` for a single model only when the user asks for headless/autonomous, or for unattended bulk automation. Interactive launches still use `run_in_background: true`.
+8. **If `amicus` is not on PATH** (typical for plugin-only installs), run every command in this skill as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest start --model gemini --prompt "..."`), or use the MCP tools (`amicus_start`, `amicus_status`, `amicus_read`, …) instead. Do not conclude the tool is broken because `amicus` is not found.
 
 ## Installation
 

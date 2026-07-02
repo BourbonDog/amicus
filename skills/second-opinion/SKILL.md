@@ -18,6 +18,8 @@ Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval),
 
 **Before launching any model, READ `MODEL-NOTES.md`** (next to this file). It holds the operating rules and per-model quirks that decide whether a run succeeds or silently fails. These were learned the hard way; skipping them wastes runs and produces empty results that look like answers.
 
+**Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest fanout --models "m1,m2,m3" --prompt-file <path> --json`), or use the equivalent MCP tools (`amicus_fanout`, `amicus_start`, `amicus_status`, `amicus_read`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) — council briefings are always self-contained (`--no-context`), so MCP transport is equivalent.
+
 ## When to use
 
 - The user provides documents, artifacts, or links **and** an analysis request **and** criteria, and wants other models to weigh in independently.
