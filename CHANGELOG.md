@@ -5,6 +5,33 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.7.7] - 2026-07-01
+
+Correctness patch from the 2026-07-01 full product review (multi-agent review, every finding adversarially
+verified against source), executed subagent-driven with per-task adversarial review plus a final whole-branch review.
+
+### Fixed
+- **Terminal errors now show their actionable hint.** Human-mode errors printed only the message while `--json`
+  carried a `hint` field; the hint now prints on a second `  → …` line. Budget-gate refusals finally tell you the
+  offending model, the threshold, and the `--max-cost` / `--no-cost-gate` overrides.
+- **Spawned sidecars no longer inherit Amicus's own MCP server.** The recursive-spawn guard only excluded a server
+  literally named `sidecar`, but the product registers as `amicus` — so every child model inherited the full
+  Amicus toolset and could spawn recursively. Children now exclude any inherited entry that *is* Amicus, matched
+  by name **or** by what the command actually runs (`amicus mcp`, `npx … amicus … mcp`, a `bin/amicus.js … mcp`
+  path). Note: this strip has no opt-out — a deliberately configured nested Amicus MCP entry is also removed from
+  spawned children.
+- **Shared-server crash detection actually works.** The crash/restart machinery listened on an event emitter the
+  real server handle never exposed, so it was dead code — a dead engine silently degraded every later session.
+  A pid liveness poll now drives detection and restart, and shutting down during the restart backoff cancels the
+  pending restart instead of spawning a server nobody asked for.
+
+### Changed
+- **`amicus continue` and `amicus resume` now report failures truthfully** (behavior change): error exits 1,
+  timeout exits 2, abort exits 130/143/2 — previously both always exited 0 and recorded the session as
+  `complete` even when the model errored or timed out. The session record now finalizes `error`/`timed-out`
+  accordingly (interactive sessions that legitimately end with an empty summary still finalize `complete`).
+  Scripts that gated on exit code 0 for these verbs will now see real failures.
+
 ## [1.7.6] - 2026-07-01
 
 A second independent review (GLM 5.2), adversarially verified against source, then fixed across 11 lanes.
