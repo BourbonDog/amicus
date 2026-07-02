@@ -57,7 +57,7 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ## Quick start
 
-**Install** — pick whichever fits; all deliver the same CLI, MCP server, and both skills:
+**Install** — pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
 
 **As a Claude Code plugin** — the most native path if you use Claude Code:
 
@@ -67,7 +67,7 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 /reload-plugins
 ```
 
-Claude Code registers the MCP server and both skills for you — nothing to configure. (The standalone Electron window is npm-only, and the first council/sidecar call downloads the OpenCode engine.)
+Claude Code registers the MCP server and both skills for you — nothing to configure. (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
 
 **With the install script** — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
 
@@ -96,6 +96,8 @@ For the **npm** and **install-script** paths, a postinstall auto-configures ever
 
 ```bash
 amicus setup
+# plugin-only install (no CLI on PATH):
+npx -y amicus@latest setup
 ```
 
 This opens a graphical wizard:
@@ -113,7 +115,7 @@ This opens a graphical wizard:
 
 > *council review this*
 
-Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill installed in the previous step is what teaches Claude to recognize this — if nothing happens, confirm it landed in `~/.claude/skills/second-opinion/`.)
+Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill is what teaches Claude to recognize this — if nothing happens, run `amicus doctor` (or `npx -y amicus@latest doctor`). npm/install-script installs place the skill at `~/.claude/skills/second-opinion/`; plugin installs keep it inside the plugin itself — check `/plugin` in Claude Code to confirm amicus is enabled.)
 
 **Your first sidecar.** The sidecar is the lower-level path — you can invoke it by phrase through Claude too, but the CLI gives you the flags directly:
 
@@ -261,6 +263,9 @@ amicus update
 | `amicus read` | Output a session's summary / conversation / metadata. |
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
+| `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
+| `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
+| `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`. |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |
@@ -304,7 +309,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 ### `amicus fanout` — same prompt, many models
 
 ```bash
-amicus fanout --models gemini,deepseek,gpt --prompt "Review this design" --json
+amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --json
 ```
 
 Fanout runs one **headless wave**: every leg gets the **same** prompt (this is the shared-prompt model the council's review stages are built on). When all legs are terminal it prints **one** JSON wave document on stdout.

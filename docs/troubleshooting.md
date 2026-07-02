@@ -3,6 +3,10 @@
 > Quick reference is in the [README Troubleshooting table](../README.md#troubleshooting).
 > This document covers the same symptoms with more diagnostic depth.
 
+## First: run `amicus doctor`
+
+Before working through any symptom below, run `amicus doctor` (plugin-only installs: `npx -y amicus@latest doctor`). It checks, in order: Node version, config directory, API keys, default model, catalog freshness, alias staleness, the OpenCode binary, Electron, installed skills, MCP registration, OpenRouter credit, and the project root — and prints a targeted fix hint for every failing check. `amicus doctor --fix` self-heals what it can (e.g. re-installs a broken Electron in place); `--json` gives machine-readable output.
+
 ---
 
 ## Install Fails with `EEXIST: … claude-sidecar`
@@ -152,7 +156,7 @@ For full headless configuration, see [docs/configuration.md](./configuration.md)
 
 **Fix:**
 - Increase the timeout: `AMICUS_GUI_LOAD_TIMEOUT_MS=30000 amicus start …`
-- Check whether another process is already using the target port: `amicus list` shows active servers.
+- Check whether another process is already using the target port: `netstat -ano | findstr <port>` (Windows) or `lsof -i :<port>` (macOS/Linux). (`amicus list --status running` shows running *sessions*, which may still hold a server — it does not list ports.)
 - `AMICUS_SHARED_SERVER=0` forces a fresh per-process server if the shared server is in a bad state.
 
 ---

@@ -25,4 +25,7 @@ describe('resolveTerminalState', () => {
   it('null/undefined result → error / 1', () => {
     expect(resolveTerminalState(null)).toEqual({ status: 'error', exitCode: 1 });
   });
+  it('abort precedence: both completed AND aborted → aborted / 2', () => {
+    expect(resolveTerminalState({ completed: true, aborted: true })).toEqual({ status: 'aborted', exitCode: 2 });
+  });
 });

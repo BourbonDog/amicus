@@ -18,6 +18,8 @@ Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval),
 
 **Before launching any model, READ `MODEL-NOTES.md`** (next to this file). It holds the operating rules and per-model quirks that decide whether a run succeeds or silently fails. These were learned the hard way; skipping them wastes runs and produces empty results that look like answers.
 
+**Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest fanout --models "m1,m2,m3" --prompt-file <path> --json`), or use the equivalent MCP tools (`amicus_fanout`, `amicus_start`, `amicus_status`, `amicus_read`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) — council briefings are always self-contained (`--no-context`), so MCP transport is equivalent.
+
 ## When to use
 
 - The user provides documents, artifacts, or links **and** an analysis request **and** criteria, and wants other models to weigh in independently.
@@ -53,6 +55,10 @@ in this run is written here. Use its absolute path in all `--prompt-file` argume
 - Write every briefing to a temp file (`_tmp-*.md` in the run folder) and pass it with
   `--prompt-file` — never inline a briefing as a CLI argument. All `_tmp-*` files are cleaned up
   after the run.
+- **Inject the current date into every briefing when the artifact is time-sensitive** (resumes, dated
+  plans, anything with start/end dates or 'present' ranges). Headless council models do not reliably
+  know "today" and have raised false "future-dated" blockers; state the date explicitly, e.g.
+  "Today's date is YYYY-MM-DD."
 
 **Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting both the reviewer-reliability data from `amicus council stats` (the authoritative quantitative source — runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — e.g.:
 
@@ -97,9 +103,11 @@ Each council model reviews **the artifact** independently. Write one Stage-1 bri
 (`_tmp-briefing-stage1.md` in the run folder) and launch the whole wave as ONE background call:
 
 ```
-amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
+amicus fanout --models "<m1,m2,m3>" --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
   --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
+
+Always quote the `--models` list — unquoted, PowerShell splits on commas and the CLI receives one mangled alias (instant arg-parse failure).
 
 Run it in the background (`run_in_background: true`); you are notified on completion — do not
 poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
@@ -145,7 +153,7 @@ equivalent.
 Instruct models to emit the structured JSON verbatim after the prose, without preamble, so it parses cleanly.
 
 **After the wave returns, validate each leg's findings block** using `validateFindings` (Unit A — `src/council/findings.js`). If a leg's JSON fails validation:
-1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` is **not** subject to the WS-2 fanout cost gate, so a repair cannot be refused mid-council.)
+1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` passes through the **same budget gate** as `fanout`. If launching the wave required `--max-cost <$>` or `--no-cost-gate`, pass the **same flag on every repair re-prompt and on the chair call** — otherwise the gate can refuse a repair or the chair mid-council.)
 2. If still malformed, retry **once more** (cap = **2** re-prompts total).
 3. If still malformed after 2 retries, mark the review `unstructured` and hand-parse its prose into the schema. The review proceeds — never dropped for a formatting miss.
 
@@ -182,7 +190,7 @@ Each model **unknowingly ranks and adjudicates its own review** — this is the 
 model. Write the bundle + judging instructions to `_tmp-bundle-stage2.md` and launch one wave:
 
 ```
-amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
+amicus fanout --models "<m1,m2,m3>" --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
   --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
@@ -190,6 +198,12 @@ amicus fanout --models <m1,m2,m3> --prompt-file <run-folder>/_tmp-bundle-stage2.
 adjudication response. **Stage-2 degrade:** a judge leg dies → tally over the surviving judges
 (≥ 1) and disclose the reduced bench in `crossreview-matrix.md`; tier definitions are unchanged
 (they already count "judges engaged"). Each judge is asked to do two things on the bundle:
+
+**Judge-briefing hardening (required).** Open `_tmp-bundle-stage2.md` with this preamble, verbatim, as its first line:
+
+> Do NOT use any tools or read any files; everything is in this message; begin immediately with A1:
+
+Plan-agent judges have wandered to tools mid-adjudication (reading files instead of judging and returning only narration), and a tool-capable judge can read the de-anonymized `review-<model>.md` files in the run folder — an anonymization leak. The preamble closes both. **Scratch-cwd (optional second layer):** launch the Stage-2 wave (and the Stage-3 chair call) with `--cwd <run-folder>/_scratch/` — create the empty directory first — so even a wandering agent finds nothing to read. Caveat: those legs' session records then live under `_scratch/.claude/amicus_sessions/`, so any later `amicus read <taskId>` for them needs the same `--cwd`.
 
 **Task A — Rank.** Order the reviews from most to least accurate and insightful. End the response with a parseable block in exactly this format (no other text on those lines):
 
@@ -205,10 +219,15 @@ FINAL RANKING:
 As each judge's ranking + adjudication response returns, collect it (the raw per-judge responses are working intermediates, not separate run-folder artifacts). Once all are in, **assemble the de-anonymized tally input** and then call `amicus council tally`:
 
 **Stage-2 → tally assembly recipe (Claude's work before calling `tally`):**
+0. **Build `meta` and `findings[]` first — `tally` requires both** (missing either fails with `BAD_ARGS: Cannot read properties of undefined (reading 'map')`):
+   - `meta` = `{ "runId": "<run-folder stem>", "models": [<every reviewed model id, including "claude" when the toggle is on — this is the street-cred universe>], "chair": "<confirmed chair model id>", "claudeInCouncil": <Stage-0 toggle> }`. Optional extras: `runType`, `date`.
+   - `findings[]` = one entry per finding across ALL reviews: `{ "id": "<run-global label id from step 1, e.g. A1>", "raiser": "<de-anonymized model that raised it>", "severity": "<from the review JSON>" }` (`claim` may be carried along but is not required).
 1. **Rewrite finding ids to run-global label ids.** Each Stage-1 review's local integer ids (`1`, `2`, `3`…) become `A1`, `A2`, `A3`… (where `A` is that review's anonymized label). The label↔model map (`Review A → deepseek`, etc.) is the key.
 2. **Build `adjudications`** — for every judge across all findings: `findingId` = run-global label id; `judge` = the model id (de-anonymized via the map); `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding. The raiser's own adjudication of its own finding is **included in the input** (the tally engine excludes it when computing peers-only tiers — do not pre-filter it).
 3. **Translate each judge's `FINAL RANKING:` block** — convert the label order (`1. Review C / 2. Review A / 3. Review B`) into a model `order` array via the same map (e.g. `{C→mistral, A→deepseek, B→gpt}` ⇒ `order: ["mistral","deepseek","gpt"]`). This is each entry in `rankings[]`.
 4. **Populate `runStats`** from the per-leg run documents emitted by `fanout --json` (and any solo red-team/chair `start --json` docs): copy `model`, `status`, `durationMs`, `usage` verbatim. Any leg with no run doc gets `durationMs: null` and `usage: null` — never invent a value. Attach `role` (`council` | `redteam` | `claude`), `wasChair`, and `conformance` (`clean` | `repaired` | `unstructured`) as council-domain labels.
+
+**Five-keys checklist — verify `tally-input.json` has ALL of:** `meta` (with `meta.models`), `findings`, `adjudications`, `rankings`, `runStats` (`runStats` may be `[]`; the other four are required). Do not call `tally` until all five are present.
 
 Then call:
 
@@ -240,10 +259,14 @@ amicus start --model <chair> --no-ui --json \
   --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
 
+(The budget gate applies to this solo call too — if Stage 0 needed `--max-cost <$>` or `--no-cost-gate` to launch the wave, the chair call needs the same flag.)
+
 The run document's `summary` is the verdict. The packet contains:
 - All Stage-1 reviews (de-anonymized — model attribution restored)
 - All cross-review ranking outputs (with model attribution)
 - All adjudication outputs (with model attribution and `agree | dispute | neutral` verdicts per finding)
+
+Open `_tmp-chair-packet.md` with the no-tools preamble, adjusted for the chair: *'Do NOT use any tools or read any files; everything is in this message; begin immediately with the verdict.'* The packet is complete by construction — the chair must never go looking for files.
 
 Instruct the chair to write a **synthesized verdict** that:
 - Weighs each reviewer's findings by their peer-validated standing (street-cred rank and adjudication pattern)
@@ -307,21 +330,25 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
   — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
   invent a figure. Add a wave **total cost** row from the wave document's
   `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`; never invent a value.
-  - **Renderer:** once `verdict.json` is written, generate the human report with
-    `amicus council report <run-folder>/verdict.json --md > <run-folder>/report.md`
-    (use `--html` for a self-contained, shareable page). This emits the
+  - **Renderer:** once `verdict.json` is written, generate BOTH renderings:
+    `amicus council report <run-folder>/verdict.json --md > <run-folder>/report.md` and
+    `amicus council report <run-folder>/verdict.json --html > <run-folder>/report.html`.
+    **`report.html` is the default final artifact to hand the user** — a self-contained,
+    shareable page. This emits the
     adjudication matrix (finding × judge), the peers-only street-cred table, the
     findings-by-tier groupings (Disputed-first), and the per-model + wave cost —
     deterministic data only. Prefer it over hand-assembling the matrix; reserve
     prose for the chair's synthesis and the decision log.
 
-Tell the user exactly which files were written and where.
+Tell the user exactly which files were written and where, leading with `report.html`, **and present the verdict inline in chat** — the chair's overall assessment (verbatim or lightly trimmed) plus the tier counts (Confirmed/Disputed/Contested/Singleton) and what was applied. Never hand over only file paths.
 
 ---
 
 ### Stage 6 — Capture lessons (compounding)
 
 This stage updates `MODEL-NOTES.md` to make future runs better. **Nothing is written until the user approves a specific diff.**
+
+The `MODEL-NOTES.md` **next to this file** is your machine-local run ledger: npm updates never overwrite it (it is installed only if missing), so lessons accumulate per machine. Durable, machine-independent lessons get folded back into the version-controlled copy in the amicus repo at release time (see the release checklist in `docs/publishing.md`).
 
 **Reflect on this run.** Review the run for:
 - Failures, near-misses, and mitigations that worked (poller traps, empty responses, timeout issues, briefing problems)
@@ -432,6 +459,7 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
     — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
     invent a figure. Add a wave **total cost** row from the wave document's
     `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`.
+  - `report.html` — the same report rendered as a self-contained page (`amicus council report <verdict.json> --html`); the default artifact to share.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
 - Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, bundle, chair packet, proposed
   MODEL-NOTES diff) live in the run folder and are cleaned up at the end of the run — the proposed-diff file
@@ -441,5 +469,5 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
 
 ## Files
 
-- `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file.
+- `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file. This copy is machine-local (never overwritten on update); the shipped seed lives in the amicus repo and absorbs durable lessons at release time.
 - `COUNCIL-DESIGN.md` — the design spec this skill implements (v3 + WS-3). Consult it if a mechanics question arises that the skill prose does not resolve.

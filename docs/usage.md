@@ -8,7 +8,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 # Core workflow
 amicus start --model <model> --prompt "<task>"
 amicus start --model <model> --prompt-file briefing.md --no-ui --json
-amicus fanout --models gemini,deepseek,gpt --prompt "Review this" --json
+amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this" --json
 amicus list [--status <filter>] [--all] [--json]
 amicus resume <task_id>
 amicus continue <task_id> --prompt "Next step..."
@@ -26,6 +26,11 @@ amicus models --refresh                   # Force-fetch from provider APIs
 amicus models --check                     # Audit aliases against catalog
 amicus mcp                                # Start MCP server (stdio transport)
 amicus update                             # Update to latest version
+amicus doctor [--json] [--fix]            # Diagnose setup; --fix self-heals (e.g. Electron)
+amicus key <provider> <key>               # Validate + save one API key (also: --remove / bare list)
+amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+ ledger append)
+amicus council stats [--json]             # Reviewer reliability from the ledger
+amicus council report <verdict.json> [--md|--html]   # Render the council run report
 ```
 
 ---
@@ -62,8 +67,8 @@ See `amicus start --help` or the README for the full option list (context, MCP, 
 Fanout runs one headless wave: every leg receives the **same** prompt concurrently (this is the shared-prompt model that the council's review stages are built on). When all legs settle, Amicus emits a single JSON wave document on stdout.
 
 ```bash
-amicus fanout --models gemini,deepseek,gpt --prompt "Review this design" --json
-amicus fanout --models gemini,opus --prompt-file briefing.md --json --wave-id my-wave-1
+amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --json
+amicus fanout --models "gemini,opus" --prompt-file briefing.md --json --wave-id my-wave-1
 ```
 
 **Key options:**
@@ -132,7 +137,7 @@ amicus abort --all                   # Stop all running sessions in this project
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `amicus_start`, `amicus_status`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
 

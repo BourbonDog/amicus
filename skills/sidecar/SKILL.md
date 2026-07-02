@@ -1,38 +1,36 @@
 ---
 name: sidecar
 description: >
-  Spawn conversations with other LLMs (Gemini, GPT, ChatGPT, Codex, o3, DeepSeek, Qwen,
-  Grok, Mistral, etc.) and fold results back into your context. TRIGGER when: user asks to
-  talk to, chat with, use, call, or spawn another LLM or model; user mentions Gemini, GPT,
-  ChatGPT, Codex, o3, DeepSeek, Claude (as a sidecar target), Qwen, Grok, Mistral, or any
-  non-current model by name; user asks to get a second opinion from another model; user
-  wants parallel exploration with a different model; user says "sidecar", "fork", or "fold".
-  CRITICAL RULES: (1) ALWAYS launch amicus CLI commands with Bash tool's
-  run_in_background: true. Never run amicus start/resume/continue in the foreground.
-  (2) The fold summary returns on stdout when the user clicks Fold in the GUI or the
-  headless agent finishes. Use TaskOutput to read it when the background task completes.
-  (3) For long or multi-line briefings, write them to a temp file and pass
-  --prompt-file <path> (mutually exclusive with --prompt; avoids shell-quoting hazards
-  and argument-size caps). (4) NEVER use o3 or o3-pro unless the user explicitly asks for it by
-  name. These models are extremely expensive ($10-60+ per request). If the user asks for
-  o3, warn them about the cost before proceeding. Default to gemini for most tasks.
-  (5) When the user asks to query MULTIPLE LLMs simultaneously (e.g., "ask Gemini AND
-  ChatGPT", "compare Gemini vs GPT"), ALWAYS use --no-ui (headless) for all of them
-  unless the user explicitly requests interactive. Opening multiple Electron windows at
-  once is disruptive. Launch them all in parallel with run_in_background: true.
-  (6) When the SAME prompt should go to N models, use `amicus fanout --models a,b,c
-  --prompt-file <path> --json` (one headless wave, one JSON result) instead of N
-  separate start calls. Different prompts per model → separate parallel
-  `amicus start --no-ui` calls.
-  (7) For a SINGLE-model sidecar, DEFAULT to interactive — omit --no-ui so the
-  Electron UI opens and the user can watch, converse, and click Fold. Use --no-ui
-  for a single model only when the user asks for headless/autonomous, or for
-  unattended bulk automation. Interactive launches still use run_in_background: true.
+  Spawn a conversation with another LLM (Gemini, GPT, ChatGPT, Codex, o3, DeepSeek,
+  Qwen, Grok, Mistral, or Claude as a target) and fold the results back into your
+  context. TRIGGER when: the user asks to talk to, chat with, call, use, or spawn
+  another LLM or model; names any non-current model; wants parallel exploration or
+  a quick take from a different model; or says "sidecar", "fork", or "fold". This
+  is NOT the skill for structured multi-model review of provided material — requests
+  like "second opinion", "council review", or red-team/stress-test against criteria
+  belong to the second-opinion skill. Before running any amicus command, read the
+  Operating Rules section at the top of this document: background launches,
+  --prompt-file briefings, interactive vs headless defaults, fanout for same-prompt
+  multi-model runs, the o3/o3-pro cost warning, and the npx fallback when amicus is
+  not on PATH.
 ---
 
 # Amicus: Multi-Model Sidecar Tool
 
 Spawn parallel conversations with different LLMs (Gemini, GPT, ChatGPT, Codex, o3, etc.) and fold results back into your context.
+
+## Operating Rules
+
+These rules are mandatory for every amicus invocation in this skill:
+
+1. **ALWAYS launch amicus CLI commands with the Bash tool's `run_in_background: true`.** Never run `amicus start/resume/continue` in the foreground.
+2. **The fold summary returns on stdout** when the user clicks Fold in the GUI or the headless agent finishes. Use TaskOutput to read it when the background task completes.
+3. **For long or multi-line briefings, write them to a temp file and pass `--prompt-file <path>`** (mutually exclusive with `--prompt`; avoids shell-quoting hazards and argument-size caps).
+4. **NEVER use o3 or o3-pro unless the user explicitly asks for it by name.** These models are extremely expensive (\$10-60+ per request). If the user asks for o3, warn them about the cost before proceeding. Default to gemini for most tasks. The CLI enforces this in code: a built-in budget gate refuses any model above a per-$/Mtok threshold (o3-pro class) before launch unless you pass `--no-cost-gate`; `--max-cost <$>` sets a soft estimated-total ceiling. When a run is refused with `BUDGET_EXCEEDED`, relay the gate's message — don't silently retry with the flag.
+5. **When the user asks to query MULTIPLE LLMs simultaneously** (e.g., "ask Gemini AND ChatGPT", "compare Gemini vs GPT"), ALWAYS use `--no-ui` (headless) for all of them unless the user explicitly requests interactive. Opening multiple Electron windows at once is disruptive. Launch them all in parallel with `run_in_background: true`.
+6. **When the SAME prompt should go to N models, use `amicus fanout --models "a,b,c" --prompt-file <path> --json`** (one headless wave, one JSON result) instead of N separate start calls. Different prompts per model → separate parallel `amicus start --no-ui` calls.
+7. **For a SINGLE-model sidecar, DEFAULT to interactive** — omit `--no-ui` so the Electron UI opens and the user can watch, converse, and click Fold. Use `--no-ui` for a single model only when the user asks for headless/autonomous, or for unattended bulk automation. Interactive launches still use `run_in_background: true`.
+8. **If `amicus` is not on PATH** (typical for plugin-only installs), run every command in this skill as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest start --model gemini --prompt "..."`), or use the MCP tools (`amicus_start`, `amicus_status`, `amicus_read`, …) instead. Do not conclude the tool is broken because `amicus` is not found.
 
 ## Installation
 
@@ -204,11 +202,11 @@ amicus start \
 ```
 
 **Required:**
-- `--model`: The model to use (see Models below)
-- `--prompt`: Detailed task description you generate
+- `--prompt` (or `--prompt-file`): Detailed task description you generate
 
 **Recommended:**
-- `--session`: Your Claude Code session ID for accurate context passing
+- `--model`: The model to use (see Models below). Omit it to use your configured default (`amicus setup`); the CLI errors only when neither an explicit model nor a configured default exists.
+- `--session-id`: Your Claude Code session ID for accurate context passing
 
 **Optional:**
 - `--no-ui`: Run autonomously without GUI (for bulk tasks)
@@ -257,7 +255,7 @@ The CLI validates all inputs **before** launching the sidecar. Invalid inputs fa
 
 | Input | Validation | Error Message |
 |-------|------------|---------------|
-| `--model` | Must be present, format: `provider/model` | `Error: --model is required` or `Error: --model must be in format provider/model` |
+| `--model` | Optional — falls back to the config default. An explicit value must resolve to a known alias or `provider/model` | `Error: Unknown model alias '<x>' …` or `No model specified and no default configured. Run 'amicus setup' to set a default model.` |
 | `--prompt` | Must be present and non-empty | `Error: --prompt is required` or `Error: --prompt cannot be empty or whitespace-only` |
 | `--cwd` | If provided, directory must exist | `Error: --cwd path does not exist: <path>` |
 | `--session-id` | If explicit ID provided (not 'current'), must exist | `Error: --session-id '<id>' not found. Use 'amicus list' to see available sessions or omit --session-id for most recent.` |
@@ -283,7 +281,7 @@ If you receive a validation error, fix the input and retry:
 
 ```bash
 # Error: --session-id 'abc123' not found
-# Fix: Use 'current' or omit --session
+# Fix: Use 'current' or omit --session-id
 amicus start --model gemini --prompt "Task" --session-id current
 
 # Error: --agent cannot be empty
@@ -303,7 +301,7 @@ amicus start --model gemini --prompt "Task"
 ### Fan Out One Prompt to N Models
 
 ```bash
-amicus fanout --models gemini,gpt,deepseek --prompt-file ./briefing.md --json
+amicus fanout --models "gemini,gpt,deepseek" --prompt-file ./briefing.md --json
 ```
 
 Runs the same prompt on every listed model in parallel (one shared engine server, headless),
@@ -404,7 +402,7 @@ amicus abort --all         # stop every running session in this project
 
 ### Model Selection
 
-Use short aliases (run `amicus guide` to see all available aliases and their current model IDs):
+Use short aliases (run `amicus models` to see the live catalog, and `amicus models --check` to audit your aliases):
 - `--model gemini` -- Google Gemini (fast, large context)
 - `--model opus` -- Claude Opus (deep analysis)
 - `--model gpt` -- OpenAI GPT
@@ -454,13 +452,13 @@ ls -lt ~/.claude/projects/-Users-john-myproject/*.jsonl | head -5
 The most recently modified file is likely your current session. Extract the UUID from the filename.
 
 **Session ID behavior:**
-- **Omit `--session`** or use `--session-id current`: Uses the most recently modified session file (less reliable if multiple sessions are active)
+- **Omit `--session-id`** or pass `--session-id current`: Uses the most recently modified session file (less reliable if multiple sessions are active)
 - **Explicit session ID** (`--session-id abc123-def456`): Must exist or the command fails immediately with: `Error: --session-id 'abc123-def456' not found`
 
 **If you get a session not found error:**
 1. List available sessions: `amicus list`
 2. Use one of the listed session IDs, OR
-3. Omit `--session` to use the most recent session
+3. Omit `--session-id` to use the most recent session
 
 ---
 
@@ -849,7 +847,7 @@ Find the correct encoded path for your project. Remember that `/`, `\`, and `_` 
 
 ### "Multiple active sessions detected"
 
-You have multiple Claude Code windows. Pass `--session` explicitly:
+You have multiple Claude Code windows. Pass `--session-id` explicitly:
 ```bash
 ls -lt ~/.claude/projects/[your-path]/*.jsonl | head -3
 # Pick the correct session UUID
@@ -912,7 +910,7 @@ amicus start --model gemini --prompt "Debug the auth issue in TokenManager.ts"
 
 The explicit session ID doesn't exist. Either:
 1. Use `amicus list` to find valid session IDs
-2. Omit `--session` to use the most recent session
+2. Omit `--session-id` to use the most recent session
 3. Use `--session-id current` for automatic resolution
 
 ```bash
