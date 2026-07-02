@@ -147,7 +147,7 @@ equivalent.
 Instruct models to emit the structured JSON verbatim after the prose, without preamble, so it parses cleanly.
 
 **After the wave returns, validate each leg's findings block** using `validateFindings` (Unit A — `src/council/findings.js`). If a leg's JSON fails validation:
-1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` is **not** subject to the WS-2 fanout cost gate, so a repair cannot be refused mid-council.)
+1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` passes through the **same budget gate** as `fanout`. If launching the wave required `--max-cost <$>` or `--no-cost-gate`, pass the **same flag on every repair re-prompt and on the chair call** — otherwise the gate can refuse a repair or the chair mid-council.)
 2. If still malformed, retry **once more** (cap = **2** re-prompts total).
 3. If still malformed after 2 retries, mark the review `unstructured` and hand-parse its prose into the schema. The review proceeds — never dropped for a formatting miss.
 
@@ -252,6 +252,8 @@ amicus start --model <chair> --no-ui --json \
   --prompt-file <run-folder>/_tmp-chair-packet.md \
   --agent Plan --no-context --summary-length verbose --timeout <minutes>
 ```
+
+(The budget gate applies to this solo call too — if Stage 0 needed `--max-cost <$>` or `--no-cost-gate` to launch the wave, the chair call needs the same flag.)
 
 The run document's `summary` is the verdict. The packet contains:
 - All Stage-1 reviews (de-anonymized — model attribution restored)
