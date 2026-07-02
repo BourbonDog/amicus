@@ -110,7 +110,10 @@ function updateSessionStatus(sessionDir, status) {
   return meta;
 }
 
-/** Resume a previous sidecar session - Spec Reference: §4.3, §8.3 */
+/**
+ * Resume a previous sidecar session - Spec Reference: §4.3, §8.3
+ * @returns {Promise<number>} process exit code
+ */
 async function resumeSidecar(options) {
   const {
     taskId, project = process.cwd(), headless = false, timeout = 15,
@@ -163,6 +166,7 @@ async function resumeSidecar(options) {
     heartbeat = createHeartbeat();
 
     let summary;
+    let result;
     const effectiveAgent = metadata.agent || 'Build';
 
     // Load conversation for both paths (interactive already did this, headless didn't)
@@ -173,7 +177,7 @@ async function resumeSidecar(options) {
 
     if (headless) {
       const userMessage = buildResumeUserMessage(metadata.briefing || '', existingConversation);
-      const result = await runHeadless(
+      result = await runHeadless(
         metadata.model, resumePrompt, userMessage,
         taskId, project, timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers }
       );
@@ -184,7 +188,7 @@ async function resumeSidecar(options) {
     } else {
       logger.info('Launching interactive resume', { taskId, model: metadata.model });
 
-      const result = await runInteractive(
+      result = await runInteractive(
         metadata.model, resumePrompt, metadata.briefing || '',
         taskId, project,
         {
@@ -202,10 +206,22 @@ async function resumeSidecar(options) {
     // Output summary
     outputSummary(summary);
 
-    // Finalize session (use updatedMetadata which has resumedAt). Pass status
-    // explicitly to preserve the pre-#36 default ('complete') and stay out of
-    // the empty-summary guard — interactive resume legitimately has no summary.
-    finalizeSession(sessionDir, summary, project, updatedMetadata, { status: 'complete' });
+    // Map the run result to the canonical terminal status + exit code —
+    // mirrors start.js. Explicit status preserves the interactive
+    // empty-summary carve-out (the #36 guard never re-classifies it).
+    const { resolveTerminalState } = require('./session-finalize');
+    const terminal = resolveTerminalState(result);
+    const metaPath = SessionPaths.metadataFile(sessionDir);
+    if (terminal.status === 'error') {
+      updatedMetadata.status = 'error';
+      updatedMetadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
+      updatedMetadata.completedAt = new Date().toISOString();
+      fs.writeFileSync(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
+      logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
+    } else {
+      finalizeSession(sessionDir, summary, project, updatedMetadata, { status: terminal.status });
+    }
+    return terminal.exitCode; // finally below still releases the lock first
   } finally {
     if (heartbeat) { heartbeat.stop(); }
     releaseLock(sessionDir);

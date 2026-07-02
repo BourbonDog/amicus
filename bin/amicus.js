@@ -95,10 +95,10 @@ async function main() {
         await handleList(args);
         break;
       case 'resume':
-        await handleResume(args);
+        exitCode = await handleResume(args);
         break;
       case 'continue':
-        await handleContinue(args);
+        exitCode = await handleContinue(args);
         break;
       case 'read':
         await handleRead(args);
@@ -188,7 +188,7 @@ async function handleResume(args) {
 
   const { resumeSidecar } = require('../src/index');
 
-  await resumeSidecar({
+  return await resumeSidecar({
     taskId,
     project: args.cwd,
     headless: args['no-ui'],
@@ -242,7 +242,7 @@ async function handleContinue(args) {
 
   const { continueSidecar } = require('../src/index');
 
-  await continueSidecar({
+  return await continueSidecar({
     taskId,
     newTaskId: args['task-id'],
     briefing: args.prompt || args.briefing,
