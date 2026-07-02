@@ -131,6 +131,29 @@ function getTools() {
     },
   },
   {
+    name: 'amicus_wait',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description:
+      'Wait (block inside one tool call) until an Amicus session or fan-out wave ' +
+      'reaches a terminal state, or until timeoutMs elapses. Returns the same JSON ' +
+      'shape as amicus_status plus {timedOut}. PREFER this over sleep+amicus_status ' +
+      'polling for headless runs: one call replaces many polls. If it returns ' +
+      'timedOut: true the run is still going — simply call amicus_wait again. ' +
+      'Works for any session or wave, including ones started by other processes.',
+    inputSchema: {
+      taskId: safeTaskId.optional().describe('The session task ID (or wave ID) to wait on.'),
+      waveId: safeTaskId.optional().describe('Alias for taskId when waiting on a fan-out wave.'),
+      timeoutMs: z.number().int().min(1000).max(110000).optional().describe(
+        'Max wait in milliseconds. Default 50000; capped at 110000 so the call ' +
+        'returns before typical MCP client kill windows. On expiry the tool ' +
+        'returns {timedOut: true} instead of erroring.'
+      ),
+      project: z.string().optional().describe(
+        'Optional project directory path. Auto-detected from working directory if omitted.'
+      ),
+    },
+  },
+  {
     name: 'amicus_read',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
@@ -400,6 +423,9 @@ Amicus spawns parallel conversations with different LLMs and folds results back 
 5. amicus_read to get the summary once complete
 6. Act on findings
 
+(Alternative to steps 2-4: call amicus_wait with the task ID — one call blocks
+up to ~50s and returns status; call it again while it returns timedOut: true.)
+
 **IMPORTANT:** Always run \`sleep 25\` before every amicus_status call. This is not optional. Each premature poll wastes context tokens for zero benefit. The sleep command enforces the wait mechanically.
 
 ### Interactive Mode (noUi: false, default)
@@ -412,7 +438,7 @@ Amicus spawns parallel conversations with different LLMs and folds results back 
 ### Fan-Out (amicus_fanout)
 Run the SAME prompt across 1-10 models in parallel (one shared engine):
 1. amicus_fanout with models + prompt -> {waveId, taskIds[]}
-2. sleep 25, then amicus_status with the waveId (repeat until done)
+2. sleep 25, then amicus_status with the waveId (repeat until done), or call amicus_wait with the waveId
 3. amicus_read the waveId -> aggregated JSON wave document (per-leg summaries inside)
 Each leg is an ordinary session: read/resume/continue it by taskId.
 

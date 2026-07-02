@@ -28,6 +28,7 @@ describe('MCP Tool Definitions', () => {
 
     expect(names).toContain('amicus_start');
     expect(names).toContain('amicus_status');
+    expect(names).toContain('amicus_wait');
     expect(names).toContain('amicus_read');
     expect(names).toContain('amicus_list');
     expect(names).toContain('amicus_resume');
@@ -38,8 +39,8 @@ describe('MCP Tool Definitions', () => {
     expect(names).toContain('amicus_fanout');
   });
 
-  test('has exactly 13 tools', () => {
-    expect(TOOLS).toHaveLength(13);
+  test('has exactly 14 tools', () => {
+    expect(TOOLS).toHaveLength(14);
   });
 
   test('tool names are unique', () => {

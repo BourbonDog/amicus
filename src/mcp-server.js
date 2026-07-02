@@ -16,6 +16,7 @@ const { isAllowedProjectRoot } = require('./project-root-allowlist');
 const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
+const { runWait, registerInProcessRun, settleInProcessRun } = require('./mcp-wait');
 
 /**
  * Elapsed run duration: time between createdAt and the run's end, bounding the
@@ -359,6 +360,10 @@ const handlers = {
 
         const timeoutMs = (input.timeout || 15) * 60 * 1000;
 
+        // amicus_wait fast path: this process owns the run promise; settle wakes
+        // any pending wait the moment finalize lands (poll fallback covers the rest).
+        registerInProcessRun(taskId);
+
         // Fire-and-forget: runHeadless with shared server's client
         runHeadless(resolvedModel, systemPrompt, userMessage, taskId, cwd,
           timeoutMs, agent, {
@@ -377,6 +382,7 @@ const handlers = {
             logger.warn('Failed to finalize session', { error: finErr.message });
           }
           sharedServer.removeSession(sessionId);
+          settleInProcessRun(taskId);
         }).catch((err) => {
           logger.error('Shared server session failed', { taskId, error: err.message });
           sharedServer.removeSession(sessionId);
@@ -389,6 +395,7 @@ const handlers = {
           } catch (writeErr) {
             logger.warn('Failed to write error metadata', { error: writeErr.message });
           }
+          settleInProcessRun(taskId);
         });
 
         // Return immediately
@@ -403,6 +410,7 @@ const handlers = {
         if (sessionId) {
           sharedServer.removeSession(sessionId);
         }
+        settleInProcessRun(taskId); // clear a dangling waiter (no-op if never registered)
         // Fall through to spawn path below
       }
     }
@@ -564,6 +572,14 @@ const handlers = {
       content.push({ type: 'text', text: HEADLESS_STATUS_REMINDER });
     }
     return { content };
+  },
+
+  async amicus_wait(input, project) {
+    // statusFn injection avoids a circular require and inherits amicus_status's
+    // crash detection + wave leg rollup on every poll tick.
+    return runWait(input, project, {
+      statusFn: (i, p) => handlers.amicus_status(i, p),
+    });
   },
 
   async amicus_read(input, project) {
@@ -916,13 +932,14 @@ const handlers = {
 
 // DEPRECATED(amicus-shim): legacy sidecar_* twins of each amicus_* tool.
 // OPT-IN since v1.8.0 — registering both names doubled the advertised tool
-// surface (13 -> 26 per server). Set AMICUS_LEGACY_ALIASES=1 in the MCP
+// surface (14 -> 28 per server). Set AMICUS_LEGACY_ALIASES=1 in the MCP
 // entry's "env" to restore them. A stdio MCP server cannot learn the
 // client-side registration key it was launched under (initialize carries
 // clientInfo, not the config key), so an env flag is the only reliable
 // switch. Remove entirely in the next major.
 const LEGACY_TOOL_ALIASES = {
   amicus_start: 'sidecar_start', amicus_status: 'sidecar_status',
+  amicus_wait: 'sidecar_wait',
   amicus_read: 'sidecar_read', amicus_list: 'sidecar_list',
   amicus_resume: 'sidecar_resume', amicus_continue: 'sidecar_continue',
   amicus_setup: 'sidecar_setup', amicus_abort: 'sidecar_abort',
