@@ -1,0 +1,42 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.BourbonDog/amicus",
+  "title": "Amicus",
+  "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
+  "repository": {
+    "url": "https://github.com/BourbonDog/amicus",
+    "source": "github"
+  },
+  "websiteUrl": "https://bourbondog.github.io/amicus/",
+  "version": "1.8.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "amicus",
+      "version": "1.8.1",
+      "runtimeHint": "npx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [
+        { "type": "positional", "value": "mcp", "valueHint": "mcp" }
+      ],
+      "environmentVariables": [
+        {
+          "name": "OPENROUTER_API_KEY",
+          "description": "OpenRouter API key (recommended multi-model route). Optional when a provider key is configured via 'amicus setup' (~/.config/amicus/.env) or OpenCode auth.json.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "AMICUS_SKIP_POSTINSTALL",
+          "description": "Set to 1 when a plugin/client manages registration itself (skips npm postinstall side effects).",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string",
+          "default": "1"
+        }
+      ]
+    }
+  ]
+}

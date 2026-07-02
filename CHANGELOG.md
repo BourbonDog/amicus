@@ -5,6 +5,35 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+Phase 9: distribution — plugin slash commands, MCP Registry wiring, and the marketplace submission runbook.
+
+### Added
+- **`/amicus:council` slash command and a `/amicus:sidecar <model> <prompt…>` argument surface.** `commands/council.md`
+  wraps the `second-opinion` skill end-to-end via `$ARGUMENTS`; `skills/sidecar/SKILL.md` gained an
+  `argument-hint` and a slash-invocation section binding `$1` (model alias, falling back to gemini for
+  non-model-looking input) and `$ARGUMENTS` (full prompt). **Slash commands are plugin-channel-only:**
+  `commands/` ships in the npm tarball (via `package.json`'s `files` array) but the npm/`install.sh`/
+  `install.ps1` postinstall flow never copies it into a Claude Code commands directory — only
+  `skills/sidecar` and `skills/second-opinion` are installed that way. npm/postinstall users do not get
+  `/amicus:council` or `/amicus:sidecar`; only plugin installs (`claude plugin install`) do. This is a
+  known, accepted gap, not a bug — carried forward from the 9.1 review as a note that must keep
+  reappearing in release-facing docs so it doesn't get silently "fixed" into a false claim.
+- **MCP Registry wiring.** `package.json` gained `mcpName: "io.github.BourbonDog/amicus"`; `server.json`
+  (repo root) describes the stdio launch (`npx amicus mcp`). `.github/workflows/publish.yml` now publishes
+  to `registry.modelcontextprotocol.io` via `mcp-publisher`, authenticated over the same GitHub OIDC token
+  used for npm Trusted Publishing — no registry secret required. This fires automatically on every `v*` tag
+  push, strictly after `npm publish` succeeds (npm-side ownership validation reads the published
+  `package.json`). See `docs/DISTRIBUTION.md` §3 for the full flow, the release-order dependency on the
+  Phase 4 tool-surface de-bloat, and the manual recovery path if the registry publish fails in CI.
+- **Marketplace submission runbook and preflight guard.** `docs/DISTRIBUTION.md` documents the
+  `claude-community` submission process (individual-author Console form route), the preflight checklist
+  (`claude plugin validate . --strict`, `claude --plugin-dir .` smoke test, `npm test`), and what the
+  Anthropic review pipeline is expected to check.
+
+### Fixed
+- **`plugin.json`'s unrecognized `bugs` field removed.** `claude plugin validate . --strict` now passes
+  clean (exit 0); it previously reported an unknown-field warning that `--strict` promotes to an error.
+
 ## [1.8.1] - 2026-07-02
 
 Docs & skills accuracy sprint from the Phase-8 whole-branch review — no engine changes. Every item fixed a claim

@@ -39,4 +39,15 @@ describe('Claude Code plugin manifest', () => {
   test('the .claude-plugin/ dir ships in the npm tarball (covers manifest + marketplace)', () => {
     expect(pkg.files).toContain('.claude-plugin/');
   });
+
+  test('manifest carries the community-submission metadata (repository, license, homepage, keywords)', () => {
+    const m = manifest();
+    expect(m.repository).toBe('https://github.com/BourbonDog/amicus');
+    expect(m.license).toBe('MIT');
+    expect(m.homepage).toBe('https://bourbondog.github.io/amicus/');
+    expect(Array.isArray(m.keywords) && m.keywords.length > 0).toBe(true);
+    // The review pipeline runs `claude plugin validate`; docs/DISTRIBUTION.md is the runbook.
+    const fs2 = require('fs');
+    expect(fs2.existsSync(path.join(ROOT, 'docs', 'DISTRIBUTION.md'))).toBe(true);
+  });
 });

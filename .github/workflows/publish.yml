@@ -30,6 +30,38 @@ jobs:
       # implied under trusted publishing; the explicit flag keeps intent visible.
       - run: npm publish --access public --provenance
 
+      # ── MCP Registry (registry.modelcontextprotocol.io) ────────────────
+      # Auth: GitHub OIDC (id-token: write above) → publish rights on
+      # io.github.BourbonDog/*. npm-side ownership validation reads "mcpName"
+      # from the PUBLISHED package.json, so these steps MUST follow npm publish.
+      # Hard-fail semantics below: if this block fails, a workflow RE-RUN
+      # will NOT recover (npm publish would EPUBLISHCONFLICT first). See
+      # "If the registry publish fails in CI" in docs/DISTRIBUTION.md §3.
+      - name: Install mcp-publisher
+        run: |
+          # pinned 2026-07-02 to registry release v1.7.9; bump deliberately
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Sync server.json version from tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > server.tmp
+          mv server.tmp server.json
+
+      - name: Publish to MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          # npm propagation can lag the publish by a few seconds; retry.
+          for i in 1 2 3 4 5; do
+            ./mcp-publisher publish && exit 0
+            echo "mcp-publisher publish attempt $i failed; retrying in 20s"
+            sleep 20
+          done
+          echo '::error::MCP Registry publish failed after 5 attempts'
+          exit 1
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
