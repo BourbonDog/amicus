@@ -11,6 +11,7 @@ const { getCompatEnv } = require('./env-compat');
 const MAX_RESTARTS = 3;
 const RESTART_WINDOW = 5 * 60 * 1000;
 const RESTART_BACKOFF = 2000;
+const CRASH_POLL_INTERVAL = 5000; // ms; env-tunable via AMICUS_CRASH_POLL_MS
 
 /**
  * SharedServerManager - manages a single shared OpenCode server for MCP sessions.
@@ -45,6 +46,12 @@ class SharedServerManager {
 
     /** @type {number[]} Timestamps of recent restart attempts */
     this._restartTimestamps = [];
+
+    /** @type {NodeJS.Timeout|null} goPid liveness poll (H7) */
+    this._crashPoll = null;
+    /** Pid-liveness probe (test seam). Lazy default keeps construction light. */
+    this._isProcessAlive = options.isProcessAlive
+      || ((pid) => require('../sidecar/session-utils').isProcessAlive(pid));
   }
 
   /**
@@ -163,6 +170,7 @@ class SharedServerManager {
       this._serverWatchdog.cancel();
       this._serverWatchdog = null;
     }
+    this._stopCrashPoll();
     if (this.server) {
       this.server.close();
       this.server = null;
@@ -171,12 +179,10 @@ class SharedServerManager {
   }
 
   /**
-   * Wire crash detection onto a freshly started server handle so an unexpected
-   * exit triggers _onServerCrash (and the restart machinery). The OpenCode
-   * server handle is a plain wrapper; it may surface lifecycle events either on
-   * itself or on an underlying child `process`. Attach to whichever is an event
-   * emitter, guarding against double-wiring across restarts.
-   *
+   * Wire crash detection onto a freshly started server handle. The REAL handle
+   * from buildServerHandle is { url, goPid, close } — it surfaces NO lifecycle
+   * events, so the emitter path alone was dead code (H7). Detection now polls
+   * the Go engine pid; emitter wiring is kept for handles that do expose events.
    * @param {object} server - Server handle returned by _doStartServer
    */
   _wireCrashListener(server) {
@@ -185,19 +191,38 @@ class SharedServerManager {
       : (server && server.process && typeof server.process.on === 'function')
         ? server.process
         : null;
-    if (!emitter || emitter._amicusCrashWired) {
-      return;
+    if (emitter && !emitter._amicusCrashWired) {
+      emitter._amicusCrashWired = true;
+      const onExit = (code) => {
+        if (this.server !== server) { return; } // stale handle already replaced/closed
+        this._onServerCrash(code);
+      };
+      emitter.on('exit', onExit);
+      emitter.on('close', onExit);
     }
-    emitter._amicusCrashWired = true;
-    const onExit = (code) => {
-      // Ignore exits from a stale handle we have already replaced/closed.
-      if (this.server !== server) {
-        return;
+    if (server && server.goPid) {
+      this._startCrashPoll(server);
+    } else if (!emitter) {
+      this.logger.debug?.('Server handle has no goPid and no emitter — crash detection unavailable');
+    }
+  }
+
+  /** Poll the Go engine pid; pid death IS the crash signal (H7). */
+  _startCrashPoll(server) {
+    this._stopCrashPoll();
+    const interval = Number(getCompatEnv('CRASH_POLL_MS')) || CRASH_POLL_INTERVAL;
+    this._crashPoll = setInterval(() => {
+      if (this.server !== server) { this._stopCrashPoll(); return; }
+      if (!this._isProcessAlive(server.goPid)) {
+        this._stopCrashPoll();
+        this._onServerCrash(null);
       }
-      this._onServerCrash(code);
-    };
-    emitter.on('exit', onExit);
-    emitter.on('close', onExit);
+    }, interval);
+    if (this._crashPoll.unref) { this._crashPoll.unref(); }
+  }
+
+  _stopCrashPoll() {
+    if (this._crashPoll) { clearInterval(this._crashPoll); this._crashPoll = null; }
   }
 
   /**
@@ -206,6 +231,7 @@ class SharedServerManager {
    * @param {number} exitCode - Process exit code from the crashed server
    */
   _onServerCrash(exitCode) {
+    this._stopCrashPoll();
     this.logger.error?.('Shared server crashed', { exitCode });
     for (const [id] of this._sessionWatchdogs) {
       this.logger.warn?.('Session interrupted by server crash', { sessionId: id });
