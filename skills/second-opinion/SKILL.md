@@ -193,6 +193,12 @@ adjudication response. **Stage-2 degrade:** a judge leg dies → tally over the 
 (≥ 1) and disclose the reduced bench in `crossreview-matrix.md`; tier definitions are unchanged
 (they already count "judges engaged"). Each judge is asked to do two things on the bundle:
 
+**Judge-briefing hardening (required).** Open `_tmp-bundle-stage2.md` with this preamble, verbatim, as its first line:
+
+> Do NOT use any tools or read any files; everything is in this message; begin immediately with A1:
+
+Plan-agent judges have wandered to tools mid-adjudication (reading files instead of judging and returning only narration), and a tool-capable judge can read the de-anonymized `review-<model>.md` files in the run folder — an anonymization leak. The preamble closes both. **Scratch-cwd (optional second layer):** launch the Stage-2 wave (and the Stage-3 chair call) with `--cwd <run-folder>/_scratch/` — create the empty directory first — so even a wandering agent finds nothing to read. Caveat: those legs' session records then live under `_scratch/.claude/amicus_sessions/`, so any later `amicus read <taskId>` for them needs the same `--cwd`.
+
 **Task A — Rank.** Order the reviews from most to least accurate and insightful. End the response with a parseable block in exactly this format (no other text on those lines):
 
 ```
@@ -251,6 +257,8 @@ The run document's `summary` is the verdict. The packet contains:
 - All Stage-1 reviews (de-anonymized — model attribution restored)
 - All cross-review ranking outputs (with model attribution)
 - All adjudication outputs (with model attribution and `agree | dispute | neutral` verdicts per finding)
+
+Open `_tmp-chair-packet.md` with the no-tools preamble, adjusted for the chair: *'Do NOT use any tools or read any files; everything is in this message; begin immediately with the verdict.'* The packet is complete by construction — the chair must never go looking for files.
 
 Instruct the chair to write a **synthesized verdict** that:
 - Weighs each reviewer's findings by their peer-validated standing (street-cred rank and adjudication pattern)
