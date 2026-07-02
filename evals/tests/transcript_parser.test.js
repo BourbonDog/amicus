@@ -3,12 +3,12 @@ const { parseTranscript } = require('../transcript_parser');
 describe('parseTranscript', () => {
   test('extracts MCP tool calls from stream-json lines', () => {
     const lines = [
-      '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"1","name":"sidecar_start","input":{"model":"gemini","prompt":"test","agent":"Build"}}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"1","name":"amicus_start","input":{"model":"gemini","prompt":"test","agent":"Build"}}]}}',
       '{"type":"result","subtype":"tool_result","tool_use_id":"1","content":"{\\"taskId\\":\\"abc123\\"}"}',
     ];
     const transcript = parseTranscript(lines);
     expect(transcript.toolCalls).toHaveLength(1);
-    expect(transcript.toolCalls[0].tool).toBe('sidecar_start');
+    expect(transcript.toolCalls[0].tool).toBe('amicus_start');
     expect(transcript.toolCalls[0].params.model).toBe('gemini');
     expect(transcript.toolCalls[0].result).toContain('abc123');
   });
@@ -24,7 +24,7 @@ describe('parseTranscript', () => {
 
   test('captures errors from tool results', () => {
     const lines = [
-      '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"1","name":"sidecar_status","input":{"taskId":"bad"}}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"1","name":"amicus_status","input":{"taskId":"bad"}}]}}',
       '{"type":"result","subtype":"tool_result","tool_use_id":"1","content":"Error: Session bad not found.","is_error":true}',
     ];
     const transcript = parseTranscript(lines);
@@ -68,7 +68,7 @@ describe('parseTranscript', () => {
 
   test('returns empty bashCommands when no bash tool calls', () => {
     const lines = [
-      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"sidecar_start","id":"tu3","input":{"model":"gemini"}}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"amicus_start","id":"tu3","input":{"model":"gemini"}}]}}',
       '{"type":"result","subtype":"tool_result","tool_use_id":"tu3","content":"{}"}',
     ];
     const transcript = parseTranscript(lines);
@@ -77,12 +77,12 @@ describe('parseTranscript', () => {
 
   test('extracts tool calls when results come as user events', () => {
     const lines = [
-      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__sidecar__sidecar_start","id":"toolu_abc","input":{"model":"gemini","prompt":"test"}}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__amicus__amicus_start","id":"toolu_abc","input":{"model":"gemini","prompt":"test"}}]}}',
       '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_abc","content":[{"type":"text","text":"{\\"taskId\\":\\"abc123\\"}"}]}]}}',
     ];
     const transcript = parseTranscript(lines);
     expect(transcript.toolCalls).toHaveLength(1);
-    expect(transcript.toolCalls[0].tool).toBe('mcp__sidecar__sidecar_start');
+    expect(transcript.toolCalls[0].tool).toBe('mcp__amicus__amicus_start');
     expect(transcript.toolCalls[0].params.model).toBe('gemini');
     expect(transcript.toolCalls[0].result).toContain('abc123');
   });

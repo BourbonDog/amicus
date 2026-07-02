@@ -6,37 +6,37 @@ const { runProgrammaticChecks } = require('../evaluator');
 describe('runProgrammaticChecks', () => {
   test('tool_called passes when tool was called', () => {
     const transcript = {
-      toolCalls: [{ tool: 'sidecar_start', params: { model: 'gemini' }, result: '{}' }],
+      toolCalls: [{ tool: 'amicus_start', params: { model: 'gemini' }, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_called', tool: 'sidecar_start' }];
+    const criteria = [{ type: 'tool_called', tool: 'amicus_start' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
   });
 
   test('tool_called fails when tool was not called', () => {
     const transcript = { toolCalls: [], errors: [] };
-    const criteria = [{ type: 'tool_called', tool: 'sidecar_start' }];
+    const criteria = [{ type: 'tool_called', tool: 'amicus_start' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(false);
   });
 
   test('tool_param passes when param matches expected value', () => {
     const transcript = {
-      toolCalls: [{ tool: 'sidecar_start', params: { agent: 'Build' }, result: '{}' }],
+      toolCalls: [{ tool: 'amicus_start', params: { agent: 'Build' }, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_param', tool: 'sidecar_start', param: 'agent', expected: 'Build' }];
+    const criteria = [{ type: 'tool_param', tool: 'amicus_start', param: 'agent', expected: 'Build' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
   });
 
   test('tool_param_matches passes on regex match', () => {
     const transcript = {
-      toolCalls: [{ tool: 'sidecar_start', params: { model: 'openrouter/google/gemini-2.5-flash' }, result: '{}' }],
+      toolCalls: [{ tool: 'amicus_start', params: { model: 'openrouter/google/gemini-2.5-flash' }, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_param_matches', tool: 'sidecar_start', param: 'model', pattern: 'gemini' }];
+    const criteria = [{ type: 'tool_param_matches', tool: 'amicus_start', param: 'model', pattern: 'gemini' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
   });
@@ -130,10 +130,10 @@ describe('runProgrammaticChecks', () => {
 
   test('tool_called matches MCP-prefixed tool names', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_start', params: { model: 'gemini' }, result: '{}' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_start', params: { model: 'gemini' }, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_called', tool: 'sidecar_start' }];
+    const criteria = [{ type: 'tool_called', tool: 'amicus_start' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
     expect(results[0].detail).toBe('Called');
@@ -141,39 +141,39 @@ describe('runProgrammaticChecks', () => {
 
   test('tool_called matches pipe-separated alternatives', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_status', params: {}, result: '{}' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_status', params: {}, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_called', tool: 'sidecar_read|sidecar_status' }];
+    const criteria = [{ type: 'tool_called', tool: 'amicus_read|amicus_status' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
   });
 
   test('tool_param matches MCP-prefixed tool names', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_start', params: { agent: 'Build' }, result: '{}' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_start', params: { agent: 'Build' }, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_param', tool: 'sidecar_start', param: 'agent', expected: 'Build' }];
+    const criteria = [{ type: 'tool_param', tool: 'amicus_start', param: 'agent', expected: 'Build' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
   });
 
   test('tool_param_matches matches MCP-prefixed tool names', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_start', params: { model: 'openrouter/google/gemini-2.5-flash' }, result: '{}' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_start', params: { model: 'openrouter/google/gemini-2.5-flash' }, result: '{}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_param_matches', tool: 'sidecar_start', param: 'model', pattern: 'gemini' }];
+    const criteria = [{ type: 'tool_param_matches', tool: 'amicus_start', param: 'model', pattern: 'gemini' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
   });
   test('tool_result_matches passes when result contains matching pattern', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_read', params: { taskId: 'abc' }, result: '## Summary\nFound missing await on refreshToken call' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_read', params: { taskId: 'abc' }, result: '## Summary\nFound missing await on refreshToken call' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_result_matches', tool: 'sidecar_read', pattern: '(await|bug|fix|issue|error|missing)' }];
+    const criteria = [{ type: 'tool_result_matches', tool: 'amicus_read', pattern: '(await|bug|fix|issue|error|missing)' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(true);
     expect(results[0].detail).toContain('Matched');
@@ -181,10 +181,10 @@ describe('runProgrammaticChecks', () => {
 
   test('tool_result_matches fails when result is empty or no output', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_read', params: { taskId: 'abc' }, result: '## Sidecar Results: No Output\n\nHeadless mode completed without summary.' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_read', params: { taskId: 'abc' }, result: '## Sidecar Results: No Output\n\nHeadless mode completed without summary.' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_result_matches', tool: 'sidecar_read', pattern: '(await|bug|fix|issue|error|missing)' }];
+    const criteria = [{ type: 'tool_result_matches', tool: 'amicus_read', pattern: '(await|bug|fix|issue|error|missing)' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(false);
   });
@@ -231,10 +231,10 @@ describe('runProgrammaticChecks', () => {
 
   test('tool_result_matches fails when tool was never called', () => {
     const transcript = {
-      toolCalls: [{ tool: 'mcp__sidecar__sidecar_status', params: {}, result: '{"status":"complete"}' }],
+      toolCalls: [{ tool: 'mcp__amicus__amicus_status', params: {}, result: '{"status":"complete"}' }],
       errors: [],
     };
-    const criteria = [{ type: 'tool_result_matches', tool: 'sidecar_read', pattern: 'anything' }];
+    const criteria = [{ type: 'tool_result_matches', tool: 'amicus_read', pattern: 'anything' }];
     const results = runProgrammaticChecks(criteria, transcript, '/tmp');
     expect(results[0].passed).toBe(false);
     expect(results[0].detail).toContain('not called');
@@ -247,13 +247,13 @@ describe('buildJudgePrompt', () => {
   test('includes rubric items and transcript summary', () => {
     const rubric = ['Was the model choice appropriate? (1-5)', 'Was the briefing good? (1-5)'];
     const transcript = {
-      toolCalls: [{ tool: 'sidecar_start', params: { model: 'gemini' }, result: '{"taskId":"abc"}' }],
+      toolCalls: [{ tool: 'amicus_start', params: { model: 'gemini' }, result: '{"taskId":"abc"}' }],
       errors: [],
     };
     const prompt = buildJudgePrompt(rubric, transcript);
     expect(prompt).toContain('model choice');
     expect(prompt).toContain('briefing');
-    expect(prompt).toContain('sidecar_start');
+    expect(prompt).toContain('amicus_start');
     expect(prompt).toContain('gemini');
     expect(prompt).toContain('JSON');
   });

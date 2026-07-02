@@ -263,6 +263,7 @@ scripts/
 evals/
 ├── tests/
 │   ├── claude_runner.test.js
+│   ├── eval_tasks.test.js
 │   ├── evaluator.test.js
 │   ├── result_writer.test.js
 │   └── transcript_parser.test.js

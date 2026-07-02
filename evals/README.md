@@ -6,14 +6,14 @@ End-to-end evaluation system that tests whether an LLM can correctly use sidecar
 
 Each eval spawns a real Claude Code process pointed at an isolated sandbox project (copied from `fixtures/`). Claude works on the task autonomously, then the system grades both tool usage and decision-making quality.
 
-In **MCP mode**, sidecar is connected via `--mcp-config` and Claude uses MCP tools (`sidecar_start`, `sidecar_read`, etc.).
+In **MCP mode**, amicus is connected via `--mcp-config` and Claude uses MCP tools (`amicus_start`, `amicus_read`, etc.). The server is spawned env-free, so it exposes the default canonical surface — legacy `sidecar_*` aliases are opt-in (`AMICUS_LEGACY_ALIASES=1`) since v1.8.0 and are NOT used here.
 
 In **CLI mode**, the `sidecar` binary is added to PATH and Claude uses bash commands (`sidecar start`, `sidecar read`, etc.).
 
 ```
 run_eval.js --eval-id 1 --mode mcp
   1. Copy fixture to /tmp sandbox
-  2. Generate MCP config pointing to sidecar binary
+  2. Generate MCP config pointing to the amicus binary
   3. Prepend mode-specific prompt prefix
   4. Spawn: claude -p "<prompt>" --output-format stream-json --mcp-config <config>
   5. Capture stream-json output lines
@@ -56,7 +56,7 @@ node evals/run_eval.js --eval-id 1
 node evals/run_eval.js --eval-id 1 --mode both
 ```
 
-**MCP mode:** Claude uses sidecar MCP tools (`sidecar_start`, `sidecar_read`, etc.) connected via `--mcp-config`. Programmatic checks use `tool_called`, `tool_param`, etc.
+**MCP mode:** Claude uses amicus MCP tools (`amicus_start`, `amicus_read`, etc.) connected via `--mcp-config`. Programmatic checks use `tool_called`, `tool_param`, etc.
 
 **CLI mode:** Claude uses bash to run `sidecar start`, `sidecar read`, etc. The sidecar binary is added to PATH. Programmatic checks use `bash_command_matches`.
 
@@ -146,7 +146,7 @@ Add an entry to `evals/eval_tasks.json` with both `programmatic` (MCP) and `prog
   "model": "sonnet",
   "success_criteria": {
     "programmatic": [
-      {"type": "tool_called", "tool": "sidecar_start"},
+      {"type": "tool_called", "tool": "amicus_start"},
       {"type": "file_changed", "path": "src/app.js"}
     ],
     "programmatic_cli": [
@@ -211,7 +211,7 @@ Each eval produces a `result.json`:
     "claude": {"input_tokens": 12500, "output_tokens": 3200}
   },
   "programmatic_results": [
-    {"type": "tool_called", "tool": "sidecar_start", "passed": true, "detail": "Called"}
+    {"type": "tool_called", "tool": "amicus_start", "passed": true, "detail": "Called"}
   ],
   "judge_results": {
     "scores": [{"rubric": "Model choice", "score": 4}],
@@ -219,7 +219,7 @@ Each eval produces a `result.json`:
     "passed": true
   },
   "sidecar_calls": [
-    {"tool": "sidecar_start", "params": {"model": "gemini", "agent": "Build"}}
+    {"tool": "amicus_start", "params": {"model": "gemini", "agent": "Build"}}
   ],
   "cli_commands": []
 }

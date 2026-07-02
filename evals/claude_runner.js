@@ -4,19 +4,24 @@ const path = require('path');
 const os = require('os');
 
 const EVALS_DIR = __dirname;
-const SIDECAR_BIN = path.join(EVALS_DIR, '..', 'bin', 'sidecar.js');
+const AMICUS_BIN = path.join(EVALS_DIR, '..', 'bin', 'amicus.js');
 const FIXTURES_DIR = path.join(EVALS_DIR, 'fixtures');
 
 /**
- * Build MCP config JSON for sidecar server.
+ * Build MCP config JSON for the amicus server.
+ *
+ * Deliberately env-free: the harness must exercise the DEFAULT tool surface
+ * (13 amicus_* tools). Do NOT add AMICUS_LEGACY_ALIASES here — the legacy
+ * sidecar_* aliases are opt-in since v1.8.0 and are removed in the next
+ * major; pinning the harness to them would only re-hide that debt.
  * @returns {object} MCP config object
  */
 function buildMcpConfig() {
   return {
     mcpServers: {
-      sidecar: {
+      amicus: {
         command: 'node',
-        args: [SIDECAR_BIN, 'mcp'],
+        args: [AMICUS_BIN, 'mcp'],
       },
     },
   };
@@ -75,7 +80,7 @@ function buildClaudeCommand({ prompt, model, maxBudget, mcpConfigPath, sandboxDi
   const baseTools = 'Read,Edit,Write,Bash,Glob,Grep';
   if (mcpConfigPath) {
     args.push('--mcp-config', mcpConfigPath);
-    args.push('--allowedTools', `mcp__sidecar__*,${baseTools}`);
+    args.push('--allowedTools', `mcp__amicus__*,${baseTools}`);
   } else {
     args.push('--allowedTools', baseTools);
   }
