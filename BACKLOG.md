@@ -168,3 +168,22 @@ none need a built artifact** (unlike winget, abandoned). Ranked by leverage:
 **Skip:** winget (needs a built artifact), Homebrew-core (notability gate ≥30 forks/watchers or ≥75 stars + postinstall-mutation
 friction; a personal tap is possible but low-payoff), Scoop official buckets, and AUR/Nix/Snap/Flatpak/Docker/mise
 (sandboxed/relocatable assumptions fight amicus's host-config mutation + native binary).
+
+---
+
+## Future goals (from the 2026-07-01 review-execution plan)
+
+- [ ] **Council Review GitHub Action v2 — adjudicated verdicts in CI.** Phase 10 of the review-execution plan ships
+  v1 as *fanout-only*: a `council-review`-labeled PR gets N independent model reviews (`amicus fanout --json`,
+  headless) synthesized into one sticky comment. v1 deliberately does NOT claim a "council verdict" because a
+  code-only pipeline cannot produce one — `amicus council tally` requires `adjudications[]`/`rankings[]`, which
+  only exist after the skill-orchestrated Stage-2 anonymous cross-review (models judging each other's reviews)
+  and chair synthesis (`src/cli-handlers-council.js`, `src/council/verdict.js`). **v2 = the real adjudicated
+  council verdict on a PR**, which needs one of two enablers: (a) a **headless Stage-2 orchestration mode** in the
+  engine (the orchestration moves from the skill into code: distribute anonymized reviews to judge legs, collect
+  adjudications/rankings, run tally + chair synthesis without a driving Claude), or (b) **claude-code-action
+  driving the actual second-opinion skill** on the runner (Claude orchestrates Stage 0–6 in CI; costs more, ships
+  sooner). Prerequisites: Phase 10 v1 in production (proves the plumbing + cost profile), and the OpenRouter CI
+  key's dashboard spend cap (the only hard cost ceiling on fresh runners — `--max-cost` is advisory with no cached
+  catalog). Full v1 design lives in `docs/superpowers/plans/2026-07-01-review-execution-10-phases.md` (Phase 10);
+  this item is also tracked as backlog entry 24 in that plan's "Backlog for review" section.
