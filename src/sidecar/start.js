@@ -23,6 +23,7 @@ const { acquireLock, releaseLock } = require('../utils/session-lock');
 const { loadMcpConfig, parseMcpSpec } = require('../opencode-client');
 const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { discoverParentMcps } = require('../utils/mcp-discovery');
+const { stripSelfMcpEntries } = require('../utils/mcp-self-identity');
 
 /** Generate a unique 8-character hex task ID */
 function generateTaskId() {
@@ -117,13 +118,11 @@ function buildMcpConfig(options) {
     }
   }
 
-  // Always exclude the sidecar itself to prevent recursive spawning.
-  // When launched from Cowork, the discovered MCP list includes "sidecar"
-  // which would cause an infinite spawn loop.
-  if (mcpServers && mcpServers.sidecar) {
-    delete mcpServers.sidecar;
-    logger.debug('Auto-excluded sidecar MCP (recursive spawn prevention)');
-  }
+  // Always exclude amicus itself — under ANY registered name or aliased
+  // invocation — to prevent recursive spawning. When launched from Cowork or
+  // Claude Code the discovered list includes 'amicus'/'sidecar' (and possibly
+  // a user alias), which would cause an infinite spawn loop.
+  if (mcpServers) { stripSelfMcpEntries(mcpServers, logger); }
 
   // Apply explicit exclusions
   if (excludeMcp && Array.isArray(excludeMcp) && mcpServers) {
