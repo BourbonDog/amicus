@@ -41,6 +41,8 @@ function realDeps() {
     fix: false,
     discoverClaudeCodeMcps: () => require('./utils/mcp-discovery').discoverClaudeCodeMcps(),
     discoverCoworkMcps: () => require('./utils/mcp-discovery').discoverCoworkMcps(),
+    inspectLegacyMcpEntries: () => require('./utils/legacy-mcp-migration').inspectAllLegacySidecarEntries(),
+    migrateLegacyMcpEntries: () => require('./utils/legacy-mcp-migration').migrateLegacySidecar(),
     skillInstalled: () => {
       const dir = path.join(os.homedir(), '.claude', 'skills');
       return fs.existsSync(path.join(dir, 'sidecar', 'SKILL.md'))
@@ -179,6 +181,30 @@ async function runDoctorChecks(depsOverride = {}) {
     }
     const extra = inCowork ? ', Cowork/Desktop' : '';
     return { id: 'mcp', name: 'MCP registration', status: 'ok', message: `registered: Claude Code${extra}`, hint: null };
+  }));
+
+  // Duplicate legacy 'sidecar' MCP registration (same server twice — doubles
+  // the client-visible tool list). Detection reads the raw config files via
+  // legacy-mcp-migration: mcp-discovery can't see it (it strips 'sidecar' as
+  // its own recursion guard). --fix removes only identical-in-effect twins.
+  checks.push(guard('mcp-legacy', 'Legacy sidecar MCP entry', () => {
+    const id = 'mcp-legacy'; const name = 'Legacy sidecar MCP entry';
+    const entries = d.inspectLegacyMcpEntries() || [];
+    const dupes = entries.filter(e => e.status === 'removable');
+    const custom = entries.filter(e => e.status === 'customized');
+    if (dupes.length === 0) {
+      const message = custom.length
+        ? `custom 'sidecar' entry in ${custom.map(e => e.target).join(', ')} — left alone`
+        : 'none';
+      return { id, name, status: 'ok', message, hint: null };
+    }
+    if (d.fix) {
+      const removed = (d.migrateLegacyMcpEntries() || []).filter(r => r.result === 'removed');
+      return removed.length >= dupes.length
+        ? { id, name, status: 'ok', message: `removed duplicate from ${removed.map(r => r.target).join(', ')}`, hint: null }
+        : { id, name, status: 'warn', message: `removed ${removed.length}/${dupes.length} duplicate(s) — could not update every config`, hint: HINTS.removeLegacySidecar };
+    }
+    return { id, name, status: 'warn', message: `duplicate 'sidecar' entry in ${dupes.map(e => e.target).join(', ')} — doubles the MCP tool list`, hint: HINTS.removeLegacySidecar };
   }));
 
   // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no key.

@@ -64,6 +64,14 @@ const REMEDIATION_HINTS = Object.freeze({
    * can't loop the way `npm install -g amicus` could when the rollback recurs.
    */
   doctorFix: 'amicus doctor --fix  (self-heal the Electron GUI in place — provisions the binary; no reinstall, so it can\'t loop)',
+
+  /**
+   * Duplicate legacy 'sidecar' MCP registration (Phase 4 de-bloat): pre-1.8
+   * postinstalls registered the same server twice. `doctor --fix` removes the
+   * twin only when it points at amicus; a customized entry is never touched.
+   */
+  removeLegacySidecar:
+    "amicus doctor --fix  (removes the duplicate legacy 'sidecar' MCP entry — same server registered twice; the 'amicus' entry stays)",
 });
 
 module.exports = REMEDIATION_HINTS;

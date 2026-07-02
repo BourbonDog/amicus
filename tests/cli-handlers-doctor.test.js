@@ -19,6 +19,11 @@ const allGood = {
   getElectronPath: () => '/path/to/electron',
   discoverClaudeCodeMcps: () => ({ amicus: {} }),
   discoverCoworkMcps: () => ({ amicus: {} }),
+  inspectLegacyMcpEntries: () => [
+    { target: 'Claude Code', status: 'absent' },
+    { target: 'Claude Desktop', status: 'absent' },
+  ],
+  migrateLegacyMcpEntries: () => [],
   skillInstalled: () => true,
 };
 
