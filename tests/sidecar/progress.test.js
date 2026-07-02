@@ -169,6 +169,18 @@ describe('Progress Reader', () => {
       // Should use last valid assistant entry
       expect(result.latest).toBe('Using Bash');
     });
+
+    it('exposes lastActivityAt (ISO) and latestPreview', () => {
+      fs.writeFileSync(path.join(tmpDir, 'conversation.jsonl'),
+        JSON.stringify({ role: 'assistant', content: 'Answer: `x`\nmore' }) + '\n');
+      const r = readProgress(tmpDir);
+      expect(r.latestPreview).toBe('Answer: x more');
+      expect(new Date(r.lastActivityAt).getTime()).toBeGreaterThan(Date.now() - 60000);
+      expect(r.lastActivityMs).toBeLessThan(60000);
+    });
+    it('lastActivityAt is null when nothing has been written', () => {
+      expect(readProgress(tmpDir).lastActivityAt).toBeNull();
+    });
   });
 
   describe('extractLatest', () => {

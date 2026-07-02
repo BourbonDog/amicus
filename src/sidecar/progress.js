@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { latestAssistantPreview } = require('./progress-fields');
 
 /** Lifecycle stage labels */
 const STAGE_LABELS = {
@@ -195,27 +196,28 @@ function readProgress(sessionDir) {
     }
   }
 
-  // Compute raw lastActivityMs for stall detection
-  let lastActivityMs = null;
-  if (convStat) {
-    lastActivityMs = Date.now() - convStat.mtime.getTime();
-  }
-  // Use progress.json updatedAt if more recent
+  // Newest activity timestamp across BOTH sources (conv mtime, progress.updatedAt):
+  // feeds lastActivityMs (stall detection) AND lastActivityAt (absolute ISO for
+  // agents) from one value so they can never disagree.
+  let newestActivity = convStat ? convStat.mtime : null;
   if (fs.existsSync(progressPath)) {
     try {
       const progress = JSON.parse(fs.readFileSync(progressPath, 'utf-8'));
       if (progress.updatedAt) {
-        const progressMs = Date.now() - new Date(progress.updatedAt).getTime();
-        if (lastActivityMs === null || progressMs < lastActivityMs) {
-          lastActivityMs = progressMs;
-        }
+        const t = new Date(progress.updatedAt);
+        if (!newestActivity || t > newestActivity) { newestActivity = t; }
       }
     } catch {
       // Ignore — already handled above
     }
   }
+  const lastActivityMs = newestActivity ? Date.now() - newestActivity.getTime() : null;
 
-  const result = { messages, lastActivity, latest, lastActivityMs };
+  const result = {
+    messages, lastActivity, latest, lastActivityMs,
+    lastActivityAt: newestActivity ? newestActivity.toISOString() : null,
+    latestPreview: latestAssistantPreview(entries),
+  };
   if (stage !== undefined) {
     result.stage = stage;
   }

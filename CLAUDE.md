@@ -134,6 +134,7 @@ src/
 │   ├── interactive-mirror.js
 │   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
+│   ├── progress-fields.js
 │   ├── progress.js  # Sidecar Progress Reader
 │   ├── read.js  # Sidecar Read Operations Module
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
@@ -330,6 +331,7 @@ evals/
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
+| `sidecar/progress-fields.js` |  | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
