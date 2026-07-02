@@ -73,6 +73,21 @@ describe('abort <taskId> fallback kill (Phase 3)', () => {
     expect(output()).not.toContain('Waiting up to');
   });
 
+  it('EPERM-unkillable pid gets the honest still-running message, not a false outcome', async () => {
+    killSpy.mockImplementation(() => {
+      const e = new Error('EPERM'); e.code = 'EPERM'; throw e;
+    }); // liveness probe: EPERM = alive; SIGTERM also refused (3.1 contract: pid in NEITHER array)
+    writeSession('beef0014', { status: 'running', pid: 54323 });
+
+    await handleAbort({ _: ['abort', 'beef0014'], cwd: project });
+
+    expect(readStatus('beef0014')).toBe('aborted');            // marker still lands
+    expect(output()).toContain('still running');               // honest third outcome
+    expect(output()).toContain('could not signal');
+    expect(output()).not.toContain('Process exited cleanly');  // no false success
+    expect(output()).not.toContain('did not exit in time');    // no false kill claim
+  });
+
   it('no-regression: wave abort keeps marker-only behavior for legs (existing contract)', async () => {
     writeSession('beef0013', { type: 'wave', status: 'running', legs: ['beef0013-1'] });
     writeSession('beef0013-1', { status: 'running', parentWave: 'beef0013' });
