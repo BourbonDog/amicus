@@ -371,12 +371,13 @@ amicus models --check         # audit your aliases against the catalog
 
 ## MCP integration
 
-The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes thirteen tools:
+The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes fourteen tools:
 
 | Tool | What it does |
 |------|--------------|
 | `amicus_start` | Spawn a session; returns a task ID immediately. |
 | `amicus_status` | Poll a task (or a fanout wave) for completion. |
+| `amicus_wait` | Block inside one tool call until a session/wave finishes or the wait window closes. |
 | `amicus_read` | Read results: summary, conversation, metadata, or JSON. |
 | `amicus_list` | List past sessions. |
 | `amicus_resume` | Reopen a session. |
@@ -389,7 +390,7 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_council_stats` | Reviewer-reliability stats from past council runs. |
 | `amicus_verdict` | Build the final council verdict from a tally + decisions. |
 
-The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then `amicus_read` once it's done — so the calling agent never blocks.
+The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then `amicus_read` once it's done — so the calling agent never blocks. Prefer `amicus_wait` over manual sleep+status polling for headless runs: it collapses the poll loop into a single blocking call that returns as soon as the run finishes (or the wait window closes).
 
 To register manually (user scope):
 

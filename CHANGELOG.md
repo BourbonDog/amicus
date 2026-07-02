@@ -5,6 +5,15 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- **`amicus_wait` MCP tool: blocking wait for a session or fan-out wave.** Blocks inside one tool call until the
+  target reaches a terminal state or the wait window closes, replacing the sleep+`amicus_status` polling loop with
+  a single call. Returns the same JSON shape as `amicus_status` plus `waitedMs` and `{timedOut: true}` (with a
+  `hint`) on expiry — re-call it while it keeps returning `timedOut: true`. Works for sessions or waves started by
+  other processes, not just the caller. Torn-read tolerant: a transient read of `metadata.json` mid-write is
+  treated as a missed poll tick, not a hard failure. Legacy alias `sidecar_wait` is available under
+  `AMICUS_LEGACY_ALIASES=1`.
+
 ### Fixed
 - **`amicus abort` now actually stops interactive sessions and wave legs.** Marker-first, honest output — reports
   what really happened including the unkillable-pid case — and no-ops cleanly with a clear message when the
@@ -12,8 +21,9 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Changed
 - **Legacy `sidecar_*` MCP tool aliases are now opt-in** via `AMICUS_LEGACY_ALIASES=1` (breaking-adjacent —
-  carrying release must be a MINOR, v1.8.0). The default client-visible surface is the 13 `amicus_*` tools; saved
-  allowlists that still reference `mcp__amicus__sidecar_*` stop resolving unless you opt back in.
+  carrying release must be a MINOR, v1.8.0). The default client-visible surface is the `amicus_*` toolset (14
+  tools as of this release); saved allowlists that still reference `mcp__amicus__sidecar_*` stop resolving unless
+  you opt back in.
 - **Postinstall no longer registers a separate `sidecar` MCP server** and auto-removes a verified-identical
   duplicate left over from pre-1.8 installs. A customized `sidecar` entry or a sole `sidecar` registration (no
   `amicus` twin) is never touched.

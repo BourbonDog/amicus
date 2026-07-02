@@ -136,10 +136,11 @@ function getTools() {
     description:
       'Wait (block inside one tool call) until an Amicus session or fan-out wave ' +
       'reaches a terminal state, or until timeoutMs elapses. Returns the same JSON ' +
-      'shape as amicus_status plus {timedOut}. PREFER this over sleep+amicus_status ' +
-      'polling for headless runs: one call replaces many polls. If it returns ' +
-      'timedOut: true the run is still going — simply call amicus_wait again. ' +
-      'Works for any session or wave, including ones started by other processes.',
+      'shape as amicus_status plus {timedOut, waitedMs} (and {hint} on timeout), with ' +
+      'next_poll stripped/replaced. PREFER this over sleep+amicus_status polling for ' +
+      'headless runs: one call replaces many polls. If it returns timedOut: true the ' +
+      'run is still going — simply call amicus_wait again. Works for any session or ' +
+      'wave, including ones started by other processes.',
     inputSchema: {
       taskId: safeTaskId.optional().describe('The session task ID (or wave ID) to wait on.'),
       waveId: safeTaskId.optional().describe('Alias for taskId when waiting on a fan-out wave.'),

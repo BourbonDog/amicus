@@ -111,5 +111,87 @@ describe('runWait', () => {
     const res = await runWait({}, '/proj', { statusFn: jest.fn(), sleep: fastSleep });
     expect(res.isError).toBe(true);
   });
+
+  describe('torn-read tolerance', () => {
+    test('transient throw then valid terminal snapshot → returns normally', async () => {
+      const seq = [
+        () => { throw new Error('EBUSY: torn read'); },
+        () => Promise.resolve(statusResult({ taskId: 't1', status: 'complete' })),
+      ];
+      const statusFn = jest.fn(() => {
+        const next = seq.shift();
+        return Promise.resolve().then(next);
+      });
+      const res = await runWait({ taskId: 't1', timeoutMs: 60000 }, '/proj', { statusFn, sleep: fastSleep });
+      const body = JSON.parse(res.content[0].text);
+      expect(body.status).toBe('complete');
+      expect(body.timedOut).toBe(false);
+      expect(statusFn).toHaveBeenCalledTimes(2);
+    });
+
+    test('transient unparseable content[0].text then valid snapshot → returns normally', async () => {
+      const seq = [
+        Promise.resolve({ content: [{ type: 'text', text: 'not json{{{' }] }),
+        Promise.resolve(statusResult({ taskId: 't1', status: 'complete' })),
+      ];
+      const statusFn = jest.fn(() => seq.shift());
+      const res = await runWait({ taskId: 't1', timeoutMs: 60000 }, '/proj', { statusFn, sleep: fastSleep });
+      const body = JSON.parse(res.content[0].text);
+      expect(body.status).toBe('complete');
+      expect(body.timedOut).toBe(false);
+      expect(statusFn).toHaveBeenCalledTimes(2);
+    });
+
+    test('persistent throws → isError at deadline naming the last failure', async () => {
+      const statusFn = jest.fn(() => { throw new Error('ENOENT: metadata.json vanished'); });
+      let t = 0;
+      const now = jest.fn(() => { t += 3000; return t; }); // deadline crossed on 2nd loop
+      const res = await runWait({ taskId: 't1', timeoutMs: 5000 }, '/proj', { statusFn, sleep: fastSleep, now });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain('ENOENT: metadata.json vanished');
+    });
+
+    test('persistent unparseable results → isError at deadline naming the last failure', async () => {
+      const statusFn = jest.fn(() => Promise.resolve({ content: [{ type: 'text', text: 'not json{{{' }] }));
+      let t = 0;
+      const now = jest.fn(() => { t += 3000; return t; });
+      const res = await runWait({ taskId: 't1', timeoutMs: 5000 }, '/proj', { statusFn, sleep: fastSleep, now });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain('unparseable status for t1');
+    });
+
+    test('deadline passes with a last-known snapshot from an earlier tick → timedOut with that snapshot', async () => {
+      const seq = [
+        () => Promise.resolve(statusResult({ taskId: 't1', status: 'running' })),
+        () => { throw new Error('transient'); },
+        () => { throw new Error('transient'); },
+      ];
+      const statusFn = jest.fn(() => {
+        const next = seq.shift() || (() => { throw new Error('transient'); });
+        return Promise.resolve().then(next);
+      });
+      let t = 0;
+      const now = jest.fn(() => { t += 3000; return t; }); // deadline crossed by the 2nd loop's remaining check
+      const res = await runWait({ taskId: 't1', timeoutMs: 5000 }, '/proj', { statusFn, sleep: fastSleep, now });
+      const body = JSON.parse(res.content[0].text);
+      expect(body.timedOut).toBe(true);
+      expect(body.status).toBe('running');
+    });
+
+    test('unknown-id isError result is still returned immediately, even after a prior torn read', async () => {
+      const seq = [
+        () => { throw new Error('transient'); },
+        () => Promise.resolve({ isError: true, content: [{ type: 'text', text: 'Session nope not found' }] }),
+      ];
+      const statusFn = jest.fn(() => {
+        const next = seq.shift();
+        return Promise.resolve().then(next);
+      });
+      const res = await runWait({ taskId: 'nope', timeoutMs: 60000 }, '/proj', { statusFn, sleep: fastSleep });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain('not found');
+      expect(statusFn).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 // Expected: all fail (module missing) → all pass after implementation.

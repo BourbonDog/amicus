@@ -1,10 +1,6 @@
-// src/mcp-wait.js  (~115 lines, under the 300-line gate)
-'use strict';
-
 /**
+ * Engine for the amicus_wait MCP tool: blocks inside one tool call until a session/wave reaches a terminal state or the wait window closes.
  * @module mcp-wait
- * Engine for the amicus_wait MCP tool: block (inside one tool call) until a
- * session/wave reaches a terminal state or the wait window closes.
  *
  * Two wake sources, one loop:
  *  - disk polling of amicus_status (spawn-path CLI children, other-process
@@ -19,6 +15,8 @@
  * so the DEFAULT wait returns {timedOut:true} at 50s — before a 60s client
  * kill — and the hard cap is 110s for clients with ~2min budgets.
  */
+
+'use strict';
 
 const { versionWarning } = require('./utils/version-info');
 
@@ -119,16 +117,37 @@ async function runWait(input, project, deps) {
   const started = now();
   const deadline = started + timeoutMs;
 
+  // Torn-read tolerance: a statusFn THROW, or a non-error result whose
+  // content[0].text fails to JSON.parse, is a MISSED TICK — not a hard
+  // failure. metadata.json is written with non-atomic fs.writeFileSync by
+  // several writers, and this loop reads it up to ~55x per call (2s cadence),
+  // multiplying exposure to a mid-write torn read vs the old 25s manual
+  // polling. Keep looping on a miss; only surface an error if the deadline
+  // passes without EVER having seen a valid snapshot.
+  let lastSnapshot = null;
+  let lastFailure = null;
+
   for (;;) {
-    const statusResult = await statusFn({ taskId, project: input.project }, project);
-    if (statusResult.isError) { return statusResult; } // e.g. session not found
-    const snapshot = parseStatusPayload(statusResult);
-    if (!snapshot) {
-      return { isError: true, content: [{ type: 'text', text: `amicus_wait: unparseable status for ${taskId}.` }] };
+    let snapshot = null;
+    try {
+      const statusResult = await statusFn({ taskId, project: input.project }, project);
+      if (statusResult.isError) { return statusResult; } // e.g. session not found — pinned behavior, unchanged
+      snapshot = parseStatusPayload(statusResult);
+      if (!snapshot) { lastFailure = `amicus_wait: unparseable status for ${taskId}.`; }
+    } catch (err) {
+      lastFailure = `amicus_wait: statusFn threw for ${taskId}: ${err.message}`;
     }
-    if (isTerminalSnapshot(snapshot)) { return buildWaitResult(snapshot, false, now() - started); }
+
+    if (snapshot) {
+      lastSnapshot = snapshot;
+      if (isTerminalSnapshot(snapshot)) { return buildWaitResult(snapshot, false, now() - started); }
+    }
+
     const remaining = deadline - now();
-    if (remaining <= 0) { return buildWaitResult(snapshot, true, now() - started); }
+    if (remaining <= 0) {
+      if (lastSnapshot) { return buildWaitResult(lastSnapshot, true, now() - started); }
+      return { isError: true, content: [{ type: 'text', text: lastFailure || `amicus_wait: no valid status for ${taskId} before deadline.` }] };
+    }
     const delay = Math.min(pollIntervalMs, remaining);
     const waiter = _inProcessRuns.get(taskId);
     // The waiter only ACCELERATES the wake — the sleep arm keeps the loop live
