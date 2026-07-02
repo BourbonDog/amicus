@@ -65,6 +65,17 @@ function inspectLegacySidecarEntry(configPath, deps = {}) {
   }
   const entry = parsed && parsed.mcpServers ? parsed.mcpServers.sidecar : undefined;
   if (!entry) { return { status: 'absent' }; }
+  // 'removable' means VERIFIED duplicate, not just amicus-shaped. Two edges
+  // must fall back to 'customized' (left alone) instead:
+  //  (a) no 'amicus' twin present — this may be the user's ONLY working
+  //      registration (scripts-skipped / manual pre-rebrand install); deleting
+  //      it would leave them with nothing.
+  //  (b) the sidecar entry carries a non-empty `env` (API keys,
+  //      AMICUS_LEGACY_ALIASES itself) — not identical-in-effect to the bare
+  //      'amicus' entry, so removing it would silently lose configuration.
+  const hasAmicusTwin = !!(parsed.mcpServers && parsed.mcpServers.amicus);
+  const hasNonEmptyEnv = !!(entry.env && typeof entry.env === 'object' && Object.keys(entry.env).length > 0);
+  if (!hasAmicusTwin || hasNonEmptyEnv) { return { status: 'customized', config: entry }; }
   return isAmicus(entry)
     ? { status: 'removable', config: entry }
     : { status: 'customized', config: entry };

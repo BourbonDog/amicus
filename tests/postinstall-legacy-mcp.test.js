@@ -13,7 +13,8 @@ jest.mock('child_process', () => ({
 }));
 const { execFileSync } = require('child_process');
 
-const { registerClaudeCode, registerClaudeDesktop } = require('../scripts/postinstall');
+const { registerClaudeCode, registerClaudeDesktop, addMcpToConfigFile } = require('../scripts/postinstall');
+const MCP_CONFIG = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] }; // scripts/postinstall.js:40
 
 describe('postinstall no longer registers a legacy sidecar MCP server', () => {
   let tmpHome; let homedirSpy; let savedAppData;
@@ -86,5 +87,61 @@ describe('postinstall no longer registers a legacy sidecar MCP server', () => {
       expect(config.mcpServers.amicus).toBeDefined();
       expect(config.mcpServers.sidecar).toBeUndefined();
     }
+  });
+});
+
+// Phase-4 final-review FIX 2: addMcpToConfigFile must not wipe a user's env on
+// upgrade. Re-running `npm i -g amicus` always overwrote the 'amicus' entry
+// with the bare MCP_CONFIG, silently dropping "env": {"AMICUS_LEGACY_ALIASES":"1"}
+// (the exact opt-in escape hatch Phase 4 tells users to add) or any API key env.
+describe('addMcpToConfigFile preserves user env on re-registration (upgrade)', () => {
+  let tmpDir; let configPath;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postinstall-env-'));
+    configPath = path.join(tmpDir, '.claude.json');
+  });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  test('existing amicus-shaped entry WITH env → env is preserved after re-registration', () => {
+    const existingWithEnv = { ...MCP_CONFIG, env: { AMICUS_LEGACY_ALIASES: '1' } };
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { amicus: existingWithEnv } }, null, 2));
+
+    const status = addMcpToConfigFile(configPath, 'amicus', MCP_CONFIG);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(config.mcpServers.amicus.env).toEqual({ AMICUS_LEGACY_ALIASES: '1' });
+    expect(config.mcpServers.amicus.command).toBe(MCP_CONFIG.command);
+    expect(config.mcpServers.amicus.args).toEqual(MCP_CONFIG.args);
+    expect(status).toBe('unchanged'); // command/args identical, only env carried forward — no-op write
+  });
+
+  test('entry absent → written as before (no regression)', () => {
+    const status = addMcpToConfigFile(configPath, 'amicus', MCP_CONFIG);
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(status).toBe('added');
+    expect(config.mcpServers.amicus).toEqual(MCP_CONFIG);
+  });
+
+  test('foreign entry at the amicus key that is NOT amicus-shaped → overwritten as today (reclaiming the reserved key)', () => {
+    const foreign = { command: 'uvx', args: ['some-other-server'] };
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { amicus: foreign } }, null, 2));
+
+    const status = addMcpToConfigFile(configPath, 'amicus', MCP_CONFIG);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(status).toBe('updated');
+    expect(config.mcpServers.amicus).toEqual(MCP_CONFIG); // 'amicus' is a reserved key — foreign entries there are reclaimed
+  });
+
+  test('command/args change while env is preserved → status is updated and both apply', () => {
+    const existingWithEnv = { command: 'npx', args: ['-y', 'amicus@1.0.0', 'mcp'], env: { FOO: 'bar' } };
+    fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { amicus: existingWithEnv } }, null, 2));
+
+    const status = addMcpToConfigFile(configPath, 'amicus', MCP_CONFIG);
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(status).toBe('updated');
+    expect(config.mcpServers.amicus.args).toEqual(MCP_CONFIG.args); // refreshed
+    expect(config.mcpServers.amicus.env).toEqual({ FOO: 'bar' });   // preserved
   });
 });

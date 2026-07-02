@@ -89,13 +89,41 @@ describe('legacy-mcp-migration', () => {
   });
 
   test('inspectAllLegacySidecarEntries reports per-target status for doctor', () => {
-    writeConfig(codePath, { sidecar: AMICUS_MCP });
+    writeConfig(codePath, { amicus: AMICUS_MCP, sidecar: AMICUS_MCP }); // verified twin → removable
     writeConfig(desktopPath, { sidecar: CUSTOM_MCP });
     const entries = inspectAllLegacySidecarEntries({ codePath, desktopPath });
     expect(entries).toEqual([
       expect.objectContaining({ target: 'Claude Code', status: 'removable' }),
       expect.objectContaining({ target: 'Claude Desktop', status: 'customized' }),
     ]);
+  });
+
+  // Phase-4 final-review FIX 1: 'removable' must mean VERIFIED duplicate, not
+  // just amicus-shaped. Two unguarded edges could delete a user's only working
+  // registration or silently drop a non-empty env.
+  test('sidecar entry with NO amicus twin is customized (sole registration — never delete it)', () => {
+    // scripts-skipped / manual pre-rebrand install: only 'sidecar' exists, no 'amicus' key at all.
+    writeConfig(codePath, { sidecar: AMICUS_MCP });
+    const result = removeLegacySidecarEntry(codePath);
+    expect(result).toBe('customized');
+    expect(readConfig(codePath).mcpServers.sidecar).toEqual(AMICUS_MCP); // untouched
+  });
+
+  test('sidecar entry with a non-empty env is customized even though it launches amicus', () => {
+    const sidecarWithEnv = { ...AMICUS_MCP, env: { AMICUS_LEGACY_ALIASES: '1' } };
+    writeConfig(codePath, { amicus: AMICUS_MCP, sidecar: sidecarWithEnv });
+    const result = removeLegacySidecarEntry(codePath);
+    expect(result).toBe('customized');
+    expect(readConfig(codePath).mcpServers.sidecar).toEqual(sidecarWithEnv); // untouched
+  });
+
+  test('inspectLegacySidecarEntry classifies both edges as customized, not removable', () => {
+    writeConfig(codePath, { sidecar: AMICUS_MCP }); // no amicus twin
+    expect(inspectLegacySidecarEntry(codePath).status).toBe('customized');
+
+    const sidecarWithEnv = { ...AMICUS_MCP, env: { API_KEY: 'secret' } };
+    writeConfig(desktopPath, { amicus: AMICUS_MCP, sidecar: sidecarWithEnv }); // non-empty env
+    expect(inspectLegacySidecarEntry(desktopPath).status).toBe('customized');
   });
 });
 

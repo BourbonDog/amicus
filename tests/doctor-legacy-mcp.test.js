@@ -62,7 +62,24 @@ describe("doctor 'mcp-legacy' duplicate sidecar check (Task 4.3)", () => {
     const c = findCheck(checks, 'mcp-legacy');
     expect(migrateLegacyMcpEntries).toHaveBeenCalledTimes(1);
     expect(c.status).toBe('ok');
-    expect(c.message).toContain('removed duplicate from Claude Code');
+    expect(c.message).toContain('removed legacy entry from: Claude Code');
+  });
+
+  test("doctor --fix success message reads naturally for MULTIPLE targets (triage note)", async () => {
+    const migrateLegacyMcpEntries = jest.fn(() => [
+      { target: 'Claude Code', result: 'removed' },
+      { target: 'Claude Desktop', result: 'removed' },
+    ]);
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      inspectLegacyMcpEntries: () => [
+        { target: 'Claude Code', status: 'removable', config: AMICUS_MCP },
+        { target: 'Claude Desktop', status: 'removable', config: AMICUS_MCP },
+      ],
+      migrateLegacyMcpEntries,
+    });
+    const c = findCheck(checks, 'mcp-legacy');
+    expect(c.status).toBe('ok');
+    expect(c.message).toBe('removed legacy entry from: Claude Code, Claude Desktop');
   });
 
   test('doctor --fix partial failure → WARN, no false success (electron --fix contract)', async () => {
@@ -103,6 +120,35 @@ describe("doctor 'mcp-legacy' duplicate sidecar check (Task 4.3)", () => {
       inspectLegacyMcpEntries: () => { throw new Error('boom'); },
     });
     expect(findCheck(checks, 'mcp-legacy').status).toBe('error');
+  });
+
+  // Phase-4 final-review FIX 3: an 'unreadable' config must not be silently
+  // folded into ok/'none' — that hides a config the user (or doctor --fix)
+  // cannot actually inspect.
+  test('unreadable config → WARN "config unreadable — skipped", never a false-ok "none"', async () => {
+    const checks = await doctor.runDoctorChecks({ ...base,
+      inspectLegacyMcpEntries: () => [
+        { target: 'Claude Code', status: 'unreadable' },
+        { target: 'Claude Desktop', status: 'absent' },
+      ],
+    });
+    const c = findCheck(checks, 'mcp-legacy');
+    expect(c.status).toBe('warn');
+    expect(c.message).toContain('Claude Code');
+    expect(c.message).toContain('config unreadable — skipped');
+  });
+
+  test('unreadable config alongside a real removable dupe still surfaces the unreadable warning', async () => {
+    const checks = await doctor.runDoctorChecks({ ...base,
+      inspectLegacyMcpEntries: () => [
+        { target: 'Claude Code', status: 'removable', config: AMICUS_MCP },
+        { target: 'Claude Desktop', status: 'unreadable' },
+      ],
+    });
+    const c = findCheck(checks, 'mcp-legacy');
+    expect(c.status).toBe('warn');
+    expect(c.message).toContain('Claude Desktop');
+    expect(c.message).toContain('config unreadable — skipped');
   });
 });
 

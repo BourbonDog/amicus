@@ -192,7 +192,18 @@ async function runDoctorChecks(depsOverride = {}) {
     const entries = d.inspectLegacyMcpEntries() || [];
     const dupes = entries.filter(e => e.status === 'removable');
     const custom = entries.filter(e => e.status === 'customized');
+    // An unreadable config is neither "no problem" nor a duplicate we can act
+    // on — reporting it as ok/'none' would hide a config doctor (and --fix)
+    // could not actually inspect. Always surface it, even alongside dupes.
+    const unreadable = entries.filter(e => e.status === 'unreadable');
+    const unreadableNote = unreadable.length
+      ? `${unreadable.map(e => e.target).join(', ')} config unreadable — skipped`
+      : null;
     if (dupes.length === 0) {
+      if (unreadableNote) {
+        const suffix = custom.length ? `; custom 'sidecar' entry in ${custom.map(e => e.target).join(', ')} — left alone` : '';
+        return { id, name, status: 'warn', message: `${unreadableNote}${suffix}`, hint: null };
+      }
       const message = custom.length
         ? `custom 'sidecar' entry in ${custom.map(e => e.target).join(', ')} — left alone`
         : 'none';
@@ -200,11 +211,17 @@ async function runDoctorChecks(depsOverride = {}) {
     }
     if (d.fix) {
       const removed = (d.migrateLegacyMcpEntries() || []).filter(r => r.result === 'removed');
-      return removed.length >= dupes.length
-        ? { id, name, status: 'ok', message: `removed duplicate from ${removed.map(r => r.target).join(', ')}`, hint: null }
-        : { id, name, status: 'warn', message: `removed ${removed.length}/${dupes.length} duplicate(s) — could not update every config`, hint: HINTS.removeLegacySidecar };
+      if (removed.length >= dupes.length) {
+        const message = `removed legacy entry from: ${removed.map(r => r.target).join(', ')}`;
+        return unreadableNote
+          ? { id, name, status: 'warn', message: `${message}; ${unreadableNote}`, hint: HINTS.removeLegacySidecar }
+          : { id, name, status: 'ok', message, hint: null };
+      }
+      const message = `removed ${removed.length}/${dupes.length} duplicate(s) — could not update every config`;
+      return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };
     }
-    return { id, name, status: 'warn', message: `duplicate 'sidecar' entry in ${dupes.map(e => e.target).join(', ')} — doubles the MCP tool list`, hint: HINTS.removeLegacySidecar };
+    const message = `duplicate 'sidecar' entry in ${dupes.map(e => e.target).join(', ')} — doubles the MCP tool list`;
+    return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };
   }));
 
   // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no key.

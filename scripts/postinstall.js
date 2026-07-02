@@ -41,7 +41,18 @@ const MCP_CONFIG = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
 
 /**
  * Add or update an MCP server in a JSON config file.
- * Always overwrites the entry to ensure upgrades apply the latest config.
+ *
+ * Refreshes command/args on every install/upgrade. If the EXISTING entry at
+ * this key is already amicus-shaped (per isAmicusMcpConfig — Phase 1's single
+ * source of truth for "this is amicus"), we MERGE instead of overwrite: the
+ * user's `env` (and any other extra keys, e.g. a future `cwd`) survive the
+ * refresh. Without this, `npm i -g amicus` silently wiped
+ * "env": {"AMICUS_LEGACY_ALIASES":"1"} — the exact opt-in escape hatch Phase 4
+ * tells users to add — on every upgrade.
+ *
+ * A NON-amicus-shaped entry at this key is overwritten as before: 'amicus' is
+ * a reserved registration name, so a foreign entry there is reclaimed rather
+ * than merged with.
  *
  * @param {string} configPath - Path to the JSON config file
  * @param {string} name - MCP server name
@@ -59,9 +70,11 @@ function addMcpToConfigFile(configPath, name, config) {
   if (!existing.mcpServers) { existing.mcpServers = {}; }
 
   const prev = existing.mcpServers[name];
-  const status = !prev ? 'added' : JSON.stringify(prev) !== JSON.stringify(config) ? 'updated' : 'unchanged';
+  const { isAmicusMcpConfig } = require('../src/utils/mcp-self-identity');
+  const nextConfig = (prev && isAmicusMcpConfig(prev)) ? { ...prev, ...config } : config;
+  const status = !prev ? 'added' : JSON.stringify(prev) !== JSON.stringify(nextConfig) ? 'updated' : 'unchanged';
 
-  existing.mcpServers[name] = config;
+  existing.mcpServers[name] = nextConfig;
   if (status !== 'unchanged') {
     const dir = path.dirname(configPath);
     if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); }

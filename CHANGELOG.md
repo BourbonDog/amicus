@@ -5,6 +5,21 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- **`amicus abort` now actually stops interactive sessions and wave legs.** Marker-first, honest output — reports
+  what really happened including the unkillable-pid case — and no-ops cleanly with a clear message when the
+  target isn't running.
+
+### Changed
+- **Legacy `sidecar_*` MCP tool aliases are now opt-in** via `AMICUS_LEGACY_ALIASES=1` (breaking-adjacent —
+  carrying release must be a MINOR, v1.8.0). The default client-visible surface is the 13 `amicus_*` tools; saved
+  allowlists that still reference `mcp__amicus__sidecar_*` stop resolving unless you opt back in.
+- **Postinstall no longer registers a separate `sidecar` MCP server** and auto-removes a verified-identical
+  duplicate left over from pre-1.8 installs. A customized `sidecar` entry or a sole `sidecar` registration (no
+  `amicus` twin) is never touched.
+- **`amicus doctor` gains an `mcp-legacy` check**, and `doctor --fix` cleans up the duplicate registration when
+  one is found.
+
 ## [1.7.7] - 2026-07-01
 
 Correctness patch from the 2026-07-01 full product review (multi-agent review, every finding adversarially
