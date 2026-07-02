@@ -371,7 +371,7 @@ amicus models --check         # audit your aliases against the catalog
 
 ## MCP integration
 
-The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes ten tools:
+The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes thirteen tools:
 
 | Tool | What it does |
 |------|--------------|
@@ -385,6 +385,9 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_setup` | Open the setup wizard. |
 | `amicus_guide` | Return usage guidance (model choice, briefings, polling). |
 | `amicus_fanout` | Launch a same-prompt wave; returns `{ waveId, taskIds[] }`. |
+| `amicus_council_tally` | Aggregate a council wave's reviews into a scored tally. |
+| `amicus_council_stats` | Reviewer-reliability stats from past council runs. |
+| `amicus_verdict` | Build the final council verdict from a tally + decisions. |
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then `amicus_read` once it's done — so the calling agent never blocks.
 
@@ -394,7 +397,7 @@ To register manually (user scope):
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-> Legacy `sidecar_*` tool names are still registered as aliases of each `amicus_*` tool for backward compatibility.
+> Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). To restore them, add `"env": {"AMICUS_LEGACY_ALIASES": "1"}` to the server entry. They will be removed entirely in the next major.
 
 ---
 

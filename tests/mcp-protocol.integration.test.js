@@ -13,22 +13,24 @@ const os = require('os');
 
 const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
-const EXPECTED_TOOLS = [
-  'amicus_start', 'amicus_status', 'amicus_read',
-  'amicus_list', 'amicus_resume', 'amicus_continue',
-  'amicus_setup', 'amicus_guide', 'amicus_abort',
-];
-// Each canonical tool is also registered under its legacy sidecar_* name (shim).
+// Derived from the real tool registry — never a literal count — so adding a
+// 14th tool (e.g. Phase 5's amicus_wait) doesn't silently desync this suite.
+const EXPECTED_TOOLS = require('../src/mcp-tools').getTools().map(t => t.name);
+// Each canonical tool is also registered under its legacy sidecar_* name
+// (shim), but ONLY when AMICUS_LEGACY_ALIASES=1 is set (opt-in since v1.8.0).
 const LEGACY_TOOLS = EXPECTED_TOOLS.map(n => n.replace(/^amicus_/, 'sidecar_'));
 
 /**
  * Helper: spawn the MCP server and provide send/receive methods.
  * Uses the MCP JSON-RPC framing over stdin/stdout.
+ * @param {object} extraEnv - extra env vars merged onto process.env for the
+ *   spawned server, e.g. { AMICUS_LEGACY_ALIASES: '1' } to restore the
+ *   opt-in legacy sidecar_* tool aliases for end-to-end validation.
  */
-function createMcpClient() {
+function createMcpClient(extraEnv = {}) {
   const child = spawn(NODE, [SIDECAR_BIN, 'mcp'], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: { ...process.env, ...extraEnv },
   });
 
   let buffer = '';
@@ -138,7 +140,46 @@ describe('MCP Protocol: handshake and tool discovery', () => {
     }
   });
 
-  it('lists all 9 amicus tools plus legacy sidecar aliases via tools/list', async () => {
+  it('default env: tools/list returns ONLY amicus_* names (aliases opt-in-off)', async () => {
+    const result = await client.request('tools/list', {});
+    expect(result.result).toBeDefined();
+    const toolNames = result.result.tools.map(t => t.name);
+    for (const expected of EXPECTED_TOOLS) {
+      expect(toolNames).toContain(expected);
+    }
+    expect(toolNames.every(n => n.startsWith('amicus_'))).toBe(true);
+    expect(toolNames.some(n => n.startsWith('sidecar_'))).toBe(false);
+    expect(toolNames.length).toBe(EXPECTED_TOOLS.length);
+  });
+
+  it('each tool has a description and inputSchema', async () => {
+    const result = await client.request('tools/list', {});
+    for (const tool of result.result.tools) {
+      expect(tool.description).toBeTruthy();
+      expect(tool.inputSchema).toBeDefined();
+    }
+  });
+});
+
+describe('MCP Protocol: legacy sidecar_* aliases (AMICUS_LEGACY_ALIASES=1)', () => {
+  let client;
+
+  beforeAll(async () => {
+    client = createMcpClient({ AMICUS_LEGACY_ALIASES: '1' });
+    const initResult = await client.request('initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'test-client', version: '1.0.0' },
+    });
+    expect(initResult.result).toBeDefined();
+    client.notify('notifications/initialized', {});
+  });
+
+  afterAll(async () => {
+    if (client) { await client.close(); }
+  });
+
+  it('lists all amicus tools plus legacy sidecar aliases via tools/list', async () => {
     const result = await client.request('tools/list', {});
     expect(result.result).toBeDefined();
     const toolNames = result.result.tools.map(t => t.name);
@@ -151,14 +192,6 @@ describe('MCP Protocol: handshake and tool discovery', () => {
     }
     expect(toolNames.length).toBe(EXPECTED_TOOLS.length + LEGACY_TOOLS.length);
   });
-
-  it('each tool has a description and inputSchema', async () => {
-    const result = await client.request('tools/list', {});
-    for (const tool of result.result.tools) {
-      expect(tool.description).toBeTruthy();
-      expect(tool.inputSchema).toBeDefined();
-    }
-  });
 });
 
 describe('MCP Protocol: tool invocation', () => {
@@ -167,7 +200,9 @@ describe('MCP Protocol: tool invocation', () => {
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-proto-int-'));
-    client = createMcpClient();
+    // This block invokes legacy sidecar_* tool names directly (below), so the
+    // server must be spawned with aliases opted in (v1.8.0 default is off).
+    client = createMcpClient({ AMICUS_LEGACY_ALIASES: '1' });
     const initResult = await client.request('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
