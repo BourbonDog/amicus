@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { logger } = require('./logger');
+const { stripSelfMcpEntries } = require('./mcp-self-identity');
 
 /**
  * Normalize .mcp.json to a flat { name: config } map.
@@ -70,15 +71,13 @@ function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
     const settingsPath = path.join(baseDir, 'settings.json');
     if (!fs.existsSync(settingsPath)) {
       // No settings.json — skip plugin discovery, may still have claude.json servers
-      const merged = { ...claudeJsonServers };
-      delete merged.sidecar;
+      const merged = stripSelfMcpEntries({ ...claudeJsonServers }, logger);
       return Object.keys(merged).length > 0 ? merged : null;
     }
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
     const enabledPlugins = settings.enabledPlugins;
     if (!enabledPlugins || typeof enabledPlugins !== 'object') {
-      const merged = { ...claudeJsonServers };
-      delete merged.sidecar;
+      const merged = stripSelfMcpEntries({ ...claudeJsonServers }, logger);
       return Object.keys(merged).length > 0 ? merged : null;
     }
 
@@ -133,11 +132,9 @@ function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
     logger.debug('Failed to read Claude Code settings', { error: err.message });
   }
 
-  // Merge: plugin servers first, then claude.json overwrites (higher priority)
-  const merged = { ...pluginServers, ...claudeJsonServers };
-
-  // Always exclude sidecar itself to prevent recursive spawning
-  delete merged.sidecar;
+  // Merge: plugin servers first, then claude.json overwrites (higher priority).
+  // Recursive-spawn guard: drop every entry that resolves to amicus itself.
+  const merged = stripSelfMcpEntries({ ...pluginServers, ...claudeJsonServers }, logger);
 
   return Object.keys(merged).length > 0 ? merged : null;
 }
