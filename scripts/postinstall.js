@@ -122,17 +122,6 @@ function registerClaudeCode() {
     });
     console.log('[amicus] MCP registered in Claude Code (via CLI).');
 
-    // DEPRECATED(amicus-shim): also register 'sidecar' so existing clients that
-    // reference the old server name keep resolving. Remove in next major.
-    try {
-      execFileSync('claude', ['mcp', 'add-json', 'sidecar', mcpJson, '--scope', 'user'], {
-        stdio: 'pipe',
-        timeout: 10000,
-      });
-    } catch {
-      // Best-effort; ignore failures for the shim registration
-    }
-
     return;
   } catch {
     // CLI not available or failed — fall back to file edit
@@ -148,10 +137,6 @@ function registerClaudeCode() {
   } else {
     console.log('[amicus] MCP already registered in Claude Code.');
   }
-
-  // DEPRECATED(amicus-shim): also register 'sidecar' entry so existing clients
-  // that reference the old server name keep resolving. Remove in next major.
-  addMcpToConfigFile(claudeConfigPath, 'sidecar', MCP_CONFIG);
 }
 
 /** Register MCP server in Claude Desktop / Cowork config */
@@ -174,10 +159,33 @@ function registerClaudeDesktop() {
   } else {
     console.log('[amicus] MCP already registered in Claude Desktop.');
   }
+}
 
-  // DEPRECATED(amicus-shim): also register 'sidecar' entry so existing clients
-  // that reference the old server name keep resolving. Remove in next major.
-  addMcpToConfigFile(configPath, 'sidecar', MCP_CONFIG);
+/**
+ * One-shot migration: drop the duplicate legacy 'sidecar' MCP entry that
+ * pre-1.8 postinstalls registered alongside 'amicus' (same server twice —
+ * doubled the client-visible tool list). Only removes an entry whose command
+ * is an amicus MCP invocation; a customized 'sidecar' entry is left alone.
+ * Covers both files the three legacy registration paths wrote to:
+ * ~/.claude.json (CLI + file fallback) and claude_desktop_config.json.
+ * Never throws (postinstall must always exit 0).
+ */
+function migrateLegacyMcp(deps = {}) {
+  try {
+    const impl = deps.migrateLegacySidecar
+      || require('../src/utils/legacy-mcp-migration').migrateLegacySidecar;
+    for (const r of impl()) {
+      if (r.result === 'removed') {
+        console.log(`[amicus] Removed duplicate legacy 'sidecar' MCP entry from ${r.target} (same server — kept as 'amicus').`);
+      } else if (r.result === 'customized') {
+        console.log(`[amicus] Kept custom 'sidecar' MCP entry in ${r.target} (does not point at amicus).`);
+      } else if (r.result === 'write-failed') {
+        console.warn(`[amicus] Warning: could not remove the legacy 'sidecar' MCP entry from ${r.target} — run: amicus doctor --fix`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[amicus] Warning: legacy MCP cleanup skipped: ${err && err.message}`);
+  }
 }
 
 /**
@@ -291,6 +299,7 @@ async function main(deps = {}) {
   const _installCouncilSkill = deps.installCouncilSkill || installCouncilSkill;
   const _registerClaudeCode = deps.registerClaudeCode || registerClaudeCode;
   const _registerClaudeDesktop = deps.registerClaudeDesktop || registerClaudeDesktop;
+  const _migrateLegacyMcp = deps.migrateLegacyMcp || migrateLegacyMcp;
   const _setupHooks = deps.setupHooks || setupHooks;
   const _provisionElectron = deps.provisionElectron || provisionElectron;
 
@@ -302,6 +311,7 @@ async function main(deps = {}) {
   _installCouncilSkill();
   _registerClaudeCode();
   _registerClaudeDesktop();
+  _migrateLegacyMcp(deps);
 
   // Non-fatal, cache-only: heal the optional Electron binary from local cache
   // or emit a deferred notice (GUI provisions on first use). Never throws.
@@ -336,4 +346,5 @@ if (require.main === module) {
   runCli();
 }
 
-module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill, setupHooks, provisionElectron, COUNCIL_FILES };
+module.exports = { main, runCli, addMcpToConfigFile, installSkill, installCouncilSkill,
+  setupHooks, provisionElectron, registerClaudeCode, registerClaudeDesktop, migrateLegacyMcp, COUNCIL_FILES };

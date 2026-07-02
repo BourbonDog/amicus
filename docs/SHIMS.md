@@ -16,4 +16,4 @@ rebrand plan: `docs/superpowers/plans/2026-06-08-amicus-rebrand.md`.
 | Config token | config.js + skill parser | [SIDECAR_CONFIG_UPDATE] / sidecar-config-hash parse | next major |
 | MCP tool names | src/mcp-server.js registration | sidecar_* tool aliases | next major |
 | Public API | src/index.js | startSidecar/listSidecars/... aliases | next major |
-| MCP registration | scripts/postinstall.js | duplicate 'sidecar' server entry | next major |
+| MCP registration | scripts/postinstall.js | duplicate 'sidecar' server entry | REMOVED in v1.8.0 (postinstall now auto-removes identical-in-effect entries) |
