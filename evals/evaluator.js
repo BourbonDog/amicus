@@ -11,8 +11,8 @@ const path = require('path');
 /**
  * Match tool name allowing MCP prefix and pipe-separated alternatives.
  * Examples:
- *   toolMatches('mcp__sidecar__sidecar_start', 'sidecar_start') -> true
- *   toolMatches('sidecar_read', 'sidecar_read|sidecar_status') -> true
+ *   toolMatches('mcp__amicus__amicus_start', 'amicus_start') -> true
+ *   toolMatches('amicus_read', 'amicus_read|amicus_status') -> true
  */
 function toolMatches(actualName, criterionName) {
   const alternatives = criterionName.split('|');

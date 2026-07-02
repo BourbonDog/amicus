@@ -9,9 +9,9 @@
     "model": "sonnet",
     "success_criteria": {
       "programmatic": [
-        {"type": "tool_called", "tool": "sidecar_start"},
-        {"type": "tool_called", "tool": "sidecar_read"},
-        {"type": "tool_result_matches", "tool": "sidecar_read", "pattern": "(await|bug|fix|missing|refresh|verify)"},
+        {"type": "tool_called", "tool": "amicus_start"},
+        {"type": "tool_called", "tool": "amicus_read"},
+        {"type": "tool_result_matches", "tool": "amicus_read", "pattern": "(await|bug|fix|missing|refresh|verify)"},
         {"type": "file_changed", "path": "src/server.js"}
       ],
       "programmatic_cli": [
@@ -40,9 +40,9 @@
     "model": "sonnet",
     "success_criteria": {
       "programmatic": [
-        {"type": "tool_called", "tool": "sidecar_start"},
-        {"type": "tool_called", "tool": "sidecar_read"},
-        {"type": "tool_result_matches", "tool": "sidecar_read", "pattern": "(test|describe|expect|assert|it\\()"},
+        {"type": "tool_called", "tool": "amicus_start"},
+        {"type": "tool_called", "tool": "amicus_read"},
+        {"type": "tool_result_matches", "tool": "amicus_read", "pattern": "(test|describe|expect|assert|it\\()"},
         {"type": "file_created", "pattern": "tests/.*\\.js$"}
       ],
       "programmatic_cli": [
@@ -71,9 +71,9 @@
     "model": "sonnet",
     "success_criteria": {
       "programmatic": [
-        {"type": "tool_called", "tool": "sidecar_start"},
-        {"type": "tool_called", "tool": "sidecar_read"},
-        {"type": "tool_result_matches", "tool": "sidecar_read", "pattern": "(JWT|token|rotation|refresh|security)"},
+        {"type": "tool_called", "tool": "amicus_start"},
+        {"type": "tool_called", "tool": "amicus_read"},
+        {"type": "tool_result_matches", "tool": "amicus_read", "pattern": "(JWT|token|rotation|refresh|security)"},
         {"type": "file_created", "pattern": "docs/.*\\.md$"}
       ],
       "programmatic_cli": [
@@ -102,9 +102,9 @@
     "model": "sonnet",
     "success_criteria": {
       "programmatic": [
-        {"type": "tool_called", "tool": "sidecar_start"},
-        {"type": "tool_called", "tool": "sidecar_read"},
-        {"type": "tool_result_matches", "tool": "sidecar_read", "pattern": "(express|token|auth|refresh|server\\.js|middleware|jwt)"}
+        {"type": "tool_called", "tool": "amicus_start"},
+        {"type": "tool_called", "tool": "amicus_read"},
+        {"type": "tool_result_matches", "tool": "amicus_read", "pattern": "(express|token|auth|refresh|server\\.js|middleware|jwt)"}
       ],
       "programmatic_cli": [
         {"type": "bash_command_matches", "pattern": "sidecar\\s+start\\s+--model"},

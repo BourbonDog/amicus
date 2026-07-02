@@ -18,7 +18,7 @@ const EVALS_DIR = __dirname;
 const TASKS_FILE = path.join(EVALS_DIR, 'eval_tasks.json');
 const WORKSPACE_DIR = path.join(EVALS_DIR, 'workspace');
 
-const MODE_PREFIX_MCP = 'You have access to sidecar MCP tools (sidecar_start, sidecar_read, sidecar_status, etc.). Use these MCP tools to delegate work to another model. Do NOT use bash to call sidecar.\n\n';
+const MODE_PREFIX_MCP = 'You have access to amicus MCP tools (amicus_start, amicus_read, amicus_status, etc.). Use these MCP tools to delegate work to another model. Do NOT use bash to call amicus or sidecar.\n\n';
 const MODE_PREFIX_CLI = 'You have access to the `sidecar` CLI tool via bash. Use commands like:\n  sidecar start --model gemini --prompt "<task>" --no-ui --timeout 3\n  sidecar read <task_id> --summary\nDo NOT use MCP tools. Use bash to run sidecar commands and wait for the results.\n\n';
 
 /** Load eval tasks */
@@ -139,9 +139,11 @@ async function runEval(task, opts = {}) {
   console.log(`  Tool calls: ${transcript.toolCalls.length}, Errors: ${transcript.errors.length}`);
   console.log(`  Tokens: ${transcript.inputTokens} in, ${transcript.outputTokens} out`);
 
-  // 7. Extract sidecar calls (MCP) or CLI commands
+  // 7. Extract amicus calls (MCP) or CLI commands. Transcripts carry either
+  // the bare tool name (amicus_start) or the server-prefixed form
+  // (mcp__amicus__amicus_start), so match both.
   const sidecarCalls = transcript.toolCalls
-    .filter(tc => tc.tool.startsWith('sidecar_'))
+    .filter(tc => /(^|__)amicus_/.test(tc.tool))
     .map(tc => ({ tool: tc.tool, params: tc.params }));
   const cliCommands = mode === 'cli'
     ? (transcript.bashCommands || []).filter(c => c.includes('sidecar'))

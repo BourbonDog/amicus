@@ -9,7 +9,7 @@ describe('formatSummaryLine', () => {
       eval_id: 1, eval_name: 'Debug Auth Bug', status: 'PASS', score: 0.85,
       duration_seconds: 92,
       token_usage: { claude: { input_tokens: 12500, output_tokens: 3200 } },
-      sidecar_calls: [{ tool: 'sidecar_start', params: { model: 'gemini', agent: 'Build' } }],
+      sidecar_calls: [{ tool: 'amicus_start', params: { model: 'gemini', agent: 'Build' } }],
     });
     expect(line).toContain('PASS');
     expect(line).toContain('Debug Auth Bug');
@@ -34,10 +34,12 @@ describe('formatSummaryLine', () => {
       eval_id: 1, eval_name: 'Debug Auth Bug', mode: 'mcp', status: 'PASS', score: 0.85,
       duration_seconds: 92,
       token_usage: { claude: { input_tokens: 12500, output_tokens: 3200 } },
-      sidecar_calls: [{ tool: 'sidecar_start', params: { model: 'gemini', agent: 'Build' } }],
+      // MCP transcripts carry the server-prefixed form — must still be found.
+      sidecar_calls: [{ tool: 'mcp__amicus__amicus_start', params: { model: 'gemini', agent: 'Build' } }],
     });
     expect(line).toContain('(MCP)');
     expect(line).toContain('Debug Auth Bug');
+    expect(line).toContain('gemini');
   });
 
   test('formats CLI mode summary with bash command', () => {

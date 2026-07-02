@@ -26,7 +26,10 @@ function formatSummaryLine(result) {
   const scoreStr = result.score.toFixed(2);
 
   let sidecarInfo = '';
-  const startCall = result.sidecar_calls?.find(c => c.tool === 'sidecar_start');
+  // Match bare (amicus_start) and MCP-prefixed (mcp__amicus__amicus_start) forms.
+  const startCall = result.sidecar_calls?.find(
+    c => c.tool === 'amicus_start' || c.tool.endsWith('__amicus_start')
+  );
   if (startCall) {
     const model = startCall.params?.model || 'unknown';
     const agent = startCall.params?.agent || 'Chat';
