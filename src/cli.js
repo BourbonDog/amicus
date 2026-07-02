@@ -330,6 +330,7 @@ Commands:
   start       Launch a new amicus session
   fanout      Run N models on the same prompt in parallel (headless)
   list        Show previous sessions
+  status      One-shot status for a session or wave (--json)
   resume      Reopen a previous session
   continue    New session building on previous
   read        Output session summary/conversation
@@ -416,6 +417,13 @@ Options for 'list':
   --status <filter>            Filter by status (running, complete)
   --all                        Show all projects
   --json                       Output as JSON
+`,
+  status: `
+Options for 'status':
+  <task_id>                    Required. Session or wave ID (positional)
+  --wave <wave_id>             Alternative to the positional ID for waves
+  --json                       Machine-readable output
+  --cwd <path>                 Project directory (default: cwd)
 `,
   abort: `
 Options for 'abort':

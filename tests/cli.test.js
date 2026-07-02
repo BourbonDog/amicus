@@ -984,6 +984,12 @@ describe('CLI Argument Parser', () => {
       const usage = getUsage();
       expect(usage).toContain('--no-context');
     });
+
+    test('status command appears in usage', () => {
+      const { getUsage } = require('../src/cli');
+      expect(getUsage()).toMatch(/^\s+status\s+One-shot status/m);
+      expect(getUsage('status')).toContain("Options for 'status':");
+    });
   });
 
   describe('per-subcommand --help (#16)', () => {

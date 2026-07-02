@@ -134,6 +134,7 @@ src/
 │   ├── interactive-mirror.js
 │   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
+│   ├── progress-fields.js
 │   ├── progress.js  # Sidecar Progress Reader
 │   ├── read.js  # Sidecar Read Operations Module
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
@@ -196,6 +197,7 @@ src/
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
+├── cli-handlers-status.js
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
@@ -287,6 +289,7 @@ evals/
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
+| `cli-handlers-status.js` |  | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `DEFAULTS()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
@@ -330,6 +333,7 @@ evals/
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()`, `runInteractive()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
+| `sidecar/progress-fields.js` |  | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |

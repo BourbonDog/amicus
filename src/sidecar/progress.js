@@ -2,12 +2,14 @@
  * Sidecar Progress Reader
  *
  * Reads conversation.jsonl and progress.json from a session directory
- * and returns progress info: message count, last activity time, latest action,
- * and lifecycle stage.
+ * and returns progress info: message count, last activity (relative string,
+ * raw ms, and absolute ISO), latest action, a sanitized preview of the
+ * newest assistant text, and lifecycle stage.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { latestAssistantPreview } = require('./progress-fields');
 
 /** Lifecycle stage labels */
 const STAGE_LABELS = {
@@ -122,7 +124,9 @@ function writeProgress(sessionDir, stage, extra = {}) {
  * Read progress from a session's conversation.jsonl and progress.json files.
  *
  * @param {string} sessionDir - Path to the session directory
- * @returns {{ messages: number, lastActivity: string, latest: string, stage?: string }}
+ * @returns {{ messages: number, lastActivity: string, latest: string,
+ *   lastActivityMs: number|null, lastActivityAt: string|null,
+ *   latestPreview: string|null, stage?: string }}
  */
 function readProgress(sessionDir) {
   const convPath = path.join(sessionDir, 'conversation.jsonl');
@@ -159,63 +163,63 @@ function readProgress(sessionDir) {
     ? computeLastActivity(convStat.mtime)
     : 'never';
 
-  // Read progress.json for lifecycle stage info
-  let stage;
-
+  // Read + parse progress.json ONCE; stage/latest/lastActivity below and the
+  // newestActivity computation all derive from this single parse.
+  let progress = null;
   if (fs.existsSync(progressPath)) {
     try {
-      const progress = JSON.parse(fs.readFileSync(progressPath, 'utf-8'));
-      stage = progress.stage;
-
-      // Use progress stage label when no assistant entries exist yet
-      if (messages === 0 && progress.stageLabel) {
-        latest = progress.stageLabel;
-      }
-
-      // Use progress.json latestTool for better latest when extractLatest
-      // returns a generic fallback (tool_use entries without name)
-      if (messages > 0 && progress.latestTool && (latest === 'Working...' || latest === 'Executing tool call...')) {
-        latest = `Calling tool: ${progress.latestTool}`;
-      }
-
-      // Use messagesReceived from progress when conversation has no assistant entries
-      if (messages === 0 && progress.messagesReceived !== undefined) {
-        messages = progress.messagesReceived;
-      }
-
-      // Use progress updatedAt for lastActivity if more recent
-      if (progress.updatedAt) {
-        const progressTime = new Date(progress.updatedAt);
-        if (!convStat || progressTime > convStat.mtime) {
-          lastActivity = computeLastActivity(progressTime);
-        }
-      }
+      progress = JSON.parse(fs.readFileSync(progressPath, 'utf-8'));
     } catch {
       // Ignore malformed progress file
     }
   }
 
-  // Compute raw lastActivityMs for stall detection
-  let lastActivityMs = null;
-  if (convStat) {
-    lastActivityMs = Date.now() - convStat.mtime.getTime();
-  }
-  // Use progress.json updatedAt if more recent
-  if (fs.existsSync(progressPath)) {
-    try {
-      const progress = JSON.parse(fs.readFileSync(progressPath, 'utf-8'));
-      if (progress.updatedAt) {
-        const progressMs = Date.now() - new Date(progress.updatedAt).getTime();
-        if (lastActivityMs === null || progressMs < lastActivityMs) {
-          lastActivityMs = progressMs;
-        }
+  // Lifecycle stage info from progress.json
+  let stage;
+
+  if (progress) {
+    stage = progress.stage;
+
+    // Use progress stage label when no assistant entries exist yet
+    if (messages === 0 && progress.stageLabel) {
+      latest = progress.stageLabel;
+    }
+
+    // Use progress.json latestTool for better latest when extractLatest
+    // returns a generic fallback (tool_use entries without name)
+    if (messages > 0 && progress.latestTool && (latest === 'Working...' || latest === 'Executing tool call...')) {
+      latest = `Calling tool: ${progress.latestTool}`;
+    }
+
+    // Use messagesReceived from progress when conversation has no assistant entries
+    if (messages === 0 && progress.messagesReceived !== undefined) {
+      messages = progress.messagesReceived;
+    }
+
+    // Use progress updatedAt for lastActivity if more recent
+    if (progress.updatedAt) {
+      const progressTime = new Date(progress.updatedAt);
+      if (!convStat || progressTime > convStat.mtime) {
+        lastActivity = computeLastActivity(progressTime);
       }
-    } catch {
-      // Ignore — already handled above
     }
   }
 
-  const result = { messages, lastActivity, latest, lastActivityMs };
+  // Newest activity timestamp across BOTH sources (conv mtime, progress.updatedAt):
+  // feeds lastActivityMs (stall detection) AND lastActivityAt (absolute ISO for
+  // agents) from one value so they can never disagree.
+  let newestActivity = convStat ? convStat.mtime : null;
+  if (progress && progress.updatedAt) {
+    const t = new Date(progress.updatedAt);
+    if (!newestActivity || t > newestActivity) { newestActivity = t; }
+  }
+  const lastActivityMs = newestActivity ? Date.now() - newestActivity.getTime() : null;
+
+  const result = {
+    messages, lastActivity, latest, lastActivityMs,
+    lastActivityAt: newestActivity ? newestActivity.toISOString() : null,
+    latestPreview: latestAssistantPreview(entries),
+  };
   if (stage !== undefined) {
     result.stage = stage;
   }
