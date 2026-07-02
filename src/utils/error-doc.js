@@ -48,6 +48,9 @@ function failJson(useJson, { code, message, hint = null, command = null }) {
     process.stdout.write(JSON.stringify(buildErrorDoc({ code, message, hint, command }), null, 2) + '\n');
   } else {
     process.stderr.write(message + '\n');
+    // Parity with --json (whose envelope carries error.hint): surface the
+    // actionable hint to humans too, in doctor's arrow style.
+    if (hint) { process.stderr.write(`  → ${hint}\n`); }
   }
   return 1;
 }
