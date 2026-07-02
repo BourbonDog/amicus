@@ -1,5 +1,6 @@
 ---
 name: sidecar
+argument-hint: "[model] [prompt...]"
 description: >
   Spawn a conversation with another LLM (Gemini, GPT, ChatGPT, Codex, o3, DeepSeek,
   Qwen, Grok, Mistral, or Claude as a target) and fold the results back into your
@@ -18,6 +19,20 @@ description: >
 # Amicus: Multi-Model Sidecar Tool
 
 Spawn parallel conversations with different LLMs (Gemini, GPT, ChatGPT, Codex, o3, etc.) and fold results back into your context.
+
+## Slash invocation (`/amicus:sidecar <model> <prompt…>`)
+
+When invoked as a slash command with arguments:
+
+- First argument (the model): $1
+- Full argument string: $ARGUMENTS
+
+Treat $1 as the target model alias and the remainder of $ARGUMENTS as the prompt.
+If $1 is not a plausible model alias (gemini, gemini-pro, gpt, codex, deepseek,
+qwen, grok, mistral, glm, …), treat the ENTIRE argument string as the prompt and
+default to gemini. Then apply the critical rules below exactly as for any other
+invocation (run_in_background: true, --prompt-file for long briefings, interactive
+by default for a single model, never o3/o3-pro unprompted).
 
 ## Operating Rules
 

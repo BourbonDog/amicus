@@ -65,7 +65,7 @@ in this run is written here. Use its absolute path in all `--prompt-file` argume
 **Free council (zero-cost).** If the user asks for a "free council" / "zero-cost council",
 read `councils.free` from `~/.config/amicus/config.json` and run
 `amicus fanout --council free --prompt-file <briefing>`. Free-tier handling:
-- Cost ≈ $0 — skip the paid-run cost framing (the budget gate is a no-op at zero price).
+- Cost ≈ \$0 — skip the paid-run cost framing (the budget gate is a no-op at zero price).
 - No reliability history: free models have no `amicus council stats` / `MODEL-NOTES` record,
   so don't rank on street-cred. Pick the most capable free model as chair and state lower confidence.
 - Weak structured output: small free models are less reliable at the strict findings JSON; expect
