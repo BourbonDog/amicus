@@ -23,10 +23,19 @@ function abortGraceMs() {
   return (Number.isFinite(n) && n > 0) ? n : 5000;
 }
 
-/** @returns {boolean} true when a process with this pid exists. */
+/**
+ * @returns {boolean} true when a process with this pid exists. EPERM means
+ * the pid exists but the caller lacks permission to signal it — that's
+ * ALIVE, not dead; only ESRCH (and other non-EPERM errors) mean dead.
+ */
 function isAlive(pid, kill = process.kill.bind(process)) {
   if (!pid) { return false; }
-  try { kill(pid, 0); return true; } catch { return false; }
+  try {
+    kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err && err.code === 'EPERM' ? true : false;
+  }
 }
 
 /** SIGTERM a pid, swallowing ESRCH. @returns {boolean} signal was sent */
@@ -60,16 +69,16 @@ async function waitThenKill(pids, opts = {}) {
   const kill = deps.kill || process.kill.bind(process);
   const sleep = deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
 
-  const targets = (Array.isArray(pids) ? pids : [pids]).filter(Boolean);
+  const targets = [...new Set((Array.isArray(pids) ? pids : [pids]).filter(Boolean))];
   const deadline = Date.now() + graceMs;
   let remaining = targets.filter((pid) => isAlive(pid, kill));
   while (remaining.length > 0 && Date.now() < deadline) {
     await sleep(pollMs);
     remaining = remaining.filter((pid) => isAlive(pid, kill));
   }
-  for (const pid of remaining) { killPidBestEffort(pid, kill); }
+  const killed = remaining.filter((pid) => killPidBestEffort(pid, kill));
   return {
-    killed: remaining,
+    killed,
     exited: targets.filter((pid) => !remaining.includes(pid)),
   };
 }

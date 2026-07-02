@@ -7,6 +7,7 @@ jest.mock('../src/utils/logger', () => ({
 const { abortGraceMs, isAlive, killPidBestEffort, waitThenKill } = require('../src/utils/abort-coordinator');
 
 const esrch = () => { const e = new Error('kill ESRCH'); e.code = 'ESRCH'; throw e; };
+const eperm = () => { const e = new Error('kill EPERM'); e.code = 'EPERM'; throw e; };
 
 describe('abort-coordinator', () => {
   afterEach(() => { delete process.env.AMICUS_ABORT_GRACE_MS; });
@@ -23,6 +24,10 @@ describe('abort-coordinator', () => {
     expect(isAlive(123, jest.fn())).toBe(true);
     expect(isAlive(123, esrch)).toBe(false);
     expect(isAlive(null)).toBe(false);
+  });
+
+  test('isAlive: EPERM => true (process exists, caller lacks permission to signal it)', () => {
+    expect(isAlive(123, eperm)).toBe(true);
   });
 
   test('killPidBestEffort SIGTERMs and swallows ESRCH', () => {
@@ -58,5 +63,21 @@ describe('abort-coordinator', () => {
     const res = await waitThenKill([null, undefined], { graceMs: 0, deps: { kill } });
     expect(res).toEqual({ killed: [], exited: [] });
     expect(kill).not.toHaveBeenCalled();
+  });
+
+  test('waitThenKill: an always-EPERM pid ends up in neither killed nor exited', async () => {
+    const kill = jest.fn(eperm);
+    const res = await waitThenKill(42, { graceMs: 0, deps: { kill } });
+    expect(res.killed).not.toContain(42);
+    expect(res.exited).not.toContain(42);
+  });
+
+  test('waitThenKill dedupes duplicate pids: at most one entry, one kill attempt', async () => {
+    const kill = jest.fn((pid, sig) => { if (sig !== 0) { /* SIGTERM: succeed */ } });
+    const res = await waitThenKill([10, 10, null], { graceMs: 0, deps: { kill } });
+    expect(res.killed).toEqual([10]);
+    expect(res.exited).toEqual([]);
+    const termCalls = kill.mock.calls.filter(([, sig]) => sig === 'SIGTERM');
+    expect(termCalls).toHaveLength(1);
   });
 });
