@@ -67,6 +67,29 @@ describe('amicus status CLI', () => {
     expect(out).toContain('openrouter/x/y');
   });
 
+  // Central exit-code contract: exit 0 = status RETRIEVED, even when the run
+  // itself ended in a failed terminal state — the QUERY succeeded. A mutation
+  // like `if (result.isError || data.status === 'crashed') return 1` must
+  // fail these.
+  test('a crashed run still exits 0 (query succeeded) and renders the failure in human mode', async () => {
+    createSession(tmpDir, 'cs-crashed', { status: 'crashed', reason: 'Process exited unexpectedly' });
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status', 'cs-crashed'], cwd: tmpDir }));
+    expect(code).toBe(0);
+    expect(out).toContain('crashed');
+    expect(out).toContain('Process exited unexpectedly');
+    expect(err).toBe('');
+  });
+
+  test('an errored run still exits 0 (query succeeded) and renders the failure in --json mode', async () => {
+    createSession(tmpDir, 'cs-errored', { status: 'error', reason: 'provider returned 402' });
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status', 'cs-errored'], cwd: tmpDir, json: true }));
+    expect(code).toBe(0);
+    const parsed = JSON.parse(out);
+    expect(parsed.status).toBe('error');
+    expect(parsed.reason).toBe('provider returned 402');
+    expect(err).toBe('');
+  });
+
   test('--wave flag is an alternative spelling for the id', async () => {
     createSession(tmpDir, 'cw-2', { type: 'wave', status: 'complete', legs: [] });
     const { code } = await capture(() => handleStatus({ _: ['status'], wave: 'cw-2', cwd: tmpDir, json: true }));
