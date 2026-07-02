@@ -28,6 +28,17 @@ describe('latestAssistantPreview', () => {
     expect(latestAssistantPreview([{ role: 'user', content: 'hi' }])).toBeNull();
     expect(latestAssistantPreview([])).toBeNull();
   });
+  test('skips assistant entries with non-string content (array/null) without crashing', () => {
+    const entries = [
+      { role: 'assistant', content: 'real text' },
+      { role: 'assistant', content: [{ type: 'text', text: 'array form' }] },
+      { role: 'assistant', content: null },
+    ];
+    expect(latestAssistantPreview(entries)).toBe('real text');
+    expect(latestAssistantPreview([
+      { role: 'assistant', content: [{ type: 'text', text: 'only array' }] },
+    ])).toBeNull();
+  });
 });
 
 describe('deriveStage', () => {

@@ -181,6 +181,27 @@ describe('Progress Reader', () => {
     it('lastActivityAt is null when nothing has been written', () => {
       expect(readProgress(tmpDir).lastActivityAt).toBeNull();
     });
+    it('latestPreview is null when conversation.jsonl does not exist', () => {
+      expect(readProgress(tmpDir).latestPreview).toBeNull();
+    });
+    it('skips assistant entries with non-string content for latestPreview', () => {
+      // Newer entries whose content is an array (SDK part-list form) or null
+      // must be skipped by shape — latestPreview falls back to the newest
+      // assistant entry with STRING content, without crashing.
+      const lines = [
+        JSON.stringify({ role: 'assistant', content: 'real text' }),
+        JSON.stringify({ role: 'assistant', content: [{ type: 'text', text: 'array form' }] }),
+        JSON.stringify({ role: 'assistant', content: null })
+      ];
+      fs.writeFileSync(
+        path.join(tmpDir, 'conversation.jsonl'),
+        lines.join('\n')
+      );
+
+      const r = readProgress(tmpDir);
+
+      expect(r.latestPreview).toBe('real text');
+    });
   });
 
   describe('extractLatest', () => {
