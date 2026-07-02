@@ -40,8 +40,8 @@ jobs:
     # soft-skips in that case rather than failing the check.
     # STRING-SAFE label waiver: on plain pull_request events `inputs.*` is empty,
     # and GitHub's loose equality coerces null→0 and false→0 — a bare
-    # `require_label == false` comparison would be TRUE on every same-repo PR
-    # and bypass the label gate. format() yields '' there ('' != 'false'), so
+    # loose `== false` comparison on the input would be TRUE on every same-repo
+    # PR and bypass the label gate. format() yields '' there ('' != 'false'), so
     # the label is ALWAYS required on pull_request; only workflow_call callers
     # can waive it by passing require_label: false.
     if: >
@@ -155,8 +155,30 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           MARKER="<!-- council-review-sticky -->"
+          # Model output is UNTRUSTED text. Before it enters the comment,
+          # neutralize anything that could (1) forge the sticky marker and
+          # hijack the next run's PATCH, (2) forge the footer disclosure, or
+          # (3) open/close <details> and break out of the workflow's own
+          # wrapper. The real footer is echoed LAST, after all model text —
+          # unforgeable by position.
+          neutralize() {
+            sed -e 's/<!-- council-review-sticky -->/[model text removed: sticky marker]/g' \
+                -e 's/not an adjudicated/not-an-adjudicated (model text)/gI' \
+                -e 's|</details|[/details|g' \
+                -e 's|<details|[details|g'
+          }
+          neutralize < reviews.md > reviews-safe.md
           SYNTH=$(jq -r '(.legs[0].summary // "(synthesis unavailable)")[:12000]' synth.json 2>/dev/null || echo '(synthesis unavailable)')
-          COST=$(jq -r '.usage.cost // "unknown"' wave.json)
+          SYNTH=$(printf '%s' "$SYNTH" | neutralize)
+          # usage.cost is an OBJECT ({amount, source, ...}) — amount is null on
+          # unpriced (cold-runner) waves; source says how authoritative it is.
+          COST_AMOUNT=$(jq -r '.usage.cost.amount // "unknown"' wave.json)
+          COST_SOURCE=$(jq -r '.usage.cost.source // "unknown"' wave.json)
+          if [ "$COST_AMOUNT" = "unknown" ]; then
+            COST_LINE="wave cost: unknown"
+          else
+            COST_LINE="wave cost: \$$(printf '%.4f' "$COST_AMOUNT") (${COST_SOURCE})"
+          fi
           STATUS=$(jq -r '"\(.counts.complete)/\(.counts.total) legs complete (\(.status))"' wave.json)
           {
             echo "$MARKER"
@@ -167,11 +189,11 @@ jobs:
             echo
             echo "<details><summary>Individual model reviews</summary>"
             echo
-            cat reviews.md
+            cat reviews-safe.md
             echo "</details>"
             echo
             echo "---"
-            echo "_${STATUS} · wave cost: \$${COST} · models: ${MODELS} · not an adjudicated council verdict (v2)_"
+            echo "_${STATUS} · ${COST_LINE} · models: ${MODELS} · not an adjudicated council verdict (v2)_"
           } > comment.md
           EXISTING=$(gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
             --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -1)

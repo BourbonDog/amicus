@@ -49,4 +49,48 @@ describe('council-review workflow (Phase 10 v1)', () => {
     expect(y).not.toMatch(/amicus\s+council\s+(tally|report)/);
     expect(y.toLowerCase()).toContain('deferred to v2');
   });
+
+  test('cost footer reads the cost OBJECT shape (amount + source) — never the raw object', () => {
+    const y = yml();
+    // sumWaveUsage (src/utils/pricing.js) makes usage.cost an OBJECT
+    // ({amount, currency, source, ...}), non-null even on cold runners —
+    // a scalar-shaped `.usage.cost // "unknown"` read renders raw JSON in
+    // every comment and its fallback never fires.
+    expect(y).toContain('.usage.cost.amount');
+    expect(y).toContain('.usage.cost.source');
+    expect(y).not.toContain('.usage.cost // ');
+  });
+
+  test('label-gate waiver stays string-safe (bare loose-equality regression = spend on every PR)', () => {
+    const y = yml();
+    // On plain pull_request events inputs.* is empty and GitHub's loose ==
+    // coerces null→0 and false→0, so a bare `require_label == false` is TRUE
+    // on every same-repo PR — bypassing the label gate. Pin the string-safe form.
+    expect(y).toContain("format('{0}', inputs.require_label) == 'false'");
+    expect(y).not.toMatch(/require_label\s*==\s*false/);
+  });
+
+  test('raw PR text reaches the shell only via env: indirection, never inline in run:', () => {
+    const lines = yml().split('\n');
+    const prText = lines.filter((l) => /\$\{\{\s*github\.event\.pull_request\.(title|body)/.test(l));
+    expect(prText.length).toBeGreaterThan(0); // the title IS used — but only through env
+    for (const l of prText) {
+      // Every use must be an env-assignment line (KEY: ${{ ... }}) — a raw
+      // ${{ }} template expansion inside a run: script is the classic
+      // GitHub Actions shell-injection vector.
+      expect(l).toMatch(/^\s+[A-Z_]+:\s*\$\{\{\s*github\.event\.pull_request\.(title|body)\s*\}\}\s*$/);
+    }
+  });
+
+  test('model output is neutralized before entering the sticky comment (no marker/footer/details forgery)', () => {
+    const y = yml();
+    // Untrusted model text must not be able to forge the sticky marker
+    // (comment hijack on the next run), forge the footer disclosure, or
+    // close the workflow's own <details> wrapper.
+    expect(y).toContain('neutralize()');
+    expect(y).toContain('s/<!-- council-review-sticky -->/');
+    expect(y).toContain('s/not an adjudicated/');
+    expect(y).toContain('s|</details|');
+    expect(y).toContain('reviews-safe.md');
+  });
 });
