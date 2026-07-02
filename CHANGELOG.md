@@ -5,6 +5,15 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Headless runs that finish via idle detection no longer write `status:"error"` / `reason:"Incomplete"` to
+  `metadata.json`.** The poll loop's two genuine idle-completion exits — the SDK-authoritative `session.status`
+  idle signal and the stable-poll activity heuristic (both gated on real output, F1 #16) — broke out of the loop
+  without setting `completed`, so `resolveTerminalState` fell through to error and poisoned `amicus_list` /
+  `amicus_status` / wave rollups for successful runs, while the stdout `--json` doc correctly said
+  `status:"complete"`. Both exits now mark the run completed, matching the fold-marker branch. Dead-server
+  classification is unchanged: the consecutive-poll-failure fast-exit (F4) and crash paths still report an error.
+
 ## [1.8.0] - 2026-07-02
 
 ### Added

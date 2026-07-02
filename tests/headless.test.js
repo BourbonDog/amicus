@@ -989,8 +989,9 @@ describe('Headless Mode Runner', () => {
         }]);
 
       const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 15000);
-      // Should NOT have detected FOLD — completed via stablePolls fallback
-      expect(result.completed).toBe(false);
+      // Ended via the stablePolls idle fallback — a genuine completion signal.
+      expect(result.completed).toBe(true);
+      // The inline marker was NOT treated as a fold delimiter: it survives in the summary.
       expect(result.summary).toContain('[SIDECAR_FOLD]');
     }, 25000);
 
@@ -1020,9 +1021,9 @@ describe('Headless Mode Runner', () => {
         testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
         30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 3 }
       );
-      // Ended via the idle fallback, NOT the fold marker.
-      expect(result.completed).toBe(false);
-      // The echoed marker is preserved as content (never treated as a delimiter).
+      // Ended via the idle fallback (a genuine completion), NOT the fold marker:
+      // the echoed marker is preserved as content, never treated as a delimiter.
+      expect(result.completed).toBe(true);
       expect(result.summary).toContain('[SIDECAR_FOLD]');
       expect(result.summary).toContain('continuing analysis');
     }, 20000);

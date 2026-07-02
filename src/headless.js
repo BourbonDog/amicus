@@ -463,6 +463,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
             if (s && s.type === 'idle') {
               logger.debug('Session reported idle by SDK — completing', { sessionId });
+              completed = true;
               break;
             }
           } catch (statusErr) {
@@ -493,6 +494,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             const threshold = assistantFinished ? stableFinishedPolls : stableIdlePolls;
             if (stablePolls >= threshold) {
               logger.debug('Session appears complete (idle)', { stablePolls, assistantFinished });
+              completed = true;
               break;
             }
           } else {
