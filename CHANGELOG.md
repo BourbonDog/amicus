@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-07-02
+
 ### Added
 - **`amicus_wait` MCP tool: blocking wait for a session or fan-out wave.** Blocks inside one tool call until the
   target reaches a terminal state or the wait window closes, replacing the sleep+`amicus_status` polling loop with
@@ -13,6 +15,17 @@ All notable changes to Amicus are documented here. Format follows
   other processes, not just the caller. Torn-read tolerant: a transient read of `metadata.json` mid-write is
   treated as a missed poll tick, not a hard failure. Legacy alias `sidecar_wait` is available under
   `AMICUS_LEGACY_ALIASES=1`.
+- **Agent-visible progress.** A new `amicus status <task_id>` (or `--wave <id>`) one-shot CLI command delegates
+  directly to the MCP status handler — same crash detection and wave-leg rollup, zero duplicated logic.
+  `amicus_status` and `amicus_list` are enriched with agent-facing `mode`, `phase`, `messageCount`,
+  `lastActivityAt`, and `latestPreview` (the pinned raw `stage` field is unchanged for back-compat; wave legs
+  additionally surface the raw `stage` alongside the coarse `phase`). Interactive (Electron GUI) runs now write
+  the same lifecycle progress stages headless runs always have (`initializing`, `server_ready`, `session_created`,
+  `prompt_sent`), and long-thinking turns emit periodic thinking-delta progress ticks instead of at most one ever
+  — so a live GUI run no longer reads "Starting up... | 0 messages" forever.
+- **`amicus doctor` duplicate-registration check.** A new `mcp-legacy` check flags plugin-channel installs
+  (`AMICUS_SKIP_POSTINSTALL=1`) that never ran the postinstall migration and still carry a duplicate legacy
+  `sidecar` MCP registration; `doctor --fix` cleans it up.
 
 ### Fixed
 - **`amicus abort` now actually stops interactive sessions and wave legs.** Marker-first, honest output — reports
@@ -29,8 +42,6 @@ All notable changes to Amicus are documented here. Format follows
 - **Postinstall no longer registers a separate `sidecar` MCP server** and auto-removes a verified-identical
   duplicate left over from pre-1.8 installs. A customized `sidecar` entry or a sole `sidecar` registration (no
   `amicus` twin) is never touched.
-- **`amicus doctor` gains an `mcp-legacy` check**, and `doctor --fix` cleans up the duplicate registration when
-  one is found.
 
 ## [1.7.7] - 2026-07-01
 
