@@ -733,18 +733,47 @@ const handlers = {
       return textResult(`Session ${input.taskId} is not running (status: ${metadata.status}).`);
     }
 
-    if (metadata.pid) {
-      try { process.kill(metadata.pid, 'SIGTERM'); } catch (err) {
-        if (err.code !== 'ESRCH') {
-          logger.warn('Failed to kill Amicus process', { pid: metadata.pid, error: err.message });
-        }
-      }
-    }
     const sessionDir = safeSessionDir(cwd, input.taskId);
-    const metaPath = path.join(sessionDir, 'metadata.json');
-    metadata.status = 'aborted';
-    metadata.abortedAt = new Date().toISOString();
-    fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
+    const { markAborted } = require('./utils/session-abort');
+    const { waitThenKill } = require('./utils/abort-coordinator');
+
+    if (metadata.type === 'wave') {
+      // Order is load-bearing: mark every running leg aborted BEFORE any kill
+      // or wave-status write. A TerminateProcess'd orchestrator (Windows
+      // process.kill) runs no signal handlers, and writing the wave status
+      // first falsifies the crash-cascade gate in amicus_status — both used
+      // to strand legs 'running' forever. Legs poll their own marker (~2s),
+      // so a live orchestrator settles gracefully during the grace window.
+      let legsAborted = 0;
+      for (const legId of metadata.legs || []) {
+        try {
+          const legMeta = readMetadata(legId, cwd);
+          if (legMeta && legMeta.status === 'running' &&
+              markAborted(safeSessionDir(cwd, legId), 'wave abort (MCP)')) {
+            legsAborted++;
+          }
+        } catch { /* skip unreadable leg */ }
+      }
+      markAborted(sessionDir, 'manual abort (MCP)');
+      // Fallback only: SIGTERM the orchestrator + its OWNED OpenCode server
+      // if they outlive the grace window. Fire-and-forget — the tool result
+      // must not block on the grace period.
+      waitThenKill([metadata.pid, metadata.goPid]).catch(() => { /* best-effort */ });
+      return textResult(JSON.stringify({
+        taskId: input.taskId, status: 'aborted', legsAborted,
+        message: `Wave abort requested. ${legsAborted} running leg(s) marked aborted; ` +
+          'the fan-out process will terminate shortly.',
+      }));
+    }
+
+    // Single session: marker FIRST — the headless loop and the interactive
+    // abort watch honor it within ~2s and tear down gracefully (mirror flush,
+    // usage persist, server-side abortSession). SIGTERM only a process that
+    // outlives the grace window. NEVER touch goPid here: on the shared-server
+    // path it is the server every session shares (pid is null there, so that
+    // path is marker-only by construction).
+    markAborted(sessionDir, 'manual abort (MCP)');
+    waitThenKill(metadata.pid).catch(() => { /* best-effort */ });
 
     return textResult(JSON.stringify({
       taskId: input.taskId, status: 'aborted',

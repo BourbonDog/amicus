@@ -242,16 +242,21 @@ describe('MCP Headless Lifecycle Integration', () => {
   });
 
   describe('Abort workflow: start -> abort -> verify', () => {
-    test('abort running session with live PID', async () => {
+    test('abort running session with live PID (marker-first: kill only after the grace window)', async () => {
       const taskId = 'abort-live-001';
       // Use process.pid as a known-alive PID
-      createSession(tmpDir, taskId, {
-        status: 'running',
-        pid: process.pid,
-      });
+      createSession(tmpDir, taskId, { status: 'running', pid: process.pid });
 
-      // Mock process.kill to prevent actually killing ourselves
+      // Mock process.kill BEFORE aborting and keep the mock installed until
+      // every grace-kill timer has been drained — a real SIGTERM here would
+      // kill the jest worker.
       const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {});
+      jest.useFakeTimers();
+      // NOTE: abortGraceMs() treats '0' as unset (falls back to the 5000ms
+      // default — see abort-coordinator.js's `n > 0` guard, tested in
+      // abort-coordinator.test.js:15-20), so a small positive value is used
+      // here instead, consistent with the other Phase-3 abort-ordering tests.
+      process.env.AMICUS_ABORT_GRACE_MS = '60';
 
       try {
         const result = await handlers.amicus_abort({ taskId }, tmpDir);
@@ -259,14 +264,25 @@ describe('MCP Headless Lifecycle Integration', () => {
         expect(data.status).toBe('aborted');
         expect(data.taskId).toBe(taskId);
 
-        // Verify process.kill was called with our PID
+        // Marker-first contract (Phase 3): the tool returns with the marker
+        // durable but NO SIGTERM sent yet.
+        expect(killSpy).not.toHaveBeenCalledWith(process.pid, 'SIGTERM');
+
+        // Drain the grace window (60ms) + the coordinator's poll cycle.
+        await jest.advanceTimersByTimeAsync(1000);
         expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGTERM');
 
         // Verify status persisted
         const status = await handlers.amicus_status({ taskId }, tmpDir);
         expect(parseResult(status).status).toBe('aborted');
       } finally {
+        // No ref'd timer may survive this test: discard every pending
+        // grace-kill timer BEFORE unmocking, or the real process.kill fires
+        // after mockRestore and SIGTERMs the worker.
+        jest.clearAllTimers();
+        jest.useRealTimers();
         killSpy.mockRestore();
+        delete process.env.AMICUS_ABORT_GRACE_MS;
       }
     });
 
