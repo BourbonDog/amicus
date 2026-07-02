@@ -7,11 +7,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const { startOpenCodeServer } = require('./session-utils');
-const { createSession, sendPromptAsync, getMessages } = require('../opencode-client');
+const { createSession, sendPromptAsync, getMessages, abortSession } = require('../opencode-client');
 const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { logger } = require('../utils/logger');
 const { getCompatEnv } = require('../utils/env-compat');
 const { startInteractiveMirror } = require('./interactive-mirror');
+const { startAbortWatch, markResultAborted } = require('./interactive-abort');
 const { getSessionDir } = require('../session-manager');
 const { canonicalProjectPath } = require('../utils/project-path');
 const { ensureElectron } = require('./electron-ensure');
@@ -206,6 +207,15 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     onActivity: () => watchdog.touch(),
   });
 
+  // Phase 3: external aborts (CLI `amicus abort` / MCP amicus_abort) write a
+  // metadata marker; nothing in the GUI path watched it before. On marker:
+  // server-side abort + SIGTERM Electron; the close handler finishes teardown.
+  const abortWatch = startAbortWatch({
+    sessionDir,
+    abortOpenCodeSession: () => abortSession(ocClient, sessionId, sessionDirectory),
+    killElectron: () => killIfAlive(electronProcess),
+  });
+
   return new Promise((resolve, _reject) => {
     // Prefer the path ensureElectron() resolved: a same-process first-use
     // provision can leave require('electron') cached as a stale null (#55).
@@ -248,6 +258,8 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
       process.removeListener('SIGTERM', killChildOnParentDeath);
       watchdog.cancel();
       activityPoller.stop();
+      abortWatch.stop();
+      markResultAborted(result, abortWatch.wasAborted());
       try {
         const { usage } = await mirror.stop();
         if (usage) { result.usage = usage; }
