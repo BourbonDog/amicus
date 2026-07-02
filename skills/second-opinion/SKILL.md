@@ -207,10 +207,15 @@ FINAL RANKING:
 As each judge's ranking + adjudication response returns, collect it (the raw per-judge responses are working intermediates, not separate run-folder artifacts). Once all are in, **assemble the de-anonymized tally input** and then call `amicus council tally`:
 
 **Stage-2 → tally assembly recipe (Claude's work before calling `tally`):**
+0. **Build `meta` and `findings[]` first — `tally` requires both** (missing either fails with `BAD_ARGS: Cannot read properties of undefined (reading 'map')`):
+   - `meta` = `{ "runId": "<run-folder stem>", "models": [<every reviewed model id, including "claude" when the toggle is on — this is the street-cred universe>], "chair": "<confirmed chair model id>", "claudeInCouncil": <Stage-0 toggle> }`. Optional extras: `runType`, `date`.
+   - `findings[]` = one entry per finding across ALL reviews: `{ "id": "<run-global label id from step 1, e.g. A1>", "raiser": "<de-anonymized model that raised it>", "severity": "<from the review JSON>" }` (`claim` may be carried along but is not required).
 1. **Rewrite finding ids to run-global label ids.** Each Stage-1 review's local integer ids (`1`, `2`, `3`…) become `A1`, `A2`, `A3`… (where `A` is that review's anonymized label). The label↔model map (`Review A → deepseek`, etc.) is the key.
 2. **Build `adjudications`** — for every judge across all findings: `findingId` = run-global label id; `judge` = the model id (de-anonymized via the map); `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding. The raiser's own adjudication of its own finding is **included in the input** (the tally engine excludes it when computing peers-only tiers — do not pre-filter it).
 3. **Translate each judge's `FINAL RANKING:` block** — convert the label order (`1. Review C / 2. Review A / 3. Review B`) into a model `order` array via the same map (e.g. `{C→mistral, A→deepseek, B→gpt}` ⇒ `order: ["mistral","deepseek","gpt"]`). This is each entry in `rankings[]`.
 4. **Populate `runStats`** from the per-leg run documents emitted by `fanout --json` (and any solo red-team/chair `start --json` docs): copy `model`, `status`, `durationMs`, `usage` verbatim. Any leg with no run doc gets `durationMs: null` and `usage: null` — never invent a value. Attach `role` (`council` | `redteam` | `claude`), `wasChair`, and `conformance` (`clean` | `repaired` | `unstructured`) as council-domain labels.
+
+**Five-keys checklist — verify `tally-input.json` has ALL of:** `meta` (with `meta.models`), `findings`, `adjudications`, `rankings`, `runStats` (`runStats` may be `[]`; the other four are required). Do not call `tally` until all five are present.
 
 Then call:
 
