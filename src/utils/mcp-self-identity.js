@@ -5,15 +5,22 @@
  * Recursive-spawn guard. A child sidecar that inherits an MCP entry launching
  * amicus itself would spawn amicus inside amicus, forever. The shipped server
  * registers as 'amicus' (scripts/postinstall.js, .claude-plugin/plugin.json)
- * plus a deprecated 'sidecar' shim — and users can alias it under ANY name —
- * so we exclude both reserved names AND any entry whose command+args resolve
- * to an amicus MCP invocation.
+ * — and users can alias it under ANY name — so we exclude both reserved
+ * names AND any entry whose command+args resolve to an amicus MCP invocation.
+ *
+ * 'sidecar'/'claude-sidecar' are recognized for BOTH lists even though
+ * package.json's "bin" field no longer ships them as of v2.0.0 (#19): a
+ * stale pre-rebrand global install can still have them linked on a user's
+ * PATH, and a stale claude.json/MCP config can still reference the old
+ * 'sidecar' server name. Recognizing them here only ever prevents a
+ * recursive self-spawn — it never breaks a legitimately different server —
+ * so there is no cost to keeping the wider net.
  */
 
-/** Server names amicus registers itself under. */
+/** Server names amicus registers itself under (current + legacy). */
 const SELF_MCP_NAMES = Object.freeze(['amicus', 'sidecar']);
 
-/** Shipped bin aliases (package.json "bin") → ./bin/amicus.js */
+/** Bin names that resolve to ./bin/amicus.js (current package.json "bin" + legacy pre-v2.0.0 names). */
 const SELF_BIN_NAMES = new Set(['amicus', 'am', 'sidecar', 'claude-sidecar']);
 
 /**

@@ -28,9 +28,7 @@
   "homepage": "https://bourbondog.github.io/amicus/",
   "bin": {
     "amicus": "./bin/amicus.js",
-    "am": "./bin/amicus.js",
-    "sidecar": "./bin/amicus.js",
-    "claude-sidecar": "./bin/amicus.js"
+    "am": "./bin/amicus.js"
   },
   "main": "src/index.js",
   "exports": {
