@@ -520,6 +520,80 @@ describe('MCP Discovery', () => {
     });
   });
 
+  describe('discoverCoworkMcps — default platform path resolution', () => {
+    let originalPlatform;
+    let originalAppData;
+    let existsSyncSpy;
+
+    function stubPlatform(value) {
+      Object.defineProperty(process, 'platform', { value, configurable: true });
+    }
+
+    beforeEach(() => {
+      originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+      originalAppData = process.env.APPDATA;
+    });
+
+    afterEach(() => {
+      if (originalPlatform) { Object.defineProperty(process, 'platform', originalPlatform); }
+      if (originalAppData === undefined) { delete process.env.APPDATA; } else { process.env.APPDATA = originalAppData; }
+      if (existsSyncSpy) { existsSyncSpy.mockRestore(); }
+    });
+
+    // Captures the baseDir discoverCoworkMcps() resolved by inspecting the
+    // path passed to fs.existsSync (no configDir override, no real file needed).
+    function capturedConfigPath() {
+      loadModule();
+      existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+      discoverCoworkMcps();
+      expect(existsSyncSpy).toHaveBeenCalledTimes(1);
+      return existsSyncSpy.mock.calls[0][0];
+    }
+
+    test('win32 with APPDATA set resolves to %APPDATA%\\Claude (not .config)', () => {
+      stubPlatform('win32');
+      process.env.APPDATA = 'C:\\Users\\tester\\AppData\\Roaming';
+
+      const configPath = capturedConfigPath();
+
+      expect(configPath).toBe(
+        path.join('C:\\Users\\tester\\AppData\\Roaming', 'Claude', 'claude_desktop_config.json')
+      );
+      expect(configPath).not.toContain('.config');
+    });
+
+    test('win32 with APPDATA unset falls back to homedir\\AppData\\Roaming\\Claude', () => {
+      stubPlatform('win32');
+      delete process.env.APPDATA;
+
+      const configPath = capturedConfigPath();
+
+      expect(configPath).toBe(
+        path.join(os.homedir(), 'AppData', 'Roaming', 'Claude', 'claude_desktop_config.json')
+      );
+    });
+
+    test('darwin resolves to ~/Library/Application Support/Claude', () => {
+      stubPlatform('darwin');
+
+      const configPath = capturedConfigPath();
+
+      expect(configPath).toBe(
+        path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json')
+      );
+    });
+
+    test('linux resolves to ~/.config/Claude', () => {
+      stubPlatform('linux');
+
+      const configPath = capturedConfigPath();
+
+      expect(configPath).toBe(
+        path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json')
+      );
+    });
+  });
+
   describe('discoverParentMcps', () => {
     test('calls discoverClaudeCodeMcps for code-local client', () => {
       loadModule();

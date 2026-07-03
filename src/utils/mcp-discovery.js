@@ -140,17 +140,41 @@ function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
 }
 
 /**
+ * Resolve Claude Desktop's per-platform config directory.
+ * Mirrors the 3-way branch in src/environment.js getCoworkRoot (same
+ * APPDATA || homedir-fallback form on win32) but stops one level higher —
+ * getCoworkRoot resolves .../Claude/local-agent-mode-sessions, while this
+ * needs the parent .../Claude dir that holds claude_desktop_config.json.
+ * Kept local rather than imported to avoid depending on an internal
+ * implementation detail (stripping getCoworkRoot's trailing segment).
+ *
+ * @param {string} platform - OS platform (process.platform)
+ * @returns {string} Claude Desktop config directory
+ */
+function getClaudeDesktopConfigDir(platform) {
+  const homedir = os.homedir();
+
+  if (platform === 'darwin') {
+    return path.join(homedir, 'Library', 'Application Support', 'Claude');
+  }
+
+  if (platform === 'win32') {
+    const appdata = process.env.APPDATA || path.join(homedir, 'AppData', 'Roaming');
+    return path.join(appdata, 'Claude');
+  }
+
+  // Linux and other Unix-like systems
+  return path.join(homedir, '.config', 'Claude');
+}
+
+/**
  * Discover MCP servers from Cowork / Claude Desktop config.
  *
  * @param {string} [configDir] - Path to config directory (for testing)
  * @returns {object|null} MCP server configs, or null if none found
  */
 function discoverCoworkMcps(configDir) {
-  const baseDir = configDir || (
-    process.platform === 'darwin'
-      ? path.join(os.homedir(), 'Library', 'Application Support', 'Claude')
-      : path.join(os.homedir(), '.config', 'Claude')
-  );
+  const baseDir = configDir || getClaudeDesktopConfigDir(process.platform);
 
   try {
     const configPath = path.join(baseDir, 'claude_desktop_config.json');
