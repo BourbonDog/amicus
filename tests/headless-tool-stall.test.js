@@ -38,6 +38,9 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
   appendFileSync: jest.fn(),
   writeFileSync: jest.fn(),
+  // writeFileAtomic (15a.1) writes tmp + renameSync; rmSync is its error-path cleanup
+  renameSync: jest.fn(),
+  rmSync: jest.fn(),
   readFileSync: jest.fn(() => JSON.stringify({ status: 'running' })),
   unlinkSync: jest.fn(),
 }));
