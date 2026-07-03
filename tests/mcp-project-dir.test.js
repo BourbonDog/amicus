@@ -71,7 +71,7 @@ describe('getProjectDir', () => {
 describe('MCP handler dispatch passes input.project', () => {
   test('amicus_list uses input.project when provided', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-proj-'));
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'test1');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'test1');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'test1', status: 'complete', model: 'gemini',
@@ -92,7 +92,7 @@ describe('MCP handler dispatch passes input.project', () => {
 
   test('amicus_status uses input.project when no 2nd arg', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-proj-'));
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'stat1');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'stat1');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'stat1', status: 'running', model: 'gemini',

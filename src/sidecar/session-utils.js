@@ -36,9 +36,8 @@ const SessionPaths = {
   },
 
   /**
-   * Resolve an EXISTING session directory for READS: prefer amicus, fall back
-   * to legacy `sidecar_sessions` (backward-compat shim). Use this when
-   * resuming/continuing an existing session so pre-rebrand sessions are found.
+   * Resolve an EXISTING session directory for READS. Use this when
+   * resuming/continuing an existing session.
    */
   resolveSessionDir(project, taskId) {
     return resolveExistingSessionDir(project, taskId);

@@ -475,7 +475,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns empty message when sessions dir exists but is empty', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessionsDir = path.join(tmpDir, '.claude', 'sidecar_sessions');
+      const sessionsDir = path.join(tmpDir, '.claude', 'amicus_sessions');
       fs.mkdirSync(sessionsDir, { recursive: true });
       try {
         const result = await handlers.amicus_list({}, tmpDir);
@@ -487,7 +487,7 @@ describe('MCP Server Handlers', () => {
 
     test('lists sessions with metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'task001');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'task001');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'task001',
@@ -512,7 +512,7 @@ describe('MCP Server Handlers', () => {
 
     test('filters sessions by status', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessionsBase = path.join(tmpDir, '.claude', 'sidecar_sessions');
+      const sessionsBase = path.join(tmpDir, '.claude', 'amicus_sessions');
 
       // Create a running session
       const runDir = path.join(sessionsBase, 'running1');
@@ -542,7 +542,7 @@ describe('MCP Server Handlers', () => {
 
     test('sorts sessions by createdAt descending', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessionsBase = path.join(tmpDir, '.claude', 'sidecar_sessions');
+      const sessionsBase = path.join(tmpDir, '.claude', 'amicus_sessions');
 
       const older = path.join(sessionsBase, 'older');
       fs.mkdirSync(older, { recursive: true });
@@ -572,7 +572,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_status', () => {
     test('returns status for existing running session with progress', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'abc12345');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'abc12345');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'abc12345',
@@ -628,7 +628,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_status enriched response', () => {
     test('includes messages and lastActivity when running', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'prog1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'prog1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'prog1', status: 'running', pid: process.pid,
@@ -653,7 +653,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns Starting up when no conversation yet', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'noprog');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'noprog');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'noprog', status: 'running', pid: process.pid,
@@ -672,7 +672,7 @@ describe('MCP Server Handlers', () => {
 
     test('detects crashed process and updates status', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'dead1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'dead1');
       fs.mkdirSync(sessDir, { recursive: true });
       // PID 2147483647 is guaranteed to not exist
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
@@ -702,7 +702,7 @@ describe('MCP Server Handlers', () => {
     const itPosix = process.platform === 'win32' ? it.skip : it;
     itPosix('crash-detect rewrite preserves 0o600 on the single-session metadata.json', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'dead-perm1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'dead-perm1');
       fs.mkdirSync(sessDir, { recursive: true });
       const metaPath = path.join(sessDir, 'metadata.json');
       fs.writeFileSync(metaPath, JSON.stringify({
@@ -724,7 +724,7 @@ describe('MCP Server Handlers', () => {
 
     test('EPERM from kill(pid, 0) means alive — does not mark crashed', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'eperm1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'eperm1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'eperm1', status: 'running', pid: process.pid,
@@ -752,7 +752,7 @@ describe('MCP Server Handlers', () => {
 
     test('does not include latest/messages for completed sessions', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'done1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'done1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'done1', status: 'complete',
@@ -774,7 +774,7 @@ describe('MCP Server Handlers', () => {
 
     test('includes reason for error/crashed sessions', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'err1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'err1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'err1', status: 'error',
@@ -807,7 +807,7 @@ describe('MCP Server Handlers', () => {
 
     test('single-session: elapsed reflects completedAt, not now', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-elapsed-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'fin1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'fin1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'fin1', status: 'complete', createdAt, completedAt: endAt,
@@ -824,7 +824,7 @@ describe('MCP Server Handlers', () => {
 
     test('single-session: aborted run bounds elapsed by abortedAt', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-elapsed-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'abo1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'abo1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'abo1', status: 'aborted', reason: 'user abort',
@@ -887,7 +887,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_status next_poll field', () => {
     test('includes next_poll when headless:true and status:running', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'hl1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'hl1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'hl1', status: 'running', pid: process.pid,
@@ -908,7 +908,7 @@ describe('MCP Server Handlers', () => {
 
     test('omits next_poll when headless is false (interactive)', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'ia1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'ia1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'ia1', status: 'running', pid: process.pid,
@@ -926,7 +926,7 @@ describe('MCP Server Handlers', () => {
 
     test('omits next_poll when headless is missing (legacy sessions)', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'leg1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'leg1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'leg1', status: 'running', pid: process.pid,
@@ -944,7 +944,7 @@ describe('MCP Server Handlers', () => {
 
     test('omits next_poll when headless:true but status:complete', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'hlc1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'hlc1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'hlc1', status: 'complete', headless: true,
@@ -962,7 +962,7 @@ describe('MCP Server Handlers', () => {
 
     test('next_poll hint contains at-least-30s guidance', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'ph1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'ph1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'ph1', status: 'running', pid: process.pid,
@@ -980,7 +980,7 @@ describe('MCP Server Handlers', () => {
 
     test('headless running amicus_status includes system-reminder content block', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'sr2');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'sr2');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'sr2', status: 'running', pid: process.pid,
@@ -999,7 +999,7 @@ describe('MCP Server Handlers', () => {
 
     test('interactive running amicus_status has no system-reminder', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'sri2');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'sri2');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'sri2', status: 'running', pid: process.pid,
@@ -1019,7 +1019,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_status stall detection', () => {
     test('includes stalled: true when lastActivityMs exceeds threshold', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-stall-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'stall1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'stall1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'stall1', status: 'running', model: 'gemini',
@@ -1052,7 +1052,7 @@ describe('MCP Server Handlers', () => {
 
     test('does not include stalled flag when activity is recent', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-nostall-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'active1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'active1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'active1', status: 'running', model: 'gemini',
@@ -1078,7 +1078,7 @@ describe('MCP Server Handlers', () => {
 
     test('does not include stalled flag for interactive sessions even when idle', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-int-stall-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'int1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'int1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'int1', status: 'running', model: 'gemini',
@@ -1106,7 +1106,7 @@ describe('MCP Server Handlers', () => {
 
     test('does not include stalled flag for completed sessions', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-done-stall-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'done2');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'done2');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'done2', status: 'complete', model: 'gemini',
@@ -1126,7 +1126,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_status model field', () => {
     test('includes model in status response when stored in metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-model-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'mdl1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'mdl1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'mdl1', status: 'complete',
@@ -1144,7 +1144,7 @@ describe('MCP Server Handlers', () => {
 
     test('omits model field when not stored in metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-nomodel-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'nomdl');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'nomdl');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'nomdl', status: 'complete',
@@ -1164,7 +1164,7 @@ describe('MCP Server Handlers', () => {
     test('includes the running amicus version in the status payload', async () => {
       const runningVersion = require('../package.json').version;
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-ver-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'ver1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'ver1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'ver1', status: 'complete',
@@ -1182,7 +1182,7 @@ describe('MCP Server Handlers', () => {
     test('includes version on a wave status payload too', async () => {
       const runningVersion = require('../package.json').version;
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verw-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verw');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'verw');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'verw', type: 'wave', status: 'complete', legs: [],
@@ -1199,7 +1199,7 @@ describe('MCP Server Handlers', () => {
 
     test('appends a stale-version warning when on-disk package.json is newer', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verstale-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verstale');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'verstale');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'verstale', status: 'complete',
@@ -1236,7 +1236,7 @@ describe('MCP Server Handlers', () => {
     test('emits no stale warning when on-disk version matches running', async () => {
       const runningVersion = require('../package.json').version;
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verok-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verok');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'verok');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'verok', status: 'complete',
@@ -1269,7 +1269,7 @@ describe('MCP Server Handlers', () => {
 
     test('does not crash when the on-disk version re-read throws', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-verthrow-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'verthrow');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'verthrow');
       fs.mkdirSync(sessDir, { recursive: true });
       const metaPath = path.join(sessDir, 'metadata.json');
       fs.writeFileSync(metaPath, JSON.stringify({
@@ -1311,7 +1311,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_read', () => {
     test('returns summary when available', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'read123');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'read123');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
       fs.writeFileSync(path.join(sessDir, 'summary.md'), '## Test Summary\n\nResults here.');
@@ -1328,7 +1328,7 @@ describe('MCP Server Handlers', () => {
 
     test('summary prepends model when stored in metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-readmdl-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'rdmdl1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'rdmdl1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         model: 'openrouter/x-ai/grok-4.3',
@@ -1345,7 +1345,7 @@ describe('MCP Server Handlers', () => {
 
     test('summary works without model in metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-readnomdl-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'rdnomdl');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'rdnomdl');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
       fs.writeFileSync(path.join(sessDir, 'summary.md'), '## Results\n\nAll good.');
@@ -1359,7 +1359,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns metadata when mode is metadata', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'meta1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'meta1');
       fs.mkdirSync(sessDir, { recursive: true });
       const meta = { taskId: 'meta1', status: 'complete', model: 'gemini' };
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify(meta));
@@ -1376,7 +1376,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns conversation when mode is conversation', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'conv1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'conv1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
       fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '{"role":"user","content":"hello"}\n');
@@ -1391,7 +1391,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns message when no conversation file exists', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'noconv');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'noconv');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
 
@@ -1405,7 +1405,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns message when no summary file exists', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'nosum');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'nosum');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
 
@@ -1519,7 +1519,7 @@ describe('MCP Server Handlers', () => {
   describe('amicus_abort PID killing', () => {
     test('sends SIGTERM to process when PID is stored in metadata (marker-first: kill only after the grace window)', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-abort-pid-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'killme1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'killme1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'killme1', status: 'running', model: 'gemini',
@@ -1553,7 +1553,7 @@ describe('MCP Server Handlers', () => {
 
     test('marks aborted even if process already exited (SIGTERM throws ESRCH)', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-abort-gone-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'gone1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'gone1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'gone1', status: 'running', model: 'gemini',
@@ -1579,7 +1579,7 @@ describe('MCP Server Handlers', () => {
 
     test('aborts a running session — status updated to aborted', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'abort1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'abort1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'abort1', status: 'running', model: 'gemini',
@@ -1604,7 +1604,7 @@ describe('MCP Server Handlers', () => {
 
     test('returns informational message for non-running session', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'done1');
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'done1');
       fs.mkdirSync(sessDir, { recursive: true });
       fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
         taskId: 'done1', status: 'complete', model: 'gemini',
@@ -1933,7 +1933,7 @@ describe('amicus_start stderr capture', () => {
   test('amicus_resume passes sessionDir for stderr capture', async () => {
     let capturedOpts;
     // Pre-create session with metadata so resume can find it
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'res1');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'res1');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'res1', status: 'complete',

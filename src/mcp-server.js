@@ -8,7 +8,7 @@ const { tryResolveModel } = require('./utils/config');
 const os = require('os');
 const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
-const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
+const { getSessionDir, SESSIONS_DIR } = require('./session-manager');
 const { readProgress, isStalled } = require('./sidecar/progress');
 const { deriveStage, sanitizePreview } = require('./sidecar/progress-fields');
 const { SharedServerManager } = require('./utils/shared-server');
@@ -732,44 +732,38 @@ const handlers = {
 
   async amicus_list(input, project) {
     const cwd = project || getProjectDir(input.project);
-    // Scan BOTH roots: canonical amicus first, then legacy sidecar (shim).
-    const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
-      .map(d => path.join(cwd, '.claude', d))
-      .filter(fs.existsSync);
-    if (roots.length === 0) { return textResult('No amicus sessions found.'); }
+    const root = path.join(cwd, '.claude', SESSIONS_DIR);
+    if (!fs.existsSync(root)) { return textResult('No amicus sessions found.'); }
 
-    // Dedup by task id — amicus (first root) wins over legacy.
     const byId = new Map();
-    for (const root of roots) {
-      for (const d of fs.readdirSync(root)) {
-        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
-        if (byId.has(d)) { continue; }
-        const metaPath = path.join(root, d, 'metadata.json');
-        if (!fs.existsSync(metaPath)) { continue; }
-        try {
-          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-          const entry = {
-            id: d, model: meta.model, status: meta.status, agent: meta.agent,
-            briefing: sanitizePreview(String(meta.briefing || ''), 80),
-            createdAt: meta.createdAt,
-            mode: meta.mode
-              || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
-          };
-          // Live-progress enrichment for RUNNING sessions only — readProgress
-          // parses conversation.jsonl, so terminal rows stay cheap.
-          if (meta.status === 'running') {
-            try {
-              const p = readProgress(path.join(root, d));
-              entry.phase = deriveStage(meta.status, p.stage);
-              entry.messageCount = p.messages;
-              entry.lastActivityAt = p.lastActivityAt;
-              entry.latestPreview = p.latestPreview;
-            } catch { /* progress optional */ }
-          }
-          byId.set(d, entry);
-        } catch {
-          // Skip unreadable metadata
+    for (const d of fs.readdirSync(root)) {
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
+      if (byId.has(d)) { continue; }
+      const metaPath = path.join(root, d, 'metadata.json');
+      if (!fs.existsSync(metaPath)) { continue; }
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const entry = {
+          id: d, model: meta.model, status: meta.status, agent: meta.agent,
+          briefing: sanitizePreview(String(meta.briefing || ''), 80),
+          createdAt: meta.createdAt,
+          mode: meta.mode
+            || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
+        };
+        // Live-progress enrichment for RUNNING sessions only — readProgress
+        // parses conversation.jsonl, so terminal rows stay cheap.
+        if (meta.status === 'running') {
+          try {
+            const p = readProgress(path.join(root, d));
+            entry.phase = deriveStage(meta.status, p.stage);
+            entry.messageCount = p.messages;
+            entry.lastActivityAt = p.lastActivityAt;
+            entry.latestPreview = p.latestPreview;
+          } catch { /* progress optional */ }
         }
+        byId.set(d, entry);
+      } catch {
+        // Skip unreadable metadata
       }
     }
 

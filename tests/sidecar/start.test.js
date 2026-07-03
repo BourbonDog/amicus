@@ -204,7 +204,7 @@ describe('createSessionMetadata PID preservation', () => {
     const { createSessionMetadata } = require('../../src/sidecar/start');
     const { SessionPaths } = require('../../src/sidecar/session-utils');
 
-    // Use tmpDir as the project; sessionDir = tmpDir/.claude/sidecar_sessions/<taskId>
+    // Use tmpDir as the project; sessionDir = tmpDir/.claude/amicus_sessions/<taskId>
     const sessionDir = SessionPaths.sessionDir(tmpDir, taskId);
     fs.mkdirSync(sessionDir, { recursive: true });
 

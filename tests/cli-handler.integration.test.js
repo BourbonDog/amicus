@@ -41,7 +41,7 @@ describe('CLI Handler Integration: list + read + abort workflow', () => {
 
   it('full workflow: create session on disk -> list -> read -> abort', async () => {
     // Setup: create two sessions on disk
-    const sessionsBase = path.join(tmpDir, '.claude', 'sidecar_sessions');
+    const sessionsBase = path.join(tmpDir, '.claude', 'amicus_sessions');
 
     const completeDir = path.join(sessionsBase, 'handler-complete-001');
     fs.mkdirSync(completeDir, { recursive: true });
@@ -98,7 +98,7 @@ describe('CLI Handler Integration: list + read + abort workflow', () => {
   });
 
   it('read with --conversation flag shows conversation data', async () => {
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'conv-test-001');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'conv-test-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'conv-test-001', model: 'gemini', status: 'complete',
@@ -121,7 +121,7 @@ describe('CLI Handler Integration: list + read + abort workflow', () => {
   });
 
   it('list --json outputs valid JSON array', async () => {
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'json-test-001');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'json-test-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'json-test-001', model: 'gemini', status: 'complete',
@@ -139,7 +139,7 @@ describe('CLI Handler Integration: list + read + abort workflow', () => {
   });
 
   it('abort does not affect other sessions', async () => {
-    const sessionsBase = path.join(tmpDir, '.claude', 'sidecar_sessions');
+    const sessionsBase = path.join(tmpDir, '.claude', 'amicus_sessions');
 
     // Create two running sessions
     for (const id of ['keep-running', 'to-abort']) {

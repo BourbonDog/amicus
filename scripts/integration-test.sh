@@ -135,27 +135,27 @@ echo "============================================"
 echo "Checking sidecar session..."
 echo "============================================"
 
-if [ -d "$TEST_DIR/.claude/sidecar_sessions" ]; then
-    SIDECAR_SESSION=$(ls "$TEST_DIR/.claude/sidecar_sessions" | head -1)
+if [ -d "$TEST_DIR/.claude/amicus_sessions" ]; then
+    SIDECAR_SESSION=$(ls "$TEST_DIR/.claude/amicus_sessions" | head -1)
     echo -e "${GREEN}Sidecar session created: $SIDECAR_SESSION${NC}"
 
     # Check metadata
-    if [ -f "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/metadata.json" ]; then
+    if [ -f "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/metadata.json" ]; then
         echo ""
         echo "Metadata:"
-        cat "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/metadata.json"
+        cat "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/metadata.json"
         echo ""
     fi
 
     # Check initial context
-    if [ -f "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/initial_context.md" ]; then
+    if [ -f "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/initial_context.md" ]; then
         echo ""
         echo "Initial Context (first 30 lines):"
-        head -30 "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/initial_context.md"
+        head -30 "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/initial_context.md"
         echo ""
 
         # Verify context includes our mock conversation
-        if grep -q "getArrayLength" "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/initial_context.md"; then
+        if grep -q "getArrayLength" "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/initial_context.md"; then
             echo -e "${GREEN}✓ Context includes conversation about getArrayLength${NC}"
         else
             echo -e "${YELLOW}⚠ Context may not include expected conversation${NC}"
@@ -163,14 +163,14 @@ if [ -d "$TEST_DIR/.claude/sidecar_sessions" ]; then
     fi
 
     # Check summary
-    if [ -f "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/summary.md" ]; then
+    if [ -f "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/summary.md" ]; then
         echo ""
         echo "Summary:"
-        cat "$TEST_DIR/.claude/sidecar_sessions/$SIDECAR_SESSION/summary.md"
+        cat "$TEST_DIR/.claude/amicus_sessions/$SIDECAR_SESSION/summary.md"
         echo ""
     fi
 else
-    echo -e "${YELLOW}No sidecar session directory found${NC}"
+    echo -e "${YELLOW}No amicus session directory found${NC}"
 fi
 
 # List sidecars

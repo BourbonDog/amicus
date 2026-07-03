@@ -194,7 +194,7 @@ describeE2E('MCP Headless E2E: real LLM via amicus_start', () => {
 
     // Dump debug log if not complete
     if (finalStatus.status !== 'complete') {
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', taskId);
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
       try {
         const debugLog = fs.readFileSync(path.join(sessDir, 'debug.log'), 'utf-8');
         process.stderr.write(`  [e2e] debug.log:\n${debugLog}\n`);
@@ -239,7 +239,7 @@ describeE2E('MCP Headless E2E: real LLM via amicus_start', () => {
     process.stderr.write(`  [e2e] Summary length: ${summary.length} chars\n`);
 
     // Step 5: Verify session files exist on disk
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', taskId);
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
     expect(fs.existsSync(path.join(sessDir, 'metadata.json'))).toBe(true);
 
     // Metadata should show complete

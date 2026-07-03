@@ -2,16 +2,16 @@
  * Session path resolution.
  *
  * Resolves the on-disk directory for a session taskId under a project, with the
- * path-traversal guard, the legacy sidecar_sessions shim, and (issue #40) a
- * cross-project fallback via the global session index when the session is not
- * found under the project this lookup defaulted to.
+ * path-traversal guard and (issue #40) a cross-project fallback via the global
+ * session index when the session is not found under the project this lookup
+ * defaulted to.
  *
  * Extracted from validators.js to keep that module under the size gate.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('../session-manager');
+const { SESSIONS_DIR } = require('../session-manager');
 const { lookupSessionProject } = require('./session-index');
 const { canonicalProjectPath } = require('./project-path');
 
@@ -27,19 +27,15 @@ function safeSessionDirUnder(project, root, taskId) {
   return resolved;
 }
 
-/** Probe both roots (canonical, then legacy) under one project; null if neither exists. */
+/** Probe the canonical root under one project; null if it doesn't exist. */
 function existingDirUnderProject(project, taskId) {
   const canonical = safeSessionDirUnder(project, SESSIONS_DIR, taskId);
   if (fs.existsSync(canonical)) { return canonical; }
-  const legacy = safeSessionDirUnder(project, LEGACY_SESSIONS_DIR, taskId);
-  if (fs.existsSync(legacy)) { return legacy; }
   return null;
 }
 
 /**
- * Resolve an EXISTING session path: prefer canonical amicus, fall back to the
- * legacy sidecar_sessions dir (shim). The traversal guard runs against BOTH
- * roots, so a malicious taskId is rejected regardless of root.
+ * Resolve an EXISTING session path under the canonical amicus_sessions dir.
  *
  * On a per-project MISS (#40), consult the global index for the project the
  * taskId was actually recorded under and probe there — so a session created

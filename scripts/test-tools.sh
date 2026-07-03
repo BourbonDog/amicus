@@ -7,7 +7,7 @@ set -e
 MODEL="${SIDECAR_TEST_MODEL:-openrouter/google/gemini-2.5-flash}"
 TIMEOUT="${SIDECAR_TEST_TIMEOUT:-5}"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-SESSION_DIR="$HOME/.claude/sidecar_sessions"
+SESSION_DIR="$HOME/.claude/amicus_sessions"
 
 echo "=========================================="
 echo "OpenCode SDK Tool Testing via Sidecar CLI"

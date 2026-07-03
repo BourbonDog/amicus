@@ -215,7 +215,7 @@ describe('resolved project flows into session path / context / prompt', () => {
 
   test('AMICUS_PROJECT_DIR root reaches the session store path used by amicus_list', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-'));
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'flow1');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'flow1');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'flow1', status: 'complete', model: 'gemini',

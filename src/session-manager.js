@@ -21,9 +21,6 @@ const SESSION_STATUS = {
 
 /** Canonical session dir name — new sessions are written here. */
 const SESSIONS_DIR = 'amicus_sessions';
-// DEPRECATED(amicus-shim): legacy session dir read for pre-rebrand sessions.
-// Remove in a future revision — see docs/SHIMS.md.
-const LEGACY_SESSIONS_DIR = 'sidecar_sessions';
 
 /**
  * Get the canonical session directory path for a task (used for WRITES).
@@ -50,19 +47,16 @@ function getSessionDir(projectDir, taskId) {
 }
 
 /**
- * Resolve an EXISTING session dir for reads: prefer amicus, fall back to legacy.
- * Backward-compat shim so pre-rebrand `.claude/sidecar_sessions/` stay visible.
+ * Resolve an EXISTING session dir for reads. Currently identical to
+ * getSessionDir (kept as a distinct name for call-site clarity/history —
+ * pre-#19 it also probed a legacy session-dir root).
  *
  * @param {string} projectDir - Project directory path
  * @param {string} taskId - Sidecar task ID
- * @returns {string} Path to the resolved session directory (defaults to the new path)
+ * @returns {string} Path to the resolved session directory
  */
 function resolveExistingSessionDir(projectDir, taskId) {
-  const current = getSessionDir(projectDir, taskId);
-  if (fs.existsSync(current)) { return current; }
-  const legacy = path.join(projectDir, '.claude', LEGACY_SESSIONS_DIR, taskId);
-  if (fs.existsSync(legacy)) { return legacy; }
-  return current; // default to the new path
+  return getSessionDir(projectDir, taskId);
 }
 
 /**
@@ -418,7 +412,6 @@ module.exports = {
   getSessionDir,
   resolveExistingSessionDir,
   SESSIONS_DIR,
-  LEGACY_SESSIONS_DIR,
   SESSION_STATUS,
   // Sub-agent functions
   getSubagentDir,

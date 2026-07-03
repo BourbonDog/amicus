@@ -128,7 +128,7 @@ describe('CLI Process: list with sessions on disk', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-cli-int-'));
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'integ-test-001');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'integ-test-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'integ-test-001',
@@ -160,7 +160,7 @@ describe('CLI Process: list with sessions on disk', () => {
 
   it('filters by status', async () => {
     // Add a running session
-    const runDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'integ-test-002');
+    const runDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'integ-test-002');
     fs.mkdirSync(runDir, { recursive: true });
     fs.writeFileSync(path.join(runDir, 'metadata.json'), JSON.stringify({
       taskId: 'integ-test-002', model: 'openai/gpt-4o', status: 'running',
@@ -179,7 +179,7 @@ describe('CLI Process: read command', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-cli-int-'));
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'read-test-001');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'read-test-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'read-test-001', model: 'gemini', status: 'complete',
@@ -211,7 +211,7 @@ describe('CLI Process: abort command', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-cli-int-'));
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'abort-integ-001');
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'abort-integ-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'abort-integ-001', model: 'gemini', status: 'running',
@@ -236,7 +236,7 @@ describe('CLI Process: abort command', () => {
 
     // Verify metadata was updated on disk
     const meta = JSON.parse(fs.readFileSync(
-      path.join(tmpDir, '.claude', 'sidecar_sessions', 'abort-integ-001', 'metadata.json'), 'utf-8'
+      path.join(tmpDir, '.claude', 'amicus_sessions', 'abort-integ-001', 'metadata.json'), 'utf-8'
     ));
     expect(meta.status).toBe('aborted');
     expect(meta.abortedAt).toBeDefined();
