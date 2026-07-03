@@ -107,9 +107,14 @@ jobs:
           # HTTP 404 when it does not (confirmed live against
           # registry.modelcontextprotocol.io/v0 2026-07-02) — a clean,
           # reliable existence check, so no error-string matching on the
-          # publish result is needed.
+          # publish result is needed. `|| true` keeps a transport-level
+          # curl failure (DNS/connection/TLS/timeout — exit 0 does NOT
+          # apply here, only HTTP 404/5xx get a clean exit) from aborting
+          # this step under `bash -e`; STATUS then falls through empty/000,
+          # which is != "200" and correctly proceeds into the login/publish
+          # retry loops below instead of dying with a bare curl exit code.
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            "https://registry.modelcontextprotocol.io/v0/servers/io.github.BourbonDog%2Famicus/versions/$VERSION")
+            "https://registry.modelcontextprotocol.io/v0/servers/io.github.BourbonDog%2Famicus/versions/$VERSION" || true)
           if [ "$STATUS" = "200" ]; then
             echo "::notice::io.github.BourbonDog/amicus@$VERSION already on the MCP Registry; skipping registry publish"
             exit 0

@@ -90,6 +90,31 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(y).toContain('::notice::');
   });
 
+  test('registry pre-check STATUS curl tolerates transport failure (non-fatal under bash -e)', () => {
+    const y = yml();
+    // scope to just the pre-check portion of the "Publish to MCP Registry"
+    // step: from the step header through the login step's name (the
+    // pre-check's STATUS curl/if-block lives entirely before login starts).
+    const stepStart = y.indexOf('- name: Publish to MCP Registry');
+    const loginStepIdx = y.indexOf('mcp-publisher login github-oidc');
+    expect(stepStart).toBeGreaterThan(-1);
+    expect(loginStepIdx).toBeGreaterThan(stepStart);
+    const preCheckBlock = y.slice(stepStart, loginStepIdx);
+
+    expect(preCheckBlock).toMatch(/registry\.modelcontextprotocol\.io\/v0/);
+
+    // the STATUS=$(curl ...) assignment must not abort the step on a
+    // transport-level curl failure (DNS/connection/TLS/timeout) under
+    // `bash -e`. The curl call wraps across a line-continuation (`\`), so
+    // isolate the full logical assignment (STATUS=$( ... ) through the
+    // closing paren, tolerant of the wrap) and require a non-fatal guard
+    // (`|| true` or equivalent) within it.
+    const statusAssignMatch = preCheckBlock.match(/STATUS=\$\(curl[\s\S]*?\)[^\n]*/);
+    expect(statusAssignMatch).not.toBeNull();
+    const statusAssign = statusAssignMatch[0];
+    expect(statusAssign).toMatch(/\|\|\s*true/);
+  });
+
   test('GitHub Release creation is guarded by an existence check (gh release view)', () => {
     const y = yml();
     expect(y).toMatch(/gh release view\s+"\$TAG_NAME"/);
