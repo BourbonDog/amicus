@@ -45,7 +45,7 @@ jest.mock('../src/headless', () => ({
 }));
 
 const { runHeadless } = require('../src/headless');
-const { startSidecar } = require('../src/index');
+const { startAmicus } = require('../src/index');
 
 // Redirect os.homedir so session dirs land under our temp tree
 const originalHomedir = os.homedir;
@@ -69,7 +69,7 @@ describe('start.js terminal state classification', () => {
     }
   });
 
-  /** Helper: run startSidecar with injected runHeadless result, return {code, metadata} */
+  /** Helper: run startAmicus with injected runHeadless result, return {code, metadata} */
   async function runWith(headlessResult) {
     runHeadless.mockResolvedValue(headlessResult);
     // Suppress stdout/console noise
@@ -77,7 +77,7 @@ describe('start.js terminal state classification', () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     let code;
     try {
-      code = await startSidecar({
+      code = await startAmicus({
         model: 'google/gemini-2.5-flash',
         briefing: 'test task',
         project: projectDir,

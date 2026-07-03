@@ -167,9 +167,9 @@ async function main() {
  * Spec Reference: §4.2
  */
 async function handleList(args) {
-  const { listSidecars } = require('../src/index');
+  const { listAmicus } = require('../src/index');
 
-  await listSidecars({
+  await listAmicus({
     status: args.status,
     all: args.all,
     json: args.json,
@@ -196,9 +196,9 @@ async function handleResume(args) {
     process.exit(1);
   }
 
-  const { resumeSidecar } = require('../src/index');
+  const { resumeAmicus } = require('../src/index');
 
-  return await resumeSidecar({
+  return await resumeAmicus({
     taskId,
     project: args.cwd,
     headless: args['no-ui'],
@@ -250,9 +250,9 @@ async function handleContinue(args) {
     args.model = await validateFallbackModel(args, alias);
   }
 
-  const { continueSidecar } = require('../src/index');
+  const { continueAmicus } = require('../src/index');
 
-  return await continueSidecar({
+  return await continueAmicus({
     taskId,
     newTaskId: args['task-id'],
     briefing: args.prompt || args.briefing,

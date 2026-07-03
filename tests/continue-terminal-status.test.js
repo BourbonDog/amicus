@@ -20,7 +20,7 @@ jest.mock('../src/opencode-client', () => ({
 
 const { runHeadless } = require('../src/headless');
 const { runInteractive } = require('../src/sidecar/interactive');
-const { continueSidecar } = require('../src/index');
+const { continueAmicus } = require('../src/index');
 
 describe('continue.js terminal state + exit code', () => {
   let projectDir;
@@ -42,7 +42,7 @@ describe('continue.js terminal state + exit code', () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     let code;
     try {
-      code = await continueSidecar({
+      code = await continueAmicus({
         taskId: 'old00001', newTaskId: 'new00001', briefing: 'follow-up',
         model: 'google/gemini-2.5-flash', project: projectDir,
         headless: true, timeout: 5, ...opts,
@@ -77,7 +77,7 @@ describe('continue.js terminal state + exit code', () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     let code;
     try {
-      code = await continueSidecar({
+      code = await continueAmicus({
         taskId: 'old00001', newTaskId: 'new00001', briefing: 'follow-up',
         model: 'google/gemini-2.5-flash', project: projectDir, headless: false,
       });

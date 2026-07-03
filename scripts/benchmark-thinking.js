@@ -49,14 +49,14 @@ function getModelsToTest() {
 async function runSingleTest(model, thinkingLevel) {
   const startTime = Date.now();
 
-  // Import sidecar functions dynamically
-  const { startSidecar } = require('../src/index');
+  // Import amicus functions dynamically
+  const { startAmicus } = require('../src/index');
 
   const projectDir = process.cwd();
 
   try {
     // Run in headless mode for clean measurement
-    const result = await startSidecar({
+    const result = await startAmicus({
       model,
       briefing: TEST_PROMPT,
       headless: true,

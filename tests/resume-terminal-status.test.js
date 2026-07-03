@@ -21,7 +21,7 @@ jest.mock('../src/utils/model-validator', () => ({ warnIfNotInCatalog: jest.fn()
 
 const { runHeadless } = require('../src/headless');
 const { runInteractive } = require('../src/sidecar/interactive');
-const { resumeSidecar } = require('../src/index');
+const { resumeAmicus } = require('../src/index');
 
 describe('resume.js terminal state + exit code', () => {
   let projectDir;
@@ -44,7 +44,7 @@ describe('resume.js terminal state + exit code', () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     let code;
     try {
-      code = await resumeSidecar({
+      code = await resumeAmicus({
         taskId: 'res00001', project: projectDir,
         headless: true, timeout: 5, ...opts,
       });
@@ -78,7 +78,7 @@ describe('resume.js terminal state + exit code', () => {
     const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     let code;
     try {
-      code = await resumeSidecar({ taskId: 'res00001', project: projectDir, headless: false });
+      code = await resumeAmicus({ taskId: 'res00001', project: projectDir, headless: false });
     } finally { consoleSpy.mockRestore(); }
     const meta = JSON.parse(fs.readFileSync(path.join(
       projectDir, '.claude', 'amicus_sessions', 'res00001', 'metadata.json'), 'utf-8'));

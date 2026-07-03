@@ -3,10 +3,15 @@
  *
  * Smoke tests for re-exports and generateTaskId.
  * Detailed behavioral tests live in sidecar/*.test.js files:
- *   - sidecar/start.test.js    → startSidecar
- *   - sidecar/read.test.js     → listSidecars, readSidecar
- *   - sidecar/resume.test.js   → resumeSidecar
- *   - sidecar/continue.test.js → continueSidecar
+ *   - sidecar/start.test.js    → startSidecar (impl), exported as startAmicus
+ *   - sidecar/read.test.js     → listSidecars/readSidecar (impl), exported as listAmicus/readAmicus
+ *   - sidecar/resume.test.js   → resumeSidecar (impl), exported as resumeAmicus
+ *   - sidecar/continue.test.js → continueSidecar (impl), exported as continueAmicus
+ *
+ * The *Sidecar-named public API aliases (startSidecar/listSidecars/
+ * resumeSidecar/continueSidecar/readSidecar re-exported verbatim from
+ * src/index.js) were removed in #19 — only the canonical *Amicus names
+ * are exported now.
  */
 
 jest.mock('../src/opencode-client', () => ({
@@ -35,12 +40,13 @@ jest.mock('../src/utils/logger', () => ({
   }
 }));
 
+const indexModule = require('../src/index');
 const {
-  startSidecar,
-  listSidecars,
-  resumeSidecar,
-  continueSidecar,
-  readSidecar,
+  startAmicus,
+  listAmicus,
+  resumeAmicus,
+  continueAmicus,
+  readAmicus,
   generateTaskId,
   COMPLETE_MARKER,
   FOLD_MARKER,
@@ -51,7 +57,7 @@ const {
   getSessionRoot,
   compressContext,
   estimateTokens
-} = require('../src/index');
+} = indexModule;
 
 describe('Index Module', () => {
   describe('generateTaskId', () => {
@@ -70,12 +76,20 @@ describe('Index Module', () => {
   });
 
   describe('Re-exports', () => {
-    it('should export all core sidecar operations', () => {
-      expect(typeof startSidecar).toBe('function');
-      expect(typeof listSidecars).toBe('function');
-      expect(typeof readSidecar).toBe('function');
-      expect(typeof resumeSidecar).toBe('function');
-      expect(typeof continueSidecar).toBe('function');
+    it('should export all core amicus operations under canonical *Amicus names', () => {
+      expect(typeof startAmicus).toBe('function');
+      expect(typeof listAmicus).toBe('function');
+      expect(typeof readAmicus).toBe('function');
+      expect(typeof resumeAmicus).toBe('function');
+      expect(typeof continueAmicus).toBe('function');
+    });
+
+    it('should NOT export the deprecated *Sidecar public API aliases (#19 absence pin)', () => {
+      expect(indexModule.startSidecar).toBeUndefined();
+      expect(indexModule.listSidecars).toBeUndefined();
+      expect(indexModule.resumeSidecar).toBeUndefined();
+      expect(indexModule.continueSidecar).toBeUndefined();
+      expect(indexModule.readSidecar).toBeUndefined();
     });
 
     it('should export environment detection functions', () => {
