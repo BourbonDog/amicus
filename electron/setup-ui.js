@@ -9,6 +9,7 @@ const { buildCouncilSectionHTML, buildCouncilScript } = require('./setup-ui-coun
 const { getDefaultAliases } = require('../src/utils/config');
 const { getBrandName } = require('./toolbar');
 const { resolveQuickPicks } = require('../src/utils/quick-picks');
+const { PROVIDER_FAMILY_NAMES } = require('../src/utils/model-fetcher');
 
 /**
  * @param {object} [options={}]
@@ -30,6 +31,7 @@ function buildSetupHTML(options = {}) {
   const modelChoicesJson = JSON.stringify(quickPicks);
   const providerNamesJson = JSON.stringify(PROVIDER_NAMES);
   const defaultAliasesJson = JSON.stringify(getDefaultAliases());
+  const familyNamesJson = JSON.stringify(PROVIDER_FAMILY_NAMES);
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Amicus Setup</title>
 <style>${css}</style></head><body>
@@ -51,11 +53,11 @@ function buildSetupHTML(options = {}) {
     </div>
   </div>
   <div class="footer"><div class="footer-brand"><svg width="15" height="15" viewBox="0 0 32 32" fill="none"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/><path class="brand-main" d="M19 8H28"/></svg> ${brandName}</div><div class="footer-nav"><button class="nav-btn" id="back-btn" style="display:none">Back</button><button class="nav-btn primary" id="next-btn" disabled>Next</button><button class="nav-btn primary" id="finish-btn" style="display:none">Finish</button></div></div>
-${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson)}
+${buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson)}
 </body></html>`;
 }
 
-function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson) {
+function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, defaultAliasesJson, familyNamesJson) {
   const keysJs = buildKeysScript();
   const aliasJs = buildAliasScript();
   const councilJs = buildCouncilScript();
@@ -69,6 +71,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   var modelChoicesData = ${modelChoicesJson};
   var providerNamesData = ${providerNamesJson};
   var defaultAliases = ${defaultAliasesJson};
+  var PROVIDER_FAMILY_NAMES = ${familyNamesJson};
   var routingChoices = {};
   var aliasEdits = {};
   var aliasDisplay = {};
@@ -178,7 +181,10 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     if (step === 2) { updateRoutingPills(); ensureCatalogLoaded(); window.refreshCouncilGating && window.refreshCouncilGating(); }
     if (step === 3) {
       updateAliasRoutes();
-      if (!window.availableModels) { fetchAvailableModels(); }
+      // B33 / #12: Step 3 shares Step 2's TTL-cached catalog load (single
+      // in-page cache: ensureCatalogLoaded no-ops if Step 2 already loaded
+      // it) instead of a separate live sidecar:fetch-models round-trip.
+      ensureCatalogLoaded();
     }
     updateNextState();
   }
@@ -393,15 +399,11 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     } catch (_e) { finishBtn.disabled = false; finishBtn.textContent = 'Finish'; }
   });
 
-  async function fetchAvailableModels() {
-    try {
-      var groups = await window.sidecarSetup.invoke('sidecar:fetch-models');
-      if (groups && groups.length > 0) { window.availableModels = groups; }
-    } catch (_e) {}
-  }
-
-  // ===== F5: searchable catalog picker (Step 2) =====
+  // ===== F5: searchable catalog picker (Step 2) + B33/#12: shared with Step 3 =====
   var catalogRows = null, catalogFetchedAt = null;
+  // #13: last-refresh outcome, so a stale cache (refresh keeps failing) is
+  // shown honestly instead of looking current.
+  var catalogLastRefreshAttempt = null, catalogLastRefreshError = null;
   window.customDefaultModel = null;
 
   async function ensureCatalogLoaded() {
@@ -412,9 +414,32 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     } catch (_e) {}
   }
 
+  // Re-derive Step 3's grouped {family, models} shape from the flat catalog
+  // rows client-side (mirrors src/utils/model-fetcher.js groupModelsByFamily
+  // keying: family name from the id prefix, falling back to the prefix
+  // itself for any provider not in PROVIDER_FAMILY_NAMES).
+  function groupCatalogByFamily(rows) {
+    if (!rows || rows.length === 0) { return []; }
+    var order = [], byFamily = {};
+    rows.forEach(function(m) {
+      var prefix = m.id.split('/')[0];
+      var family = PROVIDER_FAMILY_NAMES[prefix] || prefix;
+      if (!byFamily[family]) { byFamily[family] = []; order.push(family); }
+      byFamily[family].push(m);
+    });
+    return order.map(function(family) { return { family: family, models: byFamily[family] }; });
+  }
+
   function applyCatalog(info) {
     catalogRows = (info && info.models) || [];
     catalogFetchedAt = info && info.fetchedAt;
+    catalogLastRefreshAttempt = info && info.lastRefreshAttempt;
+    catalogLastRefreshError = info && info.lastRefreshError;
+    // Single shared in-page cache: Step 3's alias dropdown (buildModelSelect)
+    // reads window.availableModels, re-derived from the same catalog load
+    // Step 2 uses — no second get-catalog round-trip, and the refresh
+    // button (Step 2) re-applying here keeps Step 3's dropdown data current.
+    window.availableModels = groupCatalogByFamily(catalogRows);
     renderSearchMeta();
     renderSearchResults();
     if (catalogRows.length === 0) {
@@ -427,7 +452,14 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     var meta = $('model-search-meta');
     if (!meta) { return; }
     var when = catalogFetchedAt ? new Date(catalogFetchedAt).toLocaleString() : 'never';
-    meta.textContent = catalogRows.length + ' models \\u00b7 catalog fetched ' + when;
+    var text = catalogRows.length + ' models \\u00b7 catalog fetched ' + when;
+    // #13: one-line stale hint when the last refresh attempt failed AFTER
+    // the data currently shown was fetched (don't redesign Step 2 for this).
+    if (catalogLastRefreshError && catalogLastRefreshAttempt &&
+        (!catalogFetchedAt || catalogLastRefreshAttempt > catalogFetchedAt)) {
+      text += ' \\u2014 \\u26a0 refresh failed, showing last-known data';
+    }
+    meta.textContent = text;
   }
 
   function fmtCtx(n) { return n == null ? '' : ' \\u00b7 ctx ' + n; }

@@ -71,3 +71,23 @@ describe('buildWizardCSS — kit component treatments', () => {
     expect(rules).toMatch(/\.provider-check:not\(:empty\)\s*\{[^}]*background:\s*var\(--ok\)/);
   });
 });
+
+describe('buildWizardCSS — free council picker (B35/#27 grouped rendering)', () => {
+  let rules;
+  beforeAll(() => { rules = require('../../electron/setup-ui-styles').__rawWizardCSS(); });
+
+  test('results scroll area matches the Step-2 search-results height (~220px, up from the old 160px)', () => {
+    expect(rules).toMatch(/\.council-results\s*\{[^}]*max-height:\s*220px/);
+  });
+
+  test('council-group reuses the alias-group collapsible <details> treatment (no parallel system)', () => {
+    expect(rules).toMatch(/\.council-group\s+summary/);
+    expect(rules).toContain('.council-group-count');
+  });
+
+  test('two-line row: friendly name primary, raw id mono secondary (search-row precedent)', () => {
+    expect(rules).toMatch(/\.council-row-name\s*\{[^}]*color:\s*var\(--text\)/);
+    expect(rules).toMatch(/\.council-row-id\s*\{[^}]*font-family:\s*var\(--font-mono\)/);
+    expect(rules).toMatch(/\.council-row-id\s*\{[^}]*color:\s*var\(--text-muted\)/);
+  });
+});

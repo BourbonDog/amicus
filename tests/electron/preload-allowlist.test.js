@@ -10,6 +10,12 @@ describe('preload-setup allowlist', () => {
     expect(src).toContain("'sidecar:refresh-catalog'");
   });
 
+  // B33 / #12: Step 3 now shares Step 2's cached catalog load instead of a
+  // separate live fetch; the retired channel should not linger in the allowlist.
+  it('no longer allows the retired sidecar:fetch-models channel', () => {
+    expect(src).not.toContain("'sidecar:fetch-models'");
+  });
+
   it('every sidecar: channel the wizard script invokes is allowlisted', () => {
     const { buildSetupHTML } = require('../../electron/setup-ui');
     const script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];

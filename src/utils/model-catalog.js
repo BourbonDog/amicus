@@ -39,17 +39,50 @@ function readCache() {
   return null;
 }
 
-/** Write the cache atomically (tmp+rename). Best-effort; never throws. @param {Array} models */
-function writeCache(models) {
+/**
+ * Raw cache-doc read for refresh-outcome fields only (#13). Unlike readCache(),
+ * this does NOT require a `models` array — a fresh machine whose first refresh
+ * attempt failed writes a doc with only {lastRefreshAttempt, lastRefreshError}
+ * and no models/fetchedAt, and that outcome still needs to be readable.
+ * @returns {{lastRefreshAttempt?: number, lastRefreshError?: string}|null}
+ */
+function readCacheDocLoose() {
+  try {
+    const raw = fs.readFileSync(catalogPath(), 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') { return parsed; }
+  } catch { /* missing/corrupt */ }
+  return null;
+}
+
+/** Write the cache atomically (tmp+rename). Best-effort; never throws. @param {object} doc full cache document */
+function writeCacheDoc(doc) {
   const target = catalogPath();
   const tmp = `${target}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(_getConfigDir(), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(tmp, JSON.stringify({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models }, null, 2), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, target);
   } catch {
     try { fs.unlinkSync(tmp); } catch { /* best-effort */ }
   }
+}
+
+/** Write a successful fetch: fresh models/fetchedAt, outcome fields cleared. @param {Array} models */
+function writeCache(models) {
+  writeCacheDoc({ schemaVersion: CATALOG_SCHEMA_VERSION, fetchedAt: Date.now(), models });
+}
+
+/**
+ * Record a failed refresh attempt (#13): stamps lastRefreshAttempt/lastRefreshError
+ * onto the existing cache document WITHOUT touching models/fetchedAt — the good
+ * data (if any) stays byte-authoritative. With no prior cache, writes a doc that
+ * carries only the outcome fields (no models/fetchedAt to report).
+ * @param {string} reason short error-class string
+ */
+function writeRefreshFailure(reason) {
+  const existing = readCache() || { schemaVersion: CATALOG_SCHEMA_VERSION };
+  writeCacheDoc({ ...existing, lastRefreshAttempt: Date.now(), lastRefreshError: reason });
 }
 
 /**
@@ -64,7 +97,13 @@ async function refreshCatalog() {
   // refresh — never clobber a previously-good cache with the floor (the
   // "stale cache stands" contract).
   const networkRows = (models || []).filter(m => m && typeof m.id === 'string' && !m.id.startsWith('anthropic/'));
-  if (networkRows.length === 0) { return []; }
+  if (networkRows.length === 0) {
+    const reason = (models || []).length > 0
+      ? 'floor-only: all providers returned no network rows'
+      : 'network-error: all providers unreachable';
+    writeRefreshFailure(reason);
+    return [];
+  }
   writeCache(models);
   return models;
 }
@@ -92,12 +131,21 @@ async function getCatalog(opts = {}) {
 
 /**
  * Catalog rows plus cache timestamp (for UI display).
- * @returns {Promise<{models: Array, fetchedAt: number|null}>}
+ * #13: also threads the last-refresh outcome so callers can tell "current"
+ * apart from "stale because refreshing keeps failing" — null/null when the
+ * last attempt on record succeeded (or none has happened yet).
+ * @returns {Promise<{models: Array, fetchedAt: number|null, lastRefreshAttempt: number|null, lastRefreshError: string|null}>}
  */
 async function getCatalogInfo(opts = {}) {
   const models = await getCatalog(opts);
   const cache = readCache();
-  return { models, fetchedAt: cache ? cache.fetchedAt : null };
+  const doc = readCacheDocLoose(); // outcome fields survive even a models-less doc
+  return {
+    models,
+    fetchedAt: cache ? cache.fetchedAt : null,
+    lastRefreshAttempt: (doc && doc.lastRefreshAttempt) || null,
+    lastRefreshError: (doc && doc.lastRefreshError) || null,
+  };
 }
 
 module.exports = { getCatalog, refreshCatalog, catalogPath, getCatalogInfo, readCache, CATALOG_SCHEMA_VERSION };

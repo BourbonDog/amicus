@@ -47,15 +47,29 @@ function aliasMarks() {
   return map;
 }
 
+/**
+ * #13: a one-line honest memo when the last refresh attempt on record failed
+ * AFTER the data currently being shown was fetched — i.e. the cache is stale
+ * because refreshing keeps failing, not just because nobody's refreshed lately.
+ * @returns {string|null}
+ */
+function staleMemo(fetchedAt, lastRefreshAttempt, lastRefreshError) {
+  if (!lastRefreshAttempt || !lastRefreshError) { return null; }
+  if (fetchedAt && lastRefreshAttempt <= fetchedAt) { return null; }
+  const attemptWhen = new Date(lastRefreshAttempt).toISOString();
+  const fetchedWhen = fetchedAt ? new Date(fetchedAt).toISOString() : 'never';
+  return `⚠ catalog may be stale: last refresh attempt failed ${attemptWhen} (${lastRefreshError}); showing data fetched ${fetchedWhen}`;
+}
+
 async function runList(args) {
-  const { models, fetchedAt } = await getCatalogInfo();
+  const { models, fetchedAt, lastRefreshAttempt, lastRefreshError } = await getCatalogInfo();
   const q = typeof args.search === 'string' ? args.search.toLowerCase() : null;
   const filtered = q
     ? models.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
     : models;
   if (args.json) {
     process.stdout.write(JSON.stringify(buildCatalogDoc({
-      models: filtered, fetchedAt, search: q
+      models: filtered, fetchedAt, search: q, lastRefreshAttempt, lastRefreshError
     }), null, 2) + '\n');
     return 0;
   }
@@ -71,16 +85,31 @@ async function runList(args) {
   if (filtered.length === 0 && models.length === 0) {
     process.stdout.write('Catalog unavailable (offline or first run) — try: amicus models --refresh\n');
   }
+  const memo = staleMemo(fetchedAt, lastRefreshAttempt, lastRefreshError);
+  if (memo) { process.stdout.write(memo + '\n'); }
   return 0;
 }
 
 async function runRefresh(args) {
   const models = await refreshCatalog();
+  const { fetchedAt, lastRefreshAttempt, lastRefreshError } = await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
   if (args.json) {
     process.stdout.write(JSON.stringify(buildCatalogDoc({
-      models, fetchedAt: models.length > 0 ? Date.now() : null, refreshed: true
+      models, fetchedAt, refreshed: true, lastRefreshAttempt, lastRefreshError
     }), null, 2) + '\n');
-    return 0;
+    return models.length === 0 && !fetchedAt ? 1 : 0;
+  }
+  if (models.length === 0 && lastRefreshError) {
+    // Honest failure report — never claim "Refreshed catalog: 0 models" when
+    // the refresh actually failed and an old (or no) cache was retained.
+    if (fetchedAt) {
+      const when = new Date(fetchedAt).toISOString();
+      process.stdout.write(`refresh failed (${lastRefreshError}); keeping catalog from ${when}\n`);
+      process.stdout.write(`Cache: ${catalogPath()}\n`);
+      return 0; // stale-but-served: a warning, not a command failure
+    }
+    process.stdout.write(`refresh failed (${lastRefreshError}); no cache available\n`);
+    return 1; // no cache at all: a real failure
   }
   process.stdout.write(`Refreshed catalog: ${models.length} models.\n`);
   process.stdout.write(`Cache: ${catalogPath()}\n`);

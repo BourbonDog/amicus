@@ -46,3 +46,99 @@ describe('wizard script round-trips a custom default', () => {
     expect(script).toContain('window.customDefaultModel = cfg.default');
   });
 });
+
+describe('Step 3 consumes the shared catalog cache (B33 / #12)', () => {
+  let script;
+
+  beforeAll(() => {
+    const { buildSetupHTML } = require('../../electron/setup-ui');
+    script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+  });
+
+  it('never invokes the live sidecar:fetch-models channel', () => {
+    const invoked = [...script.matchAll(/invoke\('([^']+)'/g)].map(m => m[1]);
+    expect(invoked).not.toContain('sidecar:fetch-models');
+    // get-catalog is invoked exactly once in the source (inside
+    // ensureCatalogLoaded) — Step 2 and Step 3 share that single call site.
+    expect(invoked.filter(c => c === 'sidecar:get-catalog')).toHaveLength(1);
+  });
+
+  it('no longer defines a separate fetchAvailableModels live-fetch function', () => {
+    expect(script).not.toMatch(/function fetchAvailableModels/);
+  });
+
+  it('Step 3 entry calls the same ensureCatalogLoaded used by Step 2 (single shared load)', () => {
+    // The step===3 branch of showStep must reuse ensureCatalogLoaded rather
+    // than a second, independent fetch path.
+    const stepThreeIdx = script.indexOf('if (step === 3)');
+    const nextBranchIdx = script.indexOf('updateNextState();', stepThreeIdx);
+    const stepThreeBranch = script.slice(stepThreeIdx, nextBranchIdx);
+    expect(stepThreeBranch).toContain('ensureCatalogLoaded()');
+  });
+
+  it('derives window.availableModels (grouped) from the flat catalog rows via a family-grouping helper', () => {
+    expect(script).toMatch(/function groupCatalogByFamily/);
+    expect(script).toContain('window.availableModels = groupCatalogByFamily(catalogRows)');
+  });
+
+  it('groups flat catalog rows into the same {family, models} shape buildModelSelect expects', () => {
+    // Extract groupCatalogByFamily and PROVIDER_FAMILY_NAMES, evaluate in a sandbox.
+    const familyNamesMatch = script.match(/var PROVIDER_FAMILY_NAMES = (\{[^;]*\});/);
+    expect(familyNamesMatch).toBeTruthy();
+    const fnMatch = script.match(/function groupCatalogByFamily\(rows\) \{[\s\S]*?\n  \}/);
+    expect(fnMatch).toBeTruthy();
+
+    // eslint-disable-next-line no-new-func
+    const groupCatalogByFamily = new Function(
+      'PROVIDER_FAMILY_NAMES',
+      `${fnMatch[0]}; return groupCatalogByFamily;`
+    )(JSON.parse(familyNamesMatch[1].replace(/'/g, '"')));
+
+    const rows = [
+      { id: 'openrouter/google/gemini-3.5-flash', name: 'Gemini 3.5 Flash', contextLength: 1000000, pricing: null },
+      { id: 'anthropic/claude-opus-4-6', name: 'Claude Opus 4.6', contextLength: null, pricing: null },
+      { id: 'openrouter/google/gemini-3-pro', name: 'Gemini 3 Pro', contextLength: 2000000, pricing: null },
+    ];
+    const grouped = groupCatalogByFamily(rows);
+    expect(Array.isArray(grouped)).toBe(true);
+    const openrouterGroup = grouped.find(g => g.family === 'OpenRouter');
+    expect(openrouterGroup.models).toHaveLength(2);
+    expect(openrouterGroup.models.map(m => m.id)).toEqual([
+      'openrouter/google/gemini-3.5-flash', 'openrouter/google/gemini-3-pro'
+    ]);
+    const anthropicGroup = grouped.find(g => g.family === 'Anthropic');
+    expect(anthropicGroup.models).toHaveLength(1);
+  });
+
+  it('empty catalog rows produce an empty availableModels array (buildModelSelect falls back to defaultAliases)', () => {
+    const fnMatch = script.match(/function groupCatalogByFamily\(rows\) \{[\s\S]*?\n  \}/);
+    // eslint-disable-next-line no-new-func
+    const groupCatalogByFamily = new Function(
+      'PROVIDER_FAMILY_NAMES',
+      `${fnMatch[0]}; return groupCatalogByFamily;`
+    )({});
+    expect(groupCatalogByFamily([])).toEqual([]);
+  });
+});
+
+describe('renderSearchMeta shows a stale hint when the last refresh attempt failed (#13)', () => {
+  let script;
+
+  beforeAll(() => {
+    const { buildSetupHTML } = require('../../electron/setup-ui');
+    script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+  });
+
+  it('renderSearchMeta references the stale-attempt fields carried on the catalog info', () => {
+    const fnMatch = script.match(/function renderSearchMeta\(\) \{[\s\S]*?\n  \}/);
+    expect(fnMatch).toBeTruthy();
+    expect(fnMatch[0]).toMatch(/catalogLastRefreshError/);
+    expect(fnMatch[0]).toMatch(/catalogLastRefreshAttempt/);
+  });
+
+  it('applyCatalog captures lastRefreshAttempt/lastRefreshError from the IPC response', () => {
+    expect(script).toContain('catalogLastRefreshAttempt = info && info.lastRefreshAttempt');
+    expect(script).toContain('catalogLastRefreshError = info && info.lastRefreshError');
+  });
+});
+

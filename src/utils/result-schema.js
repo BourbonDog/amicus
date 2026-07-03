@@ -234,9 +234,13 @@ function buildWaveResultFromSession(project, waveId) {
 
 /**
  * Build a model-catalog document (`models [--search] [--refresh] --json`).
- * @param {{models: Array, fetchedAt: number|null, refreshed?: boolean, search?: string|null}} opts
+ * #13: lastRefreshAttempt/lastRefreshError are additive — null/null when the
+ * last refresh attempt on record succeeded (or none has happened yet).
+ * @param {{models: Array, fetchedAt: number|null, refreshed?: boolean, search?: string|null,
+ *   lastRefreshAttempt?: number|null, lastRefreshError?: string|null}} opts
  */
-function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null }) {
+function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
+  lastRefreshAttempt = null, lastRefreshError = null }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'model-catalog',
@@ -245,6 +249,8 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null }
     search,
     count: models.length,
     models,
+    lastRefreshAttempt: lastRefreshAttempt || null,
+    lastRefreshError: lastRefreshError || null,
   };
 }
 

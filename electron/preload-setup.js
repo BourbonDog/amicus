@@ -20,7 +20,6 @@ contextBridge.exposeInMainWorld('sidecarSetup', {
       'sidecar:save-config',
       'sidecar:get-config',
       'sidecar:get-api-keys',
-      'sidecar:fetch-models',
       'sidecar:get-catalog',
       'sidecar:refresh-catalog',
       'sidecar:fetch-free-models'
