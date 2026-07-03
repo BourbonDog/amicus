@@ -31,6 +31,8 @@ amicus key <provider> <key>               # Validate + save one API key (also: -
 amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+ ledger append)
 amicus council stats [--json]             # Reviewer reliability from the ledger
 amicus council report <verdict.json> [--md|--html]   # Render the council run report
+amicus council validate <file> [--json]   # Validate a Stage-1 findings block (exit 0/2/1)
+amicus council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]  # Build + write verdict.json
 ```
 
 ---
