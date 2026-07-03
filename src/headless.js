@@ -202,7 +202,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       writeProgress(sessionDir, 'server_ready');
 
       if (!serverReady) {
-        server.close();
+        await server.close();
         return {
           summary: '',
           completed: false,
@@ -239,7 +239,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         sessionId = await createSession(client, ...dirArgs);
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
-        if (!externalServer) { server.close(); }
+        if (!externalServer) { await server.close(); }
         return {
           summary: '',
           completed: false,
@@ -276,7 +276,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             const { abortSession } = require('./opencode-client');
             abortSession(client, sessionId, ...dirArgs).catch(() => {});
           } catch { /* best-effort */ }
-          try { server.close(); } catch { /* best-effort */ }
+          // close() is now async (B06 escalation) — this handler stays sync
+          // (do not restructure signal handlers), so fire-and-forget with a
+          // rejection guard. The REF'd escalation poll inside close() still
+          // does its work; the pre-existing 300ms exit timer below may cut
+          // that grace short — see task 15b.1 report for that known gap.
+          try { server.close().catch(() => {}); } catch { /* best-effort */ }
           const { resolveTerminalState } = require('./sidecar/session-finalize');
           const code = resolveTerminalState({ aborted: true }, signal).exitCode;
           const t = setTimeout(() => process.exit(code), 300);
@@ -556,7 +561,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     watchdog.cancel();
     if (uninstallSignals) { uninstallSignals(); }
-    if (!externalServer) { server.close(); }
+    if (!externalServer) { await server.close(); }
 
     // Log summary of tool calls for debugging
     if (mirror.toolCalls.length > 0) {
@@ -617,7 +622,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
     if (watchdog) { watchdog.cancel(); }
     if (uninstallSignals) { uninstallSignals(); }
-    if (!externalServer) { server.close(); }
+    if (!externalServer) { await server.close(); }
     const { emptyUsageTotals } = require('./utils/pricing');
     return {
       summary: '',

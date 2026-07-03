@@ -220,7 +220,10 @@ async function runFanout(options) {
       logger.warn('Signal received — aborting wave', { waveId, signal });
       markAborted(waveDir, signal);
       for (const dir of legDirs) { markAborted(dir, signal); }
-      try { server.close(); } catch { /* best-effort */ }
+      // close() is async (B06 escalation); this handler stays sync, so
+      // fire-and-forget with a rejection guard. The 10s exit watchdog below
+      // comfortably outlives the ~2s escalation grace inside close().
+      try { server.close().catch(() => {}); } catch { /* best-effort */ }
       const { armExitWatchdog } = require('../utils/lifecycle');
       armExitWatchdog(code, 10000, { log: (m, meta) => logger.debug(m, meta) });
     },
@@ -245,7 +248,7 @@ async function runFanout(options) {
   } finally {
     heartbeat.stop();
     uninstallSignals();
-    try { server.close(); } catch { /* already closed on signal */ }
+    try { await server.close(); } catch { /* already closed on signal */ }
   }
 
   // 7. Aggregate, persist (atomic: tmp + rename), finalize, emit

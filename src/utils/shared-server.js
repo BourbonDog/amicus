@@ -177,7 +177,10 @@ class SharedServerManager {
     this._stopCrashPoll();
     if (this._restartTimer) { clearTimeout(this._restartTimer); this._restartTimer = null; }
     if (this.server) {
-      this.server.close();
+      // close() is async (B06 escalation); shutdown() stays sync so this
+      // remains fire-and-forget — guard against an unhandled rejection.
+      const closeResult = this.server.close();
+      if (closeResult && typeof closeResult.catch === 'function') { closeResult.catch(() => {}); }
       this.server = null;
       this.client = null;
     }

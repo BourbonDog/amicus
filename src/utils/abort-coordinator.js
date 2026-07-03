@@ -54,18 +54,36 @@ function killPidBestEffort(pid, kill = process.kill.bind(process)) {
   }
 }
 
+/** SIGKILL a pid, swallowing ESRCH. @returns {boolean} signal was sent */
+function killPidHard(pid, kill = process.kill.bind(process)) {
+  if (!pid) { return false; }
+  try { kill(pid, 'SIGKILL'); return true; } catch (err) {
+    if (err.code !== 'ESRCH') {
+      logger.warn('Failed to force-kill process', { pid, error: err.message });
+    }
+    return false;
+  }
+}
+
 /**
  * Wait up to graceMs for the pids to exit on their own (marker-honoring
  * teardown), then SIGTERM any survivor. Early-exits as soon as every target
  * is gone, so a process that honors the marker in ~2s never sees a signal.
+ *
+ * Opt-in escalation (B06): pass `escalate` to additionally wait up to
+ * `escalate.killGraceMs` after the SIGTERM for the survivor(s) to exit, then
+ * SIGKILL anyone still alive. Same REF'd poll cadence (`pollMs`) as the TERM
+ * tier. A pid that was already dead at entry, or that exits during the TERM
+ * grace window, is never escalated — escalation only applies to the set that
+ * was actually SIGTERM'd and remained alive.
  *
  * NOTE: the poll timer is deliberately REF'D. The CLI awaits this call and
  * must stay alive through the grace window; callers that must not block
  * (MCP handler) fire-and-forget the returned promise instead.
  *
  * @param {number|null|Array<number|null>} pids
- * @param {{graceMs?:number, pollMs?:number, deps?:{kill?:Function, sleep?:Function}}} [opts]
- * @returns {Promise<{killed:number[], exited:number[]}>}
+ * @param {{graceMs?:number, pollMs?:number, escalate?:{killGraceMs?:number}, deps?:{kill?:Function, sleep?:Function}}} [opts]
+ * @returns {Promise<{killed:number[], exited:number[], escalated:number[]}>}
  */
 async function waitThenKill(pids, opts = {}) {
   const graceMs = opts.graceMs !== undefined ? opts.graceMs : abortGraceMs();
@@ -82,10 +100,24 @@ async function waitThenKill(pids, opts = {}) {
     remaining = remaining.filter((pid) => isAlive(pid, kill));
   }
   const killed = remaining.filter((pid) => killPidBestEffort(pid, kill));
-  return {
-    killed,
-    exited: targets.filter((pid) => !remaining.includes(pid)),
-  };
+  const exited = targets.filter((pid) => !remaining.includes(pid));
+
+  let escalated = [];
+  if (opts.escalate && killed.length > 0) {
+    const killGraceMs = opts.escalate.killGraceMs !== undefined ? opts.escalate.killGraceMs : 2000;
+    const killDeadline = Date.now() + killGraceMs;
+    let stillAlive = killed.filter((pid) => isAlive(pid, kill));
+    while (stillAlive.length > 0 && Date.now() < killDeadline) {
+      await sleep(pollMs);
+      stillAlive = stillAlive.filter((pid) => isAlive(pid, kill));
+    }
+    // Anyone SIGTERM'd that isn't in the final stillAlive set exited on its
+    // own during the kill-grace window; anyone left gets SIGKILL'd here.
+    escalated = stillAlive.filter((pid) => killPidHard(pid, kill));
+    for (const pid of killed) { exited.push(pid); }
+  }
+
+  return opts.escalate ? { killed, exited, escalated } : { killed, exited };
 }
 
-module.exports = { abortGraceMs, isAlive, killPidBestEffort, waitThenKill };
+module.exports = { abortGraceMs, isAlive, killPidBestEffort, killPidHard, waitThenKill };

@@ -540,34 +540,57 @@ function buildServerOptions(options = {}) {
 }
 
 const { findListenerPid } = require('./utils/port-pid');
+const { waitThenKill: defaultWaitThenKill } = require('./utils/abort-coordinator');
+
+// Teardown-appropriate grace window for the SIGTERM->SIGKILL escalation on
+// close() (B06). Constant, not env-overridable — this is process teardown,
+// not the marker-honoring abort grace in abort-coordinator.js.
+const CLOSE_KILL_GRACE_MS = 2000;
 
 /**
  * Build the { url, goPid, close } server handle around a raw SDK server.
  * Extracted + dependency-injected so the goPid capture and cross-platform
  * force-kill (F3 #15) can be unit-tested without the SDK's dynamic import.
+ *
+ * close() (B06 teardown-race fix): sdkServer.close() SIGTERMs the SDK's
+ * wrapper script, not the Go binary — the SDK exposes no pid for it. So
+ * close() ALSO SIGTERMs goPid directly (captured via the port scan / sdk
+ * pid fields above) and runs it through the REF'd SIGTERM->SIGKILL
+ * escalation primitive, bounded by CLOSE_KILL_GRACE_MS. The old unref'd
+ * SIGKILL-only timer is gone: on POSIX it could die with the parent before
+ * ever firing (orphaning the Go server), and it never sent a SIGTERM to the
+ * Go pid at all. On win32 this is a no-op beyond firing the signal — the
+ * job-object semantics that already reap the tree are untouched.
  * @param {{url:string, close:Function, pid?:number, process?:{pid:number}}} sdkServer
- * @param {{findListenerPid?:Function, kill?:Function, logger?:object}} [deps]
+ * @param {{findListenerPid?:Function, kill?:Function, logger?:object, waitThenKill?:Function}} [deps]
  * @returns {{url:string, goPid:number|null, close:Function}}
  */
 function buildServerHandle(sdkServer, deps = {}) {
   const findPid = deps.findListenerPid || findListenerPid;
   const kill = deps.kill || ((pid, sig) => process.kill(pid, sig));
   const log = deps.logger || require('./utils/logger').logger;
+  const waitThenKill = deps.waitThenKill || defaultWaitThenKill;
   const serverPort = parseInt(new URL(sdkServer.url).port, 10);
   const goPid = sdkServer.pid || (sdkServer.process && sdkServer.process.pid) || findPid(serverPort);
   const server = {
     url: sdkServer.url,
     goPid,
-    close() {
+    async close() {
       sdkServer.close();
-      const fallback = setTimeout(() => {
-        const pid = server.goPid;
-        if (pid && pid !== process.pid) {
-          try { kill(pid, 'SIGKILL'); } catch { /* already dead */ }
-          log.debug('Force-killed OpenCode server', { port: serverPort, pid });
-        }
-      }, 2000);
-      if (fallback.unref) { fallback.unref(); }
+      const pid = server.goPid;
+      if (!pid || pid === process.pid) { return; }
+      // graceMs: 0 => waitThenKill's own poll fires the direct SIGTERM to
+      // goPid immediately (no wait beforehand — the SDK's close() above never
+      // reaches the Go binary, so there is no reason to delay this one), then
+      // the escalation tier SIGKILLs any survivor after CLOSE_KILL_GRACE_MS.
+      const { escalated } = await waitThenKill(pid, {
+        graceMs: 0,
+        escalate: { killGraceMs: CLOSE_KILL_GRACE_MS },
+        deps: { kill },
+      });
+      if (escalated.includes(pid)) {
+        log.debug('Force-killed OpenCode server', { port: serverPort, pid });
+      }
     }
   };
   return server;

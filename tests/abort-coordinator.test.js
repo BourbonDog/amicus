@@ -80,4 +80,65 @@ describe('abort-coordinator', () => {
     const termCalls = kill.mock.calls.filter(([, sig]) => sig === 'SIGTERM');
     expect(termCalls).toHaveLength(1);
   });
+
+  describe('waitThenKill escalation (opt-in SIGKILL-after-grace, B06)', () => {
+    test('alive through both windows: TERM then KILL observed in order', async () => {
+      const signals = [];
+      // Never dies on its own — isAlive always true until we assert order.
+      const kill = jest.fn((pid, sig) => { if (sig !== 0) { signals.push(sig); } });
+      const res = await waitThenKill(42, {
+        graceMs: 0,
+        deps: { kill },
+        escalate: { killGraceMs: 0 },
+      });
+      expect(signals).toEqual(['SIGTERM', 'SIGKILL']);
+      expect(res.killed).toEqual([42]);
+      expect(res.escalated).toEqual([42]);
+    });
+
+    test('dies during the kill-grace window after TERM: SIGTERM sent, but no SIGKILL follows', async () => {
+      let alive = true;
+      const kill = jest.fn((pid, sig) => {
+        if (!alive) { esrch(); }
+        if (sig === 'SIGTERM') { /* accepted, still alive until next poll */ }
+        if (sig === 'SIGKILL') { throw new Error('must not SIGKILL a process that exited after TERM'); }
+      });
+      const sleep = jest.fn(async () => { alive = false; }); // dies on first post-TERM poll
+      const res = await waitThenKill(42, {
+        graceMs: 0,
+        pollMs: 1,
+        deps: { kill, sleep },
+        escalate: { killGraceMs: 60000 },
+      });
+      expect(res.killed).toEqual([42]); // SIGTERM was sent (graceMs:0 => immediate)
+      expect(res.escalated).toEqual([]); // but it exited before escalation needed to act
+      expect(res.exited).toEqual([42]);
+      const killSignals = kill.mock.calls.filter(([, sig]) => sig === 'SIGKILL');
+      expect(killSignals).toHaveLength(0);
+    });
+
+    test('already dead at entry: single liveness probe, no TERM, no KILL, no escalation', async () => {
+      const kill = jest.fn(esrch);
+      const res = await waitThenKill(42, {
+        graceMs: 60000,
+        deps: { kill },
+        escalate: { killGraceMs: 60000 },
+      });
+      expect(res.killed).toEqual([]);
+      expect(res.escalated).toEqual([]);
+      expect(res.exited).toEqual([42]);
+      // Only the initial isAlive probe — no signals of any kind.
+      expect(kill).toHaveBeenCalledTimes(1);
+      expect(kill).toHaveBeenCalledWith(42, 0);
+    });
+
+    test('non-escalating callers see unchanged shape: no "escalated" key added behavior', async () => {
+      const kill = jest.fn((pid, sig) => { if (sig !== 0) { /* accept */ } });
+      const res = await waitThenKill([10, null, 20], { graceMs: 0, deps: { kill } });
+      expect(res.killed).toEqual([10, 20]);
+      // No SIGKILL ever sent when escalate is not requested.
+      const killSignals = kill.mock.calls.filter(([, sig]) => sig === 'SIGKILL');
+      expect(killSignals).toHaveLength(0);
+    });
+  });
 });
