@@ -26,17 +26,60 @@ jobs:
 
       - run: npm ci
       - run: npm test
+
+      # ── Release-rail hardening (Phase 11, B04 + B05) ────────────────────
+      # This whole block exists so a workflow RE-RUN after a failure past
+      # `npm publish` (registry publish, release create) CAN recover: each
+      # publish-ish step below is idempotency-guarded so re-running the job
+      # skips work that already landed and only retries what actually failed.
+      # See "If the registry publish fails in CI" in docs/DISTRIBUTION.md §3.
+
+      - name: Verify tag matches package version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $TAG_NAME (version $VERSION) does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
       # Auth via npm Trusted Publishing (GitHub OIDC) — no token. Provenance is
       # implied under trusted publishing; the explicit flag keeps intent visible.
-      - run: npm publish --access public --provenance
+      # Idempotency guard (B04): a re-run after a later failure (registry
+      # publish, release create) must not re-attempt `npm publish` on a
+      # version that's already live — that hits EPUBLISHCONFLICT and kills
+      # the run before it reaches the step that actually failed. `npm view`
+      # exits non-zero (E404) when the version does NOT exist; under `bash -e`
+      # that would normally kill the step, so the check is wrapped in an
+      # `if npm view ...; then ... else ...; fi` so its exit code is consumed
+      # by the `if`, and the else-branch inspects stderr to route E404 (and
+      # only E404) to the publish path.
+      - name: Publish to npm
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          if npm view "amicus@$VERSION" version >/tmp/npm-view.out 2>/tmp/npm-view.err; then
+            echo "::notice::amicus@$VERSION already published to npm; skipping npm publish"
+          else
+            if grep -q "E404" /tmp/npm-view.err; then
+              npm publish --access public --provenance
+            else
+              echo "::error::npm view amicus@$VERSION failed for a reason other than 'not published' — aborting rather than guessing"
+              cat /tmp/npm-view.err
+              exit 1
+            fi
+          fi
 
       # ── MCP Registry (registry.modelcontextprotocol.io) ────────────────
       # Auth: GitHub OIDC (id-token: write above) → publish rights on
       # io.github.BourbonDog/*. npm-side ownership validation reads "mcpName"
       # from the PUBLISHED package.json, so these steps MUST follow npm publish.
-      # Hard-fail semantics below: if this block fails, a workflow RE-RUN
-      # will NOT recover (npm publish would EPUBLISHCONFLICT first). See
-      # "If the registry publish fails in CI" in docs/DISTRIBUTION.md §3.
+      # Hard-fail semantics below: if this block fails after retries, the job
+      # fails — but every step here is now idempotency-guarded, so a re-run
+      # skips whatever already succeeded and retries only the real failure.
       - name: Install mcp-publisher
         run: |
           # pinned 2026-07-02 to registry release v1.7.9; bump deliberately
@@ -51,8 +94,46 @@ jobs:
           mv server.tmp server.json
 
       - name: Publish to MCP Registry
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          ./mcp-publisher login github-oidc
+          VERSION="${TAG_NAME#v}"
+
+          # Registry-publish idempotency: a re-run after a LATER failure
+          # (e.g. release create) must not double-publish to the MCP
+          # Registry. Pre-check the registry API for this exact version
+          # before doing any login/publish work at all. The registry
+          # returns HTTP 200 with a body when the name+version exists and
+          # HTTP 404 when it does not (confirmed live against
+          # registry.modelcontextprotocol.io/v0 2026-07-02) — a clean,
+          # reliable existence check, so no error-string matching on the
+          # publish result is needed. `|| true` keeps a transport-level
+          # curl failure (DNS/connection/TLS/timeout — exit 0 does NOT
+          # apply here, only HTTP 404/5xx get a clean exit) from aborting
+          # this step under `bash -e`; STATUS then falls through empty/000,
+          # which is != "200" and correctly proceeds into the login/publish
+          # retry loops below instead of dying with a bare curl exit code.
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://registry.modelcontextprotocol.io/v0/servers/io.github.BourbonDog%2Famicus/versions/$VERSION" || true)
+          if [ "$STATUS" = "200" ]; then
+            echo "::notice::io.github.BourbonDog/amicus@$VERSION already on the MCP Registry; skipping registry publish"
+            exit 0
+          fi
+
+          # OIDC-login retry (B05): a transient OIDC token-exchange failure
+          # used to fail the registry publish outright even though the
+          # publish call itself retries. Give login the same 5x20s pattern.
+          LOGIN_OK=0
+          for i in 1 2 3 4 5; do
+            ./mcp-publisher login github-oidc && LOGIN_OK=1 && break
+            echo "mcp-publisher login attempt $i failed; retrying in 20s"
+            sleep 20
+          done
+          if [ "$LOGIN_OK" != "1" ]; then
+            echo '::error::mcp-publisher login github-oidc failed after 5 attempts'
+            exit 1
+          fi
+
           # npm propagation can lag the publish by a few seconds; retry.
           for i in 1 2 3 4 5; do
             ./mcp-publisher publish && exit 0
@@ -66,7 +147,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
-        run: gh release create "$TAG_NAME" --generate-notes --latest
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "::notice::GitHub Release $TAG_NAME already exists; skipping creation"
+          else
+            gh release create "$TAG_NAME" --generate-notes --latest
+          fi
 
       - name: Generate release notes with Claude
         env:

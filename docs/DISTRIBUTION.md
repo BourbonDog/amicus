@@ -144,16 +144,23 @@ owner). Confirmed unclaimed via
 `https://registry.modelcontextprotocol.io/v0.1/servers?search=amicus`
 (0 results, checked 2026-07-02).
 
-**Flow:** npm publish (existing, OIDC) succeeds first → `mcp-publisher`
-binary installed → `mcp-publisher login github-oidc` (no secret needed, uses
-the same `id-token: write` OIDC permission as the npm Trusted Publishing
-step) → `server.json` version synced from the tag via `jq` (belt-and-braces;
-the in-repo `server.json`/`package.json`/`packages[0]` versions are also
-kept in lockstep by hand at release time and enforced by
-`tests/scripts/package-manifest.test.js`) → `mcp-publisher publish`, retried
-up to 5 times (npm propagation lag) before hard-failing the job. The registry
-steps run strictly after `npm publish` because npm-side ownership validation
-reads `mcpName` from the *published* `package.json`.
+**Flow:** tag↔`package.json` version lockstep is verified first (fails fast
+with `::error::` on a mis-tag) → npm publish (existing, OIDC), itself guarded
+by a version-exists check so a re-run does not re-attempt a version already
+live on npm → `mcp-publisher` binary installed → `server.json` version
+synced from the tag via `jq` (belt-and-braces; the in-repo
+`server.json`/`package.json`/`packages[0]` versions are also kept in
+lockstep by hand at release time and enforced by
+`tests/scripts/package-manifest.test.js`) → MCP Registry publish, itself
+pre-checked against the registry API so a re-run does not double-publish →
+`mcp-publisher login github-oidc` (no secret needed, uses the same
+`id-token: write` OIDC permission as the npm Trusted Publishing step),
+retried up to 5 times on transient OIDC token-exchange failures → `mcp-publisher
+publish`, retried up to 5 times (npm propagation lag) before hard-failing the
+job → GitHub Release creation, guarded by an existence check so a re-run
+does not fail on a release that already exists. The registry steps run
+strictly after `npm publish` because npm-side ownership validation reads
+`mcpName` from the *published* `package.json`.
 
 **Release-order dependency (carried over from the Phase 9 plan):** cut the
 first post-merge `v*` tag only after the Phase 4 tool-surface de-bloat lands
@@ -178,18 +185,36 @@ namespace/validation error outside of CI. If publish returns "You do not
 have permission…", the error message states the granted pattern; align
 `server.json`'s `name` casing to it exactly.
 
-**If the registry publish fails in CI:** the registry steps run with
-hard-fail semantics strictly after `npm publish` succeeds. A workflow
-**re-run will NOT work** — re-running the job re-attempts `npm publish` on a
-version already on the registry, which fails immediately with
-`EPUBLISHCONFLICT` before the registry steps are ever reached. Recover
-manually instead:
+**If the registry publish fails in CI (Phase 11 hardening):** re-running the
+workflow is now the primary recovery path. Every publish-ish step in
+`publish.yml` is idempotency-guarded, so a re-run skips whatever already
+succeeded and only retries the step that actually failed:
+- **npm publish** checks `npm view amicus@<version>` first and skips with a
+  `::notice::` if that version is already on the registry (instead of
+  hitting `EPUBLISHCONFLICT`).
+- **MCP Registry publish** pre-checks
+  `registry.modelcontextprotocol.io/v0/servers/io.github.BourbonDog%2Famicus/versions/<version>`
+  (HTTP 200 = already published, 404 = not yet) and skips with a
+  `::notice::` if present, before attempting login or publish.
+- **`mcp-publisher login github-oidc`** now retries up to 5 times (20s
+  apart) on transient OIDC token-exchange failures, same pattern as the
+  publish retry.
+- **GitHub Release creation** checks `gh release view <tag>` first and skips
+  with a `::notice::` if the release already exists.
+
+So: fix whatever caused the failure (registry outage, OIDC hiccup, etc.),
+then re-run the failed job from the Actions tab (or `gh run rerun
+--failed`). Do not delete and re-push the tag — the existing job re-run is
+sufficient, and steps that already succeeded (npm publish, an earlier
+registry publish, an existing release) are detected and skipped rather than
+re-attempted or double-published.
+
+**Manual recovery (fallback, if re-run is not viable):**
 1. **Registry publish:** run the same local de-risk flow above for real —
    `mcp-publisher login github` (device-flow login as BourbonDog), sync
    `server.json`'s `.version` and `.packages[0].version` to the tag that
    already published to npm, then `mcp-publisher publish`.
-2. **GitHub Release:** the workflow's 'Create GitHub Release' step never ran
-   (it's downstream of the failed registry step), so cut it by hand:
+2. **GitHub Release:** cut it by hand:
    `gh release create <tag> --generate-notes --latest`. The "Generate release
    notes with Claude" step is optional polish — skip it or run it manually
    against the API.
