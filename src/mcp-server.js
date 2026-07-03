@@ -18,6 +18,7 @@ const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
 const { runWait, registerInProcessRun, settleInProcessRun } = require('./mcp-wait');
+const { detectClient } = require('./utils/client-detect');
 
 /**
  * Elapsed run duration: time between createdAt and the run's end, bounding the
@@ -248,7 +249,7 @@ function spawnSidecarProcess(args, sessionDir) {
 
 /** Tool handler implementations */
 const handlers = {
-  async amicus_start(input, project) {
+  async amicus_start(input, project, mcpServer) {
     // Validate all inputs before any session creation
     const { validateStartInputs } = require('./utils/input-validators');
     const validation = validateStartInputs(input);
@@ -274,7 +275,8 @@ const handlers = {
     // The file itself is written just before the spawn fallback below (the
     // shared-server path passes the prompt in-process and never reads args).
     const briefingPath = path.join(sessionDir, 'briefing.md');
-    const args = ['start', '--prompt-file', briefingPath, '--task-id', taskId, '--client', 'cowork'];
+    const detectedClient = detectClient(mcpServer);
+    const args = ['start', '--prompt-file', briefingPath, '--task-id', taskId, '--client', detectedClient];
     if (resolvedModel) { args.push('--model', resolvedModel); }
     const agent = (input.noUi && (!input.agent || input.agent.toLowerCase() === 'chat'))
       ? 'build' : input.agent;
@@ -341,6 +343,7 @@ const handlers = {
               contextSince: input.contextSince,
               contextMaxTokens: input.contextMaxTokens,
               coworkProcess: input.coworkProcess,
+              client: detectedClient,
             });
           } catch (ctxErr) {
             logger.warn('Failed to build context, proceeding without', { error: ctxErr.message });
@@ -377,6 +380,11 @@ const handlers = {
             client, server, watchdog, sessionId,
             directory: cwd, // #47: scope every per-session follow-up call to the project
             mcp: undefined, // shared server already has MCP config
+            // Amicus client tag (code-local/code-web/cowork), NOT the opencode
+            // HTTP `client` above — distinct key to avoid the name collision.
+            // Not yet consumed downstream; threaded here so it's available the
+            // moment a consumer (e.g. metadata/fold-output) needs it (12a.1/B02).
+            amicusClient: detectedClient,
           }
         ).then((result) => {
           // Session done — route through resolveTerminalState (same single source
@@ -728,10 +736,10 @@ const handlers = {
     return textResult(JSON.stringify(sessions, null, 2));
   },
 
-  async amicus_resume(input, project) {
+  async amicus_resume(input, project, mcpServer) {
     const cwd = project || getProjectDir(input.project);
     const sessionDir = safeSessionDir(cwd, input.taskId);
-    const args = ['resume', input.taskId, '--client', 'cowork', '--cwd', cwd];
+    const args = ['resume', input.taskId, '--client', detectClient(mcpServer), '--cwd', cwd];
     if (input.noUi) { args.push('--no-ui', '--agent', 'build'); }
     if (input.timeout) { args.push('--timeout', String(input.timeout)); }
     try { spawnSidecarProcess(args, sessionDir); } catch (err) {
@@ -743,7 +751,7 @@ const handlers = {
     }));
   },
 
-  async amicus_continue(input, project) {
+  async amicus_continue(input, project, mcpServer) {
     if (input.model) {
       const modelCheck = tryResolveModel(input.model);
       if (modelCheck.error) {
@@ -762,7 +770,7 @@ const handlers = {
     // --prompt-file. The briefing is written into the NEW session dir below.
     const briefingPath = path.join(sessionDir, 'briefing.md');
     const args = ['continue', input.taskId, '--prompt-file', briefingPath,
-      '--task-id', newTaskId, '--client', 'cowork', '--cwd', cwd];
+      '--task-id', newTaskId, '--client', detectClient(mcpServer), '--cwd', cwd];
     if (input.model) { args.push('--model', input.model); }
     if (input.noUi) { args.push('--no-ui', '--agent', 'build'); }
     if (input.timeout) { args.push('--timeout', String(input.timeout)); }
@@ -841,7 +849,7 @@ const handlers = {
     }));
   },
 
-  async amicus_fanout(input, project) {
+  async amicus_fanout(input, project, mcpServer) {
     const cwd = project || getProjectDir(input.project);
     const { generateTaskId } = require('./sidecar/start');
     const { deriveLegIds, DEFAULT_MAX_LEGS } = require('./sidecar/fanout');
@@ -900,7 +908,7 @@ const handlers = {
     const args = [
       'fanout', '--models', effectiveModels.join(','),
       '--prompt-file', briefingPath, '--wave-id', waveId,
-      '--json', '--client', 'cowork', '--cwd', cwd,
+      '--json', '--client', detectClient(mcpServer), '--cwd', cwd,
     ];
     const agent = input.agent || 'Build';
     args.push('--agent', agent);
@@ -1020,7 +1028,7 @@ async function startMcpServer() {
       async (input) => {
         try {
           const project = await resolveProjectDir(input.project, server);
-          return await handlers[tool.name](input, project);
+          return await handlers[tool.name](input, project, server);
         }
         catch (err) {
           logger.error(`MCP tool error: ${name}`, { error: err.message });
