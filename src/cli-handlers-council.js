@@ -159,12 +159,12 @@ function runVerdict(args, useJson) {
         hint: 'pass a valid decisions.json array or omit --decisions' });
     }
   }
-  const outPath = args.o || args.out || './verdict.json';
+  const outPath = args.out || './verdict.json';
   let verdict;
   try { verdict = buildVerdict(record, decisions); }
   catch (e) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot build verdict: ${e.message}`,
-      hint: 'tally.json needs meta, findings[], streetCred[], runStats, tierCounts' });
+      hint: 'either tally.json needs meta, findings[], streetCred[], runStats, tierCounts, or decisions.json must be a JSON array of {id, decision, …} objects' });
   }
   writeVerdictAtomic(outPath, verdict);
   process.stdout.write(useJson ? JSON.stringify(verdict, null, 2) + '\n' : renderVerdict(verdict, outPath));

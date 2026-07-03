@@ -246,7 +246,7 @@ test('verdict: --json prints the full verdict document', async () => {
   const decisionsPath = writeDecisions(dir);
   const outPath = path.join(dir, 'out.json');
   const { code, out } = await capture(() => handleCouncil({
-    _: ['council', 'verdict', tallyPath], decisions: decisionsPath, o: outPath, json: true,
+    _: ['council', 'verdict', tallyPath], decisions: decisionsPath, out: outPath, json: true,
   }));
   expect(code).toBe(0);
   const doc = JSON.parse(out);
@@ -301,6 +301,21 @@ test('verdict: unparseable decisions file → BAD_ARGS, exit 1', async () => {
   }));
   expect(code).toBe(1);
   expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+});
+
+test('verdict: decisions.json is an object, not an array → BAD_ARGS whose hint mentions the decisions array', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
+  const tallyPath = writeTally(dir);
+  const objectDecisions = path.join(dir, 'object-decisions.json');
+  fs.writeFileSync(objectDecisions, JSON.stringify({ id: 'C6', decision: 'denied' }));
+  const { code, out } = await capture(() => handleCouncil({
+    _: ['council', 'verdict', tallyPath], decisions: objectDecisions, json: true,
+  }));
+  expect(code).toBe(1);
+  const doc = JSON.parse(out);
+  expect(doc.error.code).toBe('BAD_ARGS');
+  expect(doc.error.hint).toMatch(/decisions/);
+  expect(doc.error.hint).toMatch(/array/i);
 });
 
 test('verdict: malformed tally JSON (not valid JSON) → BAD_ARGS, exit 1', async () => {
@@ -405,7 +420,7 @@ describe('council save', () => {
     expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
   });
 
-  test('cannot save a name that collides with a built-in bench name', async () => {
+  test('saving a name that collides with a built-in bench name shadows it (allowed)', async () => {
     const { code, out } = await capture(() =>
       handleCouncil({ _: ['council', 'save', 'budget'], models: 'opus,gpt', json: true }));
     expect(code).toBe(0); // allowed — this is exactly how a user shadows a built-in

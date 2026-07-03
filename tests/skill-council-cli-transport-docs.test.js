@@ -57,7 +57,7 @@ describe('B22 — Stage 5 verdict transport', () => {
   });
 
   it('output-artifacts summary references the verdict command, not a bare function call', () => {
-    const outputSection = skill.slice(skill.indexOf('## Output & naming'), skill.indexOf('## Model selection'));
+    const outputSection = skill.slice(skill.indexOf('## Output & naming'), skill.indexOf('## Files'));
     expect(outputSection).toMatch(/written via `amicus council verdict`/);
   });
 });

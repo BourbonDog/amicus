@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { handleSpend } = require('../src/cli-handlers-spend');
 const { SPEND_LEDGER_FILE, SPEND_LEDGER_SCHEMA_VERSION } = require('../src/utils/spend-ledger');
+const { SCHEMA_VERSION } = require('../src/utils/result-schema');
 
 function capture(fn) {
   const out = [];
@@ -101,7 +102,7 @@ describe('amicus spend — rollup math', () => {
     writeRows([row({})]);
     const { out } = await capture(() => handleSpend({ _: ['spend'], json: true }, noCreditDeps()));
     const doc = JSON.parse(out);
-    expect(doc.schemaVersion).toBeGreaterThanOrEqual(1);
+    expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
     expect(doc.type).toBe('spend');
   });
 
