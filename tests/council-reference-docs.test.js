@@ -21,7 +21,9 @@
  */
 const fs = require('fs');
 const path = require('path');
-const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+// Normalize CRLF: worktree checkouts may differ from main's autocrlf
+// materialization (the LF-only fence regex below found 0 blocks on CRLF).
+const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8').replace(/\r\n/g, '\n');
 
 // Real output keys, captured directly from the source (not re-typed by hand)
 // so a future schema change breaks this suite instead of leaving the doc to
