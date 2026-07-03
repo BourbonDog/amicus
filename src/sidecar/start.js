@@ -15,7 +15,8 @@ const {
   createHeartbeat,
   HEARTBEAT_INTERVAL
 } = require('./session-utils');
-const { runInteractive, checkElectronAvailable } = require('./interactive');
+const { runInteractive } = require('./interactive');
+const { checkElectronAvailable } = require('./interactive-process');
 const { buildPrompts } = require('../prompt-builder');
 const { runHeadless } = require('../headless');
 const { logger } = require('../utils/logger');

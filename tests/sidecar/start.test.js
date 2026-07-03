@@ -291,7 +291,9 @@ describe('startSidecar includeContext option', () => {
       HEARTBEAT_INTERVAL: 5000
     }));
     jest.mock('../../src/sidecar/interactive', () => ({
-      runInteractive: jest.fn(() => ({ summary: 'done' })),
+      runInteractive: jest.fn(() => ({ summary: 'done' }))
+    }));
+    jest.mock('../../src/sidecar/interactive-process', () => ({
       checkElectronAvailable: jest.fn()
     }));
     jest.mock('../../src/headless', () => ({

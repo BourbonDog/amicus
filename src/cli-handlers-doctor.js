@@ -34,7 +34,7 @@ function realDeps() {
       ensureNodeModulesBinInPath();
       return hasOpencodeBinary();
     },
-    getElectronPath: () => require('./sidecar/interactive').getElectronPath(),
+    getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
     // #56: self-heal primitive for `doctor --fix`. Pure probe (getElectronPath)
     // stays separate; repair only runs when fix is requested.
     repairElectron: (opts) => require('./sidecar/electron-install').repairElectron(opts),

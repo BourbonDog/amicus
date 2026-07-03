@@ -215,8 +215,8 @@ describe('amicus_setup Electron pre-flight', () => {
       }));
       jest.doMock('child_process', () => ({ spawn: spawnSpy }));
       const checkSpy = jest.fn(() => false);
-      jest.doMock('../src/sidecar/interactive', () => ({
-        ...jest.requireActual('../src/sidecar/interactive'),
+      jest.doMock('../src/sidecar/interactive-process', () => ({
+        ...jest.requireActual('../src/sidecar/interactive-process'),
         checkElectronAvailable: checkSpy,
       }));
       const { handlers: h } = require('../src/mcp-server');
@@ -241,8 +241,8 @@ describe('amicus_setup Electron pre-flight', () => {
         return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
       });
       jest.doMock('child_process', () => ({ spawn: spawnSpy }));
-      jest.doMock('../src/sidecar/interactive', () => ({
-        ...jest.requireActual('../src/sidecar/interactive'),
+      jest.doMock('../src/sidecar/interactive-process', () => ({
+        ...jest.requireActual('../src/sidecar/interactive-process'),
         checkElectronAvailable: jest.fn(() => true),
       }));
       const { handlers: h } = require('../src/mcp-server');

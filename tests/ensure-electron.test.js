@@ -163,12 +163,12 @@ describe('ensureElectron — once-guard / single-flight (#55)', () => {
 describe('getElectronPath / checkElectronAvailable remain PURE PROBES (#55)', () => {
   test('the probes never trigger provisioning side-effects', () => {
     // Spy on repairElectron at the module boundary: a pure probe must never
-    // reach it. interactive.js owns the probes; they call require('electron').
-    const interactive = require('../src/sidecar/interactive');
+    // reach it. interactive-process.js owns the probes; they call require('electron').
+    const interactiveProcess = require('../src/sidecar/interactive-process');
     const repairSpy = jest.spyOn(ei, 'repairElectron');
     // Calling the probes must not throw and must not provision.
-    const path1 = interactive.getElectronPath();
-    const avail = interactive.checkElectronAvailable();
+    const path1 = interactiveProcess.getElectronPath();
+    const avail = interactiveProcess.checkElectronAvailable();
     expect(typeof avail).toBe('boolean');
     // Probe returns a string path or null — never a provisioning result.
     expect(path1 === null || typeof path1 === 'string').toBe(true);

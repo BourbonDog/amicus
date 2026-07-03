@@ -25,7 +25,7 @@ describe('#54 getElectronPath / checkElectronAvailable stat the exe', () => {
       isElectronUsable: jest.fn(() => false),         // exe missing on disk
       resolveElectronBinary: jest.fn(() => '/pkg/dist/electron.exe'),
     }));
-    const { getElectronPath } = require('../../src/sidecar/interactive');
+    const { getElectronPath } = require('../../src/sidecar/interactive-process');
     expect(getElectronPath()).toBeNull();
   });
 
@@ -34,7 +34,7 @@ describe('#54 getElectronPath / checkElectronAvailable stat the exe', () => {
       isElectronUsable: jest.fn(() => false),
       resolveElectronBinary: jest.fn(() => '/pkg/dist/electron.exe'),
     }));
-    const { checkElectronAvailable } = require('../../src/sidecar/interactive');
+    const { checkElectronAvailable } = require('../../src/sidecar/interactive-process');
     expect(checkElectronAvailable()).toBe(false);
   });
 
@@ -43,7 +43,7 @@ describe('#54 getElectronPath / checkElectronAvailable stat the exe', () => {
       isElectronUsable: jest.fn(() => true),
       resolveElectronBinary: jest.fn(() => '/pkg/dist/electron.exe'),
     }));
-    const { getElectronPath } = require('../../src/sidecar/interactive');
+    const { getElectronPath } = require('../../src/sidecar/interactive-process');
     expect(getElectronPath()).toBe('/pkg/dist/electron.exe');
   });
 
@@ -52,7 +52,7 @@ describe('#54 getElectronPath / checkElectronAvailable stat the exe', () => {
       isElectronUsable: jest.fn(() => true),
       resolveElectronBinary: jest.fn(() => '/pkg/dist/electron.exe'),
     }));
-    const { checkElectronAvailable } = require('../../src/sidecar/interactive');
+    const { checkElectronAvailable } = require('../../src/sidecar/interactive-process');
     expect(checkElectronAvailable()).toBe(true);
   });
 
@@ -63,7 +63,7 @@ describe('#54 getElectronPath / checkElectronAvailable stat the exe', () => {
       resolveElectronBinary: jest.fn(() => '/pkg/dist/electron.exe'),
       repairElectron,
     }));
-    const { checkElectronAvailable } = require('../../src/sidecar/interactive');
+    const { checkElectronAvailable } = require('../../src/sidecar/interactive-process');
     checkElectronAvailable();
     expect(repairElectron).not.toHaveBeenCalled();
   });
@@ -73,7 +73,7 @@ describe('#54 getElectronPath / checkElectronAvailable stat the exe', () => {
       isElectronUsable: jest.fn(() => true),
       resolveElectronBinary: jest.fn(() => '/pkg/dist/electron.exe'),
     }));
-    const { checkElectronAvailable } = require('../../src/sidecar/interactive');
+    const { checkElectronAvailable } = require('../../src/sidecar/interactive-process');
     expect(checkElectronAvailable.length).toBe(0);
     expect(typeof checkElectronAvailable()).toBe('boolean');
   });

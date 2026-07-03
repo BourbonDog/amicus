@@ -9,7 +9,7 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { logger } = require('../utils/logger');
-const { getElectronPath } = require('./interactive');
+const { getElectronPath } = require('./interactive-process');
 const { ensureElectron } = require('./electron-ensure');
 const { getCompatEnv } = require('../utils/env-compat');
 

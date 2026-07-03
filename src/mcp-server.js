@@ -957,7 +957,7 @@ const handlers = {
   },
 
   async amicus_setup() {
-    const { checkElectronAvailable } = require('./sidecar/interactive');
+    const { checkElectronAvailable } = require('./sidecar/interactive-process');
     if (!checkElectronAvailable()) {
       return textResult(
         'The setup GUI cannot open because Electron is not installed, so no '

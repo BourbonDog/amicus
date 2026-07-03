@@ -1,7 +1,7 @@
 /**
  * #54 — doctor electron check stats the exe, not just path.txt.
  *
- * realDeps().getElectronPath delegates to interactive.getElectronPath(), which
+ * realDeps().getElectronPath delegates to interactive-process.getElectronPath(), which
  * (#54) returns null when the exe is MISSING even though path.txt survives. So
  * the doctor electron check must report "not installed" (warn) for a quarantined
  * exe, and never provision as a side-effect of the check.
@@ -17,10 +17,10 @@ describe('#54 doctor electron check reflects isElectronUsable (stat the exe)', (
 
   test('realDeps().getElectronPath returns null when the exe is quarantined/missing', () => {
     // interactive.getElectronPath now returns null for a missing exe (#54).
-    jest.doMock('../src/sidecar/interactive', () => ({
+    jest.doMock('../src/sidecar/interactive-process', () => ({
       getElectronPath: jest.fn(() => null),
     }));
-    // Re-require doctor so its lazy require('./sidecar/interactive') picks the mock.
+    // Re-require doctor so its lazy require('./sidecar/interactive-process') picks the mock.
     jest.isolateModules(() => {
       const doctor = require('../src/cli-handlers-doctor');
       // runDoctorChecks composes realDeps() internally; assert the electron check.
@@ -29,7 +29,7 @@ describe('#54 doctor electron check reflects isElectronUsable (stat the exe)', (
   });
 
   test('doctor electron check is WARN (not ok) when the exe is missing', async () => {
-    jest.doMock('../src/sidecar/interactive', () => ({
+    jest.doMock('../src/sidecar/interactive-process', () => ({
       getElectronPath: jest.fn(() => null), // #54: missing exe → null
     }));
     let runDoctorChecks;
@@ -45,7 +45,7 @@ describe('#54 doctor electron check reflects isElectronUsable (stat the exe)', (
   });
 
   test('doctor electron check is OK when the exe is usable', async () => {
-    jest.doMock('../src/sidecar/interactive', () => ({
+    jest.doMock('../src/sidecar/interactive-process', () => ({
       getElectronPath: jest.fn(() => '/pkg/dist/electron.exe'),
     }));
     let runDoctorChecks;

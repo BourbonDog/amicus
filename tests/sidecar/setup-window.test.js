@@ -11,7 +11,7 @@ jest.mock('child_process');
 jest.mock('../../src/utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
 }));
-jest.mock('../../src/sidecar/interactive', () => ({
+jest.mock('../../src/sidecar/interactive-process', () => ({
   getElectronPath: () => '/mock/path/to/Electron',
   checkElectronAvailable: () => true,
 }));
@@ -179,7 +179,7 @@ describe('setup-window', () => {
     jest.mock('../../src/utils/logger', () => ({
       logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
     }));
-    jest.mock('../../src/sidecar/interactive', () => ({
+    jest.mock('../../src/sidecar/interactive-process', () => ({
       getElectronPath: () => null,
       checkElectronAvailable: () => false,
     }));
