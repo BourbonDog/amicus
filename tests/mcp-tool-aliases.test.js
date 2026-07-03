@@ -1,12 +1,11 @@
 const { getTools } = require('../src/mcp-tools');
-const { handlers, LEGACY_TOOL_ALIASES } = require('../src/mcp-server');
+const { handlers } = require('../src/mcp-server');
 
-describe('MCP tool naming + alias shim', () => {
+describe('MCP tool naming (post-shim-removal)', () => {
   it('canonical tools are amicus_*', () => {
     const names = getTools().map(t => t.name);
     expect(names).toContain('amicus_start');
     expect(names).toContain('amicus_guide');
-    expect(names).not.toContain('sidecar_start');
   });
 
   it('handlers expose amicus_* keys', () => {
@@ -14,10 +13,14 @@ describe('MCP tool naming + alias shim', () => {
     expect(typeof handlers.amicus_status).toBe('function');
   });
 
-  it('every canonical tool has a legacy sidecar_* alias (shim)', () => {
-    const canonical = getTools().map(t => t.name);
-    for (const name of canonical) {
-      expect(LEGACY_TOOL_ALIASES[name]).toBe(name.replace(/^amicus_/, 'sidecar_'));
-    }
+  it('no sidecar_* tool is ever registered (absence pin)', () => {
+    const names = getTools().map(t => t.name);
+    expect(names.some((n) => n.startsWith('sidecar_'))).toBe(false);
+  });
+
+  it('no LEGACY_TOOL_ALIASES export remains on the mcp-server module', () => {
+    const mcpServer = require('../src/mcp-server');
+    expect(mcpServer.LEGACY_TOOL_ALIASES).toBeUndefined();
+    expect(mcpServer.legacyAliasesEnabled).toBeUndefined();
   });
 });

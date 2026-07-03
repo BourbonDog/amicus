@@ -1030,31 +1030,6 @@ const handlers = {
   async amicus_guide() { return textResult(getGuideText()); },
 };
 
-// DEPRECATED(amicus-shim): legacy sidecar_* twins of each amicus_* tool.
-// OPT-IN since v1.8.0 — registering both names doubled the advertised tool
-// surface (14 -> 28 per server). Set AMICUS_LEGACY_ALIASES=1 in the MCP
-// entry's "env" to restore them. A stdio MCP server cannot learn the
-// client-side registration key it was launched under (initialize carries
-// clientInfo, not the config key), so an env flag is the only reliable
-// switch. Remove entirely in the next major.
-const LEGACY_TOOL_ALIASES = {
-  amicus_start: 'sidecar_start', amicus_status: 'sidecar_status',
-  amicus_wait: 'sidecar_wait',
-  amicus_read: 'sidecar_read', amicus_list: 'sidecar_list',
-  amicus_resume: 'sidecar_resume', amicus_continue: 'sidecar_continue',
-  amicus_setup: 'sidecar_setup', amicus_abort: 'sidecar_abort',
-  amicus_fanout: 'sidecar_fanout',
-  amicus_guide: 'sidecar_guide',
-  amicus_council_tally: 'sidecar_council_tally',
-  amicus_council_stats: 'sidecar_council_stats',
-  amicus_verdict: 'sidecar_verdict',
-};
-
-/** sidecar_* tool aliases are opt-in as of v1.8.0. */
-function legacyAliasesEnabled(env = process.env) {
-  return env.AMICUS_LEGACY_ALIASES === '1';
-}
-
 /** Start the MCP server on stdio transport */
 async function startMcpServer() {
   const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
@@ -1065,9 +1040,6 @@ async function startMcpServer() {
     // can request them (roots/list) when no explicit project is supplied.
     { capabilities: { roots: {} } }
   );
-  // Read once per call (not at module load) so tests and long-lived
-  // processes observe the env deterministically.
-  const withLegacyAliases = legacyAliasesEnabled();
 
   for (const tool of getTools()) {
     const register = (name) => server.registerTool(
@@ -1085,7 +1057,6 @@ async function startMcpServer() {
       }
     );
     register(tool.name);
-    if (withLegacyAliases && LEGACY_TOOL_ALIASES[tool.name]) { register(LEGACY_TOOL_ALIASES[tool.name]); }
   }
   process.on('SIGTERM', () => {
     sharedServer.shutdown();
@@ -1102,5 +1073,4 @@ async function startMcpServer() {
 
 module.exports = {
   handlers, startMcpServer, getProjectDir, resolveProjectDir, getClientRoot,
-  LEGACY_TOOL_ALIASES, legacyAliasesEnabled,
 };
