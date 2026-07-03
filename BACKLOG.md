@@ -232,3 +232,32 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   pull-based fold handoff (the orchestrator reads the summary back via `amicus read`/`amicus_read`, fenced —
   see README/usage.md's Fold-handoff paragraphs added in Phase 13). Touch up at the next `architecture.md`
   revision.
+
+## Phase 15 whole-phase review triage (2026-07-03)
+
+- [ ] **Per-session `metadata.json` `writeFileAtomic` tmp orphans in session dirs.** B09 introduced roughly
+  30 potential orphan sites (every `writeFileAtomic(path.join(sessionDir, 'metadata.json'), ...)` call
+  across `src/mcp-server.js`, `src/session-manager.js`, `src/utils/session-abort.js`, and the fanout/wave
+  paths) — a kill between the tmp-write and rename leaves a stray `.metadata.json.<pid>.<hex>.tmp` file
+  behind, same failure mode B15's `src/utils/session-index-tmp-sweep.js` already sweeps for
+  `sessions-index.json.*.tmp`. Extend that same age-gated list/sweep pattern to per-session dirs and wire
+  it into `amicus doctor --fix`.
+- [ ] **Resume nonce-echo hazard.** `buildResumeUserMessage` (`src/sidecar/resume.js`) replays the prior
+  conversation verbatim, including the previous turn's valid nonced `[SIDECAR_FOLD:<nonce>]` marker — since
+  each run mints a fresh nonce, the echoed old marker can't itself trigger a premature fold today, but the
+  replay is still carrying a stale wire-format token into the new prompt. Strip trailing fold-marker lines
+  from the replayed conversation before it's embedded. Narrow: inherent to prompt-verbatim resume, not a new
+  regression.
+- [ ] **`waitThenKill`'s `exited` array overstates under escalation.** Where `waitThenKill` is used
+  (`src/cli-handlers.js`, `src/mcp-server.js`, `src/opencode-client.js`, `src/utils/abort-coordinator.js`),
+  a pid that only died after being escalated to SIGKILL still lands in the `exited` array alongside pids
+  that exited gracefully — the array doesn't distinguish "exited on its own" from "had to be force-killed".
+  Harmless today since no caller branches on that distinction, but rename or re-derive the field if one
+  ever does.
+- [ ] **`src/cli-handlers-doctor.js` is at exactly 300/300 lines** (the file-size gate ceiling) — the next
+  edit to this file trips `npm run check:sizes` and forces a split/extraction before the actual change can
+  land. Flagging now so the split is planned rather than done under gate pressure.
+- [ ] **Release-checklist item: manual POSIX teardown smoke test.** No orphaned `opencode serve` process
+  after a normal exit, a Ctrl-C, or an external `kill` of the parent — B06's target platform (POSIX) has
+  never had this executed by hand. Add it to the pre-v2.0.0 release ritual (no `RELEASE-CHECKLIST.md` exists
+  yet in this repo — create one, or fold it into whatever pre-release doc/process is adopted first).

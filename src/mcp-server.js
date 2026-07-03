@@ -530,7 +530,7 @@ const handlers = {
         try { process.kill(metadata.pid, 0); } catch (err) {
           // EPERM means the pid exists but we lack permission to signal it —
           // that's ALIVE, not dead (mirrors utils/abort-coordinator.js isAlive).
-          if (!err || err.code !== 'EPERM') {
+          if (err.code !== 'EPERM') {
             const crashedAt = new Date().toISOString();
             Object.assign(metadata, {
               status: 'crashed', crashedAt,
@@ -580,13 +580,13 @@ const handlers = {
       try { process.kill(metadata.pid, 0); } catch (err) {
         // EPERM means the pid exists but we lack permission to signal it —
         // that's ALIVE, not dead (mirrors utils/abort-coordinator.js isAlive).
-        if (!err || err.code !== 'EPERM') {
+        if (err.code !== 'EPERM') {
           Object.assign(metadata, {
             status: 'crashed', crashedAt: new Date().toISOString(),
             reason: 'Process exited unexpectedly',
           });
           writeFileAtomic(path.join(sessionDir, 'metadata.json'),
-            JSON.stringify(metadata, null, 2));
+            JSON.stringify(metadata, null, 2), { mode: 0o600 });
         }
       }
     }

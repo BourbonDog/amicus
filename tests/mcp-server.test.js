@@ -696,6 +696,32 @@ describe('MCP Server Handlers', () => {
       }
     });
 
+    // POSIX-only: NTFS ignores Unix mode bits, so fs reports a default mode on
+    // Windows. The crash-detect rewrite still passes { mode: 0o600 } (a harmless
+    // no-op on Windows) — see tests/api-key-store.test.js for the same convention.
+    const itPosix = process.platform === 'win32' ? it.skip : it;
+    itPosix('crash-detect rewrite preserves 0o600 on the single-session metadata.json', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'dead-perm1');
+      fs.mkdirSync(sessDir, { recursive: true });
+      const metaPath = path.join(sessDir, 'metadata.json');
+      fs.writeFileSync(metaPath, JSON.stringify({
+        taskId: 'dead-perm1', status: 'running', pid: 2147483647,
+        createdAt: new Date().toISOString(),
+      }), { mode: 0o600 });
+
+      try {
+        const result = await handlers.amicus_status({ taskId: 'dead-perm1' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.status).toBe('crashed');
+
+        const mode = fs.statSync(metaPath).mode & 0o777;
+        expect(mode).toBe(0o600);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
     test('EPERM from kill(pid, 0) means alive — does not mark crashed', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'eperm1');

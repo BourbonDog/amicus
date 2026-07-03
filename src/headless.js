@@ -404,6 +404,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastToolCallCount = 0;
     let lastToolResultCount = 0;
     let lastMessageCount = 0;
+    let lastReasoningLength = 0; // B53: track reasoning-output growth to detect thinking
     let lastProgressAt = Date.now(); // B53: last poll where `progressed` was true
     let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
 
@@ -515,8 +516,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         }
 
         // Activity-aware idle detection: ANY of text growth, a new tool call, a new
-        // tool result, a new message, or a new assistant message id counts as progress.
-        // Only count toward completion when NOTHING changed (genuine idle).
+        // tool result, a new message, a new assistant message id, or reasoning-output
+        // growth counts as progress. Only count toward completion when NOTHING changed
+        // (genuine idle).
         const outputGrew = mirror.output.length > lastOutputLength;
         lastOutputLength = mirror.output.length;
         const toolActivity = mirror.toolCalls.length > lastToolCallCount;
@@ -526,8 +528,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         const messageActivity = messageCount > lastMessageCount;
         lastMessageCount = messageCount;
         const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
+        // B53: an interleaved-thinking model with a pending tool call can stream ONLY
+        // reasoning deltas for minutes with no text/tool/result/message growth — mirror
+        // the F6d treatment in conversation-mirror.js (reasoning growth = activity) so
+        // the stall clock resets instead of falsely firing "Tool call stalled".
+        const reasoningActivity = mirror.reasoningOutput.length > lastReasoningLength;
+        lastReasoningLength = mirror.reasoningOutput.length;
 
-        const progressed = outputGrew || toolActivity || resultActivity || messageActivity || newAssistant;
+        const progressed = outputGrew || toolActivity || resultActivity || messageActivity
+          || newAssistant || reasoningActivity;
         if (progressed) { lastProgressAt = Date.now(); }
 
         // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise

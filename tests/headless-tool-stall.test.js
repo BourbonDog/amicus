@@ -73,6 +73,17 @@ const wedgedToolCallWithGrowingText = (text) => [{
   ],
 }];
 
+// Same tool call, PLUS growing REASONING output alongside it (interleaved-thinking
+// models streaming ONLY reasoning deltas while a tool call is pending — no visible
+// text part at all). Mirrors wedgedToolCallWithGrowingText but with a reasoning part.
+const wedgedToolCallWithGrowingReasoning = (text) => [{
+  info: { role: 'assistant', id: 'm1', time: {} },
+  parts: [
+    { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'sleep 999' } },
+    { id: 'm1:r', type: 'reasoning', text },
+  ],
+}];
+
 // The tool call resolved with a result.
 const resolvedToolCall = [{
   info: { role: 'assistant', id: 'm1', time: { completed: 1 } },
@@ -139,6 +150,50 @@ describe('per-tool-call stall detector (B53)', () => {
     expect(result.error).toBeFalsy();
     expect(mockAbortSession).toHaveBeenCalledTimes(1); // the timeout path's own abort, not the stall path
   });
+
+  it('(b2) pending tool call WITH ONLY reasoning growing does not fire (B53 fix: reasoning is progress)', async () => {
+    let call = 0;
+    mockGetMessages.mockImplementation(() => {
+      call++;
+      // Reasoning text keeps growing every poll — active thinking alongside the
+      // pending tool, with NO visible text part ever (interleaved-thinking case).
+      return Promise.resolve(wedgedToolCallWithGrowingReasoning('x'.repeat(call)));
+    });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      300, 'build', // short overall timeout so the test still terminates
+      { pollIntervalMs: 5, toolCallStallMs: 50, stableIdlePolls: 3, stableFinishedPolls: 2 }
+    );
+
+    // Reasoning growth must reset the stall clock every poll, just like text/tool/
+    // result growth — so the run rides out to the (short) overall timeout rather
+    // than the stall detector falsely firing "Tool call stalled".
+    expect(result.timedOut).toBe(true);
+    expect(result.error).toBeFalsy();
+    expect(mockAbortSession).toHaveBeenCalledTimes(1); // the timeout path's own abort, not the stall path
+  });
+
+  it('(b3) pending tool call whose reasoning growth STOPS still fires after threshold', async () => {
+    let call = 0;
+    mockGetMessages.mockImplementation(() => {
+      call++;
+      // Reasoning grows for the first 2 polls, then goes fully static — genuine stall.
+      const text = call <= 2 ? 'x'.repeat(call) : 'xx';
+      return Promise.resolve(wedgedToolCallWithGrowingReasoning(text));
+    });
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      { pollIntervalMs: 5, toolCallStallMs: 50 }
+    );
+
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(/Tool call stalled/);
+    expect(result.error).toMatch(/Bash/);
+    expect(mockAbortSession).toHaveBeenCalledWith({}, 'session-1');
+  }, 15000);
 
   it('(c) result arrives late but before threshold — no fire, run completes normally', async () => {
     mockGetMessages

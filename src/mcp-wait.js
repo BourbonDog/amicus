@@ -119,11 +119,14 @@ async function runWait(input, project, deps) {
 
   // Torn-read tolerance: a statusFn THROW, or a non-error result whose
   // content[0].text fails to JSON.parse, is a MISSED TICK — not a hard
-  // failure. metadata.json is written with non-atomic fs.writeFileSync by
-  // several writers, and this loop reads it up to ~55x per call (2s cadence),
-  // multiplying exposure to a mid-write torn read vs the old 25s manual
-  // polling. Keep looping on a miss; only surface an error if the deadline
-  // passes without EVER having seen a valid snapshot.
+  // failure. As of Phase 15 all metadata.json writers use writeFileAtomic
+  // (tmp+rename), so a torn read is no longer expected from any current
+  // writer; this tolerance remains as defense-in-depth for metadata.json
+  // files left by pre-upgrade writers and for exotic filesystems where
+  // rename isn't atomic. This loop reads it up to ~55x per call (2s cadence),
+  // multiplying exposure vs the old 25s manual polling. Keep looping on a
+  // miss; only surface an error if the deadline passes without EVER having
+  // seen a valid snapshot.
   let lastSnapshot = null;
   let lastFailure = null;
 

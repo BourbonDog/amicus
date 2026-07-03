@@ -33,10 +33,10 @@ When the user clicks **Fold** (or presses `Cmd+Shift+F`) in interactive mode:
 2. `SUMMARY_TEMPLATE` is sent to the model via OpenCode HTTP API (`prompt_async`)
 3. Electron polls `/session/:id/message` for the model's response
 4. Model generates a structured summary with: Task, Findings, Attempted Approaches, Recommendations, Code Changes, Files Modified, Assumptions, Open Questions
-5. Summary is written to stdout with `[SIDECAR_FOLD]` metadata header
+5. Summary is written to stdout with a `[SIDECAR_FOLD:<nonce>]` metadata header
 6. Electron window closes, `start.js` captures stdout and finalizes session
 
-In headless mode, the agent outputs `[SIDECAR_FOLD]` autonomously when done, and `headless.js` extracts everything before the marker.
+In headless mode, the agent outputs `[SIDECAR_FOLD:<nonce>]` autonomously when done, and `headless.js` extracts everything before the marker.
 
 **Wire-format token:** The wire-format token emitted by the model in headless mode is `[SIDECAR_FOLD:<nonce>]` — a per-run random nonce, generated once per run before prompt construction (`src/utils/fold-marker.js`), embedded in headless mode instructions by `src/prompt-builder.js`, and required by `src/headless.js`'s detector (`findTrailingFoldMarker`, final-non-empty-line match on the exact nonced marker). This closes a hardening gap (#BL-7): a static, public marker meant model output that merely echoed it (prior instructions, a scraped doc, another run's transcript) could force a premature completion; requiring the run's own nonce means only a model that actually finished can produce it. The bare `[SIDECAR_FOLD]` literal (no `:<nonce>`) is kept only as a legacy/back-compat constant (`FOLD_MARKER` in `src/headless.js`) for callers with no nonce context — it is never accepted by the detector. Tracked in `docs/SHIMS.md`.
 
