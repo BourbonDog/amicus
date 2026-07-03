@@ -8,6 +8,7 @@ const path = require('path');
 
 const { detectConflicts, formatConflictWarning } = require('../conflict');
 const { logger } = require('../utils/logger');
+const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 const {
   SESSIONS_DIR,
   getSessionDir,
@@ -104,9 +105,13 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   logger.info('Session finalized', { taskId: metadata.taskId, status: metadata.status });
 }
 
-/** Output summary to stdout with standard formatting */
+/**
+ * Output the foreground summary echo to stdout, fenced as untrusted model
+ * prose (B03). Shared seam for start.js/continue.js/resume.js's non-JSON
+ * foreground path — fencing here covers all three callers at once.
+ */
 function outputSummary(summary) {
-  console.log(summary);
+  console.log(fenceSidecarOutput(summary));
 }
 
 /**

@@ -145,6 +145,8 @@ Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `idle-ti
 
 > Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). To restore them, add `"env": {"AMICUS_LEGACY_ALIASES": "1"}` to the MCP server entry — the default surface is `amicus_*` only. They will be removed entirely in the next major (see docs/SHIMS.md).
 
+> The MCP server auto-detects whether it's running under Claude Code or Claude Desktop/Cowork (from the MCP `initialize` handshake) and passes the right `--client` value downstream — this drives context inclusion, MCP discovery, and session-dir resolution. If detection ever picks the wrong one, force it with `"env": {"AMICUS_MCP_CLIENT": "code-local"}` (or `code-web` / `cowork`) on the MCP server entry.
+
 ---
 
 ## OpenCode Agent Types

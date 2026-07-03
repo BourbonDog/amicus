@@ -160,8 +160,12 @@ describe('MCP Headless Lifecycle Integration', () => {
       const conv5 = await handlers.amicus_read({ taskId, mode: 'conversation' }, tmpDir);
       const text = getText(conv5);
       expect(text).toContain('Step 5: All done');
-      // Count the JSONL lines
-      const lines = text.trim().split('\n').filter(l => l.trim());
+      // Conversation-mode output is wrapped in the untrusted-output fence (B03);
+      // count only the underlying JSONL entry lines, not the fence wrapper.
+      expect(text).toContain('<untrusted_sidecar_output');
+      const lines = text.trim().split('\n')
+        .filter(l => l.trim())
+        .filter(l => { try { JSON.parse(l); return true; } catch { return false; } });
       expect(lines.length).toBe(5);
     });
   });

@@ -34,7 +34,25 @@ describe('MCP spawn arg building', () => {
     });
   });
 
-  test('amicus_start auto-passes --client cowork', async () => {
+  test('amicus_start passes the DETECTED client (code-local) when the caller is Claude Code', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp', claudeCodeServer);
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('code-local');
+    });
+  });
+
+  test('amicus_start passes --client cowork when detection yields cowork (no mcpServer / unrecognized caller)', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -121,6 +139,111 @@ describe('MCP spawn arg building', () => {
       const idx = capturedArgs.indexOf('--task-id');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe(newTaskId);
+    });
+  });
+
+  test('amicus_resume passes the DETECTED client, not a hardcoded cowork', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
+      await h.amicus_resume({ taskId: 'res1' }, '/tmp', claudeCodeServer);
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('code-local');
+    });
+  });
+
+  test('amicus_resume falls back to --client cowork when detection yields cowork', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_resume({ taskId: 'res1' }, '/tmp');
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('cowork');
+    });
+  });
+
+  test('amicus_continue passes the DETECTED client, not a hardcoded cowork', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
+      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, '/tmp', claudeCodeServer);
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('code-local');
+    });
+  });
+
+  test('amicus_continue falls back to --client cowork when detection yields cowork', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, '/tmp');
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('cowork');
+    });
+  });
+
+  test('amicus_fanout passes the DETECTED client, not a hardcoded cowork', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp', claudeCodeServer);
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('code-local');
+    });
+  });
+
+  test('amicus_fanout falls back to --client cowork when detection yields cowork', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      const idx = capturedArgs.indexOf('--client');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('cowork');
     });
   });
 });
