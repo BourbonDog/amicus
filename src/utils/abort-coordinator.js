@@ -88,4 +88,22 @@ async function waitThenKill(pids, opts = {}) {
   };
 }
 
-module.exports = { abortGraceMs, isAlive, killPidBestEffort, waitThenKill };
+/**
+ * Check if a session's Node/Go process pair is alive. Thin wrapper over
+ * isAlive — kept here (not sidecar/session-utils.js) so both liveness
+ * checks share one EPERM-aware classification. session-utils.js re-exports
+ * this for backward-compatible imports.
+ * @param {Object} metadata - Session metadata with pid and goPid
+ * @returns {'alive'|'server-dead'|'dead'}
+ */
+function checkSessionLiveness(metadata) {
+  if (!metadata) { return 'dead'; }
+  const nodeAlive = isAlive(metadata.pid);
+  const goAlive = isAlive(metadata.goPid);
+
+  if (nodeAlive && goAlive) { return 'alive'; }
+  if (nodeAlive && !goAlive) { return 'server-dead'; }
+  return 'dead';
+}
+
+module.exports = { abortGraceMs, isAlive, killPidBestEffort, waitThenKill, checkSessionLiveness };

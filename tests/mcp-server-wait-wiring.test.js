@@ -157,25 +157,23 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
 
       // Force removeSession (called inside the .then body, on the success
       // path, before settle used to be called in-chain) to throw — the exact
-      // regression scenario the review flagged. With the OLD code
-      // (settleInProcessRun called at the tail of the .then body), this
-      // throw would skip settle entirely: the .then's rejection falls into
-      // .catch, which does its own (successful, here) removeSession call and
-      // writes ERROR metadata over the already-complete run — but never
-      // reaches a settle call for the success path at all. With the FIX
-      // (settle moved to .finally, a separate chain step), settle fires
-      // regardless of what the .then/.catch bodies did. Spy on the
-      // prototype method; mcp-server.js calls it on the shared `sharedServer`
-      // singleton instance, which resolves the mocked prototype method via
-      // normal prototype dispatch.
+      // regression scenario the review flagged. Two defects, both fixed by
+      // 15a.1: (1) settle is wired via .finally (a separate chain step), so it
+      // fires regardless of what the .then/.catch bodies did — no leaked
+      // waiter. (2) the .then body's removeSession call is now itself guarded
+      // (try/catch): a throw there is logged and swallowed IN PLACE rather
+      // than rejecting the .then and falling into .catch, which used to
+      // unconditionally overwrite the already-committed 'complete' metadata
+      // with 'error' (a real bug — a committed success got clobbered by a
+      // cleanup-step failure). Spy on the prototype method; mcp-server.js
+      // calls it on the shared `sharedServer` singleton instance, which
+      // resolves the mocked prototype method via normal prototype dispatch.
       const { SharedServerManager } = require('../src/utils/shared-server');
-      const origRemoveSession = SharedServerManager.prototype.removeSession;
       let removeSessionCalls = 0;
       const removeSpy = jest.spyOn(SharedServerManager.prototype, 'removeSession')
-        .mockImplementation(function (...args) {
+        .mockImplementation(() => {
           removeSessionCalls += 1;
-          if (removeSessionCalls === 1) { throw new Error('removeSession exploded'); }
-          return origRemoveSession.apply(this, args); // .catch's cleanup call succeeds
+          throw new Error('removeSession exploded');
         });
 
       try {
@@ -191,13 +189,88 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
         // body, .finally still ran and settled the waiter — no leaked waiter.
         expect(mcpWait.hasInProcessRun(taskId)).toBe(false);
 
-        // Discriminates old vs. new wiring: because the .then's removeSession
-        // throw falls into .catch, the run's ALREADY-successful metadata gets
-        // overwritten with status 'error' (a pre-existing, separate quirk of
-        // routing every .then-body throw through .catch — unchanged by this
-        // fix and out of scope to correct here). What this fix guarantees
-        // regardless of that quirk is that settle still fires exactly once.
-        expect(readMeta(sessionDir).status).toBe('error');
+        // The .then's guard swallows the throw in place — the .then never
+        // rejects, so .catch's (separate) removeSession call never runs.
+        expect(removeSessionCalls).toBe(1);
+
+        // Fixed behavior (15a.1): the already-committed 'complete' status
+        // from finalizeHeadlessResult survives the removeSession throw —
+        // no clobber to 'error'.
+        expect(readMeta(sessionDir).status).toBe('complete');
+      } finally {
+        removeSpy.mockRestore();
+      }
+    });
+  });
+
+  // 15a.1 defect (a): a throw inside .catch's OWN removeSession call (this
+  // time for a genuine pre-terminal failure — runHeadless itself rejected,
+  // so .catch is legitimately reached) must not escape as an unhandled
+  // rejection. Distinct from the .then-body guard above: this exercises the
+  // SECOND removeSession call site, inside .catch.
+  test('failure path: a removeSession throw INSIDE .catch (genuine run failure) does not escape and still settles', async () => {
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({
+        runHeadlessImpl: async () => { throw new Error('boom: run failed'); },
+      });
+
+      const { handlers } = require('../src/mcp-server');
+      const mcpWait = require('../src/mcp-wait');
+      const { SharedServerManager } = require('../src/utils/shared-server');
+      const removeSpy = jest.spyOn(SharedServerManager.prototype, 'removeSession')
+        .mockImplementation(() => { throw new Error('removeSession exploded in catch'); });
+
+      const unhandled = [];
+      const onUnhandled = (reason) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+
+      try {
+        const startResult = await handlers.amicus_start(
+          { prompt: 'test prompt', noUi: true, model: 'google/gemini-test' }, tmpDir);
+        const { taskId } = JSON.parse(startResult.content[0].text);
+        const sessionDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
+
+        await drain();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        // The genuine run failure still gets recorded as 'error' — the
+        // pre-terminal-failure path is unchanged by this fix.
+        const meta = readMeta(sessionDir);
+        expect(meta.status).toBe('error');
+        expect(meta.reason).toContain('boom: run failed');
+        expect(mcpWait.hasInProcessRun(taskId)).toBe(false); // settle still fires
+        expect(unhandled).toHaveLength(0); // the removeSession throw never escaped
+      } finally {
+        process.removeListener('unhandledRejection', onUnhandled);
+        removeSpy.mockRestore();
+      }
+    });
+  });
+
+  // 15a.1 defect (b), general form: ANY terminal status finalizeHeadlessResult
+  // can commit (not just 'complete') must survive a later in-chain throw —
+  // proves the guard is a status check, not a removeSession special-case.
+  test('failure path: a committed "aborted" status survives a later removeSession throw', async () => {
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({
+        runHeadlessImpl: async () => ({ completed: false, aborted: true, summary: 'partial' }),
+      });
+
+      const { handlers } = require('../src/mcp-server');
+      const { SharedServerManager } = require('../src/utils/shared-server');
+      const removeSpy = jest.spyOn(SharedServerManager.prototype, 'removeSession')
+        .mockImplementation(() => { throw new Error('removeSession exploded'); });
+
+      try {
+        const startResult = await handlers.amicus_start(
+          { prompt: 'test prompt', noUi: true, model: 'google/gemini-test' }, tmpDir);
+        const { taskId } = JSON.parse(startResult.content[0].text);
+        const sessionDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
+
+        await drain();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        expect(readMeta(sessionDir).status).toBe('aborted'); // not clobbered to 'error'
       } finally {
         removeSpy.mockRestore();
       }

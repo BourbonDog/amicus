@@ -25,6 +25,9 @@ const allGood = {
   ],
   migrateLegacyMcpEntries: () => [],
   skillInstalled: () => true,
+  // B15: deterministic fixture — without this the check would fall through to
+  // the real config dir on whatever machine runs the suite (non-deterministic).
+  listSessionIndexTmpFiles: () => [],
 };
 
 const byId = (checks) => Object.fromEntries(checks.map(c => [c.id, c]));

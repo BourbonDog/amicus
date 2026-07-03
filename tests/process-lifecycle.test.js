@@ -23,6 +23,17 @@ describe('process lifecycle helpers', () => {
     test('returns false for 0', () => {
       expect(isProcessAlive(0)).toBe(false);
     });
+
+    test('returns true on EPERM (process exists, caller lacks permission to signal it)', () => {
+      const kill = jest.spyOn(process, 'kill').mockImplementation(() => {
+        const e = new Error('kill EPERM'); e.code = 'EPERM'; throw e;
+      });
+      try {
+        expect(isProcessAlive(123)).toBe(true);
+      } finally {
+        kill.mockRestore();
+      }
+    });
   });
 
   describe('checkSessionLiveness', () => {

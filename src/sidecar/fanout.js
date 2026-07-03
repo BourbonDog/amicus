@@ -15,6 +15,7 @@ const path = require('path');
 const { logger } = require('../utils/logger');
 const { runLeg } = require('./fanout-leg');
 const { ERROR_CODES } = require('../utils/error-doc');
+const { writeFileAtomic } = require('../utils/atomic-write');
 
 /** Default max legs per wave (env-overridable). */
 const DEFAULT_MAX_LEGS = 10;
@@ -86,15 +87,24 @@ async function validateFanoutModels(modelsArg, opts = {}) {
   return { legs };
 }
 
-/** Write/merge wave metadata (preserves fields an MCP pre-spawn handler wrote). */
+/**
+ * Write/merge wave metadata (preserves fields an MCP pre-spawn handler wrote).
+ * Abort-wins: once existing status is 'aborted', a patch cannot demote it back
+ * to a softer status (same precedence rule as writeLegPatch — a signal/abort
+ * marker must never lose a write race against an in-flight init/finalize).
+ */
 function writeWaveMetadata(waveDir, patch) {
   const metaPath = path.join(waveDir, 'metadata.json');
   let existing = {};
   if (fs.existsSync(metaPath)) {
     try { existing = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* corrupt → rewrite */ }
   }
-  const merged = { ...existing, ...patch };
-  fs.writeFileSync(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+  const safePatch = { ...patch };
+  if (existing.status === 'aborted' && safePatch.status && safePatch.status !== 'aborted') {
+    delete safePatch.status;
+  }
+  const merged = { ...existing, ...safePatch };
+  writeFileAtomic(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
   return merged;
 }
 
@@ -255,9 +265,7 @@ async function runFanout(options) {
     status: signalled ? 'aborted' : null,
   });
   const wavePath = path.join(waveDir, 'wave.json');
-  const waveTmp = `${wavePath}.tmp`;
-  fs.writeFileSync(waveTmp, JSON.stringify(wave, null, 2), { mode: 0o600 });
-  fs.renameSync(waveTmp, wavePath);
+  writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
   writeWaveMetadata(waveDir, { status: wave.status, completedAt });
   emit(wave);
   const exitCode = signalled
@@ -268,5 +276,5 @@ async function runFanout(options) {
 
 module.exports = {
   parseModelsList, deriveLegIds, validateFanoutModels, DEFAULT_MAX_LEGS,
-  runFanout,
+  runFanout, writeWaveMetadata,
 };

@@ -314,7 +314,13 @@ describe('startSidecar includeContext option', () => {
       existsSync: jest.fn(() => false),
       mkdirSync: jest.fn(),
       writeFileSync: jest.fn(),
-      readFileSync: jest.fn(() => '{}')
+      readFileSync: jest.fn(() => '{}'),
+      // createSessionMetadata now writes via writeFileAtomic (tmp write +
+      // rename); writeFileSync above is a no-op so no tmp file actually lands
+      // on disk — renameSync must be stubbed too, or the real implementation
+      // (inherited via requireActual) throws ENOENT on the never-created tmp.
+      renameSync: jest.fn(),
+      rmSync: jest.fn()
     }));
 
     buildContextMock = require('../../src/sidecar/context-builder').buildContext;

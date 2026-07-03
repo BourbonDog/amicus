@@ -105,14 +105,19 @@ describe('Session Utils', () => {
 
   describe('finalizeSession', () => {
     let writeFileSyncSpy;
+    let renameSyncSpy;
 
     beforeEach(() => {
       writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      // metadata.json now goes through writeFileAtomic (tmp write + rename) —
+      // renameSync must be stubbed too, same no-op intent as writeFileSync above.
+      renameSyncSpy = jest.spyOn(fs, 'renameSync').mockImplementation(() => {});
       detectConflicts.mockReturnValue([]);
     });
 
     afterEach(() => {
       writeFileSyncSpy.mockRestore();
+      renameSyncSpy.mockRestore();
     });
 
     it('should save summary and update metadata to complete', () => {
@@ -134,14 +139,19 @@ describe('Session Utils', () => {
         { mode: 0o600 }
       );
 
-      // Should write metadata.json with status=complete
-      const metaCall = writeFileSyncSpy.mock.calls.find(
-        c => c[0] === path.join(sessDir, 'metadata.json')
+      // metadata.json is now written atomically: writeFileSync targets a
+      // ".metadata.json.<pid>.<hex>.tmp" sibling, then renameSync moves it
+      // onto metadata.json. Assert the tmp write's content and that the
+      // rename lands on the real target path.
+      const metaTmpCall = writeFileSyncSpy.mock.calls.find(
+        c => typeof c[0] === 'string'
+          && path.basename(c[0]).startsWith('.metadata.json.') && path.basename(c[0]).endsWith('.tmp')
       );
-      expect(metaCall).toBeTruthy();
-      const savedMeta = JSON.parse(metaCall[1]);
+      expect(metaTmpCall).toBeTruthy();
+      const savedMeta = JSON.parse(metaTmpCall[1]);
       expect(savedMeta.status).toBe('complete');
       expect(savedMeta.completedAt).toBeDefined();
+      expect(renameSyncSpy).toHaveBeenCalledWith(metaTmpCall[0], path.join(sessDir, 'metadata.json'));
     });
 
     it('should detect conflicts and attach to metadata', () => {
@@ -540,5 +550,64 @@ describe('startOpenCodeServer client passthrough', () => {
     expect(mockStartServer).toHaveBeenCalledWith(
       expect.objectContaining({ mcp: mcpConfig, client: 'code-local' })
     );
+  });
+});
+
+/**
+ * Cross-lane rider: server.close() on the not-ready error path must not
+ * produce an unhandled rejection. Today close() is synchronous (returns
+ * undefined), so Promise.resolve(...).catch() is a harmless no-op; this
+ * pins the guard so a future async close() (bounded kill-escalation poll)
+ * that rejects still can't escape as an unhandled rejection.
+ */
+describe('startOpenCodeServer not-ready close() rejection guard', () => {
+  let startOpenCodeServer;
+  let mockClose;
+
+  beforeAll(() => {
+    jest.resetModules();
+
+    jest.mock('../../src/utils/logger', () => ({
+      logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+    }));
+    jest.mock('../../src/utils/path-setup', () => ({
+      ensureNodeModulesBinInPath: jest.fn()
+    }));
+    jest.mock('../../src/utils/server-setup', () => ({
+      ensurePortAvailable: jest.fn()
+    }));
+    jest.mock('../../src/headless', () => ({
+      waitForServer: jest.fn(async () => false)
+    }));
+
+    mockClose = jest.fn(() => Promise.reject(new Error('close boom')));
+
+    jest.mock('../../src/opencode-client', () => ({
+      startServer: jest.fn(async () => ({
+        client: { config: { get: jest.fn() } },
+        server: { url: 'http://127.0.0.1:3456', close: mockClose }
+      })),
+      checkHealth: jest.fn(async () => true)
+    }));
+
+    ({ startOpenCodeServer } = require('../../src/sidecar/session-utils'));
+  });
+
+  it('throws the not-ready error without an unhandled rejection, even when close() rejects', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    try {
+      await expect(startOpenCodeServer(null)).rejects.toThrow(
+        'OpenCode server failed to become ready'
+      );
+      expect(mockClose).toHaveBeenCalled();
+
+      // Let the microtask queue drain so a would-be unhandled rejection surfaces.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
   });
 });

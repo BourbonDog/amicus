@@ -299,7 +299,7 @@ function createSubagentSession(projectDir, parentTaskId, subagentId, metadata) {
   };
 
   // Write metadata
-  fs.writeFileSync(
+  writeFileAtomic(
     path.join(subagentDir, 'metadata.json'),
     JSON.stringify(subagentMetadata, null, 2),
     { mode: 0o600 }
@@ -329,7 +329,7 @@ function updateSubagentSession(projectDir, parentTaskId, subagentId, updates) {
 
   const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
   const updated = { ...metadata, ...updates };
-  fs.writeFileSync(metadataPath, JSON.stringify(updated, null, 2), { mode: 0o600 });
+  writeFileAtomic(metadataPath, JSON.stringify(updated, null, 2), { mode: 0o600 });
 }
 
 /**

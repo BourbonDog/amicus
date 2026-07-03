@@ -12,7 +12,11 @@ jest.mock('fs', () => ({
   mkdirSync: jest.fn(),
   appendFileSync: jest.fn(),
   writeFileSync: jest.fn(),
-  unlinkSync: jest.fn()
+  unlinkSync: jest.fn(),
+  // writeFileAtomic (progress.js's writer) tmp-writes then renames; both
+  // no-ops, matching the other fs stubs above.
+  renameSync: jest.fn(),
+  rmSync: jest.fn()
 }));
 
 // Mock the opencode-client module

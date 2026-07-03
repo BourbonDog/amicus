@@ -594,6 +594,23 @@ describe('Progress Reader', () => {
       expect(data.stage).toBe('custom_stage');
       expect(data.stageLabel).toBe('custom_stage');
     });
+
+    // 15a.1/B09: writeProgress is one of the highest-frequency metadata-class
+    // writers (a tick per lifecycle stage change, polled ~every 2s by
+    // amicus_status/amicus_read) — representative site for the writeFileAtomic
+    // rollout. Proves the call-site conversion behaves atomically end-to-end
+    // (real fs, not the primitive's own unit tests in tests/utils/atomic-write.test.js):
+    // no tmp sibling left behind, and the target parses as clean JSON.
+    it('leaves no lingering tmp file and the target parses cleanly (writeFileAtomic rollout)', () => {
+      writeProgress(tmpDir, 'receiving', { messagesReceived: 3 });
+
+      const entries = fs.readdirSync(tmpDir);
+      expect(entries).toEqual(['progress.json']); // no ".progress.json.<pid>.<hex>.tmp" sibling
+
+      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, 'progress.json'), 'utf-8'));
+      expect(data.stage).toBe('receiving');
+      expect(data.messagesReceived).toBe(3);
+    });
   });
 
   describe('computeLastActivity', () => {

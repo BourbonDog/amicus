@@ -21,9 +21,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { getConfigDir } = require('./config');
 const { canonicalProjectPath } = require('./project-path');
+const { writeFileAtomic } = require('./atomic-write');
 
 /** Index filename under the config dir. */
 const INDEX_FILENAME = 'sessions-index.json';
@@ -70,10 +70,9 @@ function recordSession(taskId, project) {
     const index = readIndex(); // already guarded; corrupt -> {}
     index[taskId] = canonical;
     const target = path.join(dir, INDEX_FILENAME);
-    // Unique temp name so concurrent writers never clobber the same temp file.
-    const tmp = path.join(dir, `.${INDEX_FILENAME}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify(index, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, target); // atomic on a single filesystem
+    // Atomic (temp + rename); writeFileAtomic mints a unique temp name per call
+    // so concurrent writers never clobber the same temp file.
+    writeFileAtomic(target, JSON.stringify(index, null, 2), { mode: 0o600 });
   } catch {
     // Index is a navigation aid; never let its failure break a session start.
   }

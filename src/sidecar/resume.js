@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 
+const { writeFileAtomic } = require('../utils/atomic-write');
 const { runInteractive, buildMcpConfig } = require('./start');
 const {
   SessionPaths,
@@ -106,7 +107,7 @@ function updateSessionStatus(sessionDir, status) {
   if (status === 'running') {
     meta.resumedAt = new Date().toISOString();
   }
-  fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+  writeFileAtomic(metaPath, JSON.stringify(meta, null, 2));
   return meta;
 }
 
@@ -216,7 +217,7 @@ async function resumeSidecar(options) {
       updatedMetadata.status = 'error';
       updatedMetadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
       updatedMetadata.completedAt = new Date().toISOString();
-      fs.writeFileSync(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
+      writeFileAtomic(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
       logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
     } else {
       finalizeSession(sessionDir, summary, project, updatedMetadata, { status: terminal.status });

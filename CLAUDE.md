@@ -182,10 +182,12 @@ src/
 │   ├── project-root-sanity.js
 │   ├── prompt-source.js
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
+│   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
 │   ├── remediation-hints.js
 │   ├── result-schema.js
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
+│   ├── session-index-tmp-sweep.js
 │   ├── session-index.js  # Global session index (issue #40).
 │   ├── session-lock.js
 │   ├── session-path.js  # Session path resolution.
@@ -349,7 +351,7 @@ evals/
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
-| `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `waitThenKill()` |
+| `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `waitThenKill()`, `checkSessionLiveness()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest, never auto-repair. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
@@ -384,10 +386,12 @@ evals/
 | `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
+| `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
+| `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
 | `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME()`, `recordSession()`, `lookupSessionProject()` |
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |

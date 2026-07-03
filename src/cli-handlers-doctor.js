@@ -48,8 +48,13 @@ function realDeps() {
       return fs.existsSync(path.join(dir, 'sidecar', 'SKILL.md'))
         && fs.existsSync(path.join(dir, 'second-opinion', 'SKILL.md'));
     },
+    now: () => Date.now(),
+    listSessionIndexTmpFiles: () => tmpSweep.listSessionIndexTmpFiles(), // B15
+    unlinkSessionIndexTmp: (n) => tmpSweep.unlinkSessionIndexTmp(n),
   };
 }
+// B15: sweep logic in utils/session-index-tmp-sweep.js (mirrors mcp-legacy's split).
+const tmpSweep = require('./utils/session-index-tmp-sweep');
 
 /** Run one guarded check; a thrown fn becomes an error line. */
 function guard(id, name, fn) {
@@ -223,6 +228,8 @@ async function runDoctorChecks(depsOverride = {}) {
     const message = `duplicate 'sidecar' entry in ${dupes.map(e => e.target).join(', ')} — doubles the MCP tool list`;
     return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };
   }));
+
+  checks.push(guard('sessions-index-tmp', 'Session index tmp files', () => tmpSweep.evaluateSessionIndexTmpSweep(d)));
 
   // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no key.
   checks.push(await guardAsync('openrouter-credit', 'OpenRouter credit', async () => {

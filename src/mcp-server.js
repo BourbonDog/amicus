@@ -1,6 +1,7 @@
 /** @module mcp-server — Amicus MCP Server (stdio transport) */
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./utils/atomic-write');
 const { spawn } = require('child_process');
 const { getTools, getGuideText } = require('./mcp-tools');
 const { tryResolveModel } = require('./utils/config');
@@ -20,6 +21,7 @@ const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
 const { runWait, registerInProcessRun, settleInProcessRun } = require('./mcp-wait');
 const { detectClient } = require('./utils/client-detect');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
+const { sliceForRead } = require('./utils/read-slice');
 
 /**
  * Elapsed run duration: time between createdAt and the run's end, bounding the
@@ -41,6 +43,14 @@ function elapsedMs(metadata) {
 // is the wave/leg value from statusFromResult (kept here for defensive
 // coverage); 'idle-timeout' is the shared-server idle-eviction value.
 const FAILED_TERMINAL_STATUSES = ['error', 'crashed', 'timeout', 'timed-out', 'idle-timeout', 'aborted'];
+
+// 15a.1: the statuses finalizeHeadlessResult's SUCCESS path can commit
+// (resolveTerminalState's complete/aborted/timed-out outcomes — never 'error',
+// which is finalizeHeadlessResult's OWN failure branch and must remain
+// overwritable by a later genuine failure). Once one of these lands, a later
+// throw in the same .then/.catch chain (e.g. removeSession) must not
+// overwrite it with a fresh 'error' — see the shared-server .catch below.
+const TERMINAL_STATUS_SET = new Set(['complete', 'aborted', 'timed-out']);
 
 const sharedServer = new SharedServerManager({ logger });
 
@@ -299,7 +309,7 @@ const handlers = {
         recordSession(taskId, cwd); // #40: global index for cross-project lookup
         const metaPath = path.join(sessionDir, 'metadata.json');
         const serverPort = server.url ? new URL(server.url).port : null;
-        fs.writeFileSync(metaPath, JSON.stringify({
+        writeFileAtomic(metaPath, JSON.stringify({
           taskId, status: 'running',
           pid: null, // Shared server path: don't store MCP server PID (abort would kill all sessions)
           opencodeSessionId: sessionId,
@@ -342,7 +352,7 @@ const handlers = {
             const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
             meta.status = 'idle-timeout';
             meta.completedAt = new Date().toISOString();
-            fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+            writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
           } catch (err) {
             logger.warn('Failed to update evicted session metadata', { error: err.message });
           }
@@ -377,16 +387,38 @@ const handlers = {
           } catch (finErr) {
             logger.warn('Failed to finalize session', { error: finErr.message });
           }
-          sharedServer.removeSession(sessionId);
+          // Guarded: a throw here (e.g. a stale/evicted sessionId) must not
+          // escape into an unhandled rejection, and must not fall into .catch
+          // below and have its error-overwrite clobber the terminal status
+          // finalizeHeadlessResult just committed above.
+          try {
+            sharedServer.removeSession(sessionId);
+          } catch (removeErr) {
+            logger.warn('Failed to remove session from shared server', { taskId, error: removeErr.message });
+          }
         }).catch((err) => {
           logger.error('Shared server session failed', { taskId, error: err.message });
-          sharedServer.removeSession(sessionId);
+          try {
+            sharedServer.removeSession(sessionId);
+          } catch (removeErr) {
+            logger.warn('Failed to remove session from shared server', { taskId, error: removeErr.message });
+          }
           try {
             const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            // A run that already committed a terminal status (complete/aborted/
+            // timed-out) must never be clobbered by a LATER in-chain throw (e.g.
+            // a bug after finalizeHeadlessResult) — only a genuine pre-terminal
+            // failure (runHeadless itself rejecting) should land here as 'error'.
+            if (TERMINAL_STATUS_SET.has(meta.status)) {
+              logger.warn('Shared server chain error after terminal status already committed — not overwriting', {
+                taskId, existingStatus: meta.status, error: err.message,
+              });
+              return;
+            }
             meta.status = 'error';
             meta.reason = err.message;
             meta.completedAt = new Date().toISOString();
-            fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+            writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
           } catch (writeErr) {
             logger.warn('Failed to write error metadata', { error: writeErr.message });
           }
@@ -433,7 +465,7 @@ const handlers = {
       recordSession(taskId, cwd); // #40: global index for cross-project lookup
       const metaPath = path.join(sessionDir, 'metadata.json');
       if (!fs.existsSync(metaPath)) {
-        fs.writeFileSync(metaPath, JSON.stringify({
+        writeFileAtomic(metaPath, JSON.stringify({
           taskId, status: 'running', pid: child.pid, createdAt: new Date().toISOString(),
           headless: !!input.noUi,
           // Seed briefing/mode so list/status are informative even before the
@@ -490,27 +522,31 @@ const handlers = {
       // Crash-detection for hard-killed fanout processes: the wave branch
       // returns early, so the single-session pid probe below never runs here.
       if (metadata.status === 'running' && metadata.pid) {
-        try { process.kill(metadata.pid, 0); } catch {
-          const crashedAt = new Date().toISOString();
-          Object.assign(metadata, {
-            status: 'crashed', crashedAt,
-            reason: 'Fan-out process exited unexpectedly',
-          });
-          fs.writeFileSync(path.join(sessionDir, 'metadata.json'),
-            JSON.stringify(metadata, null, 2), { mode: 0o600 });
-          // Cascade to legs whose pollers died with the parent
-          for (const leg of legs) {
-            if (leg.status === 'running') {
-              const legMeta = readMetadata(leg.taskId, cwd);
-              if (legMeta) {
-                Object.assign(legMeta, {
-                  status: 'crashed', crashedAt,
-                  reason: 'Parent fan-out process killed',
-                });
-                fs.writeFileSync(
-                  path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
-                  JSON.stringify(legMeta, null, 2), { mode: 0o600 });
-                leg.status = 'crashed';
+        try { process.kill(metadata.pid, 0); } catch (err) {
+          // EPERM means the pid exists but we lack permission to signal it —
+          // that's ALIVE, not dead (mirrors utils/abort-coordinator.js isAlive).
+          if (!err || err.code !== 'EPERM') {
+            const crashedAt = new Date().toISOString();
+            Object.assign(metadata, {
+              status: 'crashed', crashedAt,
+              reason: 'Fan-out process exited unexpectedly',
+            });
+            writeFileAtomic(path.join(sessionDir, 'metadata.json'),
+              JSON.stringify(metadata, null, 2), { mode: 0o600 });
+            // Cascade to legs whose pollers died with the parent
+            for (const leg of legs) {
+              if (leg.status === 'running') {
+                const legMeta = readMetadata(leg.taskId, cwd);
+                if (legMeta) {
+                  Object.assign(legMeta, {
+                    status: 'crashed', crashedAt,
+                    reason: 'Parent fan-out process killed',
+                  });
+                  writeFileAtomic(
+                    path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
+                    JSON.stringify(legMeta, null, 2), { mode: 0o600 });
+                  leg.status = 'crashed';
+                }
               }
             }
           }
@@ -536,13 +572,17 @@ const handlers = {
     }
 
     if (metadata.status === 'running' && metadata.pid) {
-      try { process.kill(metadata.pid, 0); } catch {
-        Object.assign(metadata, {
-          status: 'crashed', crashedAt: new Date().toISOString(),
-          reason: 'Process exited unexpectedly',
-        });
-        fs.writeFileSync(path.join(sessionDir, 'metadata.json'),
-          JSON.stringify(metadata, null, 2));
+      try { process.kill(metadata.pid, 0); } catch (err) {
+        // EPERM means the pid exists but we lack permission to signal it —
+        // that's ALIVE, not dead (mirrors utils/abort-coordinator.js isAlive).
+        if (!err || err.code !== 'EPERM') {
+          Object.assign(metadata, {
+            status: 'crashed', crashedAt: new Date().toISOString(),
+            reason: 'Process exited unexpectedly',
+          });
+          writeFileAtomic(path.join(sessionDir, 'metadata.json'),
+            JSON.stringify(metadata, null, 2));
+        }
       }
     }
 
@@ -619,7 +659,10 @@ const handlers = {
         // Fence the whole wave.json text: it embeds each leg's folded-back
         // summary/error, which is untrusted model prose entering the parent
         // context (same blunt whole-text treatment as the single-session fence).
-        return textResult(fenceSidecarOutput(fs.readFileSync(wavePath, 'utf-8')));
+        // Sliced BEFORE fencing (15a.3/B17) so the fence markup itself is
+        // never truncated.
+        const { body } = sliceForRead(fs.readFileSync(wavePath, 'utf-8'), input);
+        return textResult(fenceSidecarOutput(body));
       }
       const legsTotal = (readMeta.legs || []).length;
       const stillRunning = !readMeta.status || readMeta.status === 'running';
@@ -632,14 +675,22 @@ const handlers = {
 
     const mode = input.mode || 'summary';
     if (mode === 'metadata') {
-      return textResult(fs.readFileSync(path.join(sessionDir, 'metadata.json'), 'utf-8'));
+      // metadata is small structured JSON: exempt from offset/limit/tail (a
+      // caller slicing JSON would just break parsing), but still cap-defended
+      // defensively — apply the SAME notice convention, left unfenced to
+      // match its unfenced (structured-data) status.
+      const metaText = fs.readFileSync(path.join(sessionDir, 'metadata.json'), 'utf-8');
+      const { body } = sliceForRead(metaText, {});
+      return textResult(body);
     }
     if (mode === 'conversation') {
       const convPath = path.join(sessionDir, 'conversation.jsonl');
       if (!fs.existsSync(convPath)) { return textResult('No conversation recorded.'); }
       // Fence the whole conversation dump in ONE fence (not per-line): it is
-      // untrusted model prose entering the parent context.
-      return textResult(fenceSidecarOutput(fs.readFileSync(convPath, 'utf-8')));
+      // untrusted model prose entering the parent context. Sliced BEFORE
+      // fencing (15a.3/B17) so the fence markup itself is never truncated.
+      const { body } = sliceForRead(fs.readFileSync(convPath, 'utf-8'), input);
+      return textResult(fenceSidecarOutput(body));
     }
     // Default: summary
     const summaryPath = path.join(sessionDir, 'summary.md');
@@ -667,7 +718,11 @@ const handlers = {
     // parent context (inbound mirror of prompt-builder's outbound fence). Same
     // fence also wraps wave-summary and conversation-mode reads above (B03);
     // mode=metadata and every --json contract stay unfenced (structured data).
-    return textResult(fenceSidecarOutput(header + summaryText));
+    // Sliced BEFORE fencing (15a.3/B17). The model header is prepended before
+    // slicing, so it counts against offset/limit/the cap like the rest of the
+    // body — an explicit offset can page past it, same as any other prose.
+    const { body: slicedSummary } = sliceForRead(header + summaryText, input);
+    return textResult(fenceSidecarOutput(slicedSummary));
   },
 
   async amicus_list(input, project) {
@@ -881,7 +936,7 @@ const handlers = {
       // The prompt goes via file: the spawned command line must NOT carry it,
       // or it re-hits the ~32KB Windows argument cap (F4 spec §4.2).
       fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
-      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+      writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify({
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
         models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
       }, null, 2), { mode: 0o600 });
@@ -915,7 +970,7 @@ const handlers = {
       try {
         const m = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
         Object.assign(m, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
-        fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
+        writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
       } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }

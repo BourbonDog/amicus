@@ -412,6 +412,62 @@ describe('runFanout orchestrator', () => {
   });
 });
 
+// 15a.1/B07: writeWaveMetadata must not let an in-flight init/finalize patch
+// clobber an abort that already landed. Race: MCP pre-writes status:'running'
+// -> spawn -> user aborts (markAborted writes status:'aborted' via markTerminal)
+// -> the CLI child's own init writeWaveMetadata({status:'running',...}) races
+// the abort marker. Same precedence rule already proven for leg metadata in
+// fanout-leg.js's writeLegPatch (abort wins; ported into writeWaveMetadata).
+describe('writeWaveMetadata abort-wins guard (B07)', () => {
+  const { writeWaveMetadata } = require('../../src/sidecar/fanout');
+  let waveDir;
+
+  beforeEach(() => {
+    waveDir = fsReal.mkdtempSync(pathReal.join(os.tmpdir(), 'amicus-wavemeta-'));
+  });
+
+  afterEach(() => {
+    fsReal.rmSync(waveDir, { recursive: true, force: true });
+  });
+
+  const readMeta = () => JSON.parse(fsReal.readFileSync(pathReal.join(waveDir, 'metadata.json'), 'utf-8'));
+
+  it('does not let a running-status patch clobber an already-aborted wave', () => {
+    writeWaveMetadata(waveDir, { taskId: 'beef0001', status: 'aborted', reason: 'Aborted (SIGINT)' });
+
+    const merged = writeWaveMetadata(waveDir, { status: 'running' });
+
+    expect(merged.status).toBe('aborted');
+    expect(readMeta().status).toBe('aborted');
+  });
+
+  it('still applies non-status fields from the patch even when status is dropped', () => {
+    writeWaveMetadata(waveDir, { taskId: 'beef0002', status: 'aborted' });
+
+    const merged = writeWaveMetadata(waveDir, { status: 'running', goPid: 4242 });
+
+    expect(merged.status).toBe('aborted');
+    expect(merged.goPid).toBe(4242); // non-status fields still merge normally
+  });
+
+  it('allows a status patch through when the existing status is NOT aborted', () => {
+    writeWaveMetadata(waveDir, { taskId: 'beef0003', status: 'running' });
+
+    const merged = writeWaveMetadata(waveDir, { status: 'complete' });
+
+    expect(merged.status).toBe('complete');
+  });
+
+  it('allows re-affirming aborted -> aborted (not treated as a demotion)', () => {
+    writeWaveMetadata(waveDir, { taskId: 'beef0004', status: 'aborted' });
+
+    const merged = writeWaveMetadata(waveDir, { status: 'aborted', completedAt: '2026-01-01T00:00:00.000Z' });
+
+    expect(merged.status).toBe('aborted');
+    expect(merged.completedAt).toBe('2026-01-01T00:00:00.000Z');
+  });
+});
+
 describe('buildWaveResult count remainder rule (#14)', () => {
   const { buildWaveResult, TERMINAL_STATUSES } = require('../../src/utils/result-schema');
 

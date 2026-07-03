@@ -42,6 +42,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
   const fs = require('fs');
   const path = require('path');
   const { finalizeSession, SessionPaths } = require('./session-utils');
+  const { writeFileAtomic } = require('../utils/atomic-write');
 
   const terminal = resolveTerminalState(result);
   if (terminal.status === 'error') {
@@ -51,7 +52,7 @@ function finalizeHeadlessResult(sessionDir, result, project, metadata) {
     metadata.status = 'error';
     metadata.reason = (result && result.error) ? String(result.error) : 'Incomplete';
     metadata.completedAt = new Date().toISOString();
-    fs.writeFileSync(
+    writeFileAtomic(
       path.join(sessionDir, 'metadata.json'),
       JSON.stringify(metadata, null, 2),
       { mode: 0o600 }

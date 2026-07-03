@@ -107,6 +107,56 @@ describe('wave crash detection in amicus_status', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it('behavioral: EPERM from kill(pid, 0) means alive — wave and running legs are not cascaded to crashed', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+
+    const { handlers } = require('../src/mcp-server');
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fanout-eperm-'));
+    const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
+      const e = new Error('kill EPERM'); e.code = 'EPERM'; throw e;
+    });
+    try {
+      const waveId = 'wave-eperm-test-001';
+      const legId  = 'wave-eperm-leg-001';
+      const sessBase = path.join(tmpDir, '.claude', 'amicus_sessions');
+
+      const waveDir = path.join(sessBase, waveId);
+      fs.mkdirSync(waveDir, { recursive: true });
+      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: waveId, type: 'wave', status: 'running',
+        pid: process.pid, legs: [legId],
+        headless: true, createdAt: new Date().toISOString(),
+      }, null, 2));
+
+      const legDir = path.join(sessBase, legId);
+      fs.mkdirSync(legDir, { recursive: true });
+      fs.writeFileSync(path.join(legDir, 'metadata.json'), JSON.stringify({
+        taskId: legId, status: 'running',
+        createdAt: new Date().toISOString(),
+      }, null, 2));
+
+      const result = await handlers.amicus_status({ taskId: waveId }, tmpDir);
+      const response = JSON.parse(result.content[0].text);
+
+      // Wave must stay running — EPERM is not a crash signal
+      expect(response.status).toBe('running');
+
+      const waveMeta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
+      expect(waveMeta.status).toBe('running');
+      expect(waveMeta.crashedAt).toBeUndefined();
+
+      // The running leg must NOT have been cascaded to crashed
+      const legMeta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
+      expect(legMeta.status).toBe('running');
+    } finally {
+      killSpy.mockRestore();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('amicus_read on crashed wave without wave.json', () => {

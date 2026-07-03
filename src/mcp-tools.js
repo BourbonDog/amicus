@@ -9,6 +9,7 @@
 
 const { z } = require('zod');
 const { formatAliasNames } = require('./utils/config');
+const { READ_CAP_BYTES } = require('./utils/read-slice');
 
 /** Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only) */
 const safeTaskId = z.string().regex(
@@ -159,14 +160,35 @@ function getTools() {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
       'Read the results of a completed Amicus session. Returns the summary ' +
-      'by default, or full conversation history, or session metadata.',
+      'by default, or full conversation history, or session metadata. ' +
+      'Every mode is capped at ~50KB by default; when content exceeds the ' +
+      'cap and no offset/limit/tail is given, the response is the TAIL of ' +
+      'the content with a "[truncated: ...]" notice as the first line — use ' +
+      'offset/limit or tail to page through the rest.',
     inputSchema: {
       taskId: safeTaskId.describe('The task ID to read.'),
       mode: z.enum(['summary', 'conversation', 'metadata']).optional()
         .default('summary').describe(
           'What to read. summary (default): the fold summary. ' +
-          'conversation: full message history. metadata: session info.'
+          'conversation: full message history. metadata: session info ' +
+          '(always small; offset/limit/tail are ignored in this mode).'
         ),
+      offset: z.number().int().min(0).optional().describe(
+        'Byte offset to start reading from (0-based). When given, no cap or ' +
+        'truncation notice applies — the result is simply bounded by `limit` ' +
+        `(default ${READ_CAP_BYTES} bytes). Takes precedence over \`tail\` if ` +
+        'both are given. Ignored in mode "metadata".'
+      ),
+      limit: z.number().int().min(1).max(READ_CAP_BYTES).optional().describe(
+        `Max bytes to return, 1-${READ_CAP_BYTES}. Defaults to the ${READ_CAP_BYTES}-byte ` +
+        'cap. Ignored in mode "metadata".'
+      ),
+      tail: z.boolean().optional().describe(
+        'Return the last `limit` bytes instead of the start. Ignored if ' +
+        '`offset` is also given, and ignored in mode "metadata". This is ' +
+        'also the implicit default when content exceeds the cap and neither ' +
+        '`offset` nor `tail` is set.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),

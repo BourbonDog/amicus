@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('../utils/logger');
+const { writeFileAtomic } = require('../utils/atomic-write');
 
 /** Map a runHeadless result to a leg metadata status. */
 function legStatusFromResult(result) {
@@ -30,7 +31,7 @@ function writeLegPatch(legDir, patch) {
     delete defined.status;
   }
   const merged = { ...meta, ...defined };
-  fs.writeFileSync(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
+  writeFileAtomic(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
   return merged;
 }
 
