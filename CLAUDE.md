@@ -221,6 +221,7 @@ electron/
 ├── assets/
 │   ├── icon.png
 │   └── icon.svg
+├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
 ├── ipc-guard.js  # IPC Guard Helpers
 ├── ipc-setup.js  # IPC Setup Handlers
