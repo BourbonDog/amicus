@@ -5,6 +5,17 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-07-03
+
+### Fixed
+- **`server.json`'s description now fits the MCP Registry's 100-character cap.** The registry rejected
+  v1.9.0's publish (its first-ever attempt) with HTTP 422 — the description was 199 chars against a
+  100-char limit the schema doesn't advertise. Shortened to 98 chars; the cap is pinned by
+  `tests/scripts/package-manifest.test.js` (characters and UTF-8 bytes), and `docs/DISTRIBUTION.md` §3 now
+  documents that content-level 422s are not recoverable by workflow re-run (the re-run checks out the tag)
+  — fix `server.json` on main and use the manual path or the next tag. v1.9.0 itself shipped fully to npm
+  and GitHub Releases; this patch exists to land the registry publish.
+
 ## [1.9.0] - 2026-07-03
 
 Engine pull-forwards, release-rail hardening, docs sync, and a new Council Review GitHub Action.

@@ -8,17 +8,23 @@
     "source": "github"
   },
   "websiteUrl": "https://bourbondog.github.io/amicus/",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "amicus",
-      "version": "1.9.0",
+      "version": "1.9.1",
       "runtimeHint": "npx",
-      "transport": { "type": "stdio" },
+      "transport": {
+        "type": "stdio"
+      },
       "packageArguments": [
-        { "type": "positional", "value": "mcp", "valueHint": "mcp" }
+        {
+          "type": "positional",
+          "value": "mcp",
+          "valueHint": "mcp"
+        }
       ],
       "environmentVariables": [
         {
