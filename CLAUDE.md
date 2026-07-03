@@ -191,6 +191,7 @@ src/
 │   ├── shared-server.js
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── thinking-validators.js  # Thinking Level Validators
+│   ├── untrusted-fence.js  # Untrusted sidecar output fence.
 │   ├── update-notifier-loader.js  # update-notifier Loader
 │   ├── updater.js  # Updater Module
 │   ├── validators.js  # Input Validators
@@ -390,6 +391,7 @@ evals/
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
+| `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |

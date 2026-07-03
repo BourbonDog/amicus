@@ -69,12 +69,16 @@ describe('start --json (F4)', () => {
     expect(doc.error).toBe('model exploded');
   });
 
-  it('non-json mode still prints the raw summary (back-compat)', async () => {
+  it('non-json mode still prints the summary, fenced as untrusted output (B03)', async () => {
     await startSidecar({
       model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
       includeContext: false, taskId: 'feed0003',
     });
-    expect(logSpy).toHaveBeenCalledWith('JSON MODE SUMMARY');
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const written = logSpy.mock.calls[0][0];
+    expect(written).toContain('<untrusted_sidecar_output');
+    expect(written).toContain('</untrusted_sidecar_output>');
+    expect(written).toContain('JSON MODE SUMMARY');
   });
 
   it('emits a parseable error document even when runHeadless THROWS', async () => {

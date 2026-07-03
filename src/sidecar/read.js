@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const { safeSessionDir, TASK_ID_PATTERN } = require('../utils/validators');
 const { SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('../session-manager');
+const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 
 /**
  * Format a timestamp as relative age
@@ -141,7 +142,9 @@ async function readSidecar(options) {
   if (meta.type === 'wave' && !conversation && !metadata) {
     const { buildWaveResultFromSession } = require('../utils/result-schema');
     const { formatWaveHuman } = require('./fanout-output');
-    console.log(formatWaveHuman(buildWaveResultFromSession(project, taskId)));
+    // Fence the whole human-readable wave report: it embeds each leg's
+    // folded-back summary/error, which is untrusted model prose (B03).
+    console.log(fenceSidecarOutput(formatWaveHuman(buildWaveResultFromSession(project, taskId))));
     return;
   }
 
@@ -149,15 +152,19 @@ async function readSidecar(options) {
     const convPath = path.join(sessionDir, 'conversation.jsonl');
     if (fs.existsSync(convPath)) {
       const lines = fs.readFileSync(convPath, 'utf-8').split('\n').filter(Boolean);
-      lines.forEach(line => {
+      const formatted = lines.map(line => {
         try {
           const msg = JSON.parse(line);
           const time = new Date(msg.timestamp).toLocaleTimeString();
-          console.log(`[${msg.role} @ ${time}] ${msg.content}\n`);
+          return `[${msg.role} @ ${time}] ${msg.content}\n`;
         } catch {
           // Skip malformed lines
+          return null;
         }
-      });
+      }).filter(Boolean).join('\n');
+      // Fence the WHOLE conversation dump in ONE fence, not per-line: it is
+      // untrusted model prose entering an agent's context (B03).
+      console.log(fenceSidecarOutput(formatted));
     } else {
       console.log('No conversation recorded.');
     }
@@ -168,7 +175,8 @@ async function readSidecar(options) {
     // Default: show summary
     const summaryPath = path.join(sessionDir, 'summary.md');
     if (fs.existsSync(summaryPath)) {
-      console.log(fs.readFileSync(summaryPath, 'utf-8'));
+      // Fence the folded-back summary: untrusted model prose (B03).
+      console.log(fenceSidecarOutput(fs.readFileSync(summaryPath, 'utf-8')));
     } else {
       console.log('No summary available (session may not have been folded).');
     }
