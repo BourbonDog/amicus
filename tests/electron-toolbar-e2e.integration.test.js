@@ -117,13 +117,13 @@ function spawnElectron(options) {
   const { opencodePort, sessionId, taskId, display, extraEnv = {} } = options;
   const env = {
     ...process.env,
-    SIDECAR_OPENCODE_PORT: String(opencodePort),
-    SIDECAR_SESSION_ID: sessionId,
-    SIDECAR_TASK_ID: taskId,
-    SIDECAR_MODEL: 'test-model',
-    SIDECAR_DEBUG_PORT: String(CDP_PORT),
+    AMICUS_OPENCODE_PORT: String(opencodePort),
+    AMICUS_SESSION_ID: sessionId,
+    AMICUS_TASK_ID: taskId,
+    AMICUS_MODEL: 'test-model',
+    AMICUS_DEBUG_PORT: String(CDP_PORT),
     AMICUS_HEADLESS_TEST: '1',
-    SIDECAR_CWD: process.cwd(),
+    AMICUS_CWD: process.cwd(),
     ...extraEnv,
   };
   if (display) { env.DISPLAY = display; }
@@ -240,7 +240,7 @@ describeE2E('Electron Toolbar E2E: Update Banner (CDP)', () => {
       sessionId: serverInfo.sessionId,
       taskId: 'e2e-update-test',
       display: displayInfo.display,
-      extraEnv: { SIDECAR_MOCK_UPDATE: 'available' },
+      extraEnv: { AMICUS_MOCK_UPDATE: 'available' },
     });
     cdp = await CdpClient.toolbar(CDP_PORT, 20000);
   }, 30000);

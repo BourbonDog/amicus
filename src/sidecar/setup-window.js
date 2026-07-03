@@ -1,7 +1,7 @@
 /**
  * Setup Window Launcher
  *
- * Spawns the Electron window in setup mode (SIDECAR_MODE=setup)
+ * Spawns the Electron window in setup mode (AMICUS_MODE=setup)
  * for API key configuration. Waits for the window to close and
  * returns whether setup completed successfully.
  */
@@ -11,7 +11,6 @@ const path = require('path');
 const { logger } = require('../utils/logger');
 const { getElectronPath } = require('./interactive-process');
 const { ensureElectron } = require('./electron-ensure');
-const { getCompatEnv } = require('../utils/env-compat');
 
 /**
  * Launch the Electron setup window for API key entry.
@@ -35,7 +34,7 @@ async function launchSetupWindow() {
       AMICUS_MODE: 'setup'
     };
 
-    const debugPort = getCompatEnv('DEBUG_PORT');
+    const debugPort = process.env.AMICUS_DEBUG_PORT;
     const args = debugPort
       ? [`--remote-debugging-port=${debugPort}`, mainPath]
       : [mainPath];

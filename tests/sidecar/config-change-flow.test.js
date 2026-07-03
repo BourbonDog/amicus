@@ -24,7 +24,7 @@ describe('Config change detection flow', () => {
     fs.mkdirSync(configDir, { recursive: true });
     fs.mkdirSync(projectDir, { recursive: true });
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = configDir;
+    process.env.AMICUS_CONFIG_DIR = configDir;
     jest.resetModules();
   });
 

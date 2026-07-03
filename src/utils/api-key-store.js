@@ -5,7 +5,6 @@
 const fs = require('fs');
 const path = require('path');
 const { validateApiKey, validateOpenRouterKey, VALIDATION_ENDPOINTS } = require('./api-key-validation');
-const { getCompatEnv } = require('./env-compat');
 
 /** Maps provider IDs to environment variable names */
 const PROVIDER_ENV_MAP = {
@@ -23,7 +22,7 @@ const LEGACY_KEY_NAMES = {
 
 /** Get the path to the .env file */
 function getEnvPath() {
-  const envDir = getCompatEnv('ENV_DIR');
+  const envDir = process.env.AMICUS_ENV_DIR;
   if (envDir) {
     const resolved = path.resolve(envDir);
     if (resolved.includes('\0')) {

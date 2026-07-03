@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-describe('getConfigDir (amicus rebrand + shim)', () => {
+describe('getConfigDir (amicus rebrand + dir-fallback shim)', () => {
   let tmpHome;
   const orig = { ...process.env };
 
@@ -42,8 +42,9 @@ describe('getConfigDir (amicus rebrand + shim)', () => {
     expect(getConfigDir()()).toBe(path.join(tmpHome, 'custom'));
   });
 
-  it('honors the legacy SIDECAR_CONFIG_DIR override (shim)', () => {
+  it('ignores the legacy SIDECAR_CONFIG_DIR override (#19 absence pin)', () => {
     process.env.SIDECAR_CONFIG_DIR = path.join(tmpHome, 'legacy-custom');
-    expect(getConfigDir()()).toBe(path.join(tmpHome, 'legacy-custom'));
+    expect(getConfigDir()()).not.toBe(path.join(tmpHome, 'legacy-custom'));
+    expect(getConfigDir()()).toBe(path.join(tmpHome, '.config', 'amicus'));
   });
 });

@@ -263,8 +263,8 @@ describe('BL-1: prompt goes via --prompt-file, never inline (Windows ~32KB cap)'
           }),
         }));
         // Disable the shared-server path so we exercise the spawn fallback.
-        const prev = process.env.SIDECAR_SHARED_SERVER;
-        process.env.SIDECAR_SHARED_SERVER = '0';
+        const prev = process.env.AMICUS_SHARED_SERVER;
+        process.env.AMICUS_SHARED_SERVER = '0';
         try {
           const { handlers: h } = require('../src/mcp-server');
           const result = await h.amicus_start(
@@ -286,8 +286,8 @@ describe('BL-1: prompt goes via --prompt-file, never inline (Windows ~32KB cap)'
           expect(fs.existsSync(briefingPath)).toBe(true);
           expect(fs.readFileSync(briefingPath, 'utf-8')).toBe(bigPrompt);
         } finally {
-          if (prev === undefined) { delete process.env.SIDECAR_SHARED_SERVER; }
-          else { process.env.SIDECAR_SHARED_SERVER = prev; }
+          if (prev === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+          else { process.env.AMICUS_SHARED_SERVER = prev; }
         }
       });
     } finally {

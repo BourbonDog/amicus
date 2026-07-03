@@ -26,7 +26,7 @@ describe('api-key-store validation', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-apikey-'));
     originalEnv = { ...process.env };
     // Point env dir to temp for test isolation
-    process.env.SIDECAR_ENV_DIR = tmpDir;
+    process.env.AMICUS_ENV_DIR = tmpDir;
     // Clear relevant env vars so they don't leak between tests
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;

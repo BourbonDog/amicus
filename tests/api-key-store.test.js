@@ -23,7 +23,7 @@ describe('api-key-store', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-apikey-'));
     originalEnv = { ...process.env };
     // Point env dir to temp for test isolation
-    process.env.SIDECAR_ENV_DIR = tmpDir;
+    process.env.AMICUS_ENV_DIR = tmpDir;
     // Clear relevant env vars so they don't leak between tests
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -52,13 +52,12 @@ describe('api-key-store', () => {
   });
 
   describe('getEnvPath', () => {
-    it('should return path inside SIDECAR_ENV_DIR when set', () => {
+    it('honors the AMICUS_ENV_DIR override set in beforeEach', () => {
       const result = getEnvPath();
       expect(result).toBe(path.join(tmpDir, '.env'));
     });
 
     it('should default to ~/.config/amicus/.env on a fresh machine (neither .env exists)', () => {
-      delete process.env.SIDECAR_ENV_DIR;
       delete process.env.AMICUS_ENV_DIR;
 
       // Use a fresh empty home so neither .env file exists → must return amicus path
@@ -78,7 +77,6 @@ describe('api-key-store', () => {
     });
 
     it('should return path inside AMICUS_ENV_DIR when set', () => {
-      delete process.env.SIDECAR_ENV_DIR;
       const amicusTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-envdir-'));
       try {
         process.env.AMICUS_ENV_DIR = amicusTmpDir;
@@ -90,17 +88,18 @@ describe('api-key-store', () => {
       }
     });
 
-    it('AMICUS_ENV_DIR wins over legacy SIDECAR_ENV_DIR', () => {
-      const amicusTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-envdir-win-'));
+    it('SIDECAR_ENV_DIR is ignored even when AMICUS_ENV_DIR is unset (#19 absence pin)', () => {
+      // beforeEach already set AMICUS_ENV_DIR=tmpDir; clear it so only the
+      // legacy var is present, then confirm it is NOT honored.
+      delete process.env.AMICUS_ENV_DIR;
+      const legacyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-envdir-legacy-'));
       try {
-        // Both set — AMICUS_ must win
-        process.env.SIDECAR_ENV_DIR = tmpDir;
-        process.env.AMICUS_ENV_DIR = amicusTmpDir;
+        process.env.SIDECAR_ENV_DIR = legacyTmpDir;
         const result = getEnvPath();
-        expect(result).toBe(path.join(amicusTmpDir, '.env'));
+        expect(result).not.toBe(path.join(legacyTmpDir, '.env'));
       } finally {
-        delete process.env.AMICUS_ENV_DIR;
-        fs.rmSync(amicusTmpDir, { recursive: true, force: true });
+        delete process.env.SIDECAR_ENV_DIR;
+        fs.rmSync(legacyTmpDir, { recursive: true, force: true });
       }
     });
 
@@ -255,7 +254,7 @@ describe('api-key-store', () => {
 
     it('should create directory if it does not exist', () => {
       const nestedDir = path.join(tmpDir, 'nested', 'dir');
-      process.env.SIDECAR_ENV_DIR = nestedDir;
+      process.env.AMICUS_ENV_DIR = nestedDir;
       saveApiKey('openrouter', 'sk-or-test-789');
       const envPath = path.join(nestedDir, '.env');
       expect(fs.existsSync(envPath)).toBe(true);

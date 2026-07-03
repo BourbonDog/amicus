@@ -161,7 +161,6 @@ src/
 │   ├── config.js  # Amicus Config Module
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
-│   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
 │   ├── error-doc.js
 │   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
@@ -371,7 +370,6 @@ evals/
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `migrateLegacyConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `listCuratedRoutes()` |
-| `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
 | `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |

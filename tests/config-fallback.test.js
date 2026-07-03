@@ -32,7 +32,7 @@ describe('applyDirectApiFallback with persisted keys', () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-fallback-test-'));
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = tempDir;
+    process.env.AMICUS_CONFIG_DIR = tempDir;
 
     // Clear all relevant env vars
     delete process.env.OPENROUTER_API_KEY;
@@ -144,8 +144,8 @@ describe('applyDirectApiFallback un-mocked integration', () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
 
-    process.env.SIDECAR_CONFIG_DIR = tempDir;
-    process.env.SIDECAR_ENV_DIR = tempEnvDir;
+    process.env.AMICUS_CONFIG_DIR = tempDir;
+    process.env.AMICUS_ENV_DIR = tempEnvDir;
 
     // Write a config with aliases
     fs.writeFileSync(

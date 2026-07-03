@@ -9,7 +9,6 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { applyDirectApiFallback, autoRepairAlias } = require('./alias-resolver');
-const { getCompatEnv } = require('./env-compat');
 
 /** Default model alias map — derived from the curated-models single source (F5) */
 const { toDefaultAliases } = require('./curated-models');
@@ -20,7 +19,7 @@ const { resolveBuiltinCouncil } = require('./council-presets');
 
 /** @returns {string} Config directory path */
 function getConfigDir() {
-  const override = getCompatEnv('CONFIG_DIR');
+  const override = process.env.AMICUS_CONFIG_DIR;
   if (override) {
     const resolved = path.resolve(override);
     if (resolved.includes('\0')) {
@@ -55,7 +54,7 @@ function getConfigDir() {
  * @returns {{migrated: boolean, from?: string, to?: string, reason?: string, error?: string}}
  */
 function migrateLegacyConfigDir(opts = {}) {
-  if (getCompatEnv('CONFIG_DIR')) { return { migrated: false, reason: 'override-set' }; }
+  if (process.env.AMICUS_CONFIG_DIR) { return { migrated: false, reason: 'override-set' }; }
   const home = opts.home || process.env.HOME || process.env.USERPROFILE;
   if (!home) { return { migrated: false, reason: 'no-home' }; }
   const amicusDir = path.join(home, '.config', 'amicus');

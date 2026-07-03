@@ -38,8 +38,8 @@ describe('Setup Wizard', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-setup-test-'));
     envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-env-test-'));
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = tmpDir;
-    process.env.SIDECAR_ENV_DIR = envDir;
+    process.env.AMICUS_CONFIG_DIR = tmpDir;
+    process.env.AMICUS_ENV_DIR = envDir;
     // Clear API key env vars
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;

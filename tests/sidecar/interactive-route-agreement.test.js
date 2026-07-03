@@ -49,7 +49,6 @@ jest.mock('../../src/sidecar/session-utils', () => ({
 jest.mock('../../src/utils/agent-mapping', () => ({
   mapAgentToOpenCode: () => ({ agent: 'chat' })
 }));
-jest.mock('../../src/utils/env-compat', () => ({ getCompatEnv: () => undefined }));
 jest.mock('../../src/session-manager', () => ({ getSessionDir: () => '/sess/dir' }));
 
 // --- mirror + poller + watchdog: capture the getStatus/getMessages closures ---

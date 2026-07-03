@@ -3,7 +3,7 @@
  *
  * Covers both amicus_start write sites:
  *  - spawn-fallback initial metadata (exercised end-to-end via a mocked
- *    child_process, SIDECAR_SHARED_SERVER='0')
+ *    child_process, AMICUS_SHARED_SERVER='0')
  *  - shared-server metadata write (source-contract check; the real shared
  *    path needs a live OpenCode server, so we pin the write's contents at
  *    the source level, matching tests/mcp-shared-server.test.js style)
@@ -21,8 +21,8 @@ describe('amicus_start spawn-path initial metadata (F6)', () => {
         jest.doMock('child_process', () => ({
           spawn: jest.fn(() => ({ pid: 4242, unref: jest.fn() })),
         }));
-        const prev = process.env.SIDECAR_SHARED_SERVER;
-        process.env.SIDECAR_SHARED_SERVER = '0'; // force the spawn fallback
+        const prev = process.env.AMICUS_SHARED_SERVER;
+        process.env.AMICUS_SHARED_SERVER = '0'; // force the spawn fallback
         try {
           const { handlers: h } = require('../src/mcp-server');
           const result = await h.amicus_start(
@@ -34,8 +34,8 @@ describe('amicus_start spawn-path initial metadata (F6)', () => {
           expect(meta.mode).toBe('headless');
           expect(meta.headless).toBe(true);
         } finally {
-          if (prev === undefined) { delete process.env.SIDECAR_SHARED_SERVER; }
-          else { process.env.SIDECAR_SHARED_SERVER = prev; }
+          if (prev === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+          else { process.env.AMICUS_SHARED_SERVER = prev; }
         }
       });
     } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }
@@ -48,8 +48,8 @@ describe('amicus_start spawn-path initial metadata (F6)', () => {
         jest.doMock('child_process', () => ({
           spawn: jest.fn(() => ({ pid: 5252, unref: jest.fn() })),
         }));
-        const prev = process.env.SIDECAR_SHARED_SERVER;
-        process.env.SIDECAR_SHARED_SERVER = '0'; // force the spawn fallback
+        const prev = process.env.AMICUS_SHARED_SERVER;
+        process.env.AMICUS_SHARED_SERVER = '0'; // force the spawn fallback
         try {
           const { handlers: h } = require('../src/mcp-server');
           const result = await h.amicus_start(
@@ -61,8 +61,8 @@ describe('amicus_start spawn-path initial metadata (F6)', () => {
           expect(meta.mode).toBe('interactive');
           expect(meta.headless).toBe(false);
         } finally {
-          if (prev === undefined) { delete process.env.SIDECAR_SHARED_SERVER; }
-          else { process.env.SIDECAR_SHARED_SERVER = prev; }
+          if (prev === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+          else { process.env.AMICUS_SHARED_SERVER = prev; }
         }
       });
     } finally { fs.rmSync(tmpDir, { recursive: true, force: true }); }

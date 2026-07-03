@@ -26,17 +26,8 @@ describe('SharedServerManager', () => {
       process.env.SIDECAR_MAX_SESSIONS = orig;
     });
 
-    test('disabled when SIDECAR_SHARED_SERVER=0', () => {
-      const orig = process.env.SIDECAR_SHARED_SERVER;
-      process.env.SIDECAR_SHARED_SERVER = '0';
-      const mgr = new SharedServerManager();
-      expect(mgr.enabled).toBe(false);
-      process.env.SIDECAR_SHARED_SERVER = orig;
-    });
-
     test('disabled when AMICUS_SHARED_SERVER=0', () => {
       const orig = process.env.AMICUS_SHARED_SERVER;
-      delete process.env.AMICUS_SHARED_SERVER;
       process.env.AMICUS_SHARED_SERVER = '0';
       const mgr = new SharedServerManager();
       expect(mgr.enabled).toBe(false);
@@ -44,10 +35,10 @@ describe('SharedServerManager', () => {
       else { process.env.AMICUS_SHARED_SERVER = orig; }
     });
 
-    test('AMICUS_SHARED_SERVER wins over SIDECAR_SHARED_SERVER (AMICUS=1, SIDECAR=0 → enabled)', () => {
+    test('legacy SIDECAR_SHARED_SERVER=0 is ignored (#19 absence pin) — stays enabled', () => {
       const origA = process.env.AMICUS_SHARED_SERVER;
       const origS = process.env.SIDECAR_SHARED_SERVER;
-      process.env.AMICUS_SHARED_SERVER = '1';
+      delete process.env.AMICUS_SHARED_SERVER;
       process.env.SIDECAR_SHARED_SERVER = '0';
       const mgr = new SharedServerManager();
       expect(mgr.enabled).toBe(true);

@@ -5,7 +5,7 @@
  * Checks for new versions via update-notifier and performs
  * updates via npm install -g.
  *
- * Supports AMICUS_MOCK_UPDATE (or legacy SIDECAR_MOCK_UPDATE) env var for testing:
+ * Supports AMICUS_MOCK_UPDATE env var for testing:
  *   "available" — getUpdateInfo returns fake update
  *   "updating"  — getUpdateInfo returns fake update
  *   "success"   — performUpdate resolves immediately
@@ -15,7 +15,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const { logger } = require('./logger');
-const { getCompatEnv } = require('./env-compat');
 const { loadUpdateNotifier } = require('./update-notifier-loader');
 
 const pkg = require(path.join(__dirname, '..', '..', 'package.json'));
@@ -31,7 +30,7 @@ let notifier = null;
  * @returns {string|null} The mock mode or null
  */
 function getMockMode() {
-  const mode = getCompatEnv('MOCK_UPDATE');
+  const mode = process.env.AMICUS_MOCK_UPDATE;
   if (mode && MOCK_MODES.includes(mode)) {
     return mode;
   }

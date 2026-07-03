@@ -15,7 +15,6 @@
 const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, screen } = require('electron');
 const path = require('path');
 const { logger } = require('../src/utils/logger');
-const { getCompatEnv } = require('../src/utils/env-compat');
 const { buildToolbarHTML, TOOLBAR_H, getBrandName } = require('./toolbar');
 const { createFoldHandler } = require('./fold');
 const { createCloseGuard } = require('./close-guard');
@@ -58,25 +57,25 @@ process.on('unhandledRejection', (reason) => {
 // Configuration from Environment (set by src/sidecar/start.js)
 // ============================================================================
 
-const MODE = getCompatEnv('MODE') || 'sidecar';
-const TASK_ID = getCompatEnv('TASK_ID') || 'unknown';
-const MODEL = getCompatEnv('MODEL') || 'unknown';
-const CWD = getCompatEnv('CWD') || process.cwd();
+const MODE = process.env.AMICUS_MODE || 'sidecar';
+const TASK_ID = process.env.AMICUS_TASK_ID || 'unknown';
+const MODEL = process.env.AMICUS_MODEL || 'unknown';
+const CWD = process.env.AMICUS_CWD || process.cwd();
 // The directory the OpenCode session was actually scoped to (#45). Set by the
 // interactive launcher as canonicalProjectPath(--cwd) so the Web-UI route is
 // built from the SAME directory createSession used. Falls back to CWD for
 // back-compat with launchers that predate this env var.
-const SESSION_DIRECTORY = getCompatEnv('SESSION_DIRECTORY') || CWD;
-const CLIENT = getCompatEnv('CLIENT') || 'code-local';
-const OPENCODE_PORT = parseInt(getCompatEnv('OPENCODE_PORT') || '4096', 10);
-const OPENCODE_SESSION_ID = getCompatEnv('SESSION_ID');
-const FOLD_SHORTCUT = getCompatEnv('FOLD_SHORTCUT') || 'CommandOrControl+Shift+F';
-const WINDOW_POSITION = getCompatEnv('WINDOW_POSITION') || 'right';
+const SESSION_DIRECTORY = process.env.AMICUS_SESSION_DIRECTORY || CWD;
+const CLIENT = process.env.AMICUS_CLIENT || 'code-local';
+const OPENCODE_PORT = parseInt(process.env.AMICUS_OPENCODE_PORT || '4096', 10);
+const OPENCODE_SESSION_ID = process.env.AMICUS_SESSION_ID;
+const FOLD_SHORTCUT = process.env.AMICUS_FOLD_SHORTCUT || 'CommandOrControl+Shift+F';
+const WINDOW_POSITION = process.env.AMICUS_WINDOW_POSITION || 'right';
 // 15b.3: per-run fold nonce (#BL-7 residual). Set by the interactive launcher
 // (src/sidecar/interactive-process.js buildElectronEnv) from the SAME value
 // baked into the system prompt's fold instruction. undefined when a launcher
 // predates this env var — fold.js falls back to the legacy bare marker.
-const FOLD_NONCE = getCompatEnv('FOLD_NONCE');
+const FOLD_NONCE = process.env.AMICUS_FOLD_NONCE;
 
 const OPENCODE_URL = `http://localhost:${OPENCODE_PORT}`;
 
@@ -134,7 +133,7 @@ function createAmicusWindow() {
 
   // Check for updates: prefer env var from CLI (cache is one-shot), fallback to direct check
   let updateInfo = null;
-  const updateInfoRaw = getCompatEnv('UPDATE_INFO');
+  const updateInfoRaw = process.env.AMICUS_UPDATE_INFO;
   if (updateInfoRaw) {
     try { updateInfo = JSON.parse(updateInfoRaw); } catch (_) {}
   }
@@ -207,7 +206,7 @@ function createAmicusWindow() {
   // silently hung process (the historical "Starting up... | 0 messages" bug).
   const failsafe = attachLoadFailsafe({
     webContents: contentView.webContents,
-    timeoutMs: parseInt(getCompatEnv('GUI_LOAD_TIMEOUT_MS') || '', 10) || undefined,
+    timeoutMs: parseInt(process.env.AMICUS_GUI_LOAD_TIMEOUT_MS || '', 10) || undefined,
     onFail: ({ reason, errorCode, errorDescription, validatedURL }) => {
       logger.error('OpenCode UI failed to load', {
         reason, errorCode, errorDescription, validatedURL, url: contentUrl

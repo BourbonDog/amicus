@@ -16,8 +16,8 @@ describe('Sidecar Config Module - Model Resolution', () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-config-test-'));
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = tempDir;
-    process.env.SIDECAR_ENV_DIR = tempDir;
+    process.env.AMICUS_CONFIG_DIR = tempDir;
+    process.env.AMICUS_ENV_DIR = tempDir;
     // Clear API keys to ensure deterministic fallback behavior
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
