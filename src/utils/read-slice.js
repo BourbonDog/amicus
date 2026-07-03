@@ -12,9 +12,12 @@
  * Buffer byte slice. A slice boundary landing mid multibyte-character is
  * tolerated (the string still round-trips through JSON safely; a stray
  * replacement character at a cut edge is an acceptable trade-off for keeping
- * this a plain string operation with no encode/decode step). Sizes reported
- * in the truncation notice ARE true UTF-8 byte counts (Buffer.byteLength),
- * so "of N bytes" is accurate even though the cut itself is code-unit based.
+ * this a plain string operation with no encode/decode step). Because the cut
+ * is code-unit based, the returned slice's real UTF-8 byte length can differ
+ * from READ_CAP_BYTES for multibyte content — so the truncation notice
+ * always reports the ACTUAL Buffer.byteLength of the returned slice (never
+ * the nominal cap), alongside the true total byte count. Both figures in the
+ * notice are real, measured byte counts.
  */
 'use strict';
 
@@ -56,7 +59,8 @@ function sliceForRead(text, params = {}) {
   }
   const sliceLen = Math.min(READ_CAP_BYTES, text.length);
   const tailSlice = text.slice(text.length - sliceLen);
-  const notice = `[truncated: showing last ${READ_CAP_BYTES} of ${totalBytes} bytes — use offset/limit to page]`;
+  const actualSliceBytes = Buffer.byteLength(tailSlice, 'utf-8');
+  const notice = `[truncated: showing last ${actualSliceBytes} of ${totalBytes} bytes — use offset/limit to page]`;
   return { body: `${notice}\n${tailSlice}`, truncated: true };
 }
 

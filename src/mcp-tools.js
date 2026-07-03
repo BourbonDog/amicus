@@ -174,8 +174,9 @@ function getTools() {
           '(always small; offset/limit/tail are ignored in this mode).'
         ),
       offset: z.number().int().min(0).optional().describe(
-        'Byte offset to start reading from (0-based). Slices the raw content ' +
-        'BEFORE the ~50KB cap is applied. Takes precedence over `tail` if ' +
+        'Byte offset to start reading from (0-based). When given, no cap or ' +
+        'truncation notice applies — the result is simply bounded by `limit` ' +
+        `(default ${READ_CAP_BYTES} bytes). Takes precedence over \`tail\` if ` +
         'both are given. Ignored in mode "metadata".'
       ),
       limit: z.number().int().min(1).max(READ_CAP_BYTES).optional().describe(

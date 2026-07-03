@@ -110,6 +110,32 @@ describe('amicus_read size cap + paging (15a.3 / B17)', () => {
       const expectedSlice = body.slice(body.length - 15);
       expect(text).toContain(expectedSlice);
     });
+
+    test('over-cap multibyte content: notice "showing last N" is the TRUE byte length of the returned slice', async () => {
+      const sessDir = writeSession('conv-multibyte', { status: 'complete' });
+      // CJK filler: each char is 3 bytes in UTF-8 but 1 code unit in UTF-16.
+      // A code-unit-based slice of READ_CAP_BYTES code units on this content
+      // has a real UTF-8 byte length of ~3x READ_CAP_BYTES, not READ_CAP_BYTES.
+      const filler = '中'.repeat(READ_CAP_BYTES);
+      const body = 'HEAD_MARKER\n' + filler + '\nTAIL_MARKER';
+      fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), body);
+
+      const result = await handlers.amicus_read({ taskId: 'conv-multibyte', mode: 'conversation' }, tmpDir);
+      const text = getText(result);
+
+      const noticeMatch = text.match(/\[truncated: showing last (\d+) of (\d+) bytes[^\]]*\]/);
+      expect(noticeMatch).not.toBeNull();
+      const claimedSliceBytes = Number(noticeMatch[1]);
+
+      // Recover the actual returned body (everything after the notice line,
+      // up to the closing fence) and measure its real UTF-8 byte length.
+      const afterNotice = text.slice(text.indexOf(noticeMatch[0]) + noticeMatch[0].length + 1);
+      const closeFenceIdx = afterNotice.indexOf('\n</untrusted_sidecar_output>');
+      const returnedSlice = closeFenceIdx === -1 ? afterNotice : afterNotice.slice(0, closeFenceIdx);
+      const actualSliceBytes = Buffer.byteLength(returnedSlice, 'utf-8');
+
+      expect(claimedSliceBytes).toBe(actualSliceBytes);
+    });
   });
 
   describe('summary mode', () => {
