@@ -5,6 +5,33 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+Phase 17: documentation overhaul (the external docs-review cluster).
+
+### Added
+- **`docs/council.md` — the council pipeline documented end-to-end**: the stage flow, the tally-input and
+  tally-record schemas field-by-field (test-locked against the real validators), verdict.json provenance,
+  presets, and a complete worked example whose every command and output was executed against the binary.
+- **"Where things live"** (docs/configuration.md): the full config-dir tree (config.json shape, catalog
+  cache + refresh-outcome fields, both ledgers, tmp files and the doctor sweep), per-client session
+  storage, log reality (stderr-only — `LOG_LEVEL` never writes a file), and honest uninstall instructions
+  covering what `npm uninstall -g` does NOT clean.
+- README now leads with the **two install channels** (npm global vs Claude Code plugin, with the
+  `npx -y amicus@latest` translation note) and surfaces **`/amicus:council`** in the quick start and
+  council sections.
+
+### Changed
+- **README restructured for audience separation**: discovery + quick start + compact command table with
+  pointers; `docs/usage.md` is now the complete CLI reference (the ~30% duplicated content has one
+  canonical home each — nothing was dropped); deep dives live under `docs/`.
+- The second-opinion skill's Stage-2 briefing prose reads cleanly again (hardening sentence moved before
+  the sentence it interrupted), and `report.md`'s contract is stated once, coherently: `report.html` is
+  the deterministic renderer default; `report.md` is the chair-synthesis document that embeds the
+  rendered Markdown as one section.
+
+### Fixed
+- `amicus council --help` now lists `save`/`list`/`show` (the Phase-16 usage-string omission caught by
+  this phase's binary-verification pass).
+
 Phase 16: council & catalog UX — closes GitHub issues #12, #13, and #27.
 
 ### Added
