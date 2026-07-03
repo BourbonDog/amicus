@@ -25,8 +25,8 @@ injection, long-read failures, judge tool-wander; see changelog)._
 - **Transient provider errors** (502s, connection drops): re-run the affected leg (solo
   `amicus start --json`, same briefing file) or the wave — see per-model notes for
   model-specific signals. Never present a half-finished run as an answer.
-- **Credentials:** keys live in `~/.config/amicus/.env` (legacy `~/.config/sidecar/.env` still
-  read). Configure with `amicus setup`.
+- **Credentials:** keys live in `~/.config/amicus/.env`. The legacy `~/.config/sidecar/.env`
+  fallback was removed in v2.0.0 (see `docs/SHIMS.md`). Configure with `amicus setup`.
 - **PowerShell `--models` quoting (Windows):** always quote comma-separated model lists —
   `--models "gemini,gpt,deepseek"`. Unquoted, PowerShell splits on commas and amicus receives one
   mangled alias → instant arg-parse failure. (Now baked into every SKILL.md example.)

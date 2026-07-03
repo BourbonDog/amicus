@@ -13,7 +13,7 @@ Before working through any symptom below, run `amicus doctor` (plugin-only insta
 
 **Symptom:** `npm install -g amicus` fails with `npm error code EEXIST` naming a `claude-sidecar` (or `sidecar`) file under your global npm bin directory.
 
-**Cause:** The old upstream `claude-sidecar` package is still installed globally. Amicus ships `sidecar`/`claude-sidecar` as deprecated bin aliases, and npm refuses to overwrite bin shims owned by a different package.
+**Cause:** The old upstream `claude-sidecar` package is still installed globally. Through v1.x, Amicus shipped `sidecar`/`claude-sidecar` as deprecated bin aliases, which could also collide here — v2.0.0 no longer ships those aliases at all (removed in #19), so on a current install this is purely leftover from the old package.
 
 **Fix:**
 
@@ -22,7 +22,7 @@ npm uninstall -g claude-sidecar
 npm install -g amicus
 ```
 
-Nothing is lost in the swap: your config (`~/.config/sidecar/`), saved keys, and past sessions are all still read by Amicus through the legacy-path shims (see `docs/SHIMS.md`).
+Your keys and past sessions are not deleted by this swap, but v2.0.0 no longer reads them from the old locations automatically: config data was auto-migrated forward on every v1.x run, but if you're jumping straight from a pre-rebrand install, copy `~/.config/sidecar/` to `~/.config/amicus/` and rename any `.claude/sidecar_sessions/` dirs to `.claude/amicus_sessions/` by hand. See [docs/SHIMS.md](./SHIMS.md) for the full removal record.
 
 ---
 
@@ -32,7 +32,7 @@ Nothing is lost in the swap: your config (`~/.config/sidecar/`), saved keys, and
 
 **Key resolution order** (highest priority first, implemented in `src/utils/env-loader.js`):
 1. `process.env` — environment variables already set in the shell at launch. Never overwritten.
-2. `~/.config/amicus/.env` — keys saved via `amicus setup`. Legacy fallback: if this file does not exist, `~/.config/sidecar/.env` is used instead (DEPRECATED shim — see `docs/SHIMS.md`).
+2. `~/.config/amicus/.env` — keys saved via `amicus setup`. The legacy `~/.config/sidecar/.env` fallback was removed in v2.0.0 — see [docs/SHIMS.md](./SHIMS.md). If you're migrating a pre-rebrand install directly to v2.0.0, copy the file over by hand.
 3. `~/.local/share/opencode/auth.json` — OpenCode SDK credential store (lowest priority; Amicus only reads, never writes here).
 
 **Diagnostic steps:**
@@ -62,7 +62,7 @@ Nothing is lost in the swap: your config (`~/.config/sidecar/`), saved keys, and
 **Causes and fixes:**
 - **Explicit ID mismatch:** Run `amicus list` to see available sessions, then pass `--session-id <id>` explicitly.
 - **Wrong project directory:** Amicus looks for sessions under `<project>/.claude/amicus_sessions/`. If you run from a different cwd, the session won't be found. Pass `--project <path>` to override.
-- **Pre-rebrand sessions:** Sessions created before the Amicus rebrand live under `.claude/sidecar_sessions/`. Amicus reads both directories via the compatibility shim in `src/session-manager.js`, so they should resolve automatically. If not, check that `resolveExistingSessionDir` can see the directory.
+- **Pre-rebrand sessions:** Sessions created before the Amicus rebrand live under `.claude/sidecar_sessions/`. The dual-read shim that used to resolve those automatically was removed in v2.0.0 — Amicus now only reads `.claude/amicus_sessions/`. Rename the directory to make old sessions visible again. See [docs/SHIMS.md](./SHIMS.md).
 
 ---
 

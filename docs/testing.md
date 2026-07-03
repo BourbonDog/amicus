@@ -188,7 +188,7 @@ Spawns a real Electron window (hidden) with a real OpenCode server, connects via
 4. Fold button exists with shortcut label
 5. Settings gear button exists
 6. Update banner hidden by default
-7. Update banner visible when `AMICUS_MOCK_UPDATE=available` (or legacy `SIDECAR_MOCK_UPDATE=available`)
+7. Update banner visible when `AMICUS_MOCK_UPDATE=available` (the legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0)
 8. Screenshots captured as PNG files
 
 **Architecture:**
@@ -265,8 +265,8 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `AMICUS_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
-| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port (legacy `SIDECAR_DEBUG_PORT` still honored, deprecated). `AMICUS_DEBUG_PORT` wins when both are set. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
-| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Legacy `SIDECAR_MOCK_UPDATE` also accepted. Used in Electron toolbar E2E tests. |
+| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port (the legacy `SIDECAR_DEBUG_PORT` name was removed in v2.0.0 — see [docs/SHIMS.md](./SHIMS.md)). Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
+| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. The legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0. Used in Electron toolbar E2E tests. |
 
 ---
 
@@ -533,7 +533,7 @@ Never commit an image without completing visual verification. GitHub strips `<st
 
 ## Update Banner Mock Testing
 
-Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations (legacy `SIDECAR_MOCK_UPDATE` also accepted):
+Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations (the legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0):
 
 ```bash
 AMICUS_MOCK_UPDATE=available amicus start --model gemini --prompt "test"  # Shows banner

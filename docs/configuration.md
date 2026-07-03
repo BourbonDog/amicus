@@ -33,7 +33,7 @@ The model prefix decides which credentials are used:
 |----------|---------|---------|
 | `LOG_LEVEL` | Log verbosity: `error` \| `warn` \| `info` \| `debug`. Keep `error` (the default) for clean LLM consumption; use `debug` to diagnose poll issues. | `error` |
 | `AMICUS_CONFIG_DIR` | Override the entire config directory — keys, model catalog, session index. Useful for isolated test environments. | `~/.config/amicus` |
-| `AMICUS_ENV_DIR` | Override just the `.env` file directory (keys only). Takes precedence over the legacy `SIDECAR_ENV_DIR` name (which still works with a deprecation warning). | `~/.config/amicus` (the config dir) |
+| `AMICUS_ENV_DIR` | Override just the `.env` file directory (keys only). The legacy `SIDECAR_ENV_DIR` name was removed in v2.0.0 — only `AMICUS_ENV_DIR` is read now. | `~/.config/amicus` (the config dir) |
 | `AMICUS_FANOUT_MAX_LEGS` | Cap the number of concurrent legs in a single fanout wave. Protects against accidental runaway costs when `--models` is a long list. Non-positive or non-integer values fall back to the default. | `10` |
 | `AMICUS_MCP_CLIENT` | Force the MCP server's `--client` value (`code-local`, `code-web`, or `cowork`) instead of auto-detecting it from the caller's MCP `initialize` handshake (`clientInfo.name`). Invalid values are ignored (with a warning) and detection proceeds normally. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
 
@@ -74,7 +74,7 @@ Amicus processes self-terminate after a configurable idle period. The idle watch
 | `AMICUS_IDLE_TIMEOUT_INTERACTIVE` | Per-mode override for interactive sessions (minutes). | `60` |
 | `AMICUS_IDLE_TIMEOUT_SERVER` | Per-mode override for shared-server sessions (minutes). | `30` |
 
-Legacy `SIDECAR_IDLE_TIMEOUT*` names are still honored (deprecated — one-time warning on use).
+Legacy `SIDECAR_IDLE_TIMEOUT*` names were removed in v2.0.0 — rename to the `AMICUS_IDLE_TIMEOUT*` forms above. See [docs/SHIMS.md](./SHIMS.md).
 
 Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination entirely.
 
@@ -146,9 +146,12 @@ Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/confi
 
 - **Override:** set `AMICUS_CONFIG_DIR` to relocate the entire tree — keys, catalog, session index,
   both ledgers. Useful for isolated test environments.
-- **Legacy fallback:** if `~/.config/amicus/` doesn't exist yet but `~/.config/sidecar/` does (a
-  pre-rebrand install), Amicus reads from the legacy dir until the one-time, non-destructive
-  `migrateLegacyConfigDir()` copies it forward. Once `~/.config/amicus/` exists, it always wins.
+- **Legacy fallback — removed in v2.0.0:** `getConfigDir()` no longer falls back to
+  `~/.config/sidecar/` at all. Through v1.x, config data was auto-migrated forward on every run
+  (a one-time, non-destructive copy into `~/.config/amicus/` the first time it didn't exist yet),
+  so most installs already have everything in the new location. If you jumped straight from a
+  pre-rebrand install to v2.0.0 without ever running a v1.x build, copy `~/.config/sidecar/` to
+  `~/.config/amicus/` by hand. See [docs/SHIMS.md](./SHIMS.md).
 
 | File | Written by | Contains |
 |---|---|---|
@@ -183,8 +186,10 @@ relevant for how Claude Code/Cowork discovers *your current conversation's* cont
 **2. Amicus's own per-session directories** — where the actual session data (metadata, conversation,
 summaries) is written. These live **project-scoped**, under `.claude/amicus_sessions/<taskId>/` in
 the project directory (`SESSIONS_DIR` in `src/session-manager.js`; not under the session root
-above). The legacy `.claude/sidecar_sessions/` dir is still read (a pre-rebrand shim) but never
-written to for new sessions.
+above). The legacy `.claude/sidecar_sessions/` dual-read was removed in v2.0.0 — that directory is
+no longer read at all. If you have session history there, rename `.claude/sidecar_sessions/` to
+`.claude/amicus_sessions/` to make it visible to `amicus list`/`amicus read` again. See
+[docs/SHIMS.md](./SHIMS.md).
 
 Per-session directory contents:
 
@@ -277,4 +282,4 @@ aliases, and council presets carry over untouched.
 
 `opencode-ai` (>=1.0.0) is the bundled LLM conversation engine — it is installed automatically as a postinstall step and does not need a separate `npm install`.
 
-> **Legacy names.** Pre-rebrand `SIDECAR_*` environment variables are still honored (with a one-time deprecation warning) and map to their `AMICUS_*` equivalents. See [docs/SHIMS.md](./SHIMS.md) for the full mapping.
+> **Legacy names.** Pre-rebrand `SIDECAR_*` environment variables were removed entirely in v2.0.0 — they are no longer read, with no warning. Rename to the `AMICUS_*` equivalents documented above. See [docs/SHIMS.md](./SHIMS.md) for the full removal record and rename table.

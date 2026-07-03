@@ -34,11 +34,15 @@ describe('B50 — "Where things live" section (docs/configuration.md)', () => {
   });
 
   describe('the config tree', () => {
-    it('names the config dir and its override + legacy fallback', () => {
+    it('names the config dir and its override; states the legacy fallback is gone (v2.0.0, #19)', () => {
       const s = section();
       expect(s).toContain('~/.config/amicus');
       expect(s).toMatch(/AMICUS_CONFIG_DIR/);
-      expect(s).toMatch(/~\/.config\/sidecar/); // legacy fallback (getConfigDir)
+      // getConfigDir() no longer falls back to ~/.config/sidecar — removed in v2.0.0.
+      // Docs must say so (not silently drop the topic), so a stray mention of the
+      // legacy path is fine only inside a "removed"/"no longer" sentence.
+      expect(s).toMatch(/~\/.config\/sidecar/);
+      expect(s).toMatch(/no longer|removed in v2\.0\.0|not read|does(?:n't| not) (?:fall back|read)/i);
     });
 
     it('enumerates the real files config.js/model-catalog.js/ledgers actually write', () => {
@@ -89,11 +93,16 @@ describe('B50 — "Where things live" section (docs/configuration.md)', () => {
       expect(s).toMatch(/\.claude[\\/]projects/);
     });
 
-    it('documents the project-scoped per-session dir (amicus_sessions) distinct from the session root', () => {
+    it('documents the project-scoped per-session dir (amicus_sessions); legacy sidecar_sessions is a removed read, not a live shim', () => {
       const s = section();
       // src/session-manager.js SESSIONS_DIR = 'amicus_sessions'
       expect(s).toContain('amicus_sessions');
-      expect(s).toMatch(/sidecar_sessions/); // legacy shim, still read
+      // The sidecar_sessions dual-read shim was removed in v2.0.0 (#19, 887912a).
+      // Docs must still name the old dir (so pre-rebrand users can find their data)
+      // but state it is no longer read automatically — with a rename remedy.
+      expect(s).toMatch(/sidecar_sessions/);
+      expect(s).toMatch(/no longer read|not read|removed in v2\.0\.0/i);
+      expect(s).toMatch(/rename/i);
     });
 
     it('lists the real per-session file contents', () => {
