@@ -284,3 +284,7 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 - **Surface `waveId` (and optionally the council name) in spend rows/rollup** so wave-level cost questions ("what did this council run cost in total?") are answerable directly from `amicus spend` instead of cross-referencing run docs. [S]
 - **`council save` silently shadows a built-in on first save** — the overwrite-notice check only looks at user config, not the built-in bench names, so saving a user council named e.g. `budget` gives no "this now shadows a built-in" notice even though `council list`/`show` later report it as shadowed. Add the notice at save time. [nit]
 - **`-o` with no following value writes a file literally named `true`** (`runVerdict`'s `args.out || './verdict.json'` — when `-o` is the last token, the parser sets `result.out = true`, which is truthy and gets used as the output path). Validate that `--out`/`-o` resolves to a string before using it. [nit]
+
+## Phase 19 smoke note (2026-07-03)
+
+- **`<untrusted_sidecar_output>` fence tag still carries the "sidecar" name** (`src/utils/untrusted-fence.js` `fenceSidecarOutput()`) — user-visible in every `amicus read` output. Deliberately NOT renamed at v2.0.0 (wire-token-continuity argument, same as `[SIDECAR_FOLD]`: the skills' hardening instructions reference the literal tag). If renamed later, skills + tests + docs move in lockstep. [S]
