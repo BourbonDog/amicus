@@ -5,6 +5,43 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+Phase 15: engine correctness sweep.
+
+### Added
+- **`amicus_read` paging and size caps.** Responses are capped at ~50KB (default: the TAIL of the content,
+  with a truncation notice reporting true byte counts at the start of the body); new optional `offset`,
+  `limit`, and `tail` params page through large content. Under-cap reads are byte-identical to before;
+  slicing happens before the untrusted-output fence is applied; `metadata` mode is param-exempt but
+  defensively capped.
+- **Per-tool-call stall detector in headless runs.** A wedged tool call (pending `tool_use`, no result, no
+  other progress for `AMICUS_TOOL_CALL_STALL_MS`, default 3 min) now fails fast with a distinct
+  `Tool call stalled: …` reason instead of burning the full run timeout. Fanout legs inherit automatically.
+- **`amicus doctor --fix` sweeps orphaned sessions-index tmp files** (atomic-write artifacts from killed
+  processes; only files older than 60s are removed).
+
+### Changed
+- **The fold completion marker is now per-run nonced: `[SIDECAR_FOLD:<nonce>]`.** Model output that
+  genuinely ends with a bare `[SIDECAR_FOLD]` can no longer force premature completion — the detector
+  requires the run's own nonce (BL-7's final hardening layer). The nonce is crypto-random, threaded through
+  every mode (headless, fanout, MCP shared-server, interactive GUI), and instructed to the model in the
+  prompt; `amicus resume` re-derives it from the transcript.
+- **All session/wave metadata writes are atomic** (`writeFileAtomic` tmp+rename), retiring the torn-read
+  race class that pollers previously tolerated via missed-tick workarounds.
+
+### Fixed
+- **Orphaned `opencode serve` processes on macOS/Linux.** Server teardown now SIGTERMs the Go binary
+  directly and escalates to SIGKILL after a bounded grace window on a ref'd poll (the old unref'd 2s timer
+  silently died with fast-exiting parents). Windows semantics unchanged.
+- **Aborting a wave immediately after starting it can no longer flip its status back to `running`** — the
+  wave metadata merge now honors abort-wins precedence (same rule the per-leg writer already had).
+- **`kill(pid, 0)` throwing `EPERM` now classifies a process as ALIVE** (signal denied ≠ dead) in
+  `isProcessAlive`/`checkSessionLiveness` and both MCP crash-detection probes. EPERM no longer marks
+  healthy sessions crashed.
+- **A committed successful terminal status can no longer be clobbered to `error`** by a cleanup-step
+  failure in the MCP shared-server finalize chain (the Phase-5 review's residual gap).
+- **`discoverCoworkMcps` now checks `%APPDATA%\Claude` on Windows** instead of the XDG path — Claude
+  Desktop discovery and doctor's Cowork signal were always wrong on win32.
+
 ## [1.9.1] - 2026-07-03
 
 ### Fixed
