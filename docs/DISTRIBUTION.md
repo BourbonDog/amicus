@@ -141,7 +141,7 @@ push after this merge is the first real publish attempt.
 **Namespace:** `io.github.BourbonDog/amicus` (case-sensitive — the registry
 grants `io.github.<Login>/*` using the exact-case GitHub login/repository
 owner). Confirmed unclaimed via
-`https://registry.modelcontextprotocol.io/v0.1/servers?search=amicus`
+`https://registry.modelcontextprotocol.io/v0/servers?search=amicus`
 (0 results, checked 2026-07-02).
 
 **Flow:** tag↔`package.json` version lockstep is verified first (fails fast

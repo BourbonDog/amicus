@@ -60,6 +60,8 @@ See `amicus start --help` or the README for the full option list (context, MCP, 
 
 **Catalog validation.** For an explicit `--model`, the model is checked against the live catalog before launch — a typo'd name fails fast with same-vendor suggestions. For a model inherited from a previous session (`continue`/`resume` without `--model`), validation is **advisory**: a warning is printed but the session starts anyway. Skip with `--no-validate-model`.
 
+**The fold handoff.** In interactive mode, clicking **FOLD** (or headless completion) is a one-way summary handoff, not a live handback. Mechanically: the model is asked for a structured summary, which is written to the sidecar process's stdout as a `[SIDECAR_FOLD]`-tagged block; the runner that spawned the sidecar captures that stdout and persists it to the session's `summary.md` under the session directory. Your orchestrating agent retrieves it on request — `amicus read <taskId>` (CLI) or the `amicus_read` MCP tool — and the result comes back wrapped in an `<untrusted_sidecar_output>` fence (it's another model's prose entering your context, treated as data, not instructions).
+
 ---
 
 ## `amicus fanout` — Same Prompt, Many Models
@@ -69,16 +71,19 @@ Fanout runs one headless wave: every leg receives the **same** prompt concurrent
 ```bash
 amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --json
 amicus fanout --models "gemini,opus" --prompt-file briefing.md --json --wave-id my-wave-1
+amicus fanout --council free --prompt "Review this design" --json
 ```
 
 **Key options:**
 
 | Option | Description |
 |--------|-------------|
-| `--models <a,b,c>` | Comma-separated aliases or full provider IDs (required). |
+| `--models <a,b,c>` | Comma-separated aliases or full provider IDs. Required unless `--council` is given; mutually exclusive with `--council`. |
+| `--council <name>` | Run a saved council (e.g. `free`) instead of `--models`; mutually exclusive with `--models`. |
 | `--prompt <text>` | Shared briefing (mutually exclusive with `--prompt-file`). |
 | `--prompt-file <path>` | Read the shared briefing from a file. Preferred for long briefs and required on Windows when content exceeds ~32 KB. |
 | `--wave-id <id>` | Set the wave ID explicitly; leg IDs become `<wave-id>-1` … `<wave-id>-N`. |
+| `--session-id <id\|"current">` | Session ID to pull shared context from (default `current`). Same semantics as on `start`. |
 | `--json` | Emit the wave document on stdout. |
 | `--no-validate-model` | Skip catalog validation. |
 
@@ -112,7 +117,8 @@ amicus fanout --models "gemini,opus" --prompt-file briefing.md --json --wave-id 
 
 ```bash
 amicus list                          # Current project
-amicus list --status running         # Filter: running, complete, aborted, error
+amicus list --status running         # Filter: running, complete, error, timed-out,
+                                      #         aborted, crashed, idle-timeout
 amicus list --all                    # All projects
 amicus list --json                   # Machine-readable
 
@@ -141,7 +147,7 @@ MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicu
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
 
-Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `idle-timeout`
+Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `timed-out`, `idle-timeout`
 
 > Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). To restore them, add `"env": {"AMICUS_LEGACY_ALIASES": "1"}` to the MCP server entry — the default surface is `amicus_*` only. They will be removed entirely in the next major (see docs/SHIMS.md).
 
