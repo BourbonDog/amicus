@@ -1,7 +1,7 @@
 /**
  * Electron Toolbar E2E Integration Test
  *
- * Spawns a real Electron sidecar window (hidden via SIDECAR_HEADLESS_TEST),
+ * Spawns a real Electron sidecar window (hidden via AMICUS_HEADLESS_TEST),
  * connects via Chrome DevTools Protocol, and asserts toolbar DOM state.
  *
  * Requires OPENROUTER_API_KEY for real OpenCode server.
@@ -122,7 +122,7 @@ function spawnElectron(options) {
     SIDECAR_TASK_ID: taskId,
     SIDECAR_MODEL: 'test-model',
     SIDECAR_DEBUG_PORT: String(CDP_PORT),
-    SIDECAR_HEADLESS_TEST: '1',
+    AMICUS_HEADLESS_TEST: '1',
     SIDECAR_CWD: process.cwd(),
     ...extraEnv,
   };

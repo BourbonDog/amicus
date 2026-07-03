@@ -223,7 +223,7 @@ function createAmicusWindow() {
       // On timeout, show whatever is in flight rather than aborting the load.
       mainWindow.addBrowserView(contentView);
       updateContentBounds();
-      if (!process.env.SIDECAR_HEADLESS_TEST) {
+      if (!process.env.AMICUS_HEADLESS_TEST) {
         mainWindow.show();
       }
     }
@@ -240,7 +240,7 @@ function createAmicusWindow() {
         failsafe.cancel();
         mainWindow.addBrowserView(contentView);
         updateContentBounds();
-        if (!process.env.SIDECAR_HEADLESS_TEST) {
+        if (!process.env.AMICUS_HEADLESS_TEST) {
           mainWindow.show();
         }
       });

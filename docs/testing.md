@@ -102,7 +102,7 @@ Integration tests verify source-level invariants without mocking. They read actu
 | Test File | What It Verifies |
 |-----------|-----------------|
 | `spawn-pipe-deadlock.integration.test.js` | `spawnSidecarProcess()` in `src/mcp-server.js` uses `ignore` (not `pipe`) for stdio, no `detached: true`, uses `child.unref()` |
-| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `SIDECAR_HEADLESS_TEST` env var (compat shim — not yet renamed) |
+| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `AMICUS_HEADLESS_TEST` env var |
 
 These tests catch regressions in critical spawn/process configuration that would be hard to debug in production.
 
@@ -264,7 +264,7 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SIDECAR_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). (Name is a compat shim; the AMICUS_ rename is pending.) |
+| `AMICUS_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
 | `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port (legacy `SIDECAR_DEBUG_PORT` still honored, deprecated). `AMICUS_DEBUG_PORT` wins when both are set. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
 | `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Legacy `SIDECAR_MOCK_UPDATE` also accepted. Used in Electron toolbar E2E tests. |
 
@@ -274,7 +274,7 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 ### macOS
 
-No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `SIDECAR_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer via `Page.captureScreenshot`.
+No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `AMICUS_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer via `Page.captureScreenshot`.
 
 The visual testing docs reference `screencapture -x` and AppleScript window positioning — those are macOS-specific tools. See the Windows section for the cross-platform equivalent.
 
