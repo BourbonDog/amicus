@@ -62,6 +62,18 @@ describe('buildElectronEnv - session directory (#45)', () => {
   });
 });
 
+describe('buildElectronEnv - fold nonce (15b.3, #BL-7 residual)', () => {
+  it('sets AMICUS_FOLD_NONCE when foldNonce is provided', () => {
+    const env = buildElectronEnv(...BASE_ARGS, { foldNonce: 'cafef00d12345678' });
+    expect(env.AMICUS_FOLD_NONCE).toBe('cafef00d12345678');
+  });
+
+  it('omits AMICUS_FOLD_NONCE when not provided', () => {
+    const env = buildElectronEnv(...BASE_ARGS, {});
+    expect(env.AMICUS_FOLD_NONCE).toBeUndefined();
+  });
+});
+
 describe('getElectronPath', () => {
   // This assertion needs a real electron install (it inspects require('electron')'s
   // binary path). Local dev omits electron via --omit=optional, so skip it when

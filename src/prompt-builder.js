@@ -4,6 +4,7 @@
  * Spec Reference: §6 Fold Mechanism, §9 Implementation
  * Constructs system prompts for sidecar sessions in both interactive and headless modes.
  */
+const { buildFoldMarker } = require('./utils/fold-marker');
 
 /**
  * Summary template for fold output per spec §6.1
@@ -77,6 +78,16 @@ function buildSystemPrompt(briefing, context, project, headless, mode, client) {
  * @param {string} [mode='code'] - Agent mode ('code', 'ask', or 'plan')
  * @param {string} [summaryLength='normal'] - Desired summary length for headless mode
  * @param {string} [client='code-local'] - Client type for branding
+ * @param {string} [nonce] - Per-run fold nonce (15b.3, #BL-7 residual). Only used in
+ *   headless mode: the model is instructed to emit `[SIDECAR_FOLD:<nonce>]` instead of
+ *   the legacy bare `[SIDECAR_FOLD]`, so runHeadless's detector (which must be given
+ *   this SAME nonce) can't be forced into completing by a model that merely echoes the
+ *   public, guessable bare marker. Callers that build a headless prompt and intend to
+ *   run it should generate one nonce (utils/fold-marker.generateFoldNonce()) BEFORE
+ *   calling buildPrompts, pass it here, and pass the SAME value to runHeadless's
+ *   options.nonce. Omitted in interactive mode (GUI fold is exit-code driven, not
+ *   marker-detected) and harmless to omit in headless mode too — buildHeadlessModeSection
+ *   falls back to the legacy bare marker, matching runHeadless's own no-nonce fallback.
  * @returns {{system: string, userMessage: string}} Separated prompts
  *
  * @example
@@ -89,16 +100,19 @@ function buildSystemPrompt(briefing, context, project, headless, mode, client) {
  * );
  * // Use: POST /session/:id/message { system, parts: [{ type: 'text', text: userMessage }] }
  */
-function buildPrompts(briefing, context, project, headless, mode, summaryLength = 'normal', client) {
+function buildPrompts(briefing, context, project, headless, mode, summaryLength = 'normal', client, nonce) {
   const systemSections = [
     buildHeader(client),
     buildEnvironmentSection(project, mode),
-    headless ? buildHeadlessModeSection(summaryLength) : buildInteractiveModeSection()
+    headless ? buildHeadlessModeSection(summaryLength, nonce) : buildInteractiveModeSection()
   ];
 
-  // Strip [SIDECAR_FOLD] markers from context so the model doesn't
-  // mimic them from previous sidecar outputs in the conversation history
-  const cleanContext = context ? context.replace(/\[SIDECAR_FOLD\]/g, '') : context;
+  // Strip fold markers from context so the model doesn't mimic them from
+  // previous sidecar outputs in the conversation history. Matches BOTH the
+  // legacy bare `[SIDECAR_FOLD]` and any nonced `[SIDECAR_FOLD:<nonce>]` —
+  // a resumed/continued conversation's history can carry either shape
+  // depending on when the prior turn ran (15b.3).
+  const cleanContext = context ? context.replace(/\[SIDECAR_FOLD(:[^\]]*)?\]/g, '') : context;
 
   let userMessage;
   if (headless) {
@@ -237,9 +251,16 @@ Keep track of key findings as you work.`;
  * Spec Reference: §6.2 Headless Mode
  *
  * @param {string} summaryLength - Desired summary length (brief, normal, verbose)
+ * @param {string} [nonce] - Per-run fold nonce (15b.3, #BL-7 residual). When provided,
+ *   the model is instructed to emit `[SIDECAR_FOLD:<nonce>]` instead of the legacy bare
+ *   `[SIDECAR_FOLD]` — see buildPrompts' @param doc for the full rationale. Falls back to
+ *   the legacy bare marker when omitted (keeps this function usable standalone / by the
+ *   deprecated buildSystemPrompt(), which has no orchestration-layer caller to source a
+ *   nonce from).
  * @returns {string}
  */
-function buildHeadlessModeSection(summaryLength) {
+function buildHeadlessModeSection(summaryLength, nonce) {
+  const marker = nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]';
   let summaryFormat = `## Summary Format
 
 When complete, output your findings in this format:
@@ -266,7 +287,7 @@ When complete, output your findings in this format:
 
 **Open Questions:** (if any)
 
-[SIDECAR_FOLD]`;
+${marker}`;
 
   if (summaryLength === 'brief') {
     summaryFormat = `## Summary Format
@@ -281,7 +302,7 @@ When complete, output a BRIEF summary in this format:
 **Recommendations:**
 [Suggested actions]
 
-[SIDECAR_FOLD]`;
+${marker}`;
   } else if (summaryLength === 'verbose') {
     // Verbose could include more details or examples
     summaryFormat = `## Summary Format (VERBOSE)
@@ -315,7 +336,7 @@ When complete, output a COMPREHENSIVE summary in this format, including all deta
 **Open Questions:** (if any)
 [List all remaining ambiguities, unresolved issues, or areas requiring further investigation.]
 
-[SIDECAR_FOLD]`;
+${marker}`;
   }
 
   return `## HEADLESS MODE INSTRUCTIONS
@@ -324,14 +345,14 @@ You are running autonomously without human interaction.
 
 1. Execute the task completely
 2. Make reasonable assumptions and document them
-3. When done, output your summary followed by [SIDECAR_FOLD]
+3. When done, output your summary followed by ${marker}
 
 Do NOT ask questions. Work independently.
 
 If you encounter a blocker you cannot resolve:
 1. Document what you tried
 2. Output partial results
-3. End with [SIDECAR_FOLD]
+3. End with ${marker}
 
 ${summaryFormat}`;
 }

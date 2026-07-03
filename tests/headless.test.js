@@ -46,7 +46,47 @@ jest.mock('../src/utils/logger', () => ({
   }
 }));
 
-const { runHeadless, extractSummary, findTrailingFoldMarker, COMPLETE_MARKER, FOLD_MARKER, formatFoldOutput, DEFAULT_TIMEOUT } = require('../src/headless');
+const { runHeadless: runHeadlessRaw, extractSummary, findTrailingFoldMarker, COMPLETE_MARKER, FOLD_MARKER, formatFoldOutput, DEFAULT_TIMEOUT } = require('../src/headless');
+const { buildFoldMarker } = require('../src/utils/fold-marker');
+
+// 15b.3: fixed per-suite nonce. Most of this file's fixtures embed a
+// completion marker in mocked model output and expect runHeadless to fold on
+// it — since completion now requires the marker to carry THIS run's nonce,
+// every such fixture must (a) use NONCED_MARKER instead of the bare
+// COMPLETE_MARKER and (b) agree on a nonce with runHeadless's detection.
+// `runHeadless` below is a thin wrapper around the real one that DEFAULTS
+// options.nonce to NONCE (a call passing its OWN options.nonce — e.g. the
+// nonce-security-property tests further down — always wins, since that
+// value overwrites the default in the spread below). This means most of the
+// ~45 call sites in this file needed ZERO signature changes: only the
+// fixtures that actually assert on marker-triggered completion had their
+// [SIDECAR_FOLD] literal swapped for NONCED_MARKER.
+const NONCE = 'testnonce1234567';
+const NONCED_MARKER = buildFoldMarker(NONCE);
+
+/** Merge {nonce: NONCE} into a runHeadless options object (own properties win). */
+function withNonce(options = {}) {
+  return { nonce: NONCE, ...options };
+}
+
+/**
+ * Test-local shim: same signature as the real runHeadless, but the trailing
+ * `options` argument defaults to carrying this suite's NONCE when the call
+ * site omits it entirely (the common case: `runHeadless(m, s, u, t, p, ms)`
+ * with no 7th/8th arg). A caller that DOES pass its own options object keeps
+ * full control — `withNonce()`'s spread order means an explicit
+ * `options.nonce` (or the deliberate ABSENCE of one, tested in the
+ * nonce-security describe block below via a differently-named nonce) is
+ * never silently overwritten... except this shim can't tell "options passed
+ * without .nonce" from "options not passed" — so tests needing a DIFFERENT
+ * or ABSENT nonce call the real runHeadlessRaw directly instead.
+ */
+function runHeadless(model, systemPrompt, userMessage, taskId, project, timeoutMs, agent, options) {
+  if (arguments.length <= 6) {
+    return runHeadlessRaw(model, systemPrompt, userMessage, taskId, project, timeoutMs, undefined, { nonce: NONCE });
+  }
+  return runHeadlessRaw(model, systemPrompt, userMessage, taskId, project, timeoutMs, agent, withNonce(options));
+}
 
 describe('Headless Mode Runner', () => {
   let mockClient;
@@ -94,7 +134,7 @@ describe('Headless Mode Runner', () => {
       mockSendPromptAsync.mockResolvedValue(undefined);
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ type: 'text', text: `Done!\n${COMPLETE_MARKER}` }]
+        parts: [{ type: 'text', text: `Done!\n${NONCED_MARKER}` }]
       }]);
 
       await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -109,7 +149,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
       });
 
@@ -119,7 +159,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -141,7 +181,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
       });
 
@@ -154,7 +194,7 @@ describe('Headless Mode Runner', () => {
           .mockResolvedValueOnce([{ parts: [{ type: 'text', text: 'Still working...' }] }])
           .mockResolvedValueOnce([{
             info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-            parts: [{ type: 'text', text: `Done!\n${COMPLETE_MARKER}` }]
+            parts: [{ type: 'text', text: `Done!\n${NONCED_MARKER}` }]
           }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 10000);
@@ -170,7 +210,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         // Call without agent parameter (undefined)
@@ -191,7 +231,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000, 'plan');
@@ -213,7 +253,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: `Summary content\n${COMPLETE_MARKER}` }]
+          parts: [{ type: 'text', text: `Summary content\n${NONCED_MARKER}` }]
         }]);
       });
 
@@ -224,7 +264,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: `${summaryText}\n${COMPLETE_MARKER}` }]
+          parts: [{ type: 'text', text: `${summaryText}\n${NONCED_MARKER}` }]
         }]);
       });
     });
@@ -266,7 +306,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -293,7 +333,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -310,7 +350,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -329,7 +369,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: `${responseText}\n${COMPLETE_MARKER}` }]
+          parts: [{ type: 'text', text: `${responseText}\n${NONCED_MARKER}` }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -351,7 +391,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -370,7 +410,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: `Summary\n${COMPLETE_MARKER}` }]
+          parts: [{ type: 'text', text: `Summary\n${NONCED_MARKER}` }]
         }]);
 
         const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -386,7 +426,7 @@ describe('Headless Mode Runner', () => {
         mockSendPromptAsync.mockResolvedValue(undefined);
         mockGetMessages.mockResolvedValue([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ type: 'text', text: COMPLETE_MARKER }]
+          parts: [{ type: 'text', text: NONCED_MARKER }]
         }]);
 
         const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -436,32 +476,46 @@ describe('Headless Mode Runner', () => {
     });
   });
 
-  describe('findTrailingFoldMarker (#BL-7)', () => {
-    it('matches a marker that is the final non-empty line', () => {
-      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD]')).toBeGreaterThanOrEqual(0);
-      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD]\n\n')).toBeGreaterThanOrEqual(0);
-      expect(findTrailingFoldMarker('   [SIDECAR_FOLD]   ')).toBeGreaterThanOrEqual(0);
+  describe('findTrailingFoldMarker (#BL-7 + 15b.3 nonce)', () => {
+    it('matches the nonced marker when it is the final non-empty line', () => {
+      expect(findTrailingFoldMarker(`done\n${NONCED_MARKER}`, NONCE)).toBeGreaterThanOrEqual(0);
+      expect(findTrailingFoldMarker(`done\n${NONCED_MARKER}\n\n`, NONCE)).toBeGreaterThanOrEqual(0);
+      expect(findTrailingFoldMarker(`   ${NONCED_MARKER}   `, NONCE)).toBeGreaterThanOrEqual(0);
     });
 
     it('does NOT match a marker echoed inline in prose', () => {
-      expect(findTrailingFoldMarker('splits on the [SIDECAR_FOLD] marker')).toBe(-1);
+      expect(findTrailingFoldMarker(`splits on the ${NONCED_MARKER} marker`, NONCE)).toBe(-1);
     });
 
     it('does NOT match a standalone marker followed by more content', () => {
       // The core hardening: an own-line marker mid-output is not a completion signal.
-      expect(findTrailingFoldMarker('here:\n[SIDECAR_FOLD]\nmore work')).toBe(-1);
+      expect(findTrailingFoldMarker(`here:\n${NONCED_MARKER}\nmore work`, NONCE)).toBe(-1);
     });
 
     it('returns the TRAILING marker index when several appear', () => {
-      const out = 'a\n[SIDECAR_FOLD]\nb\n[SIDECAR_FOLD]';
+      const out = `a\n${NONCED_MARKER}\nb\n${NONCED_MARKER}`;
       // Index points at the last marker line (after "b\n"), not the first.
-      expect(findTrailingFoldMarker(out)).toBe(out.lastIndexOf('[SIDECAR_FOLD]'));
+      expect(findTrailingFoldMarker(out, NONCE)).toBe(out.lastIndexOf(NONCED_MARKER));
     });
 
     it('returns -1 for empty/absent', () => {
-      expect(findTrailingFoldMarker('')).toBe(-1);
-      expect(findTrailingFoldMarker(null)).toBe(-1);
-      expect(findTrailingFoldMarker('no marker here')).toBe(-1);
+      expect(findTrailingFoldMarker('', NONCE)).toBe(-1);
+      expect(findTrailingFoldMarker(null, NONCE)).toBe(-1);
+      expect(findTrailingFoldMarker('no marker here', NONCE)).toBe(-1);
+    });
+
+    // 15b.3 core red: the bare legacy marker and a marker carrying a
+    // DIFFERENT nonce must never match — only this exact nonce completes.
+    it('does NOT match the bare legacy [SIDECAR_FOLD] marker (no nonce)', () => {
+      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD]', NONCE)).toBe(-1);
+    });
+
+    it('does NOT match a marker carrying a DIFFERENT nonce', () => {
+      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD:someOtherNonce]', NONCE)).toBe(-1);
+    });
+
+    it('returns -1 when no nonce is supplied at all, even with a bare marker present', () => {
+      expect(findTrailingFoldMarker('done\n[SIDECAR_FOLD]', undefined)).toBe(-1);
     });
   });
 
@@ -478,7 +532,7 @@ describe('Headless Mode Runner', () => {
       mockSendPromptAsync.mockResolvedValue(undefined);
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ type: 'text', text: COMPLETE_MARKER }]
+        parts: [{ type: 'text', text: NONCED_MARKER }]
       }]);
     });
 
@@ -609,6 +663,20 @@ describe('Headless Mode Runner', () => {
       expect(output).toContain('Client: code-local');
       expect(output).toContain('Mode: headless');
     });
+
+    // 15b.3
+    it('uses the nonced marker when a nonce is provided', () => {
+      const output = formatFoldOutput({
+        model: 'test', sessionId: 'x', summary: 'hi', nonce: NONCE
+      });
+      expect(output).toContain(NONCED_MARKER);
+      expect(output).not.toContain('[SIDECAR_FOLD]');
+    });
+
+    it('falls back to the legacy bare marker when no nonce is provided (back-compat)', () => {
+      const output = formatFoldOutput({ model: 'test', sessionId: 'x', summary: 'hi' });
+      expect(output).toContain('[SIDECAR_FOLD]');
+    });
   });
 
   describe('DEFAULT_TIMEOUT', () => {
@@ -729,7 +797,7 @@ describe('Headless Mode Runner', () => {
       mockSendPromptAsync.mockResolvedValue(undefined);
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ type: 'text', text: COMPLETE_MARKER }]
+        parts: [{ type: 'text', text: NONCED_MARKER }]
       }]);
     });
 
@@ -760,7 +828,7 @@ describe('Headless Mode Runner', () => {
         }])
         .mockResolvedValueOnce([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ id: 'p1', type: 'text', text: `Working on it... Done\n${COMPLETE_MARKER}` }]
+          parts: [{ id: 'p1', type: 'text', text: `Working on it... Done\n${NONCED_MARKER}` }]
         }]);
 
       await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 15000);
@@ -786,7 +854,7 @@ describe('Headless Mode Runner', () => {
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
           parts: [
             { id: 'tool-1', type: 'tool_use', name: 'web_search', input: { query: 'test' } },
-            { id: 'p1', type: 'text', text: `Search results found\n${COMPLETE_MARKER}` }
+            { id: 'p1', type: 'text', text: `Search results found\n${NONCED_MARKER}` }
           ]
         }]);
 
@@ -830,7 +898,7 @@ describe('Headless Mode Runner', () => {
           parts: [
             { id: 'tool-1', type: 'tool_use', name: 'web_search', input: { query: 'test' } },
             { id: 'tool-2', type: 'tool_use', name: 'Read', input: { path: '/tmp/x' } },
-            { id: 'p1', type: 'text', text: `Done\n${COMPLETE_MARKER}` }
+            { id: 'p1', type: 'text', text: `Done\n${NONCED_MARKER}` }
           ]
         }]);
 
@@ -856,7 +924,7 @@ describe('Headless Mode Runner', () => {
     it('should include messagesReceived count in receiving stage', async () => {
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ id: 'p1', type: 'text', text: `Response text\n${COMPLETE_MARKER}` }]
+        parts: [{ id: 'p1', type: 'text', text: `Response text\n${NONCED_MARKER}` }]
       }]);
 
       await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
@@ -902,7 +970,7 @@ describe('Headless Mode Runner', () => {
         }])
         .mockResolvedValueOnce([{
           info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-          parts: [{ id: 'p1', type: 'text', text: `Hello world done\n${COMPLETE_MARKER}` }]
+          parts: [{ id: 'p1', type: 'text', text: `Hello world done\n${NONCED_MARKER}` }]
         }]);
 
       const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 15000);
@@ -931,7 +999,7 @@ describe('Headless Mode Runner', () => {
           },
           {
             info: { role: 'assistant', id: 'msg-2', time: { completed: Date.now() } },
-            parts: [{ id: 'p2', type: 'text', text: `Still working... Done\n${COMPLETE_MARKER}` }]
+            parts: [{ id: 'p2', type: 'text', text: `Still working... Done\n${NONCED_MARKER}` }]
           }
         ]);
 
@@ -947,7 +1015,7 @@ describe('Headless Mode Runner', () => {
         },
         {
           info: { role: 'assistant', id: 'msg-a1', time: { completed: Date.now() } },
-          parts: [{ id: 'pa1', type: 'text', text: `Assistant output\n${COMPLETE_MARKER}` }]
+          parts: [{ id: 'pa1', type: 'text', text: `Assistant output\n${NONCED_MARKER}` }]
         }
       ]);
 
@@ -961,7 +1029,7 @@ describe('Headless Mode Runner', () => {
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
         parts: [
           { id: 'tool-1', type: 'tool', name: 'Read', input: { path: '/test.js' } },
-          { id: 'p1', type: 'text', text: `Found file\n${COMPLETE_MARKER}` }
+          { id: 'p1', type: 'text', text: `Found file\n${NONCED_MARKER}` }
         ]
       }]);
 
@@ -995,13 +1063,15 @@ describe('Headless Mode Runner', () => {
       expect(result.summary).toContain('[SIDECAR_FOLD]');
     }, 25000);
 
-    it('should trigger fold when [SIDECAR_FOLD] is on its own line', async () => {
+    it('should trigger fold when the nonced marker is on its own line', async () => {
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ id: 'p1', type: 'text', text: 'Summary content\n[SIDECAR_FOLD]' }]
+        parts: [{ id: 'p1', type: 'text', text: `Summary content\n${NONCED_MARKER}` }]
       }]);
 
-      const result = await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 10000);
+      const result = await runHeadless(
+        testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 10000, 'build', withNonce()
+      );
       expect(result.completed).toBe(true);
       expect(result.summary).toBe('Summary content');
     }, 15000);
@@ -1028,20 +1098,73 @@ describe('Headless Mode Runner', () => {
       expect(result.summary).toContain('continuing analysis');
     }, 20000);
 
-    it('DOES fold once the [SIDECAR_FOLD] becomes the final non-empty line (#BL-7)', async () => {
+    it('DOES fold once the nonced marker becomes the final non-empty line (#BL-7)', async () => {
       // Same content, but the model has now genuinely finished — marker is last.
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ id: 'p1', type: 'text', text: 'All analysis complete.\n[SIDECAR_FOLD]\n' }]
+        parts: [{ id: 'p1', type: 'text', text: `All analysis complete.\n${NONCED_MARKER}\n` }]
       }]);
 
       const result = await runHeadless(
         testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
-        10000, 'build', { pollIntervalMs: 5 }
+        10000, 'build', withNonce({ pollIntervalMs: 5 })
       );
       expect(result.completed).toBe(true);
       expect(result.summary).toBe('All analysis complete.');
     }, 15000);
+
+    // 15b.3 — per-run fold nonce (BL-7 residual): the bare [SIDECAR_FOLD]
+    // marker used to be sufficient to fold ANY run. That means model output
+    // that merely REPRODUCES the bare marker (e.g. because it read these very
+    // instructions, or a doc, or another run's transcript) could force a
+    // premature completion even once it's pinned to the final line. A per-run
+    // nonce closes that: only the marker THIS run's prompt actually asked for
+    // completes THIS run.
+    describe('per-run fold nonce (15b.3, #BL-7 residual)', () => {
+      it('does NOT complete on a bare [SIDECAR_FOLD] (no nonce) when the run has a configured nonce', async () => {
+        mockGetMessages.mockResolvedValue([{
+          info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+          parts: [{ id: 'p1', type: 'text', text: 'All analysis complete.\n[SIDECAR_FOLD]\n' }]
+        }]);
+
+        const result = await runHeadless(
+          testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+          30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 3, nonce: 'expectedNonce123' }
+        );
+        // Never sees ITS nonce — must NOT fold on the bare marker. It ends via
+        // the idle fallback instead (a genuine completion, not a fold-marker one).
+        expect(result.completed).toBe(true);
+        expect(result.summary).toContain('[SIDECAR_FOLD]');
+      });
+
+      it('does NOT complete when the output carries the WRONG nonce', async () => {
+        mockGetMessages.mockResolvedValue([{
+          info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+          parts: [{ id: 'p1', type: 'text', text: 'All analysis complete.\n[SIDECAR_FOLD:wrongnonce999]\n' }]
+        }]);
+
+        const result = await runHeadless(
+          testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+          30000, 'build', { pollIntervalMs: 5, stableIdlePolls: 3, nonce: 'expectedNonce123' }
+        );
+        expect(result.completed).toBe(true); // via idle fallback, not the fold branch
+        expect(result.summary).toContain('[SIDECAR_FOLD:wrongnonce999]');
+      });
+
+      it('DOES complete when the output carries the CORRECT nonce as the final line', async () => {
+        mockGetMessages.mockResolvedValue([{
+          info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+          parts: [{ id: 'p1', type: 'text', text: 'All analysis complete.\n[SIDECAR_FOLD:expectedNonce123]\n' }]
+        }]);
+
+        const result = await runHeadless(
+          testModel, testSystemPrompt, testUserMessage, testTaskId, testProject,
+          10000, 'build', { pollIntervalMs: 5, nonce: 'expectedNonce123' }
+        );
+        expect(result.completed).toBe(true);
+        expect(result.summary).toBe('All analysis complete.');
+      });
+    });
 
     it('completes via the idle fallback after stableIdlePolls without assistantFinished', async () => {
       const stableMessage = [{
@@ -1156,7 +1279,7 @@ describe('Headless Mode Runner', () => {
       });
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ id: 'p1', type: 'text', text: `All good\n${COMPLETE_MARKER}` }]
+        parts: [{ id: 'p1', type: 'text', text: `All good\n${NONCED_MARKER}` }]
       }]);
 
       const result = await runHeadless(
@@ -1191,7 +1314,7 @@ describe('Headless Mode Runner', () => {
     it('honors an injected poll interval (fast path)', async () => {
       mockGetMessages.mockResolvedValue([{
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-        parts: [{ id: 'p1', type: 'text', text: `Quick\n${COMPLETE_MARKER}` }]
+        parts: [{ id: 'p1', type: 'text', text: `Quick\n${NONCED_MARKER}` }]
       }]);
       const start = Date.now();
       const result = await runHeadless(
@@ -1214,7 +1337,7 @@ describe('Headless Mode Runner', () => {
         info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
         parts: [
           { id: 't1', type: 'tool_use', name: 'Read', input: { path: '/big' } },
-          { id: 'p1', type: 'text', text: `Reading the file... done\n${COMPLETE_MARKER}` }
+          { id: 'p1', type: 'text', text: `Reading the file... done\n${NONCED_MARKER}` }
         ]
       };
       let n = 0;
@@ -1243,7 +1366,7 @@ describe('Headless Mode Runner', () => {
           { id: 'r1', type: 'tool_result', tool_use_id: 't1', content: 'ok' },
           { id: 't2', type: 'tool_use', name: 'B', input: {} }] }],
         [{ info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } }, parts: [
-          { id: 'x', type: 'text', text: `go done\n${COMPLETE_MARKER}` }] }],
+          { id: 'x', type: 'text', text: `go done\n${NONCED_MARKER}` }] }],
       ];
       let n = 0;
       mockGetMessages.mockImplementation(() => Promise.resolve(seq[Math.min(n++, seq.length - 1)]));
@@ -1277,7 +1400,7 @@ describe('Headless Mode Runner', () => {
         if (n < 3) { return Promise.resolve([]); } // no messages yet
         return Promise.resolve([{
           info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } },
-          parts: [{ id: 'p1', type: 'text', text: `Real output\n${COMPLETE_MARKER}` }]
+          parts: [{ id: 'p1', type: 'text', text: `Real output\n${NONCED_MARKER}` }]
         }]);
       });
       const result = await runHeadless(

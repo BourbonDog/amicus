@@ -16,6 +16,7 @@ const {
 } = require('./session-utils');
 const { acquireLock, releaseLock } = require('../utils/session-lock');
 const { runHeadless } = require('../headless');
+const { extractNonceFromText, generateFoldNonce } = require('../utils/fold-marker');
 const { logger } = require('../utils/logger');
 
 /** Load session metadata from session directory */
@@ -159,6 +160,18 @@ async function resumeSidecar(options) {
       logger.warn('Files changed since last activity', { taskId, changedFileCount: drift.changedFiles.length });
     }
 
+    // 15b.3: resume re-sends the ORIGINAL prompt text verbatim (unlike
+    // continue, which builds a fresh one) — that prompt already instructed
+    // the model with the nonce baked in at the initial start/continue time.
+    // Recover it from the saved text so the detector agrees with what the
+    // model was actually told. A session saved before 15b.3 shipped (or any
+    // prompt that somehow lost its marker instruction) has no nonce to
+    // recover — generate a fresh one so resume still gets nonce protection,
+    // even though the OLD prompt text won't mention it (that just means this
+    // resumed run can only complete via a non-fold-marker path, same as any
+    // other run whose prompt and detector nonce happen to mismatch).
+    const foldNonce = extractNonceFromText(systemPrompt) || generateFoldNonce();
+
     // Update metadata (get updated metadata with resumedAt)
     const updatedMetadata = updateSessionStatus(sessionDir, 'running');
 
@@ -179,7 +192,7 @@ async function resumeSidecar(options) {
       const userMessage = buildResumeUserMessage(metadata.briefing || '', existingConversation);
       result = await runHeadless(
         metadata.model, resumePrompt, userMessage,
-        taskId, project, timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers }
+        taskId, project, timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers, nonce: foldNonce }
       );
       summary = result.summary || '## Sidecar Results: No Output\n\nResumed session completed without summary.';
 
@@ -196,7 +209,8 @@ async function resumeSidecar(options) {
           isResume: true,
           conversation: existingConversation,
           opencodeSessionId: metadata.opencodeSessionId,
-          mcp: mcpServers
+          mcp: mcpServers,
+          foldNonce
         }
       );
       summary = result.summary || '';

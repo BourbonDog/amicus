@@ -18,7 +18,7 @@ startOpenCodeServer() → createSession() → sendPromptAsync()
 [Interactive]                    [Headless]
 Electron BrowserView opens       OpenCode async API (promptAsync)
 User converses with model        Agent works autonomously
-FOLD clicked →                   Polls for [SIDECAR_FOLD] marker
+FOLD clicked →                   Polls for [SIDECAR_FOLD:<nonce>] marker
   Model generates summary            ↓
   (SUMMARY_TEMPLATE prompt)     extractSummary() captures output
        ↓                              ↓
@@ -38,7 +38,7 @@ When the user clicks **Fold** (or presses `Cmd+Shift+F`) in interactive mode:
 
 In headless mode, the agent outputs `[SIDECAR_FOLD]` autonomously when done, and `headless.js` extracts everything before the marker.
 
-**Wire-format token:** The literal string `[SIDECAR_FOLD]` is the wire-format token emitted by the model in headless mode and parsed by `src/headless.js` (regex `^\s*\[SIDECAR_FOLD\]\s*$/m`) and embedded in headless mode instructions by `src/prompt-builder.js`. This is an intentional legacy wire format kept for compatibility, tracked in `docs/SHIMS.md`.
+**Wire-format token:** The wire-format token emitted by the model in headless mode is `[SIDECAR_FOLD:<nonce>]` — a per-run random nonce, generated once per run before prompt construction (`src/utils/fold-marker.js`), embedded in headless mode instructions by `src/prompt-builder.js`, and required by `src/headless.js`'s detector (`findTrailingFoldMarker`, final-non-empty-line match on the exact nonced marker). This closes a hardening gap (#BL-7): a static, public marker meant model output that merely echoed it (prior instructions, a scraped doc, another run's transcript) could force a premature completion; requiring the run's own nonce means only a model that actually finished can produce it. The bare `[SIDECAR_FOLD]` literal (no `:<nonce>`) is kept only as a legacy/back-compat constant (`FOLD_MARKER` in `src/headless.js`) for callers with no nonce context — it is never accepted by the detector. Tracked in `docs/SHIMS.md`.
 
 ## Shared Server Architecture
 

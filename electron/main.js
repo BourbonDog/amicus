@@ -72,6 +72,11 @@ const OPENCODE_PORT = parseInt(getCompatEnv('OPENCODE_PORT') || '4096', 10);
 const OPENCODE_SESSION_ID = getCompatEnv('SESSION_ID');
 const FOLD_SHORTCUT = getCompatEnv('FOLD_SHORTCUT') || 'CommandOrControl+Shift+F';
 const WINDOW_POSITION = getCompatEnv('WINDOW_POSITION') || 'right';
+// 15b.3: per-run fold nonce (#BL-7 residual). Set by the interactive launcher
+// (src/sidecar/interactive-process.js buildElectronEnv) from the SAME value
+// baked into the system prompt's fold instruction. undefined when a launcher
+// predates this env var — fold.js falls back to the legacy bare marker.
+const FOLD_NONCE = getCompatEnv('FOLD_NONCE');
 
 const OPENCODE_URL = `http://localhost:${OPENCODE_PORT}`;
 
@@ -89,7 +94,8 @@ const foldHandler = createFoldHandler({
   cwd: CWD,
   sessionId: OPENCODE_SESSION_ID,
   taskId: TASK_ID,
-  port: OPENCODE_PORT
+  port: OPENCODE_PORT,
+  nonce: FOLD_NONCE
 });
 // Auto-fold on close (backlog B01): a user-initiated window close with no
 // fold yet run must not silently discard the session summary. See

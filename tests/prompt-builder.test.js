@@ -6,6 +6,7 @@
  */
 
 const { buildSystemPrompt, buildPrompts, getSummaryTemplate, SUMMARY_TEMPLATE, buildEnvironmentSection } = require('../src/prompt-builder');
+const { buildFoldMarker } = require('../src/utils/fold-marker');
 
 describe('Prompt Builder', () => {
   describe('buildSystemPrompt', () => {
@@ -340,6 +341,73 @@ describe('Prompt Builder', () => {
           false
         );
         expect(system).not.toContain('[SIDECAR_FOLD]');
+      });
+
+      // 15b.3: a resumed/continued conversation's history can carry a PRIOR
+      // turn's nonced marker (that turn ran under the nonce scheme). Stripping
+      // must catch that shape too, not just the legacy bare one.
+      it('should strip a nonced [SIDECAR_FOLD:<nonce>] from context in headless mode', () => {
+        const { userMessage } = buildPrompts(
+          'task',
+          'context with [SIDECAR_FOLD:abc123def456] marker',
+          '/project',
+          true
+        );
+        expect(userMessage).not.toContain('[SIDECAR_FOLD:abc123def456]');
+        expect(userMessage).not.toContain('SIDECAR_FOLD');
+      });
+
+      it('should strip a nonced [SIDECAR_FOLD:<nonce>] from context in interactive mode', () => {
+        const { system } = buildPrompts(
+          'task',
+          'context with [SIDECAR_FOLD:abc123def456] marker',
+          '/project',
+          false
+        );
+        expect(system).not.toContain('[SIDECAR_FOLD:abc123def456]');
+        expect(system).not.toContain('SIDECAR_FOLD');
+      });
+
+      it('should strip BOTH a legacy bare marker and a nonced marker appearing in the same context', () => {
+        const { userMessage } = buildPrompts(
+          'task',
+          'old turn: [SIDECAR_FOLD] ... newer turn: [SIDECAR_FOLD:deadbeef00]',
+          '/project',
+          true
+        );
+        expect(userMessage).not.toContain('SIDECAR_FOLD');
+      });
+    });
+
+    describe('per-run fold nonce in the headless instruction (15b.3, #BL-7 residual)', () => {
+      const NONCE = 'cafef00d12345678';
+
+      it('instructs the model to emit the NONCED marker, not the bare legacy one, when a nonce is supplied', () => {
+        const { system } = buildPrompts('task', '', '/project', true, 'build', 'normal', 'code-local', NONCE);
+        expect(system).toContain(buildFoldMarker(NONCE));
+        // The bare legacy marker must not appear anywhere in the instructions —
+        // every instance was replaced by the nonced form.
+        expect(system).not.toContain('[SIDECAR_FOLD]');
+      });
+
+      it('carries the nonce through brief and verbose summary-length variants too', () => {
+        const brief = buildPrompts('task', '', '/project', true, 'build', 'brief', 'code-local', NONCE);
+        expect(brief.system).toContain(buildFoldMarker(NONCE));
+        expect(brief.system).not.toContain('[SIDECAR_FOLD]');
+
+        const verbose = buildPrompts('task', '', '/project', true, 'build', 'verbose', 'code-local', NONCE);
+        expect(verbose.system).toContain(buildFoldMarker(NONCE));
+        expect(verbose.system).not.toContain('[SIDECAR_FOLD]');
+      });
+
+      it('falls back to the legacy bare marker when no nonce is supplied (back-compat)', () => {
+        const { system } = buildPrompts('task', '', '/project', true, 'build', 'normal', 'code-local');
+        expect(system).toContain('[SIDECAR_FOLD]');
+      });
+
+      it('does not affect interactive mode (no fold-marker instruction to nonce)', () => {
+        const { system } = buildPrompts('task', '', '/project', false, 'build', 'normal', 'code-local', NONCE);
+        expect(system).not.toContain('SIDECAR_FOLD');
       });
     });
 

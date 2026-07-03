@@ -12,17 +12,41 @@
  */
 
 // Mock the opencode-client SDK module first (before any imports)
+//
+// 15b.3: startSidecar (the REAL production code path under test here) now
+// generates a per-run nonce and bakes it into the system prompt BEFORE
+// calling sendPromptAsync, and runHeadless's detector requires that exact
+// nonce. A static bare-`[SIDECAR_FOLD]` mock output can never complete a real
+// run anymore (that's the whole point of this task) — so the default
+// getMessages mock must ECHO the nonce it finds in the most recent
+// sendPromptAsync call's system prompt, exactly like a well-behaved model
+// would. mockExtractFoldNonce() below does that extraction; tests that build
+// their OWN summary text (rather than relying on the default mock) call it
+// explicitly too.
 const mockServerClose = jest.fn();
 const mockSendPromptAsync = jest.fn().mockResolvedValue(undefined);
+
+/** Pull the nonce startSidecar baked into the most recent sendPromptAsync system prompt. */
+function mockExtractFoldNonce() {
+  const { extractNonceFromText } = require('../src/utils/fold-marker');
+  const lastCall = mockSendPromptAsync.mock.calls[mockSendPromptAsync.mock.calls.length - 1];
+  const systemPrompt = lastCall && lastCall[2] && lastCall[2].system;
+  return extractNonceFromText(systemPrompt);
+}
+
 jest.mock('../src/opencode-client', () => ({
   createClient: jest.fn().mockReturnValue({}),
   createSession: jest.fn().mockResolvedValue('mock-session-id'),
   sendPrompt: mockSendPromptAsync,
   sendPromptAsync: mockSendPromptAsync,
-  getMessages: jest.fn().mockResolvedValue([{
-    info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-    parts: [{ type: 'text', text: '[SIDECAR_FOLD]' }]
-  }]),
+  getMessages: jest.fn().mockImplementation(() => {
+    const { buildFoldMarker } = require('../src/utils/fold-marker');
+    const nonce = mockExtractFoldNonce();
+    return Promise.resolve([{
+      info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
+      parts: [{ type: 'text', text: nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]' }]
+    }]);
+  }),
   checkHealth: jest.fn().mockResolvedValue(true),
   startServer: jest.fn().mockResolvedValue({
     client: {},
@@ -51,7 +75,7 @@ let mockHomeDir;
 jest.spyOn(os, 'homedir').mockImplementation(() => mockHomeDir || originalHomedir());
 
 // Import after mocks are set up
-const { startSidecar, listSidecars, readSidecar, FOLD_MARKER, COMPLETE_MARKER } = require('../src/index');
+const { startSidecar, listSidecars, readSidecar } = require('../src/index');
 
 describe('End-to-End Sidecar Flow', () => {
   let tmpDir;       // Project directory
@@ -129,8 +153,11 @@ describe('End-to-End Sidecar Flow', () => {
         { role: 'user', content: 'The token refresh logic seems suspicious' }
       ]);
 
-      // Step 2: Setup mock SDK responses
-      const mockSummary = `## Sidecar Results: Auth Bug Analysis
+      // Step 2: Setup mock SDK responses. 15b.3: the fold marker at the end
+      // must carry the nonce THIS run's prompt actually instructed — computed
+      // lazily (mockImplementation, not a static mockResolvedValue) since the
+      // nonce doesn't exist until startSidecar runs, below.
+      const mockSummaryBody = `## Sidecar Results: Auth Bug Analysis
 
 **Task:** Debug random logout issue
 
@@ -145,15 +172,19 @@ describe('End-to-End Sidecar Flow', () => {
 3. Add retry logic with exponential backoff
 
 **Files Modified:** None (analysis only)
-
-${FOLD_MARKER}`;
+`;
 
       // Get SDK mocks and configure them for this test
       const { startServer, sendPromptAsync, getMessages, createSession } = require('../src/opencode-client');
-      getMessages.mockResolvedValue([{
-        info: { role: "assistant", id: "msg-1", time: { completed: Date.now() } },
-        parts: [{ type: "text", text: mockSummary }]
-      }]);
+      const { buildFoldMarker } = require('../src/utils/fold-marker');
+      getMessages.mockImplementation(() => {
+        const nonce = mockExtractFoldNonce();
+        const marker = nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]';
+        return Promise.resolve([{
+          info: { role: "assistant", id: "msg-1", time: { completed: Date.now() } },
+          parts: [{ type: "text", text: `${mockSummaryBody}\n${marker}` }]
+        }]);
+      });
 
       // Step 3: Spy on console.log to capture the summary output
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -226,13 +257,18 @@ ${FOLD_MARKER}`;
     });
 
     it('should read sidecar summary after completion', async () => {
-      // Configure SDK mock for this test
-      const testSummary = `## Test Summary\nThis is the analysis result.\n${FOLD_MARKER}`;
+      // Configure SDK mock for this test. 15b.3: lazy nonce lookup, same
+      // reasoning as the "full workflow" test above.
       const { getMessages: getMessages2 } = require("../src/opencode-client");
-      getMessages2.mockResolvedValue([{
-        info: { role: "assistant", id: "msg-1", time: { completed: Date.now() } },
-        parts: [{ type: "text", text: testSummary }]
-      }]);
+      const { buildFoldMarker } = require('../src/utils/fold-marker');
+      getMessages2.mockImplementation(() => {
+        const nonce = mockExtractFoldNonce();
+        const marker = nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]';
+        return Promise.resolve([{
+          info: { role: "assistant", id: "msg-1", time: { completed: Date.now() } },
+          parts: [{ type: "text", text: `## Test Summary\nThis is the analysis result.\n${marker}` }]
+        }]);
+      });
 
       await startSidecar({
         model: 'google/gemini-2.5-flash',

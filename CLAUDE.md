@@ -162,6 +162,7 @@ src/
 │   ├── env-compat.js  # Environment-variable compatibility shim (Amicus rebrand).
 │   ├── env-loader.js  # Credential Loader
 │   ├── error-doc.js
+│   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
 │   ├── format-duration.js
 │   ├── free-models.js  # Free OpenRouter model detection (Unit A).
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
@@ -364,6 +365,7 @@ evals/
 | `utils/env-compat.js` | Environment-variable compatibility shim (Amicus rebrand). | `getCompatEnv()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
+| `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
 | `utils/format-duration.js` |  | `formatDuration()` |
 | `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |

@@ -9,6 +9,7 @@ const { logger } = require('../src/utils/logger');
 const { requestSummaryFromModel } = require('./summary');
 const { getSummaryTemplate } = require('../src/prompt-builder');
 const { tokenCss } = require('../src/design/tokens');
+const { buildFoldMarker, generateFoldNonce } = require('../src/utils/fold-marker');
 
 /**
  * Create a fold handler bound to the window state
@@ -19,9 +20,17 @@ const { tokenCss } = require('../src/design/tokens');
  * @param {string} state.sessionId - OpenCode session ID
  * @param {string} state.taskId - Sidecar task ID
  * @param {number} state.port - OpenCode server port
+ * @param {string} [state.nonce] - Per-run fold nonce (15b.3, #BL-7 residual). Set by
+ *   main.js from AMICUS_FOLD_NONCE — the SAME value baked into the system prompt's
+ *   fold instruction, so a completion this handler writes matches what the model was
+ *   actually asked to emit. Falls back to a freshly generated nonce when absent (e.g.
+ *   a caller/test that doesn't thread one through) — this is purely defensive: the
+ *   GUI fold path is exit-code driven, not marker-detected, so an un-advertised
+ *   fallback nonce here cannot be exploited the way headless.js's detector could.
  * @returns {{ triggerFold: Function, hasFolded: Function, isFolding: Function, hasCompleted: Function }}
  */
 function createFoldHandler(state) {
+  const nonce = state.nonce || generateFoldNonce();
   // `folded` is set synchronously at triggerFold ENTRY and covers both
   // "in flight" and "done" — this is `hasFolded()`'s existing external
   // contract (main.js wires it straight into createCloseGuard's `hasFolded`
@@ -52,7 +61,7 @@ function createFoldHandler(state) {
       }
 
       const output = [
-        '[SIDECAR_FOLD]',
+        buildFoldMarker(nonce),
         `Model: ${state.model}`,
         `Session: ${state.sessionId || state.taskId}`,
         `Client: ${state.client}`,

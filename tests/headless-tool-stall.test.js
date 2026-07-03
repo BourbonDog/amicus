@@ -47,6 +47,12 @@ jest.mock('../src/utils/logger', () => ({
 }));
 
 const { runHeadless } = require('../src/headless');
+const { buildFoldMarker } = require('../src/utils/fold-marker');
+
+// 15b.3: fixed nonce for the one fixture in this file that expects a real
+// fold-marker completion (test (c) below) — this file is otherwise about
+// tool-call stall detection, not fold-nonce semantics.
+const NONCE = 'toolstallnonce01';
 
 // A tool_use with no tool_result ever — the wedge. name kept distinct for the
 // reason-string assertion.
@@ -70,7 +76,7 @@ const resolvedToolCall = [{
   parts: [
     { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'sleep 999' } },
     { id: 'tr1', type: 'tool_result', tool_use_id: 'tc1', is_error: false, content: 'done' },
-    { id: 'm1:t', type: 'text', text: 'all done\n[SIDECAR_FOLD]\n' },
+    { id: 'm1:t', type: 'text', text: `all done\n${buildFoldMarker(NONCE)}\n` },
   ],
 }];
 
@@ -140,7 +146,7 @@ describe('per-tool-call stall detector (B53)', () => {
     const result = await runHeadless(
       'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
       60000, 'build',
-      { pollIntervalMs: 5, toolCallStallMs: 100000 } // threshold far beyond this short test's runtime
+      { pollIntervalMs: 5, toolCallStallMs: 100000, nonce: NONCE } // threshold far beyond this short test's runtime
     );
 
     expect(result.completed).toBe(true);
