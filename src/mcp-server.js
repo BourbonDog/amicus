@@ -43,6 +43,14 @@ function elapsedMs(metadata) {
 // coverage); 'idle-timeout' is the shared-server idle-eviction value.
 const FAILED_TERMINAL_STATUSES = ['error', 'crashed', 'timeout', 'timed-out', 'idle-timeout', 'aborted'];
 
+// 15a.1: the statuses finalizeHeadlessResult's SUCCESS path can commit
+// (resolveTerminalState's complete/aborted/timed-out outcomes — never 'error',
+// which is finalizeHeadlessResult's OWN failure branch and must remain
+// overwritable by a later genuine failure). Once one of these lands, a later
+// throw in the same .then/.catch chain (e.g. removeSession) must not
+// overwrite it with a fresh 'error' — see the shared-server .catch below.
+const TERMINAL_STATUS_SET = new Set(['complete', 'aborted', 'timed-out']);
+
 const sharedServer = new SharedServerManager({ logger });
 
 /**
@@ -378,12 +386,34 @@ const handlers = {
           } catch (finErr) {
             logger.warn('Failed to finalize session', { error: finErr.message });
           }
-          sharedServer.removeSession(sessionId);
+          // Guarded: a throw here (e.g. a stale/evicted sessionId) must not
+          // escape into an unhandled rejection, and must not fall into .catch
+          // below and have its error-overwrite clobber the terminal status
+          // finalizeHeadlessResult just committed above.
+          try {
+            sharedServer.removeSession(sessionId);
+          } catch (removeErr) {
+            logger.warn('Failed to remove session from shared server', { taskId, error: removeErr.message });
+          }
         }).catch((err) => {
           logger.error('Shared server session failed', { taskId, error: err.message });
-          sharedServer.removeSession(sessionId);
+          try {
+            sharedServer.removeSession(sessionId);
+          } catch (removeErr) {
+            logger.warn('Failed to remove session from shared server', { taskId, error: removeErr.message });
+          }
           try {
             const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            // A run that already committed a terminal status (complete/aborted/
+            // timed-out) must never be clobbered by a LATER in-chain throw (e.g.
+            // a bug after finalizeHeadlessResult) — only a genuine pre-terminal
+            // failure (runHeadless itself rejecting) should land here as 'error'.
+            if (TERMINAL_STATUS_SET.has(meta.status)) {
+              logger.warn('Shared server chain error after terminal status already committed — not overwriting', {
+                taskId, existingStatus: meta.status, error: err.message,
+              });
+              return;
+            }
             meta.status = 'error';
             meta.reason = err.message;
             meta.completedAt = new Date().toISOString();
