@@ -434,7 +434,7 @@ claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]
 | `AMICUS_CONFIG_DIR` | Override the config directory (keys, catalog, sessions). | `~/.config/amicus` |
 | `AMICUS_FANOUT_MAX_LEGS` | Cap the number of legs in a single fanout wave; non-positive values fall back to 10. | `10` |
 | `AMICUS_SHARED_SERVER` | When `1`, multiple MCP sessions share a single OpenCode Go process, eliminating cold-start latency. Set to `0` for per-process isolation or to diagnose a crash loop. | `1` |
-| `AMICUS_MCP_CLIENT` | Override the auto-detected MCP caller (`code-local`, `code-web`, or `cowork`). Amicus detects Claude Code vs. Claude Desktop/Cowork from the MCP `initialize` handshake; set this only if detection picks the wrong one. | auto-detected |
+| `AMICUS_MCP_CLIENT` | Override the auto-detected MCP caller (`code-local`, `code-web`, or `cowork`). Amicus detects Claude Code vs. Claude Desktop/Cowork from the MCP `initialize` handshake; set this only if detection picks the wrong one. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
 
 **Headless poller tuning** (advanced — rarely needed)
 

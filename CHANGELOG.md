@@ -42,23 +42,36 @@ Phase 12: engine pull-forwards — the three reviewer-flagged high-impact fixes.
   closing during an in-flight fold discarded the summary about to land. The window close is now intercepted
   by a close guard (`electron/close-guard.js`): a close with no fold auto-triggers the same fold flow
   (overlay + summary + `[SIDECAR_FOLD]` handoff) and then closes; a close during an in-flight fold lets it
-  finish; a failed or timed-out fold still closes the window (the user is never trapped). External abort
-  remains immediate and never waits on a fold.
+  finish — regardless of whether the fold was close-initiated or started from the toolbar/shortcut — instead
+  of falling through and destroying the window mid-summary; a failed or timed-out fold still closes the
+  window (the user is never trapped). This relies on `electron/fold.js` exposing a finer-grained
+  `isFolding()`/`hasCompleted()` split (a fold is "in flight" from the moment `triggerFold` is entered until
+  its `[SIDECAR_FOLD]` stdout write actually succeeds) alongside the original `hasFolded()`, so the guard can
+  tell "still running" apart from "actually done" — and a fold that settles without completing (including a
+  synchronous throw from the post-write nudge-overlay update, which the old code's `.catch()` couldn't
+  observe) still safely falls back to closing the window rather than leaving it permanently stuck open.
+  External abort remains immediate and never waits on a fold.
 - **The MCP server no longer hardcodes `--client cowork`.** Under Claude Code — the primary caller — that
   hardcode silently broke `includeContext:true` (empty context), parent-MCP discovery, and session-dir
   resolution. The server now detects its caller from the MCP handshake's `clientInfo` (claude-code →
   `code-local`; Claude Desktop/Cowork → `cowork`; unknown callers keep today's `cowork` behavior with a
   one-time stderr notice) and threads the detected client through every spawn path and the in-process
   shared-server path. A new `AMICUS_MCP_CLIENT` env var (set it in the MCP registration's `env` block)
-  explicitly overrides detection.
+  explicitly overrides detection. One consequence: MCP-spawned GUI chat sessions under Claude Code now keep
+  the default SE-focused base prompt — `opencode-client.js`'s Cowork-specific general-purpose prompt swap
+  (`buildCoworkAgentPrompt()`) only fires when `options.client === 'cowork'`, which no longer matches a
+  Claude Code caller now that it's correctly tagged `code-local`.
 
 ### Changed
 - **Every prose channel that returns another model's output is now wrapped in the
-  `<untrusted_sidecar_output>` fence**, extending the protection `amicus_read` summaries already had: MCP
-  wave and conversation reads, CLI `amicus read` summary/conversation/wave output, and the foreground
-  summary echo after `start`/`continue`/`resume`. This is visible in CLI output. JSON output (`--json`),
-  metadata mode, and on-disk artifacts (`wave.json`, `summary.md`, `conversation.jsonl`) are byte-identical
-  to before — the fence is applied only at output time, never at write time.
+  `<untrusted_sidecar_output>` fence** (`amicus_status`/`amicus_list` previews remain sanitized-and-truncated
+  instead, by design — `sanitizePreview()` in `src/sidecar/progress-fields.js` defangs fence/tag characters
+  and caps length so the full untrusted text is only ever reachable through the fenced `amicus_read` path),
+  extending the protection `amicus_read` summaries already had: MCP wave and conversation reads, CLI
+  `amicus read` summary/conversation/wave output, and the foreground summary echo after
+  `start`/`continue`/`resume`. This is visible in CLI output. JSON output (`--json`), metadata mode, and
+  on-disk artifacts (`wave.json`, `summary.md`, `conversation.jsonl`) are byte-identical to before — the
+  fence is applied only at output time, never at write time.
 - Internal: `interactive.js`'s Electron process helpers extracted to `src/sidecar/interactive-process.js`
   (size-gate headroom; no behavior change).
 

@@ -210,3 +210,17 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   entirely on `STATUS = "200"`. Assert the response body actually carries the expected version (not just a
   200 status code) to close a fail-unsafe drift if the registry's not-found contract ever changes shape
   (e.g. a 200 with an empty/error body during the registry's PREVIEW-API schema churn).
+
+## Phase 12 whole-phase review triage (2026-07-02)
+
+- [ ] **Wire a client tag into shared-server metadata.json for `amicus_status`/`amicus_read` parity.**
+  B02 threads the detected `--client` (`code-local`/`code-web`/`cowork`) through every spawn path and the
+  in-process shared-server path, but the shared-server `metadata.json` writes (`src/mcp-server.js`) don't
+  currently persist that client tag alongside the other session fields, so `amicus_status`/`amicus_read`
+  can't surface it the way they do for spawned sessions. Pairs with the B11 `enrichWithProgress` extraction
+  window (`src/mcp-server.js`, next refactor pass after the file quiets down) — do both in the same pass.
+- [ ] **`electron/main.js` has 3 pre-existing eslint errors outside lint-staged's `src/**` scope.**
+  `package.json`'s `lint-staged` config only globs `src/**/*.js`, so `electron/*.js` never gets auto-fixed or
+  gated on commit. `npx eslint electron/main.js` currently reports 2 `no-console` (lines 42, 54) and 1
+  `no-empty` (line 133) — pre-existing, not introduced by Phase 12. Fix when widening lint scope to cover
+  `electron/**` or on the next electron/main.js touch, whichever comes first.

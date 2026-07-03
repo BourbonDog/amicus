@@ -19,14 +19,23 @@ const { tokenCss } = require('../src/design/tokens');
  * @param {string} state.sessionId - OpenCode session ID
  * @param {string} state.taskId - Sidecar task ID
  * @param {number} state.port - OpenCode server port
- * @returns {{ triggerFold: Function, hasFolded: Function }}
+ * @returns {{ triggerFold: Function, hasFolded: Function, isFolding: Function, hasCompleted: Function }}
  */
 function createFoldHandler(state) {
+  // `folded` is set synchronously at triggerFold ENTRY and covers both
+  // "in flight" and "done" — this is `hasFolded()`'s existing external
+  // contract (main.js wires it straight into createCloseGuard's `hasFolded`
+  // dep) and must not change. `completed` is the finer-grained signal: it
+  // only flips true AFTER the `[SIDECAR_FOLD]` stdout write actually
+  // succeeds, so callers that need to distinguish "still running" from
+  // "actually done" (close-guard.js) use isFolding()/hasCompleted() instead.
   let folded = false;
+  let completed = false;
 
   async function triggerFold(mainWindow, contentView) {
     if (folded) { return; }
     folded = true;
+    completed = false;
 
     // Show fold progress in toolbar and content overlay
     showFoldOverlay(mainWindow, contentView);
@@ -54,6 +63,7 @@ function createFoldHandler(state) {
       ].join('\n');
 
       process.stdout.write(output + '\n');
+      completed = true;
       logger.info('Fold completed', { taskId: state.taskId });
 
       // Show nudge overlay before closing
@@ -76,6 +86,17 @@ function createFoldHandler(state) {
       await new Promise(resolve => setTimeout(resolve, 2500));
     } catch (err) {
       logger.error('Fold failed', { error: err.message });
+      // Reset re-entrancy so a later close/shortcut/toolbar click can retry.
+      // NOTE: this can fire AFTER the `[SIDECAR_FOLD]` stdout write already
+      // succeeded (completed = true, set above) if the post-write nudge-overlay
+      // executeJavaScript call throws SYNCHRONOUSLY on a destroyed webContents
+      // (the trailing .catch() on that call only guards promise rejection, not
+      // a synchronous throw) — the summary is safely on stdout in that case,
+      // but the window was never closed by this run, so folded must still
+      // reset to let a fallback close proceed. completed is left as-is:
+      // close-guard.js checks it independently to decide whether a pending
+      // close can simply proceed (summary already landed) or must fall back
+      // to destroy (summary never made it out).
       folded = false;
       return;
     }
@@ -93,7 +114,23 @@ function createFoldHandler(state) {
     return folded;
   }
 
-  return { triggerFold, hasFolded };
+  // isFolding(): true only while a fold is IN FLIGHT (entered but not yet
+  // completed) — the signal close-guard.js needs to keep a close blocked
+  // regardless of who initiated the fold (close-initiated or
+  // toolbar/shortcut-initiated), since hasFolded() alone can't distinguish
+  // in-flight from done.
+  function isFolding() {
+    return folded && !completed;
+  }
+
+  // hasCompleted(): true once (and only once) the `[SIDECAR_FOLD]` stdout
+  // write has actually succeeded — the signal close-guard.js needs to know
+  // the summary is safely handed off and a close may proceed.
+  function hasCompleted() {
+    return completed;
+  }
+
+  return { triggerFold, hasFolded, isFolding, hasCompleted };
 }
 
 /**

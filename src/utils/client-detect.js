@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * @module client-detect
  * Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this
@@ -26,6 +24,8 @@
  *      confident detection, so it logs a one-time warning naming the
  *      unrecognized clientInfo so misdetection is observable.
  */
+
+'use strict';
 
 const { VALID_CLIENTS } = require('../environment');
 

@@ -35,7 +35,7 @@ The model prefix decides which credentials are used:
 | `AMICUS_CONFIG_DIR` | Override the entire config directory — keys, model catalog, session index. Useful for isolated test environments. | `~/.config/amicus` |
 | `AMICUS_ENV_DIR` | Override just the `.env` file directory (keys only). Takes precedence over the legacy `SIDECAR_ENV_DIR` name (which still works with a deprecation warning). | `~/.config/amicus` (the config dir) |
 | `AMICUS_FANOUT_MAX_LEGS` | Cap the number of concurrent legs in a single fanout wave. Protects against accidental runaway costs when `--models` is a long list. Non-positive or non-integer values fall back to the default. | `10` |
-| `AMICUS_MCP_CLIENT` | Force the MCP server's `--client` value (`code-local`, `code-web`, or `cowork`) instead of auto-detecting it from the caller's MCP `initialize` handshake (`clientInfo.name`). Invalid values are ignored (with a warning) and detection proceeds normally. | auto-detected |
+| `AMICUS_MCP_CLIENT` | Force the MCP server's `--client` value (`code-local`, `code-web`, or `cowork`) instead of auto-detecting it from the caller's MCP `initialize` handshake (`clientInfo.name`). Invalid values are ignored (with a warning) and detection proceeds normally. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
 
 ---
 

@@ -96,6 +96,8 @@ const foldHandler = createFoldHandler({
 // close-guard.js for the full design (latch, fallback, abort isolation).
 const closeGuard = createCloseGuard({
   hasFolded: foldHandler.hasFolded,
+  isFolding: foldHandler.isFolding,
+  hasCompleted: foldHandler.hasCompleted,
   triggerFold: foldHandler.triggerFold,
 });
 
