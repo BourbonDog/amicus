@@ -22,7 +22,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 - [`amicus council verdict`](#amicus-council-verdict)
 - [`amicus council report`](#amicus-council-report)
 - [`amicus council stats`](#amicus-council-stats)
-- [Council presets: `save` / `list` / `show`](#council-presets-save-list-show)
+- [Council presets: `save` / `list` / `show`](#council-presets-save--list--show)
 - [Worked example](#worked-example)
 - [Where artifacts live](#where-artifacts-live)
 
@@ -173,7 +173,7 @@ assembly recipe"). It needs **all five top-level keys** — `tally()` throws
       "basis": { "a": 1, "d": 0, "n": 0 }, "confidence": "thin",
       "tierOverride": null, "adjudications": [ { "judge": "deepseek", "verdict": "agree" } ] }
   ],
-  "runStats": [ "...": "validated, echoed from input" ],
+  "runStats": [ { "...": "validated, echoed from input" } ],
   "tierCounts": { "Confirmed": 1, "Contested": 1, "Singleton": 1, "Disputed": 0 }
 }
 ```
@@ -347,11 +347,6 @@ A named preset is just a saved `--models`-style list that `--council <name>` (on
 **Built-in benches** (work with zero setup): `free` (zero-cost `:free`-suffixed OpenRouter models,
 resolved dynamically from the live catalog), `budget` (cheap workhorses, one per vendor family),
 `frontier` (premium flagships, one per vendor family).
-
-**Known binary gap:** `amicus council --help` currently lists only `tally|stats|report|validate|
-verdict` in its per-subcommand help text — `save`, `list`, and `show` exist and work (tested,
-documented here and in the README/usage.md Commands tables) but are not yet listed in the CLI's
-own `--help` output. Use this page or `docs/usage.md` as the source of truth until that's fixed.
 
 ---
 

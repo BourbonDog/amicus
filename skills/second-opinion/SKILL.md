@@ -347,15 +347,17 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
   — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
   invent a figure. Add a wave **total cost** row from the wave document's
   `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`; never invent a value.
-  - **Renderer:** once `verdict.json` is written, generate BOTH renderings:
-    `amicus council report <run-folder>/verdict.json --md > <run-folder>/report.md` and
-    `amicus council report <run-folder>/verdict.json --html > <run-folder>/report.html`.
-    **`report.html` is the default final artifact to hand the user** — a self-contained,
-    shareable page. This emits the
+  - **Renderer:** once `verdict.json` is written, run
+    `amicus council report <run-folder>/verdict.json --html > <run-folder>/report.html` — a
+    **separate, deterministic** artifact, not report.md itself. **`report.html` is the default
+    final artifact to hand the user** — a self-contained, shareable page. This emits the
     adjudication matrix (finding × judge), the peers-only street-cred table, the
     findings-by-tier groupings (Disputed-first), and the per-model + wave cost —
-    deterministic data only. Prefer it over hand-assembling the matrix; reserve
-    prose for the chair's synthesis and the decision log.
+    deterministic data only. To assemble report.md, also run
+    `amicus council report <run-folder>/verdict.json --md` (no redirect — read its stdout) and
+    paste that Markdown into report.md as one section; reserve the rest of report.md's prose for
+    the chair's synthesis and the decision log. Prefer the renderer's Markdown over
+    hand-assembling the matrix by hand.
 
 Tell the user exactly which files were written and where, leading with `report.html`, **and present the verdict inline in chat** — the chair's overall assessment (verbatim or lightly trimmed) plus the tier counts (Confirmed/Disputed/Contested/Singleton) and what was applied. Never hand over only file paths.
 

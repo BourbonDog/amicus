@@ -1104,6 +1104,30 @@ describe('CLI Argument Parser', () => {
       expect(usage).not.toContain("Options for 'read':");
     });
 
+    test("getUsage('council') lists all 8 subcommands, including save|list|show (adversarial-review Fix 3: docs/council.md's 'Known binary gap' note is retired because this is now true)", () => {
+      const usage = getUsage('council');
+      for (const sub of ['tally', 'stats', 'report', 'validate', 'verdict', 'save', 'list', 'show']) {
+        // Each subcommand must appear as its own usage line (word-boundary
+        // match against 2-space-indented start), not merely as a substring
+        // of some other word.
+        expect(usage).toMatch(new RegExp('^\\s{2}' + sub + '\\b', 'm'));
+      }
+    });
+
+    test("getUsage('council') documents save/list/show's real flags mirroring presets-cli.js", () => {
+      const usage = getUsage('council');
+      // save <name> --models a,b,c
+      expect(usage).toMatch(/save\s+<name>[^\n]*--models/);
+      // list, followed (on the next indented line, like every other sub) by --json
+      const listIdx = usage.search(/^\s{2}list\b/m);
+      expect(listIdx).toBeGreaterThan(-1);
+      expect(usage.slice(listIdx, listIdx + 120)).toMatch(/--json/);
+      // show <name>, followed by --json
+      const showIdx = usage.search(/^\s{2}show\b/m);
+      expect(showIdx).toBeGreaterThan(-1);
+      expect(usage.slice(showIdx, showIdx + 120)).toMatch(/--json/);
+    });
+
     test("getUsage('continue') prints only the continue section", () => {
       const usage = getUsage('continue');
       expect(usage).toContain("Options for 'continue':");

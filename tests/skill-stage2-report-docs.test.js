@@ -95,4 +95,21 @@ describe('B29 — report.md has exactly one full definition', () => {
     expect(reportHtmlLine).toMatch(/verdict\.json/);
     expect(reportHtmlLine).toMatch(/deterministic/i);
   });
+
+  it('the Stage 5 renderer note never redirects the --md rendering straight onto report.md (adversarial-review Fix 2: that would silently overwrite the Claude-authored artifact with pure renderer output)', () => {
+    const stage5 = skill.slice(skill.indexOf('### Stage 5'), skill.indexOf('### Stage 6'));
+    expect(stage5).not.toMatch(/--md\s*>\s*<run-folder>\/report\.md/);
+    expect(stage5).not.toMatch(/--md\s*>\s*\S*report\.md/);
+  });
+
+  it('the Stage 5 renderer note documents assembling report.md from the --md rendering\'s stdout (not a redirect) plus the chair/decision-log prose', () => {
+    const stage5 = skill.slice(skill.indexOf('### Stage 5'), skill.indexOf('### Stage 6'));
+    const rendererIdx = stage5.indexOf('**Renderer:**');
+    expect(rendererIdx).toBeGreaterThan(-1);
+    const rendererNote = stage5.slice(rendererIdx, rendererIdx + 700);
+    expect(rendererNote).toMatch(/--html\s*>\s*<run-folder>\/report\.html/);
+    expect(rendererNote).toMatch(/not report\.md itself/i);
+    expect(rendererNote).toMatch(/--md/);
+    expect(rendererNote).toMatch(/no redirect|read its stdout/i);
+  });
 });

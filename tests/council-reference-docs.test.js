@@ -198,3 +198,16 @@ describe('B46 — self-contained for a future README restructure', () => {
     expect(doc.trimStart().startsWith('#')).toBe(true);
   });
 });
+
+describe('B46 — every fenced ```json block is valid, parseable JSON (adversarial-review Fix 4)', () => {
+  const doc = read('docs/council.md');
+  const blocks = [...doc.matchAll(/```json\n([\s\S]*?)\n```/g)].map(m => m[1]);
+
+  it('the doc has fenced json blocks to check (sanity)', () => {
+    expect(blocks.length).toBeGreaterThan(0);
+  });
+
+  it.each(blocks.map((b, i) => [i, b]))('json block #%i parses without error', (_i, block) => {
+    expect(() => JSON.parse(block)).not.toThrow();
+  });
+});
