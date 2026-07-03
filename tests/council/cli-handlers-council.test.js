@@ -322,3 +322,199 @@ test('verdict: structurally-invalid tally (valid JSON, missing meta/findings) �
   expect(code).toBe(1);
   expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
 });
+
+// ---------------------------------------------------------------------------
+// council save / list / show (B23)
+// ---------------------------------------------------------------------------
+
+function seedAliases(aliases) {
+  const { loadConfig, saveConfig } = require('../../src/utils/config');
+  const cfg = loadConfig() || {};
+  cfg.aliases = { ...(cfg.aliases || {}), ...aliases };
+  saveConfig(cfg);
+}
+
+describe('council save', () => {
+  test('happy path saves a >=2 member council and confirms it', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mine'], models: 'opus,gpt', json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.ok).toBe(true);
+    expect(doc.name).toBe('mine');
+    expect(doc.models).toEqual(['opus', 'gpt']);
+    const { getCouncil } = require('../../src/utils/config');
+    expect(getCouncil('mine')).toEqual(['opus', 'gpt']);
+  });
+
+  test('human-mode save prints a confirmation line', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mine'], models: 'opus,gpt' }));
+    expect(code).toBe(0);
+    expect(out).toContain('mine');
+    expect(out).toContain('opus');
+    expect(out).toContain('gpt');
+  });
+
+  test('overwriting an existing name succeeds with a notice', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'mine'], models: 'opus,gpt', json: true }));
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mine'], models: 'haiku,deepseek', json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.overwritten).toBe(true);
+    expect(doc.models).toEqual(['haiku', 'deepseek']);
+    const { getCouncil } = require('../../src/utils/config');
+    expect(getCouncil('mine')).toEqual(['haiku', 'deepseek']);
+  });
+
+  test('rejects fewer than 2 members', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'solo'], models: 'opus', json: true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+    const { getCouncil } = require('../../src/utils/config');
+    expect(getCouncil('solo')).toBeNull();
+  });
+
+  test('rejects an unresolvable member (unknown alias, not a provider/model id)', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'bad'], models: 'opus,not-a-real-alias', json: true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  });
+
+  test('accepts a full provider/model id alongside an alias', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mixed'], models: 'opus,openrouter/some/vendor-model', json: true }));
+    expect(code).toBe(0);
+    expect(JSON.parse(out).models).toEqual(['opus', 'openrouter/some/vendor-model']);
+  });
+
+  test('missing --models → BAD_ARGS', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mine'], json: true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  });
+
+  test('missing name → BAD_ARGS', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save'], models: 'opus,gpt', json: true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  });
+
+  test('cannot save a name that collides with a built-in bench name', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'budget'], models: 'opus,gpt', json: true }));
+    expect(code).toBe(0); // allowed — this is exactly how a user shadows a built-in
+    expect(JSON.parse(out).ok).toBe(true);
+    const { getCouncil } = require('../../src/utils/config');
+    expect(getCouncil('budget')).toEqual(['opus', 'gpt']);
+  });
+});
+
+describe('council list', () => {
+  test('lists built-ins plus user-saved councils, marking built-ins', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'mine'], models: 'opus,gpt', json: true }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'list'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    const names = doc.councils.map(c => c.name);
+    expect(names).toEqual(expect.arrayContaining(['free', 'budget', 'frontier', 'mine']));
+    const builtin = doc.councils.find(c => c.name === 'budget');
+    expect(builtin.builtin).toBe(true);
+    const custom = doc.councils.find(c => c.name === 'mine');
+    expect(custom.builtin).toBe(false);
+  });
+
+  test('marks a built-in as shadowed when the user has saved a same-named council', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'budget'], models: 'opus,gpt', json: true }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'list'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    const entries = doc.councils.filter(c => c.name === 'budget');
+    // one user entry that shadows the built-in; the built-in itself is flagged shadowed
+    const userEntry = entries.find(c => c.builtin === false);
+    const builtinEntry = entries.find(c => c.builtin === true);
+    expect(userEntry).toBeDefined();
+    expect(builtinEntry.shadowed).toBe(true);
+  });
+
+  test('human-mode list prints names with a [built-in] marker', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'list'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('free');
+    expect(out).toContain('budget');
+    expect(out).toContain('frontier');
+    expect(out.toLowerCase()).toContain('built-in');
+  });
+});
+
+describe('council show', () => {
+  test('shows a user-saved council with resolution results', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'mine'], models: 'opus,gpt', json: true }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'mine'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.name).toBe('mine');
+    expect(doc.builtin).toBe(false);
+    expect(doc.members).toEqual(['opus', 'gpt']);
+    expect(doc.resolved).toEqual(['opus', 'gpt']);
+    expect(doc.dropped).toEqual([]);
+  });
+
+  test('shows a built-in bench (budget) with builtin:true', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'budget'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.name).toBe('budget');
+    expect(doc.builtin).toBe(true);
+    expect(doc.resolved.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('shows the dynamic free bench with builtin:true and resolved members', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'free'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.name).toBe('free');
+    expect(doc.builtin).toBe(true);
+    expect(doc.resolved.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('reports dropped/delisted members for a user council when aliases no longer resolve', async () => {
+    seedAliases({ 'gone-alias': 'openrouter/dead/model-x' });
+    await capture(() => handleCouncil({ _: ['council', 'save', 'flaky'], models: 'opus,gone-alias', json: true }));
+    // Now remove the alias entirely so it no longer resolves.
+    const { loadConfig, saveConfig } = require('../../src/utils/config');
+    const cfg = loadConfig();
+    delete cfg.aliases['gone-alias'];
+    saveConfig(cfg);
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'flaky'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.dropped).toContain('gone-alias');
+    expect(doc.resolved).toEqual(['opus']);
+  });
+
+  test('unknown name → BAD_ARGS error, exit 1', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'ghost'], json: true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  });
+
+  test('missing name → BAD_ARGS', async () => {
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show'], json: true }));
+    expect(code).toBe(1);
+    expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  });
+
+  test('human-mode show prints the member list', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'mine'], models: 'opus,gpt', json: true }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'mine'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('opus');
+    expect(out).toContain('gpt');
+  });
+});

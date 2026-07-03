@@ -8,6 +8,11 @@ const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 const { validateFindings } = require('./council/findings');
 const { buildVerdict, writeVerdictAtomic } = require('./council/verdict');
+const {
+  runSave: runCouncilSave,
+  runList: runCouncilList,
+  runShow: runCouncilShow,
+} = require('./council/presets-cli');
 
 function runTally(inputPath, useJson, opts = {}) {
   if (!inputPath) {
@@ -185,8 +190,12 @@ async function handleCouncil(args) {
   if (sub === 'report') { return runReport(args, useJson); }
   if (sub === 'validate') { return runValidate(args._[2], useJson); }
   if (sub === 'verdict') { return runVerdict(args, useJson); }
+  if (sub === 'save') { return runCouncilSave(args._[2], args.models, useJson); }
+  if (sub === 'list') { return runCouncilList(useJson); }
+  if (sub === 'show') { return runCouncilShow(args._[2], useJson); }
   return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
-    message: `unknown council subcommand '${sub || ''}'`, hint: 'amicus council tally|stats|report|validate|verdict' });
+    message: `unknown council subcommand '${sub || ''}'`,
+    hint: 'amicus council tally|stats|report|validate|verdict|save|list|show' });
 }
 
 module.exports = { handleCouncil };
