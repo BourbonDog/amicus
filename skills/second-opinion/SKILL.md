@@ -1,6 +1,19 @@
 ---
 name: second-opinion
-description: Run a structured, multi-model "council" review of material the user provides and turn it into decisions. Use when the user supplies one or more documents, artifacts, or links PLUS an analysis request and criteria, and wants other AI model(s) to independently evaluate, critique, fact-check, stress-test, or red-team that material and then help act on the findings. The council adds a peer cross-review stage — models review the material independently, then anonymously rank and adjudicate each other's reviews, and a designated non-Claude "chair" model synthesizes the verdict while Claude orchestrates but does not synthesize. Trigger on "second opinion", "multi-model review", "council review", "have other models review/critique/evaluate this", "cross-check this against the research", "red-team/stress-test this doc", "what would other models conclude about this", or any request to review provided material with external model(s) and turn it into accept/deny edits — even if the user never says "sidecar". Optionally includes Claude as a judged (non-voting, non-chairing) council member to see how the bench rates Claude's own take. Defaults to 3 models from different families; scales down to a single thorough pass. This is NOT for quick or exploratory single-model chats — for "ask Gemini…", "what does DeepSeek think", brainstorming with a model, or spawning/forking a conversation with another model, use the sidecar skill instead.
+description: >
+  Run a structured, multi-model "council" review of material the user provides plus
+  an analysis request and criteria, turning it into decisions. Models review the
+  material independently, then anonymously rank and adjudicate each other's reviews
+  in a peer cross-review stage, and a designated non-Claude "chair" model synthesizes
+  the verdict — Claude orchestrates but does not synthesize. Trigger on "second
+  opinion", "multi-model review", "council review", "have other models
+  review/critique/evaluate this", "cross-check this against the research",
+  "red-team/stress-test this doc", "what would other models conclude about this", or
+  any request to review provided material with external model(s) and turn it into
+  accept/deny decisions — even if the user never says "sidecar". This is NOT for
+  quick or exploratory single-model chats — "ask Gemini…", "what does DeepSeek
+  think", brainstorming with a model, or spawning/forking a conversation with
+  another model — use the sidecar skill instead.
 ---
 
 # Second Opinion (LLM Council)
