@@ -22,7 +22,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 - [`amicus council verdict`](#amicus-council-verdict)
 - [`amicus council report`](#amicus-council-report)
 - [`amicus council stats`](#amicus-council-stats)
-- [Council presets: `save` / `list` / `show`](#council-presets-save--list--show)
+- [Council presets: `save` / `list` / `show`](#council-presets-save-list-show)
 - [Worked example](#worked-example)
 - [Where artifacts live](#where-artifacts-live)
 
