@@ -34,6 +34,25 @@ Phase 9: distribution — plugin slash commands, MCP Registry wiring, and the ma
 - **`plugin.json`'s unrecognized `bugs` field removed.** `claude plugin validate . --strict` now passes
   clean (exit 0); it previously reported an unknown-field warning that `--strict` promotes to an error.
 
+Phase 13: docs quick-sync — the highest-friction documentation fixes, every claim verified against the binary.
+
+### Fixed
+- **The Fold handoff is now documented operationally** (README + usage.md): the `[SIDECAR_FOLD]` stdout
+  block, where the summary lands (`summary.md`), and how the orchestrator reads it back (fenced, via
+  `amicus read`/`amicus_read`).
+- **README↔usage.md drift corrected against the binary:** `amicus fanout` documents `--council`
+  (mutually exclusive with `--models`, exactly one required) in both files; `amicus list --status`
+  documents the full 7-value set (`running, complete, error, timed-out, aborted, crashed, idle-timeout`)
+  — note the `--json` schema's distinct `timeout` vocabulary is deliberately unchanged; fanout
+  `--session-id` support documented; `amicus status` gained real human and `--json` output examples;
+  `start --setup` documented as NOT relaxing the `--prompt`/`--prompt-file` requirement (with the exact
+  error string users see).
+- **OpenRouter 402 recovery** added to the README troubleshooting table and docs/troubleshooting.md:
+  key save/validation never checks account balance, so the first real call can 402 — recovery via
+  openrouter.ai/credits, `:free` models, and the non-blocking `amicus doctor` credit probe.
+- docs/DISTRIBUTION.md's stale `/v0.1/` registry API path synced to `/v0/`.
+- All of the above locked by `tests/docs-quick-sync.test.js` (16 pins).
+
 Phase 12: engine pull-forwards — the three reviewer-flagged high-impact fixes.
 
 ### Fixed
