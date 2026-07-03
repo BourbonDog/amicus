@@ -5,6 +5,37 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+Phase 16: council & catalog UX — closes GitHub issues #12, #13, and #27.
+
+### Added
+- **`amicus council validate <file>` and `amicus council verdict <tally.json>`** — thin CLI wrappers over the
+  existing findings-validation and verdict-builder internals, making the second-opinion skill's council
+  transport fully deterministic. `validate` exits 0 (ok) / 2 (validation failed) / 1 (bad args); `verdict`
+  writes atomically to `-o` (default `./verdict.json`), `--decisions` optional. The skill's Stage-1 and
+  Stage-5 instructions now invoke these commands, and the Stage-2 recipe persists the tally record to
+  `<run-folder>/tally.json` (previously it existed only on stdout — the verdict step had nothing to read).
+- **Council presets: `amicus council save/list/show <name>` + built-in `free`/`budget`/`frontier` benches.**
+  Built-ins resolve only when the name isn't in your config (your saved councils shadow them; `list` marks
+  shadowing). `free` resolves dynamically against the catalog (pinned offline fallback); `budget` and
+  `frontier` are alias-based (cheapest / most premium distinct-vendor picks) so alias drift tooling covers
+  them. `show` resolves against the cached catalog, including the dynamic free pick.
+- **Per-run cost ledger + `amicus spend`.** Every completed run (headless, interactive, fanout legs)
+  appends a best-effort JSONL row (`spend-ledger.jsonl` in the config dir); `amicus spend` rolls up total
+  and per-model cost/tokens/source-mix with `--since <N>d` windowing and `--json`, plus an OpenRouter
+  remaining-credit footer when a key is configured. Ledger appends can never fail a run.
+
+### Fixed
+- **Setup wizard Step 3 (alias editor) now consumes the same TTL-cached catalog as Step 2** (#12) — one
+  catalog load for the whole wizard instead of a separate uncached network fetch per run; the redundant
+  `fetch-models` IPC channel is removed.
+- **Stale catalog data is now labeled** (#13): a failed refresh records the attempt and reason in the cache
+  doc (never touching the good data), `amicus models` shows a stale memo when refreshing keeps failing,
+  `amicus models refresh` reports failure honestly instead of "Refreshed catalog: 0 models" (and its
+  `--json` reports the real stale `fetchedAt` instead of `null`), and the wizard shows a stale hint.
+- **The free-council picker is readable** (#27): models grouped by provider with friendly names (raw id as
+  the mono secondary line), a roomier scroll area, and a provider count — selection values remain raw model
+  ids throughout.
+
 Phase 15: engine correctness sweep.
 
 ### Added
