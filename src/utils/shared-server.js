@@ -25,7 +25,7 @@ class SharedServerManager {
    */
   constructor(options = {}) {
     this.logger = options.logger || console;
-    this.maxSessions = Number(process.env.SIDECAR_MAX_SESSIONS) || 20;
+    this.maxSessions = Number(process.env.AMICUS_MAX_SESSIONS) || 20;
     this.enabled = process.env.AMICUS_SHARED_SERVER !== '0';
 
     /** @type {object|null} Active server handle */

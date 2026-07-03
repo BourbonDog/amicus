@@ -18,12 +18,26 @@ describe('SharedServerManager', () => {
       expect(mgr.sessionCount).toBe(0);
     });
 
-    test('respects SIDECAR_MAX_SESSIONS env var', () => {
-      const orig = process.env.SIDECAR_MAX_SESSIONS;
-      process.env.SIDECAR_MAX_SESSIONS = '10';
+    test('respects AMICUS_MAX_SESSIONS env var', () => {
+      const orig = process.env.AMICUS_MAX_SESSIONS;
+      process.env.AMICUS_MAX_SESSIONS = '10';
       const mgr = new SharedServerManager();
       expect(mgr.maxSessions).toBe(10);
-      process.env.SIDECAR_MAX_SESSIONS = orig;
+      if (orig === undefined) { delete process.env.AMICUS_MAX_SESSIONS; }
+      else { process.env.AMICUS_MAX_SESSIONS = orig; }
+    });
+
+    test('legacy SIDECAR_MAX_SESSIONS is ignored (review finding absence pin) — falls back to default', () => {
+      const origA = process.env.AMICUS_MAX_SESSIONS;
+      const origS = process.env.SIDECAR_MAX_SESSIONS;
+      delete process.env.AMICUS_MAX_SESSIONS;
+      process.env.SIDECAR_MAX_SESSIONS = '10';
+      const mgr = new SharedServerManager();
+      expect(mgr.maxSessions).toBe(20);
+      if (origA === undefined) { delete process.env.AMICUS_MAX_SESSIONS; }
+      else { process.env.AMICUS_MAX_SESSIONS = origA; }
+      if (origS === undefined) { delete process.env.SIDECAR_MAX_SESSIONS; }
+      else { process.env.SIDECAR_MAX_SESSIONS = origS; }
     });
 
     test('disabled when AMICUS_SHARED_SERVER=0', () => {

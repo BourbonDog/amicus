@@ -309,7 +309,7 @@ evals/
 | `drift.js` | Context Drift Detection Module | `calculateDrift()`, `formatDriftWarning()`, `countTurnsSince()`, `isDriftSignificant()` |
 | `environment.js` | Environment Detection Module | `inferClient()`, `getSessionRoot()`, `detectEnvironment()`, `VALID_CLIENTS()` |
 | `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `findTrailingFoldMarker()` |
-| `index.js` | Amicus - Main Module | `API()`, `startAmicus()`, `startSidecar()`, `listAmicus()`, `listSidecars()` |
+| `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
@@ -335,7 +335,7 @@ evals/
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
 | `sidecar/electron-ensure.js` | ensureElectron() — lazy first-GUI provisioning (#55). | `ensureElectron()`, `_resetEnsureElectron()` |
-| `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `tests()` |
+| `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
@@ -534,19 +534,19 @@ Amicus processes self-terminate after inactivity via IdleWatchdog. MCP sessions 
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `SIDECAR_IDLE_TIMEOUT` | (mode-dependent) | Blanket override for idle timeout in minutes (all modes). 0 = disabled (Infinity). |
-| `SIDECAR_IDLE_TIMEOUT_HEADLESS` | 15 | Headless mode idle timeout in minutes |
-| `SIDECAR_IDLE_TIMEOUT_INTERACTIVE` | 60 | Interactive mode idle timeout in minutes |
-| `SIDECAR_IDLE_TIMEOUT_SERVER` | 30 | Shared server "no sessions" timeout in minutes |
-| `SIDECAR_MAX_SESSIONS` | 20 | Max concurrent sessions on shared server |
-| `SIDECAR_REQUEST_TIMEOUT` | 5 | Stuck-stream timeout in minutes |
-| `SIDECAR_SHARED_SERVER` | 1 | Set to 0 to disable shared server (fall back to per-process) |
+| `AMICUS_IDLE_TIMEOUT` | (mode-dependent) | Blanket override for idle timeout in minutes (all modes). 0 = disabled (Infinity). |
+| `AMICUS_IDLE_TIMEOUT_HEADLESS` | 15 | Headless mode idle timeout in minutes |
+| `AMICUS_IDLE_TIMEOUT_INTERACTIVE` | 60 | Interactive mode idle timeout in minutes |
+| `AMICUS_IDLE_TIMEOUT_SERVER` | 30 | Shared server "no sessions" timeout in minutes |
+| `AMICUS_MAX_SESSIONS` | 20 | Max concurrent sessions on shared server |
+| `AMICUS_REQUEST_TIMEOUT` | 5 | Stuck-stream timeout in minutes |
+| `AMICUS_SHARED_SERVER` | 1 | Set to 0 to disable shared server (fall back to per-process) |
 
 ### Gotchas
 
-- `SIDECAR_IDLE_TIMEOUT=0` means `Infinity` (timer never set), not zero-ms timeout
+- `AMICUS_IDLE_TIMEOUT=0` means `Infinity` (timer never set), not zero-ms timeout
 - Session lock files live at `<session_dir>/session.lock`. Delete manually if stuck with "session already active" error
-- `SIDECAR_SHARED_SERVER=0` disables shared server and falls back to per-process spawning
+- `AMICUS_SHARED_SERVER=0` disables shared server and falls back to per-process spawning
 
 ---
 

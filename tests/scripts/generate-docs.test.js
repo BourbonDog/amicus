@@ -113,6 +113,40 @@ describe('extractExports', () => {
     fs.writeFileSync(filePath, 'const x = 1;\n');
     expect(extractExports(filePath)).toEqual([]);
   });
+
+  it('uses only the key (not the value) for alias: original pairs (review finding)', () => {
+    // Regression test: src/index.js re-exports canonical names as
+    // `startAmicus: startSidecar` aliases. The exported name is the key
+    // (startAmicus); the value (startSidecar) is an internal reference,
+    // not itself part of the public API, and must not appear in the table.
+    const filePath = path.join(tmpDir, 'idx.js');
+    fs.writeFileSync(filePath, [
+      'module.exports = {',
+      '  // Canonical Amicus public API',
+      '  startAmicus: startSidecar,',
+      '  listAmicus: listSidecars,',
+      '  resumeAmicus: resumeSidecar,',
+      '  continueAmicus: continueSidecar,',
+      '  readAmicus: readSidecar,',
+      '};',
+    ].join('\n'));
+    const exports = extractExports(filePath);
+    expect(exports).toEqual(['startAmicus', 'listAmicus', 'resumeAmicus', 'continueAmicus', 'readAmicus']);
+    expect(exports).not.toContain('startSidecar');
+    expect(exports).not.toContain('listSidecars');
+  });
+
+  it('ignores // comment text inside the exports object body', () => {
+    const filePath = path.join(tmpDir, 'commented.js');
+    fs.writeFileSync(filePath, [
+      'module.exports = {',
+      '  // some prose here',
+      '  foo,',
+      '};',
+    ].join('\n'));
+    const exports = extractExports(filePath);
+    expect(exports).toEqual(['foo']);
+  });
 });
 
 // ---------------------------------------------------------------------------

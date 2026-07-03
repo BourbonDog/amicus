@@ -69,14 +69,24 @@ function extractExports(filePath) {
 
   const names = new Set();
 
-  // module.exports = { name1, name2, ... }
+  // module.exports = { name1, name2, alias: original, ... }
+  // Only the key (left of `:` when present) is the exported name; the
+  // right-hand side of an `alias: original` pair is a reference to an
+  // internal identifier, not itself an export. Strip `//` line comments
+  // first so comment prose doesn't get mistaken for a bare key.
   const objMatch = content.match(/module\.exports\s*=\s*\{([^}]*)\}/s);
   if (objMatch) {
-    const body = objMatch[1];
-    const keyRe = /\b([a-zA-Z_$][\w$]*)\b(?:\s*[,:}\n]|\s*$)/g;
+    const body = objMatch[1].replace(/\/\/[^\n]*/g, '');
+    const keyRe = /\b([a-zA-Z_$][\w$]*)\b\s*(:|(?=[,}\n]|\s*$))/g;
     let m;
     while ((m = keyRe.exec(body)) !== null) {
       names.add(m[1]);
+      if (m[2] === ':') {
+        // Skip the value side of `key: value` — advance past it so its
+        // identifier isn't matched as a separate key on the next loop.
+        keyRe.lastIndex = body.indexOf(',', keyRe.lastIndex);
+        if (keyRe.lastIndex === -1) { break; }
+      }
     }
   }
 
