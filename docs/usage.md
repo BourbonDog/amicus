@@ -110,7 +110,13 @@ amicus fanout --council free --prompt "Review this design" --json
 | `--wave-id <id>` | Set the wave ID explicitly; leg IDs become `<wave-id>-1` … `<wave-id>-N`. |
 | `--session-id <id\|"current">` | Session ID to pull shared context from (default `current`). Same semantics as on `start`. |
 | `--json` | Emit the wave document on stdout. |
+| `--max-cost <$>` | Refuse the wave if the estimated total exceeds `$` (soft ceiling). |
+| `--no-cost-gate` | Disable the budget gate (per-$/Mtok threshold + ceiling) for this run. |
 | `--no-validate-model` | Skip catalog validation. |
+
+**Shared per-leg knobs.** Every leg in the wave also accepts the same per-leg options as `start`:
+`--agent`, `--thinking`, `--timeout`, `--summary-length`, `--no-context`, `--context-*`, `--mcp*`,
+`--no-validate-model`, `--cwd`.
 
 **Exit codes:** `0` all legs complete · `2` partial wave (at least one leg failed) · `1` none complete / hard failure · `130` SIGINT · `143` SIGTERM.
 
@@ -133,6 +139,7 @@ amicus fanout --council free --prompt "Review this design" --json
 ```
 
 `status` is `complete | partial | error | aborted`. Each leg's `summary` is that model's full response.
+`legs[]` come in `--models` order (or preset-membership order for `--council`), not completion order.
 
 **Fanout vs. N parallel starts.** Use `fanout` when every leg should receive the **same prompt** — this is what the council's independent review waves use. Use N separate `start` calls when each leg needs a **different prompt**.
 
@@ -235,7 +242,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }

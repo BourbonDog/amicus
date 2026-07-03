@@ -262,6 +262,17 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   never had this executed by hand. Add it to the pre-v2.0.0 release ritual (no `RELEASE-CHECKLIST.md` exists
   yet in this repo — create one, or fold it into whatever pre-release doc/process is adopted first).
 
+## Phase 17 whole-phase review triage (2026-07-03)
+
+- [ ] **`docs/usage.md` lacks detail sections for `spend`/`doctor`/`key`** — the README's compact
+  command table currently has more detail on these three than the "canonical CLI reference" does,
+  which inverts the intended README-summary / usage.md-detail split the Phase 17 restructure was
+  going for. [S]
+- [ ] **Consider a repo-wide `*.md text eol=lf` `.gitattributes` rule** (or a normalize-read helper
+  used everywhere) — two separate CRLF-checkout seams (`council-reference-docs.test.js`,
+  `docs-quick-sync.test.js`) have now bitten docs test suites in this phase alone. [S — weigh
+  renormalization churn against the recurring cost of one-off `.replace(/\r\n/g,'\n')` fixes]
+
 ## Phase 16 review roll-up (2026-07-03)
 
 - **`council show` cannot report catalog-delisted saved-council members** — the run path (`resolveCouncilMembers`, config.js) drops delisted raw ids via its catalog `known`-set check; `show`'s resolved/dropped loop (presets-cli.js) pushes any `/`-containing id straight to `resolved`. Mirror the membership check so `show` matches run-time resolution. [S — proven by the 16a.3 review with a live fixture]

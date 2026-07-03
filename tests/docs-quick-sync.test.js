@@ -7,7 +7,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('B47 — Fold handoff operational paragraph', () => {
   const readme = read('README.md');
@@ -165,6 +165,67 @@ describe('B52 — OpenRouter 402 troubleshooting row', () => {
     expect(section).toMatch(/openrouter\.ai\/credits/);
     expect(section).toMatch(/amicus doctor/);
     expect(section).toMatch(/:free|free council|councils\.free/i);
+  });
+});
+
+describe('Phase 17 whole-phase review — fanout per-leg knobs + cost-gate flags restored', () => {
+  const usage = read('docs/usage.md');
+  const fanoutSection = usage.slice(usage.indexOf('## `amicus fanout`'), usage.indexOf('## `amicus council save'));
+
+  it('usage.md fanout section lists the shared per-leg knobs (verified against cli.js\'s fanout --help block)', () => {
+    for (const flag of ['--agent', '--thinking', '--timeout', '--summary-length', '--no-context', '--context-', '--mcp', '--no-validate-model', '--cwd']) {
+      expect(fanoutSection).toContain(flag);
+    }
+  });
+
+  it('usage.md fanout section documents --max-cost and --no-cost-gate', () => {
+    expect(fanoutSection).toMatch(/--max-cost\s*<\$>/);
+    expect(fanoutSection).toMatch(/--no-cost-gate/);
+  });
+});
+
+describe('Phase 17 whole-phase review — wave legs[] ordering note restored', () => {
+  const usage = read('docs/usage.md');
+  const fanoutSection = usage.slice(usage.indexOf('## `amicus fanout`'), usage.indexOf('## `amicus council save'));
+
+  it('usage.md states legs[] come in --models order', () => {
+    expect(fanoutSection).toMatch(/legs\[\].*--models.*order/);
+  });
+});
+
+describe('Phase 17 whole-phase review — README tier story + artifacts list', () => {
+  const readme = read('README.md');
+
+  it('README council narrative lists all four tiers, including Disputed', () => {
+    const councilSection = readme.slice(readme.indexOf('**The flow, in five beats:**'), readme.indexOf('**What a run produces**'));
+    expect(councilSection).toMatch(/Disputed/);
+    expect(councilSection).toMatch(/Confirmed/);
+    expect(councilSection).toMatch(/Contested/);
+    expect(councilSection).toMatch(/Singleton/);
+  });
+
+  it('README "What a run produces" list includes report.html', () => {
+    const producesSection = readme.slice(readme.indexOf('**What a run produces**'), readme.indexOf('**Claude in the council**'));
+    expect(producesSection).toMatch(/report\.html/);
+  });
+});
+
+describe('Phase 17 whole-phase review — status --json version is current and tolerant of future bumps', () => {
+  const readme = read('README.md');
+  const usage = read('docs/usage.md');
+  const pkgVersion = require('../package.json').version;
+  const versionPin = /"version":\s*"(\d+\.\d+\.\d+)"/;
+
+  it('README status --json example version matches package.json (regex-pinned, not a literal string)', () => {
+    const match = readme.match(versionPin);
+    expect(match).toBeTruthy();
+    expect(match[1]).toBe(pkgVersion);
+  });
+
+  it('usage.md status --json example version matches package.json (regex-pinned, not a literal string)', () => {
+    const match = usage.match(versionPin);
+    expect(match).toBeTruthy();
+    expect(match[1]).toBe(pkgVersion);
   });
 });
 

@@ -194,7 +194,7 @@ Everything you need before your first run, and what's optional.
 **The flow, in five beats:**
 
 1. **Independent reviews.** Each council model reviews the artifact on its own (one parallel wave), producing a structured findings list — claim, severity (`blocker | major | minor | nit`), location, rationale.
-2. **Anonymized cross-review.** Claude relabels every review (Review A, B, C…) and sends the identical bundle to every model. Each model ranks the reviews and adjudicates every finding (`agree | dispute | neutral`) — *unknowingly judging its own*, so self-bias washes out. This yields a **street-cred** ranking and sorts findings into **Confirmed / Contested / Singleton** tiers.
+2. **Anonymized cross-review.** Claude relabels every review (Review A, B, C…) and sends the identical bundle to every model. Each model ranks the reviews and adjudicates every finding (`agree | dispute | neutral`) — *unknowingly judging its own*, so self-bias washes out. This yields a **street-cred** ranking and sorts findings into **Disputed / Confirmed / Contested / Singleton** tiers.
 3. **Chair verdict.** A designated **non-Claude** chair receives the de-anonymized picture — all reviews, rankings, and adjudications — and synthesizes an independent verdict. Claude presents it verbatim; Claude does not synthesize.
 4. **Tiered decisions.** Confirmed findings get one bulk accept/deny; Contested and Singleton findings are decided one at a time (accept / deny / modify).
 5. **Outputs applied.** Accepted findings are written into a reviewed copy of the source; the full run is captured in the run folder.
@@ -205,6 +205,8 @@ Everything you need before your first run, and what's optional.
 - `crossreview-matrix.md` — the adjudication grid plus the de-anonymized street-cred table.
 - `verdict.md` — the chair's synthesis.
 - `report.md` — synthesis + the full decision log + a per-call run-stats table.
+- `report.html` — the deterministic renderer output (adjudication matrix, street-cred table,
+  findings-by-tier, cost — no chair prose). This is the default artifact handed to the user.
 - For an **editable source**, the accepted edits land in `<stem>-reviewed.<ext>` next to the original.
 
 **Claude in the council** (default off): you can add Claude's own fresh review to the bundle so the bench ranks and adjudicates it — Claude is *judged* but never votes or chairs, so the verdict stays independent.
@@ -309,7 +311,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
