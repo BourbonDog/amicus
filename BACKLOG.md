@@ -261,3 +261,11 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   after a normal exit, a Ctrl-C, or an external `kill` of the parent — B06's target platform (POSIX) has
   never had this executed by hand. Add it to the pre-v2.0.0 release ritual (no `RELEASE-CHECKLIST.md` exists
   yet in this repo — create one, or fold it into whatever pre-release doc/process is adopted first).
+
+## Phase 16 review roll-up (2026-07-03)
+
+- **`council show` cannot report catalog-delisted saved-council members** — the run path (`resolveCouncilMembers`, config.js) drops delisted raw ids via its catalog `known`-set check; `show`'s resolved/dropped loop (presets-cli.js) pushes any `/`-containing id straight to `resolved`. Mirror the membership check so `show` matches run-time resolution. [S — proven by the 16a.3 review with a live fixture]
+- **`continue`/`resume` never compute per-run usage** (no `resolveUsage` call on those finalize paths — pre-existing, predates the spend ledger) — so their runs contribute zero spend-ledger rows. Add usage resolution + ledger appends to both. [S]
+- **Benign double network fetch on the no-cache-failure refresh path** — `runRefresh` and the `refresh-catalog` IPC both call `refreshCatalog()` then `getCatalogInfo({maxAgeMs: Infinity})`, which re-enters `refreshCatalog` when NO cache doc exists (readCache returns null for a metadata-only failure doc). Idempotent, rare path; dedupe when convenient. [S]
+- **Size-gate cliffs:** `src/utils/result-schema.js` at 294/300 and `src/cli-handlers-doctor.js` at 300/300 — the next edit to either forces an extraction first (buildSpendDoc already carries a fold-back note for result-schema). [note]
+- **Free-picker missing-`name` fallback** (`r.name || r.id`) covered by inspection, not a test pin — one-liner test someday. [nit]
