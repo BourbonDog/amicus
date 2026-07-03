@@ -182,6 +182,7 @@ src/
 │   ├── project-root-sanity.js
 │   ├── prompt-source.js
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
+│   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
 │   ├── remediation-hints.js
 │   ├── result-schema.js
 │   ├── server-setup.js  # Server Setup Utilities
@@ -385,6 +386,7 @@ evals/
 | `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
+| `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |

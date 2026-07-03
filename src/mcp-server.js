@@ -21,6 +21,7 @@ const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
 const { runWait, registerInProcessRun, settleInProcessRun } = require('./mcp-wait');
 const { detectClient } = require('./utils/client-detect');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
+const { sliceForRead } = require('./utils/read-slice');
 
 /**
  * Elapsed run duration: time between createdAt and the run's end, bounding the
@@ -658,7 +659,10 @@ const handlers = {
         // Fence the whole wave.json text: it embeds each leg's folded-back
         // summary/error, which is untrusted model prose entering the parent
         // context (same blunt whole-text treatment as the single-session fence).
-        return textResult(fenceSidecarOutput(fs.readFileSync(wavePath, 'utf-8')));
+        // Sliced BEFORE fencing (15a.3/B17) so the fence markup itself is
+        // never truncated.
+        const { body } = sliceForRead(fs.readFileSync(wavePath, 'utf-8'), input);
+        return textResult(fenceSidecarOutput(body));
       }
       const legsTotal = (readMeta.legs || []).length;
       const stillRunning = !readMeta.status || readMeta.status === 'running';
@@ -671,14 +675,22 @@ const handlers = {
 
     const mode = input.mode || 'summary';
     if (mode === 'metadata') {
-      return textResult(fs.readFileSync(path.join(sessionDir, 'metadata.json'), 'utf-8'));
+      // metadata is small structured JSON: exempt from offset/limit/tail (a
+      // caller slicing JSON would just break parsing), but still cap-defended
+      // defensively — apply the SAME notice convention, left unfenced to
+      // match its unfenced (structured-data) status.
+      const metaText = fs.readFileSync(path.join(sessionDir, 'metadata.json'), 'utf-8');
+      const { body } = sliceForRead(metaText, {});
+      return textResult(body);
     }
     if (mode === 'conversation') {
       const convPath = path.join(sessionDir, 'conversation.jsonl');
       if (!fs.existsSync(convPath)) { return textResult('No conversation recorded.'); }
       // Fence the whole conversation dump in ONE fence (not per-line): it is
-      // untrusted model prose entering the parent context.
-      return textResult(fenceSidecarOutput(fs.readFileSync(convPath, 'utf-8')));
+      // untrusted model prose entering the parent context. Sliced BEFORE
+      // fencing (15a.3/B17) so the fence markup itself is never truncated.
+      const { body } = sliceForRead(fs.readFileSync(convPath, 'utf-8'), input);
+      return textResult(fenceSidecarOutput(body));
     }
     // Default: summary
     const summaryPath = path.join(sessionDir, 'summary.md');
@@ -706,7 +718,11 @@ const handlers = {
     // parent context (inbound mirror of prompt-builder's outbound fence). Same
     // fence also wraps wave-summary and conversation-mode reads above (B03);
     // mode=metadata and every --json contract stay unfenced (structured data).
-    return textResult(fenceSidecarOutput(header + summaryText));
+    // Sliced BEFORE fencing (15a.3/B17). The model header is prepended before
+    // slicing, so it counts against offset/limit/the cap like the rest of the
+    // body — an explicit offset can page past it, same as any other prose.
+    const { body: slicedSummary } = sliceForRead(header + summaryText, input);
+    return textResult(fenceSidecarOutput(slicedSummary));
   },
 
   async amicus_list(input, project) {
