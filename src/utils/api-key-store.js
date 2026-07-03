@@ -31,17 +31,7 @@ function getEnvPath() {
     return path.join(resolved, '.env');
   }
   const homeDir = process.env.HOME || process.env.USERPROFILE;
-  const amicusEnvPath = path.join(homeDir, '.config', 'amicus', '.env');
-  // DEPRECATED(amicus-shim): fall back to the legacy ~/.config/sidecar/.env if it
-  // exists and the new one does not, so pre-rebrand installs keep reading/writing
-  // their existing keys. Remove in a future revision — see docs/SHIMS.md.
-  if (!fs.existsSync(amicusEnvPath)) {
-    const legacyEnvPath = path.join(homeDir, '.config', 'sidecar', '.env');
-    if (fs.existsSync(legacyEnvPath)) {
-      return legacyEnvPath;
-    }
-  }
-  return amicusEnvPath;
+  return path.join(homeDir, '.config', 'amicus', '.env');
 }
 
 /** Parse a .env file into a key-value map (comments/blanks excluded) */

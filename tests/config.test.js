@@ -60,7 +60,7 @@ describe('Sidecar Config Module', () => {
       expect(config.getConfigDir()).toBe(path.join(freshHome, '.config', 'amicus'));
     });
 
-    it('falls back to the legacy ~/.config/sidecar only when amicus is absent but the legacy dir exists', () => {
+    it('ignores the legacy ~/.config/sidecar dir even when amicus is absent (#19 absence pin)', () => {
       delete process.env.AMICUS_CONFIG_DIR;
       const legacyHome = path.join(tempDir, 'legacy-home');
       fs.mkdirSync(path.join(legacyHome, '.config', 'sidecar'), { recursive: true });
@@ -68,7 +68,7 @@ describe('Sidecar Config Module', () => {
       process.env.USERPROFILE = legacyHome;
       jest.resetModules();
       const config = loadModule();
-      expect(config.getConfigDir()).toBe(path.join(legacyHome, '.config', 'sidecar'));
+      expect(config.getConfigDir()).toBe(path.join(legacyHome, '.config', 'amicus'));
     });
   });
 

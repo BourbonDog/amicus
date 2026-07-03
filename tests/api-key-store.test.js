@@ -103,7 +103,7 @@ describe('api-key-store', () => {
       }
     });
 
-    it('falls back to legacy ~/.config/sidecar/.env when it exists and the amicus one does not', () => {
+    it('ignores legacy ~/.config/sidecar/.env even when it exists and the amicus one does not (#19 absence pin)', () => {
       // No env-dir override — use real home-dir logic with mocked HOME
       delete process.env.SIDECAR_ENV_DIR;
       delete process.env.AMICUS_ENV_DIR;
@@ -121,7 +121,8 @@ describe('api-key-store', () => {
         fs.writeFileSync(sidecarEnvPath, 'OPENROUTER_API_KEY=sk-legacy\n');
 
         const result = getEnvPath();
-        expect(result).toBe(sidecarEnvPath);
+        expect(result).not.toBe(sidecarEnvPath);
+        expect(result).toBe(path.join(fakeHome, '.config', 'amicus', '.env'));
       } finally {
         process.env.HOME = origHome;
         process.env.USERPROFILE = origUserProfile;

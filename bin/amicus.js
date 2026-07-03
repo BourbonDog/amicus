@@ -7,18 +7,7 @@
  * Routes commands to appropriate handlers.
  */
 
-// One-time, non-destructive migration of the legacy ~/.config/sidecar dir onto
-// the canonical ~/.config/amicus (copy; legacy kept as a backup). Runs before
-// any config/credential read so both resolve to the unified dir. Best-effort.
-try {
-  const { migrateLegacyConfigDir } = require('../src/utils/config');
-  const _m = migrateLegacyConfigDir();
-  if (_m && _m.migrated) {
-    process.stderr.write(`[amicus] Migrated config ${_m.from} → ${_m.to} (legacy kept as a backup).\n`);
-  }
-} catch { /* best-effort: never block startup on migration */ }
-
-// Load API keys from all sources: process.env > sidecar .env > auth.json
+// Load API keys from all sources: process.env > amicus .env > auth.json
 const { loadCredentials } = require('../src/utils/env-loader');
 loadCredentials();
 

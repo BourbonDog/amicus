@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-describe('getConfigDir (amicus rebrand + dir-fallback shim)', () => {
+describe('getConfigDir (amicus rebrand; legacy dir fallback removed #19)', () => {
   let tmpHome;
   const orig = { ...process.env };
 
@@ -26,9 +26,9 @@ describe('getConfigDir (amicus rebrand + dir-fallback shim)', () => {
     expect(getConfigDir()()).toBe(path.join(tmpHome, '.config', 'amicus'));
   });
 
-  it('falls back to ~/.config/sidecar when it exists and amicus does not', () => {
+  it('ignores ~/.config/sidecar even when it exists and amicus does not (#19 absence pin)', () => {
     fs.mkdirSync(path.join(tmpHome, '.config', 'sidecar'), { recursive: true });
-    expect(getConfigDir()()).toBe(path.join(tmpHome, '.config', 'sidecar'));
+    expect(getConfigDir()()).toBe(path.join(tmpHome, '.config', 'amicus'));
   });
 
   it('prefers ~/.config/amicus when both exist', () => {
@@ -46,5 +46,10 @@ describe('getConfigDir (amicus rebrand + dir-fallback shim)', () => {
     process.env.SIDECAR_CONFIG_DIR = path.join(tmpHome, 'legacy-custom');
     expect(getConfigDir()()).not.toBe(path.join(tmpHome, 'legacy-custom'));
     expect(getConfigDir()()).toBe(path.join(tmpHome, '.config', 'amicus'));
+  });
+
+  it('migrateLegacyConfigDir no longer exists as an export (#19 absence pin)', () => {
+    const config = require('../../src/utils/config');
+    expect(config.migrateLegacyConfigDir).toBeUndefined();
   });
 });

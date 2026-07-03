@@ -21,7 +21,7 @@ const HAS_API_KEY = !!(
   process.env.OPENROUTER_API_KEY ||
   (() => {
     try {
-      const envPath = path.join(os.homedir(), '.config', 'sidecar', '.env');
+      const envPath = path.join(os.homedir(), '.config', 'amicus', '.env');
       const content = fs.readFileSync(envPath, 'utf-8');
       return content.includes('OPENROUTER_API_KEY=');
     } catch { return false; }

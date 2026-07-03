@@ -28,45 +28,7 @@ function getConfigDir() {
     return resolved;
   }
   const homeDir = process.env.HOME || process.env.USERPROFILE;
-  const amicusDir = path.join(homeDir, '.config', 'amicus');
-  // DEPRECATED(amicus-shim): fall back to the legacy ~/.config/sidecar dir if it
-  // exists and the new one does not, so pre-rebrand credentials keep working.
-  // Remove in a future revision — see docs/SHIMS.md.
-  if (!fs.existsSync(amicusDir)) {
-    const legacyDir = path.join(homeDir, '.config', 'sidecar');
-    if (fs.existsSync(legacyDir)) {
-      return legacyDir;
-    }
-  }
-  return amicusDir;
-}
-
-/**
- * One-time, non-destructive migration of the legacy ~/.config/sidecar config
- * directory onto the canonical ~/.config/amicus. Copies (does not move), so the
- * legacy dir is left intact as a backup. This collapses the two-dir split that
- * let getConfigDir() flip between them and orphan data: once ~/.config/amicus
- * exists it always wins. No-op when amicus already exists, when there is no
- * legacy dir, or when a CONFIG_DIR override is set. Best-effort — returns a
- * result object and never throws. Call once at startup, before any config read.
- *
- * @param {{home?: string}} [opts]
- * @returns {{migrated: boolean, from?: string, to?: string, reason?: string, error?: string}}
- */
-function migrateLegacyConfigDir(opts = {}) {
-  if (process.env.AMICUS_CONFIG_DIR) { return { migrated: false, reason: 'override-set' }; }
-  const home = opts.home || process.env.HOME || process.env.USERPROFILE;
-  if (!home) { return { migrated: false, reason: 'no-home' }; }
-  const amicusDir = path.join(home, '.config', 'amicus');
-  const legacyDir = path.join(home, '.config', 'sidecar');
-  try {
-    if (fs.existsSync(amicusDir)) { return { migrated: false, reason: 'amicus-exists' }; }
-    if (!fs.existsSync(legacyDir)) { return { migrated: false, reason: 'no-legacy' }; }
-    fs.cpSync(legacyDir, amicusDir, { recursive: true });
-    return { migrated: true, from: legacyDir, to: amicusDir };
-  } catch (err) {
-    return { migrated: false, reason: 'error', error: err.message };
-  }
+  return path.join(homeDir, '.config', 'amicus');
 }
 
 /** @returns {string} Full path to config.json */
@@ -379,7 +341,6 @@ function resolveCouncilMembers(name, catalog = []) {
 
 module.exports = {
   getConfigDir,
-  migrateLegacyConfigDir,
   getConfigPath,
   loadConfig,
   saveConfig,
