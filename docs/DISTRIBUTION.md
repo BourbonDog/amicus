@@ -209,6 +209,15 @@ sufficient, and steps that already succeeded (npm publish, an earlier
 registry publish, an existing release) are detected and skipped rather than
 re-attempted or double-published.
 
+**Caveat — content-level 422s are NOT re-run-recoverable.** A workflow
+re-run checks out the tag, so a `server.json` validation error (the registry
+returns HTTP 422 naming the failing field) reproduces identically on re-run.
+Fix `server.json` on main and recover via the manual path below, or let the
+fix ride the next tag. Known registry constraint (learned live): the
+top-level `description` is capped at **100 characters** — v1.9.0's first
+publish attempt 422'd on a 199-char description (2026-07-03); now pinned by
+`tests/scripts/package-manifest.test.js`.
+
 **Manual recovery (fallback, if re-run is not viable):**
 1. **Registry publish:** run the same local de-risk flow above for real —
    `mcp-publisher login github` (device-flow login as BourbonDog), sync

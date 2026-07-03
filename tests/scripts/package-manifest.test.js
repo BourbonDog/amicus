@@ -42,6 +42,12 @@ describe('MCP Registry metadata (Phase 9c)', () => {
     expect(p.packageArguments[0]).toMatchObject({ type: 'positional', value: 'mcp' });
   });
 
+  test('server.json description fits the registry 100-char cap (422 on v1.9.0, 2026-07-03)', () => {
+    const desc = serverJson().description;
+    expect(desc.length).toBeLessThanOrEqual(100);
+    expect(Buffer.byteLength(desc, 'utf8')).toBeLessThanOrEqual(100);
+  });
+
   test('publish.yml publishes to the MCP registry via OIDC, strictly after npm publish', () => {
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'publish.yml'), 'utf-8');
     expect(yml).toContain('mcp-publisher login github-oidc');

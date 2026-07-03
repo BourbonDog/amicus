@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.BourbonDog/amicus",
   "title": "Amicus",
-  "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
+  "description": "Multi-model LLM Council and parallel AI window for Claude Code. Fork any model, fold results back.",
   "repository": {
     "url": "https://github.com/BourbonDog/amicus",
     "source": "github"
