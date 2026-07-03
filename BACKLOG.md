@@ -187,3 +187,26 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   key's dashboard spend cap (the only hard cost ceiling on fresh runners — `--max-cost` is advisory with no cached
   catalog). Full v1 design lives in `docs/superpowers/plans/2026-07-01-review-execution-10-phases.md` (Phase 10);
   this item is also tracked as backlog entry 24 in that plan's "Backlog for review" section.
+
+---
+
+## Phase 11 whole-phase review triage (2026-07-02)
+
+- [ ] **Test-hygiene bundle** — land as one commit next time these test files are open. Null-guard the
+  `.match(...)[1]` frontmatter parses in `tests/skill-second-opinion-docs.test.js` and its reference twin
+  `tests/skill-sidecar-docs.test.js` (a non-matching frontmatter regex currently throws on `[1]` of `null`
+  instead of failing with a readable assertion). Tighten the `/multi-model/i` pin to the quoted "multi-model
+  review" trigger string so it can't false-match unrelated prose. Step-scope the file-wide `::notice::`/
+  `::error::` `toContain` pins in `tests/scripts/publish-workflow.test.js` (currently whole-file, should be
+  scoped to the step they claim to pin). Tighten `tests/scripts/package-manifest.test.js`'s
+  `yml.indexOf('npm publish')` ordering pin, which now matches a B04 comment rather than the actual command
+  — coverage is currently held by the new suite's ordering test (`tests/scripts/publish-workflow.test.js`),
+  so this is cleanup, not a live gap.
+- [ ] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — the new §3 correctly cites
+  `/v0/servers/.../versions/<v>`, but the untouched namespace-check paragraph still cites
+  `/v0.1/servers?search=`. Sync both to the same registry API version in the Phase 13 docs lane.
+- [ ] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** The pre-check that skips
+  re-publishing to the MCP Registry (`.github/workflows/publish.yml`, "Publish to MCP Registry" step) keys
+  entirely on `STATUS = "200"`. Assert the response body actually carries the expected version (not just a
+  200 status code) to close a fail-unsafe drift if the registry's not-found contract ever changes shape
+  (e.g. a 200 with an empty/error body during the registry's PREVIEW-API schema churn).

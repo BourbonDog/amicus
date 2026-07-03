@@ -30,16 +30,16 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(y).toContain('::notice::');
   });
 
-  test('ordering: tag-lockstep check < npm publish < mcp-publisher publish', () => {
+  test('ordering: npm version-exists guard < npm publish < mcp-publisher publish', () => {
     const y = yml();
-    const lockstepGuardMatch = y.match(/npm view "?amicus@\$VERSION"? version/);
-    const lockstepGuardIdx = lockstepGuardMatch ? lockstepGuardMatch.index : -1;
+    const versionExistsGuardMatch = y.match(/npm view "?amicus@\$VERSION"? version/);
+    const versionExistsGuardIdx = versionExistsGuardMatch ? versionExistsGuardMatch.index : -1;
     const npmPublishIdx = y.indexOf('npm publish --access public --provenance');
     const mcpPublishIdx = y.indexOf('./mcp-publisher publish');
-    expect(lockstepGuardIdx).toBeGreaterThan(-1);
+    expect(versionExistsGuardIdx).toBeGreaterThan(-1);
     expect(npmPublishIdx).toBeGreaterThan(-1);
     expect(mcpPublishIdx).toBeGreaterThan(-1);
-    expect(lockstepGuardIdx).toBeLessThan(npmPublishIdx);
+    expect(versionExistsGuardIdx).toBeLessThan(npmPublishIdx);
     expect(npmPublishIdx).toBeLessThan(mcpPublishIdx);
   });
 
@@ -113,6 +113,15 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(statusAssignMatch).not.toBeNull();
     const statusAssign = statusAssignMatch[0];
     expect(statusAssign).toMatch(/\|\|\s*true/);
+
+    // `|| true` only covers transport-level errors (DNS/connection/TLS) —
+    // it does NOT cover a hang: an accepted-then-stalled connection has no
+    // default curl timeout, so a stuck pre-check could stall the release
+    // job for hours on any publish run. Require an explicit transfer
+    // timeout on this same curl invocation so a stall fails fast instead
+    // (a non-zero exit from the timeout still hits `|| true` and correctly
+    // falls through to the publish/retry path below).
+    expect(statusAssign).toMatch(/--max-time\s+\d+/);
   });
 
   test('GitHub Release creation is guarded by an existence check (gh release view)', () => {
