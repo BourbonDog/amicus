@@ -120,3 +120,25 @@ describe('Step 3 consumes the shared catalog cache (B33 / #12)', () => {
     expect(groupCatalogByFamily([])).toEqual([]);
   });
 });
+
+describe('renderSearchMeta shows a stale hint when the last refresh attempt failed (#13)', () => {
+  let script;
+
+  beforeAll(() => {
+    const { buildSetupHTML } = require('../../electron/setup-ui');
+    script = buildSetupHTML().match(/<script>([\s\S]*)<\/script>/)[1];
+  });
+
+  it('renderSearchMeta references the stale-attempt fields carried on the catalog info', () => {
+    const fnMatch = script.match(/function renderSearchMeta\(\) \{[\s\S]*?\n  \}/);
+    expect(fnMatch).toBeTruthy();
+    expect(fnMatch[0]).toMatch(/catalogLastRefreshError/);
+    expect(fnMatch[0]).toMatch(/catalogLastRefreshAttempt/);
+  });
+
+  it('applyCatalog captures lastRefreshAttempt/lastRefreshError from the IPC response', () => {
+    expect(script).toContain('catalogLastRefreshAttempt = info && info.lastRefreshAttempt');
+    expect(script).toContain('catalogLastRefreshError = info && info.lastRefreshError');
+  });
+});
+

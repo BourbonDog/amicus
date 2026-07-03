@@ -401,6 +401,9 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
 
   // ===== F5: searchable catalog picker (Step 2) + B33/#12: shared with Step 3 =====
   var catalogRows = null, catalogFetchedAt = null;
+  // #13: last-refresh outcome, so a stale cache (refresh keeps failing) is
+  // shown honestly instead of looking current.
+  var catalogLastRefreshAttempt = null, catalogLastRefreshError = null;
   window.customDefaultModel = null;
 
   async function ensureCatalogLoaded() {
@@ -430,6 +433,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   function applyCatalog(info) {
     catalogRows = (info && info.models) || [];
     catalogFetchedAt = info && info.fetchedAt;
+    catalogLastRefreshAttempt = info && info.lastRefreshAttempt;
+    catalogLastRefreshError = info && info.lastRefreshError;
     // Single shared in-page cache: Step 3's alias dropdown (buildModelSelect)
     // reads window.availableModels, re-derived from the same catalog load
     // Step 2 uses — no second get-catalog round-trip, and the refresh
@@ -447,7 +452,14 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
     var meta = $('model-search-meta');
     if (!meta) { return; }
     var when = catalogFetchedAt ? new Date(catalogFetchedAt).toLocaleString() : 'never';
-    meta.textContent = catalogRows.length + ' models \\u00b7 catalog fetched ' + when;
+    var text = catalogRows.length + ' models \\u00b7 catalog fetched ' + when;
+    // #13: one-line stale hint when the last refresh attempt failed AFTER
+    // the data currently shown was fetched (don't redesign Step 2 for this).
+    if (catalogLastRefreshError && catalogLastRefreshAttempt &&
+        (!catalogFetchedAt || catalogLastRefreshAttempt > catalogFetchedAt)) {
+      text += ' \\u2014 \\u26a0 refresh failed, showing last-known data';
+    }
+    meta.textContent = text;
   }
 
   function fmtCtx(n) { return n == null ? '' : ' \\u00b7 ctx ' + n; }

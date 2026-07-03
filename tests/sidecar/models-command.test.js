@@ -192,4 +192,106 @@ describe('amicus models', () => {
     }
     expect(fs.existsSync(path.join(__dirname, '..', '..', 'bin', 'amicus.js'))).toBe(true);
   });
+
+  // #13: stale-catalog memo — surface when the last refresh attempt failed.
+  describe('stale-catalog memo (#13)', () => {
+    function loadHandlerWithOutcome({ catalog = CATALOG, fetchedAt = 1718000000000,
+      lastRefreshAttempt = null, lastRefreshError = null, refreshResult } = {}) {
+      jest.resetModules();
+      jest.doMock('../../src/utils/model-catalog', () => ({
+        getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt, lastRefreshAttempt, lastRefreshError })),
+        refreshCatalog: jest.fn(async () => (refreshResult !== undefined ? refreshResult : catalog)),
+        catalogPath: () => 'C:/fake/model-catalog.json',
+      }));
+      return require('../../src/sidecar/models');
+    }
+
+    it('default list appends a stale memo when the last attempt failed after the last success', async () => {
+      const { handleModels } = loadHandlerWithOutcome({
+        lastRefreshAttempt: 1718003600000, lastRefreshError: 'network-error: all providers unreachable'
+      });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'] }));
+      expect(code).toBe(0);
+      expect(out).toContain('stale');
+      expect(out).toContain('network-error: all providers unreachable');
+      expect(out).toContain(new Date(1718003600000).toISOString());
+      expect(out).toContain(new Date(1718000000000).toISOString());
+    });
+
+    it('default list has NO stale memo when there has been no failed attempt', async () => {
+      const { handleModels } = loadHandlerWithOutcome();
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'] }));
+      expect(code).toBe(0);
+      expect(out).not.toContain('stale');
+    });
+
+    it('--json list carries the outcome fields additively', async () => {
+      const { handleModels } = loadHandlerWithOutcome({
+        lastRefreshAttempt: 1718003600000, lastRefreshError: 'network-error: all providers unreachable'
+      });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.lastRefreshAttempt).toBe(1718003600000);
+      expect(doc.lastRefreshError).toBe('network-error: all providers unreachable');
+      // existing fields still present (additive, not a replacement)
+      expect(doc.schemaVersion).toBe(2);
+      expect(doc.count).toBe(2);
+    });
+
+    it('--refresh reports an honest failure instead of "Refreshed catalog: 0 models"', async () => {
+      const { handleModels } = loadHandlerWithOutcome({
+        refreshResult: [],
+        lastRefreshAttempt: 1718003600000, lastRefreshError: 'network-error: all providers unreachable',
+      });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+      expect(code).toBe(0); // stale-but-served: warning, not a command failure (cache exists)
+      expect(out).not.toContain('Refreshed catalog: 0 models');
+      expect(out).toContain('refresh failed');
+      expect(out).toContain('network-error: all providers unreachable');
+      expect(out).toContain('keeping catalog from');
+      expect(out).toContain(new Date(1718000000000).toISOString());
+    });
+
+    it('--refresh failure with NO cache at all is a real failure (non-zero exit)', async () => {
+      const { handleModels } = loadHandlerWithOutcome({
+        catalog: [], fetchedAt: null, refreshResult: [],
+        lastRefreshAttempt: 1718003600000, lastRefreshError: 'network-error: all providers unreachable',
+      });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+      expect(code).not.toBe(0);
+      expect(out).toContain('refresh failed');
+    });
+
+    it('--refresh success still reports the count as before', async () => {
+      const { handleModels } = loadHandlerWithOutcome({ refreshResult: CATALOG });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('Refreshed catalog: 2 models');
+    });
+
+    it('--refresh --json on success reports the persisted fetchedAt and null outcome fields', async () => {
+      const { handleModels } = loadHandlerWithOutcome({ refreshResult: CATALOG, fetchedAt: 1718000000000 });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.fetchedAt).toBe(1718000000000);
+      expect(doc.lastRefreshAttempt).toBeNull();
+      expect(doc.lastRefreshError).toBeNull();
+      expect(doc.count).toBe(2);
+    });
+
+    it('--refresh --json on failure reports the stale fetchedAt (not null) plus the outcome fields', async () => {
+      const { handleModels } = loadHandlerWithOutcome({
+        refreshResult: [], fetchedAt: 1718000000000,
+        lastRefreshAttempt: 1718003600000, lastRefreshError: 'network-error: all providers unreachable',
+      });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], refresh: true, json: true }));
+      expect(code).toBe(0); // stale-but-served
+      const doc = JSON.parse(out);
+      expect(doc.fetchedAt).toBe(1718000000000);
+      expect(doc.lastRefreshAttempt).toBe(1718003600000);
+      expect(doc.lastRefreshError).toBe('network-error: all providers unreachable');
+    });
+  });
 });

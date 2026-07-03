@@ -108,4 +108,30 @@ describe('catalog IPC', () => {
     const handlers = registerWithFakes();
     expect(handlers['sidecar:fetch-models']).toBeUndefined();
   });
+
+  // #13: stale-catalog memo — the IPC layer is a pure passthrough of
+  // whatever getCatalogInfo/refreshCatalog+getCatalogInfo return, so the
+  // new lastRefreshAttempt/lastRefreshError fields just need to survive.
+  it('sidecar:get-catalog passes lastRefreshAttempt/lastRefreshError through unmodified', async () => {
+    const rows = [{ id: 'openrouter/a/b', name: 'B', contextLength: 1, pricing: null }];
+    const handlers = registerWithFakes({
+      catalogInfo: { models: rows, fetchedAt: 42, lastRefreshAttempt: 99, lastRefreshError: 'network-error: all providers unreachable' }
+    });
+    expect(await handlers['sidecar:get-catalog']({})).toEqual({
+      models: rows, fetchedAt: 42, lastRefreshAttempt: 99, lastRefreshError: 'network-error: all providers unreachable'
+    });
+  });
+
+  it('sidecar:refresh-catalog passes lastRefreshAttempt/lastRefreshError through unmodified', async () => {
+    const rows = [{ id: 'openrouter/a/b', name: 'B', contextLength: null, pricing: null }];
+    const refresh = jest.fn(async () => []);
+    const handlers = registerWithFakes({
+      catalogInfo: { models: rows, fetchedAt: 99, lastRefreshAttempt: 100, lastRefreshError: 'floor-only: all providers returned no network rows' },
+      refreshImpl: refresh,
+    });
+    const res = await handlers['sidecar:refresh-catalog']({});
+    expect(res).toEqual({
+      models: rows, fetchedAt: 99, lastRefreshAttempt: 100, lastRefreshError: 'floor-only: all providers returned no network rows'
+    });
+  });
 });
