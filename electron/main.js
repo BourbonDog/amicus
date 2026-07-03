@@ -18,6 +18,7 @@ const { logger } = require('../src/utils/logger');
 const { getCompatEnv } = require('../src/utils/env-compat');
 const { buildToolbarHTML, TOOLBAR_H, getBrandName } = require('./toolbar');
 const { createFoldHandler } = require('./fold');
+const { createCloseGuard } = require('./close-guard');
 const { registerSetupHandlers } = require('./ipc-setup');
 const { computeWindowPosition } = require('./window-position');
 const { attachLoadFailsafe, buildLoadErrorHTML } = require('./load-failsafe');
@@ -89,6 +90,13 @@ const foldHandler = createFoldHandler({
   sessionId: OPENCODE_SESSION_ID,
   taskId: TASK_ID,
   port: OPENCODE_PORT
+});
+// Auto-fold on close (backlog B01): a user-initiated window close with no
+// fold yet run must not silently discard the session summary. See
+// close-guard.js for the full design (latch, fallback, abort isolation).
+const closeGuard = createCloseGuard({
+  hasFolded: foldHandler.hasFolded,
+  triggerFold: foldHandler.triggerFold,
 });
 
 // ============================================================================
@@ -284,8 +292,8 @@ function createAmicusWindow() {
     }, 500);
   }
 
-  mainWindow.on('close', () => {
-    if (!foldHandler.hasFolded() && mainWindow) { mainWindow.destroy(); }
+  mainWindow.on('close', (event) => {
+    closeGuard.handleClose(event, mainWindow, contentView);
   });
   mainWindow.on('closed', () => {
     mainWindow = null;

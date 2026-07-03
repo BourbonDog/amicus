@@ -8,7 +8,10 @@ jest.mock('../src/utils/logger', () => ({
 }));
 jest.mock('../src/headless', () => ({ runHeadless: jest.fn() }));
 jest.mock('../src/sidecar/interactive', () => ({
-  runInteractive: jest.fn(), checkElectronAvailable: jest.fn(() => true)
+  runInteractive: jest.fn()
+}));
+jest.mock('../src/sidecar/interactive-process', () => ({
+  checkElectronAvailable: jest.fn(() => true)
 }));
 jest.mock('../src/utils/mcp-discovery', () => ({ discoverParentMcps: jest.fn(() => null) }));
 jest.mock('../src/opencode-client', () => ({

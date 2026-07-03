@@ -16,7 +16,7 @@ jest.mock('../../src/utils/logger', () => ({
 
 const path = require('path');
 
-const { buildElectronEnv } = require('../../src/sidecar/interactive');
+const { buildElectronEnv } = require('../../src/sidecar/interactive-process');
 
 const BASE_ARGS = ['task-001', 'google/gemini-2.5', '/project', '/bin', '/usr/bin'];
 
@@ -71,7 +71,7 @@ describe('getElectronPath', () => {
   const itElectron = electronInstalled ? it : it.skip;
 
   itElectron('returns the path from require("electron") instead of hardcoded relative path', () => {
-    const { getElectronPath } = require('../../src/sidecar/interactive');
+    const { getElectronPath } = require('../../src/sidecar/interactive-process');
     const result = getElectronPath();
 
     // Should NOT be a hardcoded node_modules/.bin/electron path
@@ -85,13 +85,13 @@ describe('getElectronPath', () => {
   });
 
   it('returns null when electron is not installed', () => {
-    const { getElectronPath } = require('../../src/sidecar/interactive');
+    const { getElectronPath } = require('../../src/sidecar/interactive-process');
     // Mock require to throw for 'electron'
     const originalRequire = jest.requireActual;
     // getElectronPath should handle missing electron gracefully
     // We test this by checking it returns a string (electron is installed here)
     // and that checkElectronAvailable is consistent with it
-    const { checkElectronAvailable } = require('../../src/sidecar/interactive');
+    const { checkElectronAvailable } = require('../../src/sidecar/interactive-process');
     const available = checkElectronAvailable();
     const electronPath = getElectronPath();
 
