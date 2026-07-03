@@ -5,52 +5,51 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
-Phase 18: shim removal (#19) — the breaking change that defines v2.0.0.
+## [2.0.0] - 2026-07-03
 
-### Removed
-- **Every pre-rebrand `sidecar*` compatibility shim.** v1.x kept a full parallel surface so
-  `sidecar*`-era installs and integrations kept working after the Amicus rebrand; v2.0.0 removes all
-  of it in one pass. Full removal record and per-shim migration remedy: [docs/SHIMS.md](docs/SHIMS.md).
-  - **`SIDECAR_*` env-var fallback** (`src/utils/env-compat.js`, deleted) — every `SIDECAR_*` var is
-    now silently ignored; rename to its `AMICUS_*` equivalent (`SIDECAR_ENV_DIR` → `AMICUS_ENV_DIR`,
-    `SIDECAR_IDLE_TIMEOUT*` → `AMICUS_IDLE_TIMEOUT*`, `SIDECAR_DEBUG_PORT` → `AMICUS_DEBUG_PORT`,
-    `SIDECAR_MOCK_UPDATE` → `AMICUS_MOCK_UPDATE`, and `SIDECAR_MAX_SESSIONS` → `AMICUS_MAX_SESSIONS`,
-    the last legacy-prefixed env var read anywhere in the codebase).
-  - **`sidecar`/`claude-sidecar` CLI bin aliases** (`package.json` `bin`) — only `amicus`/`am` remain.
-  - **`~/.config/sidecar` config-dir fallback + `migrateLegacyConfigDir()`** (`src/utils/config.js`) —
-    config data was auto-migrated forward on every v1.x run, so most installs are unaffected; an
-    install jumping straight from pre-rebrand to v2.0.0 needs a manual one-time copy.
-  - **`.claude/sidecar_sessions/` dual-read** (`src/session-manager.js`) — only
-    `.claude/amicus_sessions/` is read now; rename old per-project session dirs to keep their history
-    visible to `amicus list`/`amicus read`.
-  - **`[SIDECAR_CONFIG_UPDATE]` / `sidecar-config-hash` dual-token acceptance** — the actual acceptance
-    path was the `sidecar` chat skill's instruction text (`skills/sidecar/SKILL.md`), not `config.js`;
-    the skill now instructs the canonical `[AMICUS_CONFIG_UPDATE]` / `amicus-config-hash` forms only.
-  - **`sidecar_*` MCP tool aliases + the `AMICUS_LEGACY_ALIASES=1` opt-in** (`src/mcp-server.js`) — the
-    tool surface is `amicus_*` only, unconditionally; `AMICUS_LEGACY_ALIASES=1` is now a no-op
-    (regression-pinned in `tests/mcp-server-legacy-aliases.test.js`).
-  - **Public API `*Sidecar` aliases** (`src/index.js` `module.exports`) — `startSidecar`/`listSidecars`/
-    `resumeSidecar`/`continueSidecar`/`readSidecar` were exported as deprecated aliases through v1.9.1
-    (present on npm in every release); v2.0.0 removes them from the package root. Only the canonical
-    `startAmicus`/`listAmicus`/`resumeAmicus`/`continueAmicus`/`readAmicus` names remain exported.
-    Switch any import of a `*Sidecar`-named export from `amicus`'s package root to its `*Amicus`
-    equivalent.
-- **Kept, not removed:** the `[SIDECAR_FOLD]`/`[SIDECAR_FOLD:<nonce>]` wire-format token (deliberate
-  transport continuity, unrelated to the compat shims), the `sidecar` chat-skill's directory name, and
-  the one-shot legacy-`'sidecar'`-MCP-entry cleanup in `src/utils/legacy-mcp-migration.js` (re-scoped
-  as a permanent healing tool for stale pre-1.8.0 dual-registrations, not a compat shim). The
-  `mcp-self-identity` recursive-spawn guard also continues to recognize the old `sidecar`/
-  `claude-sidecar` bin/server names — a defense against a stale PATH or MCP config causing amicus to
-  spawn itself, not a restoration of removed behavior.
+Amicus's first major release: the **`sidecar*` shim removal** (#19). v1.x carried a full
+compatibility surface so installs and integrations from before the Amicus rebrand kept working —
+legacy env vars, CLI bin names, config/session directory fallbacks, MCP tool aliases, and deprecated
+public-API exports. v2.0.0 removes all of it in one pass; see **Migration** below for the exact old
+form → new form for every removed shim, including the one that needs a manual one-time step. Most
+installs need zero action (config/session data auto-migrated forward across v1.x; plugin-channel
+installs float to the latest version automatically). Beyond the shim removal, this release rolls up
+five phases of engine and docs work that shipped since 1.9.1: a fully deterministic council CLI
+transport (`validate`/`verdict`/presets/spend ledger), `amicus_read` paging for large content, a
+per-tool-call stall detector, per-run-nonced fold markers, atomic metadata writes throughout, POSIX
+server teardown hardening, and a full documentation overhaul (`docs/council.md`, restructured
+README, "where things live" config-dir reference).
 
-### Documentation
-- Full sweep of every doc describing the shims as live (README, docs/usage.md, docs/configuration.md,
-  docs/testing.md, docs/troubleshooting.md, docs/opencode-integration.md, docs/architecture.md,
-  skills/sidecar/SKILL.md, skills/second-opinion/MODEL-NOTES.md) rewritten to v2.0.0 reality.
-  `docs/SHIMS.md` re-scoped from a live shim inventory into the removal record this section is built
-  from.
+### Migration (from any sidecar*-era setup)
 
-Phase 17: documentation overhaul (the external docs-review cluster).
+Full removal record and rationale: [docs/SHIMS.md](docs/SHIMS.md). Per-shim remedy:
+
+| Old form (sidecar*-era) | New form / remedy |
+| --- | --- |
+| `SIDECAR_*` env vars (`SIDECAR_ENV_DIR`, `SIDECAR_IDLE_TIMEOUT*`, `SIDECAR_DEBUG_PORT`, `SIDECAR_MOCK_UPDATE`) | Rename to the `AMICUS_*` equivalent (`AMICUS_ENV_DIR`, `AMICUS_IDLE_TIMEOUT*`, `AMICUS_DEBUG_PORT`, `AMICUS_MOCK_UPDATE`). Unrenamed vars are now silently ignored — no warning, no fallback. |
+| `SIDECAR_MAX_SESSIONS` | Rename to `AMICUS_MAX_SESSIONS` — this was the last legacy-prefixed env var read anywhere in the codebase. |
+| `sidecar` / `claude-sidecar` CLI commands | Use `amicus` (or the `am` short alias). An `EEXIST` on `npm install -g amicus` naming an old `claude-sidecar`/`sidecar` file means a *stale* global install of the old upstream package, not this shim — see [docs/troubleshooting.md](docs/troubleshooting.md#install-fails-with-eexist--claude-sidecar). |
+| `~/.config/sidecar` config dir | No action for most users — every v1.x launch auto-copied `~/.config/sidecar/` into `~/.config/amicus/` once, non-destructively. Only if you skipped every v1.x release and jump straight from pre-rebrand to v2.0.0: copy `~/.config/sidecar/` to `~/.config/amicus/` by hand — `getConfigDir()` no longer reads the old location at all. |
+| `.claude/sidecar_sessions/` | Not auto-migrated (per-project). Rename to `.claude/amicus_sessions/` in any project whose history you want `amicus list`/`amicus read` to see again. |
+| `[SIDECAR_CONFIG_UPDATE]` stderr marker / `sidecar-config-hash` HTML-comment | The `sidecar` skill now instructs the canonical forms only: `[AMICUS_CONFIG_UPDATE]` / `<!-- amicus-config-hash: ... -->`. A stale `<!-- sidecar-config-hash: ... -->` comment in an old CLAUDE.md is simply no longer recognized; the next `amicus setup` alias change writes a fresh one, and the stale comment can be deleted by hand. |
+| `sidecar_*` MCP tool names / `AMICUS_LEGACY_ALIASES=1` | The tool surface is `amicus_*` only, unconditionally — `AMICUS_LEGACY_ALIASES=1` is now a no-op (regression-pinned in `tests/mcp-server-legacy-aliases.test.js`). Update any MCP client config or tooling that still calls a `sidecar_*` tool name. |
+| `startSidecar`/`listSidecars`/`resumeSidecar`/`continueSidecar`/`readSidecar` (package-root exports) | These were deprecated aliases present on npm through v1.9.1. Only `startAmicus`/`listAmicus`/`resumeAmicus`/`continueAmicus`/`readAmicus` remain exported from `amicus`'s package root — rename any import. |
+
+**Kept, not removed** (not part of this migration): the `[SIDECAR_FOLD]`/`[SIDECAR_FOLD:<nonce>]`
+wire-format token (deliberate transport continuity, unrelated to the compat shims), the `sidecar`
+chat-skill's directory name, and the one-shot legacy-`'sidecar'`-MCP-entry cleanup in
+`src/utils/legacy-mcp-migration.js` (re-scoped as a permanent healing tool for stale pre-1.8.0
+dual-registrations — it only removes a `'sidecar'` MCP entry verified identical-in-effect to the
+`'amicus'` one; a customized entry is left alone). The `mcp-self-identity` recursive-spawn guard also
+continues to recognize the old `sidecar`/`claude-sidecar` bin/server names — a defense against a
+stale PATH or MCP config causing amicus to spawn itself, not a restoration of removed behavior.
+
+**Plugin-channel installs float automatically.** If you installed Amicus via the Claude Code plugin
+channel, `.claude-plugin/plugin.json` runs `npx -y amicus@latest mcp` — you adopt v2.0.0 on your
+next MCP server start with no upgrade action required. The only thing that can still break for you:
+if your client config or tooling relies on `sidecar_*` tool names or sets
+`AMICUS_LEGACY_ALIASES=1` expecting it to do something, update it — that opt-in is now a no-op and
+the legacy tool names are gone.
 
 ### Added
 - **`docs/council.md` — the council pipeline documented end-to-end**: the stage flow, the tally-input and
@@ -63,23 +62,6 @@ Phase 17: documentation overhaul (the external docs-review cluster).
 - README now leads with the **two install channels** (npm global vs Claude Code plugin, with the
   `npx -y amicus@latest` translation note) and surfaces **`/amicus:council`** in the quick start and
   council sections.
-
-### Changed
-- **README restructured for audience separation**: discovery + quick start + compact command table with
-  pointers; `docs/usage.md` is now the complete CLI reference (the ~30% duplicated content has one
-  canonical home each — nothing was dropped); deep dives live under `docs/`.
-- The second-opinion skill's Stage-2 briefing prose reads cleanly again (hardening sentence moved before
-  the sentence it interrupted), and `report.md`'s contract is stated once, coherently: `report.html` is
-  the deterministic renderer default; `report.md` is the chair-synthesis document that embeds the
-  rendered Markdown as one section.
-
-### Fixed
-- `amicus council --help` now lists `save`/`list`/`show` (the Phase-16 usage-string omission caught by
-  this phase's binary-verification pass).
-
-Phase 16: council & catalog UX — closes GitHub issues #12, #13, and #27.
-
-### Added
 - **`amicus council validate <file>` and `amicus council verdict <tally.json>`** — thin CLI wrappers over the
   existing findings-validation and verdict-builder internals, making the second-opinion skill's council
   transport fully deterministic. `validate` exits 0 (ok) / 2 (validation failed) / 1 (bad args); `verdict`
@@ -95,22 +77,6 @@ Phase 16: council & catalog UX — closes GitHub issues #12, #13, and #27.
   appends a best-effort JSONL row (`spend-ledger.jsonl` in the config dir); `amicus spend` rolls up total
   and per-model cost/tokens/source-mix with `--since <N>d` windowing and `--json`, plus an OpenRouter
   remaining-credit footer when a key is configured. Ledger appends can never fail a run.
-
-### Fixed
-- **Setup wizard Step 3 (alias editor) now consumes the same TTL-cached catalog as Step 2** (#12) — one
-  catalog load for the whole wizard instead of a separate uncached network fetch per run; the redundant
-  `fetch-models` IPC channel is removed.
-- **Stale catalog data is now labeled** (#13): a failed refresh records the attempt and reason in the cache
-  doc (never touching the good data), `amicus models` shows a stale memo when refreshing keeps failing,
-  `amicus models refresh` reports failure honestly instead of "Refreshed catalog: 0 models" (and its
-  `--json` reports the real stale `fetchedAt` instead of `null`), and the wizard shows a stale hint.
-- **The free-council picker is readable** (#27): models grouped by provider with friendly names (raw id as
-  the mono secondary line), a roomier scroll area, and a provider count — selection values remain raw model
-  ids throughout.
-
-Phase 15: engine correctness sweep.
-
-### Added
 - **`amicus_read` paging and size caps.** Responses are capped at ~50KB (default: the TAIL of the content,
   with a truncation notice reporting true byte counts at the start of the body); new optional `offset`,
   `limit`, and `tail` params page through large content. Under-cap reads are byte-identical to before;
@@ -123,6 +89,13 @@ Phase 15: engine correctness sweep.
   processes; only files older than 60s are removed).
 
 ### Changed
+- **README restructured for audience separation**: discovery + quick start + compact command table with
+  pointers; `docs/usage.md` is now the complete CLI reference (the ~30% duplicated content has one
+  canonical home each — nothing was dropped); deep dives live under `docs/`.
+- The second-opinion skill's Stage-2 briefing prose reads cleanly again (hardening sentence moved before
+  the sentence it interrupted), and `report.md`'s contract is stated once, coherently: `report.html` is
+  the deterministic renderer default; `report.md` is the chair-synthesis document that embeds the
+  rendered Markdown as one section.
 - **The fold completion marker is now per-run nonced: `[SIDECAR_FOLD:<nonce>]`.** Model output that
   genuinely ends with a bare `[SIDECAR_FOLD]` can no longer force premature completion — the detector
   requires the run's own nonce (BL-7's final hardening layer). The nonce is crypto-random, threaded through
@@ -132,6 +105,18 @@ Phase 15: engine correctness sweep.
   race class that pollers previously tolerated via missed-tick workarounds.
 
 ### Fixed
+- `amicus council --help` now lists `save`/`list`/`show` (the Phase-16 usage-string omission caught by
+  a later binary-verification pass).
+- **Setup wizard Step 3 (alias editor) now consumes the same TTL-cached catalog as Step 2** (#12) — one
+  catalog load for the whole wizard instead of a separate uncached network fetch per run; the redundant
+  `fetch-models` IPC channel is removed.
+- **Stale catalog data is now labeled** (#13): a failed refresh records the attempt and reason in the cache
+  doc (never touching the good data), `amicus models` shows a stale memo when refreshing keeps failing,
+  `amicus models refresh` reports failure honestly instead of "Refreshed catalog: 0 models" (and its
+  `--json` reports the real stale `fetchedAt` instead of `null`), and the wizard shows a stale hint.
+- **The free-council picker is readable** (#27): models grouped by provider with friendly names (raw id as
+  the mono secondary line), a roomier scroll area, and a provider count — selection values remain raw model
+  ids throughout.
 - **Orphaned `opencode serve` processes on macOS/Linux.** Server teardown now SIGTERMs the Go binary
   directly and escalates to SIGKILL after a bounded grace window on a ref'd poll (the old unref'd 2s timer
   silently died with fast-exiting parents). Windows semantics unchanged.
@@ -144,6 +129,19 @@ Phase 15: engine correctness sweep.
   failure in the MCP shared-server finalize chain (the Phase-5 review's residual gap).
 - **`discoverCoworkMcps` now checks `%APPDATA%\Claude` on Windows** instead of the XDG path — Claude
   Desktop discovery and doctor's Cowork signal were always wrong on win32.
+
+### Removed
+- **Every pre-rebrand `sidecar*` compatibility shim** — see **Migration** above for the full old-form →
+  new-form mapping. Also removed: **`sidecar_*` MCP tool aliases + the `AMICUS_LEGACY_ALIASES=1` opt-in**
+  (`src/mcp-server.js`) and the **public API `*Sidecar` aliases** (`src/index.js` `module.exports`) —
+  both covered in Migration.
+
+### Documentation
+- Full sweep of every doc describing the shims as live (README, docs/usage.md, docs/configuration.md,
+  docs/testing.md, docs/troubleshooting.md, docs/opencode-integration.md, docs/architecture.md,
+  skills/sidecar/SKILL.md, skills/second-opinion/MODEL-NOTES.md) rewritten to v2.0.0 reality.
+  `docs/SHIMS.md` re-scoped from a live shim inventory into the removal record the Migration section
+  above is built from.
 
 ## [1.9.1] - 2026-07-03
 

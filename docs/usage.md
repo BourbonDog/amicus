@@ -242,7 +242,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "1.9.1",
+  "version": "2.0.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
