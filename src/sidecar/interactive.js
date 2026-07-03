@@ -101,7 +101,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     }
     logger.debug('Interactive session ready', { sessionId, isResume: !!isResume });
   } catch (error) {
-    server.close();
+    server.close().catch(() => {});
     return {
       summary: '', completed: false, timedOut: false, taskId,
       error: `Session setup failed: ${error.message}`
@@ -200,7 +200,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
         const { usage } = await mirror.stop();
         if (usage) { result.usage = usage; }
       } catch (err) { logger.debug('mirror stop failed', { error: err.message }); }
-      server.close();
+      try { await server.close(); } catch { /* best-effort */ }
       logger.debug('OpenCode server closed after Electron exit');
       result.opencodeSessionId = sessionId;
       resolve(result);

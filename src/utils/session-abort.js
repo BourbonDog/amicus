@@ -75,7 +75,7 @@ function idleBackstopTeardown(sessionDir, server, externalServer) {
     fs.writeFileSync(path.join(sessionDir, 'summary.md'),
       'Session timed out — idle backstop fired before completion.\n', { mode: 0o600 });
   } catch { /* best-effort */ }
-  if (!externalServer && server) { try { server.close(); } catch { /* best-effort */ } }
+  if (!externalServer && server) { try { server.close().catch(() => {}); } catch { /* best-effort */ } }
   return 2;
 }
 
