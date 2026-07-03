@@ -307,8 +307,13 @@ describe('createCloseGuard + real fold.js: in-flight close protection (whole-pha
     for (let i = 0; i < 6; i++) { await Promise.resolve(); }
 
     // The stdout summary write landed regardless of the second close.
+    // 15b.3: the written marker now carries a per-run nonce (no `state.nonce`
+    // was passed to wire()'s state object, so fold.js generated its own
+    // fallback nonce) — assert the PREFIX, not the old bracketed literal
+    // (`[SIDECAR_FOLD]` does not match `[SIDECAR_FOLD:<nonce>]`: the nonced
+    // form lacks the closing bracket immediately after FOLD).
     const written = stdoutSpy.mock.calls.map((c) => c[0]).join('');
-    expect(written).toContain('[SIDECAR_FOLD]');
+    expect(written).toContain('[SIDECAR_FOLD:');
     expect(written).toContain('the summary');
   });
 

@@ -24,12 +24,26 @@ function createMirrorState() {
     toolCalls: [],              // [{id,name,input}] — capped at MAX_TOOL_CALLS (most-recent-N)
     seenToolCallIds: new Set(), // stable dedup identity for tool calls (survives the cap)
     seenToolResultIds: new Set(),
+    pendingToolCalls: new Map(), // id -> {id,name,firstSeenAt} — tool_use with no tool_result yet (B53)
     receivingReported: false,
     output: '',                 // accumulated assistant text
     seenReasoningParts: new Map(), // partId -> last captured reasoning length
     reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
   };
+}
+
+/**
+ * Unresolved tool calls: tool_use ids seen with no matching tool_result yet
+ * (matched by `part.tool_use_id`). Used by the headless poll loop's stall
+ * detector (B53) to fail fast on a wedged tool call instead of burning the
+ * full timeout. Returns a fresh array each call; `state.pendingToolCalls`
+ * is the live source of truth.
+ * @param {object} state from createMirrorState()
+ * @returns {Array<{id:string,name:string,firstSeenAt:string}>}
+ */
+function getPendingToolCalls(state) {
+  return Array.from(state.pendingToolCalls.values());
 }
 
 /**
@@ -94,6 +108,10 @@ function mirrorMessages(messages, state, opts = {}) {
         if (state.toolCalls.length > MAX_TOOL_CALLS) { state.toolCalls.shift(); }
         appendLines.push({ role: 'assistant', type: 'tool_use', toolCall, timestamp: now() });
 
+        // Track as pending until a matching tool_result arrives (B53 stall detector).
+        // firstSeenAt is captured once here — never touched again for this id.
+        state.pendingToolCalls.set(part.id, { id: part.id, name: part.name, firstSeenAt: now() });
+
         // Update progress on tool_use detection
         progressUpdates.push({
           stage: 'receiving',
@@ -117,6 +135,9 @@ function mirrorMessages(messages, state, opts = {}) {
             timestamp: now(),
           });
         }
+        // Resolved: clear the pending entry regardless of dedup state above (a
+        // result seen again for an id already cleared is a harmless no-op delete).
+        if (part.tool_use_id) { state.pendingToolCalls.delete(part.tool_use_id); }
       } else if (part.type === 'reasoning' && part.text) {
         // Some providers (e.g. Gemini 3.x on the direct Google path) return the
         // answer as a reasoning part with no separate text part. Accumulate it in a
@@ -178,4 +199,4 @@ function logMessage(conversationPath, message) {
   fs.appendFileSync(conversationPath, JSON.stringify(message) + '\n', { mode: 0o600 });
 }
 
-module.exports = { createMirrorState, mirrorMessages, logMessage };
+module.exports = { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls };

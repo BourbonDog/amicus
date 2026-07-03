@@ -138,6 +138,78 @@ describe('reasoning-delta progress (F6d)', () => {
   });
 });
 
+describe('pending tool-call tracking (B53 stall detector)', () => {
+  const { getPendingToolCalls } = require('../src/sidecar/conversation-mirror');
+
+  test('a tool_use with no matching tool_result is pending, with a firstSeenAt timestamp', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'ls' } },
+    ] };
+    mirrorMessages([msg], st, { now: NOW });
+    const pending = getPendingToolCalls(st);
+    expect(pending).toEqual([{ id: 'tc1', name: 'Bash', firstSeenAt: NOW() }]);
+  });
+
+  test('firstSeenAt is captured once and does not move on subsequent polls', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'ls' } },
+    ] };
+    mirrorMessages([msg], st, { now: NOW });
+    const laterNow = () => '2026-06-23T00:05:00.000Z';
+    mirrorMessages([msg], st, { now: laterNow }); // same snapshot polled again
+    const pending = getPendingToolCalls(st);
+    expect(pending).toEqual([{ id: 'tc1', name: 'Bash', firstSeenAt: NOW() }]);
+  });
+
+  test('a matching tool_result clears the pending entry', () => {
+    const st = createMirrorState();
+    const toolUseMsg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'ls' } },
+    ] };
+    mirrorMessages([toolUseMsg], st, { now: NOW });
+    expect(getPendingToolCalls(st)).toHaveLength(1);
+
+    const resultMsg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'ls' } },
+      { id: 'tr1', type: 'tool_result', tool_use_id: 'tc1', is_error: false, content: 'ok' },
+    ] };
+    mirrorMessages([resultMsg], st, { now: NOW });
+    expect(getPendingToolCalls(st)).toEqual([]);
+  });
+
+  test('multiple unmatched tool calls all appear pending; only the resolved one clears', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: {} },
+      { id: 'tc2', type: 'tool_use', name: 'Read', input: {} },
+    ] };
+    mirrorMessages([msg], st, { now: NOW });
+    expect(getPendingToolCalls(st).map(p => p.id).sort()).toEqual(['tc1', 'tc2']);
+
+    const withResult = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: {} },
+      { id: 'tc2', type: 'tool_use', name: 'Read', input: {} },
+      { id: 'tr1', type: 'tool_result', tool_use_id: 'tc1', is_error: false, content: 'ok' },
+    ] };
+    mirrorMessages([withResult], st, { now: NOW });
+    expect(getPendingToolCalls(st).map(p => p.id)).toEqual(['tc2']);
+  });
+
+  test('aggregate fields (toolCalls, seenToolCallIds, seenToolResultIds) stay byte-compatible', () => {
+    const st = createMirrorState();
+    const msg = { info: { role: 'assistant', id: 'm1', time: {} }, parts: [
+      { id: 'tc1', type: 'tool_use', name: 'Bash', input: { cmd: 'ls' } },
+      { id: 'tr1', type: 'tool_result', tool_use_id: 'tc1', is_error: false, content: 'ok' },
+    ] };
+    mirrorMessages([msg], st, { now: NOW });
+    expect(st.toolCalls).toEqual([{ id: 'tc1', name: 'Bash', input: { cmd: 'ls' } }]);
+    expect(st.seenToolCallIds.has('tc1')).toBe(true);
+    expect(st.seenToolResultIds.has('tr1')).toBe(true);
+  });
+});
+
 describe('logMessage', () => {
   const { logMessage } = require('../src/sidecar/conversation-mirror');
   const fs = require('fs');

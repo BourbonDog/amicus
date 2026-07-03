@@ -31,7 +31,7 @@ function checkElectronAvailable() {
 
 /** Build environment variables for Electron process */
 function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, options = {}) {
-  const { agent, isResume, conversation, mcp, client, windowPosition, sessionDirectory } = options;
+  const { agent, isResume, conversation, mcp, client, windowPosition, sessionDirectory, foldNonce } = options;
   const env = {
     ...process.env,
     PATH: `${nodeModulesBin}${path.delimiter}${existingPath}`,
@@ -46,6 +46,10 @@ function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, 
   // Web-UI route from THIS, not a fresh base64url(CWD) guess, so follow-up
   // prompts resolve the session when process cwd != --cwd.
   if (sessionDirectory) { env.AMICUS_SESSION_DIRECTORY = sessionDirectory; }
+  // 15b.3: per-run fold nonce (#BL-7 residual) — the same value baked into the
+  // system prompt's instruction (buildPrompts) so fold.js writes a marker the
+  // prompt actually asked for, not the guessable legacy bare `[SIDECAR_FOLD]`.
+  if (foldNonce) { env.AMICUS_FOLD_NONCE = foldNonce; }
 
   if (agent) {
     const agentConfig = mapAgentToOpenCode(agent);

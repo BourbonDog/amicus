@@ -13,33 +13,50 @@ const { ensurePortAvailable } = require('./utils/server-setup');
 const { mapAgentToOpenCode } = require('./utils/agent-mapping');
 const { writeProgress } = require('./sidecar/progress');
 const { writeFileAtomic } = require('./utils/atomic-write');
-const { createMirrorState, mirrorMessages, logMessage } = require('./sidecar/conversation-mirror');
+const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls } = require('./sidecar/conversation-mirror');
+const { buildFoldMarker, trailingFoldMarkerRegex, generateFoldNonce } = require('./utils/fold-marker');
 
 /**
- * Fold marker that the agent outputs when done
+ * Fold marker that the agent outputs when done.
  * Spec Reference: §6.2
+ *
+ * #BL-7 residual (15b.3): the bare `[SIDECAR_FOLD]` string is now a LEGACY
+ * literal only, kept exported for external consumers with no nonce context
+ * (see extractSummary/formatFoldOutput's no-nonce fallback paths below).
+ * NOTE for anyone `.toContain('[SIDECAR_FOLD]')`-checking real run output:
+ * that substring check does NOT match the real nonced marker — a nonced
+ * marker is `[SIDECAR_FOLD:<nonce>]`, which lacks the literal closing
+ * bracket immediately after FOLD that `[SIDECAR_FOLD]` requires. Real runs
+ * always call buildFoldMarker(nonce), never this bare constant.
  */
 const FOLD_MARKER = '[SIDECAR_FOLD]';
 const COMPLETE_MARKER = FOLD_MARKER; // backward compat
 
 /**
- * #BL-7: the fold marker is the fixed public string [SIDECAR_FOLD]. A model can
- * legitimately emit it on its own line mid-output — summarizing a prior sidecar,
- * reproducing these instructions, or from scraped content — which used to force a
- * PREMATURE fold. Harden by requiring the marker to be the FINAL non-empty line
- * of the output: a standalone marker followed by MORE content is treated as
- * echoed prose, not a completion signal. Only the true trailing marker folds.
+ * #BL-7: the fold marker used to be the fixed public string [SIDECAR_FOLD]. A
+ * model can legitimately emit that bare string on its own line mid-output —
+ * summarizing a prior sidecar, reproducing these instructions, or from
+ * scraped content — which forced a PREMATURE fold even after pinning the
+ * marker to the final non-empty line (the marker being fixed and public means
+ * ANY echo of it, if it happened to land last, still completed the run).
+ *
+ * 15b.3 closes the residual gap: every run now carries a per-run random
+ * nonce, and the model is instructed to emit `[SIDECAR_FOLD:<nonce>]` — a
+ * string the model can only produce by actually finishing (it isn't public,
+ * isn't in training data, and isn't guessable). A bare `[SIDECAR_FOLD]` or a
+ * marker carrying a DIFFERENT run's nonce no longer completes.
  *
  * @param {string} output - Accumulated assistant output
+ * @param {string} nonce - This run's fold nonce (required — see runHeadless)
  * @returns {number} char index where the trailing marker line begins, or -1
  */
-function findTrailingFoldMarker(output) {
-  if (!output) { return -1; }
+function findTrailingFoldMarker(output, nonce) {
+  if (!output || !nonce) { return -1; }
   // The marker must be the last non-empty line: it sits alone on its line
   // (only intra-line whitespace around it) and NOTHING but whitespace follows
   // to the end of the string. The `(?![\s\S]*\S)` lookahead pins it to the true
-  // end — a bare marker followed by more prose is echoed content, not a signal.
-  const m = /^[^\S\r\n]*\[SIDECAR_FOLD\][^\S\r\n]*$(?![\s\S]*\S)/m.exec(output);
+  // end — a marker followed by more prose is echoed content, not a signal.
+  const m = trailingFoldMarkerRegex(nonce).exec(output);
   return m ? m.index : -1;
 }
 
@@ -54,6 +71,7 @@ const STABLE_FINISHED_POLLS = Number(process.env.AMICUS_STABLE_FINISHED_POLLS) |
 const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;          // ~60s at 2s — no completion signal
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 const MAX_CONSECUTIVE_POLL_FAILURES = Number(process.env.AMICUS_MAX_CONSECUTIVE_POLL_FAILURES) || 15; // ≈30s at 2s polls
+const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 180000; // B53: wedged tool call w/ no progress
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -104,6 +122,15 @@ async function waitForServer(client, checkHealthFn, maxAttempts = 30) {
  * @param {string} [options.summaryLength='normal'] - Desired summary length
  * @param {object} [options.reasoning] - Reasoning/thinking configuration
  * @param {string} [options.reasoning.effort] - Effort level: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'none'
+ * @param {string} [options.nonce] - Per-run fold nonce (15b.3, #BL-7 residual). The
+ *   PROMPT the caller built (prompt-builder.js buildPrompts) must have instructed the
+ *   model with this SAME nonce — runHeadless only DETECTS, it never re-derives one from
+ *   the prompt text, so caller and detector agreeing on the nonce is the caller's
+ *   responsibility. Falls back to a freshly generated nonce if omitted (keeps this
+ *   function usable standalone / in tests that don't care about the fold-nonce
+ *   property) — but a fallback nonce the prompt never advertised means the model can
+ *   never legitimately produce it, so such a run can only ever complete via one of the
+ *   non-fold-marker paths (idle/timeout/etc.), never a premature bare-marker fold.
  * @returns {Promise<object>} Result object with summary, completed, timedOut flags
  */
 async function runHeadless(model, systemPrompt, userMessage, taskId, project, timeoutMs = DEFAULT_TIMEOUT, agent, options = {}) {
@@ -117,6 +144,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
   } = require('./opencode-client');
 
   const { reasoning } = options;
+  // 15b.3: never fall back to bare-marker detection — an omitted nonce still
+  // gets ONE generated here so findTrailingFoldMarker always has something to
+  // match, but since the prompt (built by the caller) never advertised THIS
+  // fallback value, the model cannot legitimately produce it. No silent
+  // bare-`[SIDECAR_FOLD]` acceptance path exists anywhere below.
+  const foldNonce = options.nonce || generateFoldNonce();
   const { getSessionDir } = require('./session-manager');
   const sessionDir = getSessionDir(project, taskId);
   const conversationPath = path.join(sessionDir, 'conversation.jsonl');
@@ -203,7 +236,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       writeProgress(sessionDir, 'server_ready');
 
       if (!serverReady) {
-        server.close();
+        await server.close();
         return {
           summary: '',
           completed: false,
@@ -240,7 +273,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         sessionId = await createSession(client, ...dirArgs);
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
-        if (!externalServer) { server.close(); }
+        if (!externalServer) { await server.close(); }
         return {
           summary: '',
           completed: false,
@@ -277,7 +310,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
             const { abortSession } = require('./opencode-client');
             abortSession(client, sessionId, ...dirArgs).catch(() => {});
           } catch { /* best-effort */ }
-          try { server.close(); } catch { /* best-effort */ }
+          // close() is now async (B06 escalation) — this handler stays sync
+          // (do not restructure signal handlers), so fire-and-forget with a
+          // rejection guard. The REF'd escalation poll inside close() still
+          // does its work; the pre-existing 300ms exit timer below may cut
+          // that grace short — see task 15b.1 report for that known gap.
+          try { server.close().catch(() => {}); } catch { /* best-effort */ }
           const { resolveTerminalState } = require('./sidecar/session-finalize');
           const code = resolveTerminalState({ aborted: true }, signal).exitCode;
           const t = setTimeout(() => process.exit(code), 300);
@@ -357,6 +395,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const stableIdlePolls = options.stableIdlePolls || STABLE_IDLE_POLLS;
     const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
     const maxConsecutivePollFailures = options.maxConsecutivePollFailures || MAX_CONSECUTIVE_POLL_FAILURES;
+    const toolCallStallMs = options.toolCallStallMs || TOOL_CALL_STALL_MS;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -365,6 +404,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastToolCallCount = 0;
     let lastToolResultCount = 0;
     let lastMessageCount = 0;
+    let lastProgressAt = Date.now(); // B53: last poll where `progressed` was true
+    let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
 
     while (!completed && (Date.now() - startTime) < timeoutMs) {
       watchdog.touch();
@@ -421,11 +462,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           elapsed: Date.now() - startTime
         });
 
-        // Check for the completion marker as the FINAL non-empty line (#BL-7).
-        // Models may emit [SIDECAR_FOLD] on its own line mid-output (echoing a
-        // prior sidecar, these instructions, or scraped content) — only treat
-        // it as a completion signal when nothing but blank lines follow it.
-        if (findTrailingFoldMarker(mirror.output) !== -1) {
+        // Check for the completion marker as the FINAL non-empty line, carrying
+        // THIS run's nonce (#BL-7 + 15b.3). Models may emit a bare or wrong-nonce
+        // marker on its own line mid-output (echoing a prior sidecar, these
+        // instructions, or scraped content) — only the exact nonced marker,
+        // with nothing but blank lines after it, is a completion signal.
+        if (findTrailingFoldMarker(mirror.output, foldNonce) !== -1) {
           completed = true;
           break;
         }
@@ -486,6 +528,33 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
 
         const progressed = outputGrew || toolActivity || resultActivity || messageActivity || newAssistant;
+        if (progressed) { lastProgressAt = Date.now(); }
+
+        // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise
+        // burns the full --timeout with zero output — the stable-poll idle gate above
+        // requires mirror.output.length > 0, which a pre-text wedge never satisfies.
+        // Fire ONLY when a tool call is genuinely pending AND no progress of any kind
+        // (text/tool/result/message/new-assistant) has been observed for the stall
+        // window — this cannot false-positive during active streaming (progress
+        // resets the clock every poll) and cannot fire without a wedged tool.
+        const pendingToolCalls = getPendingToolCalls(mirror);
+        if (pendingToolCalls.length > 0 && (Date.now() - lastProgressAt) > toolCallStallMs) {
+          const stalled = pendingToolCalls[0];
+          const pendingSeconds = Math.round((Date.now() - Date.parse(stalled.firstSeenAt)) / 1000);
+          sessionError = `Tool call stalled: ${stalled.name} pending ${pendingSeconds}s with no result or output`;
+          logger.error('Tool call stalled — no progress within threshold', {
+            taskId, toolName: stalled.name, toolId: stalled.id, pendingSeconds, toolCallStallMs
+          });
+          toolStalled = true;
+          try {
+            const { abortSession } = require('./opencode-client');
+            await abortSession(client, sessionId, ...dirArgs);
+            logger.info('Session aborted after tool-call stall', { taskId, sessionId });
+          } catch (abortErr) {
+            logger.warn('Failed to abort session after tool-call stall', { error: abortErr.message });
+          }
+          break;
+        }
 
         if (!progressed) {
           // Require real output before counting toward completion — the SDK creates an
@@ -557,7 +626,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     watchdog.cancel();
     if (uninstallSignals) { uninstallSignals(); }
-    if (!externalServer) { server.close(); }
+    if (!externalServer) { await server.close(); }
 
     // Log summary of tool calls for debugging
     if (mirror.toolCalls.length > 0) {
@@ -573,13 +642,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // Propagate the error when the model errored with no output (F1 semantics:
     // a model error alongside streamed output still yields a usable summary),
     // and ALWAYS when the poll loop bailed on consecutive failures (F4: a dead
-    // server must never classify as a complete leg, even with partial output).
+    // server must never classify as a complete leg, even with partial output)
+    // or on a tool-call stall (B53: same — a wedged tool must never classify
+    // as complete, even if some text streamed alongside it before the wedge).
     const { sumPerMessageUsage } = require('./utils/pricing');
     const usage = sumPerMessageUsage(mirror.usageByMsg);
 
-    if (sessionError && (!mirror.output || pollFailureBail)) {
+    if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
       return {
-        summary: mirror.output ? extractSummary(mirror.output) : '',
+        summary: mirror.output ? extractSummary(mirror.output, foldNonce) : '',
         completed: false,
         timedOut,
         aborted,
@@ -591,7 +662,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
 
     return {
-      summary: extractSummary(mirror.output),
+      summary: extractSummary(mirror.output, foldNonce),
       completed,
       timedOut,
       aborted,
@@ -618,7 +689,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
     if (watchdog) { watchdog.cancel(); }
     if (uninstallSignals) { uninstallSignals(); }
-    if (!externalServer) { server.close(); }
+    if (!externalServer) { await server.close(); }
     const { emptyUsageTotals } = require('./utils/pricing');
     return {
       summary: '',
@@ -633,26 +704,45 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 }
 
 /**
- * Extract summary from output (everything before the trailing [SIDECAR_FOLD])
- * Spec Reference: §6.2 - Return summary (everything before [SIDECAR_FOLD])
+ * Extract summary from output (everything before the trailing fold marker)
+ * Spec Reference: §6.2 - Return summary (everything before the fold marker)
  *
  * @param {string} output - Raw output from OpenCode
+ * @param {string} [nonce] - This run's fold nonce (15b.3). When omitted, falls
+ *   back to matching the LEGACY bare `[SIDECAR_FOLD]` marker — this keeps
+ *   extractSummary usable as a standalone string utility (e.g. re-processing
+ *   output captured before the nonce scheme, or a caller that genuinely has
+ *   no nonce context) without ever accepting a WRONG nonce as a match.
  * @returns {string} Extracted summary
  */
-function extractSummary(output) {
+function extractSummary(output, nonce) {
   if (!output) {
     return '';
   }
 
   // Split on the fold marker only when it is the FINAL non-empty line (#BL-7).
-  // A [SIDECAR_FOLD] echoed mid-output (describing code, reproducing these
+  // A marker echoed mid-output (describing code, reproducing these
   // instructions, or from scraped content) is NOT a delimiter — keep it as
   // content. Only the true trailing marker is stripped.
-  const idx = findTrailingFoldMarker(output);
+  const idx = nonce ? findTrailingFoldMarker(output, nonce) : findLegacyBareTrailingMarker(output);
   if (idx !== -1) {
     return output.slice(0, idx).trim();
   }
   return output.trim();
+}
+
+/**
+ * Legacy bare-marker trailing match (`[SIDECAR_FOLD]`, no nonce) — the
+ * pre-15b.3 behavior, kept only for extractSummary's no-nonce fallback path.
+ * NEVER used by runHeadless's own detection (that always carries a nonce —
+ * see findTrailingFoldMarker), so no live completion path can be forced by a
+ * bare marker.
+ * @param {string} output
+ * @returns {number}
+ */
+function findLegacyBareTrailingMarker(output) {
+  const m = /^[^\S\r\n]*\[SIDECAR_FOLD\][^\S\r\n]*$(?![\s\S]*\S)/m.exec(output);
+  return m ? m.index : -1;
 }
 
 /**
@@ -664,11 +754,14 @@ function extractSummary(output) {
  * @param {string} [options.cwd] - Working directory (defaults to process.cwd())
  * @param {string} [options.mode='headless'] - Execution mode
  * @param {string} options.summary - Summary text
+ * @param {string} [options.nonce] - This run's fold nonce (15b.3). When omitted,
+ *   falls back to the legacy bare `[SIDECAR_FOLD]` marker for back-compat with
+ *   external callers of this exported utility that predate the nonce scheme.
  * @returns {string} Formatted fold output
  */
-function formatFoldOutput({ model, sessionId, client, cwd, mode, summary }) {
+function formatFoldOutput({ model, sessionId, client, cwd, mode, summary, nonce }) {
   return [
-    '[SIDECAR_FOLD]',
+    nonce ? buildFoldMarker(nonce) : FOLD_MARKER,
     `Model: ${model}`,
     `Session: ${sessionId}`,
     `Client: ${client || 'code-local'}`,
@@ -689,9 +782,14 @@ module.exports = {
   DEFAULT_TIMEOUT,
   FOLD_MARKER,
   COMPLETE_MARKER,
+  // 15b.3: re-exported so callers that already `require('./headless')` don't
+  // also need `require('./utils/fold-marker')` for the common case.
+  buildFoldMarker,
+  generateFoldNonce,
   POLL_INTERVAL_MS,
   STABLE_FINISHED_POLLS,
   STABLE_IDLE_POLLS,
   POLL_CALL_TIMEOUT_MS,
   MAX_CONSECUTIVE_POLL_FAILURES,
+  TOOL_CALL_STALL_MS,
 };

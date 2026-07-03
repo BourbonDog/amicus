@@ -1028,24 +1028,7 @@ describe('OpenCode Client Wrapper', () => {
   });
 });
 
-describe('buildServerHandle (F3 #15)', () => {
-  test('captures goPid via findListenerPid and SIGKILLs it on close fallback', () => {
-    jest.useFakeTimers();
-    const kill = jest.fn();
-    const sdkClose = jest.fn();
-    const { buildServerHandle } = require('../src/opencode-client');
-    const server = buildServerHandle(
-      { url: 'http://127.0.0.1:4096', close: sdkClose },
-      { findListenerPid: () => 24680, kill, logger: { debug: () => {} } }
-    );
-    expect(server.goPid).toBe(24680);
-    server.close();
-    expect(sdkClose).toHaveBeenCalled();
-    jest.advanceTimersByTime(2000);
-    expect(kill).toHaveBeenCalledWith(24680, 'SIGKILL');
-    jest.useRealTimers();
-  });
-
+describe('buildServerHandle (F3 #15 / B06 teardown race)', () => {
   test('prefers sdkServer.pid over the port scan', () => {
     const { buildServerHandle } = require('../src/opencode-client');
     const server = buildServerHandle(
@@ -1053,6 +1036,120 @@ describe('buildServerHandle (F3 #15)', () => {
       { findListenerPid: () => 999, kill: () => {} }
     );
     expect(server.goPid).toBe(111);
+  });
+
+  describe('close() (B06: direct SIGTERM to goPid + REF\'d escalation, not an unref\'d SIGKILL timer)', () => {
+    test('SIGTERMs goPid directly on close (real escalation primitive, injected kill), in addition to sdkServer.close()', async () => {
+      // Uses the REAL waitThenKill (not mocked) so this proves close() actually
+      // wires the escalation primitive to send a SIGTERM to goPid — not just
+      // that it calls some injected function.
+      let alive = true;
+      const kill = jest.fn((pid, sig) => {
+        if (!alive) { const e = new Error('ESRCH'); e.code = 'ESRCH'; throw e; }
+        if (sig === 'SIGTERM') { alive = false; } // dies immediately after TERM
+      });
+      const sdkClose = jest.fn();
+      const { buildServerHandle } = require('../src/opencode-client');
+      const server = buildServerHandle(
+        { url: 'http://127.0.0.1:4096', close: sdkClose },
+        { findListenerPid: () => 24680, kill, logger: { debug: () => {} } }
+      );
+      await server.close();
+      expect(sdkClose).toHaveBeenCalled();
+      const termCalls = kill.mock.calls.filter(([pid, sig]) => pid === 24680 && sig === 'SIGTERM');
+      expect(termCalls).toHaveLength(1);
+      // Process died right after TERM — escalation must NOT have needed SIGKILL.
+      const killCalls = kill.mock.calls.filter(([, sig]) => sig === 'SIGKILL');
+      expect(killCalls).toHaveLength(0);
+    });
+
+    test('engages the escalation primitive on goPid with a bounded (~2s) grace, no upfront wait', async () => {
+      const waitThenKill = jest.fn(async () => ({ killed: [24680], exited: [], escalated: [24680] }));
+      const { buildServerHandle } = require('../src/opencode-client');
+      const server = buildServerHandle(
+        { url: 'http://127.0.0.1:4096', close: () => {} },
+        {
+          findListenerPid: () => 24680,
+          kill: () => {},
+          logger: { debug: () => {} },
+          waitThenKill,
+        }
+      );
+      await server.close();
+      expect(waitThenKill).toHaveBeenCalledTimes(1);
+      const [pids, opts] = waitThenKill.mock.calls[0];
+      expect(pids).toBe(24680);
+      // No upfront grace before the direct SIGTERM — the SDK's close() never
+      // reaches the Go binary, so there is nothing worth waiting for first.
+      expect(opts.graceMs).toBe(0);
+      expect(opts.escalate).toEqual(expect.objectContaining({ killGraceMs: 2000 }));
+    });
+
+    test('escalation primitive (real, unmocked) SIGKILLs goPid when it survives the SIGTERM', async () => {
+      jest.useFakeTimers();
+      const kill = jest.fn(); // never throws => pid is "always alive" until SIGKILL
+      const { buildServerHandle } = require('../src/opencode-client');
+      const server = buildServerHandle(
+        { url: 'http://127.0.0.1:4096', close: () => {} },
+        { findListenerPid: () => 24680, kill, logger: { debug: () => {} } }
+      );
+      const closed = server.close();
+      await jest.advanceTimersByTimeAsync(2000); // CLOSE_KILL_GRACE_MS
+      await closed;
+      const termCalls = kill.mock.calls.filter(([pid, sig]) => pid === 24680 && sig === 'SIGTERM');
+      const killCalls = kill.mock.calls.filter(([pid, sig]) => pid === 24680 && sig === 'SIGKILL');
+      expect(termCalls).toHaveLength(1);
+      expect(killCalls).toHaveLength(1);
+      // TERM must be observed strictly before KILL.
+      const sigOrder = kill.mock.calls.map(([, sig]) => sig).filter((s) => s !== 0);
+      expect(sigOrder.indexOf('SIGTERM')).toBeLessThan(sigOrder.indexOf('SIGKILL'));
+      jest.useRealTimers();
+    });
+
+    test('skips goPid === process.pid (degenerate self-pid guard)', async () => {
+      const kill = jest.fn();
+      const waitThenKill = jest.fn(async () => ({ killed: [], exited: [], escalated: [] }));
+      const { buildServerHandle } = require('../src/opencode-client');
+      const server = buildServerHandle(
+        { url: 'http://127.0.0.1:4096', close: () => {} },
+        { findListenerPid: () => process.pid, kill, logger: { debug: () => {} }, waitThenKill }
+      );
+      await server.close();
+      expect(kill).not.toHaveBeenCalled();
+      expect(waitThenKill).not.toHaveBeenCalled();
+    });
+
+    test('skips a falsy goPid entirely — no signals, no escalation call', async () => {
+      const kill = jest.fn();
+      const waitThenKill = jest.fn(async () => ({ killed: [], exited: [], escalated: [] }));
+      const { buildServerHandle } = require('../src/opencode-client');
+      const server = buildServerHandle(
+        { url: 'http://127.0.0.1:4096', close: () => {} },
+        { findListenerPid: () => null, kill, logger: { debug: () => {} }, waitThenKill }
+      );
+      await server.close();
+      expect(kill).not.toHaveBeenCalled();
+      expect(waitThenKill).not.toHaveBeenCalled();
+    });
+
+    test('does not arm the old unref\'d SIGKILL timer (no fallback setTimeout survives event-loop drain)', async () => {
+      jest.useFakeTimers();
+      const kill = jest.fn();
+      const waitThenKill = jest.fn(async () => ({ killed: [], exited: [24680], escalated: [] }));
+      const { buildServerHandle } = require('../src/opencode-client');
+      const server = buildServerHandle(
+        { url: 'http://127.0.0.1:4096', close: () => {} },
+        { findListenerPid: () => 24680, kill, logger: { debug: () => {} }, waitThenKill }
+      );
+      await server.close();
+      // Advance well past the old 2s fallback window — no timer-driven SIGKILL
+      // should fire from close() itself; all killing now flows through the
+      // injected (and already-awaited) waitThenKill call above.
+      jest.advanceTimersByTime(5000);
+      const killSignals = kill.mock.calls.filter(([, sig]) => sig === 'SIGKILL');
+      expect(killSignals).toHaveLength(0);
+      jest.useRealTimers();
+    });
   });
 });
 

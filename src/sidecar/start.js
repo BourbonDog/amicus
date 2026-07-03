@@ -26,6 +26,7 @@ const { loadMcpConfig, parseMcpSpec } = require('../opencode-client');
 const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { discoverParentMcps } = require('../utils/mcp-discovery');
 const { stripSelfMcpEntries } = require('../utils/mcp-self-identity');
+const { generateFoldNonce } = require('../utils/fold-marker');
 
 /** Generate a unique 8-character hex task ID */
 function generateTaskId() {
@@ -164,6 +165,12 @@ async function startSidecar(options) {
   });
   const taskId = options.taskId || generateTaskId();
   const reasoning = thinking ? { effort: thinking } : undefined;
+  // 15b.3: one nonce per run, generated BEFORE prompt construction so the
+  // SAME value can be baked into the prompt's instruction (buildPrompts) and
+  // handed to the detector (runHeadless.options.nonce / the GUI fold writer
+  // via env). Harmless to generate even for the interactive path — buildPrompts
+  // only consumes it in headless mode.
+  const foldNonce = generateFoldNonce();
 
   logger.info('Starting task', { taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive' });
 
@@ -171,7 +178,7 @@ async function startSidecar(options) {
     ? buildContext(effectiveProject, effectiveSession, { contextTurns, contextSince, contextMaxTokens, sessionDir, client, coworkProcess })
     : '[Context excluded by caller - briefing is self-contained]';
   const { system: systemPrompt, userMessage } = buildPrompts(
-    effectivePrompt, context, effectiveProject, effectiveHeadless, agent, summaryLength, client
+    effectivePrompt, context, effectiveProject, effectiveHeadless, agent, summaryLength, client, foldNonce
   );
 
   const sessDir = createSessionMetadata(taskId, effectiveProject, {
@@ -189,7 +196,8 @@ async function startSidecar(options) {
       try {
         result = await runHeadless(
           model, systemPrompt, userMessage, taskId, effectiveProject,
-          timeout * 60 * 1000, agent || 'build', { mcp: mcpServers, summaryLength, reasoning, port: opencodePort }
+          timeout * 60 * 1000, agent || 'build',
+          { mcp: mcpServers, summaryLength, reasoning, port: opencodePort, nonce: foldNonce }
         );
       } catch (err) {
         if (!json) { throw err; }
@@ -205,7 +213,7 @@ async function startSidecar(options) {
       logger.info('Launching interactive sidecar', { taskId, model, agent: effectiveAgent });
       result = await runInteractive(
         model, systemPrompt, userMessage, taskId, effectiveProject,
-        { agent, mcp: mcpServers, reasoning, client, windowPosition: position }
+        { agent, mcp: mcpServers, reasoning, client, windowPosition: position, foldNonce }
       );
       summary = result.summary || '';
       if (result.error) { logger.error('Interactive task error', { taskId, error: result.error }); }

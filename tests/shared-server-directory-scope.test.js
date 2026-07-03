@@ -53,6 +53,7 @@ jest.mock('../src/utils/logger', () => ({
 }));
 
 const { runHeadless } = require('../src/headless');
+const { buildFoldMarker } = require('../src/utils/fold-marker');
 
 describe('shared-server runHeadless scopes every per-session call to the directory (#47)', () => {
   const PROJECT = '/canonical/project/dir';
@@ -60,6 +61,11 @@ describe('shared-server runHeadless scopes every per-session call to the directo
   const systemPrompt = '# sys';
   const userMessage = 'do the thing';
   const taskId = 'scope47';
+  // 15b.3: these tests only care about directory-scoping, not fold-marker
+  // semantics — but completion now requires a matching nonce, so every
+  // fixture that used to complete on the bare marker needs one.
+  const NONCE = 'scope47nonce0001';
+  const NONCED_MARKER = buildFoldMarker(NONCE);
 
   let mockClient;
   let mockServer;
@@ -80,12 +86,12 @@ describe('shared-server runHeadless scopes every per-session call to the directo
     mockSendPromptAsync.mockResolvedValue(undefined);
     mockGetMessages.mockResolvedValue([{
       info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } },
-      parts: [{ id: 'p1', type: 'text', text: 'done\n[SIDECAR_FOLD]' }],
+      parts: [{ id: 'p1', type: 'text', text: `done\n${NONCED_MARKER}` }],
     }]);
 
     // Shared-server mode: caller passes client+server. Directory must thread through.
     await runHeadless(model, systemPrompt, userMessage, taskId, PROJECT, 5000, 'build', {
-      client: mockClient, server: mockServer, directory: PROJECT,
+      client: mockClient, server: mockServer, directory: PROJECT, nonce: NONCE,
     });
 
     // A scoped create is required so the shared server files the session under
@@ -98,11 +104,11 @@ describe('shared-server runHeadless scopes every per-session call to the directo
     mockSendPromptAsync.mockResolvedValue(undefined);
     mockGetMessages.mockResolvedValue([{
       info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } },
-      parts: [{ id: 'p1', type: 'text', text: 'done\n[SIDECAR_FOLD]' }],
+      parts: [{ id: 'p1', type: 'text', text: `done\n${NONCED_MARKER}` }],
     }]);
 
     await runHeadless(model, systemPrompt, userMessage, taskId, PROJECT, 5000, 'build', {
-      client: mockClient, server: mockServer, directory: PROJECT,
+      client: mockClient, server: mockServer, directory: PROJECT, nonce: NONCE,
     });
 
     expect(mockSendPromptAsync).toHaveBeenCalledWith(
@@ -116,11 +122,11 @@ describe('shared-server runHeadless scopes every per-session call to the directo
     mockSendPromptAsync.mockResolvedValue(undefined);
     mockGetMessages.mockResolvedValue([{
       info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } },
-      parts: [{ id: 'p1', type: 'text', text: 'done\n[SIDECAR_FOLD]' }],
+      parts: [{ id: 'p1', type: 'text', text: `done\n${NONCED_MARKER}` }],
     }]);
 
     await runHeadless(model, systemPrompt, userMessage, taskId, PROJECT, 5000, 'build', {
-      client: mockClient, server: mockServer, directory: PROJECT,
+      client: mockClient, server: mockServer, directory: PROJECT, nonce: NONCE,
     });
 
     expect(mockGetMessages).toHaveBeenCalledWith(mockClient, 'sess-1', PROJECT);
@@ -188,11 +194,11 @@ describe('shared-server runHeadless scopes every per-session call to the directo
     mockSendPromptAsync.mockResolvedValue(undefined);
     mockGetMessages.mockResolvedValue([{
       info: { role: 'assistant', id: 'm1', time: { completed: Date.now() } },
-      parts: [{ id: 'p1', type: 'text', text: 'done\n[SIDECAR_FOLD]' }],
+      parts: [{ id: 'p1', type: 'text', text: `done\n${NONCED_MARKER}` }],
     }]);
 
     await runHeadless(model, systemPrompt, userMessage, taskId, PROJECT, 5000, 'build', {
-      client: mockClient, server: mockServer, directory: PROJECT, sessionId: 'pre-made',
+      client: mockClient, server: mockServer, directory: PROJECT, sessionId: 'pre-made', nonce: NONCE,
     });
 
     expect(mockCreateSession).not.toHaveBeenCalled();

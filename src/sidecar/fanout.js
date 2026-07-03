@@ -124,6 +124,7 @@ async function runFanout(options) {
   const { createWaveHeartbeat } = require('./wave-progress');
   const { buildContext } = require('./context-builder');
   const { buildPrompts } = require('../prompt-builder');
+  const { generateFoldNonce } = require('../utils/fold-marker');
   const { installSignalAbort, markAborted } = require('../utils/session-abort');
   const { getSessionDir } = require('../session-manager');
 
@@ -198,8 +199,12 @@ async function runFanout(options) {
         coworkProcess: options.coworkProcess,
       })
     : '[Context excluded by caller - briefing is self-contained]';
+  // 15b.3: ONE nonce for the whole wave — every leg shares the SAME prompt
+  // (built once, above), so every leg's model is instructed with the same
+  // nonce, and runLeg threads it to each leg's own runHeadless detector.
+  const foldNonce = generateFoldNonce();
   const { system: systemPrompt, userMessage } = buildPrompts(
-    options.prompt, context, project, true, options.agent || 'build', options.summaryLength, options.client
+    options.prompt, context, project, true, options.agent || 'build', options.summaryLength, options.client, foldNonce
   );
 
   // 4. One shared OpenCode server
@@ -230,7 +235,10 @@ async function runFanout(options) {
       logger.warn('Signal received — aborting wave', { waveId, signal });
       markAborted(waveDir, signal);
       for (const dir of legDirs) { markAborted(dir, signal); }
-      try { server.close(); } catch { /* best-effort */ }
+      // close() is async (B06 escalation); this handler stays sync, so
+      // fire-and-forget with a rejection guard. The 10s exit watchdog below
+      // comfortably outlives the ~2s escalation grace inside close().
+      try { server.close().catch(() => {}); } catch { /* best-effort */ }
       const { armExitWatchdog } = require('../utils/lifecycle');
       armExitWatchdog(code, 10000, { log: (m, meta) => logger.debug(m, meta) });
     },
@@ -251,11 +259,12 @@ async function runFanout(options) {
       leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
       timeoutMs, agent: options.agent, client, server,
       summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
+      foldNonce,
     })));
   } finally {
     heartbeat.stop();
     uninstallSignals();
-    try { server.close(); } catch { /* already closed on signal */ }
+    try { await server.close(); } catch { /* already closed on signal */ }
   }
 
   // 7. Aggregate, persist (atomic: tmp + rename), finalize, emit

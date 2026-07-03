@@ -17,6 +17,7 @@ const {
 const { acquireLock, releaseLock } = require('../utils/session-lock');
 const { runHeadless } = require('../headless');
 const { buildPrompts } = require('../prompt-builder');
+const { generateFoldNonce } = require('../utils/fold-marker');
 const { logger } = require('../utils/logger');
 
 /** Load previous session data (metadata, summary, conversation) */
@@ -152,9 +153,14 @@ async function continueSidecar(options) {
   // Inherit agent from previous session if not specified
   const effectiveAgent = agent || oldMetadata.agent || 'Build';
 
+  // 15b.3: a continuation builds a FRESH prompt (unlike resume, which re-sends
+  // the original), so it gets a fresh nonce too — the old session's nonce has
+  // no bearing on this new one.
+  const foldNonce = generateFoldNonce();
+
   // Build system prompt and user message
   const { system: systemPrompt, userMessage } = buildPrompts(
-    briefing, fullContext, project, headless, effectiveAgent, 'normal', client
+    briefing, fullContext, project, headless, effectiveAgent, 'normal', client, foldNonce
   );
 
   // Use provided task ID (from MCP server) or generate a new one
@@ -181,7 +187,7 @@ async function continueSidecar(options) {
     if (headless) {
       result = await runHeadless(
         model, systemPrompt, userMessage, newTaskId, project,
-        timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers }
+        timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers, nonce: foldNonce }
       );
       summary = result.summary ||
         '## Sidecar Results: No Output\n\nContinued session completed without summary.';
@@ -192,7 +198,7 @@ async function continueSidecar(options) {
       logger.info('Launching interactive continue', { taskId: newTaskId, model });
       result = await runInteractive(
         model, systemPrompt, userMessage, newTaskId, project,
-        { agent: effectiveAgent, mcp: mcpServers }
+        { agent: effectiveAgent, mcp: mcpServers, foldNonce }
       );
       summary = result.summary || '';
       if (result.error) { logger.error('Interactive continue error', { taskId: newTaskId, error: result.error }); }

@@ -294,6 +294,7 @@ const handlers = {
         const { buildContext } = require('./sidecar/context-builder');
         const { buildPrompts } = require('./prompt-builder');
         const { runHeadless } = require('./headless');
+        const { generateFoldNonce } = require('./utils/fold-marker');
         const { finalizeHeadlessResult } = require('./sidecar/session-finalize');
         // resolvedModel is already available from validateStartInputs() above
 
@@ -341,9 +342,12 @@ const handlers = {
           }
         }
 
+        // 15b.3: one nonce per run, generated before prompt construction.
+        const foldNonce = generateFoldNonce();
+
         // Build prompts (same as CLI path in start.js)
         const { system: systemPrompt, userMessage } = buildPrompts(
-          input.prompt, context, cwd, true, agent, input.summaryLength
+          input.prompt, context, cwd, true, agent, input.summaryLength, undefined, foldNonce
         );
 
         // Register session with idle eviction
@@ -376,6 +380,7 @@ const handlers = {
             // Not yet consumed downstream; threaded here so it's available the
             // moment a consumer (e.g. metadata/fold-output) needs it (12a.1/B02).
             amicusClient: detectedClient,
+            nonce: foldNonce,
           }
         ).then((result) => {
           // Session done — route through resolveTerminalState (same single source
