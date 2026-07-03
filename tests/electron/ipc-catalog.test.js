@@ -99,4 +99,13 @@ describe('catalog IPC', () => {
     expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(info.mock.invocationCallOrder[0]);
     expect(info).toHaveBeenCalledWith({ maxAgeMs: Number.POSITIVE_INFINITY });
   });
+
+  // B33 / #12: Step 3's alias editor now consumes the same cached catalog
+  // Step 2 loads (sidecar:get-catalog) instead of a separate live fetch.
+  // sidecar:fetch-models was ONLY ever called by that old Step 3 path, so
+  // it is removed for cleanliness — pin its removal here.
+  it('does not register the retired sidecar:fetch-models handler', () => {
+    const handlers = registerWithFakes();
+    expect(handlers['sidecar:fetch-models']).toBeUndefined();
+  });
 });

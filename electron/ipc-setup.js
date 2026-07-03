@@ -4,7 +4,10 @@
  * Extracted from main.js to keep file sizes under 300 lines.
  * Registers all setup-mode IPC handlers: validate-key, save-key,
  * remove-key, setup-done, save-config, get-config, get-api-keys,
- * fetch-models, get-catalog, and refresh-catalog.
+ * get-catalog, and refresh-catalog.
+ * (sidecar:fetch-models was retired in B33/#12 — Step 3's alias editor now
+ * shares the TTL-cached get-catalog data Step 2 loads instead of a second,
+ * uncached live fetch.)
  */
 
 const { ipcMain } = require('electron');
@@ -157,19 +160,6 @@ function registerSetupHandlers(getMainWindow) {
     } catch (err) {
       logger.error('get-api-keys handler error', { error: err.message });
       return { status: {}, hints: {}, imported: [] };
-    }
-  });
-
-  ipcMain.handle('sidecar:fetch-models', async () => {
-    try {
-      const { readApiKeyValues } = require('../src/utils/api-key-store');
-      const { fetchAllModels, groupModelsByFamily } = require('../src/utils/model-fetcher');
-      const keys = readApiKeyValues();
-      const models = await fetchAllModels(keys);
-      return groupModelsByFamily(models);
-    } catch (err) {
-      logger.error('fetch-models handler error', { error: err.message });
-      return [];
     }
   });
 
