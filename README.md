@@ -204,7 +204,7 @@ Everything you need before your first run, and what's optional.
 
 Then the council waits for your confirmation.
 
-The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**.
+The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**. For what `amicus council tally|verdict|report|stats` actually take as input and produce — field-by-field schemas, verdict.json's provenance, and a full worked example run against the real CLI — see **[docs/council.md](./docs/council.md)**.
 
 **Free council (zero-cost).** Want the cross-examination without the model spend? `amicus setup` offers a **Free OpenRouter council** mode — readline wizard option 2, and the Electron **Models** step. It detects the free `:free` models live from the catalog, lets you multi-pick (Enter takes a vendor-diverse default), and saves them as `councils.free` — a first-class `councils` config primitive seeded under collision-safe `free-*` aliases. Your `config.default` is left untouched, and all you need is an `OPENROUTER_API_KEY`.
 
@@ -566,6 +566,7 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 | Doc | Description |
 |-----|-------------|
 | [docs/usage.md](./docs/usage.md) | Command-by-command usage guide. |
+| [docs/council.md](./docs/council.md) | Council pipeline reference: `tally`/`verdict`/`report` schemas, provenance, and a worked example. |
 | [docs/configuration.md](./docs/configuration.md) | Full configuration and environment reference. |
 | [docs/architecture.md](./docs/architecture.md) | How the engine, Electron shell, and context sharing fit together. |
 | [docs/opencode-integration.md](./docs/opencode-integration.md) | How Amicus drives the OpenCode runtime. |
