@@ -66,10 +66,13 @@ describe('B49.2 — list --status accepted values sync', () => {
     }
   });
 
-  it('README documents the full real status set for amicus list --status somewhere in the Other Commands block', () => {
-    const otherCommands = readme.slice(readme.indexOf('### Other commands'), readme.indexOf('## Models'));
+  it('README documents the full real status set for amicus list --status somewhere in the Commands block', () => {
+    // Task 17.3 restructure: `### Other commands` (with the `amicus list
+    // --status` comment) moved to docs/usage.md; README's compact `##
+    // Commands` section now states the full status set inline instead.
+    const commandsSection = readme.slice(readme.indexOf('## Commands'), readme.indexOf('## Models'));
     for (const s of REQUIRED_STATUSES) {
-      expect(otherCommands).toContain(s);
+      expect(commandsSection).toContain(s);
     }
   });
 
@@ -86,8 +89,12 @@ describe('B49.3 — fanout --session-id support documented', () => {
   const usage = read('docs/usage.md');
 
   it('README fanout section documents --session-id support', () => {
-    const fanoutSection = readme.slice(readme.indexOf('### `amicus fanout`'), readme.indexOf('### Other commands'));
-    expect(fanoutSection).toMatch(/--session-id/);
+    // Task 17.3 restructure: the per-command `### ` subsections (including
+    // `### \`amicus fanout\``) moved to docs/usage.md, the canonical CLI
+    // reference; README's compact Commands section now summarizes
+    // --session-id support inline instead of a dedicated fanout subsection.
+    const commandsSection = readme.slice(readme.indexOf('## Commands'), readme.indexOf('## Models'));
+    expect(commandsSection).toMatch(/--session-id/);
   });
 
   it('usage.md fanout section documents --session-id support', () => {
@@ -117,10 +124,13 @@ describe('B49.4 — amicus status <id> examples', () => {
 });
 
 describe('B49.5 — start --setup does not relax --prompt requirement', () => {
-  const readme = read('README.md');
+  // Task 17.3 restructure: the full `amicus start` option table (this row
+  // included) moved from README to docs/usage.md, the canonical CLI
+  // reference — README now only keeps a compact Commands table + pointer.
+  const usage = read('docs/usage.md');
 
-  it('README --setup row clarifies --prompt is still required', () => {
-    const optionsBlock = readme.slice(readme.indexOf('| `--position'), readme.indexOf('> Agents:'));
+  it('usage.md --setup row clarifies --prompt is still required', () => {
+    const optionsBlock = usage.slice(usage.indexOf('| `--session-dir'), usage.indexOf('> Agents:'));
     const setupLine = optionsBlock.split('\n').find(l => l.includes('`--setup`'));
     expect(setupLine).toBeTruthy();
     expect(setupLine).toMatch(/--prompt|still requires|does not/i);

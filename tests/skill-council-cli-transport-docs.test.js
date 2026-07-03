@@ -75,7 +75,9 @@ describe('B22 — README + usage.md gain the two new council subcommands', () =>
   const usage = read('docs/usage.md');
 
   it('README Commands table council row documents validate and verdict', () => {
-    const table = readme.match(/## Commands[\s\S]*?(?=\n### )/)[0];
+    // Task 17.3 restructure: bounded by the next `## ` section, not a `### `
+    // subheading — the per-command `### ` subsections moved to docs/usage.md.
+    const table = readme.match(/## Commands[\s\S]*?(?=\n## )/)[0];
     const councilRow = table.split('\n').find(l => l.includes('`amicus council`'));
     expect(councilRow).toBeTruthy();
     expect(councilRow).toMatch(/validate <file>/);
