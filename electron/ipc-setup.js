@@ -196,7 +196,12 @@ function registerSetupHandlers(getMainWindow) {
       const catalog = await getCatalog();
       const free = listFreeModels(catalog);
       const suggested = new Set(suggestFreeCouncil(free, 3).map(r => r.id));
-      return free.map(r => ({ id: r.id, suggested: suggested.has(r.id) }));
+      return free.map(r => ({
+        id: r.id,
+        suggested: suggested.has(r.id),
+        name: r.name,
+        vendor: r.id.split('/')[1] || '',
+      }));
     } catch (_err) { return []; }
   });
 }

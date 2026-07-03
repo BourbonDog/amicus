@@ -357,9 +357,40 @@ function __rawWizardCSS() {
   /* Free council picker (Step 2) */
   .council-section { margin-top: 14px; }
   .council-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; }
-  .council-results { max-height: 160px; overflow-y: auto; margin-top: 6px; }
-  .council-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 12px; color: var(--text); font-family: var(--font-mono); }
-  .council-row input[type="checkbox"] { accent-color: var(--accent); }
+  .council-results {
+    max-height: 220px; overflow-y: auto; margin-top: 6px;
+    border: 1px solid var(--border); border-radius: var(--r-6);
+  }
+  .council-results:empty { border: none; }
+  .council-group { margin: 0; border-bottom: 1px solid var(--border); }
+  .council-group:last-child { border-bottom: none; }
+  .council-group summary {
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text-muted);
+    list-style: none; transition: color var(--dur-fast);
+  }
+  .council-group summary::-webkit-details-marker { display: none; }
+  .council-group summary::before {
+    content: '\\25B6'; font-size: 8px; color: var(--text-faint); transition: transform var(--dur-fast);
+  }
+  .council-group[open] summary::before { transform: rotate(90deg); }
+  .council-group summary:hover { color: var(--accent); }
+  .council-group-count { color: var(--text-faint); font-weight: 400; }
+  .council-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 10px 5px 24px; font-size: 12px; color: var(--text); cursor: pointer;
+  }
+  .council-row:hover { background: var(--surface-hover); }
+  .council-row input[type="checkbox"] { accent-color: var(--accent); flex-shrink: 0; }
+  .council-row-text { display: flex; flex-direction: column; min-width: 0; }
+  .council-row-name {
+    color: var(--text); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .council-row-id {
+    color: var(--text-muted); font-size: 11px; font-family: var(--font-mono);
+    margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .council-note { font-size: 10px; color: var(--text-faint); margin-top: 6px; line-height: 1.4; }
 
   /* Alias example-icon strokes — driven by class rules (var() is invalid as an SVG attribute) */
