@@ -34,6 +34,26 @@ Phase 9: distribution — plugin slash commands, MCP Registry wiring, and the ma
 - **`plugin.json`'s unrecognized `bugs` field removed.** `claude plugin validate . --strict` now passes
   clean (exit 0); it previously reported an unknown-field warning that `--strict` promotes to an error.
 
+Phase 11: release-rail hardening and a skill-routing hotfix (pre-v1.9.0 pull-forwards).
+
+### Fixed
+- **Release-workflow re-runs now recover a half-published release instead of dead-ending.** A `publish.yml`
+  re-run after a post-`npm publish` failure previously died on `EPUBLISHCONFLICT` before ever reaching the
+  step that failed. Now the npm publish is skipped (loudly) when `amicus@<version>` is already live (E404
+  means not-published and proceeds; any other `npm view` error fails loud rather than skipping), a
+  tag↔`package.json` lockstep check fails fast before anything publishes, the MCP Registry publish is
+  skipped when the version is already registered (pre-check tolerates transport-level failures and falls
+  through to publishing), `mcp-publisher login github-oidc` gained the same 5×20s retry the publish call
+  already had, and `gh release create` is guarded by an existence check. `docs/DISTRIBUTION.md` §3 now
+  documents re-run as the primary recovery path, with the manual path as fallback. Locked by
+  `tests/scripts/publish-workflow.test.js`.
+- **The `second-opinion` skill's frontmatter description no longer exceeds Claude Code's 1024-char cap.**
+  It was 1441 chars, so the router silently truncated the tail — which was the NOT-clause routing quick
+  single-model asks ("ask Gemini…", "what does DeepSeek think") to the `sidecar` skill. Rewritten to
+  988 chars with every trigger phrase and the NOT boundary intact (same fix pattern as the sidecar skill's
+  1.8.1 overhaul); locked by `tests/skill-second-opinion-docs.test.js`. Existing installs pick the fix up
+  when postinstall refreshes skill copies on the next upgrade.
+
 ## [1.8.1] - 2026-07-02
 
 Docs & skills accuracy sprint from the Phase-8 whole-branch review — no engine changes. Every item fixed a claim
