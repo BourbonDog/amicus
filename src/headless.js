@@ -12,7 +12,7 @@ const { ensureNodeModulesBinInPath } = require('./utils/path-setup');
 const { ensurePortAvailable } = require('./utils/server-setup');
 const { mapAgentToOpenCode } = require('./utils/agent-mapping');
 const { writeProgress } = require('./sidecar/progress');
-const { createMirrorState, mirrorMessages, logMessage } = require('./sidecar/conversation-mirror');
+const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls } = require('./sidecar/conversation-mirror');
 
 /**
  * Fold marker that the agent outputs when done
@@ -53,6 +53,7 @@ const STABLE_FINISHED_POLLS = Number(process.env.AMICUS_STABLE_FINISHED_POLLS) |
 const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;          // ~60s at 2s — no completion signal
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 const MAX_CONSECUTIVE_POLL_FAILURES = Number(process.env.AMICUS_MAX_CONSECUTIVE_POLL_FAILURES) || 15; // ≈30s at 2s polls
+const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 180000; // B53: wedged tool call w/ no progress
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -361,6 +362,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const stableIdlePolls = options.stableIdlePolls || STABLE_IDLE_POLLS;
     const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
     const maxConsecutivePollFailures = options.maxConsecutivePollFailures || MAX_CONSECUTIVE_POLL_FAILURES;
+    const toolCallStallMs = options.toolCallStallMs || TOOL_CALL_STALL_MS;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -369,6 +371,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastToolCallCount = 0;
     let lastToolResultCount = 0;
     let lastMessageCount = 0;
+    let lastProgressAt = Date.now(); // B53: last poll where `progressed` was true
+    let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
 
     while (!completed && (Date.now() - startTime) < timeoutMs) {
       watchdog.touch();
@@ -490,6 +494,33 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         const newAssistant = currentAssistantMsgId !== lastAssistantMsgId;
 
         const progressed = outputGrew || toolActivity || resultActivity || messageActivity || newAssistant;
+        if (progressed) { lastProgressAt = Date.now(); }
+
+        // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise
+        // burns the full --timeout with zero output — the stable-poll idle gate above
+        // requires mirror.output.length > 0, which a pre-text wedge never satisfies.
+        // Fire ONLY when a tool call is genuinely pending AND no progress of any kind
+        // (text/tool/result/message/new-assistant) has been observed for the stall
+        // window — this cannot false-positive during active streaming (progress
+        // resets the clock every poll) and cannot fire without a wedged tool.
+        const pendingToolCalls = getPendingToolCalls(mirror);
+        if (pendingToolCalls.length > 0 && (Date.now() - lastProgressAt) > toolCallStallMs) {
+          const stalled = pendingToolCalls[0];
+          const pendingSeconds = Math.round((Date.now() - Date.parse(stalled.firstSeenAt)) / 1000);
+          sessionError = `Tool call stalled: ${stalled.name} pending ${pendingSeconds}s with no result or output`;
+          logger.error('Tool call stalled — no progress within threshold', {
+            taskId, toolName: stalled.name, toolId: stalled.id, pendingSeconds, toolCallStallMs
+          });
+          toolStalled = true;
+          try {
+            const { abortSession } = require('./opencode-client');
+            await abortSession(client, sessionId, ...dirArgs);
+            logger.info('Session aborted after tool-call stall', { taskId, sessionId });
+          } catch (abortErr) {
+            logger.warn('Failed to abort session after tool-call stall', { error: abortErr.message });
+          }
+          break;
+        }
 
         if (!progressed) {
           // Require real output before counting toward completion — the SDK creates an
@@ -577,11 +608,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // Propagate the error when the model errored with no output (F1 semantics:
     // a model error alongside streamed output still yields a usable summary),
     // and ALWAYS when the poll loop bailed on consecutive failures (F4: a dead
-    // server must never classify as a complete leg, even with partial output).
+    // server must never classify as a complete leg, even with partial output)
+    // or on a tool-call stall (B53: same — a wedged tool must never classify
+    // as complete, even if some text streamed alongside it before the wedge).
     const { sumPerMessageUsage } = require('./utils/pricing');
     const usage = sumPerMessageUsage(mirror.usageByMsg);
 
-    if (sessionError && (!mirror.output || pollFailureBail)) {
+    if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
       return {
         summary: mirror.output ? extractSummary(mirror.output) : '',
         completed: false,
@@ -698,4 +731,5 @@ module.exports = {
   STABLE_IDLE_POLLS,
   POLL_CALL_TIMEOUT_MS,
   MAX_CONSECUTIVE_POLL_FAILURES,
+  TOOL_CALL_STALL_MS,
 };
