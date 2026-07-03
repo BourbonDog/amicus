@@ -487,6 +487,12 @@ Subcommands for 'council':
     --decisions <d.json>       Optional. Stage-4 decisions array (default [])
     -o, --out <out.json>       Output path (default ./verdict.json)
     --json                     Print the full verdict document
+  save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
+    --json                     Machine-readable output
+  list                          List saved councils plus the built-in benches
+    --json                     Machine-readable output
+  show <name>                   Resolve a council by name (saved or built-in)
+    --json                     Machine-readable output
 `,
   doctor: `
 Options for 'doctor':

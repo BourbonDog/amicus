@@ -13,6 +13,7 @@ amicus list [--status <filter>] [--all] [--json]
 amicus resume <task_id>
 amicus continue <task_id> --prompt "Next step..."
 amicus read <task_id> [--conversation|--metadata|--json]
+amicus status <task_id> [--json]          # One-shot status for a session or wave
 amicus abort <task_id>
 amicus abort --all
 
@@ -49,20 +50,38 @@ amicus start --model opus --prompt-file briefing.md --no-ui --json
 amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 ```
 
-**Key options:**
+**All options:**
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--model <model>` | Alias or full `provider/model` ID. | config default |
-| `--prompt <text>` | Task description (mutually exclusive with `--prompt-file`). | *(required)* |
-| `--prompt-file <path>` | Read the prompt from a UTF-8 file. Preferred for long briefings; avoids the ~32 KB Windows argument cap. | |
+| `--model <model>` | Alias, `provider/model`, or `openrouter/provider/model`. | config default |
+| `--prompt <text>` | Task description. | *(required unless `--prompt-file`)* |
+| `--prompt-file <path>` | Read the prompt from a UTF-8 file (XOR `--prompt`). | |
+| `--agent <agent>` | OpenCode agent: `Chat`, `Build`, `Plan`. | `Chat` interactive / `Build` headless |
 | `--no-ui` | Run headless (autonomous, no window). | off |
-| `--json` | Emit the run result as a stable JSON run document on stdout (requires `--no-ui`). | off |
-| `--timeout <minutes>` | Headless timeout. | `15` |
-| `--agent <agent>` | `Chat` (interactive), `Build` (full tool access), `Plan` (read-only). | `Chat` interactive / `Build` headless |
-| `--no-validate-model` | Skip catalog validation before launch. | validation on |
+| `--json` | Emit the run result as stable JSON (requires `--no-ui`). | off |
+| `--timeout <minutes>` | Headless timeout. | 15 |
+| `--context-turns <N>` | Max conversation turns to include. | 50 |
+| `--context-since <duration>` | Time filter (e.g. `2h`); overrides turns. | |
+| `--context-max-tokens <N>` | Max context tokens. | 80000 |
+| `--no-context` | Skip parent conversation history. | off |
+| `--thinking <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. | model default |
+| `--summary-length <length>` | Fold summary verbosity: `brief`, `normal`, `verbose`. | `normal` |
+| `--mcp <spec>` | Add an MCP server (`name=url` or `name=command`). | |
+| `--mcp-config <path>` | Path to an `opencode.json` with MCP config. | |
+| `--no-mcp` | Don't inherit MCP servers from the parent. | off |
+| `--exclude-mcp <name>` | Exclude a specific inherited MCP server (repeatable). | |
+| `--session-id <id\|current>` | Session to pull context from. | `current` |
+| `--cwd <path>` | Project directory. | cwd |
+| `--client <type>` | Client context: `code-local`, `code-web`, `cowork`. | `code-local` |
+| `--position <pos>` | Window position: `right`, `left`, `center`. | `right` |
+| `--fold-shortcut <key>` | Customize the fold keyboard shortcut. | `Cmd/Ctrl+Shift+F` |
+| `--opencode-port <port>` | Port override for the OpenCode server. | |
+| `--session-dir <path>` | Explicit session-data directory. | |
+| `--setup` | Force-open configuration before launching. Does **not** relax the `--prompt`/`--prompt-file` requirement — `start --setup` still fails fast with "Error: --prompt or --prompt-file is required" if neither is given. | |
+| `--no-validate-model` | Skip model-catalog validation before launch. | validation on |
 
-See `amicus start --help` or the README for the full option list (context, MCP, thinking, summary length, window position, etc.).
+> Agents: **Chat** auto-approves reads and asks before writes/bash (interactive default); **Build** has full tool access (headless default); **Plan** is read-only analysis. `--agent Chat` is interactive-only and incompatible with `--no-ui`.
 
 **Catalog validation.** For an explicit `--model`, the model is checked against the live catalog before launch — a typo'd name fails fast with same-vendor suggestions. For a model inherited from a previous session (`continue`/`resume` without `--model`), validation is **advisory**: a warning is printed but the session starts anyway. Skip with `--no-validate-model`.
 
@@ -142,6 +161,34 @@ amicus council show budget [--json]                         # Works on built-ins
 
 ---
 
+## `amicus models` — The Model Catalog
+
+Amicus does **not** ship a frozen table of model names. Aliases and validation resolve against a **live catalog** fetched from provider APIs and cached at `~/.config/amicus/model-catalog.json` (24-hour TTL; the fetch works without an API key).
+
+```bash
+amicus models                 # List the catalog
+amicus models --search gemini # Filter by substring over id and name
+amicus models --refresh       # Force-refresh from provider APIs
+amicus models --check         # Audit your aliases against the catalog
+```
+
+`amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
+
+**Validation on launch.** `start` and `fanout` validate the model against the catalog before launching. For an explicit `--model` on `continue`/`resume` this is **blocking** (a typo'd model fails fast with suggestions); for a model *inherited* from a prior session it's **advisory**. Skip it any time with `--no-validate-model`, or fix the catalog with `amicus models --refresh`.
+
+**Aliases are a curated seed, not a fixed list.** `amicus setup` seeds a curated set of short aliases (e.g. `gemini`, `gpt`, `opus`, `deepseek`), and you add or override them with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth.
+
+**Full-id passthrough.** You can always bypass aliases and name a model directly. The prefix decides which credentials are used:
+
+| Format | Example | Credentials |
+|--------|---------|-------------|
+| `openrouter/provider/model` | `openrouter/google/gemini-2.5-flash` | `OPENROUTER_API_KEY` |
+| `google/model` | `google/gemini-2.5-flash` | `GOOGLE_GENERATIVE_AI_API_KEY` |
+| `openai/model` | `openai/gpt-5` | `OPENAI_API_KEY` |
+| `anthropic/model` | `anthropic/claude-opus-4` (the `opus` alias resolves here by default) | `ANTHROPIC_API_KEY` |
+
+---
+
 ## Other Commands
 
 ```bash
@@ -156,12 +203,45 @@ amicus read <id> --conversation      # Full conversation
 amicus read <id> --metadata          # Session metadata
 amicus read <id> --json              # Stable JSON run or wave document
 
+amicus status <id>                   # One-shot status for a session or wave
+amicus status --wave <id>            # Alternative spelling for a wave ID
+amicus status <id> --json            # Machine-readable output
+
 amicus resume <id>                   # Reopen session with full history
 amicus continue <id> --prompt "..."  # New session; previous one as read-only context
 
 amicus abort <id>                    # Stop one running session
 amicus abort --all                   # Stop all running sessions in this project
+
+amicus setup --api-keys              # Open just the API-key window
+amicus setup --add-alias fast=openrouter/google/gemini-2.5-flash   # Add/override one alias
 ```
+
+**`amicus status <id>` output.** Human-readable:
+
+```
+$ amicus status demo123
+Task:     demo123
+Status:   complete (terminal)
+Elapsed:  5m 0s
+Model:    google/gemini-2.5-flash
+```
+
+`--json`:
+
+```
+$ amicus status demo123 --json
+{
+  "taskId": "demo123",
+  "status": "complete",
+  "elapsed": "5m 0s",
+  "version": "1.9.0",
+  "model": "google/gemini-2.5-flash",
+  "phase": "terminal"
+}
+```
+
+A running session additionally reports `messages`, `lastActivity`/`latest`, and (if stalled) a `STALLED` line with recovery guidance in `--json`. A wave ID (`amicus status <waveId>` / `--wave <waveId>`) instead reports `legsComplete`/`legsTotal` and a per-leg breakdown.
 
 ---
 

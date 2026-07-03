@@ -57,6 +57,13 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ## Quick start
 
+> **Two install channels — read this first.** Amicus ships two ways, and CLI commands look different in each:
+>
+> - **npm global** (`npm install -g amicus` or the install script) puts `amicus`/`am` on your `PATH`. Every `amicus <command>` example in this README works as written.
+> - **Claude Code plugin** (`/plugin install amicus@bourbondog-amicus`) does **not** put a CLI on your `PATH`. CLI calls go through `npx -y amicus@latest <command>` instead — e.g. `amicus doctor` becomes `npx -y amicus@latest doctor`. In exchange, the plugin channel gets two things npm does **not**: the slash commands `/amicus:council` and `/amicus:sidecar`. **These are plugin-channel-ONLY — npm users don't get them** and drive the same skills by saying "council review this" / talking to Claude instead.
+>
+> **Convention used throughout this README:** plugin-channel users: prefix CLI examples with `npx -y amicus@latest` (skip the bare `amicus`/`am`). Individual code blocks are not duplicated per channel — this note is the one translation you need.
+
 **Install** — pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
 
 **As a Claude Code plugin** — the most native path if you use Claude Code:
@@ -67,7 +74,7 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 /reload-plugins
 ```
 
-Claude Code registers the MCP server and both skills for you — nothing to configure. (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
+Claude Code registers the MCP server and both skills for you — nothing to configure. It also gets you two slash commands the npm/install-script paths don't: **`/amicus:council`** (run a full council review) and **`/amicus:sidecar`** (fork a conversation to another model). (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
 
 **With the install script** — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
 
@@ -114,6 +121,8 @@ This opens a graphical wizard:
 **Your first council** — no flags to learn. In Claude Code or Cowork, give Claude a document and say:
 
 > *council review this*
+
+Plugin-channel users can also type **`/amicus:council`** directly instead of phrasing it as a request — same skill, explicit invocation.
 
 Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill is what teaches Claude to recognize this — if nothing happens, run `amicus doctor` (or `npx -y amicus@latest doctor`). npm/install-script installs place the skill at `~/.claude/skills/second-opinion/`; plugin installs keep it inside the plugin itself — check `/plugin` in Claude Code to confirm amicus is enabled.)
 
@@ -178,6 +187,8 @@ Everything you need before your first run, and what's optional.
 
 ## The Council
 
+> Trigger it by saying *"council review this"* to Claude, or, on the plugin channel, run **`/amicus:council`** directly.
+
 **Why multi-model.** Any single model — including the one running your session — has consistent blind spots. Route the *same* material through models from *different* families and the disagreements surface: missed issues, overstated confidence, claims one model alone would have waved through. The council is the structured version of that idea.
 
 **The flow, in five beats:**
@@ -204,7 +215,7 @@ Everything you need before your first run, and what's optional.
 
 Then the council waits for your confirmation.
 
-The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**.
+The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**. For what `amicus council tally|verdict|report|stats` actually take as input and produce — field-by-field schemas, verdict.json's provenance, and a full worked example run against the real CLI — see **[docs/council.md](./docs/council.md)**.
 
 **Free council (zero-cost).** Want the cross-examination without the model spend? `amicus setup` offers a **Free OpenRouter council** mode — readline wizard option 2, and the Electron **Models** step. It detects the free `:free` models live from the catalog, lets you multi-pick (Enter takes a vendor-diverse default), and saves them as `councils.free` — a first-class `councils` config primitive seeded under collision-safe `free-*` aliases. Your `config.default` is left untouched, and all you need is an `OPENROUTER_API_KEY`.
 
@@ -278,85 +289,9 @@ amicus update
 
 The `am` alias is interchangeable with `amicus` everywhere.
 
-### `amicus start` options
+**Every flag, every subcommand, every example** — including the full `amicus start` option table, `amicus fanout` (supports `--session-id`, `--council <name>` as an alternative to `--models`), council presets, and every other command — lives in **[docs/usage.md](./docs/usage.md)**, the canonical CLI reference. What follows here is just enough to see the shape of a run.
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--model <model>` | Alias, `provider/model`, or `openrouter/provider/model`. | config default |
-| `--prompt <text>` | Task description. | *(required unless `--prompt-file`)* |
-| `--prompt-file <path>` | Read the prompt from a UTF-8 file (XOR `--prompt`). | |
-| `--agent <agent>` | OpenCode agent: `Chat`, `Build`, `Plan`. | `Chat` interactive / `Build` headless |
-| `--no-ui` | Run headless (autonomous, no window). | off |
-| `--json` | Emit the run result as stable JSON (requires `--no-ui`). | off |
-| `--timeout <minutes>` | Headless timeout. | 15 |
-| `--context-turns <N>` | Max conversation turns to include. | 50 |
-| `--context-since <duration>` | Time filter (e.g. `2h`); overrides turns. | |
-| `--context-max-tokens <N>` | Max context tokens. | 80000 |
-| `--no-context` | Skip parent conversation history. | off |
-| `--thinking <level>` | Reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. | model default |
-| `--summary-length <length>` | Fold summary verbosity: `brief`, `normal`, `verbose`. | `normal` |
-| `--mcp <spec>` | Add an MCP server (`name=url` or `name=command`). | |
-| `--mcp-config <path>` | Path to an `opencode.json` with MCP config. | |
-| `--no-mcp` | Don't inherit MCP servers from the parent. | off |
-| `--exclude-mcp <name>` | Exclude a specific inherited MCP server (repeatable). | |
-| `--session-id <id\|current>` | Session to pull context from. | `current` |
-| `--cwd <path>` | Project directory. | cwd |
-| `--client <type>` | Client context: `code-local`, `code-web`, `cowork`. | `code-local` |
-| `--position <pos>` | Window position: `right`, `left`, `center`. | `right` |
-| `--fold-shortcut <key>` | Customize the fold keyboard shortcut. | `Cmd/Ctrl+Shift+F` |
-| `--opencode-port <port>` | Port override for the OpenCode server. | |
-| `--session-dir <path>` | Explicit session-data directory. | |
-| `--setup` | Force-open configuration before launching. Does **not** relax the `--prompt`/`--prompt-file` requirement — `start --setup` still fails fast with "Error: --prompt or --prompt-file is required" if neither is given. | |
-| `--no-validate-model` | Skip model-catalog validation before launch. | validation on |
-
-> Agents: **Chat** auto-approves reads and asks before writes/bash (interactive default); **Build** has full tool access (headless default); **Plan** is read-only analysis. `--agent Chat` is interactive-only and incompatible with `--no-ui`.
-
-### `amicus fanout` — same prompt, many models
-
-```bash
-amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --json
-```
-
-Fanout runs one **headless wave**: every leg gets the **same** prompt (this is the shared-prompt model the council's review stages are built on). When all legs are terminal it prints **one** JSON wave document on stdout.
-
-- `--models <a,b,c>` — comma-separated aliases or `provider/model` IDs (required, unless `--council`).
-- `--council <name>` — run a saved council, or a built-in bench (`free`, `budget`, `frontier`), instead of `--models`; mutually exclusive with `--models`. A saved council of the same name always shadows the built-in — see `amicus council save/list/show` below.
-- `--prompt <text>` / `--prompt-file <path>` — the shared briefing. `--prompt-file` avoids the ~32 KB Windows argument cap and is mutually exclusive with `--prompt`.
-- `--wave-id <id>` — set the wave ID explicitly (leg IDs become `<id>-1..N`).
-- `--json` — emit the wave document.
-- `--session-id <id|current>` — session to pull shared context from (same as `start`; supported on `fanout` too).
-- Shared per-leg knobs: `--agent`, `--thinking`, `--timeout`, `--summary-length`, `--no-context`, the `--context-*` flags, the `--mcp*` flags, `--no-validate-model`, `--cwd`.
-- **Exit codes:** `0` all legs complete, `2` partial wave, `1` none complete / hard failure.
-
-### Other commands
-
-```bash
-amicus list                          # current project
-amicus list --status running         # filter by status: running, complete, error,
-                                      # timed-out, aborted, crashed, idle-timeout
-amicus list --all                    # all projects
-amicus list --json                   # machine-readable
-
-amicus read <id>                     # summary (default)
-amicus read <id> --conversation      # full conversation
-amicus read <id> --metadata          # session metadata
-amicus read <id> --json              # stable JSON (run or wave document)
-
-amicus status <id>                   # one-shot status for a session or wave
-amicus status --wave <id>            # alternative spelling for a wave ID
-amicus status <id> --json            # machine-readable output
-
-amicus resume <id>                   # reopen with full history
-amicus continue <id> --prompt "..."  # new session, previous one as read-only context
-
-amicus abort <id>                    # stop one running session
-amicus abort --all                   # stop all running sessions in this project
-
-amicus setup --api-keys              # open just the API-key window
-amicus setup --add-alias fast=openrouter/google/gemini-2.5-flash   # add/override one alias
-```
-
-**`amicus status <id>` output.** Human-readable:
+`amicus status <id>` output. Human-readable:
 
 ```
 $ amicus status demo123
@@ -380,35 +315,20 @@ $ amicus status demo123 --json
 }
 ```
 
-A running session additionally reports `messages`, `lastActivity`/`latest`, and (if stalled) a `STALLED` line with recovery guidance in `--json`. A wave ID (`amicus status <waveId>` / `--wave <waveId>`) instead reports `legsComplete`/`legsTotal` and a per-leg breakdown.
+`amicus list --status` accepts `running`, `complete`, `error`, `timed-out`, `aborted`, `crashed`, `idle-timeout`. Full field-by-field docs (a running session's `messages`/`STALLED` reporting, wave-ID status shape, etc.) are in [docs/usage.md](./docs/usage.md).
 
 ---
 
 ## Models
 
-Amicus does **not** ship a frozen table of model names. Aliases and validation resolve against a **live catalog** fetched from provider APIs and cached at `~/.config/amicus/model-catalog.json` (24-hour TTL; the fetch works without an API key).
+Amicus does **not** ship a frozen table of model names. Aliases and validation resolve against a **live catalog** fetched from provider APIs and cached at `~/.config/amicus/model-catalog.json` (24-hour TTL; the fetch works without an API key). Run `amicus models` to see exactly what resolves on *your* machine — that's the source of truth, not this README.
 
 ```bash
 amicus models                 # list the catalog
-amicus models --search gemini # filter by substring over id and name
-amicus models --refresh       # force-refresh from provider APIs
-amicus models --check         # audit your aliases against the catalog
+amicus models --search gemini # filter by substring
 ```
 
-`amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
-
-**Validation on launch.** `start` and `fanout` validate the model against the catalog before launching. For an explicit `--model` on `continue`/`resume` this is **blocking** (a typo'd model fails fast with suggestions); for a model *inherited* from a prior session it's **advisory**. Skip it any time with `--no-validate-model`, or fix the catalog with `amicus models --refresh`.
-
-**Aliases are a curated seed, not a fixed list.** `amicus setup` seeds a curated set of short aliases (e.g. `gemini`, `gpt`, `opus`, `deepseek`), and you add or override them with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth, not this README.
-
-**Full-id passthrough.** You can always bypass aliases and name a model directly. The prefix decides which credentials are used:
-
-| Format | Example | Credentials |
-|--------|---------|-------------|
-| `openrouter/provider/model` | `openrouter/google/gemini-2.5-flash` | `OPENROUTER_API_KEY` |
-| `google/model` | `google/gemini-2.5-flash` | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| `openai/model` | `openai/gpt-5` | `OPENAI_API_KEY` |
-| `anthropic/model` | `anthropic/claude-opus-4` (the `opus` alias resolves here by default) | `ANTHROPIC_API_KEY` |
+`start`/`fanout` validate your model against the catalog before launching (skip with `--no-validate-model`). You can also always bypass aliases and pass a full `provider/model` or `openrouter/provider/model` ID directly. Catalog internals, alias management, and the full-id passthrough table are in **[docs/usage.md § Models](./docs/usage.md#amicus-models--the-model-catalog)**.
 
 ---
 
@@ -433,68 +353,25 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_council_stats` | Reviewer-reliability stats from past council runs. |
 | `amicus_verdict` | Build the final council verdict from a tally + decisions. |
 
-The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then `amicus_read` once it's done — so the calling agent never blocks. Prefer `amicus_wait` over manual sleep+status polling for headless runs: it collapses the poll loop into a single blocking call that returns as soon as the run finishes (or the wait window closes).
+The async pattern is **start → status → read** — `amicus_start`/`amicus_fanout` return immediately, then you poll `amicus_status` and call `amicus_read`; `amicus_wait` collapses that poll loop into one blocking call.
 
-To register manually (user scope):
+> Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). Set `AMICUS_LEGACY_ALIASES=1` on the server entry to restore them.
 
-```bash
-claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
-```
-
-> Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). To restore them, add `"env": {"AMICUS_LEGACY_ALIASES": "1"}` to the server entry. They will be removed entirely in the next major.
+Manual registration and per-tool detail are in **[docs/usage.md § MCP Server](./docs/usage.md#mcp-server)**.
 
 ---
 
 ## Configuration
 
-`amicus setup` is the recommended way to configure Amicus — it writes API keys to `~/.config/amicus/.env` (`0600`) and persists your default model and aliases. The environment variables below are for overrides and tuning. Dev-only variables (mock/update testing) are documented in [docs/configuration.md](./docs/configuration.md).
+`amicus setup` is the recommended way to configure Amicus — it writes API keys to `~/.config/amicus/.env` (`0600`) and persists your default model and aliases. Every environment variable (API keys, behavior tuning, headless poller, GUI/debug, process lifecycle) is documented in **[docs/configuration.md](./docs/configuration.md)**, including the legacy `SIDECAR_*` → `AMICUS_*` shim mapping.
 
-**API keys**
-
-| Variable | Purpose |
-|----------|---------|
-| `OPENROUTER_API_KEY` | OpenRouter (multi-provider access). |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Direct Google access. |
-| `OPENAI_API_KEY` | Direct OpenAI access. |
-| `ANTHROPIC_API_KEY` | Direct Anthropic access. |
-| `DEEPSEEK_API_KEY` | Direct DeepSeek access. |
-
-**Behavior**
-
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `LOG_LEVEL` | Log verbosity: `error`, `warn`, `info`, `debug`. | `error` |
-| `AMICUS_CONFIG_DIR` | Override the config directory (keys, catalog, sessions). | `~/.config/amicus` |
-| `AMICUS_FANOUT_MAX_LEGS` | Cap the number of legs in a single fanout wave; non-positive values fall back to 10. | `10` |
-| `AMICUS_SHARED_SERVER` | When `1`, multiple MCP sessions share a single OpenCode Go process, eliminating cold-start latency. Set to `0` for per-process isolation or to diagnose a crash loop. | `1` |
-| `AMICUS_MCP_CLIENT` | Override the auto-detected MCP caller (`code-local`, `code-web`, or `cowork`). Amicus detects Claude Code vs. Claude Desktop/Cowork from the MCP `initialize` handshake; set this only if detection picks the wrong one. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
-
-**Headless poller tuning** (advanced — rarely needed)
-
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `AMICUS_POLL_INTERVAL_MS` | Delay between poll cycles. | `2000` |
-| `AMICUS_POLL_CALL_TIMEOUT_MS` | Per-poll call timeout. | `30000` |
-| `AMICUS_STABLE_FINISHED_POLLS` | Stable polls required after a completion signal. | `2` |
-| `AMICUS_STABLE_IDLE_POLLS` | Stable polls required with no completion signal (~60 s at 2 s). | `30` |
-| `AMICUS_MAX_CONSECUTIVE_POLL_FAILURES` | Consecutive poll failures before bailing. | `15` |
-
-**GUI & debug**
-
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `AMICUS_GUI_LOAD_TIMEOUT_MS` | Max wait for the Electron UI to load before showing what's in flight. | `15000` |
-| `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. | `9222` |
-
-> **Legacy names.** The pre-rebrand `SIDECAR_*` environment variables are still honored (with a one-time deprecation warning) and map to their `AMICUS_*` equivalents. See **[docs/SHIMS.md](./docs/SHIMS.md)** for the full mapping.
+**New to the disk footprint?** The config tree's file-by-file contents, session storage layout, where (and whether) logs are written, `config.json`'s exact shape, and full uninstall instructions all live in **[docs/configuration.md § Where things live](./docs/configuration.md#where-things-live)**.
 
 ---
 
 ## JSON output
 
-With `--json`, Amicus emits stable, versioned documents on stdout — built for scripting and agent consumption.
-
-**Run document** (a single session — `start`, `read`, each fanout leg):
+With `--json`, Amicus emits stable, versioned run/wave documents on stdout — built for scripting and agent consumption:
 
 ```json
 {
@@ -504,22 +381,7 @@ With `--json`, Amicus emits stable, versioned documents on stdout — built for 
 }
 ```
 
-`modelInput` is the alias you passed; `model` is the resolved id. `status` is one of `complete | error | timeout | aborted` (plus `crashed` / `idle-timeout`); `summary` carries the fold output.
-
-**Wave document** (`fanout`, and `read <waveId> --json`):
-
-```json
-{
-  "schemaVersion": 1, "waveId": "...",
-  "status": "complete",
-  "counts": { "total": 0, "complete": 0, "error": 0, "timeout": 0, "aborted": 0 },
-  "legs": [ /* one run document per model, in --models order */ ]
-}
-```
-
-`status` is `complete | partial | error | aborted`. A leg's `summary` is that model's full response.
-
-**Exit codes** (for `--no-ui` / `fanout`): `0` success / all legs complete · `2` partial wave · `1` error, nothing completed, or hard failure · `130` interrupted (SIGINT) · `143` terminated (SIGTERM).
+The wave-document shape (for `fanout`), field meanings, and the full exit-code table are in **[docs/usage.md § JSON Output](./docs/usage.md#json-output)**.
 
 ---
 
@@ -537,6 +399,8 @@ Most Claude-adjacent tooling assumes macOS/Linux; Amicus doesn't.
 ---
 
 ## Troubleshooting
+
+Run `amicus doctor` first — it checks keys, catalog, OpenCode binary, Electron, skills, and MCP registration in one pass and prints a targeted fix for whatever's failing. For symptoms not covered below, or more diagnostic depth on any of these, see **[docs/troubleshooting.md](./docs/troubleshooting.md)**.
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
@@ -565,7 +429,8 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 
 | Doc | Description |
 |-----|-------------|
-| [docs/usage.md](./docs/usage.md) | Command-by-command usage guide. |
+| [docs/usage.md](./docs/usage.md) | The complete CLI & MCP reference — every flag, every subcommand, every example. |
+| [docs/council.md](./docs/council.md) | Council pipeline reference: `tally`/`verdict`/`report` schemas, provenance, and a worked example. |
 | [docs/configuration.md](./docs/configuration.md) | Full configuration and environment reference. |
 | [docs/architecture.md](./docs/architecture.md) | How the engine, Electron shell, and context sharing fit together. |
 | [docs/opencode-integration.md](./docs/opencode-integration.md) | How Amicus drives the OpenCode runtime. |

@@ -10,7 +10,11 @@ describe('docs command & MCP-tool coverage (B11)', () => {
   const toolNames = [...read('src/mcp-tools.js').matchAll(/name: '(amicus_\w+)'/g)].map(m => m[1]);
 
   it.each(['amicus doctor', 'amicus key', 'amicus council'])('README Commands table documents %s', c => {
-    const table = readme.match(/## Commands[\s\S]*?(?=\n### )/)[0];
+    // Task 17.3 restructure: the per-command `### ` subsections that used to
+    // follow `## Commands` (start options, fanout, other commands) moved to
+    // docs/usage.md (the canonical CLI reference); the table is now bounded
+    // by the next `## ` section instead of a `### ` subheading.
+    const table = readme.match(/## Commands[\s\S]*?(?=\n## )/)[0];
     expect(table).toContain(c);
   });
   it('README MCP section lists every registered tool (no stale count)', () => {

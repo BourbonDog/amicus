@@ -134,6 +134,137 @@ amicus start --model anthropic/claude-opus-4 --prompt "..."
 
 ---
 
+## Where things live
+
+New to Amicus's disk footprint? This section maps everything it reads and writes, verified against
+the source that actually writes it — not aspirational. If a claim here and the code ever disagree,
+the code wins; file an issue.
+
+### The config tree
+
+Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/config.js`):
+
+- **Override:** set `AMICUS_CONFIG_DIR` to relocate the entire tree — keys, catalog, session index,
+  both ledgers. Useful for isolated test environments.
+- **Legacy fallback:** if `~/.config/amicus/` doesn't exist yet but `~/.config/sidecar/` does (a
+  pre-rebrand install), Amicus reads from the legacy dir until the one-time, non-destructive
+  `migrateLegacyConfigDir()` copies it forward. Once `~/.config/amicus/` exists, it always wins.
+
+| File | Written by | Contains |
+|---|---|---|
+| `config.json` | `amicus setup` / `saveConfig()` (`src/utils/config.js`) | Three top-level keys: `default` (your default model alias), `aliases` (your alias → `provider/model` map), `councils` (saved council presets, e.g. `councils.free`). `0600` permissions. |
+| `.env` | `amicus setup` / `amicus key` | API keys (`OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`). `0600` permissions. |
+| `model-catalog.json` | `refreshCatalog()` (`src/utils/model-catalog.js`) | The cached provider model list, schema-versioned, with a **24-hour TTL**. Also carries refresh-outcome fields — `lastRefreshAttempt` and `lastRefreshError` — stamped on a *failed* refresh without touching the last-good `models`/`fetchedAt` (a bad fetch never clobbers a good cache). Human-readable JSON; safe to delete, it rebuilds on next use. |
+| `sessions-index.json` | `session-index.js` (`recordSession`, written at session start) | A **global** map of `taskId → project path`, consulted only when a per-project session lookup misses (e.g. an MCP server whose cwd differs from where the session was created). Navigation aid only, never authoritative — a corrupt index degrades to "no entry," never a crash. |
+| `council-ledger.jsonl` | `src/council/ledger.js` (`appendRun`), on every `council tally` | One row per council model per run — findings raised, severity breakdown, street-cred, conformance. Read back by `amicus council stats`. |
+| `spend-ledger.jsonl` | `src/utils/spend-ledger.js` (`appendSpend`), new in Phase 16 | One row per completed run/leg — tokens + resolved cost. Read back by `amicus spend` for the cross-run rollup. Append is best-effort and can never fail the run it's recording; safe to delete (starts fresh, loses history only). |
+
+**Tmp-file pattern.** Several writers (`model-catalog.json`, `sessions-index.json`, session
+metadata) use an atomic write: a temp file named `.<target>.<pid>.<random>.tmp` is written
+alongside the target, then renamed into place. A process killed between the write and the rename
+leaves an orphaned `.tmp` file behind forever — harmless, but it accumulates. `amicus doctor --fix`
+sweeps orphaned `sessions-index.json.*.tmp` files (only ones older than 60 seconds, so a live
+writer's in-flight tmp file is never touched); `amicus doctor` (without `--fix`) just reports the
+count.
+
+### Session storage
+
+Session data is split across two different roots — don't confuse them:
+
+**1. The session root** (`getSessionRoot()` in `src/environment.js`) — resolved per client, mostly
+relevant for how Claude Code/Cowork discovers *your current conversation's* context to share:
+
+| Client | Root |
+|---|---|
+| `code-local` (default on macOS, or when a `DISPLAY`/`WAYLAND_DISPLAY` is present) | `~/.claude/projects/<encoded-cwd>` — the cwd is encoded by replacing `/`, `\`, the drive-letter colon, and `_` with `-` (matches Claude Code's own scheme). |
+| `cowork` | Platform-specific: macOS `~/Library/Application Support/Claude/local-agent-mode-sessions`, Windows `%APPDATA%\Claude\local-agent-mode-sessions`, Linux `~/.config/Claude/local-agent-mode-sessions`. |
+| `code-web` | No default — `--session-dir` is **required**; there's nothing to resolve. |
+
+**2. Amicus's own per-session directories** — where the actual session data (metadata, conversation,
+summaries) is written. These live **project-scoped**, under `.claude/amicus_sessions/<taskId>/` in
+the project directory (`SESSIONS_DIR` in `src/session-manager.js`; not under the session root
+above). The legacy `.claude/sidecar_sessions/` dir is still read (a pre-rebrand shim) but never
+written to for new sessions.
+
+Per-session directory contents:
+
+| File | Written by | Notes |
+|---|---|---|
+| `metadata.json` | `createSession()` | Model, project, briefing, mode, thinking level, status. Atomic write. |
+| `conversation.jsonl` | Appended as the session runs | One JSON line per message. |
+| `progress.json` | Headless polling | Live progress snapshot (message count, latest activity, stage) — read by `amicus status` and the fanout wave heartbeat. |
+| `summary.md` | `saveSummary()`, on fold/completion | The fold output — what `amicus read <id>` returns by default. |
+| `subagents/<subagentId>/` | Sub-agent sessions | Same shape as a top-level session (its own `metadata.json` + `conversation.jsonl`). |
+
+**Fanout waves.** A wave (`amicus fanout`) gets its own session dir at `<waveId>` (same
+`amicus_sessions/` root); each leg is a full sibling session dir named `<waveId>-1` through
+`<waveId>-N` (`deriveLegIds()` in `src/sidecar/fanout.js`). The wave-heartbeat display reads each
+leg's `progress.json`/`conversation.jsonl` directly — nothing wave-specific is stored beyond the
+per-leg session dirs themselves plus the wave's own `metadata.json` (type `wave`, `legs: [...]`).
+
+### Log location + LOG_LEVEL
+
+**Logs go to stderr only — there is no log file, anywhere, ever.** `src/utils/logger.js` writes every
+entry as one JSON line via `console.error(...)`; stdout is reserved for command output (summaries,
+`--json` documents). Setting `LOG_LEVEL=debug` does **not** create a file or a new destination — it
+only lowers the filter threshold so `debug`-level entries (which are dropped by default) start
+printing to the same stderr stream. If you want debug output captured, redirect it yourself:
+
+```bash
+LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui 2> debug.log
+```
+
+Levels, in order of decreasing verbosity: `debug` > `info` > `warn` > `error` (the default). Each
+level includes everything above it.
+
+### Config file format
+
+`config.json`, commented (comments added for illustration — real JSON has none):
+
+```jsonc
+{
+  // Default alias, resolved via `aliases` below when --model is omitted.
+  "default": "gemini",
+
+  // Short name -> full provider-prefixed model id. `amicus setup` seeds a
+  // curated set; `amicus setup --add-alias name=provider/model` adds more.
+  "aliases": {
+    "gemini": "google/gemini-3-pro-preview",
+    "gpt": "openai/gpt-5",
+    "opus": "anthropic/claude-opus-4",
+    "deepseek": "openrouter/deepseek/deepseek-v3"
+  },
+
+  // Named council member lists, e.g. seeded by the Free OpenRouter council
+  // wizard step. Run with `amicus fanout --council <name>`.
+  "councils": {
+    "free": ["free-gemini", "free-deepseek", "free-llama"]
+  }
+}
+```
+
+An alias whose value is missing, `null`, or not a string is stripped on the next `saveConfig()`
+call, with a notice printed to stderr — `config.json` never accumulates dead aliases silently.
+
+### Uninstall instructions
+
+`npm uninstall -g amicus` removes the package and its bin shims. It does **not** clean up everything
+`amicus` and its postinstall left behind — remove these by hand if you want a full uninstall:
+
+| What | Where | Left behind because |
+|---|---|---|
+| MCP registration in Claude Code | `~/.claude.json` → `mcpServers.amicus` | Written by `scripts/postinstall.js`'s `registerClaudeCode()`; npm has no hook into another app's config file. Remove the `amicus` key under `mcpServers`, or run `claude mcp remove amicus`. |
+| MCP registration in Claude Desktop / Cowork | `claude_desktop_config.json` → `mcpServers.amicus` (macOS: `~/Library/Application Support/Claude/`; Windows: `%APPDATA%\Claude\`; Linux: `~/.config/claude/`) | Written by `registerClaudeDesktop()`, same reasoning. Remove the `amicus` key under `mcpServers` by hand. |
+| The chat skill | `~/.claude/skills/sidecar/` | Copied by `installSkill()`. Delete the directory. |
+| The council skill | `~/.claude/skills/second-opinion/` | Copied by `installCouncilSkill()`. Delete the directory — note `MODEL-NOTES.md` inside it is **your** reviewer-reliability data (seeded once, never overwritten by updates), so back it up first if you want to keep it. |
+| The entire config tree | `~/.config/amicus/` (keys, config, catalog cache, both ledgers, session index) | Never touched by npm at all — it's outside the package's install footprint by design (so an uninstall doesn't silently delete your API keys or history). Delete the directory yourself: `rm -rf ~/.config/amicus` (macOS/Linux) or `Remove-Item -Recurse -Force $HOME\.config\amicus` (PowerShell). |
+| Per-project session data | `<project>/.claude/amicus_sessions/` in every project you ran Amicus from | Also outside npm's footprint — it lives inside *your* project directories, not the package. Delete per-project if you want it gone. |
+
+If you plan to reinstall later, leaving `~/.config/amicus/` in place is the point — your keys,
+aliases, and council presets carry over untouched.
+
+---
+
 ## Dependencies
 
 | Package | Purpose |
