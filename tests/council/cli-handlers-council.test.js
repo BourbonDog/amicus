@@ -483,6 +483,50 @@ describe('council show', () => {
     expect(doc.resolved.length).toBeGreaterThanOrEqual(2);
   });
 
+  test('show free resolves against the cached catalog, not the offline pinned fallback', async () => {
+    // Seed a :free-rows catalog whose picks differ from PINNED_FREE_MODELS,
+    // so this only passes if `show` actually reads the cache (B24 rider fix).
+    const catalogPath = path.join(ledgerDir, 'model-catalog.json');
+    fs.writeFileSync(catalogPath, JSON.stringify({
+      schemaVersion: 2,
+      fetchedAt: Date.now(),
+      models: [
+        { id: 'openrouter/mistralai/mistral-small:free', name: 'Mistral Small (free)' },
+        { id: 'openrouter/nvidia/nemotron:free', name: 'Nemotron (free)' },
+      ],
+    }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'free'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.builtin).toBe(true);
+    expect(doc.members).toEqual(expect.arrayContaining([
+      'openrouter/mistralai/mistral-small:free',
+      'openrouter/nvidia/nemotron:free',
+    ]));
+    // The offline pinned fallback (deepseek-r1:free etc.) must NOT appear —
+    // proves the dynamic catalog pick was used, not the empty-catalog fallback.
+    expect(doc.members).not.toEqual(expect.arrayContaining(['openrouter/deepseek/deepseek-r1:free']));
+  });
+
+  test('free bench delists a previously-picked vendor when its :free row drops out of the catalog', async () => {
+    // Catalog now has a free row for only ONE vendor (mistral) — the dynamic
+    // free bench can only pick from what's present, so a vendor that used to
+    // show up (e.g. deepseek/google/qwen from the pinned fallback) reports
+    // as absent from `members` once the catalog is consulted at all.
+    const catalogPath = path.join(ledgerDir, 'model-catalog.json');
+    fs.writeFileSync(catalogPath, JSON.stringify({
+      schemaVersion: 2,
+      fetchedAt: Date.now(),
+      models: [{ id: 'openrouter/mistralai/mistral-small:free', name: 'Mistral Small (free)' }],
+    }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'free'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.members).toEqual(['openrouter/mistralai/mistral-small:free']);
+    expect(doc.resolved).toEqual(['openrouter/mistralai/mistral-small:free']);
+    expect(doc.members).not.toContain('openrouter/deepseek/deepseek-r1:free');
+  });
+
   test('reports dropped/delisted members for a user council when aliases no longer resolve', async () => {
     seedAliases({ 'gone-alias': 'openrouter/dead/model-x' });
     await capture(() => handleCouncil({ _: ['council', 'save', 'flaky'], models: 'opus,gone-alias', json: true }));

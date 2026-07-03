@@ -112,10 +112,12 @@ function runShow(name, useJson) {
       hint: 'amicus council show <name> [--json]' });
   }
   const { getCouncilWithSource, getEffectiveAliases } = require('../utils/config');
-  const { members, builtin } = getCouncilWithSource(name, []);
+  const { readCache } = require('../utils/model-catalog');
+  const catalog = (readCache() || {}).models || [];
+  const { members, builtin } = getCouncilWithSource(name, catalog);
   if (!members) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Unknown council '${name}'`,
-      hint: "amicus council list' shows available councils, or 'amicus council save' to create one" });
+      hint: "'amicus council list' shows available councils, or 'amicus council save' to create one" });
   }
   const aliases = getEffectiveAliases();
   const resolved = [];
