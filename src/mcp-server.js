@@ -521,27 +521,31 @@ const handlers = {
       // Crash-detection for hard-killed fanout processes: the wave branch
       // returns early, so the single-session pid probe below never runs here.
       if (metadata.status === 'running' && metadata.pid) {
-        try { process.kill(metadata.pid, 0); } catch {
-          const crashedAt = new Date().toISOString();
-          Object.assign(metadata, {
-            status: 'crashed', crashedAt,
-            reason: 'Fan-out process exited unexpectedly',
-          });
-          writeFileAtomic(path.join(sessionDir, 'metadata.json'),
-            JSON.stringify(metadata, null, 2), { mode: 0o600 });
-          // Cascade to legs whose pollers died with the parent
-          for (const leg of legs) {
-            if (leg.status === 'running') {
-              const legMeta = readMetadata(leg.taskId, cwd);
-              if (legMeta) {
-                Object.assign(legMeta, {
-                  status: 'crashed', crashedAt,
-                  reason: 'Parent fan-out process killed',
-                });
-                writeFileAtomic(
-                  path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
-                  JSON.stringify(legMeta, null, 2), { mode: 0o600 });
-                leg.status = 'crashed';
+        try { process.kill(metadata.pid, 0); } catch (err) {
+          // EPERM means the pid exists but we lack permission to signal it —
+          // that's ALIVE, not dead (mirrors utils/abort-coordinator.js isAlive).
+          if (!err || err.code !== 'EPERM') {
+            const crashedAt = new Date().toISOString();
+            Object.assign(metadata, {
+              status: 'crashed', crashedAt,
+              reason: 'Fan-out process exited unexpectedly',
+            });
+            writeFileAtomic(path.join(sessionDir, 'metadata.json'),
+              JSON.stringify(metadata, null, 2), { mode: 0o600 });
+            // Cascade to legs whose pollers died with the parent
+            for (const leg of legs) {
+              if (leg.status === 'running') {
+                const legMeta = readMetadata(leg.taskId, cwd);
+                if (legMeta) {
+                  Object.assign(legMeta, {
+                    status: 'crashed', crashedAt,
+                    reason: 'Parent fan-out process killed',
+                  });
+                  writeFileAtomic(
+                    path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
+                    JSON.stringify(legMeta, null, 2), { mode: 0o600 });
+                  leg.status = 'crashed';
+                }
               }
             }
           }
@@ -567,13 +571,17 @@ const handlers = {
     }
 
     if (metadata.status === 'running' && metadata.pid) {
-      try { process.kill(metadata.pid, 0); } catch {
-        Object.assign(metadata, {
-          status: 'crashed', crashedAt: new Date().toISOString(),
-          reason: 'Process exited unexpectedly',
-        });
-        writeFileAtomic(path.join(sessionDir, 'metadata.json'),
-          JSON.stringify(metadata, null, 2));
+      try { process.kill(metadata.pid, 0); } catch (err) {
+        // EPERM means the pid exists but we lack permission to signal it —
+        // that's ALIVE, not dead (mirrors utils/abort-coordinator.js isAlive).
+        if (!err || err.code !== 'EPERM') {
+          Object.assign(metadata, {
+            status: 'crashed', crashedAt: new Date().toISOString(),
+            reason: 'Process exited unexpectedly',
+          });
+          writeFileAtomic(path.join(sessionDir, 'metadata.json'),
+            JSON.stringify(metadata, null, 2));
+        }
       }
     }
 

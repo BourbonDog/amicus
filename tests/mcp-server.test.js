@@ -696,6 +696,34 @@ describe('MCP Server Handlers', () => {
       }
     });
 
+    test('EPERM from kill(pid, 0) means alive — does not mark crashed', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
+      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'eperm1');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'eperm1', status: 'running', pid: process.pid,
+        createdAt: new Date().toISOString(),
+      }));
+
+      const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => {
+        const e = new Error('kill EPERM'); e.code = 'EPERM'; throw e;
+      });
+      try {
+        const result = await handlers.amicus_status({ taskId: 'eperm1' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.status).toBe('running');
+        expect(parsed.reason).toBeUndefined();
+
+        const diskMeta = JSON.parse(fs.readFileSync(
+          path.join(sessDir, 'metadata.json'), 'utf-8'));
+        expect(diskMeta.status).toBe('running');
+        expect(diskMeta.crashedAt).toBeUndefined();
+      } finally {
+        killSpy.mockRestore();
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
     test('does not include latest/messages for completed sessions', async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-status-'));
       const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'done1');

@@ -10,6 +10,10 @@ const { detectConflicts, formatConflictWarning } = require('../conflict');
 const { logger } = require('../utils/logger');
 const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 const { writeFileAtomic } = require('../utils/atomic-write');
+// isProcessAlive/checkSessionLiveness live in utils/abort-coordinator.js
+// (shared EPERM-aware liveness classification with isAlive); re-exported
+// below for backward-compatible imports.
+const { isAlive: isProcessAlive, checkSessionLiveness } = require('../utils/abort-coordinator');
 const {
   SESSIONS_DIR,
   getSessionDir,
@@ -249,41 +253,15 @@ async function startOpenCodeServer(mcpConfig, options = {}) {
 
   const ready = await waitForServer(client, checkHealth);
   if (!ready) {
-    server.close();
+    // Fire-and-forget: today close() is sync (Promise.resolve wraps a
+    // non-promise harmlessly); once close() becomes async (bounded
+    // kill-escalation poll) this guard prevents an unhandled rejection
+    // from racing the throw below.
+    Promise.resolve(server.close()).catch(() => {});
     throw new Error('OpenCode server failed to become ready');
   }
 
   return { client, server };
-}
-
-/**
- * Check if a process with the given PID is still alive.
- * @param {number|null} pid
- * @returns {boolean}
- */
-function isProcessAlive(pid) {
-  if (!pid) { return false; }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if a session's processes are alive.
- * @param {Object} metadata - Session metadata with pid and goPid
- * @returns {'alive'|'server-dead'|'dead'}
- */
-function checkSessionLiveness(metadata) {
-  if (!metadata) { return 'dead'; }
-  const nodeAlive = isProcessAlive(metadata.pid);
-  const goAlive = isProcessAlive(metadata.goPid);
-
-  if (nodeAlive && goAlive) { return 'alive'; }
-  if (nodeAlive && !goAlive) { return 'server-dead'; }
-  return 'dead';
 }
 
 module.exports = {

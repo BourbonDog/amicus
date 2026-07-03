@@ -552,3 +552,62 @@ describe('startOpenCodeServer client passthrough', () => {
     );
   });
 });
+
+/**
+ * Cross-lane rider: server.close() on the not-ready error path must not
+ * produce an unhandled rejection. Today close() is synchronous (returns
+ * undefined), so Promise.resolve(...).catch() is a harmless no-op; this
+ * pins the guard so a future async close() (bounded kill-escalation poll)
+ * that rejects still can't escape as an unhandled rejection.
+ */
+describe('startOpenCodeServer not-ready close() rejection guard', () => {
+  let startOpenCodeServer;
+  let mockClose;
+
+  beforeAll(() => {
+    jest.resetModules();
+
+    jest.mock('../../src/utils/logger', () => ({
+      logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+    }));
+    jest.mock('../../src/utils/path-setup', () => ({
+      ensureNodeModulesBinInPath: jest.fn()
+    }));
+    jest.mock('../../src/utils/server-setup', () => ({
+      ensurePortAvailable: jest.fn()
+    }));
+    jest.mock('../../src/headless', () => ({
+      waitForServer: jest.fn(async () => false)
+    }));
+
+    mockClose = jest.fn(() => Promise.reject(new Error('close boom')));
+
+    jest.mock('../../src/opencode-client', () => ({
+      startServer: jest.fn(async () => ({
+        client: { config: { get: jest.fn() } },
+        server: { url: 'http://127.0.0.1:3456', close: mockClose }
+      })),
+      checkHealth: jest.fn(async () => true)
+    }));
+
+    ({ startOpenCodeServer } = require('../../src/sidecar/session-utils'));
+  });
+
+  it('throws the not-ready error without an unhandled rejection, even when close() rejects', async () => {
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    try {
+      await expect(startOpenCodeServer(null)).rejects.toThrow(
+        'OpenCode server failed to become ready'
+      );
+      expect(mockClose).toHaveBeenCalled();
+
+      // Let the microtask queue drain so a would-be unhandled rejection surfaces.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+});
