@@ -14,18 +14,14 @@ const os = require('os');
 const SIDECAR_BIN = path.join(__dirname, '..', 'bin', 'amicus.js');
 const NODE = process.execPath;
 // Derived from the real tool registry — never a literal count — so adding a
-// 14th tool (e.g. Phase 5's amicus_wait) doesn't silently desync this suite.
+// new canonical tool doesn't silently desync this suite.
 const EXPECTED_TOOLS = require('../src/mcp-tools').getTools().map(t => t.name);
-// Each canonical tool is also registered under its legacy sidecar_* name
-// (shim), but ONLY when AMICUS_LEGACY_ALIASES=1 is set (opt-in since v1.8.0).
-const LEGACY_TOOLS = EXPECTED_TOOLS.map(n => n.replace(/^amicus_/, 'sidecar_'));
 
 /**
  * Helper: spawn the MCP server and provide send/receive methods.
  * Uses the MCP JSON-RPC framing over stdin/stdout.
  * @param {object} extraEnv - extra env vars merged onto process.env for the
- *   spawned server, e.g. { AMICUS_LEGACY_ALIASES: '1' } to restore the
- *   opt-in legacy sidecar_* tool aliases for end-to-end validation.
+ *   spawned server.
  */
 function createMcpClient(extraEnv = {}) {
   const child = spawn(NODE, [SIDECAR_BIN, 'mcp'], {
@@ -140,7 +136,7 @@ describe('MCP Protocol: handshake and tool discovery', () => {
     }
   });
 
-  it('default env: tools/list returns ONLY amicus_* names (aliases opt-in-off)', async () => {
+  it('tools/list returns ONLY amicus_* names (no sidecar_* aliases)', async () => {
     const result = await client.request('tools/list', {});
     expect(result.result).toBeDefined();
     const toolNames = result.result.tools.map(t => t.name);
@@ -152,6 +148,26 @@ describe('MCP Protocol: handshake and tool discovery', () => {
     expect(toolNames.length).toBe(EXPECTED_TOOLS.length);
   });
 
+  it('AMICUS_LEGACY_ALIASES=1 is a no-op: tools/list is unchanged', async () => {
+    const legacyClient = createMcpClient({ AMICUS_LEGACY_ALIASES: '1' });
+    try {
+      const initResult = await legacyClient.request('initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'test-client', version: '1.0.0' },
+      });
+      expect(initResult.result).toBeDefined();
+      legacyClient.notify('notifications/initialized', {});
+
+      const result = await legacyClient.request('tools/list', {});
+      const toolNames = result.result.tools.map(t => t.name);
+      expect(toolNames.some(n => n.startsWith('sidecar_'))).toBe(false);
+      expect(toolNames.length).toBe(EXPECTED_TOOLS.length);
+    } finally {
+      await legacyClient.close();
+    }
+  });
+
   it('each tool has a description and inputSchema', async () => {
     const result = await client.request('tools/list', {});
     for (const tool of result.result.tools) {
@@ -161,48 +177,13 @@ describe('MCP Protocol: handshake and tool discovery', () => {
   });
 });
 
-describe('MCP Protocol: legacy sidecar_* aliases (AMICUS_LEGACY_ALIASES=1)', () => {
-  let client;
-
-  beforeAll(async () => {
-    client = createMcpClient({ AMICUS_LEGACY_ALIASES: '1' });
-    const initResult = await client.request('initialize', {
-      protocolVersion: '2024-11-05',
-      capabilities: {},
-      clientInfo: { name: 'test-client', version: '1.0.0' },
-    });
-    expect(initResult.result).toBeDefined();
-    client.notify('notifications/initialized', {});
-  });
-
-  afterAll(async () => {
-    if (client) { await client.close(); }
-  });
-
-  it('lists all amicus tools plus legacy sidecar aliases via tools/list', async () => {
-    const result = await client.request('tools/list', {});
-    expect(result.result).toBeDefined();
-    const toolNames = result.result.tools.map(t => t.name);
-    for (const expected of EXPECTED_TOOLS) {
-      expect(toolNames).toContain(expected);
-    }
-    // Dual-registration shim: every canonical tool also exposed under sidecar_*.
-    for (const legacy of LEGACY_TOOLS) {
-      expect(toolNames).toContain(legacy);
-    }
-    expect(toolNames.length).toBe(EXPECTED_TOOLS.length + LEGACY_TOOLS.length);
-  });
-});
-
 describe('MCP Protocol: tool invocation', () => {
   let client;
   let tmpDir;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-proto-int-'));
-    // This block invokes legacy sidecar_* tool names directly (below), so the
-    // server must be spawned with aliases opted in (v1.8.0 default is off).
-    client = createMcpClient({ AMICUS_LEGACY_ALIASES: '1' });
+    client = createMcpClient();
     const initResult = await client.request('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
@@ -247,41 +228,19 @@ describe('MCP Protocol: tool invocation', () => {
     expect(result.result.content[0].text).toContain('not found');
   });
 
-  it('legacy sidecar_list alias returns sessions from legacy dir on disk', async () => {
-    // Create a session on disk in the legacy sidecar_sessions dir (read-shim)
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'proto-test-001');
-    fs.mkdirSync(sessDir, { recursive: true });
-    fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
-      taskId: 'proto-test-001', model: 'gemini', status: 'complete',
-      briefing: 'Protocol test', createdAt: '2026-03-04T00:00:00Z',
-    }));
-
+  it('sidecar_* tool names are not callable (absence pin, #19)', async () => {
     const result = await client.request('tools/call', {
       name: 'sidecar_list',
       arguments: { project: tmpDir },
     });
-    const sessions = JSON.parse(result.result.content[0].text);
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0].id).toBe('proto-test-001');
+    // MCP SDK reports an unregistered tool as an error result, not a
+    // JSON-RPC protocol error.
+    expect(result.result.isError).toBe(true);
+    expect(result.result.content[0].text).toContain('not found');
   });
 
-  it('legacy sidecar_read alias returns summary from legacy dir on disk', async () => {
-    // Create session with summary in the legacy sidecar_sessions dir (read-shim)
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'proto-read-001');
-    fs.mkdirSync(sessDir, { recursive: true });
-    fs.writeFileSync(path.join(sessDir, 'metadata.json'), '{}');
-    fs.writeFileSync(path.join(sessDir, 'summary.md'), '## Found the bug\nIt was a race condition.');
-
-    const result = await client.request('tools/call', {
-      name: 'sidecar_read',
-      arguments: { taskId: 'proto-read-001', project: tmpDir },
-    });
-    expect(result.result.content[0].text).toContain('Found the bug');
-    expect(result.result.content[0].text).toContain('race condition');
-  });
-
-  it('full workflow via legacy aliases: list -> status -> read over protocol', async () => {
-    const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', 'proto-flow-001');
+  it('full workflow via canonical names: list -> status -> read over protocol', async () => {
+    const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'proto-flow-001');
     fs.mkdirSync(sessDir, { recursive: true });
     fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
       taskId: 'proto-flow-001', model: 'opus', status: 'complete',
@@ -291,7 +250,7 @@ describe('MCP Protocol: tool invocation', () => {
 
     // Step 1: List
     const listResult = await client.request('tools/call', {
-      name: 'sidecar_list',
+      name: 'amicus_list',
       arguments: { project: tmpDir },
     });
     const sessions = JSON.parse(listResult.result.content[0].text);
@@ -299,7 +258,7 @@ describe('MCP Protocol: tool invocation', () => {
 
     // Step 2: Status
     const statusResult = await client.request('tools/call', {
-      name: 'sidecar_status',
+      name: 'amicus_status',
       arguments: { taskId, project: tmpDir },
     });
     const status = JSON.parse(statusResult.result.content[0].text);
@@ -307,7 +266,7 @@ describe('MCP Protocol: tool invocation', () => {
 
     // Step 3: Read
     const readResult = await client.request('tools/call', {
-      name: 'sidecar_read',
+      name: 'amicus_read',
       arguments: { taskId, project: tmpDir },
     });
     expect(readResult.result.content[0].text).toContain('Workflow result');

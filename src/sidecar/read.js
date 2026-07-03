@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { safeSessionDir, TASK_ID_PATTERN } = require('../utils/validators');
-const { SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('../session-manager');
+const { SESSIONS_DIR } = require('../session-manager');
 const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 
 /**
@@ -31,18 +31,16 @@ function formatAge(dateStr) {
 }
 
 /**
- * Enumerate sessions across canonical + legacy roots (dedup, amicus wins).
+ * Enumerate sessions under the canonical amicus_sessions root.
  * @param {string} project
  * @param {{status?: string}} [opts] - status filter ('running', etc.); omit/'all' for all
  * @returns {Array<{id, model, status, agent, briefing, createdAt}>}
  */
 function enumerateSessions(project, opts = {}) {
-  const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
-    .map(d => path.join(project, '.claude', d))
-    .filter(fs.existsSync);
+  const root = path.join(project, '.claude', SESSIONS_DIR);
 
   const byId = new Map();
-  for (const root of roots) {
+  if (fs.existsSync(root)) {
     for (const d of fs.readdirSync(root)) {
       if (!TASK_ID_PATTERN.test(d)) { continue; }
       if (byId.has(d)) { continue; }

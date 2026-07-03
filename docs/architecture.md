@@ -86,8 +86,8 @@ Each Amicus process runs an `IdleWatchdog` that transitions between two states:
 Transitions: `BUSY → IDLE` when the last active session goes quiet; `IDLE → BUSY` on any new incoming request. The idle clock resets on each BUSY→IDLE transition.
 
 Timeout resolution priority (highest wins):
-1. Per-mode env var: `AMICUS_IDLE_TIMEOUT_HEADLESS`, `AMICUS_IDLE_TIMEOUT_INTERACTIVE`, `AMICUS_IDLE_TIMEOUT_SERVER` (in minutes; legacy `SIDECAR_IDLE_TIMEOUT_*` honored via env-compat shim — see `docs/SHIMS.md`)
-2. Blanket env var `AMICUS_IDLE_TIMEOUT` (legacy `SIDECAR_IDLE_TIMEOUT`) in minutes
+1. Per-mode env var: `AMICUS_IDLE_TIMEOUT_HEADLESS`, `AMICUS_IDLE_TIMEOUT_INTERACTIVE`, `AMICUS_IDLE_TIMEOUT_SERVER` (in minutes; the legacy `SIDECAR_IDLE_TIMEOUT_*` env-compat shim was removed in v2.0.0 — see `docs/SHIMS.md`)
+2. Blanket env var `AMICUS_IDLE_TIMEOUT` in minutes
 3. Constructor `timeout` option in milliseconds
 4. Mode defaults: headless=15 m, interactive=60 m, server=30 m
 

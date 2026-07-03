@@ -18,7 +18,7 @@ describe('env-loader', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-envloader-'));
     originalEnv = { ...process.env };
-    process.env.SIDECAR_ENV_DIR = tmpDir;
+    process.env.AMICUS_ENV_DIR = tmpDir;
     // Clear all provider keys
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;

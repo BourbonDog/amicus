@@ -11,7 +11,6 @@ const { startOpenCodeServer } = require('./session-utils');
 const { createSession, sendPromptAsync, getMessages, abortSession } = require('../opencode-client');
 const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { logger } = require('../utils/logger');
-const { getCompatEnv } = require('../utils/env-compat');
 const { startInteractiveMirror } = require('./interactive-mirror');
 const { startAbortWatch, markResultAborted, readAbortedMarker } = require('./interactive-abort');
 const { getSessionDir } = require('../session-manager');
@@ -162,7 +161,7 @@ async function runInteractive(model, systemPrompt, userMessage, taskId, project,
     env.AMICUS_OPENCODE_PORT = serverPort;
     env.AMICUS_SESSION_ID = sessionId;
 
-    const debugPort = getCompatEnv('DEBUG_PORT') || '9222';
+    const debugPort = process.env.AMICUS_DEBUG_PORT || '9222';
     logger.debug('Launching Electron', { taskId, model, debugPort, serverPort, sessionId });
 
     electronProcess = spawn(electronPath, [

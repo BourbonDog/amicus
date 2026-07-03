@@ -24,7 +24,7 @@ describe('Config change detection flow', () => {
     fs.mkdirSync(configDir, { recursive: true });
     fs.mkdirSync(projectDir, { recursive: true });
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = configDir;
+    process.env.AMICUS_CONFIG_DIR = configDir;
     jest.resetModules();
   });
 
@@ -40,6 +40,11 @@ describe('Config change detection flow', () => {
   /**
    * Simulates the hash extraction logic from startSidecar (lines 249-256)
    * Reads CLAUDE.md in the project dir and extracts the stored config hash.
+   * Only the canonical amicus-config-hash token is recognized (#19: the
+   * legacy sidecar-config-hash comment format was never actually accepted
+   * by production code — src/utils/config.js only ever emitted the
+   * canonical token — so there is no dual-parse to remove here, just a
+   * test-local regex that had over-broadly tolerated both forms).
    */
   function extractHashFromClaudeMd() {
     const claudeMdPath = path.join(projectDir, 'CLAUDE.md');
@@ -47,7 +52,7 @@ describe('Config change detection flow', () => {
       return null;
     }
     const content = fs.readFileSync(claudeMdPath, 'utf-8');
-    const match = content.match(/<!-- (?:amicus|sidecar)-config-hash: ([0-9a-f]+) -->/);
+    const match = content.match(/<!-- amicus-config-hash: ([0-9a-f]+) -->/);
     return match ? match[1] : null;
   }
 
@@ -436,7 +441,7 @@ describe('Config change detection flow', () => {
       const content = [
         '# CLAUDE.md',
         '<!-- Last updated: 2026-03-03 -->',
-        '<!-- sidecar-config-hash: abcd1234 -->',
+        '<!-- amicus-config-hash: abcd1234 -->',
         'More content'
       ].join('\n');
       fs.writeFileSync(path.join(projectDir, 'CLAUDE.md'), content);
@@ -461,11 +466,19 @@ describe('Config change detection flow', () => {
     });
 
     it('should not match malformed hash comments', () => {
-      const content = '<!-- sidecar-config-hash: ZZZZZZZZ -->';
+      const content = '<!-- amicus-config-hash: ZZZZZZZZ -->';
       fs.writeFileSync(path.join(projectDir, 'CLAUDE.md'), content);
 
       const hash = extractHashFromClaudeMd();
       // Regex [0-9a-f]+ won't match uppercase Z
+      expect(hash).toBeNull();
+    });
+
+    it('does NOT match the legacy sidecar-config-hash comment format (#19 absence pin)', () => {
+      const content = '<!-- sidecar-config-hash: abcd1234 -->';
+      fs.writeFileSync(path.join(projectDir, 'CLAUDE.md'), content);
+
+      const hash = extractHashFromClaudeMd();
       expect(hash).toBeNull();
     });
   });

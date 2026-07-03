@@ -22,7 +22,6 @@ const path = require('path');
 jest.mock('../../src/utils/agent-mapping', () => ({
   mapAgentToOpenCode: () => ({ agent: 'chat' })
 }));
-jest.mock('../../src/utils/env-compat', () => ({ getCompatEnv: () => undefined }));
 
 jest.mock('../../src/sidecar/interactive-mirror', () => ({
   startInteractiveMirror: () => ({ stop: jest.fn().mockResolvedValue({ usage: null }) })

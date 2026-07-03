@@ -162,32 +162,32 @@ describe('IdleWatchdog', () => {
     afterEach(() => { process.env = originalEnv; });
 
     test('per-mode env var takes highest precedence', () => {
-      process.env.SIDECAR_IDLE_TIMEOUT_HEADLESS = '5';
-      process.env.SIDECAR_IDLE_TIMEOUT = '99';
+      process.env.AMICUS_IDLE_TIMEOUT_HEADLESS = '5';
+      process.env.AMICUS_IDLE_TIMEOUT = '99';
       const wd = new IdleWatchdog({ mode: 'headless', timeout: 7000 });
       expect(wd.timeout).toBe(5 * 60 * 1000);
     });
 
     test('blanket env var overrides option and default', () => {
-      process.env.SIDECAR_IDLE_TIMEOUT = '20';
+      process.env.AMICUS_IDLE_TIMEOUT = '20';
       const wd = new IdleWatchdog({ mode: 'headless', timeout: 7000 });
       expect(wd.timeout).toBe(20 * 60 * 1000);
     });
 
-    test('SIDECAR_IDLE_TIMEOUT_INTERACTIVE applies to interactive mode', () => {
-      process.env.SIDECAR_IDLE_TIMEOUT_INTERACTIVE = '120';
+    test('AMICUS_IDLE_TIMEOUT_INTERACTIVE applies to interactive mode', () => {
+      process.env.AMICUS_IDLE_TIMEOUT_INTERACTIVE = '120';
       const wd = new IdleWatchdog({ mode: 'interactive' });
       expect(wd.timeout).toBe(120 * 60 * 1000);
     });
 
-    test('SIDECAR_IDLE_TIMEOUT_SERVER applies to server mode', () => {
-      process.env.SIDECAR_IDLE_TIMEOUT_SERVER = '45';
+    test('AMICUS_IDLE_TIMEOUT_SERVER applies to server mode', () => {
+      process.env.AMICUS_IDLE_TIMEOUT_SERVER = '45';
       const wd = new IdleWatchdog({ mode: 'server' });
       expect(wd.timeout).toBe(45 * 60 * 1000);
     });
 
     test('env var 0 means Infinity', () => {
-      process.env.SIDECAR_IDLE_TIMEOUT = '0';
+      process.env.AMICUS_IDLE_TIMEOUT = '0';
       const wd = new IdleWatchdog({ mode: 'headless' });
       expect(wd.timeout).toBe(Infinity);
     });
@@ -198,11 +198,18 @@ describe('IdleWatchdog', () => {
       expect(wd.timeout).toBe(7 * 60 * 1000);
     });
 
-    test('AMICUS_IDLE_TIMEOUT_HEADLESS wins over SIDECAR_IDLE_TIMEOUT_HEADLESS', () => {
-      process.env.AMICUS_IDLE_TIMEOUT_HEADLESS = '10';
+    test('legacy SIDECAR_IDLE_TIMEOUT_HEADLESS is ignored (#19 absence pin) — falls through to default', () => {
       process.env.SIDECAR_IDLE_TIMEOUT_HEADLESS = '99';
       const wd = new IdleWatchdog({ mode: 'headless' });
-      expect(wd.timeout).toBe(10 * 60 * 1000);
+      expect(wd.timeout).not.toBe(99 * 60 * 1000);
+      expect(wd.timeout).toBe(15 * 60 * 1000); // headless default
+    });
+
+    test('legacy SIDECAR_IDLE_TIMEOUT (blanket) is ignored (#19 absence pin)', () => {
+      process.env.SIDECAR_IDLE_TIMEOUT = '99';
+      const wd = new IdleWatchdog({ mode: 'headless', timeout: 7000 });
+      expect(wd.timeout).not.toBe(99 * 60 * 1000);
+      expect(wd.timeout).toBe(7000); // falls through to the constructor option
     });
   });
 

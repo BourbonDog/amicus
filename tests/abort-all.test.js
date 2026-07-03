@@ -56,7 +56,7 @@ describe('handleAbort --all', () => {
     expect(logSpy).toHaveBeenCalledWith('No running sessions to abort.');
   });
 
-  test('aborts a running session that lives only in the legacy sidecar_sessions dir', async () => {
+  test('a running session that lives ONLY in the legacy sidecar_sessions dir is NOT found (#19 absence pin)', async () => {
     const id = 'deadbeef';
     const legacyDir = path.join(project, '.claude', 'sidecar_sessions', id);
     fs.mkdirSync(legacyDir, { recursive: true });
@@ -64,7 +64,9 @@ describe('handleAbort --all', () => {
       JSON.stringify({ taskId: id, status: 'running', model: 'm', createdAt: new Date().toISOString() }));
     const { handleAbort } = require('../src/cli-handlers');
     await handleAbort({ _: ['abort'], all: true, cwd: project });
+    // The legacy dir is never scanned, so its metadata is untouched.
     const status = JSON.parse(fs.readFileSync(path.join(legacyDir, 'metadata.json'), 'utf-8')).status;
-    expect(status).toBe('aborted');
+    expect(status).toBe('running');
+    expect(logSpy).toHaveBeenCalledWith('No running sessions to abort.');
   });
 });

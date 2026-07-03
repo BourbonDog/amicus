@@ -13,7 +13,7 @@ describe('MCP shared server integration', () => {
     expect(src).toContain('SharedServerManager');
   });
 
-  test('checks SIDECAR_SHARED_SERVER feature flag', () => {
+  test('checks the shared-server enabled feature flag', () => {
     expect(src).toContain('sharedServer.enabled');
   });
 

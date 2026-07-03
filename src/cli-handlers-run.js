@@ -68,9 +68,9 @@ async function handleStart(args) {
     }
   }
 
-  const { startSidecar } = require('./index');
+  const { startAmicus } = require('./index');
 
-  return await startSidecar({
+  return await startAmicus({
     taskId: args['task-id'],
     model: args.model,
     prompt: args.prompt,
@@ -212,9 +212,9 @@ async function handleRead(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_SESSION, message: taskIdCheck.error }));
   }
 
-  const { readSidecar } = require('./index');
+  const { readAmicus } = require('./index');
 
-  await readSidecar({
+  await readAmicus({
     taskId,
     conversation: args.conversation,
     metadata: args.metadata,

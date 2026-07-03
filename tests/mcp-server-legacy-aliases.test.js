@@ -1,7 +1,12 @@
 // In-process registration test: mock the MCP SDK so registerTool calls are
 // captured — no stdio transport, no handshake. Counts are DERIVED from
-// getTools().length (never literal 13/26) so Phase 5's 14th tool (amicus_wait)
-// does not break this suite.
+// getTools().length (never a literal count) so adding/removing a canonical
+// tool does not silently desync this suite.
+//
+// AMICUS_LEGACY_ALIASES was the v1.8.0 opt-in switch for sidecar_* tool
+// twins. As of v2.0.0 the alias mechanism is removed entirely (#19) — the
+// env var is now inert. This suite is a regression pin for that: setting it
+// must NOT change registration behavior.
 'use strict';
 
 // jest.mock factories may only reference out-of-scope vars named mock*.
@@ -17,7 +22,7 @@ jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 }));
 
 const { getTools } = require('../src/mcp-tools');
-const { startMcpServer, legacyAliasesEnabled, LEGACY_TOOL_ALIASES } = require('../src/mcp-server');
+const { startMcpServer } = require('../src/mcp-server');
 
 const CANONICAL_COUNT = getTools().length; // single source of truth for counts
 
@@ -38,60 +43,20 @@ afterEach(() => {
   }
 });
 
-describe('legacyAliasesEnabled', () => {
-  test('off by default; on only for the exact value "1"', () => {
-    expect(legacyAliasesEnabled({})).toBe(false);
-    expect(legacyAliasesEnabled({ AMICUS_LEGACY_ALIASES: '' })).toBe(false);
-    expect(legacyAliasesEnabled({ AMICUS_LEGACY_ALIASES: 'true' })).toBe(false);
-    expect(legacyAliasesEnabled({ AMICUS_LEGACY_ALIASES: '0' })).toBe(false);
-    expect(legacyAliasesEnabled({ AMICUS_LEGACY_ALIASES: '1' })).toBe(true);
-  });
-});
-
-describe('startMcpServer tool registration (Phase 4 de-bloat)', () => {
-  test('default env: only amicus_* names — no sidecar_* twins', async () => {
+describe('startMcpServer tool registration (post-shim-removal, #19)', () => {
+  test('default env: only canonical amicus_* tools register', async () => {
     await startMcpServer();
     expect(mockRegistered.some((n) => n.startsWith('sidecar_'))).toBe(false);
     expect(mockRegistered.every((n) => n.startsWith('amicus_'))).toBe(true);
     expect(mockRegistered.length).toBe(CANONICAL_COUNT);
   });
 
-  test('AMICUS_LEGACY_ALIASES=1: every canonical tool gains its sidecar_* twin (count doubles)', async () => {
+  test('AMICUS_LEGACY_ALIASES=1 is now a no-op: still only canonical tools register', async () => {
     process.env.AMICUS_LEGACY_ALIASES = '1';
     await startMcpServer();
-    expect(mockRegistered.length).toBe(CANONICAL_COUNT * 2);
-    for (const tool of getTools()) {
-      expect(mockRegistered).toContain(tool.name);
-      expect(mockRegistered).toContain(LEGACY_TOOL_ALIASES[tool.name]);
-    }
-  });
-
-  test('flag is read per startMcpServer call, not at module load', async () => {
-    await startMcpServer();
-    const defaultCount = mockRegistered.length;
-    mockRegistered.length = 0;
-    process.env.AMICUS_LEGACY_ALIASES = '1';
-    await startMcpServer(); // same module instance, new env → aliases appear
-    expect(mockRegistered.length).toBe(defaultCount * 2);
-  });
-});
-
-describe('docs reflect the opt-in alias behavior (no drift)', () => {
-  const fs = require('fs');
-  const path = require('path');
-  const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
-
-  test.each(['docs/usage.md', 'README.md'])('%s documents AMICUS_LEGACY_ALIASES and drops the always-on claim', (file) => {
-    const doc = read(file);
-    expect(doc).toContain('AMICUS_LEGACY_ALIASES');
-    expect(doc).not.toMatch(/still registered as aliases/);
-    expect(doc).toMatch(/no longer registered by default/);
+    expect(mockRegistered.some((n) => n.startsWith('sidecar_'))).toBe(false);
+    expect(mockRegistered.length).toBe(CANONICAL_COUNT);
   });
 });
 
 // Run: npx jest tests/mcp-server-legacy-aliases.test.js
-// Failing-first: on current code the default-env test fails (sidecar_* twins
-// registered unconditionally) and legacyAliasesEnabled does not exist.
-// ALSO EDIT tests/mcp-protocol.integration.test.js per Design: env-parameterize
-// createMcpClient, spawn the legacy-surface describe with AMICUS_LEGACY_ALIASES=1,
-// and add the default-env only-amicus_* sibling test.

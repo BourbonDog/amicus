@@ -357,7 +357,7 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 
 The async pattern is **start → status → read** — `amicus_start`/`amicus_fanout` return immediately, then you poll `amicus_status` and call `amicus_read`; `amicus_wait` collapses that poll loop into one blocking call.
 
-> Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). Set `AMICUS_LEGACY_ALIASES=1` on the server entry to restore them.
+> Legacy `sidecar_*` tool names were removed entirely in v2.0.0 — only `amicus_*` tools exist now. `AMICUS_LEGACY_ALIASES=1` is a no-op left over from the v1.8.0 opt-in switch. See [docs/SHIMS.md](./docs/SHIMS.md).
 
 Manual registration and per-tool detail are in **[docs/usage.md § MCP Server](./docs/usage.md#mcp-server)**.
 
@@ -365,7 +365,7 @@ Manual registration and per-tool detail are in **[docs/usage.md § MCP Server](.
 
 ## Configuration
 
-`amicus setup` is the recommended way to configure Amicus — it writes API keys to `~/.config/amicus/.env` (`0600`) and persists your default model and aliases. Every environment variable (API keys, behavior tuning, headless poller, GUI/debug, process lifecycle) is documented in **[docs/configuration.md](./docs/configuration.md)**, including the legacy `SIDECAR_*` → `AMICUS_*` shim mapping.
+`amicus setup` is the recommended way to configure Amicus — it writes API keys to `~/.config/amicus/.env` (`0600`) and persists your default model and aliases. Every environment variable (API keys, behavior tuning, headless poller, GUI/debug, process lifecycle) is documented in **[docs/configuration.md](./docs/configuration.md)**. v2.0.0 removed the legacy `SIDECAR_*` → `AMICUS_*` env-var mapping entirely; see [docs/SHIMS.md](./docs/SHIMS.md) for the removal record and rename table.
 
 **New to the disk footprint?** The config tree's file-by-file contents, session storage layout, where (and whether) logs are written, `config.json`'s exact shape, and full uninstall instructions all live in **[docs/configuration.md § Where things live](./docs/configuration.md#where-things-live)**.
 
@@ -407,7 +407,7 @@ Run `amicus doctor` first — it checks keys, catalog, OpenCode binary, Electron
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | "council review this" does nothing | The `second-opinion` skill isn't installed | Check `~/.claude/skills/second-opinion/SKILL.md` exists; re-run `npm install -g amicus` (postinstall installs both skills) |
-| `npm install -g amicus` fails with `EEXIST: … claude-sidecar` | The old upstream `claude-sidecar` package is still installed globally; npm won't overwrite another package's bin shims | `npm uninstall -g claude-sidecar`, then `npm install -g amicus`. Your config and sessions carry over (legacy paths are still read). |
+| `npm install -g amicus` fails with `EEXIST: … claude-sidecar` | The old upstream `claude-sidecar` package is still installed globally; npm won't overwrite another package's bin shims | `npm uninstall -g claude-sidecar`, then `npm install -g amicus`. Your keys and past sessions are not lost, but v2.0.0 no longer reads the old paths automatically — see [docs/SHIMS.md](./docs/SHIMS.md) for the one-time migration steps (rename `~/.config/sidecar/` and any `.claude/sidecar_sessions/` dirs). |
 | Install fails partway, or `amicus doctor` reports the OpenCode binary "not found" | A **transient** error during the OpenCode engine's own postinstall (a spawn `ENOENT`, or an antivirus file-lock while it lays down its 11 per-platform binaries) can roll back the whole atomic install — retrying usually succeeds | Just re-run `npm install -g amicus`. If it still fails, clear the cache first: `npm cache clean --force && npm install -g amicus`. |
 | `401` / auth error | API key missing, or the model prefix doesn't match the key you have | Run `amicus setup`; make sure the prefix (`openrouter/…` vs `google/…` vs `openai/…` vs `anthropic/…`) matches the credentials you configured. |
 | `402` / "Payment Required" on first council review / `start` / `fanout` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. (The `amicus council` subcommand itself is deterministic math and never calls a model.) | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See "Free council (zero-cost)" under [The Council](#the-council) above. |
@@ -440,7 +440,7 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 | [docs/electron-testing.md](./docs/electron-testing.md) | Chrome DevTools Protocol patterns for UI testing. |
 | [docs/testing.md](./docs/testing.md) | Test suite layout and how to run it. |
 | [docs/publishing.md](./docs/publishing.md) | Release and publish process. |
-| [docs/SHIMS.md](./docs/SHIMS.md) | Legacy `SIDECAR_*` → `AMICUS_*` compatibility shims. |
+| [docs/SHIMS.md](./docs/SHIMS.md) | v2.0.0 removal record for the pre-rebrand `sidecar*` compatibility shims — what was removed and how to migrate. |
 | [skills/second-opinion/SKILL.md](./skills/second-opinion/SKILL.md) | The LLM Council skill. |
 | [skills/sidecar/SKILL.md](./skills/sidecar/SKILL.md) | The `sidecar` chat skill. |
 | [evals/README.md](./evals/README.md) | End-to-end eval harness for LLM interactions. |

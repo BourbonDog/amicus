@@ -9,15 +9,12 @@
  *
  * Timeout priority (highest to lowest):
  *   1. Per-mode env var (AMICUS_IDLE_TIMEOUT_HEADLESS, etc.) in minutes
- *      (legacy SIDECAR_IDLE_TIMEOUT_* still honored via env-compat shim)
- *   2. Blanket env var AMICUS_IDLE_TIMEOUT / SIDECAR_IDLE_TIMEOUT in minutes
+ *   2. Blanket env var AMICUS_IDLE_TIMEOUT in minutes
  *   3. Constructor option `timeout` in milliseconds
  *   4. Mode default (headless=15m, interactive=60m, server=30m)
  */
 
 'use strict';
-
-const { getCompatEnv } = require('./env-compat');
 
 /** @type {Object.<string, number>} Default timeouts per mode in milliseconds */
 const MODE_TIMEOUTS = {
@@ -26,11 +23,11 @@ const MODE_TIMEOUTS = {
   server: 30 * 60 * 1000,
 };
 
-/** @type {Object.<string, string>} Per-mode env-compat suffixes */
+/** @type {Object.<string, string>} Per-mode env var names */
 const MODE_ENV_MAP = {
-  headless: 'IDLE_TIMEOUT_HEADLESS',
-  interactive: 'IDLE_TIMEOUT_INTERACTIVE',
-  server: 'IDLE_TIMEOUT_SERVER',
+  headless: 'AMICUS_IDLE_TIMEOUT_HEADLESS',
+  interactive: 'AMICUS_IDLE_TIMEOUT_INTERACTIVE',
+  server: 'AMICUS_IDLE_TIMEOUT_SERVER',
 };
 
 /**
@@ -41,16 +38,16 @@ const MODE_ENV_MAP = {
  * @returns {number} Effective timeout in ms, or Infinity if disabled
  */
 function resolveTimeout(mode, optionTimeout) {
-  const modeSuffix = MODE_ENV_MAP[mode];
-  if (modeSuffix !== undefined) {
-    const modeEnv = getCompatEnv(modeSuffix);
+  const modeEnvName = MODE_ENV_MAP[mode];
+  if (modeEnvName !== undefined) {
+    const modeEnv = process.env[modeEnvName];
     if (modeEnv !== undefined) {
       const mins = Number(modeEnv);
       return mins === 0 ? Infinity : mins * 60 * 1000;
     }
   }
 
-  const blanket = getCompatEnv('IDLE_TIMEOUT');
+  const blanket = process.env.AMICUS_IDLE_TIMEOUT;
   if (blanket !== undefined) {
     const mins = Number(blanket);
     return mins === 0 ? Infinity : mins * 60 * 1000;

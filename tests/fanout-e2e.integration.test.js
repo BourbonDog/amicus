@@ -5,7 +5,7 @@
  * Real-LLM fan-out smoke. Runs ONLY when an OpenRouter key is available
  * (same skip-when-no-key pattern as the other real-LLM integration tests).
  * Keys are loaded the same way the CLI loads them (env-loader), so a key in
- * ~/.config/sidecar/.env counts even when the ambient env lacks it.
+ * ~/.config/amicus/.env counts even when the ambient env lacks it.
  * Run via: npm run test:integration -- fanout-e2e
  */
 

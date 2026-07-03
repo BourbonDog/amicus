@@ -108,7 +108,7 @@ class MemoryMonitor {
 function createMcpClient() {
   const child = spawn(NODE, [SIDECAR_BIN, 'mcp'], {
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, SIDECAR_SHARED_SERVER: '1' },
+    env: { ...process.env, AMICUS_SHARED_SERVER: '1' },
   });
 
   let buffer = '';

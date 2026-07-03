@@ -265,7 +265,7 @@ The async pattern is **start → status → read**: `amicus_start` (or `amicus_f
 
 Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `timed-out`, `idle-timeout`
 
-> Legacy `sidecar_*` tool names are no longer registered by default (v1.8.0). To restore them, add `"env": {"AMICUS_LEGACY_ALIASES": "1"}` to the MCP server entry — the default surface is `amicus_*` only. They will be removed entirely in the next major (see docs/SHIMS.md).
+> Legacy `sidecar_*` tool names were removed entirely in v2.0.0 — the tool surface is `amicus_*` only, always. `AMICUS_LEGACY_ALIASES=1` (the v1.8.0 opt-in switch that used to restore the `sidecar_*` twins) is now a no-op: setting it on the MCP server entry changes nothing. See [docs/SHIMS.md](./SHIMS.md) for the removal record.
 
 > The MCP server auto-detects whether it's running under Claude Code or Claude Desktop/Cowork (from the MCP `initialize` handshake) and passes the right `--client` value downstream — this drives context inclusion, MCP discovery, and session-dir resolution. If detection ever picks the wrong one, force it with `"env": {"AMICUS_MCP_CLIENT": "code-local"}` (or `code-web` / `cowork`) on the MCP server entry.
 
@@ -306,7 +306,7 @@ Amicus processes automatically shut down after a period of inactivity. Default i
 
 Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination entirely. For per-mode control use `AMICUS_IDLE_TIMEOUT_HEADLESS`, `AMICUS_IDLE_TIMEOUT_INTERACTIVE`, or `AMICUS_IDLE_TIMEOUT_SERVER` (all in minutes). See [docs/configuration.md](configuration.md#process-lifecycle) for the full table.
 
-Legacy `SIDECAR_IDLE_TIMEOUT*` names still honored (deprecated).
+Legacy `SIDECAR_IDLE_TIMEOUT*` names were removed in v2.0.0 — use the `AMICUS_IDLE_TIMEOUT*` names above. See [docs/SHIMS.md](./SHIMS.md).
 
 ---
 

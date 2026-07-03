@@ -5,6 +5,48 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+Phase 18: shim removal (#19) — the breaking change that defines v2.0.0.
+
+### Removed
+- **Every pre-rebrand `sidecar*` compatibility shim.** v1.x kept a full parallel surface so
+  `sidecar*`-era installs and integrations kept working after the Amicus rebrand; v2.0.0 removes all
+  of it in one pass. Full removal record and per-shim migration remedy: [docs/SHIMS.md](docs/SHIMS.md).
+  - **`SIDECAR_*` env-var fallback** (`src/utils/env-compat.js`, deleted) — every `SIDECAR_*` var is
+    now silently ignored; rename to its `AMICUS_*` equivalent (`SIDECAR_ENV_DIR` → `AMICUS_ENV_DIR`,
+    `SIDECAR_IDLE_TIMEOUT*` → `AMICUS_IDLE_TIMEOUT*`, `SIDECAR_DEBUG_PORT` → `AMICUS_DEBUG_PORT`,
+    `SIDECAR_MOCK_UPDATE` → `AMICUS_MOCK_UPDATE`, and `SIDECAR_MAX_SESSIONS` → `AMICUS_MAX_SESSIONS`,
+    the last legacy-prefixed env var read anywhere in the codebase).
+  - **`sidecar`/`claude-sidecar` CLI bin aliases** (`package.json` `bin`) — only `amicus`/`am` remain.
+  - **`~/.config/sidecar` config-dir fallback + `migrateLegacyConfigDir()`** (`src/utils/config.js`) —
+    config data was auto-migrated forward on every v1.x run, so most installs are unaffected; an
+    install jumping straight from pre-rebrand to v2.0.0 needs a manual one-time copy.
+  - **`.claude/sidecar_sessions/` dual-read** (`src/session-manager.js`) — only
+    `.claude/amicus_sessions/` is read now; rename old per-project session dirs to keep their history
+    visible to `amicus list`/`amicus read`.
+  - **`[SIDECAR_CONFIG_UPDATE]` / `sidecar-config-hash` dual-token acceptance** — the actual acceptance
+    path was the `sidecar` chat skill's instruction text (`skills/sidecar/SKILL.md`), not `config.js`;
+    the skill now instructs the canonical `[AMICUS_CONFIG_UPDATE]` / `amicus-config-hash` forms only.
+  - **`sidecar_*` MCP tool aliases + the `AMICUS_LEGACY_ALIASES=1` opt-in** (`src/mcp-server.js`) — the
+    tool surface is `amicus_*` only, unconditionally; `AMICUS_LEGACY_ALIASES=1` is now a no-op
+    (regression-pinned in `tests/mcp-server-legacy-aliases.test.js`).
+  - **Public API `*Sidecar` naming** — clarified, not actually a removal: `startSidecar`/`listSidecars`/etc.
+    were always internal identifiers, never separately-exported deprecated aliases; the only public
+    names were always `startAmicus`/`listAmicus`/`resumeAmicus`/`continueAmicus`/`readAmicus`.
+- **Kept, not removed:** the `[SIDECAR_FOLD]`/`[SIDECAR_FOLD:<nonce>]` wire-format token (deliberate
+  transport continuity, unrelated to the compat shims), the `sidecar` chat-skill's directory name, and
+  the one-shot legacy-`'sidecar'`-MCP-entry cleanup in `src/utils/legacy-mcp-migration.js` (re-scoped
+  as a permanent healing tool for stale pre-1.8.0 dual-registrations, not a compat shim). The
+  `mcp-self-identity` recursive-spawn guard also continues to recognize the old `sidecar`/
+  `claude-sidecar` bin/server names — a defense against a stale PATH or MCP config causing amicus to
+  spawn itself, not a restoration of removed behavior.
+
+### Documentation
+- Full sweep of every doc describing the shims as live (README, docs/usage.md, docs/configuration.md,
+  docs/testing.md, docs/troubleshooting.md, docs/opencode-integration.md, docs/architecture.md,
+  skills/sidecar/SKILL.md, skills/second-opinion/MODEL-NOTES.md) rewritten to v2.0.0 reality.
+  `docs/SHIMS.md` re-scoped from a live shim inventory into the removal record this section is built
+  from.
+
 Phase 17: documentation overhaul (the external docs-review cluster).
 
 ### Added

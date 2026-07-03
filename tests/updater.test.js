@@ -18,6 +18,7 @@ const originalEnv = { ...process.env };
 
 beforeEach(() => {
   process.env = { ...originalEnv };
+  delete process.env.AMICUS_MOCK_UPDATE;
   delete process.env.SIDECAR_MOCK_UPDATE;
   jest.resetModules();
   jest.restoreAllMocks();
@@ -138,7 +139,7 @@ describe('Updater Module', () => {
     it('should skip initialization in mock mode', async () => {
       const loadUpdateNotifier = mockLoader(jest.fn());
 
-      process.env.SIDECAR_MOCK_UPDATE = 'available';
+      process.env.AMICUS_MOCK_UPDATE = 'available';
       const updater = require('../src/utils/updater');
 
       await updater.initUpdateCheck();
@@ -247,10 +248,10 @@ describe('Updater Module', () => {
     });
   });
 
-  describe('SIDECAR_MOCK_UPDATE env var', () => {
+  describe('AMICUS_MOCK_UPDATE env var', () => {
     describe('mode: "available"', () => {
       it('should return fake update info from getUpdateInfo', async () => {
-        process.env.SIDECAR_MOCK_UPDATE = 'available';
+        process.env.AMICUS_MOCK_UPDATE = 'available';
         const updater = require('../src/utils/updater');
 
         await updater.initUpdateCheck();
@@ -265,7 +266,7 @@ describe('Updater Module', () => {
 
     describe('mode: "success"', () => {
       it('should make performUpdate resolve immediately with success', async () => {
-        process.env.SIDECAR_MOCK_UPDATE = 'success';
+        process.env.AMICUS_MOCK_UPDATE = 'success';
         const updater = require('../src/utils/updater');
 
         const result = await updater.performUpdate();
@@ -274,7 +275,7 @@ describe('Updater Module', () => {
       });
 
       it('should return fake update info from getUpdateInfo', async () => {
-        process.env.SIDECAR_MOCK_UPDATE = 'success';
+        process.env.AMICUS_MOCK_UPDATE = 'success';
         const updater = require('../src/utils/updater');
 
         await updater.initUpdateCheck();
@@ -287,7 +288,7 @@ describe('Updater Module', () => {
 
     describe('mode: "error"', () => {
       it('should make performUpdate return failure', async () => {
-        process.env.SIDECAR_MOCK_UPDATE = 'error';
+        process.env.AMICUS_MOCK_UPDATE = 'error';
         const updater = require('../src/utils/updater');
 
         const result = await updater.performUpdate();
@@ -299,7 +300,7 @@ describe('Updater Module', () => {
 
     describe('mode: "updating"', () => {
       it('should return fake update info from getUpdateInfo', async () => {
-        process.env.SIDECAR_MOCK_UPDATE = 'updating';
+        process.env.AMICUS_MOCK_UPDATE = 'updating';
         const updater = require('../src/utils/updater');
 
         await updater.initUpdateCheck();
@@ -309,6 +310,19 @@ describe('Updater Module', () => {
         expect(info.hasUpdate).toBe(true);
         expect(info.latest).toBe('99.0.0');
       });
+    });
+  });
+
+  describe('legacy SIDECAR_MOCK_UPDATE (#19 absence pin)', () => {
+    it('is ignored — no longer activates mock mode', async () => {
+      process.env.SIDECAR_MOCK_UPDATE = 'available';
+      const loadUpdateNotifier = mockLoader(jest.fn());
+      const updater = require('../src/utils/updater');
+
+      await updater.initUpdateCheck();
+
+      // Real loader path is taken (not short-circuited into mock mode).
+      expect(loadUpdateNotifier).toHaveBeenCalled();
     });
   });
 });

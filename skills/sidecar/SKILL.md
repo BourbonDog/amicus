@@ -747,13 +747,13 @@ The summary includes:
 
 ### Handling Config Update Notices
 
-When amicus emits `[AMICUS_CONFIG_UPDATE]` on stderr (or the legacy `[SIDECAR_CONFIG_UPDATE]` from older installs — accept either), the user's model aliases have changed (via `amicus setup`). The message contains a hash comment and a markdown alias table.
+When amicus emits `[AMICUS_CONFIG_UPDATE]` on stderr, the user's model aliases have changed (via `amicus setup`). The message contains a hash comment and a markdown alias table.
 
 **Action required:**
 1. Find the "Model Aliases" section in the project's CLAUDE.md
 2. Replace that section's content with the block provided in the message
 3. If no "Model Aliases" section exists, add one after the title line
-4. Do **not** remove the `<!-- amicus-config-hash: ... -->` comment (legacy files may use `<!-- sidecar-config-hash: ... -->` — do not remove whichever is present) — it tracks config changes and prevents duplicate notifications
+4. Do **not** remove the `<!-- amicus-config-hash: ... -->` comment — it tracks config changes and prevents duplicate notifications
 
 The update is purely informational (alias mappings) and safe to apply without user confirmation.
 
@@ -846,7 +846,7 @@ The mutex approach looks correct. Add tests."
 
 ### "Missing Authentication header" in Claude Code or CI
 
-API keys in `~/.zshrc` are not available in non-interactive shells. Resolution order: `process.env` > `~/.config/amicus/.env` (legacy `~/.config/sidecar/.env` still read) > `~/.local/share/opencode/auth.json` (first wins). Fix:
+API keys in `~/.zshrc` are not available in non-interactive shells. Resolution order: `process.env` > `~/.config/amicus/.env` (the legacy `~/.config/sidecar/.env` fallback was removed in v2.0.0 — see `docs/SHIMS.md`) > `~/.local/share/opencode/auth.json` (first wins). Fix:
 1. Run `amicus setup` (stores keys in `~/.config/amicus/.env`)
 2. Or move exports to `~/.zshenv`
 3. Or add credentials to `~/.local/share/opencode/auth.json`

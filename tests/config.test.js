@@ -16,8 +16,8 @@ describe('Sidecar Config Module', () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-config-test-'));
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = tempDir;
-    process.env.SIDECAR_ENV_DIR = tempDir;
+    process.env.AMICUS_CONFIG_DIR = tempDir;
+    process.env.AMICUS_ENV_DIR = tempDir;
     // Clear API keys to ensure deterministic fallback behavior
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -40,13 +40,12 @@ describe('Sidecar Config Module', () => {
   }
 
   describe('getConfigDir', () => {
-    it('should return SIDECAR_CONFIG_DIR when set', () => {
+    it('should return AMICUS_CONFIG_DIR when set', () => {
       const config = loadModule();
       expect(config.getConfigDir()).toBe(tempDir);
     });
 
     it('defaults to ~/.config/amicus when no env override and neither config dir exists', () => {
-      delete process.env.SIDECAR_CONFIG_DIR;
       delete process.env.AMICUS_CONFIG_DIR;
       // Point HOME at a fresh dir so the result is deterministic regardless of
       // whatever ~/.config dirs exist on the test machine (a clean CI runner has
@@ -61,8 +60,7 @@ describe('Sidecar Config Module', () => {
       expect(config.getConfigDir()).toBe(path.join(freshHome, '.config', 'amicus'));
     });
 
-    it('falls back to the legacy ~/.config/sidecar only when amicus is absent but the legacy dir exists', () => {
-      delete process.env.SIDECAR_CONFIG_DIR;
+    it('ignores the legacy ~/.config/sidecar dir even when amicus is absent (#19 absence pin)', () => {
       delete process.env.AMICUS_CONFIG_DIR;
       const legacyHome = path.join(tempDir, 'legacy-home');
       fs.mkdirSync(path.join(legacyHome, '.config', 'sidecar'), { recursive: true });
@@ -70,7 +68,7 @@ describe('Sidecar Config Module', () => {
       process.env.USERPROFILE = legacyHome;
       jest.resetModules();
       const config = loadModule();
-      expect(config.getConfigDir()).toBe(path.join(legacyHome, '.config', 'sidecar'));
+      expect(config.getConfigDir()).toBe(path.join(legacyHome, '.config', 'amicus'));
     });
   });
 
@@ -120,7 +118,7 @@ describe('Sidecar Config Module', () => {
 
     it('should create the config directory if it does not exist', () => {
       const nestedDir = path.join(tempDir, 'nested', 'deep');
-      process.env.SIDECAR_CONFIG_DIR = nestedDir;
+      process.env.AMICUS_CONFIG_DIR = nestedDir;
       jest.resetModules();
       const config = loadModule();
 

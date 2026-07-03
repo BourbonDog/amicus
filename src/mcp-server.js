@@ -8,7 +8,7 @@ const { tryResolveModel } = require('./utils/config');
 const os = require('os');
 const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
-const { getSessionDir, SESSIONS_DIR, LEGACY_SESSIONS_DIR } = require('./session-manager');
+const { getSessionDir, SESSIONS_DIR } = require('./session-manager');
 const { readProgress, isStalled } = require('./sidecar/progress');
 const { deriveStage, sanitizePreview } = require('./sidecar/progress-fields');
 const { SharedServerManager } = require('./utils/shared-server');
@@ -732,44 +732,38 @@ const handlers = {
 
   async amicus_list(input, project) {
     const cwd = project || getProjectDir(input.project);
-    // Scan BOTH roots: canonical amicus first, then legacy sidecar (shim).
-    const roots = [SESSIONS_DIR, LEGACY_SESSIONS_DIR]
-      .map(d => path.join(cwd, '.claude', d))
-      .filter(fs.existsSync);
-    if (roots.length === 0) { return textResult('No amicus sessions found.'); }
+    const root = path.join(cwd, '.claude', SESSIONS_DIR);
+    if (!fs.existsSync(root)) { return textResult('No amicus sessions found.'); }
 
-    // Dedup by task id — amicus (first root) wins over legacy.
     const byId = new Map();
-    for (const root of roots) {
-      for (const d of fs.readdirSync(root)) {
-        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
-        if (byId.has(d)) { continue; }
-        const metaPath = path.join(root, d, 'metadata.json');
-        if (!fs.existsSync(metaPath)) { continue; }
-        try {
-          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-          const entry = {
-            id: d, model: meta.model, status: meta.status, agent: meta.agent,
-            briefing: sanitizePreview(String(meta.briefing || ''), 80),
-            createdAt: meta.createdAt,
-            mode: meta.mode
-              || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
-          };
-          // Live-progress enrichment for RUNNING sessions only — readProgress
-          // parses conversation.jsonl, so terminal rows stay cheap.
-          if (meta.status === 'running') {
-            try {
-              const p = readProgress(path.join(root, d));
-              entry.phase = deriveStage(meta.status, p.stage);
-              entry.messageCount = p.messages;
-              entry.lastActivityAt = p.lastActivityAt;
-              entry.latestPreview = p.latestPreview;
-            } catch { /* progress optional */ }
-          }
-          byId.set(d, entry);
-        } catch {
-          // Skip unreadable metadata
+    for (const d of fs.readdirSync(root)) {
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
+      if (byId.has(d)) { continue; }
+      const metaPath = path.join(root, d, 'metadata.json');
+      if (!fs.existsSync(metaPath)) { continue; }
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const entry = {
+          id: d, model: meta.model, status: meta.status, agent: meta.agent,
+          briefing: sanitizePreview(String(meta.briefing || ''), 80),
+          createdAt: meta.createdAt,
+          mode: meta.mode
+            || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
+        };
+        // Live-progress enrichment for RUNNING sessions only — readProgress
+        // parses conversation.jsonl, so terminal rows stay cheap.
+        if (meta.status === 'running') {
+          try {
+            const p = readProgress(path.join(root, d));
+            entry.phase = deriveStage(meta.status, p.stage);
+            entry.messageCount = p.messages;
+            entry.lastActivityAt = p.lastActivityAt;
+            entry.latestPreview = p.latestPreview;
+          } catch { /* progress optional */ }
         }
+        byId.set(d, entry);
+      } catch {
+        // Skip unreadable metadata
       }
     }
 
@@ -1030,31 +1024,6 @@ const handlers = {
   async amicus_guide() { return textResult(getGuideText()); },
 };
 
-// DEPRECATED(amicus-shim): legacy sidecar_* twins of each amicus_* tool.
-// OPT-IN since v1.8.0 — registering both names doubled the advertised tool
-// surface (14 -> 28 per server). Set AMICUS_LEGACY_ALIASES=1 in the MCP
-// entry's "env" to restore them. A stdio MCP server cannot learn the
-// client-side registration key it was launched under (initialize carries
-// clientInfo, not the config key), so an env flag is the only reliable
-// switch. Remove entirely in the next major.
-const LEGACY_TOOL_ALIASES = {
-  amicus_start: 'sidecar_start', amicus_status: 'sidecar_status',
-  amicus_wait: 'sidecar_wait',
-  amicus_read: 'sidecar_read', amicus_list: 'sidecar_list',
-  amicus_resume: 'sidecar_resume', amicus_continue: 'sidecar_continue',
-  amicus_setup: 'sidecar_setup', amicus_abort: 'sidecar_abort',
-  amicus_fanout: 'sidecar_fanout',
-  amicus_guide: 'sidecar_guide',
-  amicus_council_tally: 'sidecar_council_tally',
-  amicus_council_stats: 'sidecar_council_stats',
-  amicus_verdict: 'sidecar_verdict',
-};
-
-/** sidecar_* tool aliases are opt-in as of v1.8.0. */
-function legacyAliasesEnabled(env = process.env) {
-  return env.AMICUS_LEGACY_ALIASES === '1';
-}
-
 /** Start the MCP server on stdio transport */
 async function startMcpServer() {
   const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
@@ -1065,9 +1034,6 @@ async function startMcpServer() {
     // can request them (roots/list) when no explicit project is supplied.
     { capabilities: { roots: {} } }
   );
-  // Read once per call (not at module load) so tests and long-lived
-  // processes observe the env deterministically.
-  const withLegacyAliases = legacyAliasesEnabled();
 
   for (const tool of getTools()) {
     const register = (name) => server.registerTool(
@@ -1085,7 +1051,6 @@ async function startMcpServer() {
       }
     );
     register(tool.name);
-    if (withLegacyAliases && LEGACY_TOOL_ALIASES[tool.name]) { register(LEGACY_TOOL_ALIASES[tool.name]); }
   }
   process.on('SIGTERM', () => {
     sharedServer.shutdown();
@@ -1102,5 +1067,4 @@ async function startMcpServer() {
 
 module.exports = {
   handlers, startMcpServer, getProjectDir, resolveProjectDir, getClientRoot,
-  LEGACY_TOOL_ALIASES, legacyAliasesEnabled,
 };

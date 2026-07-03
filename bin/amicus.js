@@ -7,18 +7,7 @@
  * Routes commands to appropriate handlers.
  */
 
-// One-time, non-destructive migration of the legacy ~/.config/sidecar dir onto
-// the canonical ~/.config/amicus (copy; legacy kept as a backup). Runs before
-// any config/credential read so both resolve to the unified dir. Best-effort.
-try {
-  const { migrateLegacyConfigDir } = require('../src/utils/config');
-  const _m = migrateLegacyConfigDir();
-  if (_m && _m.migrated) {
-    process.stderr.write(`[amicus] Migrated config ${_m.from} → ${_m.to} (legacy kept as a backup).\n`);
-  }
-} catch { /* best-effort: never block startup on migration */ }
-
-// Load API keys from all sources: process.env > sidecar .env > auth.json
+// Load API keys from all sources: process.env > amicus .env > auth.json
 const { loadCredentials } = require('../src/utils/env-loader');
 loadCredentials();
 
@@ -167,9 +156,9 @@ async function main() {
  * Spec Reference: §4.2
  */
 async function handleList(args) {
-  const { listSidecars } = require('../src/index');
+  const { listAmicus } = require('../src/index');
 
-  await listSidecars({
+  await listAmicus({
     status: args.status,
     all: args.all,
     json: args.json,
@@ -196,9 +185,9 @@ async function handleResume(args) {
     process.exit(1);
   }
 
-  const { resumeSidecar } = require('../src/index');
+  const { resumeAmicus } = require('../src/index');
 
-  return await resumeSidecar({
+  return await resumeAmicus({
     taskId,
     project: args.cwd,
     headless: args['no-ui'],
@@ -250,9 +239,9 @@ async function handleContinue(args) {
     args.model = await validateFallbackModel(args, alias);
   }
 
-  const { continueSidecar } = require('../src/index');
+  const { continueAmicus } = require('../src/index');
 
-  return await continueSidecar({
+  return await continueAmicus({
     taskId,
     newTaskId: args['task-id'],
     briefing: args.prompt || args.briefing,

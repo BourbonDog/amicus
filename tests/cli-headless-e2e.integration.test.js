@@ -22,7 +22,7 @@ const HAS_API_KEY = !!(
   process.env.OPENROUTER_API_KEY ||
   (() => {
     try {
-      const envPath = path.join(os.homedir(), '.config', 'sidecar', '.env');
+      const envPath = path.join(os.homedir(), '.config', 'amicus', '.env');
       const content = fs.readFileSync(envPath, 'utf-8');
       return content.includes('OPENROUTER_API_KEY=');
     } catch { return false; }
@@ -121,7 +121,7 @@ describeE2E('CLI Headless E2E: real LLM via sidecar start --no-ui', () => {
     expect(result.stdout.length).toBeGreaterThan(0);
 
     // Find the session directory (there should be exactly one)
-    const sessionsDir = path.join(tmpDir, '.claude', 'sidecar_sessions');
+    const sessionsDir = path.join(tmpDir, '.claude', 'amicus_sessions');
     expect(fs.existsSync(sessionsDir)).toBe(true);
 
     const sessions = fs.readdirSync(sessionsDir);

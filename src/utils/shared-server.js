@@ -6,7 +6,6 @@
  */
 
 const { IdleWatchdog } = require('./idle-watchdog');
-const { getCompatEnv } = require('./env-compat');
 
 const MAX_RESTARTS = 3;
 const RESTART_WINDOW = 5 * 60 * 1000;
@@ -26,8 +25,8 @@ class SharedServerManager {
    */
   constructor(options = {}) {
     this.logger = options.logger || console;
-    this.maxSessions = Number(process.env.SIDECAR_MAX_SESSIONS) || 20;
-    this.enabled = getCompatEnv('SHARED_SERVER') !== '0';
+    this.maxSessions = Number(process.env.AMICUS_MAX_SESSIONS) || 20;
+    this.enabled = process.env.AMICUS_SHARED_SERVER !== '0';
 
     /** @type {object|null} Active server handle */
     this.server = null;
@@ -218,7 +217,7 @@ class SharedServerManager {
   /** Poll the Go engine pid; pid death IS the crash signal (H7). */
   _startCrashPoll(server) {
     this._stopCrashPoll();
-    const interval = Number(getCompatEnv('CRASH_POLL_MS')) || CRASH_POLL_INTERVAL;
+    const interval = Number(process.env.AMICUS_CRASH_POLL_MS) || CRASH_POLL_INTERVAL;
     this._crashPoll = setInterval(() => {
       if (this.server !== server) { this._stopCrashPoll(); return; }
       if (!this._isProcessAlive(server.goPid)) {

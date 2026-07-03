@@ -17,7 +17,7 @@ describe('MCP eager model validation', () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-mcp-val-'));
     originalEnv = { ...process.env };
-    process.env.SIDECAR_CONFIG_DIR = tempDir;
+    process.env.AMICUS_CONFIG_DIR = tempDir;
     jest.resetModules();
   });
 

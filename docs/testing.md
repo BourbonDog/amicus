@@ -102,7 +102,7 @@ Integration tests verify source-level invariants without mocking. They read actu
 | Test File | What It Verifies |
 |-----------|-----------------|
 | `spawn-pipe-deadlock.integration.test.js` | `spawnSidecarProcess()` in `src/mcp-server.js` uses `ignore` (not `pipe`) for stdio, no `detached: true`, uses `child.unref()` |
-| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `SIDECAR_HEADLESS_TEST` env var (compat shim — not yet renamed) |
+| `electron-headless-mode.test.js` | `electron/main.js` gates `mainWindow.show()` behind `AMICUS_HEADLESS_TEST` env var |
 
 These tests catch regressions in critical spawn/process configuration that would be hard to debug in production.
 
@@ -188,7 +188,7 @@ Spawns a real Electron window (hidden) with a real OpenCode server, connects via
 4. Fold button exists with shortcut label
 5. Settings gear button exists
 6. Update banner hidden by default
-7. Update banner visible when `AMICUS_MOCK_UPDATE=available` (or legacy `SIDECAR_MOCK_UPDATE=available`)
+7. Update banner visible when `AMICUS_MOCK_UPDATE=available` (the legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0)
 8. Screenshots captured as PNG files
 
 **Architecture:**
@@ -264,9 +264,9 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `SIDECAR_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). (Name is a compat shim; the AMICUS_ rename is pending.) |
-| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port (legacy `SIDECAR_DEBUG_PORT` still honored, deprecated). `AMICUS_DEBUG_PORT` wins when both are set. Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
-| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. Legacy `SIDECAR_MOCK_UPDATE` also accepted. Used in Electron toolbar E2E tests. |
+| `AMICUS_HEADLESS_TEST` | unset | Set to `1` to suppress `mainWindow.show()` in Electron. Window is created but never made visible. CDP screenshots still work (captures off-screen renderer). |
+| `AMICUS_DEBUG_PORT` | `9222` | CDP remote debugging port (the legacy `SIDECAR_DEBUG_PORT` name was removed in v2.0.0 — see [docs/SHIMS.md](./SHIMS.md)). Use `9223`+ to avoid conflicts with Chrome browser. E2E tests use `9224`. |
+| `AMICUS_MOCK_UPDATE` | unset | Mock update banner state: `available`, `updating`, `success`, `error`. The legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0. Used in Electron toolbar E2E tests. |
 
 ---
 
@@ -274,7 +274,7 @@ const child = spawn(process.execPath, ['tests/helpers/start-server.js']);
 
 ### macOS
 
-No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `SIDECAR_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer via `Page.captureScreenshot`.
+No extra dependencies needed. Electron runs natively. The window is created with `show: false` when `AMICUS_HEADLESS_TEST=1`, so no visible window pops up. CDP screenshots capture the off-screen renderer via `Page.captureScreenshot`.
 
 The visual testing docs reference `screencapture -x` and AppleScript window positioning — those are macOS-specific tools. See the Windows section for the cross-platform equivalent.
 
@@ -533,7 +533,7 @@ Never commit an image without completing visual verification. GitHub strips `<st
 
 ## Update Banner Mock Testing
 
-Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations (legacy `SIDECAR_MOCK_UPDATE` also accepted):
+Use `AMICUS_MOCK_UPDATE` to test update UI states without real npm operations (the legacy `SIDECAR_MOCK_UPDATE` name was removed in v2.0.0):
 
 ```bash
 AMICUS_MOCK_UPDATE=available amicus start --model gemini --prompt "test"  # Shows banner

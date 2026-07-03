@@ -13,7 +13,7 @@
 
 // Mock the opencode-client SDK module first (before any imports)
 //
-// 15b.3: startSidecar (the REAL production code path under test here) now
+// 15b.3: startAmicus (the REAL production code path under test here) now
 // generates a per-run nonce and bakes it into the system prompt BEFORE
 // calling sendPromptAsync, and runHeadless's detector requires that exact
 // nonce. A static bare-`[SIDECAR_FOLD]` mock output can never complete a real
@@ -26,7 +26,7 @@
 const mockServerClose = jest.fn();
 const mockSendPromptAsync = jest.fn().mockResolvedValue(undefined);
 
-/** Pull the nonce startSidecar baked into the most recent sendPromptAsync system prompt. */
+/** Pull the nonce startAmicus baked into the most recent sendPromptAsync system prompt. */
 function mockExtractFoldNonce() {
   const { extractNonceFromText } = require('../src/utils/fold-marker');
   const lastCall = mockSendPromptAsync.mock.calls[mockSendPromptAsync.mock.calls.length - 1];
@@ -75,7 +75,7 @@ let mockHomeDir;
 jest.spyOn(os, 'homedir').mockImplementation(() => mockHomeDir || originalHomedir());
 
 // Import after mocks are set up
-const { startSidecar, listSidecars, readSidecar } = require('../src/index');
+const { startAmicus, listAmicus, readAmicus } = require('../src/index');
 
 describe('End-to-End Sidecar Flow', () => {
   let tmpDir;       // Project directory
@@ -156,7 +156,7 @@ describe('End-to-End Sidecar Flow', () => {
       // Step 2: Setup mock SDK responses. 15b.3: the fold marker at the end
       // must carry the nonce THIS run's prompt actually instructed — computed
       // lazily (mockImplementation, not a static mockResolvedValue) since the
-      // nonce doesn't exist until startSidecar runs, below.
+      // nonce doesn't exist until startAmicus runs, below.
       const mockSummaryBody = `## Sidecar Results: Auth Bug Analysis
 
 **Task:** Debug random logout issue
@@ -190,7 +190,7 @@ describe('End-to-End Sidecar Flow', () => {
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
       // Step 4: Run sidecar start
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         briefing: 'Debug the random logout issue. Focus on token refresh race conditions.',
         project: tmpDir,
@@ -237,7 +237,7 @@ describe('End-to-End Sidecar Flow', () => {
 
     it('should list sidecars after completing a task', async () => {
       // SDK mock returns completion marker by default
-      await startSidecar({
+      await startAmicus({
         model: 'openai/gpt-4o',
         briefing: 'Generate unit tests',
         project: tmpDir,
@@ -247,7 +247,7 @@ describe('End-to-End Sidecar Flow', () => {
       // Now list sidecars
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await listSidecars({ project: tmpDir });
+      await listAmicus({ project: tmpDir });
 
       const output = logSpy.mock.calls.map(c => c[0]).join('\n');
       expect(output).toContain('openai/gpt-4o');
@@ -270,7 +270,7 @@ describe('End-to-End Sidecar Flow', () => {
         }]);
       });
 
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         briefing: 'Analyze codebase',
         project: tmpDir,
@@ -284,7 +284,7 @@ describe('End-to-End Sidecar Flow', () => {
       // Read the summary
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await readSidecar({ taskId, project: tmpDir });
+      await readAmicus({ taskId, project: tmpDir });
 
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Test Summary'));
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('analysis result'));
@@ -302,7 +302,7 @@ describe('End-to-End Sidecar Flow', () => {
         { role: 'user', content: 'Here is the error log: "Database connection timeout"' }
       ]);
 
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         briefing: 'Investigate the database timeout issue',
         project: tmpDir,
@@ -333,7 +333,7 @@ describe('End-to-End Sidecar Flow', () => {
 
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         briefing: 'Test task',
         project: tmpDir,
@@ -367,7 +367,7 @@ describe('End-to-End Sidecar Flow', () => {
 
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         briefing: 'Test task',
         project: tmpDir,
@@ -387,7 +387,7 @@ describe('End-to-End Sidecar Flow', () => {
       // Get SDK mock
       const { sendPromptAsync: spa2 } = require("../src/opencode-client");
 
-      await startSidecar({
+      await startAmicus({
         model: 'anthropic/claude-3.5-sonnet',
         briefing: 'Test model config',
         project: tmpDir,
@@ -409,7 +409,7 @@ describe('End-to-End Sidecar Flow', () => {
 
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         prompt: 'Debug the auth issue',
         cwd: tmpDir,
@@ -439,7 +439,7 @@ describe('End-to-End Sidecar Flow', () => {
 
       const logSpy = jest.spyOn(console, 'log').mockImplementation();
 
-      await startSidecar({
+      await startAmicus({
         model: 'google/gemini-2.5-flash',
         prompt: 'Test code-web client',
         cwd: tmpDir,

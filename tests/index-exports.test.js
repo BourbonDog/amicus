@@ -8,9 +8,12 @@ describe('public API amicus aliases', () => {
     expect(typeof api.continueAmicus).toBe('function');
     expect(typeof api.readAmicus).toBe('function');
   });
-  it('keeps legacy *Sidecar aliases pointing to the same fns (shim)', () => {
-    expect(api.startAmicus).toBe(api.startSidecar);
-    expect(api.listAmicus).toBe(api.listSidecars);
+  it('does NOT export legacy *Sidecar public API aliases (#19 absence pin)', () => {
+    expect(api.startSidecar).toBeUndefined();
+    expect(api.listSidecars).toBeUndefined();
+    expect(api.resumeSidecar).toBeUndefined();
+    expect(api.continueSidecar).toBeUndefined();
+    expect(api.readSidecar).toBeUndefined();
   });
 });
 

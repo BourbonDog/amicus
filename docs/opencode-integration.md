@@ -95,7 +95,7 @@ mapAgentToOpenCode('custom')   // -> { agent: 'custom' } // passed through as lo
 
 ## Backward Compatibility
 
-**Legacy exported names** `startSidecar`, `listSidecars`, `resumeSidecar`, `continueSidecar`, `readSidecar` are real source identifiers that exist in `src/index.js` as deprecated shims pointing to the canonical `startAmicus` / `listAmicus` / etc. exports. They are kept for backward compatibility, tracked in `docs/SHIMS.md`.
+**Not a shim.** `startSidecar`, `listSidecars`, `resumeSidecar`, `continueSidecar`, `readSidecar` are internal require-bound identifiers imported from `src/sidecar/*.js` — they were never separately-exported deprecated aliases. `src/index.js` re-exports them exactly once, under their canonical public names: `startAmicus`, `listAmicus`, `resumeAmicus`, `continueAmicus`, `readAmicus`. There is no `*Sidecar`-named export on the package root, in this version or any prior one. See [docs/SHIMS.md](./SHIMS.md) for what v2.0.0 actually removed.
 
 ---
 

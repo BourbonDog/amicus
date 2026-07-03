@@ -15,7 +15,7 @@ const os = require('os');
 
 /** Create a session directory with metadata.json */
 function createSession(projectDir, taskId, meta) {
-  const sessDir = path.join(projectDir, '.claude', 'sidecar_sessions', taskId);
+  const sessDir = path.join(projectDir, '.claude', 'amicus_sessions', taskId);
   fs.mkdirSync(sessDir, { recursive: true });
   const defaults = {
     taskId,
@@ -186,7 +186,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       expect(data.status).toBe('aborted');
 
       // Verify metadata was updated on disk
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', taskId);
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
       const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
       expect(meta.status).toBe('aborted');
       expect(meta.abortedAt).toBeDefined();
@@ -314,7 +314,7 @@ describe('MCP Headless Lifecycle Integration', () => {
       const before = new Date().toISOString();
       await handlers.amicus_abort({ taskId }, tmpDir);
 
-      const sessDir = path.join(tmpDir, '.claude', 'sidecar_sessions', taskId);
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', taskId);
       const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
       expect(meta.abortedAt).toBeDefined();
       expect(new Date(meta.abortedAt).getTime()).toBeGreaterThanOrEqual(new Date(before).getTime());
