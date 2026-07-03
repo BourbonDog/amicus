@@ -57,6 +57,13 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ## Quick start
 
+> **Two install channels — read this first.** Amicus ships two ways, and CLI commands look different in each:
+>
+> - **npm global** (`npm install -g amicus` or the install script) puts `amicus`/`am` on your `PATH`. Every `amicus <command>` example in this README works as written.
+> - **Claude Code plugin** (`/plugin install amicus@bourbondog-amicus`) does **not** put a CLI on your `PATH`. CLI calls go through `npx -y amicus@latest <command>` instead — e.g. `amicus doctor` becomes `npx -y amicus@latest doctor`. In exchange, the plugin channel gets two things npm does **not**: the slash commands `/amicus:council` and `/amicus:sidecar`. **These are plugin-channel-ONLY — npm users don't get them** and drive the same skills by saying "council review this" / talking to Claude instead.
+>
+> **Convention used throughout this README:** plugin-channel users: prefix CLI examples with `npx -y amicus@latest` (skip the bare `amicus`/`am`). Individual code blocks are not duplicated per channel — this note is the one translation you need.
+
 **Install** — pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
 
 **As a Claude Code plugin** — the most native path if you use Claude Code:
@@ -67,7 +74,7 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 /reload-plugins
 ```
 
-Claude Code registers the MCP server and both skills for you — nothing to configure. (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
+Claude Code registers the MCP server and both skills for you — nothing to configure. It also gets you two slash commands the npm/install-script paths don't: **`/amicus:council`** (run a full council review) and **`/amicus:sidecar`** (fork a conversation to another model). (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
 
 **With the install script** — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
 
@@ -114,6 +121,8 @@ This opens a graphical wizard:
 **Your first council** — no flags to learn. In Claude Code or Cowork, give Claude a document and say:
 
 > *council review this*
+
+Plugin-channel users can also type **`/amicus:council`** directly instead of phrasing it as a request — same skill, explicit invocation.
 
 Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill is what teaches Claude to recognize this — if nothing happens, run `amicus doctor` (or `npx -y amicus@latest doctor`). npm/install-script installs place the skill at `~/.claude/skills/second-opinion/`; plugin installs keep it inside the plugin itself — check `/plugin` in Claude Code to confirm amicus is enabled.)
 
@@ -177,6 +186,8 @@ Everything you need before your first run, and what's optional.
 ---
 
 ## The Council
+
+> Trigger it by saying *"council review this"* to Claude, or, on the plugin channel, run **`/amicus:council`** directly.
 
 **Why multi-model.** Any single model — including the one running your session — has consistent blind spots. Route the *same* material through models from *different* families and the disagreements surface: missed issues, overstated confidence, claims one model alone would have waved through. The council is the structured version of that idea.
 
@@ -487,6 +498,8 @@ claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]
 | `AMICUS_DEBUG_PORT` | Chrome DevTools Protocol port for the Electron window. | `9222` |
 
 > **Legacy names.** The pre-rebrand `SIDECAR_*` environment variables are still honored (with a one-time deprecation warning) and map to their `AMICUS_*` equivalents. See **[docs/SHIMS.md](./docs/SHIMS.md)** for the full mapping.
+
+**New to the disk footprint?** The config tree's file-by-file contents, session storage layout, where (and whether) logs are written, `config.json`'s exact shape, and full uninstall instructions all live in **[docs/configuration.md § Where things live](./docs/configuration.md#where-things-live)**.
 
 ---
 
