@@ -224,3 +224,11 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   gated on commit. `npx eslint electron/main.js` currently reports 2 `no-console` (lines 42, 54) and 1
   `no-empty` (line 133) — pre-existing, not introduced by Phase 12. Fix when widening lint scope to cover
   `electron/**` or on the next electron/main.js touch, whichever comes first.
+
+## v1.9.0 release-cut triage (2026-07-03)
+
+- [ ] **`docs/architecture.md:25` flow arrow overstates the fold handoff as a push.** "Summary output to
+  stdout → Claude Code receives in context" reads as an automatic push, in tension with the documented
+  pull-based fold handoff (the orchestrator reads the summary back via `amicus read`/`amicus_read`, fenced —
+  see README/usage.md's Fold-handoff paragraphs added in Phase 13). Touch up at the next `architecture.md`
+  revision.

@@ -371,7 +371,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
@@ -541,7 +541,7 @@ Most Claude-adjacent tooling assumes macOS/Linux; Amicus doesn't.
 | `npm install -g amicus` fails with `EEXIST: … claude-sidecar` | The old upstream `claude-sidecar` package is still installed globally; npm won't overwrite another package's bin shims | `npm uninstall -g claude-sidecar`, then `npm install -g amicus`. Your config and sessions carry over (legacy paths are still read). |
 | Install fails partway, or `amicus doctor` reports the OpenCode binary "not found" | A **transient** error during the OpenCode engine's own postinstall (a spawn `ENOENT`, or an antivirus file-lock while it lays down its 11 per-platform binaries) can roll back the whole atomic install — retrying usually succeeds | Just re-run `npm install -g amicus`. If it still fails, clear the cache first: `npm cache clean --force && npm install -g amicus`. |
 | `401` / auth error | API key missing, or the model prefix doesn't match the key you have | Run `amicus setup`; make sure the prefix (`openrouter/…` vs `google/…` vs `openai/…` vs `anthropic/…`) matches the credentials you configured. |
-| `402` / "Payment Required" on first `council`/`start` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See "Free council (zero-cost)" under [The Council](#the-council) above. |
+| `402` / "Payment Required" on first council review / `start` / `fanout` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. (The `amicus council` subcommand itself is deterministic math and never calls a model.) | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See "Free council (zero-cost)" under [The Council](#the-council) above. |
 | Session not found | No session matches the given ID | Run `amicus list`, or omit `--session-id` to use the most recent. |
 | No conversation history found | Project-path encoding | Check `~/.claude/projects/`; `/` and `_` in the project path are encoded as `-` in the directory name. |
 | Headless run never finishes | Task is bigger than the default timeout | Raise it: `--timeout 30`. |

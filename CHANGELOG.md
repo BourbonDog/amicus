@@ -5,7 +5,9 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
-Phase 9: distribution — plugin slash commands, MCP Registry wiring, and the marketplace submission runbook.
+## [1.9.0] - 2026-07-03
+
+Engine pull-forwards, release-rail hardening, docs sync, and a new Council Review GitHub Action.
 
 ### Added
 - **`/amicus:council` slash command and a `/amicus:sidecar <model> <prompt…>` argument surface.** `commands/council.md`
@@ -29,14 +31,40 @@ Phase 9: distribution — plugin slash commands, MCP Registry wiring, and the ma
   `claude-community` submission process (individual-author Console form route), the preflight checklist
   (`claude plugin validate . --strict`, `claude --plugin-dir .` smoke test, `npm test`), and what the
   Anthropic review pipeline is expected to check.
+- **Council Review GitHub Action (v1).** A new reusable, label-gated workflow (`.github/workflows/council-review.yml`)
+  runs an `amicus fanout` review wave (default cheap bench `deepseek,gemini,glm`, cost- and time-bounded) over a
+  pull request's diff and posts one sticky synthesis comment with the individual reviews collapsed underneath. v1 is
+  fanout-only — independent reviews plus a one-leg synthesis, no adjudicated verdict (that needs the skill-orchestrated
+  Stage-2 cross-review, which a code-only pipeline can't produce; deferred to v2). Fork-safe and no-checkout by
+  design: PR code is never checked out or executed, only its diff (capped, via `gh pr diff`) is read; the job soft-skips
+  with a notice when `OPENROUTER_API_KEY` is unavailable (e.g. a fork PR without repo secrets) rather than failing the
+  check; every use of PR-controlled text (title/body) reaches the shell only through `env:` indirection, never inlined
+  into a `run:` script. Untrusted model output is neutralized before it enters the PR comment — case-insensitive,
+  whitespace-tolerant rules strip anything that could forge the sticky-comment marker (and hijack the next run's
+  update), forge the "not an adjudicated verdict" footer disclosure, or break out of the comment's own `<details>`
+  wrapper — and the real footer is echoed last, after all model text, so its position can't be forged. The label
+  gate (`council-review`) is enforced with a string-safe comparison (`format('{0}', inputs.require_label) == 'false'`)
+  to avoid a loose-equality bug where GitHub coerces an empty `pull_request`-event input to falsy and would otherwise
+  bypass the gate on every same-repo PR. **Inert by default:** the workflow only runs once a repo both adds the
+  `OPENROUTER_API_KEY` Actions secret and applies the `council-review` label to a PR — installing it does nothing on
+  its own. Locked by `tests/scripts/council-review-workflow.test.js`.
+
+### Changed
+- **Every prose channel that returns another model's output is now wrapped in the
+  `<untrusted_sidecar_output>` fence** (`amicus_status`/`amicus_list` previews remain sanitized-and-truncated
+  instead, by design — `sanitizePreview()` in `src/sidecar/progress-fields.js` defangs fence/tag characters
+  and caps length so the full untrusted text is only ever reachable through the fenced `amicus_read` path),
+  extending the protection `amicus_read` summaries already had: MCP wave and conversation reads, CLI
+  `amicus read` summary/conversation/wave output, and the foreground summary echo after
+  `start`/`continue`/`resume`. This is visible in CLI output. JSON output (`--json`), metadata mode, and
+  on-disk artifacts (`wave.json`, `summary.md`, `conversation.jsonl`) are byte-identical to before — the
+  fence is applied only at output time, never at write time.
+- Internal: `interactive.js`'s Electron process helpers extracted to `src/sidecar/interactive-process.js`
+  (size-gate headroom; no behavior change).
 
 ### Fixed
 - **`plugin.json`'s unrecognized `bugs` field removed.** `claude plugin validate . --strict` now passes
   clean (exit 0); it previously reported an unknown-field warning that `--strict` promotes to an error.
-
-Phase 13: docs quick-sync — the highest-friction documentation fixes, every claim verified against the binary.
-
-### Fixed
 - **The Fold handoff is now documented operationally** (README + usage.md): the `[SIDECAR_FOLD]` stdout
   block, where the summary lands (`summary.md`), and how the orchestrator reads it back (fenced, via
   `amicus read`/`amicus_read`).
@@ -48,14 +76,11 @@ Phase 13: docs quick-sync — the highest-friction documentation fixes, every cl
   `start --setup` documented as NOT relaxing the `--prompt`/`--prompt-file` requirement (with the exact
   error string users see).
 - **OpenRouter 402 recovery** added to the README troubleshooting table and docs/troubleshooting.md:
-  key save/validation never checks account balance, so the first real call can 402 — recovery via
-  openrouter.ai/credits, `:free` models, and the non-blocking `amicus doctor` credit probe.
+  key save/validation never checks account balance, so the first council review / `start` / `fanout` call
+  can 402 (the `amicus council` subcommand itself is deterministic math and never calls a model) — recovery
+  via openrouter.ai/credits, `:free` models, and the non-blocking `amicus doctor` credit probe.
 - docs/DISTRIBUTION.md's stale `/v0.1/` registry API path synced to `/v0/`.
-- All of the above locked by `tests/docs-quick-sync.test.js` (16 pins).
-
-Phase 12: engine pull-forwards — the three reviewer-flagged high-impact fixes.
-
-### Fixed
+- All of the above locked by `tests/docs-quick-sync.test.js` (17 pins).
 - **Closing the GUI window no longer loses the session summary.** Closing without folding previously
   destroyed the window immediately — the session finalized as `complete` with a placeholder summary, and
   closing during an in-flight fold discarded the summary about to land. The window close is now intercepted
@@ -80,23 +105,6 @@ Phase 12: engine pull-forwards — the three reviewer-flagged high-impact fixes.
   the default SE-focused base prompt — `opencode-client.js`'s Cowork-specific general-purpose prompt swap
   (`buildCoworkAgentPrompt()`) only fires when `options.client === 'cowork'`, which no longer matches a
   Claude Code caller now that it's correctly tagged `code-local`.
-
-### Changed
-- **Every prose channel that returns another model's output is now wrapped in the
-  `<untrusted_sidecar_output>` fence** (`amicus_status`/`amicus_list` previews remain sanitized-and-truncated
-  instead, by design — `sanitizePreview()` in `src/sidecar/progress-fields.js` defangs fence/tag characters
-  and caps length so the full untrusted text is only ever reachable through the fenced `amicus_read` path),
-  extending the protection `amicus_read` summaries already had: MCP wave and conversation reads, CLI
-  `amicus read` summary/conversation/wave output, and the foreground summary echo after
-  `start`/`continue`/`resume`. This is visible in CLI output. JSON output (`--json`), metadata mode, and
-  on-disk artifacts (`wave.json`, `summary.md`, `conversation.jsonl`) are byte-identical to before — the
-  fence is applied only at output time, never at write time.
-- Internal: `interactive.js`'s Electron process helpers extracted to `src/sidecar/interactive-process.js`
-  (size-gate headroom; no behavior change).
-
-Phase 11: release-rail hardening and a skill-routing hotfix (pre-v1.9.0 pull-forwards).
-
-### Fixed
 - **Release-workflow re-runs now recover a half-published release instead of dead-ending.** A `publish.yml`
   re-run after a post-`npm publish` failure previously died on `EPUBLISHCONFLICT` before ever reaching the
   step that failed. Now the npm publish is skipped (loudly) when `amicus@<version>` is already live (E404

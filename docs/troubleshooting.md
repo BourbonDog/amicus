@@ -44,7 +44,7 @@ Nothing is lost in the swap: your config (`~/.config/sidecar/`), saved keys, and
 
 ## OpenRouter 402 / "Payment Required" on First Call
 
-**Symptom:** `amicus setup` and `amicus key openrouter <key>` both report the key as valid, but the first real `council`/`start`/`fanout` call against an OpenRouter model fails with `402 Payment Required`.
+**Symptom:** `amicus setup` and `amicus key openrouter <key>` both report the key as valid, but the first council review / `start` / `fanout` call against an OpenRouter model fails with `402 Payment Required`. (The `amicus council` subcommand itself is deterministic math and never calls a model, so it can't trigger this.)
 
 **Cause:** Key save only checks that the key **authenticates** (`validateApiKey` — a `GET` against `openrouter.ai/api/v1/models`, which succeeds for any real key regardless of balance). It does not check credit; a zero-credit or free-tier-only key saves cleanly and only fails later, on the first paid-model call. `amicus doctor` DOES probe credit (the "OpenRouter credit" check, non-blocking) and the interactive `amicus setup` wizard prints a warning at the end if it detects zero credit or free-tier — but neither runs automatically after `amicus key`.
 
