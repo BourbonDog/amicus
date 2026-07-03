@@ -1,6 +1,7 @@
 /** @module mcp-server — Amicus MCP Server (stdio transport) */
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./utils/atomic-write');
 const { spawn } = require('child_process');
 const { getTools, getGuideText } = require('./mcp-tools');
 const { tryResolveModel } = require('./utils/config');
@@ -299,7 +300,7 @@ const handlers = {
         recordSession(taskId, cwd); // #40: global index for cross-project lookup
         const metaPath = path.join(sessionDir, 'metadata.json');
         const serverPort = server.url ? new URL(server.url).port : null;
-        fs.writeFileSync(metaPath, JSON.stringify({
+        writeFileAtomic(metaPath, JSON.stringify({
           taskId, status: 'running',
           pid: null, // Shared server path: don't store MCP server PID (abort would kill all sessions)
           opencodeSessionId: sessionId,
@@ -342,7 +343,7 @@ const handlers = {
             const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
             meta.status = 'idle-timeout';
             meta.completedAt = new Date().toISOString();
-            fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+            writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
           } catch (err) {
             logger.warn('Failed to update evicted session metadata', { error: err.message });
           }
@@ -386,7 +387,7 @@ const handlers = {
             meta.status = 'error';
             meta.reason = err.message;
             meta.completedAt = new Date().toISOString();
-            fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+            writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
           } catch (writeErr) {
             logger.warn('Failed to write error metadata', { error: writeErr.message });
           }
@@ -433,7 +434,7 @@ const handlers = {
       recordSession(taskId, cwd); // #40: global index for cross-project lookup
       const metaPath = path.join(sessionDir, 'metadata.json');
       if (!fs.existsSync(metaPath)) {
-        fs.writeFileSync(metaPath, JSON.stringify({
+        writeFileAtomic(metaPath, JSON.stringify({
           taskId, status: 'running', pid: child.pid, createdAt: new Date().toISOString(),
           headless: !!input.noUi,
           // Seed briefing/mode so list/status are informative even before the
@@ -496,7 +497,7 @@ const handlers = {
             status: 'crashed', crashedAt,
             reason: 'Fan-out process exited unexpectedly',
           });
-          fs.writeFileSync(path.join(sessionDir, 'metadata.json'),
+          writeFileAtomic(path.join(sessionDir, 'metadata.json'),
             JSON.stringify(metadata, null, 2), { mode: 0o600 });
           // Cascade to legs whose pollers died with the parent
           for (const leg of legs) {
@@ -507,7 +508,7 @@ const handlers = {
                   status: 'crashed', crashedAt,
                   reason: 'Parent fan-out process killed',
                 });
-                fs.writeFileSync(
+                writeFileAtomic(
                   path.join(getSessionDir(cwd, leg.taskId), 'metadata.json'),
                   JSON.stringify(legMeta, null, 2), { mode: 0o600 });
                 leg.status = 'crashed';
@@ -541,7 +542,7 @@ const handlers = {
           status: 'crashed', crashedAt: new Date().toISOString(),
           reason: 'Process exited unexpectedly',
         });
-        fs.writeFileSync(path.join(sessionDir, 'metadata.json'),
+        writeFileAtomic(path.join(sessionDir, 'metadata.json'),
           JSON.stringify(metadata, null, 2));
       }
     }
@@ -881,7 +882,7 @@ const handlers = {
       // The prompt goes via file: the spawned command line must NOT carry it,
       // or it re-hits the ~32KB Windows argument cap (F4 spec §4.2).
       fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
-      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+      writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify({
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
         models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
       }, null, 2), { mode: 0o600 });
@@ -915,7 +916,7 @@ const handlers = {
       try {
         const m = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
         Object.assign(m, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
-        fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
+        writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
       } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }

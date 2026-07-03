@@ -9,6 +9,7 @@ const path = require('path');
 const { detectConflicts, formatConflictWarning } = require('../conflict');
 const { logger } = require('../utils/logger');
 const { fenceSidecarOutput } = require('../utils/untrusted-fence');
+const { writeFileAtomic } = require('../utils/atomic-write');
 const {
   SESSIONS_DIR,
   getSessionDir,
@@ -100,7 +101,7 @@ function finalizeSession(sessionDir, summary, project, metadata, opts = {}) {
   const hasSummary = typeof summary === 'string' && summary.trim().length > 0;
   metadata.status = opts.status || (hasSummary ? 'complete' : 'error');
   metadata.completedAt = new Date().toISOString();
-  fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+  writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
 
   logger.info('Session finalized', { taskId: metadata.taskId, status: metadata.status });
 }

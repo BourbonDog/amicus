@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 
+const { writeFileAtomic } = require('../utils/atomic-write');
 const { generateTaskId, runInteractive, buildMcpConfig } = require('./start');
 const {
   SessionPaths,
@@ -103,7 +104,7 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
     continuesFrom: oldTaskId
   };
 
-  fs.writeFileSync(SessionPaths.metadataFile(sessionDir), JSON.stringify(metadata, null, 2));
+  writeFileAtomic(SessionPaths.metadataFile(sessionDir), JSON.stringify(metadata, null, 2));
 
   return sessionDir;
 }
@@ -220,7 +221,7 @@ async function continueSidecar(options) {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
     meta.completedAt = new Date().toISOString();
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+    writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
     finalizeSession(sessionDir, summary, project, meta, { status: terminal.status });

@@ -105,14 +105,19 @@ describe('Session Utils', () => {
 
   describe('finalizeSession', () => {
     let writeFileSyncSpy;
+    let renameSyncSpy;
 
     beforeEach(() => {
       writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+      // metadata.json now goes through writeFileAtomic (tmp write + rename) —
+      // renameSync must be stubbed too, same no-op intent as writeFileSync above.
+      renameSyncSpy = jest.spyOn(fs, 'renameSync').mockImplementation(() => {});
       detectConflicts.mockReturnValue([]);
     });
 
     afterEach(() => {
       writeFileSyncSpy.mockRestore();
+      renameSyncSpy.mockRestore();
     });
 
     it('should save summary and update metadata to complete', () => {
@@ -134,14 +139,19 @@ describe('Session Utils', () => {
         { mode: 0o600 }
       );
 
-      // Should write metadata.json with status=complete
-      const metaCall = writeFileSyncSpy.mock.calls.find(
-        c => c[0] === path.join(sessDir, 'metadata.json')
+      // metadata.json is now written atomically: writeFileSync targets a
+      // ".metadata.json.<pid>.<hex>.tmp" sibling, then renameSync moves it
+      // onto metadata.json. Assert the tmp write's content and that the
+      // rename lands on the real target path.
+      const metaTmpCall = writeFileSyncSpy.mock.calls.find(
+        c => typeof c[0] === 'string'
+          && path.basename(c[0]).startsWith('.metadata.json.') && path.basename(c[0]).endsWith('.tmp')
       );
-      expect(metaCall).toBeTruthy();
-      const savedMeta = JSON.parse(metaCall[1]);
+      expect(metaTmpCall).toBeTruthy();
+      const savedMeta = JSON.parse(metaTmpCall[1]);
       expect(savedMeta.status).toBe('complete');
       expect(savedMeta.completedAt).toBeDefined();
+      expect(renameSyncSpy).toHaveBeenCalledWith(metaTmpCall[0], path.join(sessDir, 'metadata.json'));
     });
 
     it('should detect conflicts and attach to metadata', () => {

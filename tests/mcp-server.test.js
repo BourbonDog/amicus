@@ -1604,7 +1604,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', contextTurns: 25 }, '/tmp/proj');
@@ -1626,7 +1632,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', contextSince: '2h' }, '/tmp/proj');
@@ -1648,7 +1660,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', contextMaxTokens: 40000 }, '/tmp/proj');
@@ -1670,7 +1688,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'test', model: 'openrouter/test/model', summaryLength: 'verbose' }, '/tmp/proj');
@@ -1692,7 +1716,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'self-contained task', model: 'openrouter/test/model', includeContext: false }, '/tmp/proj');
@@ -1713,7 +1743,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'needs context', model: 'openrouter/test/model', includeContext: true }, '/tmp/proj');
@@ -1734,7 +1770,13 @@ describe('amicus_start context and summary args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_start({ prompt: 'default behavior', model: 'openrouter/test/model' }, '/tmp/proj');
@@ -1757,7 +1799,13 @@ describe('amicus_continue context args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_continue({ taskId: 'abc123', prompt: 'continue task', contextTurns: 10 }, '/tmp/proj');
@@ -1779,7 +1827,13 @@ describe('amicus_continue context args', () => {
         ...jest.requireActual('fs'),
         mkdirSync: jest.fn(),
         writeFileSync: jest.fn(),
-        existsSync: jest.fn(() => false)
+        existsSync: jest.fn(() => false),
+        // Metadata writes now go through writeFileAtomic (tmp write + rename);
+        // writeFileSync above is a no-op so no tmp file lands on disk —
+        // renameSync must be stubbed too, or the real implementation
+        // (inherited via requireActual) throws ENOENT on the tmp path.
+        renameSync: jest.fn(),
+        rmSync: jest.fn()
       }));
       const { handlers } = require('../src/mcp-server');
       await handlers.amicus_continue({ taskId: 'abc123', prompt: 'continue task', contextMaxTokens: 20000 }, '/tmp/proj');

@@ -22,6 +22,10 @@ jest.mock('fs', () => ({
   writeFileSync: jest.fn(),
   unlinkSync: jest.fn(),
   readFileSync: jest.fn(),
+  // writeFileAtomic tmp-writes then renames; both no-ops, matching the other
+  // fs stubs above (this suite asserts on directory scoping, not on-disk writes).
+  renameSync: jest.fn(),
+  rmSync: jest.fn(),
 }));
 
 const mockCreateSession = jest.fn();

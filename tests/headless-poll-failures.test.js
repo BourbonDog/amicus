@@ -27,6 +27,10 @@ jest.mock('fs', () => ({
   writeFileSync: jest.fn(),
   readFileSync: jest.fn(() => JSON.stringify({ status: 'running' })),
   unlinkSync: jest.fn(),
+  // writeFileAtomic (progress.js's writer) tmp-writes then renames; both
+  // no-ops, matching the other fs stubs above.
+  renameSync: jest.fn(),
+  rmSync: jest.fn(),
 }));
 
 jest.mock('../src/utils/logger', () => ({

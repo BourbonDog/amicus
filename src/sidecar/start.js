@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 
+const { writeFileAtomic } = require('../utils/atomic-write');
 const { buildContext } = require('./context-builder');
 const {
   SessionPaths,
@@ -66,7 +67,7 @@ function createSessionMetadata(taskId, project, options) {
     createdAt: existing.createdAt || new Date().toISOString()
   };
 
-  fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+  writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
 
   return sessionDir;
 }
@@ -221,7 +222,7 @@ async function startSidecar(options) {
   // Persist OpenCode session ID for resume capability
   if (result && result.opencodeSessionId) {
     meta.opencodeSessionId = result.opencodeSessionId;
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+    writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
   }
 
   // Map the run result to a definitive terminal status + exit code (single source of truth).
@@ -231,7 +232,7 @@ async function startSidecar(options) {
     meta.status = 'error';
     meta.reason = (result && result.error) ? String(result.error) : 'Incomplete';
     meta.completedAt = new Date().toISOString();
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
+    writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Session completed with error', { taskId, error: meta.reason });
   } else {
     // complete / timed-out / aborted: persist the (possibly partial) summary with the correct status.
@@ -243,7 +244,7 @@ async function startSidecar(options) {
   if (runUsage) {
     const m = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
     m.usage = runUsage;
-    fs.writeFileSync(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
+    writeFileAtomic(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
   }
 
   if (json) {

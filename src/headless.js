@@ -12,6 +12,7 @@ const { ensureNodeModulesBinInPath } = require('./utils/path-setup');
 const { ensurePortAvailable } = require('./utils/server-setup');
 const { mapAgentToOpenCode } = require('./utils/agent-mapping');
 const { writeProgress } = require('./sidecar/progress');
+const { writeFileAtomic } = require('./utils/atomic-write');
 const { createMirrorState, mirrorMessages, logMessage } = require('./sidecar/conversation-mirror');
 
 /**
@@ -261,7 +262,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           const metaPath = path.join(sessionDir, 'metadata.json');
           const m = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
           m.goPid = server.goPid;
-          fs.writeFileSync(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
+          writeFileAtomic(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
         } catch { /* metadata optional */ }
       }
       const { installSignalAbort, markAborted } = require('./utils/session-abort');

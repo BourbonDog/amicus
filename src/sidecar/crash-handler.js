@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { SessionPaths } = require('./session-utils');
+const { writeFileAtomic } = require('../utils/atomic-write');
 
 /**
  * Create a crash handler that updates session metadata on error.
@@ -38,7 +39,7 @@ function installCrashHandler(taskId, project) {
       metadata.reason = err.message;
       metadata.errorAt = new Date().toISOString();
 
-      fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
+      writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
 
       // Delete session lock if it exists
       const lockPath = path.join(sessionDir, 'session.lock');

@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { latestAssistantPreview } = require('./progress-fields');
+const { writeFileAtomic } = require('../utils/atomic-write');
 
 /** Lifecycle stage labels */
 const STAGE_LABELS = {
@@ -117,7 +118,7 @@ function writeProgress(sessionDir, stage, extra = {}) {
     updatedAt: new Date().toISOString(),
     ...extra
   };
-  fs.writeFileSync(progressPath, JSON.stringify(data), { mode: 0o600 });
+  writeFileAtomic(progressPath, JSON.stringify(data), { mode: 0o600 });
 }
 
 /**
