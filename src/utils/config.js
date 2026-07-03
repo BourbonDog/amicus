@@ -15,6 +15,9 @@ const { getCompatEnv } = require('./env-compat');
 const { toDefaultAliases } = require('./curated-models');
 const DEFAULT_ALIASES = toDefaultAliases();
 
+/** Built-in council benches (B23) — consulted only when a name is absent from user config. */
+const { resolveBuiltinCouncil } = require('./council-presets');
+
 /** @returns {string} Config directory path */
 function getConfigDir() {
   const override = getCompatEnv('CONFIG_DIR');
@@ -313,6 +316,24 @@ function getCouncil(name) {
 }
 
 /**
+ * Look up a council's raw member list, checking user config FIRST and the
+ * built-in benches (free/budget/frontier — src/utils/council-presets.js)
+ * only when the name is absent from user config. User config always shadows
+ * a same-named built-in — this matches the pre-existing last-write-wins
+ * posture the wizard's `councils.free` seeding already relied on.
+ * @param {string} name
+ * @param {Array<{id:string}>} [catalog] needed only to resolve the dynamic 'free' bench
+ * @returns {{members:string[]|null, builtin:boolean}}
+ */
+function getCouncilWithSource(name, catalog = []) {
+  const userMembers = getCouncil(name);
+  if (userMembers) { return { members: userMembers, builtin: false }; }
+  const builtinMembers = resolveBuiltinCouncil(name, catalog);
+  if (builtinMembers) { return { members: builtinMembers, builtin: true }; }
+  return { members: null, builtin: false };
+}
+
+/**
  * Expand a saved council into a runnable members list, degrading gracefully.
  * Each member is resolved to its full model id (alias → id via effective
  * aliases; a member containing '/' is taken as-is) and that id checked against
@@ -320,12 +341,17 @@ function getCouncil(name) {
  * warning rather than fail-fast-aborting the whole wave. The catalog check is
  * skipped when the catalog is empty (offline). Returns members RAW (alias or
  * id) — leg-time validation resolves them again.
+ *
+ * Resolution order: user config (`config.councils`) is checked first; when
+ * `name` is absent there, the built-in benches (`free`/`budget`/`frontier`)
+ * are consulted (src/utils/council-presets.js). A user-saved council always
+ * shadows a built-in of the same name.
  * @param {string} name
  * @param {Array<{id:string}>} [catalog]
  * @returns {{models:string[], dropped:string[]} | {error:string}}
  */
 function resolveCouncilMembers(name, catalog = []) {
-  const members = getCouncil(name);
+  const { members } = getCouncilWithSource(name, catalog);
   if (!members) {
     return { error: `Unknown council '${name}'. Run 'amicus setup' to create one.` };
   }
@@ -370,5 +396,6 @@ module.exports = {
   buildProviderModels,
   getCouncils,
   getCouncil,
+  getCouncilWithSource,
   resolveCouncilMembers,
 };

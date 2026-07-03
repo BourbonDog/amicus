@@ -216,6 +216,8 @@ amicus fanout --council free --prompt "Review this design"
 
 The `amicus_fanout` MCP tool takes the same `council` parameter, and the `second-opinion` skill reads `councils.free` automatically. A member that gets delisted is dropped with a warning — the council still runs as long as ≥2 survive. Free models are **rate-limited and quality-variable**, and some return 404 unless you enable data-sharing at [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy).
 
+**Council presets.** Save your own named member lists with `amicus council save <name> --models a,b,c` (≥2 resolvable aliases or `provider/model` IDs), then run them with `--council <name>` anywhere a council runs. `amicus council list` shows saved presets plus three built-in benches that work with no setup at all — `free` (the same zero-cost dynamic pick described above, used when you haven't seeded `councils.free`), `budget` (cheap workhorses, one per vendor family), and `frontier` (premium flagships, one per vendor family). `amicus council show <name>` resolves any of them (saved or built-in) and reports which members are currently usable. A saved council always shadows a built-in of the same name — exactly how the wizard's `councils.free` seeding already worked.
+
 ---
 
 ## The parallel window
@@ -266,8 +268,9 @@ amicus update
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
+| `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
-| `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`. |
+| `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |
@@ -317,7 +320,7 @@ amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this design" --jso
 Fanout runs one **headless wave**: every leg gets the **same** prompt (this is the shared-prompt model the council's review stages are built on). When all legs are terminal it prints **one** JSON wave document on stdout.
 
 - `--models <a,b,c>` — comma-separated aliases or `provider/model` IDs (required, unless `--council`).
-- `--council <name>` — run a saved council (e.g. `free`) instead of `--models`; mutually exclusive with `--models`.
+- `--council <name>` — run a saved council, or a built-in bench (`free`, `budget`, `frontier`), instead of `--models`; mutually exclusive with `--models`. A saved council of the same name always shadows the built-in — see `amicus council save/list/show` below.
 - `--prompt <text>` / `--prompt-file <path>` — the shared briefing. `--prompt-file` avoids the ~32 KB Windows argument cap and is mutually exclusive with `--prompt`.
 - `--wave-id <id>` — set the wave ID explicitly (leg IDs become `<id>-1..N`).
 - `--json` — emit the wave document.

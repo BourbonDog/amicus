@@ -94,6 +94,14 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   const summary = result.summary || null;
   const { resolveUsage } = require('../utils/pricing');
   const usage = result && result.usage ? resolveUsage({ model: leg.model, usageTotals: result.usage }) : null;
+  // B24: cross-run spend ledger — one row per leg (mirrors start.js's single-run
+  // append). Best-effort; never let ledger bookkeeping affect the leg's own result.
+  if (usage) {
+    try {
+      const { appendSpend } = require('../utils/spend-ledger');
+      appendSpend({ taskId: legId, waveId, model: leg.model, mode: 'leg', usage });
+    } catch { /* best-effort */ }
+  }
   // If setup threw before the session dir existed, there is nothing on disk to
   // finalize — still resolve to an error run document so the wave aggregates.
   const legPatch = {

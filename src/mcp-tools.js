@@ -305,7 +305,9 @@ function getTools() {
         `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed. Omit when using 'council'.`
       ),
       council: z.string().optional().describe(
-        "Run a saved council by name (e.g. 'free') instead of 'models'. Expands to the council's members. Mutually exclusive with 'models'."
+        "Run a saved council, or a built-in bench ('free', 'budget', 'frontier'), instead of 'models'. " +
+        "Expands to the council's members; a saved council of the same name shadows a built-in. " +
+        'Mutually exclusive with \'models\'.'
       ),
       prompt: z.string().describe(
         'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'

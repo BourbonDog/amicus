@@ -27,10 +27,16 @@ amicus models --check                     # Audit aliases against catalog
 amicus mcp                                # Start MCP server (stdio transport)
 amicus update                             # Update to latest version
 amicus doctor [--json] [--fix]            # Diagnose setup; --fix self-heals (e.g. Electron)
+amicus spend [--since 7d] [--json]        # Cross-run cost rollup from the spend ledger
 amicus key <provider> <key>               # Validate + save one API key (also: --remove / bare list)
 amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+ ledger append)
 amicus council stats [--json]             # Reviewer reliability from the ledger
 amicus council report <verdict.json> [--md|--html]   # Render the council run report
+amicus council validate <file> [--json]   # Validate a Stage-1 findings block (exit 0/2/1)
+amicus council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]  # Build + write verdict.json
+amicus council save <name> --models a,b,c # Save a named council preset (>=2 resolvable members)
+amicus council list [--json]              # List saved councils + built-ins (free/budget/frontier)
+amicus council show <name> [--json]       # Resolve a council (saved or built-in) and show its members
 ```
 
 ---
@@ -79,7 +85,7 @@ amicus fanout --council free --prompt "Review this design" --json
 | Option | Description |
 |--------|-------------|
 | `--models <a,b,c>` | Comma-separated aliases or full provider IDs. Required unless `--council` is given; mutually exclusive with `--council`. |
-| `--council <name>` | Run a saved council (e.g. `free`) instead of `--models`; mutually exclusive with `--models`. |
+| `--council <name>` | Run a saved council, or one of the built-in benches `free` \| `budget` \| `frontier`, instead of `--models`; mutually exclusive with `--models`. A saved council of the same name as a built-in always takes precedence (see `amicus council list`/`show`). |
 | `--prompt <text>` | Shared briefing (mutually exclusive with `--prompt-file`). |
 | `--prompt-file <path>` | Read the shared briefing from a file. Preferred for long briefs and required on Windows when content exceeds ~32 KB. |
 | `--wave-id <id>` | Set the wave ID explicitly; leg IDs become `<wave-id>-1` … `<wave-id>-N`. |
@@ -110,6 +116,29 @@ amicus fanout --council free --prompt "Review this design" --json
 `status` is `complete | partial | error | aborted`. Each leg's `summary` is that model's full response.
 
 **Fanout vs. N parallel starts.** Use `fanout` when every leg should receive the **same prompt** — this is what the council's independent review waves use. Use N separate `start` calls when each leg needs a **different prompt**.
+
+---
+
+## `amicus council save|list|show` — Council Presets
+
+A council preset is a named list of `--models`-style members (aliases or full `provider/model` IDs) that `--council <name>` (on `fanout` and the `amicus_fanout` MCP tool) can run in one shot.
+
+```bash
+amicus council save my-bench --models opus,gpt,deepseek   # Save (or overwrite) a preset
+amicus council list [--json]                               # Saved presets + built-ins
+amicus council show my-bench [--json]                       # Members + resolution (resolved/dropped)
+amicus council show budget [--json]                         # Works on built-ins too
+```
+
+**Built-in benches.** Three names resolve even with no saved config — `resolveCouncilMembers` (the same function `--council` uses everywhere) checks user-saved councils first, and falls back to these only when the name isn't saved:
+
+| Name | Members | Resolution |
+|------|---------|------------|
+| `free` | Zero-cost `:free`-suffixed OpenRouter models, one per vendor | Dynamic — resolved from the live catalog at use time (same logic as the setup wizard's free-council picker), with a small offline pinned fallback when the catalog is empty |
+| `budget` | 3 cheap workhorse aliases across 3 distinct vendor families | Static — fixed aliases from the default alias table |
+| `frontier` | 3 premium flagship aliases across 3 distinct vendor families | Static — fixed aliases from the default alias table |
+
+**Precedence: user config always shadows a built-in of the same name.** If you `amicus setup` the wizard's free-OpenRouter-council flow, it seeds `councils.free` in your config — that saved list then wins over the built-in `free` bench (this is the pre-existing behavior, unchanged). The same shadowing applies if you `amicus council save budget --models ...`. `amicus council list` marks a built-in `shadowed: true` when a saved council of the same name exists.
 
 ---
 

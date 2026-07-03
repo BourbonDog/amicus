@@ -19,4 +19,6 @@ don't re-ask for what is already present).
 
 Then follow the second-opinion skill end to end: Stage 0 intake/prep and run-folder
 setup, council selection with a cost estimate and explicit user confirmation, the
-three review waves, `amicus council tally`, and the accept/deny decision pass.
+three review waves, `amicus council validate` on each leg's findings block,
+`amicus council tally`, the accept/deny decision pass, and `amicus council verdict`
+to write the final `verdict.json`.

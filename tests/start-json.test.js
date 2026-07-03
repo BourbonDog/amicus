@@ -101,6 +101,83 @@ describe('start --json (F4)', () => {
   });
 });
 
+describe('spend ledger append on start finalize (B24)', () => {
+  let project;
+  let prevConfigDir;
+  let ledgerDir;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-startspend-'));
+    prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-startspend-ledger-'));
+    process.env.AMICUS_CONFIG_DIR = ledgerDir;
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    fs.rmSync(project, { recursive: true, force: true });
+    if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+    else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+  });
+
+  it('a headless run with usage appends one spend-ledger row, mode:headless', async () => {
+    // costReported > 0 short-circuits resolveLegCost before it ever consults
+    // pricing/catalog lookups — keeps this test independent of catalog state.
+    mockRunHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      usage: { tokens: { input: 200, output: 80, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.02 },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0001',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      taskId: 'spend0001', waveId: null, model: 'openrouter/a/b', mode: 'headless',
+      tokens: { input: 200, output: 80 },
+      cost: { amount: 0.02, currency: 'USD', source: 'reported' },
+    });
+  });
+
+  it('a run with no usage on the result does not append a row', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      // no .usage
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0002',
+    });
+    expect(readSpendRows(ledgerDir)).toHaveLength(0);
+  });
+
+  it('a ledger append failure never fails the run (best-effort)', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      usage: { tokens: { input: 5, output: 5, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.001 },
+    });
+    // Force appendSpend to throw — start.js wraps the call in its own try/catch,
+    // so the run must still complete and emit its JSON doc normally.
+    jest.spyOn(require('../src/utils/spend-ledger'), 'appendSpend').mockImplementation(() => {
+      throw new Error('ledger boom');
+    });
+    const logSpy = console.log;
+    const exitCode = await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0003',
+    });
+    expect(exitCode).toBe(0);
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const doc = JSON.parse(logSpy.mock.calls[0][0]);
+    expect(doc.status).toBe('complete');
+    jest.restoreAllMocks();
+  });
+});
+
 describe('finalizeSession signature (source guard)', () => {
   it('accepts an opts arg and uses process.stderr.write for quietStdout routing', () => {
     const src = fs.readFileSync(path.join(__dirname, '../src/sidecar/session-utils.js'), 'utf-8');

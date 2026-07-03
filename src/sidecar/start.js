@@ -253,6 +253,12 @@ async function startSidecar(options) {
     const m = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
     m.usage = runUsage;
     writeFileAtomic(metaPath, JSON.stringify(m, null, 2), { mode: 0o600 });
+    // B24: cross-run spend ledger. Best-effort — appendSpend never throws, but
+    // this run's own success must never hinge on ledger bookkeeping either way.
+    try {
+      const { appendSpend } = require('../utils/spend-ledger');
+      appendSpend({ taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage });
+    } catch { /* best-effort */ }
   }
 
   if (json) {

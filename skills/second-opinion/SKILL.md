@@ -165,7 +165,7 @@ equivalent.
 
 Instruct models to emit the structured JSON verbatim after the prose, without preamble, so it parses cleanly.
 
-**After the wave returns, validate each leg's findings block** using `validateFindings` (Unit A — `src/council/findings.js`). If a leg's JSON fails validation:
+**After the wave returns, validate each leg's findings block** by running `amicus council validate <leg-file> --json` (a thin CLI wrapper over `validateFindings`, Unit A — `src/council/findings.js`). It reads the leg's saved `review-<model>.md` and prints `{ok, findings, errors}`. Exit codes are a **tri-state** contract: `0` when `ok:true` (well-formed, proceed), `2` when `ok:false` (validation failed — a distinct, scriptable outcome, not a crash), `1` (`BAD_ARGS`) for a missing/unreadable file. If a leg's JSON fails validation (`ok:false` / exit 2):
 1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` passes through the **same budget gate** as `fanout`. If launching the wave required `--max-cost <$>` or `--no-cost-gate`, pass the **same flag on every repair re-prompt and on the chair call** — otherwise the gate can refuse a repair or the chair mid-council.)
 2. If still malformed, retry **once more** (cap = **2** re-prompts total).
 3. If still malformed after 2 retries, mark the review `unstructured` and hand-parse its prose into the schema. The review proceeds — never dropped for a formatting miss.
@@ -242,10 +242,10 @@ As each judge's ranking + adjudication response returns, collect it (the raw per
 
 **Five-keys checklist — verify `tally-input.json` has ALL of:** `meta` (with `meta.models`), `findings`, `adjudications`, `rankings`, `runStats` (`runStats` may be `[]`; the other four are required). Do not call `tally` until all five are present.
 
-Then call:
+Then call, saving the printed `record` to `<run-folder>/tally.json` (Stage 5's `amicus council verdict` reads it back from disk):
 
 ```
-amicus council tally <run-folder>/tally-input.json --json
+amicus council tally <run-folder>/tally-input.json --json > <run-folder>/tally.json
 ```
 
 The output `record` carries the deterministic tiers (Disputed / Confirmed / Contested / Singleton), `confidence` (`solid` | `thin`), both street-cred numbers (`withSelf` and `peersOnly`), the validated `runStats`, and `tierCounts`. **Claude may override a `thin`-confidence tier at the margins** before Stage 4 — record the override in `tierOverride: {from, to, reason}`; the matrix and `verdict.json` surface it. De-anonymize and write the tally results to `crossreview-matrix.md` — the adjudication grid plus the street-cred table. This data feeds Stage 3 (chair briefing) and is never re-anonymized or forwarded to any council model.
@@ -334,7 +334,7 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
 - `review-<model>.md` × N (already saved in Stage 1)
 - `crossreview-matrix.md` — the de-anonymized adjudication grid and street-cred table
 - `verdict.md` (already saved in Stage 3)
-- `verdict.json` — write via `buildVerdict(record, decisions)` (`src/council/verdict.js`): pass the tally `record` from Stage 2 and the Stage-4 decision map (accepted / denied / modified / deferred per finding, plus any `duplicateOf` links Claude identified). This is the schema-stamped machine-readable record of the full run. Write it with an atomic tmp+rename to the run folder.
+- `verdict.json` — write by running `amicus council verdict <run-folder>/tally.json --decisions <run-folder>/decisions.json -o <run-folder>/verdict.json` (a thin CLI wrapper over `buildVerdict(record, decisions)` + `writeVerdictAtomic`, `src/council/verdict.js`). `<run-folder>/tally.json` is the `record` saved from the Stage-2 `amicus council tally` call. Save the Stage-4 decision map (accepted / denied / modified / deferred per finding, plus any `duplicateOf` links Claude identified) to `<run-folder>/decisions.json` first, then run the command — it parses the tally record and the decisions file, calls `buildVerdict`, and writes the schema-stamped machine-readable record to the run folder via the same atomic tmp+rename convention the function always used.
 - `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was
   applied (+ the "How Claude's review fared" readout when "Claude in the council" is on) + a
   **run-stats table**: one row per model call — **stage** (which stage you launched the call for)
@@ -465,7 +465,7 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `review-<model>.md` ×N — raw Stage 1 reviews (plus `review-claude.md` when "Claude in the council" is on)
   - `crossreview-matrix.md` — adjudication grid + de-anonymized street-cred table
   - `verdict.md` — the chair's synthesis (prose)
-  - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `buildVerdict(record, decisions)` at Stage 5
+  - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `amicus council verdict` at Stage 5
   - `report.md` — synthesis + decision log + what was applied (+ the "How Claude's review fared" readout when the toggle is on) + a
     **run-stats table**: one row per model call — **stage** (which stage you launched the call for) plus **model, status, durationMs, and cost** read from the wave/run JSON `usage`
     block. Cost is `usage.cost.amount` (USD); mark it with its `usage.cost.source`

@@ -94,6 +94,17 @@ function parseArgs(argv) {
       } else {
         result[key] = true;
       }
+    } else if (arg === '-o') {
+      // Single short-flag alias, scoped to exactly '-o' (council verdict's
+      // --out shorthand). No general short-flag support is implemented —
+      // any other leading-dash token still falls through to positionals.
+      const next = argv[i + 1];
+      if (next && !next.startsWith('-')) {
+        result.out = next;
+        i++;
+      } else {
+        result.out = true;
+      }
     } else {
       result._.push(arg);
     }
@@ -338,7 +349,10 @@ Commands:
   council tally <input.json> [--json]   Tally council findings → tiers/street-cred
   council stats [--json]                Reviewer-reliability from the ledger
   council report <verdict.json> [--wave <wave.json>] [--md|--html]   Disagreement+verdict report
+  council validate <file> [--json]      Validate a Stage-1 findings block (exit 0/2/1)
+  council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]   Build + write verdict.json
   doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
+  spend [--since 7d] [--json]           Cross-run cost rollup from the spend ledger
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
@@ -465,12 +479,27 @@ Subcommands for 'council':
     --wave <wave.json>         Include per-leg run stats from a wave file
     --md                       Emit Markdown (default)
     --html                     Emit a self-contained HTML page
+  validate <file>               Validate a Stage-1 reviewer's findings block
+    --json                     Machine-readable output
+    Exit codes: 0 ok:true, 2 ok:false (validation failure), 1 BAD_ARGS
+                               (missing/unreadable file)
+  verdict <tally.json>          Build + write verdict.json (buildVerdict + atomic write)
+    --decisions <d.json>       Optional. Stage-4 decisions array (default [])
+    -o, --out <out.json>       Output path (default ./verdict.json)
+    --json                     Print the full verdict document
 `,
   doctor: `
 Options for 'doctor':
   --json                       Machine-readable output
   --fix                        Self-heal fixable checks in place (provisions the
                                Electron GUI binary; no global reinstall)
+`,
+  spend: `
+Options for 'spend':
+  --since <Nd>                  Restrict to the last N days (e.g. --since 7d)
+  --json                        Machine-readable output (versioned spend doc)
+  Reads ~/.config/amicus/spend-ledger.jsonl (one row per completed run/leg).
+  Shows remaining OpenRouter credit when a key is configured.
 `,
   setup: `
 Options for 'setup':
