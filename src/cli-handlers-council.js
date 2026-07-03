@@ -6,6 +6,8 @@ const { deriveReliability, appendRun } = require('./council/ledger');
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
+const { validateFindings } = require('./council/findings');
+const { buildVerdict, writeVerdictAtomic } = require('./council/verdict');
 
 function runTally(inputPath, useJson, opts = {}) {
   if (!inputPath) {
@@ -87,6 +89,93 @@ function runReport(args, useJson) {
   return 0;
 }
 
+/**
+ * `amicus council validate <file>` — thin wrapper over `validateFindings`
+ * (src/council/findings.js). Tri-state outcome, distinct from the usual
+ * two-state (0/1) CLI convention:
+ *   exit 0  ok:true              — findings block is well-formed
+ *   exit 2  ok:false             — findings block parsed as a *result*, but
+ *                                  validation failed (a distinct, scriptable
+ *                                  outcome — mirrors the repo's exit-2
+ *                                  "completed-with-failure" convention)
+ *   exit 1  BAD_ARGS envelope    — missing/unreadable input file
+ */
+function runValidate(filePath, useJson) {
+  if (!filePath) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'council validate needs a <file> path',
+      hint: 'amicus council validate <file> [--json]' });
+  }
+  let text;
+  try { text = fs.readFileSync(filePath, 'utf-8'); }
+  catch (e) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot read ${filePath}: ${e.message}`,
+      hint: 'pass a Stage-1 reviewer output file (prose + trailing ```json findings block)' });
+  }
+  const result = validateFindings(text);
+  process.stdout.write(useJson ? JSON.stringify(result, null, 2) + '\n' : renderValidate(result));
+  return result.ok ? 0 : 2;
+}
+
+function renderValidate(result) {
+  if (result.ok) {
+    const hist = {};
+    for (const f of result.findings) { hist[f.severity] = (hist[f.severity] || 0) + 1; }
+    const parts = Object.keys(hist).map(sev => `${sev} ${hist[sev]}`).join(', ');
+    const n = result.findings.length;
+    return `OK — ${n} finding${n === 1 ? '' : 's'}${parts ? ` (${parts})` : ''}\n`;
+  }
+  return 'INVALID\n' + result.errors.map(e => `  ${e.code}: ${e.detail}`).join('\n') + '\n';
+}
+
+/**
+ * `amicus council verdict <tally.json> --decisions <decisions.json> [-o|--out <out.json>]`
+ * Thin wrapper over `buildVerdict` + `writeVerdictAtomic` (src/council/verdict.js).
+ * `--decisions` is optional (buildVerdict defaults decisions to []). Writes to
+ * `-o`/`--out` (default `./verdict.json`) via the atomic tmp+rename convention.
+ */
+function runVerdict(args, useJson) {
+  const tallyPath = args._[2];
+  if (!tallyPath) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'council verdict needs a <tally.json> path',
+      hint: 'amicus council verdict <tally.json> [--decisions <decisions.json>] [-o|--out <out.json>]' });
+  }
+  let record;
+  try { record = JSON.parse(fs.readFileSync(tallyPath, 'utf-8')); }
+  catch (e) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot read ${tallyPath}: ${e.message}`,
+      hint: 'pass a valid tally.json (from `amicus council tally` / amicus_council_tally)' });
+  }
+  let decisions = [];
+  const decisionsPath = args.decisions;
+  if (decisionsPath) {
+    try { decisions = JSON.parse(fs.readFileSync(decisionsPath, 'utf-8')); }
+    catch (e) {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot read --decisions ${decisionsPath}: ${e.message}`,
+        hint: 'pass a valid decisions.json array or omit --decisions' });
+    }
+  }
+  const outPath = args.o || args.out || './verdict.json';
+  let verdict;
+  try { verdict = buildVerdict(record, decisions); }
+  catch (e) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot build verdict: ${e.message}`,
+      hint: 'tally.json needs meta, findings[], streetCred[], runStats, tierCounts' });
+  }
+  writeVerdictAtomic(outPath, verdict);
+  process.stdout.write(useJson ? JSON.stringify(verdict, null, 2) + '\n' : renderVerdict(verdict, outPath));
+  return 0;
+}
+
+function renderVerdict(v, outPath) {
+  const counts = {};
+  for (const f of v.findings) {
+    const key = f.decision || 'undecided';
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  const parts = Object.keys(counts).map(k => `${k} ${counts[k]}`).join('  ');
+  return `Verdict (schema v${v.schemaVersion}, ${v.runId}) → ${outPath}\n  ${parts}\n`;
+}
+
 /** @param {{_:string[], json?:boolean}} args @returns {Promise<number>} */
 async function handleCouncil(args) {
   const sub = args._[1];
@@ -94,8 +183,10 @@ async function handleCouncil(args) {
   if (sub === 'tally') { return runTally(args._[2], useJson, { append: !args['no-ledger'] }); }
   if (sub === 'stats') { return runStats(useJson); }
   if (sub === 'report') { return runReport(args, useJson); }
+  if (sub === 'validate') { return runValidate(args._[2], useJson); }
+  if (sub === 'verdict') { return runVerdict(args, useJson); }
   return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
-    message: `unknown council subcommand '${sub || ''}'`, hint: 'amicus council tally|stats|report' });
+    message: `unknown council subcommand '${sub || ''}'`, hint: 'amicus council tally|stats|report|validate|verdict' });
 }
 
 module.exports = { handleCouncil };
