@@ -34,6 +34,34 @@ Phase 9: distribution — plugin slash commands, MCP Registry wiring, and the ma
 - **`plugin.json`'s unrecognized `bugs` field removed.** `claude plugin validate . --strict` now passes
   clean (exit 0); it previously reported an unknown-field warning that `--strict` promotes to an error.
 
+Phase 12: engine pull-forwards — the three reviewer-flagged high-impact fixes.
+
+### Fixed
+- **Closing the GUI window no longer loses the session summary.** Closing without folding previously
+  destroyed the window immediately — the session finalized as `complete` with a placeholder summary, and
+  closing during an in-flight fold discarded the summary about to land. The window close is now intercepted
+  by a close guard (`electron/close-guard.js`): a close with no fold auto-triggers the same fold flow
+  (overlay + summary + `[SIDECAR_FOLD]` handoff) and then closes; a close during an in-flight fold lets it
+  finish; a failed or timed-out fold still closes the window (the user is never trapped). External abort
+  remains immediate and never waits on a fold.
+- **The MCP server no longer hardcodes `--client cowork`.** Under Claude Code — the primary caller — that
+  hardcode silently broke `includeContext:true` (empty context), parent-MCP discovery, and session-dir
+  resolution. The server now detects its caller from the MCP handshake's `clientInfo` (claude-code →
+  `code-local`; Claude Desktop/Cowork → `cowork`; unknown callers keep today's `cowork` behavior with a
+  one-time stderr notice) and threads the detected client through every spawn path and the in-process
+  shared-server path. A new `AMICUS_MCP_CLIENT` env var (set it in the MCP registration's `env` block)
+  explicitly overrides detection.
+
+### Changed
+- **Every prose channel that returns another model's output is now wrapped in the
+  `<untrusted_sidecar_output>` fence**, extending the protection `amicus_read` summaries already had: MCP
+  wave and conversation reads, CLI `amicus read` summary/conversation/wave output, and the foreground
+  summary echo after `start`/`continue`/`resume`. This is visible in CLI output. JSON output (`--json`),
+  metadata mode, and on-disk artifacts (`wave.json`, `summary.md`, `conversation.jsonl`) are byte-identical
+  to before — the fence is applied only at output time, never at write time.
+- Internal: `interactive.js`'s Electron process helpers extracted to `src/sidecar/interactive-process.js`
+  (size-gate headroom; no behavior change).
+
 Phase 11: release-rail hardening and a skill-routing hotfix (pre-v1.9.0 pull-forwards).
 
 ### Fixed
