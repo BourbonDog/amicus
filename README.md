@@ -226,6 +226,8 @@ When you don't need a full council — just one other model's take — fork a co
 
 **Headless (`--no-ui`):** the agent works autonomously and emits the fold summary when it finishes — ideal for bulk work like test generation or documentation. Pair with `--json` for a machine-readable run document.
 
+**How the fold handoff actually works.** A fold is a summary handoff, not a live handback — once you fold, the sidecar model's context is gone. Mechanically: clicking **FOLD** asks the model for a structured summary, then writes it to the Electron process's stdout as a `[SIDECAR_FOLD]`-tagged block; the amicus runner that spawned Electron captures that stdout and persists it as the session's `summary.md` (under the session directory, alongside `metadata.json` and `conversation.jsonl`). Nothing pushes the result back to you automatically — your orchestrating agent picks it up on request, via `amicus read <taskId>` (CLI) or the `amicus_read` MCP tool. Either path returns the summary wrapped in an `<untrusted_sidecar_output>` fence, since it's prose from another model entering your context and should be treated as data, not instructions.
+
 **Context sharing.** Your conversation history is passed automatically. Tune it:
 
 - `--context-turns <N>` — max conversation turns to include (default 50).
@@ -301,7 +303,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 | `--fold-shortcut <key>` | Customize the fold keyboard shortcut. | `Cmd/Ctrl+Shift+F` |
 | `--opencode-port <port>` | Port override for the OpenCode server. | |
 | `--session-dir <path>` | Explicit session-data directory. | |
-| `--setup` | Force-open configuration before launching. | |
+| `--setup` | Force-open configuration before launching. Does **not** relax the `--prompt`/`--prompt-file` requirement — `start --setup` still fails fast with "Error: --prompt or --prompt-file is required" if neither is given. | |
 | `--no-validate-model` | Skip model-catalog validation before launch. | validation on |
 
 > Agents: **Chat** auto-approves reads and asks before writes/bash (interactive default); **Build** has full tool access (headless default); **Plan** is read-only analysis. `--agent Chat` is interactive-only and incompatible with `--no-ui`.
@@ -319,6 +321,7 @@ Fanout runs one **headless wave**: every leg gets the **same** prompt (this is t
 - `--prompt <text>` / `--prompt-file <path>` — the shared briefing. `--prompt-file` avoids the ~32 KB Windows argument cap and is mutually exclusive with `--prompt`.
 - `--wave-id <id>` — set the wave ID explicitly (leg IDs become `<id>-1..N`).
 - `--json` — emit the wave document.
+- `--session-id <id|current>` — session to pull shared context from (same as `start`; supported on `fanout` too).
 - Shared per-leg knobs: `--agent`, `--thinking`, `--timeout`, `--summary-length`, `--no-context`, the `--context-*` flags, the `--mcp*` flags, `--no-validate-model`, `--cwd`.
 - **Exit codes:** `0` all legs complete, `2` partial wave, `1` none complete / hard failure.
 
@@ -326,7 +329,8 @@ Fanout runs one **headless wave**: every leg gets the **same** prompt (this is t
 
 ```bash
 amicus list                          # current project
-amicus list --status running         # filter by status (running, complete)
+amicus list --status running         # filter by status: running, complete, error,
+                                      # timed-out, aborted, crashed, idle-timeout
 amicus list --all                    # all projects
 amicus list --json                   # machine-readable
 
@@ -348,6 +352,32 @@ amicus abort --all                   # stop all running sessions in this project
 amicus setup --api-keys              # open just the API-key window
 amicus setup --add-alias fast=openrouter/google/gemini-2.5-flash   # add/override one alias
 ```
+
+**`amicus status <id>` output.** Human-readable:
+
+```
+$ amicus status demo123
+Task:     demo123
+Status:   complete (terminal)
+Elapsed:  5m 0s
+Model:    google/gemini-2.5-flash
+```
+
+`--json`:
+
+```
+$ amicus status demo123 --json
+{
+  "taskId": "demo123",
+  "status": "complete",
+  "elapsed": "5m 0s",
+  "version": "1.8.1",
+  "model": "google/gemini-2.5-flash",
+  "phase": "terminal"
+}
+```
+
+A running session additionally reports `messages`, `lastActivity`/`latest`, and (if stalled) a `STALLED` line with recovery guidance in `--json`. A wave ID (`amicus status <waveId>` / `--wave <waveId>`) instead reports `legsComplete`/`legsTotal` and a per-leg breakdown.
 
 ---
 
@@ -511,6 +541,7 @@ Most Claude-adjacent tooling assumes macOS/Linux; Amicus doesn't.
 | `npm install -g amicus` fails with `EEXIST: … claude-sidecar` | The old upstream `claude-sidecar` package is still installed globally; npm won't overwrite another package's bin shims | `npm uninstall -g claude-sidecar`, then `npm install -g amicus`. Your config and sessions carry over (legacy paths are still read). |
 | Install fails partway, or `amicus doctor` reports the OpenCode binary "not found" | A **transient** error during the OpenCode engine's own postinstall (a spawn `ENOENT`, or an antivirus file-lock while it lays down its 11 per-platform binaries) can roll back the whole atomic install — retrying usually succeeds | Just re-run `npm install -g amicus`. If it still fails, clear the cache first: `npm cache clean --force && npm install -g amicus`. |
 | `401` / auth error | API key missing, or the model prefix doesn't match the key you have | Run `amicus setup`; make sure the prefix (`openrouter/…` vs `google/…` vs `openai/…` vs `anthropic/…`) matches the credentials you configured. |
+| `402` / "Payment Required" on first `council`/`start` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See "Free council (zero-cost)" under [The Council](#the-council) above. |
 | Session not found | No session matches the given ID | Run `amicus list`, or omit `--session-id` to use the most recent. |
 | No conversation history found | Project-path encoding | Check `~/.claude/projects/`; `/` and `_` in the project path are encoded as `-` in the directory name. |
 | Headless run never finishes | Task is bigger than the default timeout | Raise it: `--timeout 30`. |
