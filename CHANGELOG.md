@@ -29,9 +29,12 @@ Phase 18: shim removal (#19) — the breaking change that defines v2.0.0.
   - **`sidecar_*` MCP tool aliases + the `AMICUS_LEGACY_ALIASES=1` opt-in** (`src/mcp-server.js`) — the
     tool surface is `amicus_*` only, unconditionally; `AMICUS_LEGACY_ALIASES=1` is now a no-op
     (regression-pinned in `tests/mcp-server-legacy-aliases.test.js`).
-  - **Public API `*Sidecar` naming** — clarified, not actually a removal: `startSidecar`/`listSidecars`/etc.
-    were always internal identifiers, never separately-exported deprecated aliases; the only public
-    names were always `startAmicus`/`listAmicus`/`resumeAmicus`/`continueAmicus`/`readAmicus`.
+  - **Public API `*Sidecar` aliases** (`src/index.js` `module.exports`) — `startSidecar`/`listSidecars`/
+    `resumeSidecar`/`continueSidecar`/`readSidecar` were exported as deprecated aliases through v1.9.1
+    (present on npm in every release); v2.0.0 removes them from the package root. Only the canonical
+    `startAmicus`/`listAmicus`/`resumeAmicus`/`continueAmicus`/`readAmicus` names remain exported.
+    Switch any import of a `*Sidecar`-named export from `amicus`'s package root to its `*Amicus`
+    equivalent.
 - **Kept, not removed:** the `[SIDECAR_FOLD]`/`[SIDECAR_FOLD:<nonce>]` wire-format token (deliberate
   transport continuity, unrelated to the compat shims), the `sidecar` chat-skill's directory name, and
   the one-shot legacy-`'sidecar'`-MCP-entry cleanup in `src/utils/legacy-mcp-migration.js` (re-scoped

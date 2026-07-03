@@ -6,7 +6,6 @@
 const path = require('path');
 
 const { logger } = require('../utils/logger');
-const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 
 /** Resolve the Electron binary path ONLY when the exe actually exists on disk.
  *  #54: path.txt surviving (require('electron') resolving) is NOT enough — a
@@ -31,13 +30,12 @@ function checkElectronAvailable() {
 
 /** Build environment variables for Electron process */
 function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, options = {}) {
-  const { agent, isResume, conversation, mcp, client, windowPosition, sessionDirectory, foldNonce } = options;
+  const { client, windowPosition, sessionDirectory, foldNonce } = options;
   const env = {
     ...process.env,
     PATH: `${nodeModulesBin}${path.delimiter}${existingPath}`,
     AMICUS_TASK_ID: taskId,
-    AMICUS_MODEL: model,
-    SIDECAR_PROJECT: project
+    AMICUS_MODEL: model
   };
 
   if (client) { env.AMICUS_CLIENT = client; }
@@ -50,19 +48,6 @@ function buildElectronEnv(taskId, model, project, nodeModulesBin, existingPath, 
   // system prompt's instruction (buildPrompts) so fold.js writes a marker the
   // prompt actually asked for, not the guessable legacy bare `[SIDECAR_FOLD]`.
   if (foldNonce) { env.AMICUS_FOLD_NONCE = foldNonce; }
-
-  if (agent) {
-    const agentConfig = mapAgentToOpenCode(agent);
-    env.SIDECAR_AGENT = agentConfig.agent;
-    if (agentConfig.permissions) { env.SIDECAR_PERMISSIONS = agentConfig.permissions; }
-  }
-
-  if (isResume) {
-    env.SIDECAR_RESUME = 'true';
-    if (conversation) { env.SIDECAR_CONVERSATION = conversation; }
-  }
-
-  if (mcp) { env.SIDECAR_MCP_CONFIG = JSON.stringify(mcp); }
 
   return env;
 }

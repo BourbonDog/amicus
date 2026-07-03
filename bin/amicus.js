@@ -175,7 +175,7 @@ async function handleResume(args) {
 
   if (!taskId) {
     console.error('Error: task_id is required for resume');
-    console.error('Usage: sidecar resume <task_id>');
+    console.error('Usage: amicus resume <task_id>');
     process.exit(1);
   }
 
@@ -204,7 +204,7 @@ async function handleContinue(args) {
 
   if (!taskId) {
     console.error('Error: task_id is required for continue');
-    console.error('Usage: sidecar continue <task_id> --prompt "..."');
+    console.error('Usage: amicus continue <task_id> --prompt "..."');
     process.exit(1);
   }
 

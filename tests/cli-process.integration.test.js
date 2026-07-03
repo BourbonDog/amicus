@@ -254,12 +254,18 @@ describe('CLI Process: resume/continue validation', () => {
     const { stderr, code } = await runCli(['resume']);
     expect(code).toBe(1);
     expect(stderr).toContain('task_id is required');
+    // v2.0.0 ships no `sidecar` binary — the usage hint must name the real one.
+    expect(stderr).toContain('Usage: amicus resume <task_id>');
+    expect(stderr).not.toContain('Usage: sidecar');
   });
 
   it('continue exits 1 without task_id', async () => {
     const { stderr, code } = await runCli(['continue']);
     expect(code).toBe(1);
     expect(stderr).toContain('task_id is required');
+    // v2.0.0 ships no `sidecar` binary — the usage hint must name the real one.
+    expect(stderr).toContain('Usage: amicus continue <task_id> --prompt "..."');
+    expect(stderr).not.toContain('Usage: sidecar');
   });
 
   it('continue exits 1 without --prompt', async () => {
@@ -278,5 +284,36 @@ describe('CLI Process: resume/continue validation', () => {
     // the "--prompt is required" fallback that fires when the flag is ignored.
     expect(stderr).toContain('--prompt-file');
     expect(stderr).not.toContain('--prompt is required');
+  });
+});
+
+describe('CLI Process: no leftover "Usage: sidecar" strings anywhere in src/ or bin/', () => {
+  // v2.0.0 ships no `sidecar` binary (#19, shim removal). A live error path that
+  // still prints "Usage: sidecar ..." would point users at a command that no
+  // longer exists. Guard the whole surface, not just resume/continue above.
+  it('no source or bin file contains a "Usage: sidecar" string', () => {
+    const root = path.join(__dirname, '..');
+    const dirs = ['src', 'bin'];
+    const offenders = [];
+
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.isFile() && entry.name.endsWith('.js')) {
+          const content = fs.readFileSync(full, 'utf-8');
+          if (/Usage:\s*sidecar\b/.test(content)) {
+            offenders.push(path.relative(root, full));
+          }
+        }
+      }
+    };
+
+    for (const d of dirs) {
+      walk(path.join(root, d));
+    }
+
+    expect(offenders).toEqual([]);
   });
 });

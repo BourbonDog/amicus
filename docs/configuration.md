@@ -36,6 +36,7 @@ The model prefix decides which credentials are used:
 | `AMICUS_ENV_DIR` | Override just the `.env` file directory (keys only). The legacy `SIDECAR_ENV_DIR` name was removed in v2.0.0 — only `AMICUS_ENV_DIR` is read now. | `~/.config/amicus` (the config dir) |
 | `AMICUS_FANOUT_MAX_LEGS` | Cap the number of concurrent legs in a single fanout wave. Protects against accidental runaway costs when `--models` is a long list. Non-positive or non-integer values fall back to the default. | `10` |
 | `AMICUS_MCP_CLIENT` | Force the MCP server's `--client` value (`code-local`, `code-web`, or `cowork`) instead of auto-detecting it from the caller's MCP `initialize` handshake (`clientInfo.name`). Invalid values are ignored (with a warning) and detection proceeds normally. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
+| `AMICUS_MAX_SESSIONS` | Maximum number of concurrent sessions the shared OpenCode server (`src/utils/shared-server.js`) will track before rejecting new ones. Renamed from `SIDECAR_MAX_SESSIONS` in v2.0.0. | `20` |
 
 ---
 

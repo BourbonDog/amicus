@@ -185,9 +185,10 @@ describe('docs/testing.md — legacy env var mentions removed (18.1 fixed HEADLE
 describe('docs/opencode-integration.md — Backward Compatibility section corrected', () => {
   const doc = read('docs/opencode-integration.md');
 
-  it('no longer claims startSidecar/listSidecars/etc. are deprecated shims in src/index.js', () => {
-    // These are plain internal require-bound identifiers re-exported once as
-    // startAmicus/listAmicus/etc — never deprecated aliases, never shims.
+  it('no longer claims startSidecar/listSidecars/etc. are internal-only, never-exported identifiers', () => {
+    // Through v1.9.1 these WERE exported as deprecated aliases from src/index.js's
+    // module.exports (present on npm in every v1.x release); v2.0.0 removed them.
+    // The doc must not claim they were "never separately-exported deprecated aliases".
     expect(doc).not.toMatch(/are real source identifiers that exist in `src\/index\.js` as deprecated shims/i);
   });
 });

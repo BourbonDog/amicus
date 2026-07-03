@@ -91,7 +91,6 @@ For detailed data flow, fold mechanism, and Electron BrowserView architecture, s
 
 <!-- AUTO:tree -->
 bin/
-├── amicus
 └── amicus.js  # Amicus CLI Entry Point
 src/
 ├── council/
