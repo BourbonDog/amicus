@@ -352,6 +352,7 @@ Commands:
   council validate <file> [--json]      Validate a Stage-1 findings block (exit 0/2/1)
   council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]   Build + write verdict.json
   doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
+  spend [--since 7d] [--json]           Cross-run cost rollup from the spend ledger
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
@@ -492,6 +493,13 @@ Options for 'doctor':
   --json                       Machine-readable output
   --fix                        Self-heal fixable checks in place (provisions the
                                Electron GUI binary; no global reinstall)
+`,
+  spend: `
+Options for 'spend':
+  --since <Nd>                  Restrict to the last N days (e.g. --since 7d)
+  --json                        Machine-readable output (versioned spend doc)
+  Reads ~/.config/amicus/spend-ledger.jsonl (one row per completed run/leg).
+  Shows remaining OpenRouter credit when a key is configured.
 `,
   setup: `
 Options for 'setup':

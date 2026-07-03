@@ -123,6 +123,11 @@ async function main() {
         exitCode = await handleDoctor(args);
         break;
       }
+      case 'spend': {
+        const { handleSpend } = require('../src/cli-handlers-spend');
+        exitCode = await handleSpend(args);
+        break;
+      }
       case 'setup':
         await handleSetup(args);
         break;

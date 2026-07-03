@@ -102,6 +102,8 @@ amicus models --check           # audit your configured aliases against the cata
 - **Floor-only refresh guard.** A background or offline `--refresh` can never clobber a good cache with an empty or truncated response. If the fresh fetch returns fewer models than the cached catalog, Amicus keeps the existing cache and logs a warning. This protects against transient network errors.
 - **Catalog location.** `~/.config/amicus/model-catalog.json` — human-readable JSON; safe to inspect or delete (it rebuilds on next use).
 
+**Spend ledger.** Every completed run/leg appends one row to `~/.config/amicus/spend-ledger.jsonl` (tokens + resolved cost). `amicus spend` reads it for a cross-run rollup; safe to delete (starts fresh, loses history only).
+
 **Validation on launch.** `amicus start` and `amicus fanout` validate the model against the catalog before launching. For an explicit `--model` this is **blocking** (a typo'd model name fails fast with same-vendor suggestions); for a model inherited from a previous session via `continue`/`resume` it is **advisory** (a warning is printed but the session still starts). Skip catalog validation with `--no-validate-model`, or refresh the catalog with `amicus models --refresh`.
 
 **`amicus models --check` in CI.** The command exits with the **number of stale aliases** (capped at 100) and prints replacement suggestions for each, so it integrates cleanly into a CI gate:

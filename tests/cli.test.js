@@ -960,6 +960,25 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('spend command', () => {
+    test('parseArgs recognizes spend as a command', () => {
+      const args = parseArgs(['spend']);
+      expect(args._[0]).toBe('spend');
+    });
+
+    test('parseArgs reads --since as a value flag (not swallowed as boolean)', () => {
+      const args = parseArgs(['spend', '--since', '7d', '--json']);
+      expect(args.since).toBe('7d');
+      expect(args.json).toBe(true);
+    });
+
+    test('spend command appears in usage text', () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage();
+      expect(usage).toMatch(/^\s+spend\s+/m);
+    });
+  });
+
   describe('usage text includes new options', () => {
     test('--no-mcp appears in usage', () => {
       const { getUsage } = require('../src/cli');
@@ -1110,6 +1129,15 @@ describe('CLI Argument Parser', () => {
       expect(usage).not.toContain("Options for 'start':");
     });
 
+    test("getUsage('spend') prints only the spend section", () => {
+      const usage = getUsage('spend');
+      expect(usage).toContain("Options for 'spend':");
+      expect(usage).toContain('--since');
+      expect(usage).toContain('--json');
+      expect(usage).not.toContain("Options for 'start':");
+      expect(usage).not.toContain("Options for 'doctor':");
+    });
+
     test("getUsage('setup') prints only the setup section", () => {
       const usage = getUsage('setup');
       expect(usage).toContain("Options for 'setup':");
@@ -1133,7 +1161,7 @@ describe('CLI Argument Parser', () => {
     });
 
     test('every newly-covered command still shows the top-level Usage line', () => {
-      for (const cmd of ['council', 'continue', 'resume', 'doctor', 'setup', 'key', 'mcp']) {
+      for (const cmd of ['council', 'continue', 'resume', 'doctor', 'spend', 'setup', 'key', 'mcp']) {
         expect(getUsage(cmd)).toContain('Usage: amicus');
       }
     });

@@ -27,6 +27,7 @@ amicus models --check                     # Audit aliases against catalog
 amicus mcp                                # Start MCP server (stdio transport)
 amicus update                             # Update to latest version
 amicus doctor [--json] [--fix]            # Diagnose setup; --fix self-heals (e.g. Electron)
+amicus spend [--since 7d] [--json]        # Cross-run cost rollup from the spend ledger
 amicus key <provider> <key>               # Validate + save one API key (also: --remove / bare list)
 amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+ ledger append)
 amicus council stats [--json]             # Reviewer reliability from the ledger

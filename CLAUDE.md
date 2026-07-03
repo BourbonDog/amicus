@@ -195,6 +195,7 @@ src/
 │   ├── session-lock.js
 │   ├── session-path.js  # Session path resolution.
 │   ├── shared-server.js
+│   ├── spend-ledger.js
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── thinking-validators.js  # Thinking Level Validators
 │   ├── untrusted-fence.js  # Untrusted sidecar output fence.
@@ -205,6 +206,7 @@ src/
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
+├── cli-handlers-spend.js
 ├── cli-handlers-status.js  # `amicus status <task_id>` — one-shot human/JSON status for a session or wave.
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
@@ -298,6 +300,7 @@ evals/
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
+| `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()` |
 | `cli-handlers-status.js` | `amicus status <task_id>` — one-shot human/JSON status for a session or wave. | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `DEFAULTS()` |
@@ -402,6 +405,7 @@ evals/
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
+| `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
 | `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |

@@ -410,6 +410,59 @@ describe('runFanout orchestrator', () => {
     expect(result.errorDoc.code).toBe('BUDGET_EXCEEDED');
     expect(mockStartOpenCodeServer).not.toHaveBeenCalled();
   });
+
+  describe('spend ledger append (B24)', () => {
+    let prevConfigDir;
+    let ledgerDir;
+    beforeEach(() => {
+      prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+      ledgerDir = fsReal.mkdtempSync(pathReal.join(os.tmpdir(), 'amicus-spend-ledger-'));
+      process.env.AMICUS_CONFIG_DIR = ledgerDir;
+      // resolveUsage's internal lookupPricing() call is NOT affected by the
+      // mockLookupPricing export override (module-local reference — see
+      // pricing.js resolveUsage), so use a REPORTED cost instead: resolveLegCost
+      // short-circuits on reportedCost > 0 before ever consulting pricing.
+      mockRunHeadless.mockImplementation(async (_m, _s, _u, taskId) => ({
+        ...legOk(taskId),
+        usage: { tokens: { input: 100, output: 50, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.005 },
+      }));
+    });
+    afterEach(() => {
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+    });
+
+    it('appends one spend-ledger row per leg, tagged with the waveId', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave1' });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      expect(rows.map(r => r.taskId).sort()).toEqual(['ledgerwave1-1', 'ledgerwave1-2']);
+      for (const row of rows) {
+        expect(row.waveId).toBe('ledgerwave1');
+        expect(row.mode).toBe('leg');
+        expect(row.tokens).toMatchObject({ input: 100, output: 50 });
+        expect(row.cost).toEqual({ amount: 0.005, currency: 'USD', source: 'reported' });
+      }
+    });
+
+    it('a leg with no usage (errored before pricing) does not append a row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      mockRunHeadless
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => ({
+          summary: '', completed: false, timedOut: false, aborted: false, taskId, toolCalls: [],
+          // no .usage
+        }))
+        .mockImplementationOnce(async (_m, _s, _u, taskId) => ({
+          ...legOk(taskId),
+          usage: { tokens: { input: 10, output: 5, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0 },
+        }));
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave2' });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].taskId).toBe('ledgerwave2-2');
+    });
+  });
 });
 
 // 15a.1/B07: writeWaveMetadata must not let an in-flight init/finalize patch

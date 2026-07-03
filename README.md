@@ -268,6 +268,7 @@ amicus update
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
+| `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
 | `amicus abort` | Abort a running session (or `--all`). |
