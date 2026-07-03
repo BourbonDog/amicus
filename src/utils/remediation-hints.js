@@ -72,6 +72,15 @@ const REMEDIATION_HINTS = Object.freeze({
    */
   removeLegacySidecar:
     "amicus doctor --fix  (removes the duplicate legacy 'sidecar' MCP entry — same server registered twice; the 'amicus' entry stays)",
+
+  /**
+   * Orphaned sessions-index.json.*.tmp files (15a.1/B15): a kill between the
+   * atomic tmp-write and rename leaves a stray temp file in the config dir
+   * forever. `doctor --fix` sweeps files older than 60s (never a live writer's
+   * ms-lived tmp).
+   */
+  sweepSessionIndexTmp:
+    'amicus doctor --fix  (sweeps orphaned .sessions-index.json.*.tmp files left by an interrupted write)',
 });
 
 module.exports = REMEDIATION_HINTS;
