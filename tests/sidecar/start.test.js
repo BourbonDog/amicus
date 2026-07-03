@@ -81,15 +81,21 @@ describe('Config change detection on start', () => {
   });
 
   it('should extract hash from CLAUDE.md content when present', () => {
-    const content = '# CLAUDE.md\n<!-- sidecar-config-hash: abcd1234 -->\nSome content';
-    const match = content.match(/<!-- (?:amicus|sidecar)-config-hash: ([0-9a-f]+) -->/);
+    const content = '# CLAUDE.md\n<!-- amicus-config-hash: abcd1234 -->\nSome content';
+    const match = content.match(/<!-- amicus-config-hash: ([0-9a-f]+) -->/);
     expect(match).not.toBeNull();
     expect(match[1]).toBe('abcd1234');
   });
 
   it('should return null hash when CLAUDE.md has no hash comment', () => {
     const content = '# CLAUDE.md\nSome content without hash';
-    const match = content.match(/<!-- (?:amicus|sidecar)-config-hash: ([0-9a-f]+) -->/);
+    const match = content.match(/<!-- amicus-config-hash: ([0-9a-f]+) -->/);
+    expect(match).toBeNull();
+  });
+
+  it('does NOT match the legacy sidecar-config-hash comment format (#19 absence pin)', () => {
+    const content = '# CLAUDE.md\n<!-- sidecar-config-hash: abcd1234 -->\nSome content';
+    const match = content.match(/<!-- amicus-config-hash: ([0-9a-f]+) -->/);
     expect(match).toBeNull();
   });
 });
