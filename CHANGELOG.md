@@ -27,6 +27,23 @@ All notable changes to Amicus are documented here. Format follows
   its own registration and warned "not registered in Claude Code" even when one existed. The check
   now reads the same config sources directly (unstripped) to answer "is amicus registered?".
 
+### CI / Security
+
+- `council-review.yml`: both fanout legs (review wave and synthesis) now request
+  `--summary-length normal` instead of `verbose`. `--summary-length` only shapes the prompt (there is
+  no engine-side output-token cap), so `verbose` was asking every model in the wave — on a paid CI
+  key — for maximally long output on every PR.
+- `council-review.yml`: the model-to-model handoff from the review wave into the synthesis leg is
+  now neutralized. The synthesis briefing previously concatenated raw model review text
+  (`reviews.md`) straight into another model's prompt with no sanitization; it now runs the same
+  neutralization (byte-identical sed rules, duplicated into the synthesis step's own shell) used on
+  the human-facing PR comment, and wraps the reviews in an explicit untrusted-data block before
+  handing them to the synthesis model. The comment path itself is unchanged.
+- `ci.yml`: the `quality` job now runs [actionlint](https://github.com/rhysd/actionlint) (pinned to
+  v1.7.7) over `.github/workflows/`, which also shellchecks every `run:` block via ubuntu-latest's
+  preinstalled shellcheck. Verified locally with the actionlint + shellcheck Windows binaries before
+  landing; both are clean against all 5 workflows (0 findings), so no suppression config was needed.
+
 ## [2.0.0] - 2026-07-03
 
 Amicus's first major release: the **`sidecar*` shim removal** (#19). v1.x carried a full
