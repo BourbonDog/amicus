@@ -177,7 +177,7 @@ amicus start --model anthropic/<model-name> --prompt "..."
 
 ### Agent Selection Guidelines
 
-**Chat mode (default)** — no `--agent` flag needed. Reads are auto-approved, writes and bash commands require user permission in the Electron UI:
+**Chat mode (interactive default)** — no `--agent` flag needed. Reads are auto-approved, writes and bash commands require user permission in the Electron UI:
 ```bash
 # Default — good for questions, analysis, and guided work
 amicus start --model gemini --prompt "Analyze the auth flow and suggest improvements"
@@ -199,7 +199,7 @@ amicus start --model gemini --prompt "Implement the login feature" --agent Build
 
 | Mode | Use When |
 |------|----------|
-| **Chat** (default) | Questions, analysis, guided exploration — you control what gets written |
+| **Chat** (interactive default) | Questions, analysis, guided exploration — you control what gets written |
 | **Plan** | Comprehensive read-only analysis where no changes should happen |
 | **Build** | Offloading implementation tasks where full autonomy is desired |
 
@@ -252,12 +252,15 @@ amicus start \
 - `--json`: With `--no-ui`, emit the run result as one stable JSON document on stdout
   (`schemaVersion: 1`; the `summary` field is the model's output).
 - `--no-validate-model`: Skip the model-catalog pre-flight check (validation is on by default).
-- `--agent <agent>`: Agent mode (controls tool permissions). If omitted, defaults to **Chat**.
+- `--agent <agent>`: Agent mode (controls tool permissions). If omitted, defaults to
+  **Chat** in interactive mode and **Build** in headless (`--no-ui`) mode — `chat`
+  stalls without user interaction, so headless runs need an agent that doesn't wait
+  on write/bash approval.
 
   **Primary Agents (for `amicus start`):**
-  - `Chat` **(default)**: Reads auto-approved, writes/bash require user permission
+  - `Chat` **(interactive default)**: Reads auto-approved, writes/bash require user permission
   - `Plan`: Read-only mode - no file modifications possible
-  - `Build`: Full tool access - all operations auto-approved
+  - `Build` **(headless default)**: Full tool access - all operations auto-approved
 
   **Custom Agents:**
   Custom agents defined in `~/.config/opencode/agents/` or `.opencode/agents/` are passed through directly.
@@ -573,16 +576,16 @@ Amicus uses OpenCode's agent framework with three primary modes:
 
 | Agent | Reads | Writes/Edits | Bash | Default |
 |-------|-------|-------------|------|---------|
-| **Chat** | auto | asks permission | asks permission | Yes |
+| **Chat** | auto | asks permission | asks permission | Interactive |
 | **Plan** | auto | denied | denied | No |
-| **Build** | auto | auto | auto | No |
+| **Build** | auto | auto | auto | Headless |
 
-#### Chat Agent (Default)
+#### Chat Agent (Interactive Default)
 
-Conversational mode — reads are auto-approved, writes and bash commands prompt for user permission in the UI. This is the default when no `--agent` flag is provided.
+Conversational mode — reads are auto-approved, writes and bash commands prompt for user permission in the UI. This is the default when no `--agent` flag is provided **in interactive mode**; headless (`--no-ui`) runs default to Build instead (see the Headless section below).
 
 ```bash
-# These are equivalent — Chat is the default
+# These are equivalent — Chat is the interactive default
 amicus start --model gemini --prompt "Analyze the auth flow"
 amicus start --model gemini --prompt "Analyze the auth flow" --agent Chat
 ```

@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { mustMatch, mustSection } = require('./helpers/docs-extract');
+const { mustMatch, mustSection, mustIndexOf } = require('./helpers/docs-extract');
 const raw = fs.readFileSync(path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md'), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('sidecar SKILL.md overhaul (B10/B11)', () => {
@@ -49,5 +49,29 @@ describe('sidecar SKILL.md amicus_wait guidance (B16)', () => {
     const section = mustSection(raw, /### MCP Server \(Auto-Registered\)\n\n[^\n]*\n/, 'skills/sidecar/SKILL.md MCP Server (Auto-Registered) section');
     expect(section).toContain('amicus_start');
     expect(section).toContain('amicus_wait');
+  });
+});
+
+describe('sidecar SKILL.md --agent default is split by interactive/headless (B30)', () => {
+  it('the flags-reference --agent entry names both defaults, not an unqualified Chat default', () => {
+    const section = mustSection(raw, /- `--agent <agent>`:[\s\S]*?\n\n/, 'skills/sidecar/SKILL.md flags-reference --agent entry');
+    expect(section).toMatch(/interactive/i);
+    expect(section).toMatch(/headless|Build/);
+    expect(section).not.toMatch(/defaults to \*\*Chat\*\*\.\s*\n/);
+  });
+
+  it('no unqualified "defaults to Chat" claim remains anywhere in the file', () => {
+    expect(raw).not.toMatch(/defaults to \*\*Chat\*\*(?!.*headless)/);
+  });
+
+  it('the Primary Agents flags-reference Chat bullet is qualified to interactive mode', () => {
+    const section = mustSection(raw, /- `Chat` \*\*\([^)]*\)\*\*:[^\n]*\n/, 'skills/sidecar/SKILL.md flags-reference Chat bullet');
+    expect(section).toMatch(/interactive/i);
+  });
+
+  it('the Chat Agent (Default) section scopes the default claim to interactive mode', () => {
+    const idx = mustIndexOf(raw, '#### Chat Agent', 'skills/sidecar/SKILL.md Chat Agent section heading');
+    const section = raw.slice(idx, idx + 600);
+    expect(section).toMatch(/interactive/i);
   });
 });

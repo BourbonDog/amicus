@@ -53,6 +53,18 @@ All notable changes to Amicus are documented here. Format follows
   preinstalled shellcheck. Verified locally with the actionlint + shellcheck Windows binaries before
   landing; both are clean against all 5 workflows (0 findings), so no suppression config was needed.
 
+### Documentation
+
+- Corrected the `--agent` default docs in `skills/sidecar/SKILL.md`: the flag defaults to `Chat`
+  only in interactive mode — headless (`--no-ui`) runs default to `Build`, since `chat` stalls
+  without user interaction. The file previously claimed an unqualified "defaults to Chat" in
+  several spots while also correctly documenting the headless-`Build` default elsewhere,
+  contradicting itself; `docs/usage.md` was already correct and unchanged.
+- Corrected `commands/council.md`'s description of the council pipeline order: `amicus council
+  validate` runs per-leg during Stage 1 (independent reviews), and `amicus council tally` runs
+  after Stage 2 (cross-review) and before Stage 3 (chair synthesis) — not, as previously worded,
+  both after all three review waves.
+
 ## [2.0.0] - 2026-07-03
 
 Amicus's first major release: the **`sidecar*` shim removal** (#19). v1.x carried a full
