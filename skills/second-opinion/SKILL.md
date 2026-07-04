@@ -124,7 +124,7 @@ Always quote the `--models` list — unquoted, PowerShell splits on commas and t
 
 Run it in the background (`run_in_background: true`); you are notified on completion — do not
 poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
-ONE JSON wave document on stdout (`schemaVersion: 1`; the wave's id field is `waveId`, each leg's id is `taskId`): check `status` (`complete` | `partial` |
+ONE JSON wave document on stdout (`schemaVersion: 2`; the wave's id field is `waveId`, each leg's id is `taskId`): check `status` (`complete` | `partial` |
 `error`), `counts`, and each leg in `legs[]` — a leg's `summary` field IS that model's review;
 `model`/`modelInput` identify the reviewer (`model` is the resolved id, `modelInput` the alias you passed — use the alias for `review-<model>.md` filenames); `status`/`error` identify failures. Exit code 0 =
 all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted. (To re-fetch a single leg later: `amicus read <taskId> --json`.)

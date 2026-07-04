@@ -1,7 +1,5 @@
-// src/utils/doctor-mcp-checks.js
-'use strict';
-
 /**
+ * @module doctor-mcp-checks
  * B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
  * 'mcp-legacy'), split out of src/cli-handlers-doctor.js to keep that file
  * under the 300-line size gate (mirrors how session-index-tmp-sweep.js holds
@@ -18,6 +16,8 @@
  *
  * 'mcp-legacy' (evaluateLegacyMcpEntry): unchanged logic, moved verbatim.
  */
+
+'use strict';
 
 const HINTS = require('./remediation-hints');
 

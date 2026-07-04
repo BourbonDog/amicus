@@ -250,7 +250,7 @@ amicus start \
 - `--prompt-file <path>`: Read the prompt/briefing from a UTF-8 file (mutually exclusive with
   `--prompt`). Use for long or multi-line briefings.
 - `--json`: With `--no-ui`, emit the run result as one stable JSON document on stdout
-  (`schemaVersion: 1`; the `summary` field is the model's output).
+  (`schemaVersion: 2`; the `summary` field is the model's output).
 - `--no-validate-model`: Skip the model-catalog pre-flight check (validation is on by default).
 - `--agent <agent>`: Agent mode (controls tool permissions). If omitted, defaults to
   **Chat** in interactive mode and **Build** in headless (`--no-ui`) mode — `chat`

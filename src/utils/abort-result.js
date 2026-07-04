@@ -1,11 +1,11 @@
-'use strict';
-
 /**
  * @module abort-result
  * The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
  * Split out of result-schema.js purely to stay under the size gate — same
  * versioning contract (fields only ADDED within a SCHEMA_VERSION) applies here.
  */
+
+'use strict';
 
 const { SCHEMA_VERSION } = require('./result-schema-version');
 

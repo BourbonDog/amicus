@@ -1,11 +1,11 @@
-'use strict';
-
 /**
  * @module cli-preflight
  * Tiny shared preflight guards used by more than one CLI run handler
  * (start/resume/continue/fanout), split out so each handler file can stay
  * under the size gate without duplicating the same few lines.
  */
+
+'use strict';
 
 const { failJson, ERROR_CODES } = require('./error-doc');
 const { validateTaskId } = require('./validators');
