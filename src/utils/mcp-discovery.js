@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { logger } = require('./logger');
-const { stripSelfMcpEntries } = require('./mcp-self-identity');
+const { stripSelfMcpEntries, isAmicusMcpConfig } = require('./mcp-self-identity');
 
 /**
  * Normalize .mcp.json to a flat { name: config } map.
@@ -34,17 +34,16 @@ function normalizeMcpJson(raw) {
 }
 
 /**
- * Discover MCP servers from Claude Code's plugin chain AND ~/.claude.json.
- *
- * Discovery sources (merged, in priority order):
- * 1. ~/.claude.json → mcpServers  (servers added via `claude mcp add`)
- * 2. Enabled plugins → .mcp.json entries
+ * Read Claude Code's merged mcpServers map (~/.claude.json + plugin-chain
+ * .mcp.json files) WITHOUT the self-entry strip. Shared raw-read core for
+ * both discoverClaudeCodeMcps (strips) and hasAmicusRegistration (does not —
+ * it needs to SEE the amicus entry the strip would otherwise hide).
  *
  * @param {string} [claudeDir] - Path to ~/.claude directory (for testing)
  * @param {string} [claudeJsonPath] - Path to ~/.claude.json (for testing)
- * @returns {object|null} Merged MCP server configs, or null if none found
+ * @returns {object} Merged MCP server configs (never stripped); {} if none found
  */
-function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
+function readRawClaudeCodeMcpServers(claudeDir, claudeJsonPath) {
   const baseDir = claudeDir || path.join(os.homedir(), '.claude');
   const jsonPath = claudeJsonPath || path.join(os.homedir(), '.claude.json');
 
@@ -71,14 +70,12 @@ function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
     const settingsPath = path.join(baseDir, 'settings.json');
     if (!fs.existsSync(settingsPath)) {
       // No settings.json — skip plugin discovery, may still have claude.json servers
-      const merged = stripSelfMcpEntries({ ...claudeJsonServers }, logger);
-      return Object.keys(merged).length > 0 ? merged : null;
+      return { ...claudeJsonServers };
     }
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
     const enabledPlugins = settings.enabledPlugins;
     if (!enabledPlugins || typeof enabledPlugins !== 'object') {
-      const merged = stripSelfMcpEntries({ ...claudeJsonServers }, logger);
-      return Object.keys(merged).length > 0 ? merged : null;
+      return { ...claudeJsonServers };
     }
 
     let installedPlugins = {};
@@ -133,10 +130,49 @@ function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
   }
 
   // Merge: plugin servers first, then claude.json overwrites (higher priority).
-  // Recursive-spawn guard: drop every entry that resolves to amicus itself.
-  const merged = stripSelfMcpEntries({ ...pluginServers, ...claudeJsonServers }, logger);
+  return { ...pluginServers, ...claudeJsonServers };
+}
 
+/**
+ * Discover MCP servers from Claude Code's plugin chain AND ~/.claude.json.
+ *
+ * Discovery sources (merged, in priority order):
+ * 1. ~/.claude.json → mcpServers  (servers added via `claude mcp add`)
+ * 2. Enabled plugins → .mcp.json entries
+ *
+ * @param {string} [claudeDir] - Path to ~/.claude directory (for testing)
+ * @param {string} [claudeJsonPath] - Path to ~/.claude.json (for testing)
+ * @returns {object|null} Merged MCP server configs, or null if none found
+ */
+function discoverClaudeCodeMcps(claudeDir, claudeJsonPath) {
+  // Recursive-spawn guard: drop every entry that resolves to amicus itself.
+  const merged = stripSelfMcpEntries(readRawClaudeCodeMcpServers(claudeDir, claudeJsonPath), logger);
   return Object.keys(merged).length > 0 ? merged : null;
+}
+
+/**
+ * True when Claude Code already has a working amicus MCP registration —
+ * checked against the SAME raw sources discoverClaudeCodeMcps reads, but
+ * WITHOUT stripSelfMcpEntries. discoverClaudeCodeMcps strips every
+ * 'amicus'/'sidecar'-shaped entry as a recursive-spawn guard (src/utils/
+ * mcp-self-identity.js), so code.amicus is ALWAYS undefined downstream —
+ * that check is the wrong consumer to answer "is amicus registered?" (B14).
+ *
+ * True when any entry's key is literally 'amicus' (regardless of its value
+ * shape — an unrecognizable value under that key is still an amicus
+ * registration slot) OR its value passes isAmicusMcpConfig() (covers
+ * aliased keys, e.g. legacy 'sidecar' or a custom name, whose command/args
+ * resolve to an amicus MCP invocation).
+ *
+ * @param {string} [claudeDir] - Path to ~/.claude directory (for testing)
+ * @param {string} [claudeJsonPath] - Path to ~/.claude.json (for testing)
+ * @returns {boolean}
+ */
+function hasAmicusRegistration(claudeDir, claudeJsonPath) {
+  const servers = readRawClaudeCodeMcpServers(claudeDir, claudeJsonPath) || {};
+  return Object.entries(servers).some(([name, config]) => (
+    name === 'amicus' || isAmicusMcpConfig(config)
+  ));
 }
 
 /**
@@ -211,5 +247,6 @@ module.exports = {
   discoverParentMcps,
   discoverClaudeCodeMcps,
   discoverCoworkMcps,
+  hasAmicusRegistration,
   normalizeMcpJson
 };
