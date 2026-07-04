@@ -57,7 +57,10 @@ async function handleAbortTaskJson(args, taskId) {
 
   if (meta.status !== 'running') {
     // Not a hard error — the task exists — but nothing was aborted by this call.
-    console.log(JSON.stringify(buildAbortResult({ scope: 'session', taskId, aborted: [] }), null, 2));
+    // Scope must reflect the task's own type (wave vs session), not assume
+    // 'session' — a terminal wave still has meta.type === 'wave'.
+    const scope = meta.type === 'wave' ? 'wave' : 'session';
+    console.log(JSON.stringify(buildAbortResult({ scope, taskId, aborted: [] }), null, 2));
     return 0;
   }
 
@@ -75,13 +78,16 @@ async function handleAbortTaskJson(args, taskId) {
         }
       } catch { /* skip unreadable leg */ }
     }
-    markAborted(sessionDir, 'manual abort');
-    aborted.unshift(taskId);
+    // Only report the wave itself as aborted if its own markAborted write
+    // succeeded — mirrors the leg gating above and the --all/single-session
+    // gating (aborted[] must list ids ACTUALLY marked aborted per
+    // buildAbortResult's doc-comment).
+    if (markAborted(sessionDir, 'manual abort')) { aborted.unshift(taskId); }
     console.log(JSON.stringify(buildAbortResult({ scope: 'wave', taskId, aborted }), null, 2));
     return 0;
   }
 
-  markAborted(sessionDir, 'manual abort');
+  const wasMarked = markAborted(sessionDir, 'manual abort');
 
   // Same fallback direct-kill as human mode (see the comment on the
   // equivalent block in handleAbort below) — json mode still needs the
@@ -101,7 +107,9 @@ async function handleAbortTaskJson(args, taskId) {
     }
   }
 
-  console.log(JSON.stringify(buildAbortResult({ scope: 'session', taskId, aborted: [taskId] }), null, 2));
+  // aborted[] must list ids ACTUALLY marked aborted (buildAbortResult's doc
+  // comment) — gate on markAborted's own return, matching --all/wave-leg gating.
+  console.log(JSON.stringify(buildAbortResult({ scope: 'session', taskId, aborted: wasMarked ? [taskId] : [] }), null, 2));
   return 0;
 }
 

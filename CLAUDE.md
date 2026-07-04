@@ -148,7 +148,7 @@ src/
 │   └── wave-progress.js
 ├── utils/
 │   ├── abort-coordinator.js
-│   ├── abort-result.js
+│   ├── abort-result.js  # The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
 │   ├── activity-poller.js
 │   ├── agent-mapping.js  # Agent Mapping Module
 │   ├── alias-audit.js  # Alias Audit (F5) — report + suggest, never auto-repair.
@@ -157,12 +157,12 @@ src/
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
 │   ├── auth-json.js  # Auth JSON Reader
-│   ├── cli-preflight.js
+│   ├── cli-preflight.js  # Tiny shared preflight guards used by more than one CLI run handler
 │   ├── client-detect.js  # Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this
 │   ├── config.js  # Amicus Config Module
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
-│   ├── doctor-mcp-checks.js
+│   ├── doctor-mcp-checks.js  # B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
 │   ├── env-loader.js  # Credential Loader
 │   ├── error-doc.js
 │   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
@@ -188,7 +188,7 @@ src/
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
 │   ├── remediation-hints.js
-│   ├── result-schema-version.js
+│   ├── result-schema-version.js  # The single SCHEMA_VERSION constant shared by result-schema.js and
 │   ├── result-schema.js
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
@@ -365,7 +365,7 @@ evals/
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |
-| `utils/abort-result.js` |  | `buildAbortResult()` |
+| `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest, never auto-repair. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
@@ -374,12 +374,12 @@ evals/
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
-| `utils/cli-preflight.js` |  | `requireNoUiForJson()`, `requireValidTaskId()` |
+| `utils/cli-preflight.js` | Tiny shared preflight guards used by more than one CLI run handler | `requireNoUiForJson()`, `requireValidTaskId()` |
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `listCuratedRoutes()` |
-| `utils/doctor-mcp-checks.js` |  | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
+| `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
 | `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
@@ -405,7 +405,7 @@ evals/
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
-| `utils/result-schema-version.js` |  | `SCHEMA_VERSION()` |
+| `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION()` |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |

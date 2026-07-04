@@ -143,6 +143,70 @@ describe('abort --json (B21-rest)', () => {
     expect(doc.aborted).toEqual([]);
     expect(doc.count).toBe(0);
   });
+
+  // Item 3 (Phase 20 review): the status !== 'running' early-return branch
+  // hardcoded scope: 'session' regardless of meta.type, so a terminal WAVE
+  // reported scope 'session' instead of 'wave'.
+  it('terminal wave (already complete) -> scope is wave, not session', async () => {
+    writeSession('jsonwavedone', { type: 'wave', status: 'complete', legs: ['jsonwavedone-1'] });
+    const out = await captureStdout(() => handleAbort({ _: ['abort', 'jsonwavedone'], cwd: project, json: true }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({
+      type: 'abort', ok: false, scope: 'wave', taskId: 'jsonwavedone', aborted: [], count: 0,
+    });
+  });
+});
+
+describe('abort --json gating on markAborted result (item 4, Phase 20 review)', () => {
+  let project;
+
+  const writeSession = (taskId, meta) => {
+    const dir = path.join(project, '.claude', 'amicus_sessions', taskId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify({ taskId, ...meta }, null, 2));
+    return dir;
+  };
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-abortgate-'));
+    jest.resetModules();
+  });
+  afterEach(() => {
+    fs.rmSync(project, { recursive: true, force: true });
+    jest.dontMock('../src/utils/session-abort');
+  });
+
+  it('single-session path: markAborted() returning false -> aborted: [], count 0, ok false', async () => {
+    jest.doMock('../src/utils/session-abort', () => ({
+      markAborted: jest.fn(() => false),
+    }));
+    const { handleAbort: handleAbortFresh } = require('../src/cli-handlers');
+    writeSession('gate0001', { status: 'running' });
+    const out = await captureStdout(() => handleAbortFresh({ _: ['abort', 'gate0001'], cwd: project, json: true }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'abort', scope: 'session', taskId: 'gate0001', aborted: [], count: 0, ok: false });
+  });
+
+  it('wave path: wave-level markAborted() returning false does not unshift the waveId, ' +
+    'even when a leg succeeds', async () => {
+    jest.doMock('../src/utils/session-abort', () => ({
+      // Legs succeed; only the wave's own markAborted call (2nd+ call, dir === wave's own)
+      // fails. We can't easily distinguish call target here, so drive via call order:
+      // leg call happens first (inside the for loop), wave call happens after.
+      markAborted: jest.fn()
+        .mockImplementationOnce(() => true)  // leg
+        .mockImplementationOnce(() => false), // wave itself
+    }));
+    const { handleAbort: handleAbortFresh } = require('../src/cli-handlers');
+    writeSession('gatewave1', { type: 'wave', status: 'running', legs: ['gatewave1-1'] });
+    writeSession('gatewave1-1', { status: 'running', parentWave: 'gatewave1' });
+    const out = await captureStdout(() => handleAbortFresh({ _: ['abort', 'gatewave1'], cwd: project, json: true }));
+    const doc = JSON.parse(out);
+    expect(doc.scope).toBe('wave');
+    expect(doc.aborted).toEqual(['gatewave1-1']);
+    expect(doc.aborted).not.toContain('gatewave1');
+    expect(doc.count).toBe(1);
+  });
 });
 
 describe('abort human output unchanged when NOT --json (byte-identical pins)', () => {

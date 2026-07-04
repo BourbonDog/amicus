@@ -64,9 +64,9 @@ function getTools() {
       ),
       agent: z.enum(['Chat', 'Plan', 'Build']).optional()
         .default('Chat').describe(
-          'Agent mode. Chat (default): reads auto, writes ask ' +
-          'permission. Plan: read-only analysis. Build: full auto ' +
-          '(all operations approved).'
+          'Agent mode. Chat (interactive default; headless runs auto-convert ' +
+          'to Build): reads auto, writes ask permission. Plan: read-only ' +
+          'analysis. Build: full auto (all operations approved).'
         ),
       noUi: z.boolean().optional().default(false).describe(
         'Run headless without GUI. Default false (opens Electron window).'
@@ -478,9 +478,11 @@ Each leg is an ordinary session: read/resume/continue it by taskId.
 ## Agent Selection
 | Agent | Reads | Writes | Bash | Use When |
 |-------|-------|--------|------|----------|
-| Chat (default) | auto | asks | asks | Questions, analysis |
+| Chat (interactive default*) | auto | asks | asks | Questions, analysis |
 | Plan | auto | denied | denied | Read-only analysis |
 | Build | auto | auto | auto | Implementation tasks |
+
+* Headless (\`noUi\`) runs auto-convert Chat to Build — Chat would otherwise stall waiting on write/bash approval with no UI to approve it.
 
 ## Writing Good Briefings
 Include: Objective, Background, Files of interest, Success criteria, Constraints.

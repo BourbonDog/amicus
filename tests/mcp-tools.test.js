@@ -6,6 +6,7 @@
  */
 
 const { getTools, getGuideText, safeTaskId, safeModel } = require('../src/mcp-tools');
+const { mustIndexOf } = require('./helpers/docs-extract');
 const TOOLS = getTools();
 
 describe('MCP Tool Definitions', () => {
@@ -393,7 +394,9 @@ describe('MCP Tool Definitions', () => {
 
     test('headless workflow presents amicus_wait as the primary step, sleep+status as fallback (B16)', () => {
       const guide = getGuideText();
-      const headless = guide.slice(guide.indexOf('### Headless Mode'), guide.indexOf('### Interactive Mode'));
+      const headlessStart = mustIndexOf(guide, '### Headless Mode', 'amicus_guide "### Headless Mode" heading');
+      const headlessEnd = mustIndexOf(guide, '### Interactive Mode', 'amicus_guide "### Interactive Mode" heading');
+      const headless = guide.slice(headlessStart, headlessEnd);
       expect(headless).toContain('amicus_wait');
       expect(headless).toContain('sleep');
       // amicus_wait must be presented as the primary step, before the sleep+status fallback steps.

@@ -134,8 +134,11 @@ async function main() {
         break;
       default: {
         console.error(`Unknown command: ${command}`);
-        const [suggestion] = suggestCommand(command, getCommandNames());
-        if (suggestion) { console.error(`Did you mean: ${suggestion}`); }
+        // suggestCommand honors a cap-3 contract (up to 3 candidates, closest
+        // first) — print all of them, not just the closest, matching the
+        // join precedent in src/cli-handlers.js.
+        const candidates = suggestCommand(command, getCommandNames());
+        if (candidates.length > 0) { console.error(`Did you mean: ${candidates.join(', ')}`); }
         console.log(getUsage());
         process.exit(1);
       }
