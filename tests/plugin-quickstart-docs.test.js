@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+const { mustSection } = require('./helpers/docs-extract');
 
 describe('plugin quick-start accuracy (A8)', () => {
   const readme = read('README.md');
@@ -10,7 +11,7 @@ describe('plugin quick-start accuracy (A8)', () => {
     expect(readme).toMatch(/npx -y amicus@latest/);
   });
   it('configure step offers the npx path for plugin installs', () => {
-    const qs = readme.match(/## Quick start[\s\S]*?(?=\n## )/)[0];
+    const qs = mustSection(readme, /## Quick start[\s\S]*?(?=\n## )/, 'README.md Quick start section');
     expect(qs).toMatch(/npx -y amicus@latest setup/);
   });
   it('skill-location hint covers plugin installs', () => {

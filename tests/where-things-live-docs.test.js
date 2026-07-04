@@ -15,6 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+const { mustSection, mustIndexOf } = require('./helpers/docs-extract');
 
 describe('B50 — "Where things live" section (docs/configuration.md)', () => {
   const config = read('docs/configuration.md');
@@ -177,7 +178,7 @@ describe('B48 — plugin-channel command treatment (absorbs B41)', () => {
   const readme = read('README.md');
 
   it('has a prominent two-install-channels callout before Quick start ends', () => {
-    const qs = readme.match(/## Quick start[\s\S]*?(?=\n## )/)[0];
+    const qs = mustSection(readme, /## Quick start[\s\S]*?(?=\n## )/, 'README.md Quick start section');
     expect(qs).toMatch(/npx -y amicus@latest/);
     expect(qs).toMatch(/plugin-channel|plugin channel/i);
     expect(qs).toMatch(/npm global|npm install -g amicus/i);
@@ -189,12 +190,14 @@ describe('B48 — plugin-channel command treatment (absorbs B41)', () => {
   });
 
   it('/amicus:council appears in Quick start (first-screen discoverability, B41)', () => {
-    const qs = readme.match(/## Quick start[\s\S]*?(?=\n## )/)[0];
+    const qs = mustSection(readme, /## Quick start[\s\S]*?(?=\n## )/, 'README.md Quick start section');
     expect(qs).toMatch(/\/amicus:council/);
   });
 
   it('/amicus:council appears in The Council section', () => {
-    const councilSection = readme.slice(readme.indexOf('## The Council'), readme.indexOf('## The parallel window'));
+    const start = mustIndexOf(readme, '## The Council', 'README.md "## The Council" heading');
+    const end = mustIndexOf(readme, '## The parallel window', 'README.md "## The parallel window" heading');
+    const councilSection = readme.slice(start, end);
     expect(councilSection).toMatch(/\/amicus:council/);
   });
 

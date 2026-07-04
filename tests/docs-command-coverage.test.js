@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+const { mustSection } = require('./helpers/docs-extract');
 
 describe('docs command & MCP-tool coverage (B11)', () => {
   const readme = read('README.md');
@@ -14,7 +15,7 @@ describe('docs command & MCP-tool coverage (B11)', () => {
     // follow `## Commands` (start options, fanout, other commands) moved to
     // docs/usage.md (the canonical CLI reference); the table is now bounded
     // by the next `## ` section instead of a `### ` subheading.
-    const table = readme.match(/## Commands[\s\S]*?(?=\n## )/)[0];
+    const table = mustSection(readme, /## Commands[\s\S]*?(?=\n## )/, 'README.md Commands table');
     expect(table).toContain(c);
   });
   it('README MCP section lists every registered tool (no stale count)', () => {

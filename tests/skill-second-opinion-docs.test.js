@@ -1,11 +1,12 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { mustMatch } = require('./helpers/docs-extract');
 const raw = fs.readFileSync(path.join(__dirname, '..', 'skills', 'second-opinion', 'SKILL.md'), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('second-opinion SKILL.md frontmatter (B27)', () => {
-  const fm = raw.match(/^---\n([\s\S]*?)\n---/)[1];
-  const desc = fm.match(/description: >\n([\s\S]*)$/)[1]
+  const fm = mustMatch(raw, /^---\n([\s\S]*?)\n---/, 'skills/second-opinion/SKILL.md frontmatter block')[1];
+  const desc = mustMatch(fm, /description: >\n([\s\S]*)$/, 'skills/second-opinion/SKILL.md frontmatter description field')[1]
     .split('\n').map(l => l.trim()).join(' ').trim();
 
   it('frontmatter description fits the 1024-char skill-list limit', () => {

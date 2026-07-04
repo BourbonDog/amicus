@@ -9,6 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
+const { mustSection } = require('./helpers/docs-extract');
 
 describe('B22 — Stage 1 validate transport', () => {
   const skill = read('skills/second-opinion/SKILL.md');
@@ -77,7 +78,7 @@ describe('B22 — README + usage.md gain the two new council subcommands', () =>
   it('README Commands table council row documents validate and verdict', () => {
     // Task 17.3 restructure: bounded by the next `## ` section, not a `### `
     // subheading — the per-command `### ` subsections moved to docs/usage.md.
-    const table = readme.match(/## Commands[\s\S]*?(?=\n## )/)[0];
+    const table = mustSection(readme, /## Commands[\s\S]*?(?=\n## )/, 'README.md Commands table');
     const councilRow = table.split('\n').find(l => l.includes('`amicus council`'));
     expect(councilRow).toBeTruthy();
     expect(councilRow).toMatch(/validate <file>/);
