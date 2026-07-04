@@ -137,4 +137,43 @@ describe('council-review workflow (Phase 10 v1)', () => {
     expect(out).toContain('[details');
     expect(out).toContain('not-an-adjudicated (model text)');
   });
+
+  test('no leg requests verbose summaries (unbounded model output on a paid CI key)', () => {
+    const y = yml();
+    // --summary-length is prompt-only (src/prompt-builder.js) with no token
+    // cap anywhere in the engine; verbose asks every model for maximally
+    // long output. Both the review wave and the synthesis leg must stay at
+    // the (default) 'normal' length.
+    expect(y).not.toMatch(/--summary-length\s+verbose/);
+  });
+
+  test('synthesis briefing is built from NEUTRALIZED reviews, not raw reviews.md (model-to-model handoff)', () => {
+    const y = yml();
+    // The comment path already neutralizes model text before it reaches the
+    // human-facing PR comment. The synthesis step is a SEPARATE shell (no
+    // shared function) and previously fed the raw reviews.md straight into
+    // another model's prompt with zero neutralization on that handoff.
+    const synthStepIdx = y.indexOf('Synthesize the reviews');
+    const commentStepIdx = y.indexOf('Post sticky PR comment');
+    expect(synthStepIdx).toBeGreaterThan(-1);
+    expect(commentStepIdx).toBeGreaterThan(synthStepIdx);
+    const synthBlock = y.slice(synthStepIdx, commentStepIdx);
+
+    // the synthesis step must define its own neutralize() (separate shell,
+    // function isn't shared with the comment step) and consume the safe
+    // file — never the raw reviews.md — when building synth-briefing.md
+    expect(synthBlock).toContain('neutralize()');
+    expect(synthBlock).not.toMatch(/cat reviews\.md/);
+
+    // duplicated sed rules must be byte-for-byte identical to the comment
+    // step's rules (same 4 substrings), so the whole-file sed-rule harvest
+    // above still finds ≥4 total handled distinct occurrences across the file
+    const sedRuleCount = (y.match(/-e\s+'s[/|][^']+'/g) || []).length;
+    expect(sedRuleCount).toBeGreaterThanOrEqual(8); // 4 in comment step + 4 duplicated in synth step
+
+    // untrusted-data fencing: reviews must be wrapped in a clearly delimited
+    // block with an instruction line marking them as untrusted, non-instruction
+    // model output — mirroring how the diff is fenced in briefing.md (lines ~100-116)
+    expect(synthBlock.toLowerCase()).toMatch(/untrusted/);
+  });
 });
