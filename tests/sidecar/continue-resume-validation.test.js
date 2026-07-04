@@ -72,8 +72,11 @@ describe('wiring (source guards)', () => {
   const path = require('path');
 
   it('handleContinue resolves+validates an explicit --model like start', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'bin', 'amicus.js'), 'utf-8');
-    const handler = src.slice(src.indexOf('async function handleContinue'), src.indexOf('async function handleRead'));
+    // B21-rest: handleContinue moved from bin/amicus.js to its own module
+    // (src/cli-handlers-resume-continue.js) so the --json plumbing could fit
+    // under the size gate. Same behavior, new home — update the guard's source.
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'cli-handlers-resume-continue.js'), 'utf-8');
+    const handler = src.slice(src.indexOf('async function handleContinue'));
     expect(handler).toMatch(/resolveModelFromArgs/);
     expect(handler).toMatch(/validateFallbackModel/);
     expect(handler).toMatch(/if \(args\.model !== undefined\)/);

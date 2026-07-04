@@ -123,7 +123,7 @@ async function continueSidecar(options) {
     headless = false,
     timeout = 15,
     agent,
-    mcp, mcpConfig, client, noMcp, excludeMcp
+    mcp, mcpConfig, client, noMcp, excludeMcp, json = false
   } = options;
 
   // Load previous session data
@@ -185,10 +185,17 @@ async function continueSidecar(options) {
 
   try {
     if (headless) {
-      result = await runHeadless(
-        model, systemPrompt, userMessage, newTaskId, project,
-        timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers, nonce: foldNonce }
-      );
+      try {
+        result = await runHeadless(
+          model, systemPrompt, userMessage, newTaskId, project,
+          timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers, nonce: foldNonce }
+        );
+      } catch (err) {
+        if (!json) { throw err; }
+        // --json contract: stdout must always carry a parseable run doc,
+        // even when the engine throws rather than returning {error}.
+        result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: newTaskId };
+      }
       summary = result.summary ||
         '## Sidecar Results: No Output\n\nContinued session completed without summary.';
 
@@ -209,8 +216,8 @@ async function continueSidecar(options) {
     releaseLock(prevSessionDir);
   }
 
-  // Output summary
-  outputSummary(summary);
+  // Output summary (human mode only — json mode keeps stdout to the doc below)
+  if (!json) { outputSummary(summary); }
 
   // Load current metadata for finalization
   const metaPath = SessionPaths.metadataFile(sessionDir);
@@ -230,8 +237,16 @@ async function continueSidecar(options) {
     writeFileAtomic(metaPath, JSON.stringify(meta, null, 2), { mode: 0o600 });
     logger.error('Continuation completed with error', { taskId: newTaskId, error: meta.reason });
   } else {
-    finalizeSession(sessionDir, summary, project, meta, { status: terminal.status });
+    finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status });
   }
+
+  if (json) {
+    const { buildRunResult } = require('../utils/result-schema');
+    const finalMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    const doc = buildRunResult({ taskId: newTaskId, metadata: finalMeta, result, summary, sessionDir });
+    console.log(JSON.stringify(doc, null, 2));
+  }
+
   return terminal.exitCode;
 }
 
