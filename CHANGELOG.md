@@ -5,6 +5,14 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `amicus doctor`'s MCP registration check no longer false-negatives on a healthy Claude Code
+  registration. The check's only signal was `discoverClaudeCodeMcps()`, which always strips every
+  `amicus`/`sidecar`-shaped entry as its own recursive-spawn guard — so the check could never see
+  its own registration and warned "not registered in Claude Code" even when one existed. The check
+  now reads the same config sources directly (unstripped) to answer "is amicus registered?".
+
 ## [2.0.0] - 2026-07-03
 
 Amicus's first major release: the **`sidecar*` shim removal** (#19). v1.x carried a full
