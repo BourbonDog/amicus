@@ -25,3 +25,17 @@ describe('second-opinion SKILL.md frontmatter (B27)', () => {
     expect(fm).toMatch(/^name: second-opinion\s*$/m);
   });
 });
+
+describe('second-opinion SKILL.md amicus_wait guidance (B16)', () => {
+  it('transport-rule MCP tool list includes amicus_wait', () => {
+    const transportRule = mustMatch(raw, /\*\*Transport rule[\s\S]*?equivalent\.\n/, 'skills/second-opinion/SKILL.md transport rule paragraph')[0];
+    expect(transportRule).toContain('amicus_wait');
+  });
+
+  it('Cowork/no-Bash path recommends amicus_wait, with amicus_status as fallback', () => {
+    const coworkSection = mustMatch(raw, /\*\*Cowork \/ no-Bash environments:\*\*[\s\S]*?equivalent\.\n/, 'skills/second-opinion/SKILL.md Cowork/no-Bash paragraph')[0];
+    expect(coworkSection).toContain('amicus_wait');
+    expect(coworkSection).toContain('amicus_status');
+    expect(coworkSection.indexOf('amicus_wait')).toBeLessThan(coworkSection.indexOf('amicus_status'));
+  });
+});

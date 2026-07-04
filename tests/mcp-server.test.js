@@ -246,6 +246,20 @@ describe('MCP spawn arg building', () => {
       expect(capturedArgs[idx + 1]).toBe('cowork');
     });
   });
+
+  test('amicus_fanout success message recommends amicus_wait before amicus_status (B16)', async () => {
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } })),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      const result = await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      const body = JSON.parse(result.content[0].text);
+      expect(body.message).toContain('amicus_wait');
+      expect(body.message).toContain('amicus_status');
+      expect(body.message.indexOf('amicus_wait')).toBeLessThan(body.message.indexOf('amicus_status'));
+    });
+  });
 });
 
 describe('BL-1: prompt goes via --prompt-file, never inline (Windows ~32KB cap)', () => {
@@ -1014,6 +1028,61 @@ describe('MCP Server Handlers', () => {
         fs.rmSync(tmpDir, { recursive: true });
       }
     });
+
+    test('next_poll.hint recommends amicus_wait before the sleep-25 fallback (B16)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'wait-order1');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'wait-order1', status: 'running', pid: process.pid,
+        headless: true, createdAt: new Date().toISOString(),
+      }));
+      fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
+      try {
+        const result = await handlers.amicus_status({ taskId: 'wait-order1' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        const hint = parsed.next_poll.hint;
+        expect(hint).toContain('amicus_wait');
+        expect(hint).toContain('sleep 25');
+        expect(hint.indexOf('amicus_wait')).toBeLessThan(hint.indexOf('sleep 25'));
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('HEADLESS_START_REMINDER (amicus_start) recommends amicus_wait before sleep-25 (B16)', async () => {
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('child_process', () => ({
+          spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
+        }));
+        const { handlers: h } = require('../src/mcp-server');
+        const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+        const reminder = result.content[1].text;
+        expect(reminder).toContain('amicus_wait');
+        expect(reminder).toContain('sleep 25');
+        expect(reminder.indexOf('amicus_wait')).toBeLessThan(reminder.indexOf('sleep 25'));
+      });
+    });
+
+    test('HEADLESS_STATUS_REMINDER (amicus_status) recommends amicus_wait before sleep-25 (B16)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-poll-'));
+      const sessDir = path.join(tmpDir, '.claude', 'amicus_sessions', 'wait-order2');
+      fs.mkdirSync(sessDir, { recursive: true });
+      fs.writeFileSync(path.join(sessDir, 'metadata.json'), JSON.stringify({
+        taskId: 'wait-order2', status: 'running', pid: process.pid,
+        headless: true, createdAt: new Date().toISOString(),
+      }));
+      fs.writeFileSync(path.join(sessDir, 'conversation.jsonl'), '');
+      try {
+        const result = await handlers.amicus_status({ taskId: 'wait-order2' }, tmpDir);
+        const reminder = result.content[1].text;
+        expect(reminder).toContain('amicus_wait');
+        expect(reminder).toContain('sleep 25');
+        expect(reminder.indexOf('amicus_wait')).toBeLessThan(reminder.indexOf('sleep 25'));
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
   });
 
   describe('amicus_status stall detection', () => {
@@ -1434,6 +1503,25 @@ describe('MCP Server Handlers', () => {
         const result = await handlers.amicus_read({ taskId: 'nope' }, tmpDir);
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain(tmpDir);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    test('still-running wave (no wave.json yet) recommends amicus_wait before amicus_status (B16)', async () => {
+      const { getSessionDir } = require('../src/session-manager');
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+      const waveDir = getSessionDir(tmpDir, 'wave-wait1');
+      fs.mkdirSync(waveDir, { recursive: true });
+      fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: 'wave-wait1', type: 'wave', status: 'running', legs: ['wave-wait1-1', 'wave-wait1-2'],
+      }));
+      try {
+        const result = await handlers.amicus_read({ taskId: 'wave-wait1' }, tmpDir);
+        const msg = result.content[0].text;
+        expect(msg).toContain('amicus_wait');
+        expect(msg).toContain('amicus_status');
+        expect(msg.indexOf('amicus_wait')).toBeLessThan(msg.indexOf('amicus_status'));
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
       }

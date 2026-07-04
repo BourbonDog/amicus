@@ -19,6 +19,15 @@ All notable changes to Amicus are documented here. Format follows
   Suggestions are capped at 3 and only shown within edit-distance 2 of a known command; unrelated
   garbage input gets no suggestion.
 
+### Changed
+
+- Agent-facing polling guidance now recommends `amicus_wait` first across every headless-flow
+  reminder, tool description, and guide section (MCP system-reminders, `amicus_start`/`amicus_resume`/
+  `amicus_continue`/`amicus_fanout` descriptions, `amicus_guide`'s headless workflow, and the
+  `second-opinion`/`sidecar` skill docs) — one blocking call replaces the sleep+status poll loop.
+  `sleep 25` + `amicus_status` polling remains documented as the explicit fallback for clients
+  without the `amicus_wait` tool; it is never presented as the only mechanism.
+
 ### Fixed
 
 - `amicus doctor`'s MCP registration check no longer false-negatives on a healthy Claude Code

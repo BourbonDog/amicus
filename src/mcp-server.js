@@ -205,13 +205,13 @@ function appendVersionWarning(content) {
  */
 function computeNextPoll() {
   return {
-    hint: 'Run `sleep 25` in your shell before calling amicus_status again. This enforces the wait and prevents token-wasting rapid polls. Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true.',
+    hint: 'Preferred: call amicus_wait with this task ID — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true. Fallback (no amicus_wait tool available): run `sleep 25` in your shell before calling amicus_status again. This enforces the wait and prevents token-wasting rapid polls.',
     wait_command: 'sleep 25',
   };
 }
 
-const HEADLESS_START_REMINDER = '<system-reminder>IMPORTANT: Before calling amicus_status, you MUST run `sleep 25` in your shell first. This enforces the polling interval and prevents token waste. Do other useful work while waiting, or run `sleep 25` to block until the next poll window. Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true.</system-reminder>';
-const HEADLESS_STATUS_REMINDER = '<system-reminder>IMPORTANT: This session is still running. Before calling amicus_status again, you MUST run `sleep 25` in your shell first. Each premature poll wastes context tokens for zero benefit. Run `sleep 25` now, then check again. Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true.</system-reminder>';
+const HEADLESS_START_REMINDER = '<system-reminder>Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true. Fallback (no amicus_wait tool available): before calling amicus_status, you MUST run `sleep 25` in your shell first. This enforces the polling interval and prevents token waste. Do other useful work while waiting, or run `sleep 25` to block until the next poll window.</system-reminder>';
+const HEADLESS_STATUS_REMINDER = '<system-reminder>Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true. Fallback (no amicus_wait tool available): this session is still running. Before calling amicus_status again, you MUST run `sleep 25` in your shell first. Each premature poll wastes context tokens for zero benefit. Run `sleep 25` now, then check again.</system-reminder>';
 
 /** Spawn an Amicus CLI process (fire-and-forget) */
 function spawnSidecarProcess(args, sessionDir) {
@@ -672,7 +672,8 @@ const handlers = {
       const legsTotal = (readMeta.legs || []).length;
       const stillRunning = !readMeta.status || readMeta.status === 'running';
       const msg = stillRunning
-        ? `Wave ${input.taskId} is still running (${legsTotal} legs). Poll amicus_status.`
+        ? `Wave ${input.taskId} is still running (${legsTotal} legs). Preferred: call amicus_wait ` +
+          'with this waveId — one blocking call replaces polling. Fallback: poll amicus_status.'
         : `Wave ${input.taskId} ended with status '${readMeta.status}' before writing wave.json ` +
           '(fan-out may have been killed). Read individual legs by taskId, or use mode \'metadata\'.';
       return textResult(msg);
@@ -976,7 +977,9 @@ const handlers = {
 
     const body = JSON.stringify({
       waveId, taskIds: legIds, status: 'running', mode: 'headless',
-      message: 'Fan-out started. Poll amicus_status with the waveId; amicus_read the waveId when complete.',
+      message: 'Fan-out started. Preferred: call amicus_wait with the waveId — one blocking call ' +
+        'replaces polling; re-call it while it returns timedOut: true. Fallback: poll amicus_status ' +
+        'with the waveId. Either way, amicus_read the waveId when complete.',
     });
     return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
   },

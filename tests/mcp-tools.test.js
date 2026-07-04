@@ -216,6 +216,12 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_resume');
       expect(tool.inputSchema).toHaveProperty('timeout');
     });
+
+    test('description recommends amicus_wait, with amicus_status as fallback (B16)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_resume');
+      expect(tool.description).toContain('amicus_wait');
+      expect(tool.description).toContain('amicus_status');
+    });
   });
 
   describe('amicus_continue', () => {
@@ -252,6 +258,12 @@ describe('MCP Tool Definitions', () => {
     test('has contextMaxTokens in input schema with correct description', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.inputSchema.contextMaxTokens.description).toContain('Default: 80000.');
+    });
+
+    test('description recommends amicus_wait, with amicus_status as fallback (B16)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
+      expect(tool.description).toContain('amicus_wait');
+      expect(tool.description).toContain('amicus_status');
     });
   });
 
@@ -295,6 +307,11 @@ describe('MCP Tool Definitions', () => {
     test('has parentSession in input schema (#10)', () => {
       expect(fanoutTool.inputSchema).toHaveProperty('parentSession');
     });
+
+    test('description recommends amicus_wait, with sleep+amicus_status as fallback (B16)', () => {
+      expect(fanoutTool.description).toContain('amicus_wait');
+      expect(fanoutTool.description).toContain('amicus_status');
+    });
   });
 
   describe('polling guidance in descriptions', () => {
@@ -308,6 +325,13 @@ describe('MCP Tool Definitions', () => {
     test('amicus_status description mentions headless mode', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_status');
       expect(tool.description).toContain('headless');
+    });
+
+    test('amicus_start description recommends amicus_wait before the sleep-25 fallback (B16)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_start');
+      expect(tool.description).toContain('amicus_wait');
+      expect(tool.description).toContain('sleep 25');
+      expect(tool.description.indexOf('amicus_wait')).toBeLessThan(tool.description.indexOf('sleep 25'));
     });
   });
 
@@ -365,6 +389,15 @@ describe('MCP Tool Definitions', () => {
       const guide = getGuideText();
       const runningVersion = require('../package.json').version;
       expect(guide).toContain(runningVersion);
+    });
+
+    test('headless workflow presents amicus_wait as the primary step, sleep+status as fallback (B16)', () => {
+      const guide = getGuideText();
+      const headless = guide.slice(guide.indexOf('### Headless Mode'), guide.indexOf('### Interactive Mode'));
+      expect(headless).toContain('amicus_wait');
+      expect(headless).toContain('sleep');
+      // amicus_wait must be presented as the primary step, before the sleep+status fallback steps.
+      expect(headless.indexOf('amicus_wait')).toBeLessThan(headless.indexOf('sleep'));
     });
 
   });

@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { mustMatch } = require('./helpers/docs-extract');
+const { mustMatch, mustSection } = require('./helpers/docs-extract');
 const raw = fs.readFileSync(path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md'), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('sidecar SKILL.md overhaul (B10/B11)', () => {
@@ -35,5 +35,19 @@ describe('sidecar SKILL.md overhaul (B10/B11)', () => {
   it('--model documented as optional-with-default, not required', () => {
     expect(raw).not.toContain('Error: --model is required');
     expect(raw).toMatch(/--model.*(Optional|falls back|configured default)/i);
+  });
+});
+
+describe('sidecar SKILL.md amicus_wait guidance (B16)', () => {
+  it('the npx-fallback MCP tool list (Operating Rules #8) includes amicus_wait', () => {
+    const line = mustSection(raw, /^8\. .*$/m, 'skills/sidecar/SKILL.md Operating Rules item 8 (npx fallback)');
+    expect(line).toContain('amicus_start');
+    expect(line).toContain('amicus_wait');
+  });
+
+  it('the "MCP Server (Auto-Registered)" tool list includes amicus_wait', () => {
+    const section = mustSection(raw, /### MCP Server \(Auto-Registered\)\n\n[^\n]*\n/, 'skills/sidecar/SKILL.md MCP Server (Auto-Registered) section');
+    expect(section).toContain('amicus_start');
+    expect(section).toContain('amicus_wait');
   });
 });
