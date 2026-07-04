@@ -61,6 +61,20 @@ describe('CLI Process: unknown command', () => {
     expect(code).toBe(1);
     expect(stderr).toContain('Unknown command');
   });
+
+  it('suggests the nearest command for a near-miss typo (did-you-mean)', async () => {
+    const { stderr, code } = await runCli(['contnue']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown command: contnue');
+    expect(stderr).toContain('Did you mean: continue');
+  });
+
+  it('prints no suggestion for a command that is not close to any known one', async () => {
+    const { stderr, code } = await runCli(['xyzzyplugh']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown command: xyzzyplugh');
+    expect(stderr).not.toContain('Did you mean');
+  });
 });
 
 describe('CLI Process: start validation errors', () => {

@@ -124,4 +124,55 @@ function validateStartInputs(input) {
   return { valid: true, resolvedModel: resolved };
 }
 
-module.exports = { validateStartInputs, findSimilar };
+/**
+ * Levenshtein edit distance between two strings (insertions, deletions,
+ * substitutions, each cost 1). Hand-rolled — no runtime dependency added,
+ * since fast-levenshtein is only a dev-time transitive and runtime deps are
+ * locked for this project.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function levenshteinDistance(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) { return n; }
+  if (n === 0) { return m; }
+
+  // Single rolling row (O(min(m,n)) space) rather than a full m×n matrix —
+  // plenty for CLI command names, which are always short.
+  let prevRow = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const currRow = [i];
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      currRow[j] = Math.min(
+        prevRow[j] + 1,      // deletion
+        currRow[j - 1] + 1,  // insertion
+        prevRow[j - 1] + cost // substitution
+      );
+    }
+    prevRow = currRow;
+  }
+  return prevRow[n];
+}
+
+/**
+ * Suggest known commands close to an unrecognized one ("did you mean").
+ * @param {string} input - the unrecognized token the user typed
+ * @param {string[]} candidates - known command names
+ * @param {number} [maxDistance=2] - inclusive distance cap
+ * @param {number} [maxSuggestions=3]
+ * @returns {string[]} candidates within maxDistance, closest first, capped
+ */
+function suggestCommand(input, candidates, maxDistance = 2, maxSuggestions = 3) {
+  if (!input) { return []; }
+  return candidates
+    .map(c => ({ c, distance: levenshteinDistance(input.toLowerCase(), c.toLowerCase()) }))
+    .filter(({ distance }) => distance <= maxDistance)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, maxSuggestions)
+    .map(({ c }) => c);
+}
+
+module.exports = { validateStartInputs, findSimilar, levenshteinDistance, suggestCommand };

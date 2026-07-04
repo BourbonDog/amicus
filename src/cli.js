@@ -442,6 +442,7 @@ Options for 'status':
   abort: `
 Options for 'abort':
   --all                        Abort all running sessions in this project
+  --json                       Emit the abort result as stable JSON
 `,
   read: `
 Options for 'read':
@@ -457,6 +458,7 @@ Options for 'continue':
   --model <model>              Optional. Override the model (alias or provider/model)
   --cwd <path>                 Project directory (default: cwd)
   --no-ui                      Run without GUI (autonomous mode)
+  --json                       With --no-ui: emit the run result as stable JSON
   --timeout <minutes>          Headless timeout (default: 15)
   --context-turns <N>          Max conversation turns (default: 50)
   --context-max-tokens <N>     Max context tokens (default: 80000)
@@ -466,6 +468,7 @@ Options for 'resume':
   <task_id>                    Required. Session to reopen (positional)
   --cwd <path>                 Project directory (default: cwd)
   --no-ui                      Run without GUI (autonomous mode)
+  --json                       With --no-ui: emit the run result as stable JSON
   --timeout <minutes>          Headless timeout (default: 15)
 `,
   council: `
@@ -546,6 +549,22 @@ Examples:
   amicus read abc123 --conversation
 `;
 
+// Commands handled directly in bin/amicus.js's switch that have no dedicated
+// USAGE_COMMAND_BLOCKS entry (their usage is covered by USAGE_HEADER's command
+// list only). Kept minimal and explicit rather than parsing the switch itself.
+const SWITCH_ONLY_COMMANDS = ['update'];
+
+/**
+ * Canonical list of top-level command names, for did-you-mean suggestions and
+ * any other consumer that needs "every command amicus recognizes" without a
+ * second hand-maintained list. Derived from USAGE_COMMAND_BLOCKS (the existing
+ * per-command help source of truth) plus SWITCH_ONLY_COMMANDS.
+ * @returns {string[]}
+ */
+function getCommandNames() {
+  return [...Object.keys(USAGE_COMMAND_BLOCKS), ...SWITCH_ONLY_COMMANDS];
+}
+
 /**
  * Get usage text.
  *
@@ -570,5 +589,6 @@ module.exports = {
   parseArgs,
   validateStartArgs,
   getUsage,
+  getCommandNames,
   DEFAULTS
 };
