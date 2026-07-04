@@ -5,9 +5,11 @@
  * under the 300-line limit.
  */
 
-const fs = require('fs');
-const path = require('path');
-const { validateTaskId, safeSessionDir } = require('./utils/validators');
+'use strict';
+
+// handleAbort moved to src/cli-handlers-abort.js (B21-rest: --json branch
+// needed headroom this file didn't have). Re-exported below for compatibility.
+const { handleAbort } = require('./cli-handlers-abort');
 
 /**
  * Handle 'amicus setup' command
@@ -62,123 +64,6 @@ async function handleSetup(args) {
   }
 
   await runInteractiveSetup();
-}
-
-/**
- * Handle 'sidecar abort' command
- * Marks a running session as aborted
- */
-async function handleAbort(args) {
-  if (args.all) {
-    const project = args.cwd || process.cwd();
-    const { enumerateSessions } = require('./sidecar/read');
-    const { markAborted } = require('./utils/session-abort');
-    const { resolveExistingSessionDir } = require('./session-manager');
-    // A session may complete between enumeration and the write (TOCTOU); the
-    // window is tiny for a local CLI and markAborted is best-effort, so we count
-    // only sessions actually marked aborted.
-    const running = enumerateSessions(project, { status: 'running' });
-    if (running.length === 0) {
-      console.log('No running sessions to abort.');
-      return;
-    }
-    let aborted = 0;
-    for (const s of running) {
-      if (markAborted(resolveExistingSessionDir(project, s.id), 'abort --all')) {
-        aborted++;
-        console.log(`Aborted ${s.id}`);
-      }
-    }
-    console.log(`Aborted ${aborted} running session(s).`);
-    return;
-  }
-
-  const taskId = args._[1];
-
-  if (!taskId) {
-    console.error('Error: task_id is required for abort');
-    console.error('Usage: amicus abort <task_id>');
-    process.exit(1);
-  }
-
-  const taskIdCheck = validateTaskId(taskId);
-  if (!taskIdCheck.valid) {
-    console.error(taskIdCheck.error);
-    process.exit(1);
-  }
-
-  const project = args.cwd || process.cwd();
-  const sessionDir = safeSessionDir(project, taskId);
-  const metaPath = path.join(sessionDir, 'metadata.json');
-
-  if (!fs.existsSync(metaPath)) {
-    console.error(`Session ${taskId} not found`);
-    process.exit(1);
-  }
-
-  let meta;
-  try {
-    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-  } catch (_err) {
-    console.error(`Session ${taskId} has malformed metadata`);
-    process.exit(1);
-  }
-  // Guard against a completed/terminal session: without this, metadata.pid
-  // still holds a value forever and `amicus abort <completed-task>` would
-  // wait the grace window then TerminateProcess whatever unrelated process
-  // now owns that (possibly recycled) pid. Mirrors MCP's amicus_abort guard
-  // (src/mcp-server.js) — same wording, no re-mark, no kill.
-  if (meta.status !== 'running') {
-    console.log(`Session ${taskId} is not running (status: ${meta.status}).`);
-    return;
-  }
-
-  const { markAborted } = require('./utils/session-abort');
-
-  // F4: aborting a wave aborts every still-running leg too.
-  if (meta.type === 'wave') {
-    const { resolveExistingSessionDir } = require('./session-manager');
-    let aborted = 0;
-    for (const legId of meta.legs || []) {
-      const legDir = resolveExistingSessionDir(project, legId);
-      try {
-        const legMeta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8'));
-        // TOCTOU: a leg may complete between this read and markAborted —
-        // best-effort, same contract as abort --all above.
-        if (legMeta.status === 'running') {
-          if (markAborted(legDir, 'wave abort')) { aborted++; }
-        }
-      } catch { /* skip unreadable leg */ }
-    }
-    markAborted(sessionDir, 'manual abort');
-    console.log(`Wave ${taskId} marked as aborted (${aborted} running leg(s) aborted).`);
-    return;
-  }
-
-  markAborted(sessionDir, 'manual abort');
-  console.log(`Session ${taskId} marked as aborted.`);
-
-  // Phase 3: fallback direct-kill for a session that does not honor the
-  // marker. Headless loops poll the marker every ~2s and the interactive
-  // abort watch does too, so the normal outcome is a graceful exit during
-  // the grace window; only a wedged/legacy process gets SIGTERM. The wait is
-  // awaited on purpose — bin/amicus.js arms its force-exit watchdog only
-  // after this handler returns.
-  if (meta.pid) {
-    const { waitThenKill, abortGraceMs } = require('./utils/abort-coordinator');
-    const graceSec = Math.ceil(abortGraceMs() / 1000);
-    console.log(`Waiting up to ${graceSec}s for the session process (pid ${meta.pid}) to exit gracefully...`);
-    const { killed, exited } = await waitThenKill(meta.pid);
-    if (killed.length > 0) {
-      console.log(`Process ${meta.pid} did not exit in time — sent SIGTERM (a hard kill on Windows).`);
-    } else if (exited.length > 0) {
-      console.log('Process exited cleanly.');
-    } else {
-      // 3.1 contract: an EPERM-unkillable pid lands in NEITHER array —
-      // it is still alive and we could not signal it. Say so honestly.
-      console.log(`Process ${meta.pid} is still running — could not signal it (insufficient permission). It may require manual termination.`);
-    }
-  }
 }
 
 /**

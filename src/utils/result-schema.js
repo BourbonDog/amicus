@@ -1,15 +1,13 @@
-// src/utils/result-schema.js
 'use strict';
 
 /**
  * @module result-schema
  * Versioned, machine-parseable result documents for `--json` output (F4).
- *
- * Stability contract: fields are only ADDED within a SCHEMA_VERSION;
- * any rename/removal bumps SCHEMA_VERSION.
+ * Stability contract: fields are only ADDED within a SCHEMA_VERSION; any
+ * rename/removal bumps SCHEMA_VERSION (defined in ./result-schema-version.js,
+ * split out so ./abort-result.js can depend on it without a circular require).
  */
-
-const SCHEMA_VERSION = 2;
+const { SCHEMA_VERSION } = require('./result-schema-version');
 
 /** Leg/run statuses that count as terminal for wave aggregation. */
 const TERMINAL_STATUSES = ['complete', 'error', 'timeout', 'aborted', 'crashed', 'idle-timeout'];
@@ -159,8 +157,7 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
  * @param {string} project - Project dir
  * @param {string} taskId
  * @returns {object} run document
- * @throws {Error} if the session does not exist
- * @throws {Error} if metadata.json is missing or corrupt
+ * @throws {Error} if the session does not exist or metadata.json is missing/corrupt
  */
 function buildRunResultFromSession(project, taskId) {
   const fs = require('fs');
@@ -189,8 +186,7 @@ function buildRunResultFromSession(project, taskId) {
  * @param {string} project
  * @param {string} waveId
  * @returns {object} wave document
- * @throws {Error} if the wave session does not exist
- * @throws {Error} if metadata.json is missing or corrupt
+ * @throws {Error} if the wave session does not exist or metadata.json is missing/corrupt
  */
 function buildWaveResultFromSession(project, waveId) {
   const fs = require('fs');
@@ -283,6 +279,9 @@ function buildDoctorDoc({ version, timestamp, checks }) {
   };
 }
 
+// buildAbortResult lives in ./abort-result.js (size-gate split); re-exported below.
+const { buildAbortResult } = require('./abort-result');
+
 module.exports = {
   SCHEMA_VERSION,
   TERMINAL_STATUSES,
@@ -297,4 +296,5 @@ module.exports = {
   buildCatalogDoc,
   buildAuditDoc,
   buildDoctorDoc,
+  buildAbortResult,
 };
