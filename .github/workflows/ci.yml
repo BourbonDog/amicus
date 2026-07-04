@@ -23,7 +23,7 @@ jobs:
       - run: npm test
 
   quality:
-    name: quality (lint + secret-scan + size-gate)
+    name: quality (lint + secret-scan + size-gate + actionlint)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -35,6 +35,20 @@ jobs:
       - run: npm run check:secrets
       - run: npm run check:sizes
       - run: npm run check:tarball
+      # Pinned to v1.7.7 (bump deliberately). ubuntu-latest ships shellcheck
+      # preinstalled, so actionlint also shellchecks every `run:` block across
+      # all workflows for free — no separate shellcheck install needed here.
+      # Verified locally (actionlint + shellcheck Windows binaries) before this
+      # landed: 0 findings across all 5 workflows, so no suppression config
+      # was needed. If a future change trips a finding that would force an
+      # edit to a byte-pinned workflow line (see tests/scripts/*-workflow.test.js
+      # and package-manifest.test.js), suppress it narrowly with a checked-in
+      # .github/actionlint.yaml (documented per-rule) rather than rewording
+      # the pinned line.
+      - name: actionlint (lint GitHub Actions workflows)
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
 
   windows-install-smoke:
     # #35: prove the github:/tarball global install runs IDENTICALLY on Windows

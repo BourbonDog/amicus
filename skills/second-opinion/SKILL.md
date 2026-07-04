@@ -31,7 +31,7 @@ Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval),
 
 **Before launching any model, READ `MODEL-NOTES.md`** (next to this file). It holds the operating rules and per-model quirks that decide whether a run succeeds or silently fails. These were learned the hard way; skipping them wastes runs and produces empty results that look like answers.
 
-**Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest fanout --models "m1,m2,m3" --prompt-file <path> --json`), or use the equivalent MCP tools (`amicus_fanout`, `amicus_start`, `amicus_status`, `amicus_read`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) — council briefings are always self-contained (`--no-context`), so MCP transport is equivalent.
+**Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest fanout --models "m1,m2,m3" --prompt-file <path> --json`), or use the equivalent MCP tools (`amicus_fanout`, `amicus_start`, `amicus_wait`, `amicus_status`, `amicus_read`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) — council briefings are always self-contained (`--no-context`), so MCP transport is equivalent.
 
 ## When to use
 
@@ -124,7 +124,7 @@ Always quote the `--models` list — unquoted, PowerShell splits on commas and t
 
 Run it in the background (`run_in_background: true`); you are notified on completion — do not
 poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
-ONE JSON wave document on stdout (`schemaVersion: 1`; the wave's id field is `waveId`, each leg's id is `taskId`): check `status` (`complete` | `partial` |
+ONE JSON wave document on stdout (`schemaVersion: 2`; the wave's id field is `waveId`, each leg's id is `taskId`): check `status` (`complete` | `partial` |
 `error`), `counts`, and each leg in `legs[]` — a leg's `summary` field IS that model's review;
 `model`/`modelInput` identify the reviewer (`model` is the resolved id, `modelInput` the alias you passed — use the alias for `review-<model>.md` filenames); `status`/`error` identify failures. Exit code 0 =
 all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted. (To re-fetch a single leg later: `amicus read <taskId> --json`.)
@@ -141,9 +141,10 @@ amicus start --model <redteam-model> --no-ui --json \
 Its stdout is a single run document; the `summary` field is the review.
 
 **Cowork / no-Bash environments:** use the MCP tools instead — `amicus_fanout` (briefing via
-file) returns `{waveId, taskIds[]}` immediately; poll `amicus_status`, then `amicus_read` each
-leg. The council's briefings are always self-contained (`--no-context`), so MCP transport is
-equivalent.
+file) returns `{waveId, taskIds[]}` immediately. Preferred: call `amicus_wait` with the waveId —
+one blocking call per wave; re-call it while it returns `timedOut: true`. Fallback: poll
+`amicus_status`. Either way, `amicus_read` each leg when done. The council's briefings are always
+self-contained (`--no-context`), so MCP transport is equivalent.
 
 **Required structured output from every model.** Instruct each council model to produce:
 

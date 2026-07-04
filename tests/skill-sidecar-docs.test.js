@@ -1,11 +1,12 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { mustMatch, mustSection, mustIndexOf } = require('./helpers/docs-extract');
 const raw = fs.readFileSync(path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md'), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('sidecar SKILL.md overhaul (B10/B11)', () => {
-  const fm = raw.match(/^---\n([\s\S]*?)\n---/)[1];
-  const desc = fm.match(/description: >\n([\s\S]*)$/)[1]
+  const fm = mustMatch(raw, /^---\n([\s\S]*?)\n---/, 'skills/sidecar/SKILL.md frontmatter block')[1];
+  const desc = mustMatch(fm, /description: >\n([\s\S]*)$/, 'skills/sidecar/SKILL.md frontmatter description field')[1]
     .split('\n').map(l => l.trim()).join(' ').trim();
   const body = raw.slice(raw.indexOf('\n---', 4) + 4);
 
@@ -34,5 +35,53 @@ describe('sidecar SKILL.md overhaul (B10/B11)', () => {
   it('--model documented as optional-with-default, not required', () => {
     expect(raw).not.toContain('Error: --model is required');
     expect(raw).toMatch(/--model.*(Optional|falls back|configured default)/i);
+  });
+});
+
+describe('sidecar SKILL.md amicus_wait guidance (B16)', () => {
+  it('the npx-fallback MCP tool list (Operating Rules #8) includes amicus_wait', () => {
+    const line = mustSection(raw, /^8\. .*$/m, 'skills/sidecar/SKILL.md Operating Rules item 8 (npx fallback)');
+    expect(line).toContain('amicus_start');
+    expect(line).toContain('amicus_wait');
+  });
+
+  it('the "MCP Server (Auto-Registered)" tool list includes amicus_wait', () => {
+    const section = mustSection(raw, /### MCP Server \(Auto-Registered\)\n\n[^\n]*\n/, 'skills/sidecar/SKILL.md MCP Server (Auto-Registered) section');
+    expect(section).toContain('amicus_start');
+    expect(section).toContain('amicus_wait');
+  });
+});
+
+describe('sidecar SKILL.md --agent default is split by interactive/headless (B30)', () => {
+  it('the flags-reference --agent entry names both defaults, not an unqualified Chat default', () => {
+    const section = mustSection(raw, /- `--agent <agent>`:[\s\S]*?\n\n/, 'skills/sidecar/SKILL.md flags-reference --agent entry');
+    expect(section).toMatch(/interactive/i);
+    expect(section).toMatch(/headless|Build/);
+    expect(section).not.toMatch(/defaults to \*\*Chat\*\*\.\s*\n/);
+  });
+
+  it('no unqualified default+Chat claim remains anywhere in the file', () => {
+    // Broader than a single "defaults to **Chat**" phrase: catches the whole
+    // default/Chat proximity family (either word order, plain or bolded)
+    // so a differently-worded unqualified claim can't slip back in. Every
+    // line that mentions a default near "Chat" must also say "interactive"
+    // on that same line — that's what makes the default claim qualified.
+    const defaultNearChatPattern = /\bdefaults?\b.{0,20}\bChat\b|\bChat\b.{0,20}\bdefaults?\b/i;
+    const offendingLines = raw
+      .split('\n')
+      .filter(line => defaultNearChatPattern.test(line))
+      .filter(line => !/interactive/i.test(line));
+    expect(offendingLines).toEqual([]);
+  });
+
+  it('the Primary Agents flags-reference Chat bullet is qualified to interactive mode', () => {
+    const section = mustSection(raw, /- `Chat` \*\*\([^)]*\)\*\*:[^\n]*\n/, 'skills/sidecar/SKILL.md flags-reference Chat bullet');
+    expect(section).toMatch(/interactive/i);
+  });
+
+  it('the Chat Agent (Default) section scopes the default claim to interactive mode', () => {
+    const idx = mustIndexOf(raw, '#### Chat Agent', 'skills/sidecar/SKILL.md Chat Agent section heading');
+    const section = raw.slice(idx, idx + 600);
+    expect(section).toMatch(/interactive/i);
   });
 });

@@ -119,7 +119,7 @@ function updateSessionStatus(sessionDir, status) {
 async function resumeSidecar(options) {
   const {
     taskId, project = process.cwd(), headless = false, timeout = 15,
-    mcp, mcpConfig, client, noMcp, excludeMcp
+    mcp, mcpConfig, client, noMcp, excludeMcp, json = false
   } = options;
 
   // Resume operates on an EXISTING session — resolve dual-dir (amicus, then legacy).
@@ -191,10 +191,17 @@ async function resumeSidecar(options) {
 
     if (headless) {
       const userMessage = buildResumeUserMessage(metadata.briefing || '', existingConversation);
-      result = await runHeadless(
-        metadata.model, resumePrompt, userMessage,
-        taskId, project, timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers, nonce: foldNonce }
-      );
+      try {
+        result = await runHeadless(
+          metadata.model, resumePrompt, userMessage,
+          taskId, project, timeout * 60 * 1000, effectiveAgent, { mcp: mcpServers, nonce: foldNonce }
+        );
+      } catch (err) {
+        if (!json) { throw err; }
+        // --json contract: stdout must always carry a parseable run doc,
+        // even when the engine throws rather than returning {error}.
+        result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId };
+      }
       summary = result.summary || '## Sidecar Results: No Output\n\nResumed session completed without summary.';
 
       if (result.timedOut) { logger.warn('Resume task timed out', { taskId }); }
@@ -218,8 +225,8 @@ async function resumeSidecar(options) {
       if (result.error) { logger.error('Interactive resume error', { taskId, error: result.error }); }
     }
 
-    // Output summary
-    outputSummary(summary);
+    // Output summary (human mode only — json mode keeps stdout to the doc below)
+    if (!json) { outputSummary(summary); }
 
     // Map the run result to the canonical terminal status + exit code —
     // mirrors start.js. Explicit status preserves the interactive
@@ -234,8 +241,16 @@ async function resumeSidecar(options) {
       writeFileAtomic(metaPath, JSON.stringify(updatedMetadata, null, 2), { mode: 0o600 });
       logger.error('Resume completed with error', { taskId, error: updatedMetadata.reason });
     } else {
-      finalizeSession(sessionDir, summary, project, updatedMetadata, { status: terminal.status });
+      finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status });
     }
+
+    if (json) {
+      const { buildRunResult } = require('../utils/result-schema');
+      const finalMeta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      const doc = buildRunResult({ taskId, metadata: finalMeta, result, summary, sessionDir });
+      console.log(JSON.stringify(doc, null, 2));
+    }
+
     return terminal.exitCode; // finally below still releases the lock first
   } finally {
     if (heartbeat) { heartbeat.stop(); }

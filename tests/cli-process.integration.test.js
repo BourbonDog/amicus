@@ -61,6 +61,31 @@ describe('CLI Process: unknown command', () => {
     expect(code).toBe(1);
     expect(stderr).toContain('Unknown command');
   });
+
+  it('suggests the nearest command for a near-miss typo (did-you-mean)', async () => {
+    const { stderr, code } = await runCli(['contnue']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown command: contnue');
+    expect(stderr).toContain('Did you mean: continue');
+  });
+
+  it('prints no suggestion for a command that is not close to any known one', async () => {
+    const { stderr, code } = await runCli(['xyzzyplugh']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown command: xyzzyplugh');
+    expect(stderr).not.toContain('Did you mean');
+  });
+
+  it('joins ALL suggestions (up to the cap-3 contract) instead of discarding all but the closest', async () => {
+    // 'stat' is within edit-distance 2 of both 'start' and 'status' — suggestCommand's
+    // own cap-3 contract returns both, closest first. The CLI must print all of them
+    // joined with ', ' (matching the in-repo precedent in src/cli-handlers.js), not just
+    // the first one destructured off the array.
+    const { stderr, code } = await runCli(['stat']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown command: stat');
+    expect(stderr).toContain('Did you mean: start, status');
+  });
 });
 
 describe('CLI Process: start validation errors', () => {

@@ -10,12 +10,12 @@ amicus start --model <model> --prompt "<task>"
 amicus start --model <model> --prompt-file briefing.md --no-ui --json
 amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this" --json
 amicus list [--status <filter>] [--all] [--json]
-amicus resume <task_id>
-amicus continue <task_id> --prompt "Next step..."
+amicus resume <task_id> [--no-ui --json]
+amicus continue <task_id> --prompt "Next step..." [--no-ui --json]
 amicus read <task_id> [--conversation|--metadata|--json]
 amicus status <task_id> [--json]          # One-shot status for a session or wave
-amicus abort <task_id>
-amicus abort --all
+amicus abort <task_id> [--json]
+amicus abort --all [--json]
 
 # Setup & maintenance
 amicus setup                              # Full wizard: keys, default model, aliases
@@ -215,10 +215,14 @@ amicus status --wave <id>            # Alternative spelling for a wave ID
 amicus status <id> --json            # Machine-readable output
 
 amicus resume <id>                   # Reopen session with full history
+amicus resume <id> --no-ui --json    # Headless resume; stable run document on stdout
 amicus continue <id> --prompt "..."  # New session; previous one as read-only context
+amicus continue <id> --prompt "..." --no-ui --json   # Headless continue; run doc carries the NEW task id
 
 amicus abort <id>                    # Stop one running session
+amicus abort <id> --json             # Machine-readable abort result
 amicus abort --all                   # Stop all running sessions in this project
+amicus abort --all --json            # Machine-readable abort result (scope: "all")
 
 amicus setup --api-keys              # Open just the API-key window
 amicus setup --add-alias fast=openrouter/google/gemini-2.5-flash   # Add/override one alias

@@ -44,8 +44,11 @@ function getTools() {
       'ALWAYS use HEADLESS (noUi: true) for all of them unless the user ' +
       'explicitly requests interactive. Opening multiple Electron windows ' +
       'at once is disruptive. ' +
-      'For headless mode, ALWAYS run `sleep 25` in your shell before each ' +
-      'amicus_status call to enforce the polling interval. ' +
+      'For headless mode, prefer calling amicus_wait with the task ID — one ' +
+      'blocking call replaces the sleep+status loop; re-call it while it returns ' +
+      'timedOut: true. Fallback (no amicus_wait tool available): ALWAYS run ' +
+      '`sleep 25` in your shell before each amicus_status call to enforce the ' +
+      'polling interval. ' +
       'For interactive mode, do not poll. Wait for the user to tell you ' +
       'they\'ve clicked Fold, then use amicus_read. ' +
       'Call amicus_guide first if you need help choosing a model or writing a good briefing.' +
@@ -61,9 +64,9 @@ function getTools() {
       ),
       agent: z.enum(['Chat', 'Plan', 'Build']).optional()
         .default('Chat').describe(
-          'Agent mode. Chat (default): reads auto, writes ask ' +
-          'permission. Plan: read-only analysis. Build: full auto ' +
-          '(all operations approved).'
+          'Agent mode. Chat (interactive default; headless runs auto-convert ' +
+          'to Build): reads auto, writes ask permission. Plan: read-only ' +
+          'analysis. Build: full auto (all operations approved).'
         ),
       noUi: z.boolean().optional().default(false).describe(
         'Run headless without GUI. Default false (opens Electron window).'
@@ -215,7 +218,8 @@ function getTools() {
     description:
       'Reopen a previous Amicus session with full conversation history ' +
       'preserved. The session continues in the same OpenCode session. ' +
-      'Returns a task ID immediately — use amicus_status to poll.',
+      'Returns a task ID immediately — use amicus_wait to block until done ' +
+      '(or poll amicus_status).',
     inputSchema: {
       taskId: safeTaskId.describe(
         'The task ID of the session to resume.'
@@ -238,7 +242,7 @@ function getTools() {
       'Start a new Amicus session that inherits a previous session\'s ' +
       'conversation as context. The previous session\'s messages become ' +
       'read-only background for the new task. Returns a task ID ' +
-      'immediately — use amicus_status to poll.',
+      'immediately — use amicus_wait to block until done (or poll amicus_status).',
     inputSchema: {
       taskId: safeTaskId.describe(
         'The task ID of the previous session to continue from.'
@@ -296,10 +300,12 @@ function getTools() {
     description:
       'Run N models on the SAME prompt in parallel (one shared engine) and ' +
       'aggregate the results. Headless only. Returns {waveId, taskIds[]} ' +
-      'immediately. Poll amicus_status with the waveId (run `sleep 25` between ' +
-      'polls); when done, amicus_read the waveId for the aggregated JSON wave ' +
-      'document (per-leg summaries inside). Each leg is also an ordinary ' +
-      'session readable by taskId.',
+      'immediately. Preferred: call amicus_wait with the waveId — one blocking ' +
+      'call replaces polling; re-call it while it returns timedOut: true. ' +
+      'Fallback (no amicus_wait tool available): poll amicus_status with the ' +
+      'waveId (run `sleep 25` between polls). Either way, amicus_read the waveId ' +
+      'when done for the aggregated JSON wave document (per-leg summaries ' +
+      'inside). Each leg is also an ordinary session readable by taskId.',
     inputSchema: {
       models: z.array(safeModel).min(1).max(10).optional().describe(
         `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed. Omit when using 'council'.`
@@ -442,16 +448,18 @@ Amicus spawns parallel conversations with different LLMs and folds results back 
 
 ### Headless Mode (noUi: true)
 1. amicus_start with model + prompt + noUi: true -> get task ID
-2. Run \`sleep 25\` in your shell (this enforces the polling interval)
-3. amicus_status to check progress
-4. If still running, run \`sleep 25\` again before each subsequent amicus_status call
-5. amicus_read to get the summary once complete
-6. Act on findings
+2. **Preferred:** call amicus_wait with the task ID — one blocking call (up to
+   ~50s) replaces the sleep+status loop; re-call it while it returns timedOut: true
+3. amicus_read to get the summary once complete
+4. Act on findings
 
-(Alternative to steps 2-4: call amicus_wait with the task ID — one call blocks
-up to ~50s and returns status; call it again while it returns timedOut: true.)
+**Fallback (only if amicus_wait is unavailable):**
+1. Run \`sleep 25\` in your shell (this enforces the polling interval)
+2. amicus_status to check progress
+3. If still running, run \`sleep 25\` again before each subsequent amicus_status call
+4. amicus_read to get the summary once complete
 
-**IMPORTANT:** Always run \`sleep 25\` before every amicus_status call. This is not optional. Each premature poll wastes context tokens for zero benefit. The sleep command enforces the wait mechanically.
+**IMPORTANT (fallback path only):** Always run \`sleep 25\` before every amicus_status call. This is not optional. Each premature poll wastes context tokens for zero benefit. The sleep command enforces the wait mechanically.
 
 ### Interactive Mode (noUi: false, default)
 1. amicus_start with model + prompt -> get task ID
@@ -463,16 +471,18 @@ up to ~50s and returns status; call it again while it returns timedOut: true.)
 ### Fan-Out (amicus_fanout)
 Run the SAME prompt across 1-10 models in parallel (one shared engine):
 1. amicus_fanout with models + prompt -> {waveId, taskIds[]}
-2. sleep 25, then amicus_status with the waveId (repeat until done), or call amicus_wait with the waveId
+2. **Preferred:** call amicus_wait with the waveId (re-call while timedOut: true). **Fallback:** sleep 25, then amicus_status with the waveId (repeat until done)
 3. amicus_read the waveId -> aggregated JSON wave document (per-leg summaries inside)
 Each leg is an ordinary session: read/resume/continue it by taskId.
 
 ## Agent Selection
 | Agent | Reads | Writes | Bash | Use When |
 |-------|-------|--------|------|----------|
-| Chat (default) | auto | asks | asks | Questions, analysis |
+| Chat (interactive default*) | auto | asks | asks | Questions, analysis |
 | Plan | auto | denied | denied | Read-only analysis |
 | Build | auto | auto | auto | Implementation tasks |
+
+* Headless (\`noUi\`) runs auto-convert Chat to Build — Chat would otherwise stall waiting on write/bash approval with no UI to approve it.
 
 ## Writing Good Briefings
 Include: Objective, Background, Files of interest, Success criteria, Constraints.

@@ -47,7 +47,11 @@ module.exports = {
     {
       // CLI output files use console.log for user-facing output (not logging)
       // These display results to the user, not debug info
-      files: ['src/sidecar/fanout.js', 'src/sidecar/read.js', 'src/sidecar/session-utils.js', 'src/sidecar/start.js', 'src/cli-handlers.js', 'src/utils/start-helpers.js'],
+      files: [
+        'src/sidecar/fanout.js', 'src/sidecar/read.js', 'src/sidecar/session-utils.js',
+        'src/sidecar/start.js', 'src/sidecar/resume.js', 'src/sidecar/continue.js',
+        'src/cli-handlers.js', 'src/cli-handlers-abort.js', 'src/utils/start-helpers.js',
+      ],
       rules: {
         'no-console': 'off'
       }

@@ -5,7 +5,9 @@
  * size gate and to make handlers unit-testable without running main().
  *
  * Contains: handleStart, handleFanout, handleRead
- * Remaining inline in bin/amicus.js: handleList, handleResume, handleContinue
+ * See also: src/cli-handlers-resume-continue.js (handleResume, handleContinue —
+ * split out to stay under the size gate) and src/cli-handlers.js (handleList
+ * remains inline in bin/amicus.js).
  */
 
 'use strict';
@@ -14,6 +16,7 @@ const { validateStartArgs } = require('./cli');
 const { validateTaskId } = require('./utils/validators');
 const { resolveModelFromArgs, validateFallbackModel } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
+const { requireNoUiForJson } = require('./utils/cli-preflight');
 
 /**
  * Handle 'sidecar start' command
@@ -33,9 +36,7 @@ async function handleStart(args) {
     // prompt-file set and trip its mutually-exclusive branch.
     delete args['prompt-file'];
   }
-  if (args.json && !args['no-ui']) {
-    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --json requires --no-ui' }));
-  }
+  requireNoUiForJson(args, useJson);
 
   const mc = args['max-cost'];
   if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc <= 0)) {

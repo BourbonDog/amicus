@@ -17,7 +17,10 @@ const allGood = {
   findStaleAliases: () => [],
   hasOpencodeBinary: () => true,
   getElectronPath: () => '/path/to/electron',
-  discoverClaudeCodeMcps: () => ({ amicus: {} }),
+  // B14: hasAmicusRegistration (raw, unstripped read) is the PRIMARY 'mcp'
+  // check signal — discoverClaudeCodeMcps can never produce { amicus: {} }
+  // because it always strips the amicus entry (recursive-spawn guard).
+  hasAmicusRegistration: () => true,
   discoverCoworkMcps: () => ({ amicus: {} }),
   inspectLegacyMcpEntries: () => [
     { target: 'Claude Code', status: 'absent' },
@@ -84,8 +87,43 @@ describe('runDoctorChecks', () => {
   });
 
   test('unregistered MCP → warn with install hint', async () => {
-    const checks = await runDoctorChecks({ ...allGood, discoverClaudeCodeMcps: () => null });
+    const checks = await runDoctorChecks({ ...allGood, hasAmicusRegistration: () => false });
     expect(byId(checks).mcp.status).toBe('warn');
+  });
+
+  describe("mcp check false-negative fix (B14)", () => {
+    test('registered in Claude Code (hasAmicusRegistration true) → ok, even though discoverCoworkMcps has no amicus', async () => {
+      const checks = await runDoctorChecks({ ...allGood,
+        hasAmicusRegistration: () => true,
+        discoverCoworkMcps: () => null });
+      const c = byId(checks).mcp;
+      expect(c.status).toBe('ok');
+      expect(c.message).toBe('registered: Claude Code');
+    });
+
+    test('registered in both Claude Code and Cowork/Desktop → ok, message names both', async () => {
+      const checks = await runDoctorChecks({ ...allGood,
+        hasAmicusRegistration: () => true,
+        discoverCoworkMcps: () => ({ amicus: {} }) });
+      const c = byId(checks).mcp;
+      expect(c.status).toBe('ok');
+      expect(c.message).toBe('registered: Claude Code, Cowork/Desktop');
+    });
+
+    test('not registered anywhere → warn, never crashes when discoverCoworkMcps is also null', async () => {
+      const checks = await runDoctorChecks({ ...allGood,
+        hasAmicusRegistration: () => false,
+        discoverCoworkMcps: () => null });
+      const c = byId(checks).mcp;
+      expect(c.status).toBe('warn');
+      expect(c.message).toBe('not registered in Claude Code');
+    });
+
+    test('a throwing hasAmicusRegistration degrades to an error line, never throws out of doctor', async () => {
+      const checks = await runDoctorChecks({ ...allGood,
+        hasAmicusRegistration: () => { throw new Error('boom'); } });
+      expect(byId(checks).mcp.status).toBe('error');
+    });
   });
 
   describe('OpenRouter credit check (#43)', () => {
@@ -167,7 +205,7 @@ describe('runDoctorChecks', () => {
     });
 
     test('unregistered MCP hint references the shared reinstall command', async () => {
-      const checks = await runDoctorChecks({ ...allGood, discoverClaudeCodeMcps: () => null });
+      const checks = await runDoctorChecks({ ...allGood, hasAmicusRegistration: () => false });
       expect(byId(checks).mcp.hint).toContain(HINTS.reinstall);
     });
 

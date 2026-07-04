@@ -1,11 +1,12 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { mustMatch } = require('./helpers/docs-extract');
 const raw = fs.readFileSync(path.join(__dirname, '..', 'skills', 'second-opinion', 'SKILL.md'), 'utf-8').replace(/\r\n/g, '\n');
 
 describe('second-opinion SKILL.md frontmatter (B27)', () => {
-  const fm = raw.match(/^---\n([\s\S]*?)\n---/)[1];
-  const desc = fm.match(/description: >\n([\s\S]*)$/)[1]
+  const fm = mustMatch(raw, /^---\n([\s\S]*?)\n---/, 'skills/second-opinion/SKILL.md frontmatter block')[1];
+  const desc = mustMatch(fm, /description: >\n([\s\S]*)$/, 'skills/second-opinion/SKILL.md frontmatter description field')[1]
     .split('\n').map(l => l.trim()).join(' ').trim();
 
   it('frontmatter description fits the 1024-char skill-list limit', () => {
@@ -22,5 +23,19 @@ describe('second-opinion SKILL.md frontmatter (B27)', () => {
   });
   it('name is unchanged', () => {
     expect(fm).toMatch(/^name: second-opinion\s*$/m);
+  });
+});
+
+describe('second-opinion SKILL.md amicus_wait guidance (B16)', () => {
+  it('transport-rule MCP tool list includes amicus_wait', () => {
+    const transportRule = mustMatch(raw, /\*\*Transport rule[\s\S]*?equivalent\.\n/, 'skills/second-opinion/SKILL.md transport rule paragraph')[0];
+    expect(transportRule).toContain('amicus_wait');
+  });
+
+  it('Cowork/no-Bash path recommends amicus_wait, with amicus_status as fallback', () => {
+    const coworkSection = mustMatch(raw, /\*\*Cowork \/ no-Bash environments:\*\*[\s\S]*?equivalent\.\n/, 'skills/second-opinion/SKILL.md Cowork/no-Bash paragraph')[0];
+    expect(coworkSection).toContain('amicus_wait');
+    expect(coworkSection).toContain('amicus_status');
+    expect(coworkSection.indexOf('amicus_wait')).toBeLessThan(coworkSection.indexOf('amicus_status'));
   });
 });

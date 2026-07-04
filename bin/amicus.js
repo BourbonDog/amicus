@@ -11,12 +11,12 @@
 const { loadCredentials } = require('../src/utils/env-loader');
 loadCredentials();
 
-const { parseArgs, getUsage } = require('../src/cli');
-const { validateTaskId } = require('../src/utils/validators');
-const { resolveModelFromArgs, validateFallbackModel } = require('../src/utils/start-helpers');
+const { parseArgs, getUsage, getCommandNames } = require('../src/cli');
 const { handleSetup, handleAbort, handleUpdate, handleMcp, handleKey } = require('../src/cli-handlers');
 const { handleStart, handleFanout, handleRead } = require('../src/cli-handlers-run');
+const { handleResume, handleContinue } = require('../src/cli-handlers-resume-continue');
 const { isOneShotCommand, armExitWatchdog } = require('../src/utils/lifecycle');
+const { suggestCommand } = require('../src/utils/input-validators');
 const { logger } = require('../src/utils/logger');
 
 const VERSION = require('../package.json').version;
@@ -124,7 +124,7 @@ async function main() {
         await handleKey(args);
         break;
       case 'abort':
-        await handleAbort(args);
+        exitCode = await handleAbort(args);
         break;
       case 'mcp':
         await handleMcp();
@@ -132,10 +132,16 @@ async function main() {
       case 'update':
         await handleUpdate();
         break;
-      default:
+      default: {
         console.error(`Unknown command: ${command}`);
+        // suggestCommand honors a cap-3 contract (up to 3 candidates, closest
+        // first) — print all of them, not just the closest, matching the
+        // join precedent in src/cli-handlers.js.
+        const candidates = suggestCommand(command, getCommandNames());
+        if (candidates.length > 0) { console.error(`Did you mean: ${candidates.join(', ')}`); }
         console.log(getUsage());
         process.exit(1);
+      }
     }
   } catch (err) {
     console.error(`Error: ${err.message}`);
@@ -163,94 +169,6 @@ async function handleList(args) {
     all: args.all,
     json: args.json,
     project: args.cwd
-  });
-}
-
-/**
- * Handle 'sidecar resume' command
- * Spec Reference: §4.3
- */
-async function handleResume(args) {
-  const taskId = args._[1];
-
-  if (!taskId) {
-    console.error('Error: task_id is required for resume');
-    console.error('Usage: amicus resume <task_id>');
-    process.exit(1);
-  }
-
-  const taskIdCheck = validateTaskId(taskId);
-  if (!taskIdCheck.valid) {
-    console.error(taskIdCheck.error);
-    process.exit(1);
-  }
-
-  const { resumeAmicus } = require('../src/index');
-
-  return await resumeAmicus({
-    taskId,
-    project: args.cwd,
-    headless: args['no-ui'],
-    timeout: args.timeout
-  });
-}
-
-/**
- * Handle 'sidecar continue' command
- * Spec Reference: §4.4
- */
-async function handleContinue(args) {
-  const taskId = args._[1];
-
-  if (!taskId) {
-    console.error('Error: task_id is required for continue');
-    console.error('Usage: amicus continue <task_id> --prompt "..."');
-    process.exit(1);
-  }
-
-  const taskIdCheck = validateTaskId(taskId);
-  if (!taskIdCheck.valid) {
-    console.error(taskIdCheck.error);
-    process.exit(1);
-  }
-
-  // BL-1: accept --prompt-file (XOR --prompt) so the MCP handler can pass a long
-  // follow-up prompt via file, dodging the ~32KB Windows command-line cap.
-  if (args['prompt-file'] !== undefined) {
-    const { resolvePromptSource } = require('../src/utils/prompt-source');
-    const promptRes = resolvePromptSource(args);
-    if (promptRes.error) {
-      console.error(promptRes.error);
-      process.exit(1);
-    }
-    args.prompt = promptRes.prompt;
-    delete args['prompt-file'];
-  }
-
-  if (!args.prompt && !args.briefing) {
-    console.error('Error: --prompt is required for continue');
-    process.exit(1);
-  }
-
-  // F5: an explicitly passed --model gets the same resolution+validation as start.
-  if (args.model !== undefined) {
-    const { model, alias } = resolveModelFromArgs(args);
-    args.model = model;
-    args.model = await validateFallbackModel(args, alias);
-  }
-
-  const { continueAmicus } = require('../src/index');
-
-  return await continueAmicus({
-    taskId,
-    newTaskId: args['task-id'],
-    briefing: args.prompt || args.briefing,
-    model: args.model,
-    project: args.cwd,
-    contextTurns: args['context-turns'],
-    contextMaxTokens: args['context-max-tokens'],
-    headless: args['no-ui'],
-    timeout: args.timeout
   });
 }
 

@@ -30,6 +30,7 @@ const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8').replac
 // silently drift.
 const { tally } = require('../src/council/tally');
 const { buildVerdict } = require('../src/council/verdict');
+const { mustSection } = require('./helpers/docs-extract');
 
 describe('B46 — docs/council.md exists and is wired in', () => {
   it('the file exists', () => {
@@ -38,7 +39,7 @@ describe('B46 — docs/council.md exists and is wired in', () => {
 
   it('README Documentation table links to it', () => {
     const readme = read('README.md');
-    const docTable = readme.match(/## Documentation[\s\S]*?(?=\n---)/)[0];
+    const docTable = mustSection(readme, /## Documentation[\s\S]*?(?=\n---)/, 'README.md Documentation table');
     expect(docTable).toMatch(/docs\/council\.md/);
   });
 
