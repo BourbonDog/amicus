@@ -784,7 +784,7 @@ If a relevant sidecar exists:
 ### Example 1: Interactive Debugging (Chat Mode - Default)
 
 ```bash
-# Default Chat mode — can read freely, asks before writing
+# Chat mode (interactive default) — can read freely, asks before writing
 amicus start \
   --model gpt \
   --session-id "$(ls -t ~/.claude/projects/-Users-john-myproject/*.jsonl | head -1 | xargs basename .jsonl)" \

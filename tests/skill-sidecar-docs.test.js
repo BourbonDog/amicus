@@ -60,8 +60,18 @@ describe('sidecar SKILL.md --agent default is split by interactive/headless (B30
     expect(section).not.toMatch(/defaults to \*\*Chat\*\*\.\s*\n/);
   });
 
-  it('no unqualified "defaults to Chat" claim remains anywhere in the file', () => {
-    expect(raw).not.toMatch(/defaults to \*\*Chat\*\*(?!.*headless)/);
+  it('no unqualified default+Chat claim remains anywhere in the file', () => {
+    // Broader than a single "defaults to **Chat**" phrase: catches the whole
+    // default/Chat proximity family (either word order, plain or bolded)
+    // so a differently-worded unqualified claim can't slip back in. Every
+    // line that mentions a default near "Chat" must also say "interactive"
+    // on that same line — that's what makes the default claim qualified.
+    const defaultNearChatPattern = /\bdefaults?\b.{0,20}\bChat\b|\bChat\b.{0,20}\bdefaults?\b/i;
+    const offendingLines = raw
+      .split('\n')
+      .filter(line => defaultNearChatPattern.test(line))
+      .filter(line => !/interactive/i.test(line));
+    expect(offendingLines).toEqual([]);
   });
 
   it('the Primary Agents flags-reference Chat bullet is qualified to interactive mode', () => {
