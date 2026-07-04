@@ -5,6 +5,20 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `--json` on `resume`, `continue`, and `abort`. `amicus resume <id> --no-ui --json` and
+  `amicus continue <id> --prompt "..." --no-ui --json` emit the same versioned run document as
+  `start --json` (a `continue` run's document carries the new continuation task id, not the old
+  one). `amicus abort <id|--all> --json` emits a new `type: 'abort'` document
+  (`{ schemaVersion, type, ok, scope, taskId, aborted, count }`) covering single-session, wave, and
+  `--all` aborts, success and failure alike — stdout carries exactly one parseable document either
+  way, and non-`--json` human output is unchanged (byte-identical pinned messages still hold).
+- Did-you-mean suggestions for unknown CLI commands: a near-miss typo like `amicus contnue` now
+  prints `Unknown command: contnue` followed by `Did you mean: continue` on stderr (still exits 1).
+  Suggestions are capped at 3 and only shown within edit-distance 2 of a known command; unrelated
+  garbage input gets no suggestion.
+
 ### Fixed
 
 - `amicus doctor`'s MCP registration check no longer false-negatives on a healthy Claude Code
