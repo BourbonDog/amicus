@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-04
+
 ### Added
 
 - `--json` on `resume`, `continue`, and `abort`. `amicus resume <id> --no-ui --json` and
