@@ -2,6 +2,8 @@
 'use strict';
 
 const HINTS = require('./utils/remediation-hints');
+// B14/4.3: 'mcp' + 'mcp-legacy' check bodies (mirrors the B15 tmpSweep split — see file header).
+const mcpChecks = require('./utils/doctor-mcp-checks');
 
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
@@ -39,8 +41,13 @@ function realDeps() {
     // stays separate; repair only runs when fix is requested.
     repairElectron: (opts) => require('./sidecar/electron-install').repairElectron(opts),
     fix: false,
-    discoverClaudeCodeMcps: () => require('./utils/mcp-discovery').discoverClaudeCodeMcps(),
     discoverCoworkMcps: () => require('./utils/mcp-discovery').discoverCoworkMcps(),
+    // B14: raw (unstripped) read — the PRIMARY 'mcp' check signal.
+    // discoverClaudeCodeMcps() always strips 'amicus'/'sidecar'-shaped
+    // entries (recursive-spawn guard, src/utils/mcp-self-identity.js) and so
+    // can never be used to detect a healthy registration — see
+    // utils/doctor-mcp-checks.js for the full rationale.
+    hasAmicusRegistration: () => require('./utils/mcp-discovery').hasAmicusRegistration(),
     inspectLegacyMcpEntries: () => require('./utils/legacy-mcp-migration').inspectAllLegacySidecarEntries(),
     migrateLegacyMcpEntries: () => require('./utils/legacy-mcp-migration').migrateLegacySidecar(),
     skillInstalled: () => {
@@ -175,59 +182,12 @@ async function runDoctorChecks(depsOverride = {}) {
       : { id: 'skills', name: 'Skills installed', status: 'warn', message: 'one or both skills missing', hint: `${HINTS.reinstall}  (re-runs the skill install)` }
   )));
 
-  checks.push(guard('mcp', 'MCP registration', () => {
-    const code = d.discoverClaudeCodeMcps();
-    const cowork = d.discoverCoworkMcps();
-    const inCode = !!(code && code.amicus);
-    const inCowork = !!(cowork && cowork.amicus);
-    // Primary signal: Claude Code MCP registration. Cowork/Desktop is reported as bonus only.
-    if (!inCode) {
-      return { id: 'mcp', name: 'MCP registration', status: 'warn', message: 'not registered in Claude Code', hint: `${HINTS.reinstall}  (or install the amicus plugin)` };
-    }
-    const extra = inCowork ? ', Cowork/Desktop' : '';
-    return { id: 'mcp', name: 'MCP registration', status: 'ok', message: `registered: Claude Code${extra}`, hint: null };
-  }));
+  checks.push(guard('mcp', 'MCP registration', () => mcpChecks.evaluateMcpRegistration(d)));
 
-  // Duplicate legacy 'sidecar' MCP registration (same server twice — doubles
-  // the client-visible tool list). Detection reads the raw config files via
-  // legacy-mcp-migration: mcp-discovery can't see it (it strips 'sidecar' as
-  // its own recursion guard). --fix removes only identical-in-effect twins.
-  checks.push(guard('mcp-legacy', 'Legacy sidecar MCP entry', () => {
-    const id = 'mcp-legacy'; const name = 'Legacy sidecar MCP entry';
-    const entries = d.inspectLegacyMcpEntries() || [];
-    const dupes = entries.filter(e => e.status === 'removable');
-    const custom = entries.filter(e => e.status === 'customized');
-    // An unreadable config is neither "no problem" nor a duplicate we can act
-    // on — reporting it as ok/'none' would hide a config doctor (and --fix)
-    // could not actually inspect. Always surface it, even alongside dupes.
-    const unreadable = entries.filter(e => e.status === 'unreadable');
-    const unreadableNote = unreadable.length
-      ? `${unreadable.map(e => e.target).join(', ')} config unreadable — skipped`
-      : null;
-    if (dupes.length === 0) {
-      if (unreadableNote) {
-        const suffix = custom.length ? `; custom 'sidecar' entry in ${custom.map(e => e.target).join(', ')} — left alone` : '';
-        return { id, name, status: 'warn', message: `${unreadableNote}${suffix}`, hint: null };
-      }
-      const message = custom.length
-        ? `custom 'sidecar' entry in ${custom.map(e => e.target).join(', ')} — left alone`
-        : 'none';
-      return { id, name, status: 'ok', message, hint: null };
-    }
-    if (d.fix) {
-      const removed = (d.migrateLegacyMcpEntries() || []).filter(r => r.result === 'removed');
-      if (removed.length >= dupes.length) {
-        const message = `removed legacy entry from: ${removed.map(r => r.target).join(', ')}`;
-        return unreadableNote
-          ? { id, name, status: 'warn', message: `${message}; ${unreadableNote}`, hint: HINTS.removeLegacySidecar }
-          : { id, name, status: 'ok', message, hint: null };
-      }
-      const message = `removed ${removed.length}/${dupes.length} duplicate(s) — could not update every config`;
-      return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };
-    }
-    const message = `duplicate 'sidecar' entry in ${dupes.map(e => e.target).join(', ')} — doubles the MCP tool list`;
-    return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };
-  }));
+  // Duplicate legacy 'sidecar' MCP registration check — logic lives in
+  // utils/doctor-mcp-checks.js (mirrors the B15 tmpSweep split) to keep this
+  // file under the 300-line size gate.
+  checks.push(guard('mcp-legacy', 'Legacy sidecar MCP entry', () => mcpChecks.evaluateLegacyMcpEntry(d)));
 
   checks.push(guard('sessions-index-tmp', 'Session index tmp files', () => tmpSweep.evaluateSessionIndexTmpSweep(d)));
 
