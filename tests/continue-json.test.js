@@ -131,4 +131,19 @@ describe('handleContinue --json pre-flight (bin/amicus.js wiring)', () => {
     const doc = JSON.parse(out);
     expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'MISSING_PROMPT' } });
   });
+
+  it('continue --json against a well-formed but nonexistent session -> BAD_SESSION envelope on stdout, not a raw throw', async () => {
+    const { handleContinue } = require('../src/cli-handlers-resume-continue');
+    const emptyProject = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-contjson-empty-'));
+    try {
+      const out = await captureStdout(() => handleContinue({
+        _: ['continue', 'ffffffff'], json: true, 'no-ui': true, prompt: 'hi', cwd: emptyProject,
+      }));
+      const doc = JSON.parse(out);
+      expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_SESSION' } });
+      expect(doc.error.message).toContain('ffffffff');
+    } finally {
+      fs.rmSync(emptyProject, { recursive: true, force: true });
+    }
+  });
 });

@@ -25,13 +25,23 @@ async function handleResume(args) {
 
   const { resumeAmicus } = require('./index');
 
-  return await resumeAmicus({
-    taskId,
-    project: args.cwd,
-    headless: args['no-ui'],
-    timeout: args.timeout,
-    json: useJson,
-  });
+  try {
+    return await resumeAmicus({
+      taskId,
+      project: args.cwd,
+      headless: args['no-ui'],
+      timeout: args.timeout,
+      json: useJson,
+    });
+  } catch (err) {
+    // resumeSidecar throws a plain Error before it has a chance to consult
+    // `json` (e.g. the session directory doesn't exist) — under --json that
+    // must still land as ONE parseable envelope on stdout, not an uncaught
+    // throw. Non-json mode is unaffected: re-throw so bin/amicus.js's
+    // existing top-level catch prints `Error: <message>` exactly as before.
+    if (!useJson) { throw err; }
+    process.exit(failJson(true, { code: ERROR_CODES.BAD_SESSION, message: err.message }));
+  }
 }
 
 /**
@@ -69,18 +79,25 @@ async function handleContinue(args) {
 
   const { continueAmicus } = require('./index');
 
-  return await continueAmicus({
-    taskId,
-    newTaskId: args['task-id'],
-    briefing: args.prompt || args.briefing,
-    model: args.model,
-    project: args.cwd,
-    contextTurns: args['context-turns'],
-    contextMaxTokens: args['context-max-tokens'],
-    headless: args['no-ui'],
-    timeout: args.timeout,
-    json: useJson,
-  });
+  try {
+    return await continueAmicus({
+      taskId,
+      newTaskId: args['task-id'],
+      briefing: args.prompt || args.briefing,
+      model: args.model,
+      project: args.cwd,
+      contextTurns: args['context-turns'],
+      contextMaxTokens: args['context-max-tokens'],
+      headless: args['no-ui'],
+      timeout: args.timeout,
+      json: useJson,
+    });
+  } catch (err) {
+    // Same rationale as handleResume above: continueSidecar/loadPreviousSession
+    // throws before consulting `json` when the PREVIOUS session doesn't exist.
+    if (!useJson) { throw err; }
+    process.exit(failJson(true, { code: ERROR_CODES.BAD_SESSION, message: err.message }));
+  }
 }
 
 module.exports = { handleResume, handleContinue };

@@ -116,4 +116,19 @@ describe('handleResume --json pre-flight (bin/amicus.js wiring)', () => {
     const doc = JSON.parse(out);
     expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_SESSION' } });
   });
+
+  it('resume --json against a well-formed but nonexistent session -> BAD_SESSION envelope on stdout, not a raw throw', async () => {
+    const { handleResume } = require('../src/cli-handlers-resume-continue');
+    const emptyProject = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-resjson-empty-'));
+    try {
+      const out = await captureStdout(() => handleResume({
+        _: ['resume', 'ffffffff'], json: true, 'no-ui': true, cwd: emptyProject,
+      }));
+      const doc = JSON.parse(out);
+      expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_SESSION' } });
+      expect(doc.error.message).toContain('ffffffff');
+    } finally {
+      fs.rmSync(emptyProject, { recursive: true, force: true });
+    }
+  });
 });
