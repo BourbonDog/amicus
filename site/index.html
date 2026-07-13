@@ -470,107 +470,6 @@ h2.v .w-anim{opacity:1;transform:none}
 </div>
 </div>
 
-<!-- QUICK START -->
-<section class="demo-section" id="demo">
-  <div class="w">
-    <div class="tag rv">Quick Start</div>
-    <h2 class="rv">Install. Configure. <span>Council.</span></h2>
-    <p class="lead rv" style="margin:0 auto">Install as a Claude Code plugin, via one script, or with npm — each delivers both skills, the CLI, and the MCP server. No manual registration required.</p>
-    <div style="max-width:680px;margin:2.5rem auto 0;border-radius:10px;background:var(--bg);border:1px solid var(--border2);overflow:hidden" class="rv">
-      <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--border)">
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
-      </div>
-      <pre style="padding:1.4rem 1.6rem;font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:2.1;overflow-x:auto;margin:0"><span style="color:#555"># Install as a Claude Code plugin — most native</span>
-<span style="color:var(--green)">/plugin marketplace add BourbonDog/amicus</span>
-<span style="color:var(--green)">/plugin install amicus@bourbondog-amicus</span>
-
-<span style="color:#555"># …or one line (macOS / Linux — needs Node 18+)</span>
-<span style="color:var(--green)">curl -fsSL https://raw.githubusercontent.com/BourbonDog/amicus/main/install.sh | sh</span>
-
-<span style="color:#555"># …or with npm (any OS with Node 18+)</span>
-<span style="color:var(--green)">npm install -g amicus</span>
-
-<span style="color:#555"># Configure API keys and default model</span>
-<span style="color:var(--green)">amicus setup</span>
-
-<span style="color:#555"># Then in Claude Code or Cowork, just say:</span>
-<span style="color:#c4a4dc">"council review this"</span></pre>
-    </div>
-  </div>
-</section>
-
-<hr class="sep">
-
-<!-- HOW IT WORKS -->
-<section id="how">
-  <div class="w">
-    <div class="tag rv">How It Works</div>
-    <h2 class="rv">Council. Or Fork.<br><span>You Choose the Depth.</span></h2>
-    <p class="lead rv">A full multi-model council for structured review, or a quick fork to one other model. Both share your full Claude context automatically.</p>
-    <div class="grid3">
-      <div class="g-cell rv r1">
-        <!-- Council illustration -->
-        <svg viewBox="0 0 280 120" fill="none">
-          <rect x="10" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#d97757" stroke-width="1"/>
-          <text x="42" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Gemini</text>
-          <text x="42" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
-          <rect x="90" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#10a37f" stroke-width="1"/>
-          <text x="122" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#10a37f">GPT</text>
-          <text x="122" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
-          <rect x="170" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#738ADB" stroke-width="1"/>
-          <text x="202" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#738ADB">DeepSeek</text>
-          <text x="202" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
-          <path d="M42 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
-          <path d="M122 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
-          <path d="M202 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
-          <rect x="50" y="80" width="145" height="32" rx="5" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
-          <text x="122" y="95" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Chair verdict</text>
-          <text x="122" y="106" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8b24a">Confirmed / Contested / Singleton</text>
-        </svg>
-        <h3>01 &middot; Council</h3>
-        <p>Say <em>council review this</em>. Independent reviews → anonymous cross-review → a non-Claude chair verdict. You accept or deny tiered findings.</p>
-      </div>
-      <div class="g-cell rv r2">
-        <!-- Fork/Work illustration -->
-        <svg viewBox="0 0 280 120" fill="none">
-          <rect x="10" y="25" width="90" height="70" rx="6" fill="#161618" stroke="#222225"/>
-          <text x="55" y="50" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#555">Claude</text>
-          <text x="55" y="65" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#4ade80">working...</text>
-          <path d="M 100 60 L 140 60" stroke="#d97757" stroke-width="1.5" stroke-dasharray="4,3"/>
-          <polygon points="138,56 146,60 138,64" fill="#d97757"/>
-          <rect x="150" y="25" width="120" height="70" rx="6" fill="#161618" stroke="#d97757" stroke-width="1.2"/>
-          <text x="210" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#d97757">Amicus</text>
-          <text x="210" y="62" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">Exploring...</text>
-          <text x="210" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">in parallel</text>
-          <text x="140" y="112" font-family="IBM Plex Mono,monospace" font-size="7" fill="#444" text-anchor="middle">simultaneous</text>
-        </svg>
-        <h3>02 &middot; Fork &amp; Work</h3>
-        <p>Or fork to a single model — Gemini, GPT, DeepSeek, any. It starts with your full Claude context. Work alongside it in a real window.</p>
-      </div>
-      <div class="g-cell rv r3">
-        <!-- Fold illustration -->
-        <svg viewBox="0 0 280 120" fill="none">
-          <rect x="10" y="25" width="120" height="70" rx="6" fill="#161618" stroke="#222225"/>
-          <text x="70" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#a1a1a0">Claude</text>
-          <rect x="22" y="56" width="96" height="28" rx="4" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
-          <text x="70" y="68" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">FOLD summary</text>
-          <text x="70" y="78" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#e8b24a">received</text>
-          <path d="M 210 60 L 140 60" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"/>
-          <polygon points="142,56 134,60 142,64" fill="#666"/>
-          <rect x="220" y="35" width="50" height="50" rx="6" fill="#161618" stroke="#222225"/>
-          <rect x="228" y="47" width="34" height="14" rx="3" fill="#d97757"/>
-          <text x="245" y="57" text-anchor="middle" font-family="Outfit,sans-serif" font-size="7.5" font-weight="600" fill="#fff">Fold</text>
-          <text x="245" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">click</text>
-        </svg>
-        <h3>03 &middot; Fold</h3>
-        <p>Click Fold and a structured summary flows back into Claude. Findings, recommendations, decisions. No context switching, no noise.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
 <hr class="sep">
 
 <!-- COUNCIL ROUND TABLE -->
@@ -961,6 +860,109 @@ h2.v .w-anim{opacity:1;transform:none}
           <div class="swarm-feat">Findings tiered: Confirmed / Contested / Singleton</div>
           <div class="swarm-feat">Claude can sit at the table — judged, never the judge</div>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- QUICK START -->
+<section class="demo-section" id="demo">
+  <div class="w">
+    <div class="tag rv">Quick Start</div>
+    <h2 class="rv">Install. Configure. <span>Council.</span></h2>
+    <p class="lead rv" style="margin:0 auto">Install as a Claude Code plugin, via one script, or with npm — each delivers both skills, the CLI, and the MCP server. No manual registration required.</p>
+    <div style="max-width:680px;margin:2.5rem auto 0;border-radius:10px;background:var(--bg);border:1px solid var(--border2);overflow:hidden" class="rv">
+      <div style="display:flex;gap:5px;padding:10px 14px;border-bottom:1px solid var(--border)">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--border2)"></span>
+      </div>
+      <pre style="padding:1.4rem 1.6rem;font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:2.1;overflow-x:auto;margin:0"><span style="color:#555"># Install as a Claude Code plugin — most native</span>
+<span style="color:var(--green)">/plugin marketplace add BourbonDog/amicus</span>
+<span style="color:var(--green)">/plugin install amicus@bourbondog-amicus</span>
+
+<span style="color:#555"># …or one line (macOS / Linux — needs Node 18+)</span>
+<span style="color:var(--green)">curl -fsSL https://raw.githubusercontent.com/BourbonDog/amicus/main/install.sh | sh</span>
+
+<span style="color:#555"># …or with npm (any OS with Node 18+)</span>
+<span style="color:var(--green)">npm install -g amicus</span>
+
+<span style="color:#555"># Configure API keys and default model</span>
+<span style="color:var(--green)">amicus setup</span>
+
+<span style="color:#555"># Then in Claude Code or Cowork, just say:</span>
+<span style="color:#c4a4dc">"council review this"</span></pre>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="w">
+    <div class="tag rv">How It Works</div>
+    <h2 class="rv">Council. Or Fork.<br><span>You Choose the Depth.</span></h2>
+    <p class="lead rv">A full multi-model council for structured review, or a quick fork to one other model. Both share your full Claude context automatically.</p>
+    <div class="grid3">
+      <div class="g-cell rv r1">
+        <!-- Council illustration -->
+        <svg viewBox="0 0 280 120" fill="none">
+          <rect x="10" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#d97757" stroke-width="1"/>
+          <text x="42" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Gemini</text>
+          <text x="42" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
+          <rect x="90" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#10a37f" stroke-width="1"/>
+          <text x="122" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#10a37f">GPT</text>
+          <text x="122" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
+          <rect x="170" y="10" width="65" height="50" rx="6" fill="#161618" stroke="#738ADB" stroke-width="1"/>
+          <text x="202" y="32" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#738ADB">DeepSeek</text>
+          <text x="202" y="44" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">review</text>
+          <path d="M42 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
+          <path d="M122 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
+          <path d="M202 60 L122 80" stroke="#d97757" stroke-width=".8" stroke-dasharray="3,2"/>
+          <rect x="50" y="80" width="145" height="32" rx="5" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
+          <text x="122" y="95" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">Chair verdict</text>
+          <text x="122" y="106" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8b24a">Confirmed / Contested / Singleton</text>
+        </svg>
+        <h3>01 &middot; Council</h3>
+        <p>Say <em>council review this</em>. Independent reviews → anonymous cross-review → a non-Claude chair verdict. You accept or deny tiered findings.</p>
+      </div>
+      <div class="g-cell rv r2">
+        <!-- Fork/Work illustration -->
+        <svg viewBox="0 0 280 120" fill="none">
+          <rect x="10" y="25" width="90" height="70" rx="6" fill="#161618" stroke="#222225"/>
+          <text x="55" y="50" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#555">Claude</text>
+          <text x="55" y="65" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#4ade80">working...</text>
+          <path d="M 100 60 L 140 60" stroke="#d97757" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <polygon points="138,56 146,60 138,64" fill="#d97757"/>
+          <rect x="150" y="25" width="120" height="70" rx="6" fill="#161618" stroke="#d97757" stroke-width="1.2"/>
+          <text x="210" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#d97757">Amicus</text>
+          <text x="210" y="62" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">Exploring...</text>
+          <text x="210" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">in parallel</text>
+          <text x="140" y="112" font-family="IBM Plex Mono,monospace" font-size="7" fill="#444" text-anchor="middle">simultaneous</text>
+        </svg>
+        <h3>02 &middot; Fork &amp; Work</h3>
+        <p>Or fork to a single model — Gemini, GPT, DeepSeek, any. It starts with your full Claude context. Work alongside it in a real window.</p>
+      </div>
+      <div class="g-cell rv r3">
+        <!-- Fold illustration -->
+        <svg viewBox="0 0 280 120" fill="none">
+          <rect x="10" y="25" width="120" height="70" rx="6" fill="#161618" stroke="#222225"/>
+          <text x="70" y="48" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#a1a1a0">Claude</text>
+          <rect x="22" y="56" width="96" height="28" rx="4" fill="#d97757" opacity=".08" stroke="#d97757" stroke-width=".8"/>
+          <text x="70" y="68" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#d97757">FOLD summary</text>
+          <text x="70" y="78" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#e8b24a">received</text>
+          <path d="M 210 60 L 140 60" stroke="#666" stroke-width="1.2" stroke-dasharray="4,3"/>
+          <polygon points="142,56 134,60 142,64" fill="#666"/>
+          <rect x="220" y="35" width="50" height="50" rx="6" fill="#161618" stroke="#222225"/>
+          <rect x="228" y="47" width="34" height="14" rx="3" fill="#d97757"/>
+          <text x="245" y="57" text-anchor="middle" font-family="Outfit,sans-serif" font-size="7.5" font-weight="600" fill="#fff">Fold</text>
+          <text x="245" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">click</text>
+        </svg>
+        <h3>03 &middot; Fold</h3>
+        <p>Click Fold and a structured summary flows back into Claude. Findings, recommendations, decisions. No context switching, no noise.</p>
       </div>
     </div>
   </div>
