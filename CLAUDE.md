@@ -585,4 +585,5 @@ GEMINI.md and AGENTS.md are symlinks to CLAUDE.md -- no sync needed.
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [skills/second-opinion/SKILL.md](skills/second-opinion/SKILL.md) — LLM Council skill
 - [skills/second-opinion/MODEL-NOTES.md](skills/second-opinion/MODEL-NOTES.md) — per-model operating rules
+- [skills/second-opinion/SEAT-BRIEFS.md](skills/second-opinion/SEAT-BRIEFS.md) — optional council element briefs (critic seat, lenses, debate mode, verdict scale)
 - [skills/second-opinion/COUNCIL-DESIGN.md](skills/second-opinion/COUNCIL-DESIGN.md) — council design spec
