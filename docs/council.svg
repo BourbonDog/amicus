@@ -1,6 +1,9 @@
 <svg viewBox="0 0 520 352" fill="none" xmlns="http://www.w3.org/2000/svg">
   <title>Amicus LLM Council: independent review phase — five models read the same material cold, Claude Opus among them, chaired by GPT-5</title>
 
+  <!-- ===== Card background (matches site surface color) ===== -->
+  <rect width="520" height="352" fill="#111113" rx="14"/>
+
   <!-- ===== Round table ===== -->
   <path d="M128 158a132 54 0 1 0 264 0a132 54 0 1 0-264 0" stroke="#2f2f35" stroke-width="1.4" fill="#17171a" fill-opacity="1"/>
   <path d="M128 158v10a132 54 0 0 0 264 0v-10" stroke="#26262b" stroke-width="1.4"/>
