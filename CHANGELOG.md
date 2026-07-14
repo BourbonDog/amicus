@@ -5,6 +5,41 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-07-14
+
+### Added
+
+- **Optional council elements** (second-opinion skill): four new opt-in behaviors, presented
+  together with Claude-in-the-council as a single numbered Stage-0 menu — all default OFF, enabled
+  only when the user names them, and the launch confirmation must enumerate what's on:
+  - **Critic seat** — one bench member swaps to a four-pass adversarial brief (adversarial pass,
+    edge-case hunt, consistency check, executability test), launched as a concurrent solo beside
+    the fanout wave (`role: "critic"`). Its findings enter the same anonymized bundle and are
+    peer-adjudicated like any other seat's — the council disciplines the critic.
+  - **Expert lenses** — each seat reviews through a distinct expert perspective (panel domain
+    scoped with the user: business/technical/customer/financial/custom). Lens runs always tally
+    `--no-ledger` and the report discloses the weakened cross-review anonymity.
+  - **Debate mode** — a new Stage 2.5 rebuttal round: Contested/Disputed findings go back to their
+    raisers to DEFEND / AMEND / WITHDRAW, disputing judges re-vote, then the final ledger-recorded
+    tally. Exactly one round; withdrawn findings are auto-denied and listed in the report.
+  - **Chair verdict scale** — the chair closes with 3–5 hard questions and a final parseable
+    `VERDICT: Ship it | Fix these first | Fundamental rethink` line, surfaced at the top of the
+    report.
+- New `skills/second-opinion/SEAT-BRIEFS.md` — briefing boilerplate for the elements plus a
+  standard anti-sycophancy clause now required in **every** Stage-1 briefing. Critic and lens
+  methodologies adapted from the `/critic` and `/debate` agents in John Renaldi's product-kit
+  (MIT), with deliberate deviations documented (no findings quota; verdict moved to the chair).
+- Zero engine changes: free-form `runStats[].role` labels, tally-input re-assembly, and the
+  existing `--no-ledger` flag cover all four elements.
+
+### Changed
+
+- `COUNCIL-DESIGN.md` gains §12 documenting the elements, their caveats (critic
+  self-identification in cross-review; lens anonymity/ledger trade-offs), and parallel panels as
+  future work. The `/council` command accepts pre-requested elements in its arguments.
+- MODEL-NOTES seed: fold-back of the v2.2.0 verification council — claim-class dedup
+  adjudication limit, minimax debut (strong critic seat), qwen-coder debut.
+
 ## [2.1.0] - 2026-07-04
 
 ### Added
