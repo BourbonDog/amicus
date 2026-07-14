@@ -4,8 +4,8 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-07-02 (runs 4-7 folded back from the field ledger: PowerShell quoting, date
-injection, long-read failures, judge tool-wander; see changelog)._
+_Last updated: 2026-07-14 (v2.2.0 fold-back: v3.1 optional council elements verified live;
+claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see changelog)._
 
 ## Global operating rules (all models)
 - **Council runs are headless by design** (autonomous batch work): `fanout` is headless by
@@ -54,6 +54,19 @@ injection, long-read failures, judge tool-wander; see changelog)._
   no-tools preamble is now mandatory in SKILL.md Stage 2/3 — keep it verbatim.
 - The tally input needs **all five keys** (`meta` incl. `meta.models`, `findings`, `adjudications`,
   `rankings`, `runStats`) — see the SKILL.md Stage-2 recipe step 0.
+- **Claim-class dedup glosses rationale errors.** When several reviews raise the same claim, judges
+  adjudicate the class ("same as A3 — agree") and skip verifying each finding's own rationale text:
+  a direction-inverted arithmetic detail inside an otherwise-correct finding drew unanimous agrees
+  despite an explicit "dispute material factual errors in the rationale" instruction. If
+  rationale-level precision matters, instruct judges to independently verify the numbers in each
+  finding; otherwise expect class-level adjudication and let the chair reconcile details (a chair
+  has caught and corrected such an error unprompted).
+- **Optional council elements (v2.2.0) verified live:** critic seat (solo-alongside-fanout;
+  `role: "critic"` passes through `council tally` untouched), debate mode's nothing-to-debate path
+  (provisional `--no-ledger` tally → skip rebuttals → final ledger-recorded tally), and the chair
+  verdict scale (parseable `VERDICT:` line + hard questions) all behaved per SEAT-BRIEFS. **Debate
+  mode's defense/re-vote waves remain unexercised** — an all-Confirmed consensus run has no
+  rebuttal surface; exercise them on a contentious artifact before trusting that path blind.
 
 ## Per-model notes
 
@@ -101,6 +114,21 @@ injection, long-read failures, judge tool-wander; see changelog)._
 
 ### Claude  (in-council, when toggle on)
 - Consistently the most *calibrated* reviewer (no severity inflation; findings overwhelmingly Confirmed; bench-best street-cred in recent runs) but sometimes the least *original* — it can miss the boldest single catch. Treat as a reliability floor, not a discovery engine.
+
+### minimax  (`--model minimax` → via OpenRouter)
+- Fast (~2 min review legs), cheap, `clean` findings-JSON conformance on debut.
+- Took the **critic seat** brief exceptionally well: unanimously ranked #1 by its bench, full
+  coverage on a ground-truth test, zero padded findings under the anti-padding rule. A strong
+  default critic-seat candidate.
+- **Quirks:** occasional CJK character intrusions mid-English prose (cosmetic; the findings JSON
+  is unaffected); can invert the direction of an arithmetic detail inside an otherwise-correct
+  rationale — see the claim-class-dedup tip in Stage-2 briefing tips.
+
+### qwen-coder  (`--model qwen-coder` → via OpenRouter; distinct from `qwen`)
+- Very fast (16–22 s legs, review and judging alike), `clean` conformance, competent
+  core-blocker coverage on prose/PRD artifacts.
+- Ranked last on its debut bench — misses the offline, interruption-handling, and
+  test-methodology gap classes stronger seats catch. Fine budget-bench filler; do not chair it.
 
 ### (others — add as used)
 - Opus / o-series etc. are reachable via amicus **if their API keys are configured**. Add notes
@@ -160,3 +188,8 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
   GUI-hangs-on-this-machine rule (resolved 2026-06-10; headless stays the council default by
   design). Config path updated to `~/.config/amicus/.env`.
 - **2026-07-02** — Folded back field lessons from runs 4-7 (AV-receiver, pork-shoulder, resume, novel ×2 councils): PowerShell `--models` quoting; current-date injection; long-read model selection; judge no-tools preamble; severity-inflation-justifies-dispute; five-keys tally schema; new Grok/Kimi/Mistral/Claude-in-council sections. Quantitative history stays in the ledger (`amicus council stats`).
+- **2026-07-14 (v2.2.0)** — Optional council elements shipped and verified on a planted-flaw
+  ground-truth council (critic seat, debate mode nothing-to-debate path, chair verdict scale;
+  expert lenses defined but not yet field-run). New lessons: claim-class dedup glosses
+  rationale-level errors in Stage-2; minimax debut (strong critic seat, CJK-intrusion quirk);
+  qwen-coder debut (fast budget filler). Debate mode's defense/re-vote waves still unexercised.
