@@ -74,6 +74,14 @@ Three things to hold onto:
    "what does this mean" writeup) is `report.md`, written by Claude in Stage 5 of the skill — a
    *different* artifact from what this renderer produces. See
    [Where artifacts live](#where-artifacts-live).
+4. **Optional council elements (v2.2.0) are orchestration-level — nothing in these subcommands
+   changed for them.** The skill's opt-in elements (critic seat, expert lenses, debate mode, chair
+   verdict scale — see [SKILL.md](../skills/second-opinion/SKILL.md) and
+   [SEAT-BRIEFS.md](../skills/second-opinion/SEAT-BRIEFS.md)) ride on existing engine surfaces:
+   seat roles travel as free-form `runStats[].role` labels (`"critic"`, `"lens:<slug>"`), debate
+   mode runs the Stage-2 tally with `--no-ledger` (provisional) and re-tallies after the rebuttal
+   round (that second, post-rebuttal tally is the ledger-recorded one), and lens runs always pass
+   `--no-ledger` so non-comparable reviews never feed `stats`.
 
 ---
 
@@ -205,8 +213,11 @@ a lone disputing peer (`a=0, d=1`, which is **Contested (thin)**). A 2-vs-2 spli
 
 **Ledger append.** Unless `--no-ledger`, `tally` writes one row per `meta.models` entry to
 `council-ledger.jsonl` (append-only, JSON Lines). Use `--no-ledger` for a re-tally that shouldn't
-double-count (e.g. re-running after fixing a malformed input). This is best-effort: a ledger write
-failure prints a notice to stderr but does not fail the tally.
+double-count (e.g. re-running after fixing a malformed input). Two standing uses from the skill's
+optional elements (v2.2.0): **debate mode** tallies provisionally with `--no-ledger` after Stage 2
+and records only the final post-rebuttal tally, and **expert-lens runs** always pass `--no-ledger`
+(lens reviews aren't comparable to standard reviews, so they must not feed `stats`). This is
+best-effort: a ledger write failure prints a notice to stderr but does not fail the tally.
 
 ---
 

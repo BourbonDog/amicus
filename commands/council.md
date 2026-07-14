@@ -17,12 +17,6 @@ the **analysis request**, and the **criteria**. If any of the three is missing o
 ambiguous, ask for it before launching any model (the skill's Stage 0 covers this —
 don't re-ask for what is already present).
 
-The user may also name **optional council elements** in the arguments (critic seat,
-expert lenses, debate mode, chair verdict scale, Claude in the council). All elements
-default OFF; the skill's Stage-0 menu is the single opt-in point. If the user named
-elements here, carry them into Stage 0 as pre-requested — confirm them back by name
-instead of re-asking — and never enable an element the user did not explicitly name.
-
 Then follow the second-opinion skill end to end, in pipeline order: Stage 0
 intake/prep and run-folder setup, then council selection with a cost estimate
 and explicit user confirmation; Stage 1 independent reviews, running
@@ -30,3 +24,9 @@ and explicit user confirmation; Stage 1 independent reviews, running
 cross-review, followed by `amicus council tally` once cross-review settles;
 Stage 3 council-chair synthesis; Stage 4 the accept/deny decision pass; and
 Stage 5, which runs `amicus council verdict` to write the final `verdict.json`.
+
+The user may also name **optional council elements** in the arguments (critic seat,
+expert lenses, debate mode, verdict scale, Claude in the council). All elements
+default OFF; the skill's Stage-0 menu is the single opt-in point. If the user named
+elements here, carry them into Stage 0 as pre-requested — confirm them back by name
+instead of re-asking — and never enable an element the user did not explicitly name.

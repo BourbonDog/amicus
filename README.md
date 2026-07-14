@@ -213,11 +213,19 @@ Everything you need before your first run, and what's optional.
   findings-by-tier, cost — no chair prose). This is the default artifact handed to the user.
 - For an **editable source**, the accepted edits land in `<stem>-reviewed.<ext>` next to the original.
 
-**Claude in the council** (default off): you can add Claude's own fresh review to the bundle so the bench ranks and adjudicates it — Claude is *judged* but never votes or chairs, so the verdict stays independent.
+**Optional council elements** (v2.2.0, all default off): five opt-in behaviors, offered once as a menu at launch — nothing turns on unless you name it, and the confirmation lists exactly what's on.
 
-**Cost is disclosed up front.** Before any model launches, you see the run shape — for example:
+- **Critic seat** — one reviewer swaps to a four-pass adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Its findings enter the same anonymized bundle as everyone else's, so the bench disciplines the critic: manufactured negativity lands Disputed and dies in the tally.
+- **Expert lenses** — each reviewer takes a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, or custom). Lens runs never feed the reliability ledger, and the report discloses the weakened cross-review anonymity.
+- **Debate mode** — after cross-review, every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw**, and the disputing judges re-vote. Exactly one rebuttal round, then the final tally.
+- **Chair verdict scale** — the chair closes with 3–5 hard questions and one parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`.
+- **Claude in the council** — Claude adds its own fresh review to the bundle so the bench ranks and adjudicates it. Claude is *judged* but never votes or chairs, so the verdict stays independent.
 
-> This run uses 3 council models across 2 fanout waves + 1 chair call (~7 model runs).
+The critic and lens methodologies are adapted from the `/critic` and `/debate` agents in [John Renaldi's product-kit](https://github.com/jrenaldi79/plugin-marketplace) (MIT); the briefing boilerplate lives in [`skills/second-opinion/SEAT-BRIEFS.md`](./skills/second-opinion/SEAT-BRIEFS.md).
+
+**Cost is disclosed up front.** Before any model launches, you see the run shape — including any enabled optional elements — for example:
+
+> This run uses 3 council models across 2 fanout waves + 1 chair call, with critic seat + debate mode ON (~7 base runs + up to 6 rebuttal calls).
 
 Then the council waits for your confirmation.
 
@@ -315,7 +323,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
