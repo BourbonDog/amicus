@@ -8,13 +8,12 @@
  * with dynamic ESM imports in the OpenCode SDK.
  */
 
-const path = require('path');
-
-// Ensure node_modules/.bin is in PATH so the SDK can find the opencode binary
-const nodeModulesBin = path.join(__dirname, '..', '..', 'node_modules', '.bin');
-if (!process.env.PATH.includes(nodeModulesBin)) {
-  process.env.PATH = `${nodeModulesBin}${path.delimiter}${process.env.PATH}`;
-}
+// Ensure the SDK can spawn the opencode binary. The shared util also adds the
+// Windows platform sub-package bin dirs (opencode.exe) — spawn() can't execute
+// the .bin/*.cmd shims without shell:true, so the hand-rolled .bin-only PATH
+// prepend this replaced was ENOENT-ing on Windows.
+const { ensureNodeModulesBinInPath } = require('../../src/utils/path-setup');
+ensureNodeModulesBinInPath();
 
 async function main() {
   // Dynamic import to handle ESM SDK

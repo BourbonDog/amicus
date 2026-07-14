@@ -15,6 +15,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { loadCredentials } = require('../src/utils/env-loader');
+const { SCHEMA_VERSION } = require('../src/utils/result-schema-version');
 loadCredentials();
 
 const hasKey = !!process.env.OPENROUTER_API_KEY;
@@ -49,7 +50,7 @@ d('fanout end-to-end (real LLM)', () => {
 
       const doc = JSON.parse(out);
       expect(doc.type).toBe('wave');
-      expect(doc.schemaVersion).toBe(1);
+      expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
       expect(doc.legs).toHaveLength(2);
       expect(['complete', 'partial']).toContain(doc.status);
       expect(fs.existsSync(path.join(project, '.claude', 'amicus_sessions', doc.waveId, 'wave.json'))).toBe(true);

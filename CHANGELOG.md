@@ -40,6 +40,17 @@ All notable changes to Amicus are documented here. Format follows
 - MODEL-NOTES seed: fold-back of the v2.2.0 verification council — claim-class dedup
   adjudication limit, minimax debut (strong critic seat), qwen-coder debut.
 
+### Fixed
+
+- Resurrected both Windows e2e integration suites, silently dead since before the rebrand:
+  Node's `spawn()` cannot execute `node_modules/.bin` `.cmd` shims on Windows, so the Electron
+  toolbar suite (electron shim) and the OpenCode server test helper ENOENT'd without a visible
+  error. The helper now uses the shared `ensureNodeModulesBinInPath()` (which adds the platform
+  `opencode.exe` dirs to PATH) and the toolbar suite spawns the real binary via
+  `require('electron')`. Also refreshed two stale pins the dead suites never caught: the wave
+  document's `schemaVersion` (now pinned to the shared `SCHEMA_VERSION` constant instead of a
+  literal `1`) and the pre-rebrand `Sidecar` toolbar brand assertion (now `Amicus`).
+
 ## [2.1.0] - 2026-07-04
 
 ### Added

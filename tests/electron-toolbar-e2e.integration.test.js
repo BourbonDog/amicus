@@ -14,7 +14,11 @@ const fs = require('fs');
 const os = require('os');
 const { CdpClient } = require('./helpers/cdp-client');
 
-const ELECTRON_BIN = path.join(__dirname, '..', 'node_modules', '.bin', 'electron');
+// require('electron') from plain Node returns the absolute path to the real
+// binary (dist/electron.exe on Windows). The previous node_modules/.bin shim
+// path silently ENOENT'd on Windows spawn() — .cmd shims need shell:true, and
+// the unhandled 'error' event made it look like a CDP "target not found".
+const ELECTRON_BIN = (() => { try { return require('electron'); } catch { return null; } })();
 const ELECTRON_MAIN = path.join(__dirname, '..', 'electron', 'main.js');
 const SERVER_HELPER = path.join(__dirname, 'helpers', 'start-server.js');
 const CDP_PORT = 9224;
@@ -183,7 +187,9 @@ describeE2E('Electron Toolbar E2E (CDP)', () => {
   it('renders brand name', async () => {
     await cdp.waitForSelector('.brand');
     const brand = await cdp.evaluate(`document.querySelector('.brand')?.textContent`);
-    expect(brand).toContain('Sidecar');
+    // Pre-rebrand this pinned 'Sidecar'; the suite was dead on Windows (spawn
+    // shim ENOENT) from before the Amicus rename, so it never caught the drift.
+    expect(brand).toContain('Amicus');
   });
 
   it('displays task ID', async () => {
