@@ -5,6 +5,43 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-07-15
+
+### ⚠️ Breaking
+
+- **Node >=22.12 is now required** (`engines.node`). Amicus 3.0 fails fast on older Node with a
+  clear message instead of a confusing error deep in provisioning. This is driven by
+  `@electron/get` 5.x (ESM-only, requires Node >=22.12), which the Electron self-heal depends on.
+  Node 18/20 users — **including headless / council-only users who never touch the GUI** — must
+  upgrade Node.
+- **Electron upgraded 28 -> 43.1.1**, which drops OS support for **Windows 8/8.1, Windows Server
+  2012/2012 R2, and macOS 11**. The interactive GUI will not run there; headless runs and the
+  council are unaffected.
+
+### Changed
+
+- **Electron 28.3.3 -> 43.1.1**, clearing the outstanding high-severity `npm audit` finding
+  (ASAR Integrity Bypass, GHSA-vmqv-hx8q-j7mg). Amicus runs Electron **unpackaged**, so the
+  ASAR-integrity attack class never applied to its deployment — the concrete effect is a clean
+  audit and staying on a supported Electron line.
+- **Content view migrated from the deprecated `BrowserView` to `WebContentsView`**
+  (`mainWindow.contentView.addChildView`). All four windows now set `sandbox` explicitly.
+- **`@electron/get` 2.x -> 5.x** (now a direct `dependency`, ESM-only). The self-heal defers a
+  lazy dynamic `import()` to the network path and bounds the download with an `AbortSignal`
+  timeout (5.x dropped the old `got`-style timeout).
+- CI matrices raised to Node 22/24.
+
+### Fixed
+
+- Runtime Node-version guard (`src/utils/node-version-guard.js`) fires early in `bin/amicus.js`,
+  before heavy imports, so an unsupported Node fails with an actionable message.
+
+### Known limitations
+
+- `@electron/get` 5.x uses native `fetch`, which does **not** honor `HTTPS_PROXY` / `NO_PROXY`.
+  Provisioning Electron behind a corporate proxy needs a manual cache copy or `ELECTRON_MIRROR`
+  (see `docs/troubleshooting.md`). Headless runs and the council never download Electron.
+
 ## [2.2.0] - 2026-07-14
 
 ### Added
