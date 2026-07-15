@@ -16,13 +16,7 @@ const ANTHROPIC_MODELS = [
   { id: 'anthropic/claude-3-5-haiku', name: 'Claude 3.5 Haiku', contextLength: null, pricing: null }
 ];
 
-const PROVIDER_FAMILY_NAMES = {
-  openrouter: 'OpenRouter',
-  google: 'Google',
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  deepseek: 'DeepSeek'
-};
+const { PROVIDER_FAMILY_NAMES } = require('./provider-registry');
 
 /** Provider API configs for fetching model lists */
 const PROVIDER_FETCH_CONFIG = {

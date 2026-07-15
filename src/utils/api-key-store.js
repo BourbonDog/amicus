@@ -5,15 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { validateApiKey, validateOpenRouterKey, VALIDATION_ENDPOINTS } = require('./api-key-validation');
-
-/** Maps provider IDs to environment variable names */
-const PROVIDER_ENV_MAP = {
-  openrouter: 'OPENROUTER_API_KEY',
-  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  anthropic: 'ANTHROPIC_API_KEY',
-  deepseek: 'DEEPSEEK_API_KEY'
-};
+const { PROVIDER_ENV_MAP } = require('./provider-registry');
 
 /** Legacy key names that have been renamed (old -> new) */
 const LEGACY_KEY_NAMES = {
