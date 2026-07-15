@@ -41,13 +41,13 @@ function createFoldHandler(state) {
   let folded = false;
   let completed = false;
 
-  async function triggerFold(mainWindow, contentView) {
+  async function triggerFold(mainWindow, opencodeView) {
     if (folded) { return; }
     folded = true;
     completed = false;
 
     // Show fold progress in toolbar and content overlay
-    showFoldOverlay(mainWindow, contentView);
+    showFoldOverlay(mainWindow, opencodeView);
 
     try {
       // Ask the model to generate a structured summary
@@ -76,8 +76,8 @@ function createFoldHandler(state) {
       logger.info('Fold completed', { taskId: state.taskId });
 
       // Show nudge overlay before closing
-      if (contentView) {
-        await contentView.webContents.executeJavaScript(`
+      if (opencodeView) {
+        await opencodeView.webContents.executeJavaScript(`
           (function() {
             var overlay = document.getElementById('amicus-fold-overlay');
             if (overlay) {
@@ -147,7 +147,7 @@ function createFoldHandler(state) {
  * Note: The JS strings below contain only hardcoded markup (no user input),
  * so there is no XSS risk from DOM manipulation.
  */
-function showFoldOverlay(mainWindow, contentView) {
+function showFoldOverlay(mainWindow, opencodeView) {
   if (mainWindow) {
     mainWindow.webContents.executeJavaScript(`
       (function() {
@@ -174,7 +174,7 @@ function showFoldOverlay(mainWindow, contentView) {
       })();
     `).catch(() => {});
   }
-  if (contentView) {
+  if (opencodeView) {
     // Scope token vars to the overlay container so var(--x) resolves without
     // touching OpenCode's own :root (which would clobber its CSS variables).
     const rawCss = tokenCss({ absoluteFontUrls: true });
@@ -182,9 +182,9 @@ function showFoldOverlay(mainWindow, contentView) {
     // custom properties are defined on #amicus-fold-overlay and inherited by
     // its descendants. @font-face blocks are left at global scope (no selector).
     const scopedCss = rawCss.replace(/:root\s*\{/, '#amicus-fold-overlay {');
-    contentView.webContents.insertCSS(scopedCss).catch(() => {});
+    opencodeView.webContents.insertCSS(scopedCss).catch(() => {});
 
-    contentView.webContents.executeJavaScript(`
+    opencodeView.webContents.executeJavaScript(`
       (function() {
         if (!document.getElementById('fold-spin-style')) {
           var style = document.createElement('style');

@@ -3,7 +3,7 @@
 /**
  * Issue #49 — token-driven theme for the embedded OpenCode web UI.
  *
- * main.js injects this via `contentView.webContents.insertCSS(...)` on
+ * main.js injects this via `opencodeView.webContents.insertCSS(...)` on
  * `dom-ready`. Before #49 that hook only HID OpenCode's header/wordmark; this
  * module extends it so the embedded chat surface inherits the clay/gold tokens
  * and matches the token-driven Amicus toolbar (toolbar.js).
@@ -13,7 +13,7 @@
  * PREFER overriding OpenCode's OWN :root CSS custom properties — a much more
  * stable surface than `.css-abc123` class selectors. We:
  *   1. inline the canonical token CSS (tokenCss) so OUR vars + @font-face are
- *      available inside the BrowserView (absolute font URLs, same as toolbar.js
+ *      available inside the WebContentsView (absolute font URLs, same as toolbar.js
  *      / setup-ui-styles.js / load-failsafe.js do),
  *   2. remap a generous superset of OpenCode's plausible theme custom-property
  *      names to our tokens (var(--...)), covering the prefixes OpenCode has
@@ -115,7 +115,7 @@ const ELEMENT_FALLBACKS = `
 `;
 
 /**
- * Build the full theme CSS string injected into the OpenCode BrowserView.
+ * Build the full theme CSS string injected into the OpenCode WebContentsView.
  * @returns {string} hide-chrome + inlined tokens + :root overrides + fallbacks.
  */
 function buildOpencodeThemeCSS() {

@@ -54,9 +54,9 @@
  * @param {() => boolean} [deps.hasCompleted] - Whether the fold's
  *   `[SIDECAR_FOLD]` stdout write has actually succeeded. Falls back to
  *   `hasFolded()` when omitted.
- * @param {(mainWindow: object, contentView: object) => Promise<void>} deps.triggerFold
+ * @param {(mainWindow: object, opencodeView: object) => Promise<void>} deps.triggerFold
  *   - The SAME fold.js closure used by the shortcut/toolbar/IPC paths.
- * @returns {{ handleClose: (event: object, mainWindow: object, contentView: object) => void }}
+ * @returns {{ handleClose: (event: object, mainWindow: object, opencodeView: object) => void }}
  */
 function createCloseGuard({ hasFolded, isFolding, hasCompleted, triggerFold }) {
   const checkIsFolding = isFolding || hasFolded;
@@ -78,7 +78,7 @@ function createCloseGuard({ hasFolded, isFolding, hasCompleted, triggerFold }) {
     }
   }
 
-  function handleClose(event, mainWindow, contentView) {
+  function handleClose(event, mainWindow, opencodeView) {
     if (checkHasCompleted()) {
       // Fold already completed — proceed exactly like the pre-existing
       // behavior (no interception, no destroy call from the guard itself;
@@ -110,7 +110,7 @@ function createCloseGuard({ hasFolded, isFolding, hasCompleted, triggerFold }) {
     }
     closeFoldAttempted = true;
 
-    Promise.resolve(triggerFold(mainWindow, contentView)).then(() => {
+    Promise.resolve(triggerFold(mainWindow, opencodeView)).then(() => {
       // triggerFold can RESOLVE without ever calling mainWindow.close() —
       // its outer catch swallows failures (including a synchronous throw
       // from the post-write nudge-overlay executeJavaScript call, which can

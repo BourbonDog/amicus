@@ -1,5 +1,5 @@
 /**
- * Content Preload - OpenCode BrowserView (minimal, no privileged bridge)
+ * Content Preload - OpenCode WebContentsView (minimal, no privileged bridge)
  *
  * The OpenCode Web UI is remote-ish content: it should NOT be able to reach the
  * privileged sidecar IPC (fold/open-settings/perform-update/...). This preload

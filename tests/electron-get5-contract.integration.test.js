@@ -1,15 +1,16 @@
 'use strict';
 /**
  * @electron/get 5.x provisioning contract (integration).
- * Guarded: runs only when @electron/get@5 is installed AND AMICUS_TEST_ELECTRON_DOWNLOAD is set
- * (a real network download). Skips otherwise — including on the base @electron/get@2.x deps.
  *
  * WHY child_process: @electron/get 5.x is ESM-only. `await import()` inside Jest hits Jest's
  * ESM limitation (needs --experimental-vm-modules), so the REAL import + download run in a
  * plain Node subprocess (the repo's established pattern for ESM-only deps, cf.
  * update-notifier-loader). @electron/get 5.x's exports map also forbids
- * require('@electron/get/package.json'), so the version is read via fs (walking up from the
- * resolved entry), not require.
+ * require('@electron/get/package.json'), so the version is read via fs.
+ *
+ * The IMPORT contract runs whenever @electron/get@5 is present (no network) — a standing
+ * regression test for the CJS->ESM boundary the self-heal depends on. The DOWNLOAD contract
+ * (real network) is gated behind AMICUS_TEST_ELECTRON_DOWNLOAD.
  */
 const fs = require('fs');
 const path = require('path');
@@ -30,31 +31,50 @@ function getVersion() {
   return null;
 }
 
+const REPO = path.join(__dirname, '..');
+function runNode(script) {
+  return execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf-8', cwd: REPO });
+}
+
 const version = getVersion();
 const isGet5 = !!version && version.startsWith('5');
-const d = (isGet5 && process.env.AMICUS_TEST_ELECTRON_DOWNLOAD) ? describe : describe.skip;
+const dImport = isGet5 ? describe : describe.skip;
+const dDownload = (isGet5 && process.env.AMICUS_TEST_ELECTRON_DOWNLOAD) ? describe : describe.skip;
 
-d('@electron/get 5.x provisioning contract', () => {
-  jest.setTimeout(10 * 60 * 1000);
-
+dImport('@electron/get 5.x import contract (no network)', () => {
   test('dynamic import resolves downloadArtifact in real Node', () => {
-    const out = execFileSync(process.execPath, ['--input-type=module', '-e',
-      `const g = await import('@electron/get'); console.log('TYPEOF:' + typeof g.downloadArtifact);`,
-    ], { encoding: 'utf-8', cwd: path.join(__dirname, '..') });
+    const out = runNode(`const g = await import('@electron/get'); console.log('TYPEOF:' + typeof g.downloadArtifact);`);
     expect(out).toContain('TYPEOF:function');
   });
+});
+
+dDownload('@electron/get 5.x download contract (real network)', () => {
+  jest.setTimeout(10 * 60 * 1000);
 
   test('a real download checksum-validates and lands in the expected cache root', () => {
-    const script = `
+    const out = runNode(`
       const g = await import('@electron/get');
       const zip = await g.downloadArtifact({ version: '43.1.1', artifactName: 'electron' });
       const fs = await import('node:fs');
       console.log('ZIP:' + zip + '|EXISTS:' + fs.existsSync(zip));
-    `;
-    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script],
-      { encoding: 'utf-8', cwd: path.join(__dirname, '..') });
+    `);
     expect(out).toMatch(/ZIP:.*electron-v43\.1\.1-.+\.zip\|EXISTS:true/);
-    // sumchecker validation is implicit: a checksum failure throws in the subprocess
-    // (non-zero exit) and execFileSync would reject before this assertion.
+  });
+
+  test('a corrupted cache entry is re-validated by sumchecker, not trusted', () => {
+    // Corrupt the cached zip, then re-download WITHOUT force: sumchecker must reject the
+    // tampered cache and re-fetch a valid zip (integrity is enforced, not bypassed).
+    const out = runNode(`
+      const g = await import('@electron/get');
+      const fs = await import('node:fs');
+      const zip = await g.downloadArtifact({ version: '43.1.1', artifactName: 'electron' });
+      const before = fs.statSync(zip).size;
+      fs.writeFileSync(zip, Buffer.concat([fs.readFileSync(zip), Buffer.from('TAMPER')])); // corrupt cache
+      const zip2 = await g.downloadArtifact({ version: '43.1.1', artifactName: 'electron' });
+      const after = fs.statSync(zip2).size;
+      console.log('AFTER_MATCHES_VALID:' + (after === before));
+    `);
+    // A re-validated, re-fetched zip has the correct (original) size, not the tampered size.
+    expect(out).toContain('AFTER_MATCHES_VALID:true');
   });
 });

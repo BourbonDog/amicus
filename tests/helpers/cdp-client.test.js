@@ -23,6 +23,14 @@ describe('CdpClient', () => {
             type: 'page',
             url: 'http://localhost:4096/',
             webSocketDebuggerUrl: `ws://127.0.0.1:${serverPort}/devtools/page/content-page-id`
+          },
+          {
+            // A non-page background target that shares the data:/localhost URL shape —
+            // the type==='page' filter must exclude it (Chromium 150 enumerates these).
+            id: 'sw-id',
+            type: 'service_worker',
+            url: 'data:text/html,sw',
+            webSocketDebuggerUrl: `ws://127.0.0.1:${serverPort}/devtools/page/sw-id`
           }
         ]));
         return;
@@ -66,9 +74,10 @@ describe('CdpClient', () => {
   it('getTargets returns parsed target list', async () => {
     const cdp = new CdpClient(serverPort);
     const targets = await cdp.getTargets();
-    expect(targets).toHaveLength(2);
+    expect(targets).toHaveLength(3);
     expect(targets[0].id).toBe('toolbar-page-id');
     expect(targets[1].url).toContain('http://localhost');
+    expect(targets[2].type).toBe('service_worker');
   });
 
   it('findTarget filters by predicate', async () => {
@@ -77,6 +86,14 @@ describe('CdpClient', () => {
     expect(toolbar.id).toBe('toolbar-page-id');
     const content = await cdp.findTarget(t => t.url.startsWith('http://localhost'));
     expect(content.id).toBe('content-page-id');
+  });
+
+  it("type==='page' filter excludes a non-page target with a data: URL", async () => {
+    const cdp = new CdpClient(serverPort);
+    // The sw-id target has a data: URL but type 'service_worker' — the factory filter
+    // must return the real page, not the background target.
+    const match = await cdp.findTarget(t => t.type === 'page' && t.url.startsWith('data:'));
+    expect(match.id).toBe('toolbar-page-id');
   });
 
   it('findTarget returns null when no match', async () => {

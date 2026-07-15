@@ -146,7 +146,7 @@ function cacheRootFor(env = process.env) {
  * @returns {Promise<void>}
  */
 async function controlledProvision({
-  electronDir, platform, arch, version, downloadArtifact, extract, fs, env = process.env,
+  electronDir, platform, arch, version, downloadArtifact, extract, fs, env = process.env, downloadMs = 480000,
 }) {
   const zip = await downloadArtifact({
     version,
@@ -155,7 +155,7 @@ async function controlledProvision({
     cacheRoot: cacheRootFor(env),
     platform,
     arch,
-    checksums: undefined, // 5.x uses native fetch (no got-style timeout); sumchecker validates
+    downloadOptions: { signal: AbortSignal.timeout(downloadMs) }, // 5.x native fetch: bound stalled downloads, free the lock
   });
   await extractFromCache({ zip, electronDir, platform, extract, fs });
 }
@@ -270,7 +270,7 @@ async function repairElectron({
     try {
       const downloadArtifact = await resolveDownloadArtifact();
       await controlledProvision({
-        electronDir, platform, arch, version, downloadArtifact, extract, fs, env: process.env,
+        electronDir, platform, arch, version, downloadArtifact, extract, fs, env: process.env, downloadMs: timeoutMs,
       });
       controlledExtracted = true; // download + extract returned without throwing
     } catch {
