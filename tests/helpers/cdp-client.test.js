@@ -14,11 +14,13 @@ describe('CdpClient', () => {
         res.end(JSON.stringify([
           {
             id: 'toolbar-page-id',
+            type: 'page',
             url: 'data:text/html;charset=utf-8,toolbar',
             webSocketDebuggerUrl: `ws://127.0.0.1:${serverPort}/devtools/page/toolbar-page-id`
           },
           {
             id: 'content-page-id',
+            type: 'page',
             url: 'http://localhost:4096/',
             webSocketDebuggerUrl: `ws://127.0.0.1:${serverPort}/devtools/page/content-page-id`
           }

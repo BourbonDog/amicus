@@ -11,23 +11,23 @@ const path = require('path');
 const MAIN = fs.readFileSync(path.join(__dirname, '..', '..', 'electron', 'main.js'), 'utf-8');
 
 describe('main.js M9 security wiring', () => {
-  test('the content BrowserView uses the minimal preload, not the bridge preload', () => {
-    // The BrowserView block must reference preload-content.js.
-    const viewBlock = MAIN.slice(MAIN.indexOf('new BrowserView('));
+  test('the content WebContentsView uses the minimal preload, not the bridge preload', () => {
+    // The WebContentsView block must reference preload-content.js.
+    const viewBlock = MAIN.slice(MAIN.indexOf('new WebContentsView('));
     expect(viewBlock).toContain("preload-content.js");
   });
 
   test('the toolbar/main window keeps preload.js', () => {
     const winBlock = MAIN.slice(
       MAIN.indexOf('new BrowserWindow('),
-      MAIN.indexOf('new BrowserView(')
+      MAIN.indexOf('new WebContentsView(')
     );
     expect(winBlock).toContain("preload.js");
     expect(winBlock).not.toContain("preload-content.js");
   });
 
   test('the content view guards navigation and window-open', () => {
-    expect(MAIN).toContain("contentView.webContents.on('will-navigate'");
+    expect(MAIN).toContain("opencodeView.webContents.on('will-navigate'");
     expect(MAIN).toContain('isAllowedContentNavigation');
     expect(MAIN).toContain('setWindowOpenHandler');
   });
