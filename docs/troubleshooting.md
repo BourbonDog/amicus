@@ -161,6 +161,19 @@ For full headless configuration, see [docs/configuration.md](./configuration.md)
 
 ---
 
+## Electron Download Fails Behind a Corporate Proxy
+
+**Symptom:** The first interactive `amicus start` (or `amicus doctor --fix`) hangs or errors while "provisioning Electron", on a network that requires an HTTP/HTTPS proxy.
+
+**Cause:** Amicus downloads the Electron binary via `@electron/get`. As of `@electron/get` 5.x (shipped with the Electron 43 upgrade), the downloader uses Node's native `fetch`, which — unlike the older `got`-based path — does **not** honor `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` automatically. Proxied and authenticated-proxy environments are therefore not auto-detected.
+
+**Fix:**
+- **Manual install (most reliable):** on a machine/network with direct access, run any `amicus start` once to populate the Electron cache, then copy the cache directory to the target machine — `%LOCALAPPDATA%\electron\Cache` (Windows), `~/Library/Caches/electron` (macOS), `$XDG_CACHE_HOME/electron` or `~/.cache/electron` (Linux). Amicus reuses a valid cached binary without re-downloading.
+- **Point at your own mirror:** set `ELECTRON_MIRROR` (and `ELECTRON_CUSTOM_DIR` if needed) to an internal Electron mirror that is reachable without a proxy.
+- Headless runs and the full council never need Electron — use `--no-ui` if the GUI is not required.
+
+---
+
 ## GUI Load Failsafe
 
 **Symptom:** Interactive Amicus window shows a load-error page instead of the OpenCode UI, with a message about the UI not responding.

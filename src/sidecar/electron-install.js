@@ -155,11 +155,7 @@ async function controlledProvision({
     cacheRoot: cacheRootFor(env),
     platform,
     arch,
-    checksums: undefined,
-    // Bound the fetch so a stalled/blocked network aborts (got v11 timeouts:
-    // socket = inactivity, request = total) instead of hanging the repair —
-    // a hung-then-killed download is what orphaned the single-flight lock.
-    downloadOptions: { timeout: { socket: 60000, request: 480000 } },
+    checksums: undefined, // 5.x uses native fetch (no got-style timeout); sumchecker validates
   });
   await extractFromCache({ zip, electronDir, platform, extract, fs });
 }
@@ -214,7 +210,11 @@ async function repairElectron({
   const spawn = deps.spawn || ((cmd, args, o) => spawnSync(cmd, args, { ...o, timeout: timeoutMs || 480000 }));
   const findZip = deps.cachedZip || ((o) => cachedZip(o));
   const acquireLock = deps.acquireLock || ((o) => acquireRepairLock({ ...o, fs }));
-  const downloadArtifact = deps.downloadArtifact || require('@electron/get').downloadArtifact;
+  // Lazy: import the ESM-only @electron/get only on the network path, so cacheOnly
+  // repairs and injected mocks stay parseable under Jest (which can't import() ESM).
+  const resolveDownloadArtifact = deps.downloadArtifact
+    ? async () => deps.downloadArtifact
+    : async () => (await import('@electron/get')).downloadArtifact;
 
   if (!version) {
     try {
@@ -268,6 +268,7 @@ async function repairElectron({
     // download that produced no usable exe is a FAILURE (no false success; #53).
     let controlledExtracted = false;
     try {
+      const downloadArtifact = await resolveDownloadArtifact();
       await controlledProvision({
         electronDir, platform, arch, version, downloadArtifact, extract, fs, env: process.env,
       });
