@@ -195,6 +195,7 @@ src/
 │   ├── remediation-hints.js
 │   ├── result-schema-version.js  # The single SCHEMA_VERSION constant shared by result-schema.js and
 │   ├── result-schema.js
+│   ├── route-launch.js  # Route-launch views (#61 gateway routing integration, Task 4.2).
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
 │   ├── session-index-tmp-sweep.js
@@ -417,6 +418,7 @@ evals/
 | `utils/remediation-hints.js` |  |  |
 | `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION()` |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
+| `utils/route-launch.js` | Route-launch views (#61 gateway routing integration, Task 4.2). | `buildLaunchKeys()`, `getRouteCatalogInfo()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
 | `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
