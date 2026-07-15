@@ -84,3 +84,36 @@ describe('resolveRoute — explicit modes', () => {
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct' });
   });
 });
+
+describe('resolveRoute — non-canonical descriptor inputs', () => {
+  test('string canonical id resolves like the equivalent parsed descriptor', () => {
+    const r = resolveRoute({
+      descriptor: 'openai/gpt-5.5', source: 'cli', gatewayMode: 'auto', allowSelection: false,
+      validateModel: true, keys: { ...NO_KEYS, openai: true }, catalogInfo: cat(['openai/gpt-5.5']),
+    });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5' });
+  });
+
+  test('string OpenRouter-literal id resolves via openrouter', () => {
+    const r = resolveRoute({
+      descriptor: 'openrouter/openai/gpt-5.5', source: 'cli', gatewayMode: 'auto', allowSelection: false,
+      validateModel: true, keys: { ...NO_KEYS, openrouter: true }, catalogInfo: EMPTY,
+    });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter' });
+  });
+
+  test('alias-kind descriptor is rejected as invalid_descriptor, not garbage-resolved', () => {
+    const aliasDescriptor = parseDescriptor('gpt', { aliases: { gpt: 'openrouter/openai/gpt-5.5' } });
+    const r = resolveRoute(req('placeholder', { descriptor: aliasDescriptor, keys: { ...NO_KEYS, openrouter: true, openai: true } }));
+    expect(r).toMatchObject({ kind: 'error', reason: 'invalid_descriptor' });
+    expect(r.kind).not.toBe('resolved');
+    expect(r.executableId).toBeUndefined();
+    expect(JSON.stringify(r)).not.toMatch(/undefined/);
+  });
+
+  test('null descriptor is rejected as invalid_descriptor without throwing', () => {
+    let r;
+    expect(() => { r = resolveRoute(req('placeholder', { descriptor: null })); }).not.toThrow();
+    expect(r).toMatchObject({ kind: 'error', reason: 'invalid_descriptor' });
+  });
+});
