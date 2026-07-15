@@ -16,13 +16,7 @@ const ANTHROPIC_MODELS = [
   { id: 'anthropic/claude-3-5-haiku', name: 'Claude 3.5 Haiku', contextLength: null, pricing: null }
 ];
 
-const PROVIDER_FAMILY_NAMES = {
-  openrouter: 'OpenRouter',
-  google: 'Google',
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  deepseek: 'DeepSeek'
-};
+const { PROVIDER_FAMILY_NAMES } = require('./provider-registry');
 
 /** Provider API configs for fetching model lists */
 const PROVIDER_FETCH_CONFIG = {
@@ -82,7 +76,20 @@ const PROVIDER_FETCH_CONFIG = {
         pricing: null
       }));
     }
-  }
+  },
+  anthropic: {
+    url: 'https://api.anthropic.com/v1/models',
+    authHeader: (key) => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01' }),
+    normalize: (body) => {
+      const data = JSON.parse(body);
+      return (data.data || []).map(m => ({
+        id: `anthropic/${m.id}`,
+        name: m.display_name || m.id,
+        contextLength: null,
+        pricing: null,
+      }));
+    },
+  },
 };
 
 const FETCH_TIMEOUT_MS = 5000;
@@ -95,7 +102,9 @@ const FETCH_TIMEOUT_MS = 5000;
  */
 function fetchModelsFromProvider(provider, key) {
   if (provider === 'anthropic') {
-    return Promise.resolve(ANTHROPIC_MODELS);
+    // No key -> hardcoded floor, no network. With a key -> try live, fall back to floor.
+    if (!key) { return Promise.resolve(ANTHROPIC_MODELS); }
+    return fetchViaConfig('anthropic', key).then(rows => (rows.length > 0 ? rows : ANTHROPIC_MODELS));
   }
 
   const config = PROVIDER_FETCH_CONFIG[provider];
@@ -103,6 +112,18 @@ function fetchModelsFromProvider(provider, key) {
     return Promise.resolve([]);
   }
 
+  return fetchViaConfig(provider, key);
+}
+
+/**
+ * Perform the HTTPS fetch + normalize for a single configured provider.
+ * Resolves to `[]` on any non-200 response, network error, timeout, or parse error.
+ * @param {string} provider - Key into PROVIDER_FETCH_CONFIG
+ * @param {string} key - API key
+ * @returns {Promise<Array>} Normalized model rows, or [] on any failure
+ */
+function fetchViaConfig(provider, key) {
+  const config = PROVIDER_FETCH_CONFIG[provider];
   const url = config.buildUrl ? config.buildUrl(key) : config.url;
   const headers = config.authHeader(key);
 

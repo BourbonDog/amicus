@@ -19,13 +19,7 @@ const VALID_AGENT_MODES = OPENCODE_AGENTS;
 /**
  * Provider to API key mapping
  */
-const PROVIDER_KEY_MAP = {
-  'openrouter': { key: 'OPENROUTER_API_KEY', name: 'OpenRouter' },
-  'google': { key: 'GOOGLE_GENERATIVE_AI_API_KEY', name: 'Google Gemini' },
-  'openai': { key: 'OPENAI_API_KEY', name: 'OpenAI' },
-  'anthropic': { key: 'ANTHROPIC_API_KEY', name: 'Anthropic' },
-  'deepseek': { key: 'DEEPSEEK_API_KEY', name: 'DeepSeek' },
-};
+const { PROVIDER_KEY_MAP } = require('./provider-registry');
 
 /** Task ID format: alphanumeric, hyphens, underscores, 1-64 chars */
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;

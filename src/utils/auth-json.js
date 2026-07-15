@@ -50,7 +50,7 @@ function resolveAuthJsonPath(env = process.env) {
 const AUTH_JSON_PATH = resolveAuthJsonPath();
 
 /** Known provider IDs that map to sidecar's PROVIDER_ENV_MAP */
-const KNOWN_PROVIDERS = ['openrouter', 'google', 'openai', 'anthropic', 'deepseek'];
+const { KNOWN_PROVIDERS } = require('./provider-registry');
 
 /**
  * Extract key value from an auth.json provider entry.
