@@ -7,6 +7,11 @@
  * Routes commands to appropriate handlers.
  */
 
+// Node version guard: fail fast on unsupported Node versions
+const { checkNodeVersion } = require('../src/utils/node-version-guard');
+const _nv = checkNodeVersion(process.version);
+if (!_nv.ok) { process.stderr.write(_nv.message + '\n'); process.exit(1); }
+
 // Load API keys from all sources: process.env > amicus .env > auth.json
 const { loadCredentials } = require('../src/utils/env-loader');
 loadCredentials();
