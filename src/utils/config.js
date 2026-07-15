@@ -339,6 +339,24 @@ function resolveCouncilMembers(name, catalog = []) {
   return { models, dropped };
 }
 
+/** @returns {{prefer:'direct'|'openrouter', migration_notified:Object}} routing config with defaults */
+function getRoutingConfig() {
+  const config = loadConfig() || {};
+  const r = (config.routing && typeof config.routing === 'object') ? config.routing : {};
+  const prefer = r.prefer === 'openrouter' ? 'openrouter' : 'direct';
+  const migration_notified = (r.migration_notified && typeof r.migration_notified === 'object') ? r.migration_notified : {};
+  return { prefer, migration_notified };
+}
+
+/** Merge --gateway (perCall) with routing.prefer into a router gatewayMode.
+ * @param {string|undefined} perCall 'auto'|'direct'|'openrouter'|undefined
+ * @returns {'auto'|'direct'|'openrouter'} */
+function resolveGatewayMode(perCall) {
+  if (perCall && perCall !== 'auto') { return perCall; }
+  const { prefer } = getRoutingConfig();
+  return prefer === 'openrouter' ? 'openrouter' : 'auto';
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -358,4 +376,6 @@ module.exports = {
   getCouncil,
   getCouncilWithSource,
   resolveCouncilMembers,
+  getRoutingConfig,
+  resolveGatewayMode,
 };
