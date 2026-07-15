@@ -1,7 +1,7 @@
 /**
  * Amicus Electron Shell - v3
  *
- * Uses BrowserView to split the window into two physical areas:
+ * Uses WebContentsView to split the window into two physical areas:
  *   - Top: OpenCode Web UI (gets its own viewport, no CSS conflicts)
  *   - Bottom 40px: Amicus toolbar (branding, task ID, timer, fold button)
  *
@@ -12,7 +12,7 @@
  * Spec Reference: §4.4 Electron Wrapper
  */
 
-const { app, BrowserWindow, BrowserView, globalShortcut, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, WebContentsView, globalShortcut, ipcMain, screen } = require('electron');
 const path = require('path');
 const { logger } = require('../src/utils/logger');
 const { buildToolbarHTML, TOOLBAR_H, getBrandName } = require('./toolbar');
@@ -84,7 +84,7 @@ const OPENCODE_URL = `http://localhost:${OPENCODE_PORT}`;
 // ============================================================================
 
 let mainWindow = null;
-let contentView = null;
+let opencodeView = null;
 let currentToolbarH = TOOLBAR_H;
 
 const foldHandler = createFoldHandler({
@@ -157,10 +157,10 @@ function createAmicusWindow() {
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toolbarHtml)}`);
   mainWindow.webContents.on('page-title-updated', (e) => e.preventDefault());
 
-  // BrowserView for OpenCode content. It uses a MINIMAL preload that exposes no
+  // WebContentsView for OpenCode content. It uses a MINIMAL preload that exposes no
   // privileged bridge — the OpenCode page must not be able to reach the fold /
   // settings / update IPC (M9). The toolbar window keeps preload.js.
-  contentView = new BrowserView({
+  opencodeView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-content.js'),
       contextIsolation: true, nodeIntegration: false,
@@ -170,14 +170,14 @@ function createAmicusWindow() {
   // Pin the content view to the OpenCode localhost origin: block any attempt to
   // navigate it off-origin or open new windows (defense-in-depth, M9). data:
   // URLs (the in-app load-error page) are still allowed by the guard.
-  contentView.webContents.on('will-navigate', (event, targetUrl) => {
+  opencodeView.webContents.on('will-navigate', (event, targetUrl) => {
     if (!isAllowedContentNavigation(targetUrl, OPENCODE_URL)) {
       logger.warn('Blocked content-view navigation', { targetUrl });
       event.preventDefault();
     }
   });
-  contentView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  // Load OpenCode off-screen first; only attach BrowserView after rebranding
+  opencodeView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // Load OpenCode off-screen first; only attach WebContentsView after rebranding
   // to prevent the OpenCode logo/splash from flashing during load.
   mainWindow.on('resize', updateContentBounds);
 
@@ -190,9 +190,9 @@ function createAmicusWindow() {
   // is token-driven — it inlines tokenCss() and remaps OpenCode's own :root
   // custom properties — so it tracks the toolbar without brittle class
   // selectors. insertCSS is more reliable than preload DOM injection in a
-  // BrowserView. NOTE: the live visual match is a user-side CDP/manual check.
-  contentView.webContents.on('dom-ready', () => {
-    contentView.webContents.insertCSS(buildOpencodeThemeCSS()).catch(() => {});
+  // WebContentsView. NOTE: the live visual match is a user-side CDP/manual check.
+  opencodeView.webContents.on('dom-ready', () => {
+    opencodeView.webContents.insertCSS(buildOpencodeThemeCSS()).catch(() => {});
   });
 
   // Navigate directly to the session URL to bypass the project selection screen.
@@ -205,7 +205,7 @@ function createAmicusWindow() {
   // failsafe, a failed/stalled UI load leaves an invisible window and a
   // silently hung process (the historical "Starting up... | 0 messages" bug).
   const failsafe = attachLoadFailsafe({
-    webContents: contentView.webContents,
+    webContents: opencodeView.webContents,
     timeoutMs: parseInt(process.env.AMICUS_GUI_LOAD_TIMEOUT_MS || '', 10) || undefined,
     onFail: ({ reason, errorCode, errorDescription, validatedURL }) => {
       logger.error('OpenCode UI failed to load', {
@@ -215,12 +215,12 @@ function createAmicusWindow() {
         const html = buildLoadErrorHTML({
           url: validatedURL || contentUrl, errorCode, errorDescription
         });
-        contentView.webContents
+        opencodeView.webContents
           .loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
           .catch(() => {});
       }
       // On timeout, show whatever is in flight rather than aborting the load.
-      mainWindow.addBrowserView(contentView);
+      mainWindow.contentView.addChildView(opencodeView);
       updateContentBounds();
       if (!process.env.AMICUS_HEADLESS_TEST) {
         mainWindow.show();
@@ -228,16 +228,16 @@ function createAmicusWindow() {
     }
   });
 
-  contentView.webContents.loadURL(contentUrl);
+  opencodeView.webContents.loadURL(contentUrl);
 
-  contentView.webContents.on('did-finish-load', () => {
+  opencodeView.webContents.on('did-finish-load', () => {
     // Wait for React to render, then rebrand and show window
     setTimeout(() => {
       rebrandUI().then(() => {
         // Disarm only once the window is actually about to show, so a wedged
         // rebrand/executeJavaScript is still covered by the timeout.
         failsafe.cancel();
-        mainWindow.addBrowserView(contentView);
+        mainWindow.contentView.addChildView(opencodeView);
         updateContentBounds();
         if (!process.env.AMICUS_HEADLESS_TEST) {
           mainWindow.show();
@@ -247,7 +247,7 @@ function createAmicusWindow() {
   });
 
   globalShortcut.register(FOLD_SHORTCUT, () => {
-    foldHandler.triggerFold(mainWindow, contentView);
+    foldHandler.triggerFold(mainWindow, opencodeView);
   });
 
   // Poll toolbar for button clicks (IPC doesn't work with data: URLs).
@@ -258,7 +258,7 @@ function createAmicusWindow() {
       if (!action) { return; }
       mainWindow.webContents.executeJavaScript('window.__amicusToolbarAction = null');
       if (action === 'fold') {
-        foldHandler.triggerFold(mainWindow, contentView);
+        foldHandler.triggerFold(mainWindow, opencodeView);
       } else if (action === 'open-settings') {
         createSettingsChildWindow();
       }
@@ -300,11 +300,11 @@ function createAmicusWindow() {
   }
 
   mainWindow.on('close', (event) => {
-    closeGuard.handleClose(event, mainWindow, contentView);
+    closeGuard.handleClose(event, mainWindow, opencodeView);
   });
   mainWindow.on('closed', () => {
     mainWindow = null;
-    contentView = null;
+    opencodeView = null;
     globalShortcut.unregisterAll();
     app.quit();
   });
@@ -356,9 +356,9 @@ async function createSetupWindow() {
 // ============================================================================
 
 function updateContentBounds() {
-  if (!mainWindow || !contentView) { return; }
+  if (!mainWindow || !opencodeView) { return; }
   const [w, h] = mainWindow.getContentSize();
-  contentView.setBounds({ x: 0, y: 0, width: w, height: h - currentToolbarH });
+  opencodeView.setBounds({ x: 0, y: 0, width: w, height: h - currentToolbarH });
 }
 
 // Amicus wordmark SVG in the same pixel/block art style as the OpenCode logo.
@@ -387,12 +387,12 @@ const AMICUS_WORDMARK = [
 ].join('');
 
 function rebrandUI() {
-  if (!contentView) { return Promise.resolve(); }
+  if (!opencodeView) { return Promise.resolve(); }
   const brandName = getBrandName(CLIENT);
   // The OpenCode logo may be hidden (display:none/visibility:hidden) by preload.js
   // or insertCSS before this runs. Use a MutationObserver with a fallback timeout
   // to catch it whenever React renders it into the DOM.
-  return contentView.webContents.executeJavaScript(`
+  return opencodeView.webContents.executeJavaScript(`
     (function() {
       document.title = '${brandName}';
       var header = document.querySelector('#root > div > header');
@@ -436,7 +436,7 @@ function rebrandUI() {
 // ============================================================================
 
 // These handlers are privileged (fold/settings/update/resize). Only the toolbar
-// window may invoke them — the OpenCode content BrowserView must not (M9). The
+// window may invoke them — the OpenCode content WebContentsView must not (M9). The
 // content view no longer gets a bridge preload, but we still validate the
 // sender as belt-and-suspenders in case a future preload change reintroduces one.
 const fromToolbar = (event) => isPrivilegedSender(event, () => mainWindow);
@@ -444,7 +444,7 @@ const fromToolbar = (event) => isPrivilegedSender(event, () => mainWindow);
 // Amicus mode: fold
 ipcMain.handle('sidecar:fold', (event) => {
   if (!fromToolbar(event)) { return; }
-  return foldHandler.triggerFold(mainWindow, contentView);
+  return foldHandler.triggerFold(mainWindow, opencodeView);
 });
 
 // Amicus mode: open settings in a child window
