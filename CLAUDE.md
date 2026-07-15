@@ -168,6 +168,7 @@ src/
 │   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
 │   ├── format-duration.js
 │   ├── free-models.js  # Free OpenRouter model detection (Unit A).
+│   ├── gateway-router.js  # Pure gateway router (#61). Decides direct vs OpenRouter for a request using
 │   ├── idle-watchdog.js  # IdleWatchdog - BUSY/IDLE state machine with self-terminating timer.
 │   ├── input-validators.js
 │   ├── legacy-mcp-migration.js
@@ -389,6 +390,7 @@ evals/
 | `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
 | `utils/format-duration.js` |  | `formatDuration()` |
 | `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
+| `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `resolveRoute()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `findSimilar()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
