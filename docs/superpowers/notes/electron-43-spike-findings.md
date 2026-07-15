@@ -53,3 +53,17 @@ Installed for spike (--no-save): @electron/get 5.0.0, electron 43.1.1.
   (clarity), handle PROXY (the one unresolved risk — untested here).
 - Task 2.3 migration API is confirmed working before we touch main.js.
 - Open risk carried forward: PROXY support under native fetch (no proxy on this machine to test).
+
+## Jest + @electron/get 5 ESM interaction (found during Phase 1 validation)
+- With `@electron/get@5` (ESM) installed, the mock-based provisioning suites
+  (`electron-quarantine.test.js`, `electron-install.test.js`, `electron-self-heal-smoke.test.js`)
+  FAIL to parse under Jest's CommonJS transform ("Jest encountered an unexpected token … ECMAScript
+  Modules"). Jest resolves/parses the mocked module even when auto-mocked.
+- Implication for Task 2.1 (adds scope the plan under-specified): switching the self-heal to a lazy
+  `await import('@electron/get')` is NOT just cleanliness — it is what lets Jest keep parsing (the
+  ESM module is not required at load time), and the existing `jest.mock('@electron/get')` in those
+  suites will need reworking to mock the dynamic import (e.g. mock the wrapper fn, or a
+  jest.unstable_mockModule + import). This reinstates the await-import approach as the RECOMMENDED
+  path (not merely optional).
+- Phase 1 must be validated against BASE deps (electron ^28 + hoisted @electron/get 2.x CJS); the
+  spike's --no-save installs polluted node_modules and were reverted via `npm install --ignore-scripts`.
