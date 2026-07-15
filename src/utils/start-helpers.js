@@ -112,7 +112,7 @@ function deriveAlias(args) {
  * @returns {Promise<{model: string, alias: string|undefined, gateway: string, provenance: object}>}
  */
 async function resolveLaunchModel(args) {
-  const { resolveGatewayMode } = require('./config');
+  const { resolveGatewayMode, loadConfig } = require('./config');
   const { resolveRouteForLaunch } = require('./route-launch');
   const { toCliMessage, toStructuredError } = require('./route-error');
 
@@ -123,8 +123,26 @@ async function resolveLaunchModel(args) {
   // selection_required we can render below, not an unhandled prompt.
   const allowSelection = false;
 
+  // No --model given: the parser does not inject a default, so resolve the
+  // configured default here (mirroring the pre-#61 resolveModelFromArgs
+  // behavior) before handing off to the router. Without this, `undefined`
+  // would reach resolveRouteForLaunch -> parseDescriptor(undefined) -> an
+  // `invalid` result, breaking the common `amicus start` (no --model) case.
+  let modelInput = args.model;
+  if (modelInput === undefined || modelInput === null) {
+    const cfg = loadConfig();
+    if (cfg && cfg.default) {
+      modelInput = cfg.default;
+    } else {
+      process.stderr.write(
+        'No model specified and no default configured. Run \'amicus setup\' to set a default model.\n'
+      );
+      process.exit(1);
+    }
+  }
+
   const result = await resolveRouteForLaunch({
-    model: args.model,
+    model: modelInput,
     gatewayMode,
     source: 'cli',
     allowSelection,

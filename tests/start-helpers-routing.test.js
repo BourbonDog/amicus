@@ -145,6 +145,41 @@ describe('resolveLaunchModel', () => {
     errSpy.mockRestore();
     exitSpy.mockRestore();
   });
+
+  test('no --model given: resolves the configured default and passes it to resolveRouteForLaunch (regression #61 Task 4.5)', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: { source: 'cli' },
+    });
+    const { resolveLaunchModel } = loadStartHelpers({
+      resolveRouteForLaunch,
+      loadConfig: () => ({ default: 'gpt' }),
+    });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    const out = await resolveLaunchModel({});
+
+    expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt' }));
+    expect(out).toMatchObject({ model: 'openai/gpt-5.5', gateway: 'direct' });
+    errSpy.mockRestore();
+  });
+
+  test('no --model given and no default configured: writes the no-default message to stderr and exits 1', async () => {
+    const resolveRouteForLaunch = jest.fn();
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, loadConfig: () => null });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({})).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toContain(
+      'No model specified and no default configured. Run \'amicus setup\' to set a default model.'
+    );
+    expect(resolveRouteForLaunch).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
 });
 
 describe('deriveAlias', () => {
