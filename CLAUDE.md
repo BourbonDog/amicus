@@ -181,6 +181,7 @@ src/
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
+│   ├── model-input-default.js
 │   ├── model-validator.js  # Model Validator
 │   ├── node-version-guard.js
 │   ├── path-setup.js
@@ -405,6 +406,7 @@ evals/
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
+| `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-validator.js` | Model Validator | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()` |

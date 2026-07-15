@@ -112,9 +112,10 @@ function deriveAlias(args) {
  * @returns {Promise<{model: string, alias: string|undefined, gateway: string, provenance: object}>}
  */
 async function resolveLaunchModel(args) {
-  const { resolveGatewayMode, loadConfig } = require('./config');
+  const { resolveGatewayMode } = require('./config');
   const { resolveRouteForLaunch } = require('./route-launch');
   const { toCliMessage, toStructuredError } = require('./route-error');
+  const { resolveModelInputOrDefault } = require('./model-input-default');
 
   const gatewayMode = resolveGatewayMode(args.gateway);
   const validateModel = !args['no-validate-model'];
@@ -128,17 +129,14 @@ async function resolveLaunchModel(args) {
   // behavior) before handing off to the router. Without this, `undefined`
   // would reach resolveRouteForLaunch -> parseDescriptor(undefined) -> an
   // `invalid` result, breaking the common `amicus start` (no --model) case.
-  let modelInput = args.model;
-  if (modelInput === undefined || modelInput === null) {
-    const cfg = loadConfig();
-    if (cfg && cfg.default) {
-      modelInput = cfg.default;
-    } else {
-      process.stderr.write(
-        'No model specified and no default configured. Run \'amicus setup\' to set a default model.\n'
-      );
-      process.exit(1);
-    }
+  // Shared with the MCP amicus_start handler (mcp-server.js, #61 Task 6.2)
+  // via model-input-default.js, so this lookup lives in exactly one place.
+  const modelInput = resolveModelInputOrDefault(args.model);
+  if (modelInput === undefined) {
+    process.stderr.write(
+      'No model specified and no default configured. Run \'amicus setup\' to set a default model.\n'
+    );
+    process.exit(1);
   }
 
   const result = await resolveRouteForLaunch({

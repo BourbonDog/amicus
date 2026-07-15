@@ -10,6 +10,33 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// amicus_start now routes the model through resolveRouteForLaunch (#61 Task
+// 6.2). This file's tests use synthetic vendor/model strings (e.g.
+// 'google/gemini-test', 'openrouter/test/model') purely to exercise OTHER
+// spawn-arg/response behavior, not real routing decisions — the real router
+// would fail them (no real key/catalog entry for a fake model, and any real
+// key present on the dev machine running these tests would make the outcome
+// environment-dependent). Default-mock resolveRouteForLaunch here to a
+// deterministic passthrough mirroring the pre-#61 tryResolveModel behavior
+// (a slash-bearing string resolves as-is); actual routing-error/executableId
+// behavior is covered by tests/mcp-model-validation.test.js.
+jest.mock('../src/utils/route-launch', () => ({
+  resolveRouteForLaunch: jest.fn(async ({ model }) => {
+    if (typeof model === 'string' && model.includes('/')) {
+      return {
+        kind: 'resolved',
+        gateway: model.startsWith('openrouter/') ? 'openrouter' : 'direct',
+        executableId: model,
+        provenance: {},
+      };
+    }
+    return {
+      kind: 'error', type: 'model_route_error', field: 'model',
+      requested: model, reason: 'invalid_descriptor', preferredGateway: null, suggestions: [],
+    };
+  }),
+}));
+
 /**
  * Tests that verify the args passed to the spawned CLI process.
  * Uses jest.isolateModulesAsync + jest.doMock to mock child_process per-test.

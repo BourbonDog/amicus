@@ -1,5 +1,11 @@
 'use strict';
 
+// Model resolution is intentionally NOT covered here (#61 Task 6.2):
+// validateStartInputs no longer resolves/validates models — that moved to
+// mcp-server.js's amicus_start handler, which routes through
+// resolveRouteForLaunch and renders a `model_route_error` on failure. See
+// tests/mcp-model-validation.test.js for that coverage.
+
 describe('validateStartInputs', () => {
   let validateStartInputs, findSimilar;
 
@@ -25,42 +31,11 @@ describe('validateStartInputs', () => {
       expect(result.valid).toBe(false);
       expect(result.error.field).toBe('prompt');
     });
-  });
 
-  describe('model validation', () => {
-    test('rejects invalid model alias with suggestions', () => {
-      const result = validateStartInputs({ prompt: 'test', model: 'gemni' });
-      expect(result.valid).toBe(false);
-      expect(result.error.field).toBe('model');
-      expect(result.error.suggestions).toBeDefined();
-      expect(result.error.available).toBeDefined();
-    });
-
-    test('accepts valid model alias and resolves it', () => {
-      const result = validateStartInputs({ prompt: 'test', model: 'gemini' });
+    test('accepts a valid prompt regardless of model field (model is not validated here)', () => {
+      const result = validateStartInputs({ prompt: 'test', model: 'not-a-real-model' });
       expect(result.valid).toBe(true);
-      expect(result.resolvedModel).toBeDefined();
-      expect(result.resolvedModel).toContain('/');
-    });
-
-    test('accepts undefined model (uses default)', () => {
-      const result = validateStartInputs({ prompt: 'test' });
-      // Should either resolve default or fail gracefully
-      // depends on config - if no default configured, may fail
-      if (result.valid) {
-        expect(result.resolvedModel).toBeDefined();
-      } else {
-        expect(result.error.field).toBe('model');
-      }
-    });
-
-    test('accepts full model string as-is', () => {
-      const result = validateStartInputs({
-        prompt: 'test',
-        model: 'openrouter/google/gemini-2.0-flash',
-      });
-      expect(result.valid).toBe(true);
-      expect(result.resolvedModel).toBe('openrouter/google/gemini-2.0-flash');
+      expect(result.resolvedModel).toBeUndefined();
     });
   });
 
@@ -136,22 +111,18 @@ describe('validateStartInputs', () => {
     });
 
     test('error is JSON-serializable for MCP response', () => {
-      const result = validateStartInputs({ prompt: 'test', model: 'nonexistent_xyz' });
+      const result = validateStartInputs({ prompt: '', timeout: -5 });
       expect(result.valid).toBe(false);
       const json = JSON.stringify(result.error);
       const parsed = JSON.parse(json);
       expect(parsed.type).toBe('validation_error');
-      expect(parsed.field).toBe('model');
-      expect(parsed.message).toContain('nonexistent_xyz');
-      expect(Array.isArray(parsed.available)).toBe(true);
+      expect(parsed.field).toBe('prompt');
+      expect(typeof parsed.message).toBe('string');
     });
 
-    test('model error includes descriptive message with available aliases', () => {
-      const result = validateStartInputs({ prompt: 'test', model: 'gem' });
-      expect(result.error.message).toContain('gem');
-      // 'gem' is a prefix of 'gemini' so suggestions should include it
-      expect(result.error.suggestions.length).toBeGreaterThan(0);
-      expect(result.error.available.length).toBeGreaterThan(0);
+    test('timeout error includes the offending value in its message', () => {
+      const result = validateStartInputs({ prompt: 'test', timeout: 999 });
+      expect(result.error.message).toContain('999');
     });
   });
 });

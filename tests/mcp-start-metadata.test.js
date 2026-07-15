@@ -13,6 +13,19 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// amicus_start routes the model through resolveRouteForLaunch (#61 Task 6.2).
+// The synthetic 'google/gemini-test' model below exists to exercise metadata
+// writes, not real routing — default-mock a deterministic passthrough
+// (mirrors the same default mock in tests/mcp-server.test.js).
+jest.mock('../src/utils/route-launch', () => ({
+  resolveRouteForLaunch: jest.fn(async ({ model }) => ({
+    kind: 'resolved',
+    gateway: typeof model === 'string' && model.startsWith('openrouter/') ? 'openrouter' : 'direct',
+    executableId: model,
+    provenance: {},
+  })),
+}));
+
 describe('amicus_start spawn-path initial metadata (F6)', () => {
   test('writes briefing + mode at creation', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-create-'));

@@ -27,6 +27,20 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// amicus_start routes the model through resolveRouteForLaunch (#61 Task 6.2).
+// These tests use a synthetic 'google/gemini-test' model purely to exercise
+// the settle-wiring behavior below, not real routing — default-mock a
+// deterministic passthrough so it doesn't depend on real keys/catalog state
+// (mirrors the same default mock in tests/mcp-server.test.js).
+jest.mock('../src/utils/route-launch', () => ({
+  resolveRouteForLaunch: jest.fn(async ({ model }) => ({
+    kind: 'resolved',
+    gateway: typeof model === 'string' && model.startsWith('openrouter/') ? 'openrouter' : 'direct',
+    executableId: model,
+    provenance: {},
+  })),
+}));
+
 function mockCommonSeams({ runHeadlessImpl }) {
   // Shared server startup: avoid spawning a real OpenCode Go process.
   jest.doMock('../src/sidecar/session-utils', () => ({
