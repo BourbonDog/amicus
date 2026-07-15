@@ -158,7 +158,10 @@ class CdpClient {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       try {
-        const target = await cdp.findTarget(t => t.url && t.url.startsWith('data:'));
+        // type==='page' guards against new Chromium-150 background targets
+        // (service workers etc.) whose url could false-match; the child
+        // WebContentsView + the data: toolbar both enumerate as 'page' (spike).
+        const target = await cdp.findTarget(t => t.type === 'page' && t.url && t.url.startsWith('data:'));
         if (target) { await cdp.connect(target.id); return cdp; }
       } catch { /* not ready */ }
       await new Promise(r => setTimeout(r, 500));
@@ -178,7 +181,7 @@ class CdpClient {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       try {
-        const target = await cdp.findTarget(t => t.url && t.url.startsWith('http://localhost'));
+        const target = await cdp.findTarget(t => t.type === 'page' && t.url && t.url.startsWith('http://localhost'));
         if (target) { await cdp.connect(target.id); return cdp; }
       } catch { /* not ready */ }
       await new Promise(r => setTimeout(r, 500));

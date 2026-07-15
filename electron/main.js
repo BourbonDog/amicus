@@ -127,7 +127,7 @@ function createAmicusWindow() {
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true, nodeIntegration: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     }
   });
 
@@ -163,7 +163,7 @@ function createAmicusWindow() {
   opencodeView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-content.js'),
-      contextIsolation: true, nodeIntegration: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: true,
     }
   });
 
@@ -334,7 +334,7 @@ async function createSetupWindow() {
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload-setup.js'),
-      contextIsolation: true, nodeIntegration: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: false, // preload-setup.js require()s shell (not sandbox-safe)
     }
   });
 
@@ -498,7 +498,7 @@ function createSettingsChildWindow() {
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload-setup.js'),
-      contextIsolation: true, nodeIntegration: false,
+      contextIsolation: true, nodeIntegration: false, sandbox: false, // shares preload-setup.js (shell)
     }
   });
 
