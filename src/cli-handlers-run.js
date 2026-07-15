@@ -14,7 +14,7 @@
 
 const { validateStartArgs } = require('./cli');
 const { validateTaskId } = require('./utils/validators');
-const { resolveModelFromArgs, validateFallbackModel } = require('./utils/start-helpers');
+const { resolveLaunchModel } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
 
@@ -43,9 +43,8 @@ async function handleStart(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
 
-  const { model, alias } = resolveModelFromArgs(args);
+  const { model, alias } = await resolveLaunchModel(args);
   args.model = model;
-  args.model = await validateFallbackModel(args, alias);
 
   // Normalize agent: --agent takes precedence, otherwise use --mode
   args.agent = args.agent || args.mode;

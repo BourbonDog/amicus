@@ -70,7 +70,91 @@ async function validateFallbackModel(args, alias) {
   }
 }
 
+/**
+ * Derive the alias used for resolution (needed downstream by the budget gate,
+ * which reports `alias || args.model` as the pricing lookup's modelInput).
+ * Mirrors the alias-derivation half of resolveModelFromArgs, but — per the
+ * #61 Task 4.5 design — only ever returns a no-slash token: an explicit
+ * `--model` containing '/' or a slash-bearing config default both resolve to
+ * undefined here (resolveModelFromArgs, by contrast, echoes a slash-bearing
+ * explicit --model back as "alias"; that's fine there because detectFallback/
+ * validateDirectModel both no-op on a slash-bearing alias, but this router
+ * path has no such tolerant caller).
+ * @param {object} args - Parsed CLI arguments
+ * @returns {string|undefined}
+ */
+function deriveAlias(args) {
+  const raw = args.model;
+  if (raw !== undefined && raw !== null && !raw.includes('/')) {
+    return raw;
+  }
+  if (raw === undefined || raw === null) {
+    const { loadConfig } = require('./config');
+    const cfg = loadConfig();
+    if (cfg && cfg.default && !cfg.default.includes('/')) {
+      return cfg.default;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the model for a `start` launch through the Foundation gateway
+ * router (#61 Task 4.5), replacing the resolveModelFromArgs +
+ * validateFallbackModel pipeline for the start path only — resume/continue
+ * keep using that legacy pair (above) until Tasks 5.2/7.3 migrate them too.
+ *
+ * On `resolved`, returns `{ model, alias, gateway, provenance }` (and prints
+ * any advisory `notice` to stderr). On `error` or `selection_required`,
+ * renders the appropriate message to stderr and exits(1) — this never
+ * returns in that case.
+ * @param {object} args - Parsed CLI arguments
+ * @returns {Promise<{model: string, alias: string|undefined, gateway: string, provenance: object}>}
+ */
+async function resolveLaunchModel(args) {
+  const { resolveGatewayMode } = require('./config');
+  const { resolveRouteForLaunch } = require('./route-launch');
+  const { toCliMessage, toStructuredError } = require('./route-error');
+
+  const gatewayMode = resolveGatewayMode(args.gateway);
+  const validateModel = !args['no-validate-model'];
+  // allowSelection is hardcoded false: the interactive picker is Task 6.3.
+  // Until it lands, a direct miss must produce a structured error/
+  // selection_required we can render below, not an unhandled prompt.
+  const allowSelection = false;
+
+  const result = await resolveRouteForLaunch({
+    model: args.model,
+    gatewayMode,
+    source: 'cli',
+    allowSelection,
+    validateModel,
+  });
+
+  if (result.kind === 'resolved') {
+    if (result.notice) {
+      process.stderr.write(`${result.notice}\n`);
+    }
+    return {
+      model: result.executableId,
+      alias: deriveAlias(args),
+      gateway: result.gateway,
+      provenance: result.provenance,
+    };
+  }
+
+  // 'error' or 'selection_required': render and exit.
+  if (args.json) {
+    process.stderr.write(`${JSON.stringify(toStructuredError(result))}\n`);
+  } else {
+    process.stderr.write(`${toCliMessage(result)}\n`);
+  }
+  process.exit(1);
+}
+
 module.exports = {
   resolveModelFromArgs,
   validateFallbackModel,
+  resolveLaunchModel,
+  deriveAlias,
 };
