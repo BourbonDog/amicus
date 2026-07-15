@@ -374,6 +374,26 @@ function resolveGatewayMode(perCall) {
   return prefer === 'openrouter' ? 'openrouter' : 'auto';
 }
 
+/**
+ * Persist the one-time direct-migration notice flag for a vendor (#61 Task
+ * 5.1 — visible-migration guarantee). Best-effort: swallows any saveConfig
+ * failure so a persistence hiccup never breaks the launch that triggered it.
+ * @param {string} vendor
+ */
+function markMigrationNotified(vendor) {
+  try {
+    const config = loadConfig() || {};
+    if (!config.routing || typeof config.routing !== 'object') { config.routing = {}; }
+    if (!config.routing.migration_notified || typeof config.routing.migration_notified !== 'object') {
+      config.routing.migration_notified = {};
+    }
+    config.routing.migration_notified[vendor] = true;
+    saveConfig(config);
+  } catch (_err) {
+    // best-effort: never fail the launch over a persistence error
+  }
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -395,4 +415,5 @@ module.exports = {
   resolveCouncilMembers,
   getRoutingConfig,
   resolveGatewayMode,
+  markMigrationNotified,
 };

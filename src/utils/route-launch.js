@@ -50,6 +50,42 @@ async function getRouteCatalogInfo() {
 const ROUTE_VERSION = 1;
 
 /**
+ * One-time per-vendor notice when auto-routing migrates a both-key holder off
+ * OpenRouter onto direct (#61 Task 5.1 — visible-migration guarantee: never
+ * silent). Advisory only — never changes the routing decision, and a failed
+ * persist (markMigrationNotified is itself best-effort) never blocks the
+ * launch. Fires only when ALL of these hold:
+ *  - the result actually resolved to gateway 'direct'
+ *  - the caller did NOT explicitly force a gateway (gatewayMode === 'auto');
+ *    an explicit --gateway direct means the user chose direct, no notice
+ *  - the descriptor is not itself an explicit `openrouter/...` literal
+ *  - the user holds an OpenRouter key (otherwise nothing is being migrated
+ *    FROM)
+ *  - this vendor hasn't already been notified (getRoutingConfig().migration_notified)
+ * @param {{result:object, descriptor:object, gatewayMode:string, keys:object}} args
+ * @returns {object} the (possibly mutated) result
+ */
+function maybeMigrationNotice({ result, descriptor, gatewayMode, keys }) {
+  if (result.kind !== 'resolved' || result.gateway !== 'direct') { return result; }
+  if (gatewayMode !== 'auto') { return result; }
+  if (descriptor.isExplicitOpenRouter) { return result; }
+  if (!keys.openrouter) { return result; }
+  try {
+    // Lazy-required so jest.doMock('./config', ...) can intercept it per-test.
+    const { getRoutingConfig, markMigrationNotified } = require('./config');
+    if (getRoutingConfig().migration_notified[descriptor.vendor]) { return result; }
+    const notice = `Routing ${descriptor.vendor} via direct API (previously OpenRouter). ` +
+      'Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.';
+    result.notice = result.notice ? `${result.notice} ${notice}` : notice;
+    markMigrationNotified(descriptor.vendor);
+  } catch (_err) {
+    // Advisory only: never let a lookup/persist failure change the routing
+    // decision or block the launch.
+  }
+  return result;
+}
+
+/**
  * Bridge: alias -> descriptor -> resolveRoute (Task 4.4).
  * Resolves a raw model string to a Descriptor — if it is a known no-slash
  * alias (per getEffectiveAliases()), its concrete id is parsed instead, so an
@@ -72,9 +108,10 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   const descriptor = parseDescriptor(concrete, { aliases });
   const keys = buildLaunchKeys();
   const catalogInfo = await getRouteCatalogInfo();
-  const result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
+  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
+    result = maybeMigrationNotice({ result, descriptor, gatewayMode, keys });
   }
   return result;
 }
