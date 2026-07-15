@@ -46,4 +46,37 @@ async function getRouteCatalogInfo() {
   }
 }
 
-module.exports = { buildLaunchKeys, getRouteCatalogInfo };
+/** Module version stamped onto `resolved` results' provenance (carry-forward). */
+const ROUTE_VERSION = 1;
+
+/**
+ * Bridge: alias -> descriptor -> resolveRoute (Task 4.4).
+ * Resolves a raw model string to a Descriptor — if it is a known no-slash
+ * alias (per getEffectiveAliases()), its concrete id is parsed instead, so an
+ * alias pointing at an `openrouter/...` value is treated as an explicit,
+ * force-OR literal while an alias pointing at a bare `vendor/model` is
+ * policy-routed like any other canonical id. Assembles live key/catalog state
+ * and delegates the actual decision to the pure gateway-router. Additive:
+ * not wired into any launch path yet.
+ * @param {{model:string, gatewayMode:string, source:string, allowSelection?:boolean, validateModel?:boolean}} opts
+ * @returns {Promise<object>} RouteResult (resolved | selection_required | error)
+ */
+async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelection, validateModel }) {
+  // Lazy-required so jest.doMock('./config' | './model-descriptor' | './gateway-router', ...)
+  // can intercept them per-test, matching the pattern already used above for model-catalog.
+  const { getEffectiveAliases } = require('./config');
+  const { parseDescriptor } = require('./model-descriptor');
+  const { resolveRoute } = require('./gateway-router');
+  const aliases = getEffectiveAliases();
+  const concrete = (typeof model === 'string' && !model.includes('/') && aliases[model]) ? aliases[model] : model;
+  const descriptor = parseDescriptor(concrete, { aliases });
+  const keys = buildLaunchKeys();
+  const catalogInfo = await getRouteCatalogInfo();
+  const result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
+  if (result.kind === 'resolved') {
+    result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
+  }
+  return result;
+}
+
+module.exports = { buildLaunchKeys, getRouteCatalogInfo, resolveRouteForLaunch, ROUTE_VERSION };
