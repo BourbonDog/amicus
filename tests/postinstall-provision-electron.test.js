@@ -73,7 +73,7 @@ describe('postinstall provisions electron cache-only (#57)', () => {
   test('emits a deferred notice + exits 0 when there is no cache', async () => {
     const repairElectron = jest.fn().mockResolvedValue({
       deferred: true,
-      reason: 'No cached electron zip found for v28.0.0 (win32-x64); deferring download.',
+      reason: 'No cached electron zip found for v43.1.1 (win32-x64); deferring download.',
     });
     const { warnings, exits } = await runWithSpies({ repairElectron });
 

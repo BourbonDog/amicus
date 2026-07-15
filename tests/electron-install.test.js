@@ -82,7 +82,7 @@ describe('resolveElectronBinary + isElectronUsable (#53, #59)', () => {
 describe('cachedZip (#53)', () => {
   test('locates a fixtured electron-v<ver>-<platform>-<arch>.zip under a cache root', () => {
     const cacheRoot = mkTmp('amicus-electron-cache-');
-    const version = '28.3.3';
+    const version = '43.1.1';
     const platform = 'win32';
     const arch = 'x64';
     const zipName = `electron-v${version}-${platform}-${arch}.zip`;
@@ -105,7 +105,7 @@ describe('cachedZip (#53)', () => {
     const emptyRoot = mkTmp('amicus-electron-cache-empty-');
     // Fully isolate the env so the real default cache root cannot leak in.
     const found = ei.cachedZip({
-      version: '28.3.3',
+      version: '43.1.1',
       platform: 'win32',
       arch: 'x64',
       env: {
@@ -123,7 +123,7 @@ describe('cachedZip (#53)', () => {
 describe('repairElectron (#53)', () => {
   test('cacheOnly: extracts a cached zip + writes path.txt OFFLINE (never downloads)', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
-    const zipPath = path.join(mkTmp('amicus-cz-'), 'electron-v28.3.3-win32-x64.zip');
+    const zipPath = path.join(mkTmp('amicus-cz-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(zipPath, 'PKzip');
 
     const extract = jest.fn(async (_zip, opts) => {
@@ -136,7 +136,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: true,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => zipPath,
@@ -158,7 +158,7 @@ describe('repairElectron (#53)', () => {
 
   test('cacheOnly: a silently-failed extract (no usable exe) reports repaired:false', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
-    const zipPath = path.join(mkTmp('amicus-cz-'), 'electron-v28.3.3-win32-x64.zip');
+    const zipPath = path.join(mkTmp('amicus-cz-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(zipPath, 'PKzip');
 
     // Extract runs but does NOT materialize the exe (interrupted unzip / AV quarantine).
@@ -169,7 +169,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: true,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => zipPath,
@@ -197,7 +197,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: true,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => null,
@@ -220,7 +220,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: true,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => null,
@@ -234,7 +234,7 @@ describe('repairElectron (#53)', () => {
 
   test('single-flight lock blocks a concurrent double-extract', async () => {
     const { dir, exeName } = fakeElectronDir({ withExe: false, platform: 'win32' });
-    const zipPath = path.join(mkTmp('amicus-cz2-'), 'electron-v28.3.3-win32-x64.zip');
+    const zipPath = path.join(mkTmp('amicus-cz2-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(zipPath, 'PKzip');
 
     // A single shared lock: second acquire throws (EEXIST-style).
@@ -260,7 +260,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: true,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: { cachedZip: () => zipPath, extract, spawn: jest.fn(), acquireLock },
     };
@@ -279,7 +279,7 @@ describe('repairElectron (#53)', () => {
 
   test('controlled (no cache, !cacheOnly): CONTROLLED download via downloadArtifact + extract, never spawns install.js', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
-    const dlZip = path.join(mkTmp('amicus-dl-'), 'electron-v28.3.3-win32-x64.zip');
+    const dlZip = path.join(mkTmp('amicus-dl-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(dlZip, 'PKzip');
 
     // downloadArtifact fetches the zip ourselves (the SAME api install.js uses).
@@ -296,7 +296,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: false,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => null,
@@ -309,7 +309,7 @@ describe('repairElectron (#53)', () => {
 
     expect(downloadArtifact).toHaveBeenCalledTimes(1);
     const dlOpts = downloadArtifact.mock.calls[0][0];
-    expect(dlOpts.version).toBe('28.3.3');
+    expect(dlOpts.version).toBe('43.1.1');
     expect(dlOpts.artifactName).toBe('electron');
     expect(dlOpts.force).toBe(true);
     expect(dlOpts.platform).toBe('win32');
@@ -324,7 +324,7 @@ describe('repairElectron (#53)', () => {
 
   test('controlled download that yields NO usable exe reports repaired:false (no false success)', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
-    const dlZip = path.join(mkTmp('amicus-dl-'), 'electron-v28.3.3-win32-x64.zip');
+    const dlZip = path.join(mkTmp('amicus-dl-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(dlZip, 'PKzip');
 
     const downloadArtifact = jest.fn(async () => dlZip);
@@ -336,7 +336,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: false,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => null,
@@ -356,10 +356,10 @@ describe('repairElectron (#53)', () => {
   test('corrupt cached zip: extract throws → delete bad zip + forced re-download + extract', async () => {
     const { dir, exeName, distDir } = fakeElectronDir({ withExe: false, platform: 'win32' });
     // The CACHED zip is corrupt — extracting it throws.
-    const badZip = path.join(mkTmp('amicus-bad-'), 'electron-v28.3.3-win32-x64.zip');
+    const badZip = path.join(mkTmp('amicus-bad-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(badZip, 'CORRUPT');
     // The re-downloaded zip is good.
-    const goodZip = path.join(mkTmp('amicus-good-'), 'electron-v28.3.3-win32-x64.zip');
+    const goodZip = path.join(mkTmp('amicus-good-'), 'electron-v43.1.1-win32-x64.zip');
     fs.writeFileSync(goodZip, 'PKzip');
 
     let extractCalls = 0;
@@ -377,7 +377,7 @@ describe('repairElectron (#53)', () => {
       cacheOnly: false,
       electronDir: dir,
       platform: 'win32',
-      version: '28.3.3',
+      version: '43.1.1',
       arch: 'x64',
       deps: {
         cachedZip: () => badZip, // cache HIT, but corrupt

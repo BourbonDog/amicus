@@ -275,7 +275,7 @@ aliases, and council presets carry over untouched.
 
 | Package | Purpose |
 |---------|---------|
-| `electron` ^28.0.0 | Interactive Amicus window |
+| `electron` ^43.1.1 | Interactive Amicus window |
 | `tiktoken` ^1.0.0 | Declared for future exact tokenization; **currently unused** — token sizing uses a length/4 heuristic (see `src/context.js`, `src/context-compression.js`). |
 | `jest` ^29.0.0 | Testing framework |
 | `eslint` ^8.0.0 | Code linting |
