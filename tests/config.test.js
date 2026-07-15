@@ -392,5 +392,51 @@ describe('Sidecar Config Module', () => {
       const sonnetCount = modelKeys.filter(k => k === 'anthropic/claude-sonnet-4.6').length;
       expect(sonnetCount).toBe(1);
     });
+
+    it('zero-arg call is unchanged from prior (alias-only) behavior', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels();
+      expect(result).toHaveProperty('openrouter');
+      expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
+      expect(result.openrouter.models['anthropic/claude-opus-4.8']).toBeDefined();
+      // No alias resolves directly to openai/ — confirms no resolvedRoutes leakage.
+      expect(result.openai).toBeUndefined();
+    });
+
+    it('registers a resolved route even when no alias points at it', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels(['openai/gpt-5.5']);
+      expect(result.openai).toBeDefined();
+      expect(result.openai.models['gpt-5.5']).toEqual({});
+    });
+
+    it('registers the resolved DIRECT route alongside a mismatched alias-derived provider', () => {
+      const data = {
+        aliases: { gpt: 'openrouter/openai/gpt-5.5' },
+      };
+      fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
+      const config = loadModule();
+      const result = config.buildProviderModels(['openai/gpt-5.5']);
+      // Alias-derived: openrouter carries the nested openai/gpt-5.5 model id.
+      expect(result.openrouter).toBeDefined();
+      expect(result.openrouter.models['openai/gpt-5.5']).toEqual({});
+      // Resolved-route-derived: openai carries the plain gpt-5.5 model id.
+      expect(result.openai).toBeDefined();
+      expect(result.openai.models['gpt-5.5']).toEqual({});
+    });
+
+    it('splits a multi-segment resolved route into provider + remaining model id', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels(['openrouter/anthropic/claude-sonnet-4.6']);
+      expect(result.openrouter).toBeDefined();
+      expect(result.openrouter.models['anthropic/claude-sonnet-4.6']).toEqual({});
+    });
+
+    it('ignores falsy and single-segment entries in resolvedRoutes', () => {
+      const config = loadModule();
+      const before = config.buildProviderModels();
+      const result = config.buildProviderModels([null, undefined, '', 'no-slash-model']);
+      expect(result).toEqual(before);
+    });
   });
 });

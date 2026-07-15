@@ -473,9 +473,11 @@ function buildServerOptions(options = {}) {
   }
 
   // Sync sidecar aliases into OpenCode's provider.models so the UI
-  // model picker shows all configured models (single source of truth).
+  // model picker shows all configured models (single source of truth),
+  // and register the actually-resolved launch route's provider so it
+  // always matches config.model (the "sole input" invariant — see #61).
   const { buildProviderModels } = require('./utils/config');
-  config.provider = buildProviderModels();
+  config.provider = buildProviderModels(options.model ? [options.model] : []);
 
   // Register custom 'chat' agent: reads auto-approved, writes/bash require permission
   const chatAgent = {

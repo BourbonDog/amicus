@@ -235,16 +235,25 @@ function tryResolveModel(modelArg) {
   }
 }
 
-/** Build OpenCode provider.models config from sidecar aliases.
+/** Build OpenCode provider.models config from sidecar aliases, plus the
+ * actually-resolved launch route(s). The alias-derived entries let the UI
+ * model picker show every configured model (single source of truth for the
+ * picker); resolvedRoutes ensures the id OpenCode is ACTUALLY told to launch
+ * (config.model) is always registered under its correct provider, even when
+ * an alias maps to a different provider for the same model (e.g. an alias
+ * stores `openrouter/openai/gpt-5.5` but the router resolves DIRECT to
+ * `openai/gpt-5.5` — without this, only `openrouter` would be registered,
+ * mismatching config.model).
+ * @param {string[]} [resolvedRoutes] executable model id(s) actually launched
  * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.3": {}, ... } } } */
-function buildProviderModels() {
+function buildProviderModels(resolvedRoutes = []) {
   const aliases = getEffectiveAliases();
   const providers = {};
 
-  for (const fullModel of Object.values(aliases)) {
-    if (!fullModel || typeof fullModel !== 'string') { continue; }
+  const addRoute = (fullModel) => {
+    if (!fullModel || typeof fullModel !== 'string') { return; }
     const parts = fullModel.split('/');
-    if (parts.length < 2) { continue; }
+    if (parts.length < 2) { return; }
 
     const providerID = parts[0];
     const modelID = parts.slice(1).join('/');
@@ -253,6 +262,14 @@ function buildProviderModels() {
       providers[providerID] = { models: {} };
     }
     providers[providerID].models[modelID] = {};
+  };
+
+  for (const fullModel of Object.values(aliases)) {
+    addRoute(fullModel);
+  }
+
+  for (const resolved of resolvedRoutes) {
+    addRoute(resolved);
   }
 
   return providers;
