@@ -103,8 +103,13 @@ const FETCH_TIMEOUT_MS = 5000;
 function fetchModelsFromProvider(provider, key) {
   if (provider === 'anthropic') {
     // No key -> hardcoded floor, no network. With a key -> try live, fall back to floor.
-    if (!key) { return Promise.resolve(ANTHROPIC_MODELS); }
-    return fetchViaConfig('anthropic', key).then(rows => (rows.length > 0 ? rows : ANTHROPIC_MODELS));
+    // Floor-fallback rows are tagged authoritative:false (#61 4.3) so classifyModel
+    // never hard-blocks a miss against a stale/hardcoded list -- it returns
+    // 'unknown' instead. Rows from a successful live fetch are NOT tagged (they
+    // are authoritative). Map to new objects; never mutate ANTHROPIC_MODELS in place.
+    if (!key) { return Promise.resolve(ANTHROPIC_MODELS.map(r => ({ ...r, authoritative: false }))); }
+    return fetchViaConfig('anthropic', key).then(rows =>
+      (rows.length > 0 ? rows : ANTHROPIC_MODELS.map(r => ({ ...r, authoritative: false }))));
   }
 
   const config = PROVIDER_FETCH_CONFIG[provider];

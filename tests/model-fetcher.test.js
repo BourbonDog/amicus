@@ -99,8 +99,10 @@ describe('model-fetcher', () => {
     it('should return hardcoded models for anthropic with no key (no API call)', async () => {
       // With a key, anthropic now attempts a live fetch (see tests/model-fetcher-anthropic.test.js);
       // only the no-key path is guaranteed to skip the network call.
+      // Floor-fallback rows carry authoritative:false (#61 4.3) so a classification
+      // miss returns 'unknown', never 'invalid'.
       const result = await fetchModelsFromProvider('anthropic', '');
-      expect(result).toEqual(ANTHROPIC_MODELS);
+      expect(result).toEqual(ANTHROPIC_MODELS.map(m => ({ ...m, authoritative: false })));
       expect(https.get).not.toHaveBeenCalled();
     });
 
@@ -353,9 +355,9 @@ describe('model-fetcher', () => {
     });
 
     describe('fetchModelsFromProvider anthropic (no https.get)', () => {
-      it('returns ANTHROPIC_MODELS without calling https.get', async () => {
+      it('returns ANTHROPIC_MODELS tagged authoritative:false without calling https.get', async () => {
         const result = await fetchModelsFromProvider('anthropic', '');
-        expect(result).toEqual(ANTHROPIC_MODELS);
+        expect(result).toEqual(ANTHROPIC_MODELS.map(m => ({ ...m, authoritative: false })));
         expect(https.get).not.toHaveBeenCalled();
       });
     });
