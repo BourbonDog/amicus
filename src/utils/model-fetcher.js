@@ -76,7 +76,20 @@ const PROVIDER_FETCH_CONFIG = {
         pricing: null
       }));
     }
-  }
+  },
+  anthropic: {
+    url: 'https://api.anthropic.com/v1/models',
+    authHeader: (key) => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01' }),
+    normalize: (body) => {
+      const data = JSON.parse(body);
+      return (data.data || []).map(m => ({
+        id: `anthropic/${m.id}`,
+        name: m.display_name || m.id,
+        contextLength: null,
+        pricing: null,
+      }));
+    },
+  },
 };
 
 const FETCH_TIMEOUT_MS = 5000;
@@ -89,7 +102,9 @@ const FETCH_TIMEOUT_MS = 5000;
  */
 function fetchModelsFromProvider(provider, key) {
   if (provider === 'anthropic') {
-    return Promise.resolve(ANTHROPIC_MODELS);
+    // No key -> hardcoded floor, no network. With a key -> try live, fall back to floor.
+    if (!key) { return Promise.resolve(ANTHROPIC_MODELS); }
+    return fetchViaConfig('anthropic', key).then(rows => (rows.length > 0 ? rows : ANTHROPIC_MODELS));
   }
 
   const config = PROVIDER_FETCH_CONFIG[provider];
@@ -97,6 +112,18 @@ function fetchModelsFromProvider(provider, key) {
     return Promise.resolve([]);
   }
 
+  return fetchViaConfig(provider, key);
+}
+
+/**
+ * Perform the HTTPS fetch + normalize for a single configured provider.
+ * Resolves to `[]` on any non-200 response, network error, timeout, or parse error.
+ * @param {string} provider - Key into PROVIDER_FETCH_CONFIG
+ * @param {string} key - API key
+ * @returns {Promise<Array>} Normalized model rows, or [] on any failure
+ */
+function fetchViaConfig(provider, key) {
+  const config = PROVIDER_FETCH_CONFIG[provider];
   const url = config.buildUrl ? config.buildUrl(key) : config.url;
   const headers = config.authHeader(key);
 

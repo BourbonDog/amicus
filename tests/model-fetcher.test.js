@@ -96,8 +96,10 @@ describe('model-fetcher', () => {
       ]);
     });
 
-    it('should return hardcoded models for anthropic (no API call)', async () => {
-      const result = await fetchModelsFromProvider('anthropic', 'sk-ant-test');
+    it('should return hardcoded models for anthropic with no key (no API call)', async () => {
+      // With a key, anthropic now attempts a live fetch (see tests/model-fetcher-anthropic.test.js);
+      // only the no-key path is guaranteed to skip the network call.
+      const result = await fetchModelsFromProvider('anthropic', '');
       expect(result).toEqual(ANTHROPIC_MODELS);
       expect(https.get).not.toHaveBeenCalled();
     });
