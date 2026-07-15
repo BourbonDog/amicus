@@ -1,8 +1,9 @@
 # Electron 28 → 43 Upgrade + WebContentsView Migration — Design
 
 _Status: design (brainstormed 2026-07-14). Origin: issue #17 (the remaining high-severity
-`npm audit` item). Reviewed by DeepSeek (draft) and GLM (this spec), headless Plan/Build passes;
-all findings verified against the live npm registry and the actual code before adoption._
+`npm audit` item). Reviewed by DeepSeek (draft), GLM (revision 2), and GPT-5.6 Terra Pro
+(revision 3), headless Plan/Build passes; all findings verified against the live npm registry,
+the Electron release notes, and the actual code before adoption._
 
 ## 1. Intent
 
@@ -34,8 +35,15 @@ Therefore:
   Explicitly ruled in, so the plan doesn't over-invest chasing a packaged-app control that
   Amicus's architecture never exposes.
 
+**But executable integrity is not irrelevant — it moves to the download path** (GPT #4). Amicus
+downloads and executes a stock Electron binary outside npm's normal extraction, caches it, and
+can re-fetch it via `repairElectron`. The real integrity concern is therefore **download
+provenance and cache integrity**, not the ASAR bypass: checksum enforcement, corrupted-cache
+rejection, mirror trust, and `force:true` not bypassing validation. This is verified in the
+spike (§7) — it is the honest replacement for the ASAR control, not an absence of one.
+
 This section exists because "the upgrade clears the vuln" was an unverified mechanism claim in
-the draft (GLM finding #1). The honest statement is above.
+the draft (GLM finding #1); the integrity-moves-to-download nuance is GPT finding #4.
 
 ## 2. Decisions already made (do not re-litigate without a hard blocker)
 
@@ -83,7 +91,8 @@ alternative (keep floor low, guard the GUI self-heal on Node ≥22 with a clear 
 considered and rejected for simplicity; revisit only if headless-on-old-Node turns out to be a
 common configuration.
 
-Encode: `package.json` `engines.node` → `>=22.12.0`; release notes lead with the Node-18/20 drop;
+Encode: `package.json` `engines.node` → `>=22.12.0`; **an explicit early Node-version guard**
+(§6, GPT #9) since `engines` is advisory; release notes lead with the Node-18/20 drop;
 **CI workflows** — update every `node-version` matrix and the `npm publish` job's Node to 22/24
 (`.github/workflows/*`).
 
@@ -93,10 +102,16 @@ Encode: `package.json` `engines.node` → `>=22.12.0`; release notes lead with t
 
 **A.1 API swaps** (mechanics confirmed against Electron's migration guide):
 - `new BrowserView({webPreferences})` → `new WebContentsView({webPreferences})` (`main.js:163`)
-- `mainWindow.addBrowserView(contentView)` → `mainWindow.contentView.addChildView(contentView)` (`main.js:223,240`)
-- Removal is `mainWindow.contentView.removeChildView(view)`. **There is no `setBrowserView`
-  equivalent** — WebContentsView is add/remove, not swap-in-place; grep `main.js` for
-  `setBrowserView`/`getBrowserView(s)`/`.hostWebContents` and handle each explicitly.
+- **Rename the child variable** from `contentView` to `opencodeView` (GPT #1): the current code
+  names the child view `contentView`, which collides with Electron's `mainWindow.contentView`
+  (the window's *root* view). The receiver of `addChildView` is the root, the argument is the
+  child — the collision makes the call dangerously ambiguous. After renaming:
+  `mainWindow.addBrowserView(contentView)` → `mainWindow.contentView.addChildView(opencodeView)`
+  (`main.js:223,240`).
+- Removal is `mainWindow.contentView.removeChildView(opencodeView)`. **There is no
+  `setBrowserView` equivalent** — WebContentsView is add/remove, not swap-in-place; grep
+  `main.js` for `setBrowserView`/`getBrowserView(s)`/`.hostWebContents` and handle each
+  explicitly. The corrected receiver + rename is a **spike assertion**, not just a grep item.
 - `contentView.setBounds(...)`, `contentView.webContents.*`, `will-navigate` (`main.js:173`,
   already on the content view), `setWindowOpenHandler` (`main.js:179`), `insertCSS` on
   `dom-ready` (`main.js:194`), `render-process-gone` (`main.js:349`) — expected to carry over;
@@ -126,7 +141,14 @@ alongside the toolbar page. Verify, in the spike and the manual gate:
 
 `src/sidecar/electron-install.js` calls `@electron/get` directly but the package is undeclared
 (relies on the hoisted 2.0.3). Work items:
-1. **Declare `@electron/get` as a direct `optionalDependency` pinned `^5.0.0`.**
+1. **Declare `@electron/get` in regular `dependencies` (not optional), pinned `^5.0.0`** (GPT #3).
+   It is *required at runtime whenever the self-heal runs* — making it optional would turn a
+   recoverable "electron missing" into an unrecoverable "downloader missing too," and it also
+   fixes a latent fragility (today `@electron/get` is only present because it's hoisted from the
+   optional `electron`'s own tree, so `--omit=optional` breaks the self-heal). The package is
+   small pure-JS, so headless users pay ~nothing. (If a headless install footprint concern
+   surfaces, the fallback is optional + a deterministic import-failure remediation message —
+   test both.)
 2. **ESM interop:** `require('@electron/get')` (`electron-install.js:217`) throws
    `ERR_REQUIRE_ESM` against ESM-only 5.x. Convert to a lazy
    `const { downloadArtifact } = await import('@electron/get')` inside the (already-async)
@@ -146,7 +168,22 @@ alongside the toolbar page. Verify, in the spike and the manual gate:
    (`electron-install.js:102`); document whether Amicus trusts `downloadArtifact`'s own
    extraction or re-extracts via `unzip.js` (confirm the Node-24 `extract-zip@2.0.1` stall
    workaround at `unzip.js:5-11` is still reachable/needed, or prune it).
-6. **v42 no-op confirmation:** the "downloads on first-run not postinstall" change (v42) should be
+6. **Download integrity (GPT #4):** `@electron/get@5` bundles `sumchecker`. During the spike,
+   verify — not just "download succeeds" — that: the ZIP is checksum-verified by 5.x's
+   `downloadArtifact` (know the checksum source + failure behavior); a deliberately corrupted
+   cache entry is *rejected*, not extracted/executed; `force:true` re-download does **not** bypass
+   integrity; a configured mirror/custom artifact URL still validates the checksum; and the exe
+   selected after extraction is the expected one, not merely an existing path.
+7. **Proxy behavior (GPT #5):** dropping `got` for native `fetch` drops `got`'s `HTTPS_PROXY` /
+   `HTTP_PROXY` / `NO_PROXY` / proxy-auth / custom-CA handling. This path is an Electron
+   bootstrap/repair often run on **managed corporate Windows networks** — a direct-internet
+   download succeeding does not prove proxied installs work. Inventory the proxy/mirror config
+   the downloader accepts today; determine 5.x's behavior under Node ≥22; then either preserve
+   proxy support via a 5.x-supported mechanism (an undici dispatcher / `global-agent`, incl.
+   authenticated proxies + `NO_PROXY`) or explicitly document unsupported proxy environments with
+   a manual Electron-install fallback. Add a proxy/dispatcher test — "successful direct download"
+   is insufficient.
+8. **v42 no-op confirmation:** the "downloads on first-run not postinstall" change (v42) should be
    inert (Amicus provisions lazily, installs electron `--ignore-scripts`). Confirm against
    `scripts/postinstall.js` `provisionElectron()` / `repairElectron({cacheOnly:true})`.
 
@@ -173,9 +210,12 @@ Work items:
 
 ### Area D — Version pins, fixtures, CDP hardening, greps
 
-- `package.json`: electron optionalDependency `^28.0.0` → `^43.0.0` (pin 43.1.1 acceptable);
-  add `@electron/get ^5.0.0`; `engines.node >= 22.12.0`. Update `package-lock.json`,
-  `docs/configuration.md:278`.
+- `package.json`: electron optionalDependency `^28.0.0` → **`^43.1.1`** (GPT #2 — **not**
+  `^43.0.0`, which semver-permits the pre-fix `43.0.0`; the security floor is `43.1.1`, so the
+  caret must start there, or pin exact `43.1.1`); add `@electron/get ^5.0.0` to **regular
+  `dependencies`** (Area B.1); `engines.node >= 22.12.0`. Update `package-lock.json`,
+  `docs/configuration.md:278`. Add CI validation that resolves + reports the installed Electron
+  version so the manifest floor and the provisioned binary agree.
 - Test fixtures hardcoding `28.0.0`/`28.3.3`: `tests/electron-install.test.js`,
   `electron-self-heal-smoke.test.js`, `electron-quarantine.test.js`,
   `postinstall-provision-electron.test.js` (the last asserts the exact string
@@ -188,10 +228,15 @@ Work items:
 - **Cheap greps:** `shell.openItem` (removed v29), `app.allowRendererProcessReuse` (removed v22),
   and any `clipboard` exposure in preloads (deprecated v40, removed-from-renderer v43).
 
-### Area E — Chromium 120→130 behavioral delta (GLM #4, trimmed)
+### Area E — Chromium behavioral delta (GLM #4 / GPT #6, corrected)
 
-Electron 28→43 spans ~Chromium 120→130. Two deltas are load-bearing for Amicus (the rest —
-third-party cookies, client hints — are irrelevant to a localhost/`data:` app):
+**Verified against the Electron 43 release notes:** Electron 28 = Chromium **120**; Electron 43 =
+Chromium **150** (150.0.7871.46, Node 24.17 internally). The delta is **~30 Chromium majors**, not
+the "120→130" the draft claimed (GPT #6 caught the understatement; the exact figure is verified
+here, not guessed). The tests below are unchanged, but they must be justified against the real
+delta — review the Electron 29–43 release notes for the web-platform/security/CSP/CDP/GPU changes
+that touch Amicus's concrete dependencies. Two deltas are load-bearing (the rest — third-party
+cookies, client hints — are irrelevant to a localhost/`data:` app):
 - **`data:`-URL restrictions:** Chromium has progressively tightened what `data:` URLs may do
   (navigation, scripting, CSP). Amicus loads the toolbar + setup UI from `data:text/html` and
   drives them via `executeJavaScript`. Verify in the spike that a `data:` URL page still loads,
@@ -211,29 +256,54 @@ In order:
 4. `npm audit` clean (0 high).
 5. Run the above on **Node 22+** (the new floor).
 
-New automated coverage to add (GLM #6 test gaps): a test that exercises the real (non-mocked)
-`await import('@electron/get')` self-heal path; and — if feasible under the CDP harness — a
-WebContentsView create→addChildView→setBounds→render assertion so view-lifecycle regressions are
-caught in CI, not only manually.
+New automated / acceptance coverage to add:
+- A test that exercises the real (non-mocked) `await import('@electron/get')` self-heal path
+  (GLM #6) — unit mocks hide `ERR_REQUIRE_ESM`.
+- If feasible under the CDP harness, a WebContentsView create→addChildView→setBounds→render
+  assertion so view-lifecycle regressions are caught in CI, not only manually.
+- **Windows AV upgrade acceptance case (GPT #7):** from a cache with only the *old* electron
+  binary (or none), provision `43.1.1`, launch it, and exercise the existing
+  `electron-quarantine.js` path — a new electron version = new binary hash, which endpoint
+  protection commonly treats differently. Verify the error output distinguishes failed download /
+  corrupt archive / deleted exe / blocked execution, and keeps actionable remediation wording.
+- **globalShortcut regression (GPT #8):** in the desktop smoke, assert `register()` return values,
+  invoke the shortcut after focus moves to the child view and back to the toolbar, and assert
+  cleanup/re-registration across window close/reopen (document expected non-availability on
+  Linux/Wayland CI rather than asserting blindly).
+- **Node-version guard (GPT #9):** `engines.node` is advisory under common npm configs. Add an
+  early, explicit Node-version guard in the lifecycle/runtime entrypoint (or in postinstall) that
+  fails with a clear "Amicus 3.0 requires Node ≥22.12" message, rather than surfacing as a
+  confusing `ERR_REQUIRE_ESM` deep in provisioning.
 
 ## 7. Sequencing
 
-1. **Research spike first (smallest safe step) — now de-risks BOTH provisioning and the GUI
-   migration** (GLM #3). A throwaway branch on Node 22 that:
-   - **(B)** installs electron 43 + `@electron/get 5`, converts the `require` to `await import`
-     in the actual self-heal path, and confirms: the lazy import loads in the CJS module; a real
-     `downloadArtifact` succeeds; its return/zip-path shape is unchanged; the cache root matches
-     `electron-cache.js`; the extracted binary launches.
-   - **(A)** launches Electron 43 and stands up a **`new WebContentsView({webPreferences})`**,
-     `mainWindow.contentView.addChildView`, `setBounds`, loads a `data:` URL, and verifies:
-     rendering; the child view's **CDP target type**; that `data:` URL script + `executeJavaScript`
-     still work; and that `will-navigate`/`render-process-gone`/`dom-ready` fire on the child
-     `webContents`.
+**Spike sub-steps are ordered B-then-A, not parallel (GPT #3/Q3):** Area A cannot be spiked until
+Area B has actually made an Electron 43 runtime available — otherwise a provisioning failure gets
+misdiagnosed as a WebContentsView / `data:` / CDP / renderer failure.
+
+1. **Research spike first (smallest safe step) — de-risks BOTH provisioning and the GUI migration:**
+   1a. **(B, first)** on Node 22: install electron 43 + `@electron/get 5`, convert the `require`
+       to `await import` in the actual self-heal path, and confirm: the lazy import loads in the
+       CJS module; a real `downloadArtifact` **checksum-validates and** succeeds; return/zip-path
+       shape unchanged; cache root matches `electron-cache.js`; a corrupted cache is rejected;
+       proxy behavior is known (Area B.7); the extracted binary launches.
+   1b. **(A, on that known-good binary)** stand up `new WebContentsView({webPreferences})`,
+       `mainWindow.contentView.addChildView(opencodeView)`, `setBounds`, load a `data:` URL, and
+       verify: rendering; the child view's **CDP target type**; `data:` URL script +
+       `executeJavaScript`; and that `will-navigate`/`render-process-gone`/`dom-ready` fire on the
+       child `webContents`.
    If the spike surfaces a hard incompatibility, revisit the target here rather than mid-migration.
 2. Area A view migration + the grep, verified by CDP e2e + manual smoke.
 3. Area C preload/sandbox audit (can parallel A).
 4. Area D pins/fixtures/CDP hardening + Area E `data:`/CDP checks.
 5. Full verification bar → release notes → 3.0.0 cut.
+
+**Decomposition (GPT Q4):** split into two separately-verifiable phases/PRs — **(1) preparation**
+(Node-support policy + guard, CI matrices, version-fixture normalization, provisioning contract
+tests, downloader integrity/proxy validation) then **(2) the migration** (electron 43 +
+`@electron/get` 5 + WebContentsView), released as 3.0.0. Do **not** publish the prep phase as a
+release claiming Node ≥22.12 until the provisioning path is actually compatible. If shipped as one
+PR, keep provisioning-first and view-migration-second as distinct commits.
 
 ## 8. Risks
 
@@ -245,7 +315,13 @@ caught in CI, not only manually.
   the spike.
 - **`env-paths 3.x` cache-path drift** — silent re-downloads if `electron-cache.js` disagrees.
 - **ESM dynamic-import in the CJS self-heal** — must be exercised by a real (non-mocked) load.
-- **`data:`-URL Chromium restrictions** (Area E) — could break the toolbar/setup rendering.
+- **`data:`-URL Chromium restrictions** (Area E, ~30 Chromium majors) — could break the
+  toolbar/setup rendering.
+- **Download integrity** — a bad mirror / corrupted cache / `force:true` bypassing checksum could
+  extract-and-execute a tampered binary; the download path is the real integrity boundary now (§1a,
+  Area B.6).
+- **Proxy regression** — `got`→native-`fetch` can silently break Electron provisioning behind a
+  corporate proxy (Area B.7).
 - **CI/release** — the Node-22 bump must land in every workflow's `node-version` before the tag,
   or the publish job fails.
 
@@ -262,8 +338,9 @@ caught in CI, not only manually.
 ## 10. Open questions
 
 None blocking. The spike (§7.1) resolves the residual empirical unknowns: native-fetch timeout
-shape, cache-path parity, the WebContentsView API shape + CDP target type, and `data:`-URL
-behavior on Chromium 130.
+shape, **download checksum/corrupted-cache behavior**, **proxy support under native fetch**,
+cache-path parity, the WebContentsView API shape + CDP target type, and `data:`-URL behavior on
+Chromium 150.
 
 ## 11. Implementation surface
 
