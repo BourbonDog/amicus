@@ -67,6 +67,7 @@ const CARDLESS = [
   { alias: 'claude', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-4.6' } },
   { alias: 'sonnet', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-4.6' } },
   { alias: 'haiku', routes: { openrouter: 'openrouter/anthropic/claude-haiku-4.5' } },
+  { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5' } },
   { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.7-max' } },
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
   { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },

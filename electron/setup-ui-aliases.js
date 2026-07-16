@@ -9,7 +9,7 @@
 const ALIAS_GROUPS = [
   { name: 'Gemini', keys: ['gemini', 'gemini-pro'] },
   { name: 'GPT', keys: ['gpt', 'gpt-pro', 'codex'] },
-  { name: 'Claude', keys: ['claude', 'sonnet', 'opus', 'haiku'] },
+  { name: 'Claude', keys: ['claude', 'sonnet', 'opus', 'haiku', 'fable'] },
   { name: 'DeepSeek', keys: ['deepseek'] },
   { name: 'Qwen', keys: ['qwen', 'qwen-coder', 'qwen-flash'] },
   { name: 'Mistral', keys: ['mistral', 'devstral'] },
