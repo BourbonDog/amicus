@@ -419,6 +419,35 @@ function markMigrationNotified(vendor) {
   }
 }
 
+/**
+ * Existing-user one-time onboarding offer (Part 2, Task 9). Mirrors
+ * markMigrationNotified's flag pattern: a single boolean persisted at
+ * config.routing.tier_onboarded once the notice has fired, so it never
+ * repeats.
+ * @returns {boolean} true once the notice has fired
+ */
+function hasTierOnboarded() {
+  const config = loadConfig() || {};
+  return !!(config.routing && config.routing.tier_onboarded === true);
+}
+
+/**
+ * Persist the one-time onboarding-notice flag, preserving any other routing
+ * keys (prefer, tier, migration_notified). Best-effort: swallows any
+ * saveConfig failure so a persistence hiccup never breaks the command that
+ * triggered it (mirrors markMigrationNotified).
+ */
+function markTierOnboarded() {
+  try {
+    const config = loadConfig() || {};
+    if (!config.routing || typeof config.routing !== 'object') { config.routing = {}; }
+    config.routing.tier_onboarded = true;
+    saveConfig(config);
+  } catch (_err) {
+    // best-effort: never fail the command over a persistence error
+  }
+}
+
 /** Global cost-tier preference (Part 2, Task 1) — cheapest-to-priciest. */
 const COST_TIERS = ['frontier', 'balanced', 'economy'];
 
@@ -468,4 +497,6 @@ module.exports = {
   COST_TIERS,
   getCostTier,
   setCostTier,
+  hasTierOnboarded,
+  markTierOnboarded,
 };

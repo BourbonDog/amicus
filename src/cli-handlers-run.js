@@ -14,7 +14,7 @@
 
 const { validateStartArgs } = require('./cli');
 const { validateTaskId } = require('./utils/validators');
-const { resolveLaunchModel } = require('./utils/start-helpers');
+const { resolveLaunchModel, maybeOfferProviderDefaults } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
@@ -43,6 +43,12 @@ async function handleStart(args) {
   if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc <= 0)) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
+
+  // Existing-user one-time onboarding offer (Part 2, Task 9): a non-blocking
+  // notice, printed at most once ever, pointing users who already have direct
+  // provider keys at the per-provider cost-aware default picker. No-ops on
+  // any non-interactive/--json run (see maybeOfferProviderDefaults).
+  maybeOfferProviderDefaults(args);
 
   const { model, alias } = await resolveLaunchModel(args);
   args.model = model;

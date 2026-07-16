@@ -123,7 +123,60 @@ async function resolveLaunchModel(args) {
   process.exit(1);
 }
 
+/**
+ * Existing-user one-time onboarding offer (Part 2, Task 9). Prints a single
+ * non-blocking notice line pointing configured-but-not-yet-onboarded users at
+ * the per-provider cost-aware default picker (`amicus key <provider>`, Task
+ * 6). This is a PRINTED LINE, never an interactive prompt -- it must never
+ * wait on stdin.
+ *
+ * Fires only when ALL of:
+ *  - the session is interactive (a real TTY, and not --json/--quiet)
+ *  - the user hasn't already seen this notice (`hasTierOnboarded()` false)
+ *  - at least one DIRECT provider (openai/anthropic/google/deepseek, via
+ *    `provider-registry.listDirectProviders`) has a key configured
+ *  - the user hasn't already used the picker (no vendor-named alias set --
+ *    no key of `config.aliases` matches a direct-provider id)
+ *
+ * The flag is only ever set when the notice actually printed. If any gate
+ * fails, this is a no-op AND the flag is left unset -- a user who later adds
+ * a direct key (or a non-interactive run that becomes interactive) can still
+ * see the notice once. Wrapped end-to-end in try/catch: a bug here must never
+ * break the command it's attached to.
+ * @param {object} [args] parsed CLI args (checked for --json/--quiet to gate interactivity)
+ */
+function maybeOfferProviderDefaults(args = {}) {
+  try {
+    const interactive = !!process.stdin.isTTY && !args.json && !args.quiet;
+    if (!interactive) { return; }
+
+    const { hasTierOnboarded, markTierOnboarded, loadConfig } = require('./config');
+    if (hasTierOnboarded()) { return; }
+
+    const { listDirectProviders } = require('./provider-registry');
+    const { readApiKeys } = require('./api-key-store');
+    const directProviders = listDirectProviders();
+    const apiKeys = readApiKeys();
+    const hasDirectKey = directProviders.some((p) => apiKeys[p]);
+    if (!hasDirectKey) { return; }
+
+    const config = loadConfig() || {};
+    const aliases = (config.aliases && typeof config.aliases === 'object') ? config.aliases : {};
+    const hasVendorAlias = directProviders.some((p) => Object.prototype.hasOwnProperty.call(aliases, p));
+    if (hasVendorAlias) { return; }
+
+    process.stdout.write(
+      'Tip: run `amicus key <provider>` to pick a cost-aware default model per provider ' +
+      '(avoids defaulting to the priciest flagship).\n'
+    );
+    markTierOnboarded();
+  } catch (_err) {
+    // best-effort: never break the command this is attached to
+  }
+}
+
 module.exports = {
   resolveLaunchModel,
   deriveAlias,
+  maybeOfferProviderDefaults,
 };
