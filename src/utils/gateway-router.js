@@ -1,8 +1,9 @@
 /**
  * Pure gateway router (#61). Decides direct vs OpenRouter for a request using
  * only injected state (keys, catalogInfo, gatewayMode) — no I/O. Returns a
- * RouteResult (resolved | selection_required | error). Wiring into launch paths
- * is Plan 2; this module is behavior-neutral until then.
+ * RouteResult (resolved | selection_required | error). Wired into live launch
+ * paths via route-launch.js's resolveRouteForLaunch (start-helpers.js,
+ * mcp-server.js, sidecar/fanout-validate.js).
  */
 'use strict';
 

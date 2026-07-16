@@ -6,8 +6,9 @@
  *   - `toCliMessage`      -> a human stderr string for the CLI
  *
  * Pure module: no I/O, no requires of launch modules (cli.js/headless.js/
- * mcp-server.js/etc). Additive only — not imported by any launch path yet;
- * wiring is a later task in the #61 Integration plan.
+ * mcp-server.js/etc). Wired into live launch paths — start-helpers.js,
+ * sidecar/fanout-leg.js, and mcp-server.js all render RouteResults through
+ * toStructuredError/toCliMessage.
  *
  * Router error shape (src/utils/model-descriptor.js `routeError()`):
  *   {kind:'error', type:'model_route_error', field, requested, reason,
