@@ -1,7 +1,11 @@
 // tests/provider-default-picker.test.js
 'use strict';
 
-const { buildProviderDefaultChoices } = require('../src/utils/provider-default-picker');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+const { buildProviderDefaultChoices, applyProviderDefault } = require('../src/utils/provider-default-picker');
 
 /**
  * Fixture: anthropic direct rows (haiku/sonnet/opus + one direct-only,
@@ -193,5 +197,91 @@ describe('buildProviderDefaultChoices — degenerate input, must not crash', () 
   test('degenerate vendor (non-string / empty) -> empty rows, does not throw', () => {
     expect(buildProviderDefaultChoices(undefined, { catalog: anthropicCatalog })).toEqual({ preselectedId: null, rows: [] });
     expect(buildProviderDefaultChoices('', { catalog: anthropicCatalog })).toEqual({ preselectedId: null, rows: [] });
+  });
+});
+
+describe('applyProviderDefault — read-modify-write (vendor alias + seed default)', () => {
+  let tempDir;
+  let originalEnv;
+  let loadConfig;
+  let saveConfig;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-config-test-'));
+    originalEnv = { ...process.env };
+    process.env.AMICUS_CONFIG_DIR = tempDir;
+    ({ loadConfig, saveConfig } = require('../src/utils/config'));
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test('empty config: sets aliases.anthropic AND seeds config.default, returns setAsDefault:true', () => {
+    const result = applyProviderDefault('anthropic', 'anthropic/claude-sonnet-5');
+    expect(result).toEqual({ alias: 'anthropic', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.anthropic).toBe('anthropic/claude-sonnet-5');
+    expect(cfg.default).toBe('anthropic');
+  });
+
+  test('existing default is never clobbered: second call sets only aliases.anthropic, setAsDefault:false', () => {
+    saveConfig({ default: 'gpt', aliases: { gpt: 'openai/gpt-5.5' } });
+
+    const result = applyProviderDefault('anthropic', 'anthropic/claude-sonnet-5');
+    expect(result).toEqual({ alias: 'anthropic', setAsDefault: false });
+
+    const cfg = loadConfig();
+    expect(cfg.default).toBe('gpt');
+    expect(cfg.aliases.anthropic).toBe('anthropic/claude-sonnet-5');
+  });
+
+  test('existing unrelated aliases are preserved', () => {
+    saveConfig({ default: 'gpt', aliases: { gpt: 'openai/gpt-5.5', deepseek: 'deepseek/deepseek-v4-pro' } });
+
+    applyProviderDefault('anthropic', 'anthropic/claude-sonnet-5');
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.gpt).toBe('openai/gpt-5.5');
+    expect(cfg.aliases.deepseek).toBe('deepseek/deepseek-v4-pro');
+    expect(cfg.aliases.anthropic).toBe('anthropic/claude-sonnet-5');
+  });
+
+  test('divergent OR-only vendor (anthropic): chosenId stored VERBATIM, never stripped to a fabricated dot-form id', () => {
+    const result = applyProviderDefault('anthropic', 'openrouter/anthropic/claude-fable-5');
+    expect(result).toEqual({ alias: 'anthropic', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.anthropic).toBe('openrouter/anthropic/claude-fable-5');
+    expect(cfg.aliases.anthropic).not.toBe('anthropic/claude-fable-5');
+  });
+
+  test('non-divergent vendor (openai): chosenId is canonicalized to the bare direct-first form', () => {
+    const result = applyProviderDefault('openai', 'openrouter/openai/gpt-5.5');
+    expect(result).toEqual({ alias: 'openai', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.aliases.openai).toBe('openai/gpt-5.5');
+  });
+
+  test('seedDefaultIfAbsent:false never sets config.default, even when absent', () => {
+    const result = applyProviderDefault('anthropic', 'anthropic/claude-sonnet-5', { seedDefaultIfAbsent: false });
+    expect(result).toEqual({ alias: 'anthropic', setAsDefault: false });
+
+    const cfg = loadConfig();
+    expect(cfg.default).toBeUndefined();
+    expect(cfg.aliases.anthropic).toBe('anthropic/claude-sonnet-5');
+  });
+
+  test('whitespace-only existing default is treated as absent and gets seeded', () => {
+    saveConfig({ default: '   ', aliases: {} });
+
+    const result = applyProviderDefault('anthropic', 'anthropic/claude-sonnet-5');
+    expect(result).toEqual({ alias: 'anthropic', setAsDefault: true });
+
+    const cfg = loadConfig();
+    expect(cfg.default).toBe('anthropic');
   });
 });

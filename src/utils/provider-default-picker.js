@@ -15,7 +15,7 @@
 'use strict';
 
 const { resolveTier } = require('./model-tiers');
-const { getCostTier } = require('./config');
+const { getCostTier, loadConfig, saveConfig } = require('./config');
 const { pairAcrossGateways } = require('./gateway-route-catalog');
 const { toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
 
@@ -197,4 +197,38 @@ function buildProviderDefaultChoices(vendor, options = {}) {
   return { preselectedId, rows };
 }
 
-module.exports = { buildProviderDefaultChoices };
+/**
+ * Apply a picker choice: store the vendor-named alias and (optionally) seed
+ * `config.default` on first use. Read-modify-write, NO-CLOBBER -- preserves
+ * an already-set `config.default` and every other existing alias/key.
+ *
+ * `chosenId` is a verbatim catalog id straight from `buildProviderDefaultChoices`
+ * (via `chooseRowId`/`computePreselectedId`): a real direct id, or -- for a
+ * `DIVERGENT_VENDORS` vendor with no direct twin -- an `openrouter/`-prefixed
+ * id. **Never** run `toCanonicalDefault` on a divergent vendor's id: that
+ * would strip the `openrouter/` prefix and fabricate a non-direct-callable
+ * dot-form id no row actually carries (the exact bug just fixed in Task 4's
+ * `chooseRowId`/`canonicalizeResolved`). Non-divergent vendors' direct and
+ * OpenRouter ids are identical once the prefix is stripped, so
+ * `toCanonicalDefault` is safe there.
+ * @param {string} vendor e.g. 'anthropic'
+ * @param {string} chosenId verbatim catalog id from the picker
+ * @param {{seedDefaultIfAbsent?: boolean}} [options]
+ * @returns {{alias: string, setAsDefault: boolean}}
+ */
+function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true } = {}) {
+  const storedId = DIVERGENT_VENDORS.has(vendor) ? chosenId : toCanonicalDefault(chosenId);
+
+  const config = loadConfig() || {};
+  if (!config.aliases || typeof config.aliases !== 'object') { config.aliases = {}; }
+  config.aliases[vendor] = storedId;
+
+  const hasDefault = typeof config.default === 'string' && config.default.trim().length > 0;
+  const setAsDefault = seedDefaultIfAbsent && !hasDefault;
+  if (setAsDefault) { config.default = vendor; }
+
+  saveConfig(config);
+  return { alias: vendor, setAsDefault };
+}
+
+module.exports = { buildProviderDefaultChoices, applyProviderDefault };
