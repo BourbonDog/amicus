@@ -119,10 +119,12 @@ async function resolveLaunchModel(args) {
 
   const gatewayMode = resolveGatewayMode(args.gateway);
   const validateModel = !args['no-validate-model'];
-  // allowSelection is hardcoded false: the interactive picker is Task 6.3.
-  // Until it lands, a direct miss must produce a structured error/
-  // selection_required we can render below, not an unhandled prompt.
-  const allowSelection = false;
+  // Interactive alternatives picker (#61 Task 6.3): only offered on a real
+  // interactive TTY session that hasn't opted out with --no-ui. A headless/
+  // non-TTY run (CI, piped output, --no-ui) keeps allowSelection false, so a
+  // direct miss there still produces the structured error/selection_required
+  // rendered below rather than an unhandled prompt.
+  const allowSelection = !args['no-ui'] && !!process.stdin.isTTY;
 
   // No --model given: the parser does not inject a default, so resolve the
   // configured default here (mirroring the pre-#61 resolveModelFromArgs
@@ -159,7 +161,29 @@ async function resolveLaunchModel(args) {
     };
   }
 
-  // 'error' or 'selection_required': render and exit.
+  // Interactive alternatives picker (#61 Task 6.3): only reachable when
+  // allowSelection was true above (real TTY, no --no-ui), so the router only
+  // ever hands back selection_required here in that same interactive case.
+  if (result.kind === 'selection_required') {
+    const { promptRouteSelection } = require('./model-validator');
+    try {
+      const chosen = await promptRouteSelection(result, deriveAlias(args));
+      return {
+        model: chosen.model,
+        alias: deriveAlias(args),
+        gateway: chosen.gateway,
+        provenance: result.provenance || {},
+      };
+    } catch (err) {
+      process.stderr.write(`${err.message || 'Model selection cancelled.'}\n`);
+      process.exit(1);
+    }
+  }
+
+  // 'error': render and exit. (A non-interactive run never reaches
+  // kind:'selection_required' — allowSelection is false there, so the router
+  // resolves a catalog miss straight to kind:'error' with reason
+  // 'model_not_found' instead; see gateway-router.js's catalogGate.)
   if (args.json) {
     process.stderr.write(`${JSON.stringify(toStructuredError(result))}\n`);
   } else {

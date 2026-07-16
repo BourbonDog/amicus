@@ -50,6 +50,57 @@ async function getRouteCatalogInfo() {
 const ROUTE_VERSION = 1;
 
 /**
+ * Build up to ~6 labeled alternatives for a `selection_required` RouteResult
+ * (#61 Task 6.3, spec Decision 10). Pure: reads only the already-parsed
+ * descriptor plus the live keys/catalogInfo the caller already assembled.
+ *
+ * Two categories, in order:
+ *  1. The SAME model via OpenRouter — only when an OpenRouter key is present
+ *     AND the OR-namespaced id (`openrouter/<vendor>/<model>`) is actually
+ *     present in the catalog (never suggest an id we can't confirm exists).
+ *  2. Up to 5 OTHER models in the same direct vendor namespace (ids starting
+ *     `<vendor>/`, excluding the requested id itself and excluding any
+ *     `openrouter/`-prefixed rows, which share the `<vendor>/` prefix check
+ *     only when vendor === 'openrouter' and are filtered out defensively).
+ *
+ * @param {{vendor?: string, model?: string}} descriptor parsed Descriptor for
+ *   the request that produced the selection_required (canonical or
+ *   openrouter-literal — both carry vendor/model)
+ * @param {Object<string,boolean>} keys per-provider key-presence map (buildLaunchKeys() shape)
+ * @param {{models: Array<{id:string}>}} catalogInfo
+ * @returns {Array<{model:string, gateway:string, note:string}>}
+ */
+function buildSuggestions(descriptor, keys, catalogInfo) {
+  const suggestions = [];
+  const vendor = descriptor && descriptor.vendor;
+  const model = descriptor && descriptor.model;
+  if (!vendor || !model) { return suggestions; }
+
+  const models = (catalogInfo && Array.isArray(catalogInfo.models)) ? catalogInfo.models : [];
+  const requestedDirectId = `${vendor}/${model}`;
+
+  if (keys && keys.openrouter) {
+    const orId = `openrouter/${vendor}/${model}`;
+    if (models.some(m => m && m.id === orId)) {
+      suggestions.push({ model: orId, gateway: 'openrouter', note: 'same model via OpenRouter' });
+    }
+  }
+
+  const nsPrefix = `${vendor}/`;
+  const sameVendor = models.filter(m =>
+    m && typeof m.id === 'string' &&
+    m.id.startsWith(nsPrefix) &&
+    !m.id.startsWith('openrouter/') &&
+    m.id !== requestedDirectId
+  ).slice(0, 5);
+  for (const m of sameVendor) {
+    suggestions.push({ model: m.id, gateway: 'direct', note: `${vendor} model` });
+  }
+
+  return suggestions.slice(0, 6);
+}
+
+/**
  * One-time per-vendor notice when auto-routing migrates a both-key holder off
  * OpenRouter onto direct (#61 Task 5.1 — visible-migration guarantee: never
  * silent). Advisory only — never changes the routing decision, and a failed
@@ -112,8 +163,10 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
     result = maybeMigrationNotice({ result, descriptor, gatewayMode, keys });
+  } else if (result.kind === 'selection_required') {
+    result.suggestions = buildSuggestions(descriptor, keys, catalogInfo);
   }
   return result;
 }
 
-module.exports = { buildLaunchKeys, getRouteCatalogInfo, resolveRouteForLaunch, ROUTE_VERSION };
+module.exports = { buildLaunchKeys, getRouteCatalogInfo, resolveRouteForLaunch, buildSuggestions, ROUTE_VERSION };

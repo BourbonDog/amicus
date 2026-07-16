@@ -145,4 +145,104 @@ describe('resolveRouteForLaunch', () => {
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5' });
     expect(r.provenance.resolutionVersion).toBe(1);
   });
+
+  test('selection_required (direct key present, model invalid, allowSelection) carries populated suggestions (#61 Task 6.3)', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: ALIASES,
+      apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
+      catalogModels: [
+        { id: 'openai/gpt-5.5', authoritative: true },
+        { id: 'openai/gpt-4o', authoritative: true },
+        { id: 'openrouter/openai/gpt-9', authoritative: true },
+      ],
+    });
+    const r = await resolveRouteForLaunch({ model: 'openai/gpt-9', gatewayMode: 'auto', source: 'cli', allowSelection: true, validateModel: true });
+    expect(r.kind).toBe('selection_required');
+    expect(r.suggestions).toEqual(expect.arrayContaining([
+      { model: 'openrouter/openai/gpt-9', gateway: 'openrouter', note: 'same model via OpenRouter' },
+      { model: 'openai/gpt-5.5', gateway: 'direct', note: 'openai model' },
+      { model: 'openai/gpt-4o', gateway: 'direct', note: 'openai model' },
+    ]));
+    expect(r.suggestions.length).toBe(3);
+  });
+});
+
+describe('buildSuggestions', () => {
+  test('includes the OpenRouter alternative when an OR key is present and the OR-namespaced id is in the catalog', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'openai', model: 'gpt-5' },
+      { openrouter: true },
+      { models: [{ id: 'openrouter/openai/gpt-5' }, { id: 'openai/gpt-5.5' }] }
+    );
+    expect(result).toContainEqual({ model: 'openrouter/openai/gpt-5', gateway: 'openrouter', note: 'same model via OpenRouter' });
+  });
+
+  test('omits the OpenRouter alternative when the OR-namespaced id is not in the catalog, even with a key', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'openai', model: 'gpt-5' },
+      { openrouter: true },
+      { models: [{ id: 'openai/gpt-5.5' }] }
+    );
+    expect(result.some((s) => s.gateway === 'openrouter')).toBe(false);
+  });
+
+  test('omits the OpenRouter alternative when no OR key is present, even if the catalog has the id', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'openai', model: 'gpt-5' },
+      { openrouter: false },
+      { models: [{ id: 'openrouter/openai/gpt-5' }] }
+    );
+    expect(result.length).toBe(0);
+  });
+
+  test('collects up to 5 same-vendor alternatives, excluding the requested id and openrouter-namespaced rows', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'openai', model: 'gpt-5' },
+      {},
+      { models: [
+        { id: 'openai/gpt-5' }, // requested id -> excluded
+        { id: 'openai/gpt-5.5' },
+        { id: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4-turbo' },
+        { id: 'openai/o3-mini' },
+        { id: 'openai/o3' },
+        { id: 'openai/gpt-3.5' }, // 6th same-vendor row -> beyond the cap of 5
+        { id: 'openrouter/openai/gpt-5.5' }, // different namespace -> excluded
+        { id: 'google/gemini-2.5-pro' }, // different vendor -> excluded
+      ] }
+    );
+    expect(result.length).toBe(5);
+    expect(result.every((s) => s.gateway === 'direct' && s.model.startsWith('openai/') && s.note === 'openai model')).toBe(true);
+    expect(result.some((s) => s.model === 'openai/gpt-5')).toBe(false);
+    expect(result.some((s) => s.model === 'openai/gpt-3.5')).toBe(false);
+  });
+
+  test('combines the OpenRouter alternative with same-vendor alternatives, capped at 6 total', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'openai', model: 'gpt-5' },
+      { openrouter: true },
+      { models: [
+        { id: 'openrouter/openai/gpt-5' },
+        { id: 'openai/gpt-5.5' },
+        { id: 'openai/gpt-4o' },
+        { id: 'openai/gpt-4-turbo' },
+        { id: 'openai/o3-mini' },
+        { id: 'openai/o3' },
+        { id: 'openai/gpt-3.5' },
+      ] }
+    );
+    expect(result.length).toBe(6);
+    expect(result[0]).toEqual({ model: 'openrouter/openai/gpt-5', gateway: 'openrouter', note: 'same model via OpenRouter' });
+  });
+
+  test('returns [] when the descriptor is missing vendor/model', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    expect(buildSuggestions({}, {}, { models: [] })).toEqual([]);
+    expect(buildSuggestions(undefined, {}, { models: [] })).toEqual([]);
+  });
 });
