@@ -47,7 +47,7 @@ const FAMILIES = [
     idPattern: /^claude-opus-[\d.-]+$/,
     directProviders: ['anthropic'],
     fallback: { openrouter: 'openrouter/anthropic/claude-opus-4.8',
-                anthropic: 'anthropic/claude-opus-4-6' } },
+                anthropic: 'anthropic/claude-opus-4-8' } },
   { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
     vendorPath: 'deepseek',
     idPattern: /^deepseek-v[\d.]+(-pro)?$/,
@@ -64,9 +64,12 @@ const CARDLESS = [
   { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.5-pro' } },
   // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
   { alias: 'codex', routes: { openrouter: 'openrouter/openai/gpt-5.3-codex' } },
-  { alias: 'claude', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-4.6' } },
-  { alias: 'sonnet', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-4.6' } },
-  { alias: 'haiku', routes: { openrouter: 'openrouter/anthropic/claude-haiku-4.5' } },
+  { alias: 'claude', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-5',
+                                anthropic: 'anthropic/claude-sonnet-5' } },
+  { alias: 'sonnet', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-5',
+                                anthropic: 'anthropic/claude-sonnet-5' } },
+  { alias: 'haiku', routes: { openrouter: 'openrouter/anthropic/claude-haiku-4.5',
+                              anthropic: 'anthropic/claude-haiku-4-5-20251001' } },
   { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5' } },
   { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.7-max' } },
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
@@ -152,4 +155,62 @@ function listCuratedRoutes() {
   return out;
 }
 
-module.exports = { getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes };
+/**
+ * Vendors whose direct-API ids differ from OpenRouter's (dot vs. dash
+ * versioning, distinct model names, etc.). NEVER derive a direct form for
+ * these — derivation would emit the wrong (dot) id, or invent a direct id
+ * for a model that is OpenRouter-only today (e.g. fable).
+ */
+const DIVERGENT_VENDORS = new Set(['anthropic']);
+
+/**
+ * @param {string} orRoute e.g. 'openrouter/anthropic/claude-sonnet-5'
+ * @returns {string} the vendor segment, e.g. 'anthropic'
+ */
+function vendorOf(orRoute) {
+  const rest = orRoute.slice('openrouter/'.length);
+  return rest.slice(0, rest.indexOf('/'));
+}
+
+/**
+ * @param {string} vendorPath
+ * @param {Object<string,string>} obj a family.fallback or cardless.routes map
+ * @returns {string|undefined} the direct-API executable id, or undefined
+ * when no direct form is available for this alias.
+ */
+function directFormFor(vendorPath, obj) {
+  if (obj[vendorPath]) { return obj[vendorPath]; } // explicit, authored, current direct id
+  if (DIVERGENT_VENDORS.has(vendorPath)) { return undefined; } // no explicit form + divergent → omit
+  const bare = toCanonicalDefault(obj.openrouter); // safe only when ids are identical across gateways
+  return bare !== obj.openrouter ? bare : undefined; // gateway-only vendor → undefined
+}
+
+/**
+ * @param {string} vendorPath
+ * @param {Object<string,string>} obj a family.fallback or cardless.routes map
+ * @returns {{direct?: string, openrouter: string}}
+ */
+function gatewayRoutesFor(vendorPath, obj) {
+  const routes = { openrouter: obj.openrouter };
+  const direct = directFormFor(vendorPath, obj);
+  if (direct) { routes.direct = direct; }
+  return routes;
+}
+
+/**
+ * @returns {Object<string,{direct?: string, openrouter: string}>} alias →
+ * per-gateway executable ids. Unlike `toDefaultAliases` (a single pinned
+ * string per alias, used for display/`config.default`), this carries BOTH
+ * gateway-native forms so the router (Task 3) can route direct-first
+ * without corrupting divergent-vendor ids (e.g. Anthropic's dash format).
+ */
+function toGatewayRoutes() {
+  const out = {};
+  for (const f of FAMILIES) { out[f.alias] = gatewayRoutesFor(f.vendorPath, f.fallback); }
+  for (const e of CARDLESS) { out[e.alias] = gatewayRoutesFor(vendorOf(e.routes.openrouter), e.routes); }
+  return out;
+}
+
+module.exports = {
+  getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes, toGatewayRoutes
+};

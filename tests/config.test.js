@@ -179,10 +179,10 @@ describe('Sidecar Config Module', () => {
       expect(aliases.gemini).toBe('google/gemini-3.5-flash');
     });
 
-    it('should map claude to anthropic/claude-sonnet-4.6 (bare, direct-capable)', () => {
+    it('should map claude to anthropic/claude-sonnet-5 (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.claude).toBe('anthropic/claude-sonnet-4.6');
+      expect(aliases.claude).toBe('anthropic/claude-sonnet-5');
     });
 
     it('should map opus to anthropic/claude-opus-4.8 (bare, direct-capable)', () => {
@@ -397,7 +397,7 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
       const modelKeys = Object.keys(result.anthropic.models);
-      const sonnetCount = modelKeys.filter(k => k === 'claude-sonnet-4.6').length;
+      const sonnetCount = modelKeys.filter(k => k === 'claude-sonnet-5').length;
       expect(sonnetCount).toBe(1);
     });
 
