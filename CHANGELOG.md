@@ -5,6 +5,49 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-07-15
+
+### Added
+
+- **Direct-first gateway routing** (#61): bare `provider/model` model IDs (e.g. `anthropic/claude-opus-4-5`)
+  now route to your **direct** provider key when one is configured, falling back to OpenRouter only when
+  it isn't. An explicit `openrouter/...`-prefixed model ID remains a force-OpenRouter override — that
+  literal form never changes behavior.
+  - New `--gateway auto|direct|openrouter` CLI flag on `start`, `fanout`, and `continue` (`auto` is the
+    direct-first default) and a matching `gateway` enum on the MCP `amicus_start` / `amicus_fanout` /
+    `amicus_continue` tools.
+  - New `routing.prefer` config key (`"direct"` default | `"openrouter"`) sets the global default; the
+    per-call `--gateway`/`gateway` param overrides it for that run.
+  - Non-interactive CLI (`--json`) and MCP now emit a structured `model_route_error` (`type`, `field`,
+    `requested`, `reason`) instead of an ad hoc message when a request can't be routed — identical shape
+    on both surfaces.
+  - Interactive runs get a picker with alternatives when a direct route misses (e.g. key missing or model
+    not on that vendor's live catalog), instead of failing outright.
+  - Live Anthropic model fetcher: the model catalog now queries Anthropic's API directly for the current
+    model list, the same live-fetch treatment OpenAI and Google already had.
+- Session provenance (resume/continue) preserves the gateway a run originally resolved to, even if keys
+  or `routing.prefer` change in between.
+
+### Changed
+
+- **Default aliases for direct-capable vendors** (`openai`, `google`, `anthropic`, `deepseek`) now resolve
+  to bare canonical model IDs instead of `openrouter/...`-prefixed ones, so they participate in
+  direct-first routing out of the box. Gateway-only vendors (`qwen`, `grok`, `glm`, and other
+  OpenRouter-exclusive families) are unchanged — they still resolve through OpenRouter, since there's no
+  direct key path for them.
+  - **Migration:** if you hold both an OpenRouter key and a direct key for one of the four vendors above,
+    the next run against that vendor moves you to the direct route and prints a one-time notice; it's
+    silent after that. Set `routing.prefer: "openrouter"` in config (or pass `--gateway openrouter` /
+    `gateway: "openrouter"` per call) to keep routing everything through OpenRouter as before. Aliases you
+    already overrode via `amicus setup --add-alias` are untouched.
+
+### Notes
+
+- Builds on the #61 gateway-routing foundation (router core, resolution modes, key discovery) merged to
+  main ahead of this release; this release wires that router into the live launch path (CLI + MCP), adds
+  the control surface (`--gateway` / `gateway` / `routing.prefer`), and switches default guidance to the
+  direct-first form.
+
 ## [3.0.0] - 2026-07-15
 
 ### ⚠️ Breaking
