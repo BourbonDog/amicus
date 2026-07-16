@@ -258,11 +258,14 @@ describe('gateway-correct-ids e2e (#61 Task 7): opus resolves direct with dashes
     expect(entry.model).toBe(EXPECTED_DIRECT_ID);
     expect(entry.mode).toBe('headless');
 
-    // Defensive: pre-flight was never rejected by the router (route-error.js
-    // REASON_TEXT strings would appear here had resolveLaunchModel exited(1)
-    // instead of reaching startSidecar).
-    expect(result.stderr).not.toContain('model_not_found');
-    expect(result.stderr).not.toContain("not found in the model catalog");
+    // Defensive: pre-flight was never rejected by the router. The CLI (no
+    // --json) renders errors via route-error.js's toCliMessage(), which
+    // emits the human-readable REASON_TEXT/FIX_HINTS sentences -- never the
+    // raw snake_case reason keys -- so these check for the actual rendered
+    // text that would appear had resolveLaunchModel exited(1) instead of
+    // reaching startSidecar.
+    expect(result.stderr).not.toContain('The requested model was not found in the catalog.');
+    expect(result.stderr).not.toContain('Run `amicus models --refresh`, or pass --no-validate-model.');
     expect(result.stderr).not.toContain('No API key was found for this vendor');
     expect(result.stderr).not.toContain('No OpenRouter API key is configured');
   }, 20000);
@@ -281,8 +284,11 @@ describe('gateway-correct-ids e2e (#61 Task 7): opus resolves direct with dashes
     expect(entry).not.toBeNull();
     expect(entry.model).toBe(EXPECTED_DIRECT_ID);
 
-    expect(result.stderr).not.toContain('model_not_found');
-    expect(result.stderr).not.toContain('direct_unavailable');
-    expect(result.stderr).not.toContain('no_direct_key');
+    // Same rationale as the first test: assert on the real rendered
+    // REASON_TEXT sentences (route-error.js), not the raw reason keys, which
+    // never appear in non-JSON CLI stderr output.
+    expect(result.stderr).not.toContain('The requested model was not found in the catalog.');
+    expect(result.stderr).not.toContain("This model isn't available on the vendor's direct API; use OpenRouter or a different model.");
+    expect(result.stderr).not.toContain("No API key is configured for this vendor's direct API.");
   }, 20000);
 });
