@@ -280,6 +280,90 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
   });
 });
 
+describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias (Part 2 Task 3, spec D2)', () => {
+  // Real (unmocked) curated-models, same rationale as the Task 3 block above.
+  const { toGatewayRoutes } = require('../src/utils/curated-models');
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' }
+
+  // (a) A USER vendor alias (not a curated default NAME at all) whose value
+  // happens to BE the curated Anthropic direct id must still get the correct
+  // bridged gatewayIds pair, by matching on the RESOLVED MODEL rather than
+  // the alias name — this is exactly what Part 1's name-based guard missed.
+  test('user vendor alias "anthropic" -> curated divergent model resolves direct via by-model gatewayIds', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, anthropic: opusRoutes.direct }, // 'anthropic/claude-opus-4-8'
+      apiKeys: { ...ALL_FALSE, anthropic: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'anthropic', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: opusRoutes.direct });
+    expect(r.executableId).toBe('anthropic/claude-opus-4-8');
+  });
+
+  test('user vendor alias "anthropic" -> curated divergent model resolves openrouter (dot-form) via by-model gatewayIds', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, anthropic: opusRoutes.direct }, // 'anthropic/claude-opus-4-8'
+      apiKeys: { ...ALL_FALSE, openrouter: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'anthropic', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: opusRoutes.openrouter });
+    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-4.8');
+  });
+
+  // (c) A user override of `opus` pointed at a non-divergent, non-curated
+  // model must resolve to exactly that model, with no gatewayIds leaking in
+  // from either the curated by-model index or the (skipped, non-divergent)
+  // catalog fallback.
+  test('user override of opus -> non-divergent custom model resolves to that model, no wrong gatewayIds', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, opus: 'openai/gpt-9-custom' },
+      apiKeys: { ...ALL_FALSE, openai: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-9-custom' });
+    expect(r.executableId).not.toBe(opusRoutes.direct);
+    expect(r.executableId).not.toBe(opusRoutes.openrouter);
+  });
+
+  // (d) An alias resolving to an uncatalogued/unknown model — including one
+  // in the DIVERGENT anthropic namespace, so the catalog-pairing fallback is
+  // actually exercised and genuinely misses — must still launch (fail-open:
+  // no gatewayIds, not an error, not a blocked launch).
+  test('alias -> uncatalogued divergent-vendor model still launches (fail-open, no gatewayIds)', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, 'my-claude': 'anthropic/claude-nonexistent-9000' },
+      apiKeys: { ...ALL_FALSE, anthropic: true },
+      catalogModels: [], // empty catalog: pairAcrossGateways finds nothing for either side
+    });
+    const r = await resolveRouteForLaunch({ model: 'my-claude', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'anthropic/claude-nonexistent-9000' });
+  });
+
+  // (d, continued) Fail-open must hold even when the catalog-pairing lookup
+  // itself throws (e.g. a corrupted catalog module) — never an error, never
+  // a blocked launch, just no gatewayIds.
+  test('a throwing catalog-pairing lookup still fails open (no gatewayIds, launch unaffected)', async () => {
+    jest.resetModules();
+    jest.doMock('../src/utils/config', () => ({
+      getEffectiveAliases: () => ({ ...ALIASES, 'my-claude': 'anthropic/claude-nonexistent-9000' }),
+      getDefaultAliases: () => ({ ...ALIASES, 'my-claude': 'anthropic/claude-nonexistent-9000' }),
+    }));
+    jest.doMock('../src/utils/api-key-store', () => ({
+      readApiKeys: () => ({ ...ALL_FALSE, anthropic: true }),
+    }));
+    jest.doMock('../src/utils/auth-json', () => ({ readAuthJsonKeys: () => ({}) }));
+    jest.doMock('../src/utils/model-catalog', () => ({
+      getCatalogInfo: async () => ({ models: [], lastRefreshError: null }),
+    }));
+    jest.doMock('../src/utils/gateway-route-catalog', () => ({
+      pairAcrossGateways: () => { throw new Error('boom: catalog pairing exploded'); },
+    }));
+    const { resolveRouteForLaunch } = require('../src/utils/route-launch');
+    const r = await resolveRouteForLaunch({ model: 'my-claude', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'anthropic/claude-nonexistent-9000' });
+    jest.dontMock('../src/utils/gateway-route-catalog');
+  });
+});
+
 describe('buildSuggestions', () => {
   test('includes the OpenRouter alternative when an OR key is present and the OR-namespaced id is in the catalog', () => {
     const { buildSuggestions } = loadRouteLaunch();

@@ -212,5 +212,5 @@ function toGatewayRoutes() {
 }
 
 module.exports = {
-  getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes, toGatewayRoutes
+  getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes, toGatewayRoutes, DIVERGENT_VENDORS
 };
