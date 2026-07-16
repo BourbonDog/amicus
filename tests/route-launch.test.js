@@ -362,6 +362,39 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'anthropic/claude-nonexistent-9000' });
     jest.dontMock('../src/utils/gateway-route-catalog');
   });
+
+  // Fast-follow fix (final whole-branch review, Fix 1): the by-model
+  // generalization above unconditionally preferred gatewayIds.direct over
+  // gatewayIds.openrouter, which silently broke Part 1's documented contract
+  // that an alias whose value is an explicit `openrouter/...` literal is a
+  // FORCE-OR literal (model-descriptor.js's isExplicitOpenRouter). An alias
+  // like `foo -> openrouter/openai/gpt-5.5` must stay on OpenRouter even
+  // though a direct id for the same model exists and both keys are present.
+  test('alias pinned to an explicit openrouter/... literal for a curated model stays on OpenRouter, even with both keys (Fix 1)', async () => {
+    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.5', openrouter: 'openrouter/openai/gpt-5.5' }
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, foo: gptRoutes.openrouter }, // 'openrouter/openai/gpt-5.5'
+      apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'foo', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: gptRoutes.openrouter });
+    expect(r.executableId.startsWith('openrouter/')).toBe(true);
+    expect(r.executableId).not.toBe(gptRoutes.direct);
+  });
+
+  // Companion assertion: a BARE direct alias for the same underlying model
+  // must still resolve direct-first under auto — only an explicit
+  // openrouter/... literal forces OR; this must not regress from the fix
+  // above.
+  test('alias pinned to a bare direct id for the same curated model still resolves direct (no regression)', async () => {
+    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.5', openrouter: 'openrouter/openai/gpt-5.5' }
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, foo: gptRoutes.direct }, // 'openai/gpt-5.5'
+      apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'foo', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: gptRoutes.direct });
+  });
 });
 
 describe('buildSuggestions', () => {

@@ -241,14 +241,15 @@ function resolveGatewayIdsByModel(resolvedId, catalogInfo) {
  * while one pointing at a bare `vendor/model` is policy-routed normally.
  *
  * For ANY alias, the resolved concrete id is looked up BY MODEL via
- * resolveGatewayIdsByModel() and, when found, threaded through as
- * `gatewayIds` — the descriptor is then parsed from the gateway-native
- * direct form (falling back to openrouter) rather than the resolved alias
- * string itself, which can be the wrong per-gateway form for a divergent
- * vendor (e.g. Anthropic's dash ids vs. OpenRouter's dot ids). A user
- * override or vendor alias pointing at the same underlying model now gets
- * the same correct ids; one pointing at an uncovered model gets no
- * gatewayIds (fail-open). Full-id / non-alias inputs are unaffected.
+ * resolveGatewayIdsByModel() and threaded through as `gatewayIds` — the
+ * descriptor is then re-parsed from the gateway-native form (not the raw
+ * alias string, which can be the wrong per-gateway form for a divergent
+ * vendor, e.g. Anthropic's dash vs. OpenRouter's dot ids). Preserves Part
+ * 1's force-OR contract: an alias whose ORIGINAL value is an explicit
+ * `openrouter/...` literal prefers `gatewayIds.openrouter` (else falls back
+ * to that original value); any other alias value prefers `gatewayIds.direct`
+ * (else `.openrouter`) as before. Uncovered models get no gatewayIds
+ * (fail-open); full-id/non-alias inputs are unaffected.
  *
  * Assembles live key/catalog state and delegates the actual decision to the
  * pure gateway-router. Wired into start-helpers.js, mcp-server.js, and
@@ -274,8 +275,15 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   const catalogInfo = validateModel === false ? { models: [], lastRefreshError: null } : await getRouteCatalogInfo();
   let gatewayIds;
   if (isAlias) {
+    const originalConcrete = concrete; // pre-gatewayIds alias value; may itself be an explicit `openrouter/...` literal
     gatewayIds = resolveGatewayIdsByModel(concrete, catalogInfo);
-    if (gatewayIds) { concrete = gatewayIds.direct || gatewayIds.openrouter; }
+    if (gatewayIds) {
+      // Force-OR contract (Part 1): an explicit openrouter/... alias value
+      // stays on OpenRouter; only a bare vendor/model value prefers direct.
+      concrete = originalConcrete.startsWith('openrouter/')
+        ? (gatewayIds.openrouter || originalConcrete)
+        : (gatewayIds.direct || gatewayIds.openrouter);
+    }
   }
   const descriptor = parseDescriptor(concrete, { aliases });
   let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo, gatewayIds });
