@@ -9,11 +9,11 @@ const https = require('https');
 
 /** Hardcoded Anthropic models (no public listing endpoint) */
 const ANTHROPIC_MODELS = [
-  { id: 'anthropic/claude-opus-4-6', name: 'Claude Opus 4.6', contextLength: null, pricing: null },
-  { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-opus-4-8', name: 'Claude Opus 4.8', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: null, pricing: null },
-  { id: 'anthropic/claude-sonnet-4-5', name: 'Claude Sonnet 4.5', contextLength: null, pricing: null },
-  { id: 'anthropic/claude-3-5-haiku', name: 'Claude 3.5 Haiku', contextLength: null, pricing: null }
+  { id: 'anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: null, pricing: null },
+  { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: null, pricing: null }
 ];
 
 const { PROVIDER_FAMILY_NAMES } = require('./provider-registry');
