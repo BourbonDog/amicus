@@ -386,8 +386,8 @@ describe('curated-models deepseek routes', () => {
     expect(direct.model).toBe('deepseek/deepseek-v4-pro');
   });
 
-  test('toDefaultAliases deepseek still prefers openrouter route', () => {
+  test('toDefaultAliases deepseek resolves to the bare direct-capable id (Task 8.1a)', () => {
     const aliases = toDefaultAliases();
-    expect(aliases.deepseek).toMatch(/^openrouter\//);
+    expect(aliases.deepseek).toBe('deepseek/deepseek-v4-pro');
   });
 });

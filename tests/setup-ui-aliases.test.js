@@ -68,9 +68,11 @@ describe('setup-ui-aliases', () => {
     });
 
     it('should contain model strings in each row', () => {
+      // Task 8.1a: gemini/gpt are direct-capable default aliases, so their
+      // stored model string is now the bare canonical id, not openrouter/...
       expect(html).toContain('class="alias-model"');
-      expect(html).toContain('openrouter/google/gemini-3.5-flash');
-      expect(html).toContain('openrouter/openai/gpt-5.5');
+      expect(html).toContain('google/gemini-3.5-flash');
+      expect(html).toContain('openai/gpt-5.5');
     });
 
     it('should contain arrow separators', () => {

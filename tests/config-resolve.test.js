@@ -180,51 +180,55 @@ describe('Sidecar Config Module - Model Resolution', () => {
       stderrSpy.mockRestore();
     });
 
-    it('returns the stored openrouter/ id unchanged when GOOGLE_GENERATIVE_AI_API_KEY is set but OPENROUTER_API_KEY is not', () => {
+    // Task 8.1a: gemini/gpt/opus/deepseek are now bare canonical default
+    // aliases (direct-capable vendors), so resolveModel returns the stored
+    // bare id verbatim — the gateway router (not resolveModel) is what
+    // decides direct-vs-OpenRouter for a bare id at launch time.
+    it('returns the stored bare id unchanged when GOOGLE_GENERATIVE_AI_API_KEY is set but OPENROUTER_API_KEY is not', () => {
       process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-gemini-key';
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('openrouter/google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.5-flash');
     });
 
-    it('returns the stored openrouter/ id unchanged when OPENAI_API_KEY is set but OPENROUTER_API_KEY is not', () => {
+    it('returns the stored bare id unchanged when OPENAI_API_KEY is set but OPENROUTER_API_KEY is not', () => {
       process.env.OPENAI_API_KEY = 'test-openai-key';
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gpt');
-      expect(result).toBe('openrouter/openai/gpt-5.5');
+      expect(result).toBe('openai/gpt-5.5');
     });
 
-    it('returns the stored openrouter/ id unchanged when ANTHROPIC_API_KEY is set but OPENROUTER_API_KEY is not', () => {
+    it('returns the stored bare id unchanged when ANTHROPIC_API_KEY is set but OPENROUTER_API_KEY is not', () => {
       process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('opus');
-      expect(result).toBe('openrouter/anthropic/claude-opus-4.8');
+      expect(result).toBe('anthropic/claude-opus-4.8');
     });
 
-    it('returns the stored openrouter/ id unchanged when DEEPSEEK_API_KEY is set but OPENROUTER_API_KEY is not', () => {
+    it('returns the stored bare id unchanged when DEEPSEEK_API_KEY is set but OPENROUTER_API_KEY is not', () => {
       process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('deepseek');
-      expect(result).toBe('openrouter/deepseek/deepseek-v4-pro');
+      expect(result).toBe('deepseek/deepseek-v4-pro');
     });
 
-    it('returns the stored openrouter/ id unchanged when both OPENROUTER_API_KEY and a direct key are set', () => {
+    it('returns the stored bare id unchanged when both OPENROUTER_API_KEY and a direct key are set', () => {
       process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
       process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-gemini-key';
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('openrouter/google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.5-flash');
     });
 
-    it('returns the stored openrouter/ id unchanged when neither key is set', () => {
+    it('returns the stored bare id unchanged when neither key is set', () => {
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('openrouter/google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.5-flash');
     });
 
     it('returns explicit model strings with slash unchanged regardless of env keys', () => {
@@ -241,14 +245,14 @@ describe('Sidecar Config Module - Model Resolution', () => {
       expect(result).toBe('openrouter/qwen/qwen3.7-max');
     });
 
-    it('returns the stored openrouter/ id unchanged via default alias resolution', () => {
+    it('returns the stored bare id unchanged via default alias resolution', () => {
       process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-gemini-key';
       const data = { default: 'gemini', aliases: {} };
       fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel(undefined);
-      expect(result).toBe('openrouter/google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.5-flash');
     });
 
     it('returns explicit default model strings unchanged regardless of env keys', () => {

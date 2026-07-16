@@ -170,34 +170,37 @@ describe('Sidecar Config Module', () => {
       }
     });
 
-    it('should map gemini to openrouter/google/gemini-3.5-flash', () => {
+    // Task 8.1a: direct-capable vendors (openai/anthropic/google/deepseek)
+    // resolve to the BARE canonical id (policy-routed, direct-first) rather
+    // than the openrouter/ literal — see src/utils/curated-models.js.
+    it('should map gemini to google/gemini-3.5-flash (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.gemini).toBe('openrouter/google/gemini-3.5-flash');
+      expect(aliases.gemini).toBe('google/gemini-3.5-flash');
     });
 
-    it('should map claude to openrouter/anthropic/claude-sonnet-4.6', () => {
+    it('should map claude to anthropic/claude-sonnet-4.6 (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.claude).toBe('openrouter/anthropic/claude-sonnet-4.6');
+      expect(aliases.claude).toBe('anthropic/claude-sonnet-4.6');
     });
 
-    it('should map opus to openrouter/anthropic/claude-opus-4.8', () => {
+    it('should map opus to anthropic/claude-opus-4.8 (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.8');
+      expect(aliases.opus).toBe('anthropic/claude-opus-4.8');
     });
 
-    it('should map gpt to openrouter/openai/gpt-5.5', () => {
+    it('should map gpt to openai/gpt-5.5 (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.gpt).toBe('openrouter/openai/gpt-5.5');
+      expect(aliases.gpt).toBe('openai/gpt-5.5');
     });
 
-    it('should map deepseek to openrouter/deepseek/deepseek-v4-pro', () => {
+    it('should map deepseek to deepseek/deepseek-v4-pro (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.deepseek).toBe('openrouter/deepseek/deepseek-v4-pro');
+      expect(aliases.deepseek).toBe('deepseek/deepseek-v4-pro');
     });
 
     it('should map all qwen variants correctly', () => {
@@ -235,8 +238,8 @@ describe('Sidecar Config Module', () => {
     it('should return defaults when no config exists', () => {
       const config = loadModule();
       const aliases = config.getEffectiveAliases();
-      expect(aliases.gemini).toBe('openrouter/google/gemini-3.5-flash');
-      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.8');
+      expect(aliases.gemini).toBe('google/gemini-3.5-flash');
+      expect(aliases.opus).toBe('anthropic/claude-opus-4.8');
     });
 
     it('should merge user aliases with defaults (user wins)', () => {
@@ -253,7 +256,7 @@ describe('Sidecar Config Module', () => {
 
       expect(aliases.gemini).toBe('openrouter/google/custom-gemini');
       expect(aliases['my-model']).toBe('openrouter/custom/model');
-      expect(aliases.opus).toBe('openrouter/anthropic/claude-opus-4.8');
+      expect(aliases.opus).toBe('anthropic/claude-opus-4.8');
     });
   });
 
@@ -346,22 +349,26 @@ describe('Sidecar Config Module', () => {
   });
 
   describe('buildProviderModels', () => {
+    // Task 8.1a: direct-capable default aliases (gemini/opus/gpt/codex/
+    // deepseek/...) are now BARE canonical ids, so they group under their
+    // own direct provider bucket rather than nested under openrouter.
+    // Gateway-only aliases (grok, qwen, ...) are unaffected — still nested
+    // under openrouter.
     it('should group aliases by provider with model IDs as keys', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
       expect(result).toHaveProperty('openrouter');
       expect(result.openrouter).toHaveProperty('models');
       expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
-      expect(result.openrouter.models['google/gemini-3.5-flash']).toBeDefined();
+      expect(result.google.models['gemini-3.5-flash']).toBeDefined();
     });
 
     it('should include all default alias models', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
-      const modelKeys = Object.keys(result.openrouter.models);
-      expect(modelKeys).toContain('anthropic/claude-opus-4.8');
-      expect(modelKeys).toContain('openai/gpt-5.3-codex');
-      expect(modelKeys).toContain('deepseek/deepseek-v4-pro');
+      expect(result.anthropic.models['claude-opus-4.8']).toBeDefined();
+      expect(result.openai.models['gpt-5.3-codex']).toBeDefined();
+      expect(result.deepseek.models['deepseek-v4-pro']).toBeDefined();
     });
 
     it('should include user-configured aliases', () => {
@@ -386,21 +393,23 @@ describe('Sidecar Config Module', () => {
     });
 
     it('should deduplicate models pointed to by multiple aliases', () => {
+      // claude and sonnet both resolve to the same bare anthropic id.
       const config = loadModule();
       const result = config.buildProviderModels();
-      const modelKeys = Object.keys(result.openrouter.models);
-      const sonnetCount = modelKeys.filter(k => k === 'anthropic/claude-sonnet-4.6').length;
+      const modelKeys = Object.keys(result.anthropic.models);
+      const sonnetCount = modelKeys.filter(k => k === 'claude-sonnet-4.6').length;
       expect(sonnetCount).toBe(1);
     });
 
-    it('zero-arg call is unchanged from prior (alias-only) behavior', () => {
+    it('zero-arg call groups direct-capable aliases under their direct provider, gateway-only aliases under openrouter', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
       expect(result).toHaveProperty('openrouter');
       expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
-      expect(result.openrouter.models['anthropic/claude-opus-4.8']).toBeDefined();
-      // No alias resolves directly to openai/ — confirms no resolvedRoutes leakage.
-      expect(result.openai).toBeUndefined();
+      // gpt/opus are bare canonical ids (Task 8.1a) — grouped under their own
+      // direct provider, not nested inside openrouter.
+      expect(result.anthropic.models['claude-opus-4.8']).toBeDefined();
+      expect(result.openai).toBeDefined();
     });
 
     it('registers a resolved route even when no alias points at it', () => {
