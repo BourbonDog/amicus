@@ -419,6 +419,31 @@ function markMigrationNotified(vendor) {
   }
 }
 
+/** Global cost-tier preference (Part 2, Task 1) — cheapest-to-priciest. */
+const COST_TIERS = ['frontier', 'balanced', 'economy'];
+
+/** @returns {'frontier'|'balanced'|'economy'} config.routing.tier, defaulting/coercing to 'balanced' */
+function getCostTier() {
+  const config = loadConfig() || {};
+  const tier = config.routing && config.routing.tier;
+  return COST_TIERS.includes(tier) ? tier : 'balanced';
+}
+
+/**
+ * Persist the global cost-tier preference under routing.tier, preserving any
+ * other routing keys (prefer, migration_notified).
+ * @param {string} tier one of COST_TIERS
+ * @throws {Error} when tier is not a recognized cost tier
+ */
+function setCostTier(tier) {
+  if (!COST_TIERS.includes(tier)) {
+    throw new Error(`Invalid cost tier '${tier}'. Must be one of: ${COST_TIERS.join(', ')}`);
+  }
+  const config = loadConfig() || {};
+  config.routing = { ...(config.routing || {}), tier };
+  saveConfig(config);
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -440,4 +465,7 @@ module.exports = {
   getRoutingConfig,
   resolveGatewayMode,
   markMigrationNotified,
+  COST_TIERS,
+  getCostTier,
+  setCostTier,
 };

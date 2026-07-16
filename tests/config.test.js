@@ -475,4 +475,76 @@ describe('Sidecar Config Module', () => {
       expect(result['x-ai']).toBeUndefined();
     });
   });
+
+  /**
+   * Cost-aware per-provider defaults (Part 2, Task 1): a global cost-tier
+   * preference stored at config.routing.tier.
+   */
+  describe('getCostTier / setCostTier', () => {
+    it('exports COST_TIERS as the three known tiers', () => {
+      const config = loadModule();
+      expect(config.COST_TIERS).toEqual(['frontier', 'balanced', 'economy']);
+    });
+
+    it('getCostTier returns balanced by default when no config exists', () => {
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('balanced');
+    });
+
+    it('getCostTier returns balanced when routing exists but tier is unset', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { prefer: 'openrouter' } })
+      );
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('balanced');
+    });
+
+    it('getCostTier returns the saved value when config.routing.tier is set', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { tier: 'economy' } })
+      );
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('economy');
+    });
+
+    it('getCostTier coerces a garbage tier value to balanced', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { tier: 'bogus' } })
+      );
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('balanced');
+    });
+
+    it('setCostTier persists under routing.tier, preserving prefer and migration_notified', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({
+          routing: { prefer: 'openrouter', migration_notified: { openai: true } },
+        })
+      );
+      const config = loadModule();
+      config.setCostTier('economy');
+
+      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
+      expect(written.routing.tier).toBe('economy');
+      expect(written.routing.prefer).toBe('openrouter');
+      expect(written.routing.migration_notified).toEqual({ openai: true });
+    });
+
+    it('setCostTier creates routing when absent', () => {
+      const config = loadModule();
+      config.setCostTier('frontier');
+
+      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
+      expect(written.routing).toEqual({ tier: 'frontier' });
+    });
+
+    it('setCostTier throws on an invalid tier', () => {
+      const config = loadModule();
+      expect(() => config.setCostTier('bogus')).toThrow();
+    });
+  });
 });
