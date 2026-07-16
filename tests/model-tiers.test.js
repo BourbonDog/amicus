@@ -38,6 +38,14 @@ describe('TIERS table', () => {
     expect(TIERS.deepseek.frontier.test('deepseek-v4')).toBe(false);
     expect(TIERS.deepseek.frontier.test('deepseek-v4-pro')).toBe(true);
   });
+
+  test('google balanced excludes -flash-lite (anchored so it does not cross-match economy)', () => {
+    expect(TIERS.google.balanced.test('gemini-3.5-flash')).toBe(true);
+    expect(TIERS.google.balanced.test('gemini-3.5-flash-preview')).toBe(true);
+    expect(TIERS.google.balanced.test('gemini-3.5-flash-latest')).toBe(true);
+    expect(TIERS.google.balanced.test('gemini-3.5-flash-lite')).toBe(false);
+    expect(TIERS.google.economy.test('gemini-3.5-flash-lite')).toBe(true);
+  });
 });
 
 describe('resolveTier — anthropic (direct + OpenRouter twins)', () => {
@@ -61,9 +69,9 @@ describe('resolveTier — anthropic (direct + OpenRouter twins)', () => {
   });
   test('picks the newest version when multiple generations are present', () => {
     const multi = [
-      ...catalog,
       row('anthropic/claude-haiku-3-0'),
       row('openrouter/anthropic/claude-haiku-3-0'),
+      ...catalog,
     ];
     expect(resolveTier('anthropic', 'economy', multi)).toBe('anthropic/claude-haiku-4-5');
   });
@@ -84,6 +92,25 @@ describe('resolveTier — openai (base vs -mini vs -pro)', () => {
   });
   test('frontier -> -pro', () => {
     expect(resolveTier('openai', 'frontier', catalog)).toBe('openai/gpt-5.5-pro');
+  });
+});
+
+describe('resolveTier — google (balanced vs economy do not collapse when both exist)', () => {
+  const catalog = [
+    row('google/gemini-3.5-flash'),
+    row('openrouter/google/gemini-3.5-flash'),
+    row('google/gemini-3.5-flash-lite'),
+    row('openrouter/google/gemini-3.5-flash-lite'),
+  ];
+
+  test('balanced resolves to the plain -flash id, not -flash-lite', () => {
+    expect(resolveTier('google', 'balanced', catalog)).toBe('google/gemini-3.5-flash');
+  });
+  test('economy resolves to the -flash-lite id', () => {
+    expect(resolveTier('google', 'economy', catalog)).toBe('google/gemini-3.5-flash-lite');
+  });
+  test('balanced and economy resolve to different ids', () => {
+    expect(resolveTier('google', 'balanced', catalog)).not.toBe(resolveTier('google', 'economy', catalog));
   });
 });
 
@@ -130,5 +157,8 @@ describe('resolveTier — gateway-only vendors delegate to the curated flagship'
     expect(resolveTier('minimax', 'balanced', [])).toBe(toDefaultAliases().minimax);
     expect(resolveTier('moonshotai', 'economy', [])).toBe(toDefaultAliases().kimi);
     expect(resolveTier('bytedance-seed', 'frontier', [])).toBe(toDefaultAliases().seed);
+  });
+  test('an invalid tier still returns null for a gateway-only vendor (validation is not skipped)', () => {
+    expect(resolveTier('x-ai', 'not-a-tier', [])).toBeNull();
   });
 });

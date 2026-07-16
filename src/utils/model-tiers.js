@@ -42,7 +42,7 @@ const TIERS = {
   },
   google: {
     economy: /^gemini-[\d.]+-flash-lite/,
-    balanced: /^gemini-[\d.]+-flash/,
+    balanced: /^gemini-[\d.]+-flash(?!-lite)/,
     frontier: /^gemini-[\d.]+-pro/,
   },
   deepseek: {
@@ -97,12 +97,13 @@ function vendorHasModels(catalog, vendor) {
  */
 function resolveTier(vendor, tier, catalog) {
   if (typeof vendor !== 'string' || !vendor) { return null; }
+  if (!TIER_ORDER.includes(tier)) { return null; }
 
   const gatewayAlias = GATEWAY_ONLY_ALIAS[vendor];
   if (gatewayAlias) { return toDefaultAliases()[gatewayAlias] || null; }
 
   const table = TIERS[vendor];
-  if (!table || !TIER_ORDER.includes(tier)) { return null; }
+  if (!table) { return null; }
 
   const direct = pickForTier(catalog, vendor, table[tier]);
   if (direct) { return direct; }
