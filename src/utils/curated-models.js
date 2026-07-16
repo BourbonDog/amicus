@@ -160,8 +160,10 @@ function listCuratedRoutes() {
  * versioning, distinct model names, etc.). NEVER derive a direct form for
  * these — derivation would emit the wrong (dot) id, or invent a direct id
  * for a model that is OpenRouter-only today (e.g. fable).
+ * Frozen so consumers can only read it (`.has()`) — a frozen Set still
+ * supports lookups, it just can't be `.add()`/`.delete()`/`.clear()`-ed.
  */
-const DIVERGENT_VENDORS = new Set(['anthropic']);
+const DIVERGENT_VENDORS = Object.freeze(new Set(['anthropic']));
 
 /**
  * @param {string} orRoute e.g. 'openrouter/anthropic/claude-sonnet-5'

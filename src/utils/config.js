@@ -448,7 +448,7 @@ function markTierOnboarded() {
   }
 }
 
-/** Global cost-tier preference (Part 2, Task 1) — cheapest-to-priciest. */
+/** Global cost-tier preference (Part 2, Task 1) — priciest-to-cheapest. */
 const COST_TIERS = ['frontier', 'balanced', 'economy'];
 
 /** @returns {'frontier'|'balanced'|'economy'} config.routing.tier, defaulting/coercing to 'balanced' */

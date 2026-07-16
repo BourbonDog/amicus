@@ -44,12 +44,6 @@ async function handleStart(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
 
-  // Existing-user one-time onboarding offer (Part 2, Task 9): a non-blocking
-  // notice, printed at most once ever, pointing users who already have direct
-  // provider keys at the per-provider cost-aware default picker. No-ops on
-  // any non-interactive/--json run (see maybeOfferProviderDefaults).
-  maybeOfferProviderDefaults(args);
-
   const { model, alias } = await resolveLaunchModel(args);
   args.model = model;
 
@@ -60,6 +54,14 @@ async function handleStart(args) {
   if (!validation.valid) {
     process.exit(failJson(useJson, { code: validation.code || ERROR_CODES.BAD_ARGS, message: validation.error }));
   }
+
+  // Existing-user one-time onboarding offer (Part 2, Task 9): a non-blocking
+  // notice, printed at most once ever, pointing users who already have direct
+  // provider keys at the per-provider cost-aware default picker. No-ops on
+  // any non-interactive/--json run (see maybeOfferProviderDefaults). Fired
+  // only after validateStartArgs succeeds so a failed first `amicus start`
+  // doesn't burn the one-time flag.
+  maybeOfferProviderDefaults(args);
 
   // Budget gate for solo start
   if (!args['no-cost-gate']) {
