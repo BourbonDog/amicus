@@ -5,6 +5,29 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-07-16
+
+### Fixed
+
+- **Anthropic model aliases now route correctly for direct-Anthropic-key users.** `--model opus` /
+  `haiku` / `claude` / `sonnet` previously resolved to OpenRouter's dot-form id (e.g.
+  `anthropic/claude-opus-4.8`), which the direct Anthropic API rejects with `model_not_found` (it uses
+  dashes/date suffixes: `claude-opus-4-8`, `claude-haiku-4-5-20251001`). Aliases now carry per-gateway
+  executable ids and the router emits the selected gateway's native id. OpenRouter-only users were
+  unaffected.
+
+### Changed
+
+- `--model claude` / `--model sonnet` default target moves from Claude Sonnet 4.6 to **Claude Sonnet
+  5**; the offline model floor was refreshed to the current Anthropic family.
+- Availability-aware routing: a model not served on the selected gateway (e.g. Fable, which is
+  OpenRouter-only) routes to the gateway that has it, or errors clearly under an explicit `--gateway`.
+
+### Added
+
+- `amicus models --check --strict` exits non-zero on curated default-alias drift; a scheduled
+  `model-drift` CI workflow audits the per-gateway ids against the live (keyless) OpenRouter catalog.
+
 ## [3.1.0] - 2026-07-15
 
 ### Added
