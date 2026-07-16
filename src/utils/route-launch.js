@@ -137,25 +137,51 @@ function maybeMigrationNotice({ result, descriptor, gatewayMode, keys }) {
 }
 
 /**
- * Bridge: alias -> descriptor -> resolveRoute (Task 4.4).
+ * Bridge: alias -> descriptor -> resolveRoute (Task 4.4; gatewayIds bridging
+ * Task 3 of #61's gateway-correct-model-ids fix).
  * Resolves a raw model string to a Descriptor — if it is a known no-slash
  * alias (per getEffectiveAliases()), its concrete id is parsed instead, so an
  * alias pointing at an `openrouter/...` value is treated as an explicit,
  * force-OR literal while an alias pointing at a bare `vendor/model` is
- * policy-routed like any other canonical id. Assembles live key/catalog state
- * and delegates the actual decision to the pure gateway-router. Additive:
- * not wired into any launch path yet.
+ * policy-routed like any other canonical id.
+ *
+ * When the alias is UNMODIFIED from its curated default (effective value ===
+ * getDefaultAliases()[alias]), this also looks up curated-models'
+ * toGatewayRoutes()[alias] and threads it through as `gatewayIds`, and parses
+ * the descriptor from the gateway-native direct form (falling back to the
+ * openrouter form) rather than the single pinned alias string — the pinned
+ * string can be the wrong per-gateway form for divergent vendors (e.g.
+ * Anthropic's dash ids vs. OpenRouter's dot ids), so `toGatewayRoutes()` is
+ * the source of truth for actually-correct ids. A USER OVERRIDE (the
+ * effective alias differs from the curated default) or an alias with no
+ * curated route map intentionally skips all of this: no gatewayIds, and the
+ * user's own alias string is parsed as before — we must never impose curated
+ * Anthropic-style ids onto a target the user chose themselves. Full-id /
+ * non-alias inputs are likewise unaffected (no gatewayIds).
+ *
+ * Assembles live key/catalog state and delegates the actual decision to the
+ * pure gateway-router. Additive: not wired into any launch path yet.
  * @param {{model:string, gatewayMode:string, source:string, allowSelection?:boolean, validateModel?:boolean}} opts
  * @returns {Promise<object>} RouteResult (resolved | selection_required | error)
  */
 async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelection, validateModel }) {
-  // Lazy-required so jest.doMock('./config' | './model-descriptor' | './gateway-router', ...)
+  // Lazy-required so jest.doMock('./config' | './model-descriptor' | './gateway-router' | './curated-models', ...)
   // can intercept them per-test, matching the pattern already used above for model-catalog.
-  const { getEffectiveAliases } = require('./config');
+  const { getEffectiveAliases, getDefaultAliases } = require('./config');
   const { parseDescriptor } = require('./model-descriptor');
   const { resolveRoute } = require('./gateway-router');
+  const { toGatewayRoutes } = require('./curated-models');
   const aliases = getEffectiveAliases();
-  const concrete = (typeof model === 'string' && !model.includes('/') && aliases[model]) ? aliases[model] : model;
+  const isAlias = typeof model === 'string' && !model.includes('/') && !!aliases[model];
+  let concrete = isAlias ? aliases[model] : model;
+  let gatewayIds;
+  if (isAlias && aliases[model] === getDefaultAliases()[model]) {
+    const routes = toGatewayRoutes()[model];
+    if (routes) {
+      gatewayIds = routes;
+      concrete = routes.direct || routes.openrouter;
+    }
+  }
   const descriptor = parseDescriptor(concrete, { aliases });
   const keys = buildLaunchKeys();
   // Skip the catalog fetch entirely under --no-validate-model: gateway-router's
@@ -166,7 +192,7 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   // own `=== false` guard: any other value (incl. an omitted flag) still fetches,
   // so a caller can never skip the fetch while the gate still classifies against it.
   const catalogInfo = validateModel === false ? { models: [], lastRefreshError: null } : await getRouteCatalogInfo();
-  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
+  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo, gatewayIds });
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
     result = maybeMigrationNotice({ result, descriptor, gatewayMode, keys });

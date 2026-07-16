@@ -19,10 +19,14 @@ const ALIASES = {
   gpt: 'openai/gpt-5.5',
 };
 
-function loadRouteLaunch({ aliases = {}, apiKeys = ALL_FALSE, authKeys = {}, catalogModels = [], getCatalogInfoSpy } = {}) {
+function loadRouteLaunch({ aliases = {}, defaultAliases, apiKeys = ALL_FALSE, authKeys = {}, catalogModels = [], getCatalogInfoSpy } = {}) {
   jest.resetModules();
   jest.doMock('../src/utils/config', () => ({
     getEffectiveAliases: () => aliases,
+    // Defaults to `aliases` itself (trivially "not overridden") when the
+    // caller doesn't care about the override-guard distinction; tests that
+    // exercise Task 3's gatewayIds bridge pass a distinct `defaultAliases`.
+    getDefaultAliases: () => (defaultAliases !== undefined ? defaultAliases : aliases),
   }));
   jest.doMock('../src/utils/api-key-store', () => ({
     readApiKeys: () => apiKeys,
@@ -196,6 +200,51 @@ describe('resolveRouteForLaunch', () => {
       { model: 'openai/gpt-4o', gateway: 'direct', note: 'openai model' },
     ]));
     expect(r.suggestions.length).toBe(3);
+  });
+});
+
+describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Task 3)', () => {
+  // Real (unmocked) curated-models.toGatewayRoutes().opus, so this test tracks
+  // the actual curated Anthropic ids rather than hand-duplicating them.
+  const { toGatewayRoutes, toDefaultAliases } = require('../src/utils/curated-models');
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' }
+  const opusDefault = toDefaultAliases().opus; // whatever config stores as the effective alias today
+
+  test('opus alias (curated default, not overridden) resolves direct via the bridged dash-form gatewayIds id', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, opus: opusDefault },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, anthropic: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: opusRoutes.direct });
+    expect(r.executableId).toBe('anthropic/claude-opus-4-8');
+  });
+
+  test('opus alias (curated default, not overridden), OR-only key, resolves openrouter via the bridged gatewayIds id', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, opus: opusDefault },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, openrouter: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: opusRoutes.openrouter });
+    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-4.8');
+  });
+
+  test('user-overridden opus alias does NOT get curated gatewayIds — resolves the user\'s custom target', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      // User has repointed `opus` at some other model — effective alias
+      // differs from the curated default, so the override guard must skip
+      // the curated Anthropic gatewayIds entirely.
+      aliases: { ...ALIASES, opus: 'openai/gpt-9-custom' },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, openai: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-9-custom' });
+    // Must not have been coerced onto the curated Anthropic direct id.
+    expect(r.executableId).not.toBe(opusRoutes.direct);
   });
 });
 
