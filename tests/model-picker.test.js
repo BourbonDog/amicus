@@ -1,9 +1,9 @@
 /**
  * promptRouteSelection tests (#61 gateway routing integration, Task 6.3).
  *
- * The interactive alternatives picker for a direct-model miss. Mirrors
- * tests/model-validator.test.js's approach to stubbing readline/config for
- * promptModelSelection, adapted to the {model, gateway, note} suggestion
+ * The interactive alternatives picker for a direct-model miss. Mirrors the
+ * readline/config stubbing approach used elsewhere in this module for
+ * interactive pickers, adapted to the {model, gateway, note} suggestion
  * shape that route-launch.js's buildSuggestions produces.
  */
 

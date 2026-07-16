@@ -7,10 +7,10 @@
 // tests/mcp-model-validation.test.js for that coverage.
 
 describe('validateStartInputs', () => {
-  let validateStartInputs, findSimilar;
+  let validateStartInputs;
 
   beforeAll(() => {
-    ({ validateStartInputs, findSimilar } = require('../src/utils/validators'));
+    ({ validateStartInputs } = require('../src/utils/validators'));
   });
 
   describe('prompt validation', () => {
@@ -124,34 +124,5 @@ describe('validateStartInputs', () => {
       const result = validateStartInputs({ prompt: 'test', timeout: 999 });
       expect(result.error.message).toContain('999');
     });
-  });
-});
-
-describe('findSimilar', () => {
-  let findSimilar;
-
-  beforeAll(() => {
-    ({ findSimilar } = require('../src/utils/validators'));
-  });
-
-  test('finds prefix matches', () => {
-    const result = findSimilar('gem', ['gemini', 'gpt', 'opus']);
-    expect(result).toContain('gemini');
-    expect(result).not.toContain('gpt');
-  });
-
-  test('finds reverse prefix matches', () => {
-    const result = findSimilar('gemini-pro', ['gemini', 'gpt']);
-    expect(result).toContain('gemini');
-  });
-
-  test('returns empty for null input', () => {
-    const result = findSimilar(null, ['gemini']);
-    expect(result).toEqual([]);
-  });
-
-  test('limits to 3 results', () => {
-    const result = findSimilar('g', ['g1', 'g2', 'g3', 'g4', 'g5']);
-    expect(result.length).toBeLessThanOrEqual(3);
   });
 });

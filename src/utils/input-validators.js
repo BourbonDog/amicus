@@ -15,21 +15,6 @@ function getValidators() {
 }
 
 /**
- * Find candidates that start with the input or vice versa.
- * @param {string} input
- * @param {string[]} candidates
- * @returns {string[]} Up to 3 matching candidates
- */
-function findSimilar(input, candidates) {
-  if (!input) { return []; }
-  const lower = input.toLowerCase();
-  return candidates.filter(c => {
-    const cl = c.toLowerCase();
-    return cl.startsWith(lower) || lower.startsWith(cl);
-  }).slice(0, 3);
-}
-
-/**
  * Validate sidecar_start inputs before session creation.
  * Composes existing validators for prompt/timeout/agent. Model resolution is
  * NOT this function's concern (#61 Task 6.2): it is routed separately by the
@@ -160,4 +145,4 @@ function suggestCommand(input, candidates, maxDistance = 2, maxSuggestions = 3) 
     .map(({ c }) => c);
 }
 
-module.exports = { validateStartInputs, findSimilar, levenshteinDistance, suggestCommand };
+module.exports = { validateStartInputs, levenshteinDistance, suggestCommand };

@@ -426,6 +426,7 @@ Options for 'fanout':
   --json                       Emit the wave result as stable JSON on stdout
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
+  --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -467,6 +468,7 @@ Options for 'continue':
   <task_id>                    Required. Session to build on (positional)
   --prompt <text>              Required. Briefing for the new session
   --model <model>              Optional. Override the model (alias or provider/model)
+  --gateway <mode>             Routing when --model is given: auto (direct-first), direct, or openrouter
   --cwd <path>                 Project directory (default: cwd)
   --no-ui                      Run without GUI (autonomous mode)
   --json                       With --no-ui: emit the run result as stable JSON
