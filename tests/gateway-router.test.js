@@ -85,6 +85,47 @@ describe('resolveRoute — explicit modes', () => {
   });
 });
 
+describe('resolveRoute — per-gateway ids (req.gatewayIds, Task 2)', () => {
+  const GW = { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' };
+
+  test('direct route emits the direct-native id (dashes), not the descriptor dots', () => {
+    const r = resolveRoute(req('anthropic/claude-opus-4.8', {
+      gatewayIds: GW, keys: { ...NO_KEYS, anthropic: true }, catalogInfo: cat(['anthropic/claude-opus-4-8']) }));
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'anthropic/claude-opus-4-8' });
+  });
+
+  test('OR fallback emits the OR-native id (dots)', () => {
+    const r = resolveRoute(req('anthropic/claude-opus-4.8', {
+      gatewayIds: GW, keys: { ...NO_KEYS, openrouter: true }, catalogInfo: cat(['openrouter/anthropic/claude-opus-4.8']) }));
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: 'openrouter/anthropic/claude-opus-4.8' });
+  });
+
+  test('auto + direct key but model NOT on direct (fable) falls back to OR', () => {
+    const r = resolveRoute(req('anthropic/claude-fable-5', {
+      gatewayIds: { openrouter: 'openrouter/anthropic/claude-fable-5' }, // no direct form
+      keys: { ...NO_KEYS, anthropic: true, openrouter: true },
+      catalogInfo: cat(['openrouter/anthropic/claude-fable-5']) }));
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: 'openrouter/anthropic/claude-fable-5' });
+  });
+
+  test('--gateway direct for a direct-unavailable model errors', () => {
+    const r = resolveRoute(req('anthropic/claude-fable-5', { gatewayMode: 'direct',
+      gatewayIds: { openrouter: 'openrouter/anthropic/claude-fable-5' }, keys: { ...NO_KEYS, anthropic: true } }));
+    expect(r).toMatchObject({ kind: 'error', reason: 'direct_unavailable' });
+  });
+
+  test('--gateway openrouter for an openrouter-unavailable model errors', () => {
+    const r = resolveRoute(req('anthropic/claude-opus-4.8', { gatewayMode: 'openrouter',
+      gatewayIds: { direct: 'anthropic/claude-opus-4-8' }, keys: { ...NO_KEYS, openrouter: true } }));
+    expect(r).toMatchObject({ kind: 'error', reason: 'openrouter_unavailable' });
+  });
+
+  test('no gatewayIds → unchanged behavior (executableFor construction)', () => {
+    const r = resolveRoute(req('openai/gpt-5.5', { keys: { ...NO_KEYS, openai: true }, catalogInfo: cat(['openai/gpt-5.5']) }));
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5' });
+  });
+});
+
 describe('resolveRoute — non-canonical descriptor inputs', () => {
   test('string canonical id resolves like the equivalent parsed descriptor', () => {
     const r = resolveRoute({

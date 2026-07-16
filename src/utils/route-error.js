@@ -51,6 +51,8 @@ const REASON_TEXT = Object.freeze({
   no_key_for_vendor: 'No API key was found for this vendor via any gateway.',
   model_not_found: 'The requested model was not found in the catalog.',
   invalid_descriptor: 'The model identifier could not be parsed.',
+  direct_unavailable: "This model isn't available on the vendor's direct API; use OpenRouter or a different model.",
+  openrouter_unavailable: "This model isn't on OpenRouter; use --gateway direct or a different model.",
   [SELECTION_REQUIRED_REASON]: 'Multiple models match your request; a specific one must be selected.',
 });
 
@@ -63,6 +65,8 @@ const FIX_HINTS = Object.freeze({
   no_key_for_vendor: 'Add a provider key or an OpenRouter key.',
   model_not_found: 'Run `amicus models --refresh`, or pass --no-validate-model.',
   invalid_descriptor: 'Use a vendor/model id or a configured alias.',
+  direct_unavailable: 'Drop --gateway direct (use auto or --gateway openrouter), or pick a different model.',
+  openrouter_unavailable: 'Use --gateway direct, or pick a different model.',
   [SELECTION_REQUIRED_REASON]: 'Pick one of the suggestions below, or narrow the model id.',
 });
 

@@ -112,6 +112,29 @@ describe('route-error renderer (#61 Task 6.1)', () => {
     expect(message).toContain('google/gemini-2.5-flash');
   });
 
+  test('ROUTE_ERROR_REASONS closed set is unchanged by the new availability reasons (Task 2 back-compat)', () => {
+    expect(ROUTE_ERROR_REASONS).not.toContain('direct_unavailable');
+    expect(ROUTE_ERROR_REASONS).not.toContain('openrouter_unavailable');
+  });
+
+  test.each(['direct_unavailable', 'openrouter_unavailable'])(
+    'reason "%s" has non-empty REASON_TEXT guidance that renders in the CLI message',
+    (reason) => {
+      const result = routeError({
+        requested: 'anthropic/claude-fable-5',
+        reason,
+        preferredGateway: reason === 'direct_unavailable' ? 'direct' : 'openrouter',
+        suggestions: [],
+      });
+
+      expect(typeof REASON_TEXT[reason]).toBe('string');
+      expect(REASON_TEXT[reason].length).toBeGreaterThan(0);
+
+      const message = toCliMessage(result);
+      expect(message).toContain(REASON_TEXT[reason]);
+    }
+  );
+
   test('toStructuredError is pure (no mutation of the input result)', () => {
     const result = routeError({
       requested: 'acme/some-model',
