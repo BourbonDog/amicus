@@ -187,8 +187,12 @@ async function seedCatalog(print) {
  * (Enter = the vendor-diverse default), seeds aliases + councils.free, and
  * never touches config.default.
  * @param {readline.Interface} rl
+ * @param {Array<object>} [catalogArg] pre-fetched catalog from the caller
+ *   (`runReadlineSetup` already fetches one for the per-provider phase) --
+ *   reused as-is to avoid a second `getCatalog()` round trip. Falls back to
+ *   fetching its own when omitted (e.g. direct unit-test callers).
  */
-async function runFreeCouncilBranch(rl) {
+async function runFreeCouncilBranch(rl, catalogArg) {
   const keys = detectApiKeys();
   if (!keys.openrouter) {
     console.log('');
@@ -196,10 +200,14 @@ async function runFreeCouncilBranch(rl) {
     console.log('Set OPENROUTER_API_KEY and re-run: amicus setup. No changes made.');
     return;
   }
-  const { getCatalog } = require('../utils/model-catalog');
   const { listFreeModels, suggestFreeCouncil, PINNED_FREE_MODELS } = require('../utils/free-models');
   let catalog = [];
-  try { catalog = await getCatalog(); } catch (_e) { /* offline */ }
+  if (Array.isArray(catalogArg)) {
+    catalog = catalogArg;
+  } else {
+    const { getCatalog } = require('../utils/model-catalog');
+    try { catalog = await getCatalog(); } catch (_e) { /* offline */ }
+  }
   let free = listFreeModels(catalog);
   if (free.length === 0) {
     console.log('Live free-model list unavailable (offline?) — using a small pinned set.');
@@ -249,22 +257,30 @@ async function runFreeCouncilBranch(rl) {
  * Skippable and crash-proof: `runProviderDefaultFlow` already degrades to a
  * graceful summary line on an empty/offline catalog (never calls `ask`), and
  * a per-provider try/catch means one provider's failure can't block the rest
- * of setup (mirrors `cli-handlers.js`'s `offerProviderDefault`).
+ * of setup (mirrors `cli-handlers.js`'s `offerProviderDefault`). It's also a
+ * graceful no-op for a gateway provider (`openrouter`) -- see
+ * `runProviderDefaultFlow`'s `isDirectProvider` gate.
  * @param {readline.Interface} rl
  * @param {string[]} foundKeys keyed providers, in detection order
  * @param {Array<object>} catalog
+ * @returns {Promise<Set<string>>} vendor alias NAMES actually written this run
+ *   (i.e. `runProviderDefaultFlow` returned a non-null `chosenId`) -- the
+ *   standard model step must not clobber these when a quick-pick family
+ *   alias collides with one (see the standard-model-step alias-upgrade guard).
  */
 async function runProviderDefaultPickers(rl, foundKeys, catalog) {
-  if (foundKeys.length === 0) { return; }
+  const written = new Set();
+  if (foundKeys.length === 0) { return written; }
   const { runProviderDefaultFlow } = require('../utils/provider-default-prompt');
   for (const provider of foundKeys) {
     try {
-      const { summaryLine } = await runProviderDefaultFlow(provider, {
+      const { chosenId, summaryLine } = await runProviderDefaultFlow(provider, {
         interactive: true,
         ask: (q) => askQuestion(rl, q),
         catalog,
         print: console.log,
       });
+      if (chosenId) { written.add(provider); }
       console.log(summaryLine);
     } catch (err) {
       console.log(
@@ -274,6 +290,7 @@ async function runProviderDefaultPickers(rl, foundKeys, catalog) {
     }
   }
   console.log('');
+  return written;
 }
 
 /**
@@ -325,12 +342,14 @@ async function runReadlineSetup() {
 
     // Task 7 (cost-aware defaults P2): per-provider picker, once per keyed
     // provider, BEFORE the mode prompt -- orthogonal to standard-vs-free-council.
-    await runProviderDefaultPickers(rl, foundKeys, catalog);
+    // `vendorAliasesWritten` is consulted by the standard model step below so
+    // it never clobbers a vendor alias this phase just wrote (Fix 2).
+    const vendorAliasesWritten = await runProviderDefaultPickers(rl, foundKeys, catalog);
 
     const mode = await askQuestion(rl,
       'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
     if (mode === '2') {
-      await runFreeCouncilBranch(rl);
+      await runFreeCouncilBranch(rl, catalog);
       return;
     }
 
@@ -361,7 +380,12 @@ async function runReadlineSetup() {
     if (chosen.alias) {
       cfg.default = chosen.alias;
       const pick = picks.find(p => p.alias === chosen.alias);
-      if (pick && !chosen.noUpgrade) {
+      // Fix 2: a quick-pick family alias (e.g. 'deepseek') can collide with a
+      // vendor alias the per-provider phase just wrote this run. `config.default`
+      // pointing at that alias name is fine (the user's explicit overall-default
+      // choice), but the alias's VALUE must stay the vendor phase's tier choice --
+      // skip the curated-flagship upgrade so it isn't discarded.
+      if (pick && !chosen.noUpgrade && !vendorAliasesWritten.has(chosen.alias)) {
         cfg.aliases[chosen.alias] = toCanonicalDefault(pick.routes.openrouter || Object.values(pick.routes)[0]);
       } else if (cfg.aliases[chosen.alias] === undefined) {
         const fallback = getDefaultAliases()[chosen.alias];

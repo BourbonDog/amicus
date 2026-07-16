@@ -16,6 +16,7 @@
 'use strict';
 
 const { buildProviderDefaultChoices, applyProviderDefault } = require('./provider-default-picker');
+const { isDirectProvider } = require('./provider-registry');
 
 /** Format a $/M-input price for display; `null`/`undefined` -> 'n/a'. @param {number|null|undefined} pricePerMInput */
 function formatPrice(pricePerMInput) {
@@ -61,6 +62,14 @@ async function promptForChoice(ask, print, choices) {
  * caller to print. Never throws for an empty/offline catalog -- callers
  * should still wrap this in a try/catch (a picker bug must never abort an
  * already-successful key save).
+ *
+ * Gateway providers (e.g. `openrouter`) are a graceful no-op: `openrouter` is
+ * the GATEWAY, not a model vendor, so `buildProviderDefaultChoices` would
+ * match every OR-namespaced catalog row, "recommended" would be arbitrary,
+ * and writing `aliases.openrouter = "<some vendor>/<model>"` would be
+ * nonsensical. Per-provider defaults only make sense for DIRECT model
+ * vendors (`provider-registry.isDirectProvider`) -- no choices are built, no
+ * alias is written, and `config.default` is never seeded for a gateway.
  * @param {string} provider vendor name, e.g. 'anthropic'
  * @param {{interactive?: boolean, ask?: (prompt: string) => Promise<string>,
  *   catalog?: Array<object>, print?: (line: string) => void}} [options]
@@ -70,6 +79,15 @@ async function runProviderDefaultFlow(provider, options = {}) {
   const { interactive = false, ask } = options;
   const catalog = Array.isArray(options.catalog) ? options.catalog : [];
   const print = typeof options.print === 'function' ? options.print : () => {};
+
+  if (!isDirectProvider(provider)) {
+    return {
+      chosenId: null,
+      setAsDefault: false,
+      summaryLine: 'Per-provider defaults apply to direct provider keys (openai/anthropic/google/deepseek) -- ' +
+        'models routed via OpenRouter use your overall default.',
+    };
+  }
 
   const choices = buildProviderDefaultChoices(provider, { catalog });
   if (!choices.rows || choices.rows.length === 0) {

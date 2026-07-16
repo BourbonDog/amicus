@@ -422,6 +422,48 @@ describe('Setup Wizard', () => {
       const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
       expect(saved.default).toBe('gemini'); // standard step still ran normally
     });
+
+    it('Fix 2: standard step selecting the quick-pick family that collides with a just-written vendor alias (deepseek) keeps the tier-chosen id -- does not clobber it with the curated flagship', async () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
+
+      const { getCatalog } = require('../../src/utils/model-catalog');
+      getCatalog.mockResolvedValueOnce([
+        // 'balanced' tier (default cost tier) match for deepseek -- the
+        // per-provider phase's tier-chosen pick.
+        { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
+        // Newest/highest-version id -- what the standard step's quick-pick
+        // family resolver (resolveQuickPicks) would treat as the curated
+        // flagship for the 'deepseek' family alias.
+        { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
+      ]);
+
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((prompt, callback) => {
+        if (prompt.includes('Pick a number')) { callback(''); return; } // per-provider phase: accept preselected (tier-chosen)
+        if (prompt.includes('Setup mode')) { callback('1'); return; } // standard mode
+        callback('5'); // standard model step -> quick-pick families are
+        // [gemini, gemini-pro, gpt, opus, deepseek] (curated-models.js
+        // FAMILIES order) -> '5' selects the 'deepseek' family, whose alias
+        // name collides with the vendor alias the per-provider phase just wrote.
+      });
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      // The standard step's explicit choice legitimately becomes config.default...
+      expect(saved.default).toBe('deepseek');
+      // ...but the alias's VALUE must stay the per-provider phase's tier
+      // choice (deepseek-v3), NOT get overwritten with the curated flagship
+      // (deepseek-v4-pro) the standard step would otherwise upgrade it to.
+      expect(saved.aliases.deepseek).toBe('deepseek/deepseek-v3');
+    });
   });
 
   describe('runInteractiveSetup (Electron-first)', () => {
