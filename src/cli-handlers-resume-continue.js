@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { resolveModelFromArgs, validateFallbackModel } = require('./utils/start-helpers');
+const { resolveLaunchModel } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson, requireValidTaskId } = require('./utils/cli-preflight');
 
@@ -70,11 +70,25 @@ async function handleContinue(args) {
 
   requireNoUiForJson(args, useJson);
 
-  // F5: an explicitly passed --model gets the same resolution+validation as start.
+  // F5/#61 Task 7.3: an explicitly passed --model routes through the gateway
+  // router exactly like start (resolveLaunchModel), so --gateway / direct-first
+  // policy / structured route errors apply here too. The NO-`--model` case
+  // (inherit the prior session's model) is unchanged below — that IS the
+  // "preserve prior route" behavior: the prior concrete id is reused verbatim,
+  // never re-resolved.
+  // #61 Task 5.2 (best-effort provenance): stash the freshly-resolved
+  // gateway/resolutionVersion so the NEW session's metadata can record them.
+  // These stay undefined on the inherit-prior-model path (no fresh routing
+  // happened there), so the metadata writer simply omits them — the prior
+  // concrete model id being reused verbatim already prevents a silent gateway
+  // change for a continued session without a fresh --model.
+  let routeGateway;
+  let routeResolutionVersion;
   if (args.model !== undefined) {
-    const { model, alias } = resolveModelFromArgs(args);
+    const { model, gateway, provenance } = await resolveLaunchModel(args);
     args.model = model;
-    args.model = await validateFallbackModel(args, alias);
+    routeGateway = gateway;
+    routeResolutionVersion = provenance && provenance.resolutionVersion;
   }
 
   const { continueAmicus } = require('./index');
@@ -91,6 +105,8 @@ async function handleContinue(args) {
       headless: args['no-ui'],
       timeout: args.timeout,
       json: useJson,
+      gateway: routeGateway,
+      resolutionVersion: routeResolutionVersion,
     });
   } catch (err) {
     // Same rationale as handleResume above: continueSidecar/loadPreviousSession

@@ -224,6 +224,11 @@ async function executeMode(options) {
  * @param {string} [options.client] - Client type (e.g. 'cowork', 'code-local')
  * @param {string} [options.systemPrompt] - System prompt to set on agent config (hidden from UI)
  * @param {string} [options.agentName] - Agent to set systemPrompt on (default: 'chat')
+ * @param {string[]} [options.models] - Resolved executable id(s) actually launched on this
+ *   server (#61 Task 4.6/7.3 sole-input invariant) — a multi-model shared server (fanout)
+ *   has no single default `config.model`, so this registers ALL of them in provider.models
+ *   instead. Additive alongside the single-model `options.model` path used by owned-server
+ *   callers (start/continue); see opencode-client.js's buildServerOptions.
  * @returns {Promise<{client: object, server: object}>}
  * @throws {Error} If server fails to start or health check fails
  */
@@ -244,6 +249,7 @@ async function startOpenCodeServer(mcpConfig, options = {}) {
   const serverOptions = { port };
   if (mcpConfig) { serverOptions.mcp = mcpConfig; }
   if (options.client) { serverOptions.client = options.client; }
+  if (options.models) { serverOptions.models = options.models; }
   if (options.systemPrompt) { serverOptions.systemPrompt = options.systemPrompt; }
   if (options.agentName) { serverOptions.agentName = options.agentName; }
 

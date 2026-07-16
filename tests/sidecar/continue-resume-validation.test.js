@@ -71,15 +71,19 @@ describe('wiring (source guards)', () => {
   const fs = require('fs');
   const path = require('path');
 
-  it('handleContinue resolves+validates an explicit --model like start', () => {
-    // B21-rest: handleContinue moved from bin/amicus.js to its own module
-    // (src/cli-handlers-resume-continue.js) so the --json plumbing could fit
-    // under the size gate. Same behavior, new home — update the guard's source.
+  it('handleContinue routes an explicit --model through the gateway router, mirroring start (#61 Task 7.3)', () => {
+    // #61 Task 7.3: continue's explicit --model no longer goes through the
+    // legacy resolveModelFromArgs/validateFallbackModel pair — it now routes
+    // through resolveLaunchModel (start-helpers.js), the SAME router path
+    // `start` uses, so --gateway / direct-first policy / structured route
+    // errors apply to continue too. The NO-`--model` case (inherit the prior
+    // session's model) is untouched — see the guard below.
     const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'cli-handlers-resume-continue.js'), 'utf-8');
     const handler = src.slice(src.indexOf('async function handleContinue'));
-    expect(handler).toMatch(/resolveModelFromArgs/);
-    expect(handler).toMatch(/validateFallbackModel/);
+    expect(handler).toMatch(/resolveLaunchModel/);
     expect(handler).toMatch(/if \(args\.model !== undefined\)/);
+    expect(handler).not.toMatch(/resolveModelFromArgs/);
+    expect(handler).not.toMatch(/validateFallbackModel/);
   });
 
   it('continueSidecar and resumeSidecar warn on inherited models', () => {

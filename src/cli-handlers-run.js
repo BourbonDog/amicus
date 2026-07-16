@@ -160,7 +160,7 @@ async function handleFanout(args) {
 
   // Direct require — the src/index.js public re-export is added later (Task 13)
   const { runFanout } = require('./sidecar/fanout');
-  const { loadConfig } = require('./utils/config');
+  const { loadConfig, resolveGatewayMode } = require('./utils/config');
   const cfg = loadConfig() || {};
   const { exitCode } = await runFanout({
     models: args.models,
@@ -186,6 +186,9 @@ async function handleFanout(args) {
     noMcp: args['no-mcp'],
     excludeMcp: args['exclude-mcp'],
     noValidateModel: args['no-validate-model'],
+    // #61 Task 7.3: --gateway merged with routing.prefer, applied per leg
+    // by validateFanoutModels' router call.
+    gatewayMode: resolveGatewayMode(args.gateway),
     json: !!args.json,
     client: args.client,
     maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost,

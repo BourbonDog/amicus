@@ -169,6 +169,43 @@ describe('MCP spawn arg building', () => {
     });
   });
 
+  test('amicus_continue forwards --gateway to the spawned CLI child (#61 Task 7.3)', async () => {
+    // amicus_continue never resolves the route itself — it spawns a CLI child
+    // that does (piece 1 of #61 Task 7.3), so the MCP caller's gateway choice
+    // must ride along on the spawn args for the child's routing to honor it.
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_continue(
+        { taskId: 'old-gw', prompt: 'follow-up', noUi: true, gateway: 'openrouter' }, '/tmp'
+      );
+      const idx = capturedArgs.indexOf('--gateway');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('openrouter');
+    });
+  });
+
+  test('amicus_continue omits --gateway when not supplied', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_continue({ taskId: 'old-nogw', prompt: 'follow-up', noUi: true }, '/tmp');
+      expect(capturedArgs).not.toContain('--gateway');
+    });
+  });
+
   test('amicus_resume passes the DETECTED client, not a hardcoded cowork', async () => {
     let capturedArgs;
     await jest.isolateModulesAsync(async () => {
@@ -271,6 +308,43 @@ describe('MCP spawn arg building', () => {
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('cowork');
+    });
+  });
+
+  test('amicus_fanout forwards --gateway to the spawned CLI child (#61 Task 7.3)', async () => {
+    // amicus_fanout never resolves any leg's route itself — it spawns a CLI
+    // child that routes each leg (piece 2 of #61 Task 7.3), so the MCP
+    // caller's gateway choice must ride along on the spawn args.
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout(
+        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], gateway: 'direct' }, '/tmp'
+      );
+      const idx = capturedArgs.indexOf('--gateway');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('direct');
+    });
+  });
+
+  test('amicus_fanout omits --gateway when not supplied', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      expect(capturedArgs).not.toContain('--gateway');
     });
   });
 

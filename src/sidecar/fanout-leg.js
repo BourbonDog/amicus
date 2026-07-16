@@ -36,6 +36,31 @@ function writeLegPatch(legDir, patch) {
 }
 
 /**
+ * Synthesize an error run document for a leg whose MODEL never routed (#61
+ * Task 7.3) — the gateway router returned `error` (or, in principle,
+ * `selection_required`) for this leg's requested model before any session was
+ * created, so there is nothing to run. Mirrors the shape runLeg's own catch
+ * branch already produces for "setup threw before the session dir existed":
+ * no legDir, no summary, an `error` status — this never touches the shared
+ * server or the Promise.all in runFanout, so it can never sink a sibling leg.
+ * @param {{leg: {modelInput: string, routeResult: object}, legId: string,
+ *   waveId: string, quiet?: boolean}} args
+ * @returns {object} run document (status 'error')
+ */
+function buildRoutingFailureLeg({ leg, legId, waveId, quiet }) {
+  const { toCliMessage } = require('../utils/route-error');
+  const { buildRunResult } = require('../utils/result-schema');
+  const message = toCliMessage(leg.routeResult);
+  if (!quiet) {
+    process.stderr.write(`[fanout] leg ${legId} (${leg.modelInput}): error (routing)\n`);
+  }
+  return buildRunResult({
+    taskId: legId, metadata: {}, result: { error: message, completed: false },
+    summary: null, modelInput: leg.modelInput, sessionDir: null, waveId,
+  });
+}
+
+/**
  * Run one leg end-to-end: session record → runHeadless (shared server) →
  * leg finalize. Never throws — always resolves to a run document.
  */
@@ -129,4 +154,4 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   });
 }
 
-module.exports = { legStatusFromResult, writeLegPatch, runLeg };
+module.exports = { legStatusFromResult, writeLegPatch, runLeg, buildRoutingFailureLeg };

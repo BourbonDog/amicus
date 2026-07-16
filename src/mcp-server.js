@@ -851,6 +851,10 @@ const handlers = {
     const args = ['continue', input.taskId, '--prompt-file', briefingPath,
       '--task-id', newTaskId, '--client', detectClient(mcpServer), '--cwd', cwd];
     if (input.model) { args.push('--model', input.model); }
+    // #61 Task 7.3: forward the caller's gateway preference to the spawned
+    // CLI child, which does the actual model routing (piece 1) — unlike
+    // amicus_start, this handler never resolves the route itself.
+    if (input.gateway) { args.push('--gateway', input.gateway); }
     if (input.noUi) { args.push('--no-ui', '--agent', 'build'); }
     if (input.timeout) { args.push('--timeout', String(input.timeout)); }
     if (input.contextTurns)     { args.push('--context-turns', String(input.contextTurns)); }
@@ -991,6 +995,10 @@ const handlers = {
     ];
     const agent = input.agent || 'Build';
     args.push('--agent', agent);
+    // #61 Task 7.3: forward the caller's gateway preference to the spawned
+    // CLI child, which routes each leg's model (piece 2) — unlike
+    // amicus_start, this handler never resolves any leg's route itself.
+    if (input.gateway) { args.push('--gateway', input.gateway); }
     if (input.thinking)      { args.push('--thinking', input.thinking); }
     if (input.timeout)       { args.push('--timeout', String(input.timeout)); }
     if (input.summaryLength) { args.push('--summary-length', input.summaryLength); }

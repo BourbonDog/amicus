@@ -400,6 +400,10 @@ async function getSessionStatus(client, sessionId, directory) {
  * @param {AbortSignal} [options.signal] - Abort signal to stop server
  * @param {object} [options.mcp] - MCP server configurations
  * @param {string} [options.model] - Default model
+ * @param {string[]} [options.models] - Resolved executable id(s) actually launched (#61 Task
+ *   4.6/7.3 sole-input invariant) — a multi-model shared server (fanout) has no single
+ *   default model, so ALL of them register in provider.models via this instead of `model`.
+ *   Takes precedence over the `options.model` single-id fallback when non-empty.
  * @param {string} [options.client] - Client type ('cowork', 'code-local', etc.)
  * @param {string} [options.systemPrompt] - System prompt to set on agent config (hidden from UI)
  * @param {string} [options.agentName] - Agent to set systemPrompt on (default: 'chat')
@@ -476,8 +480,14 @@ function buildServerOptions(options = {}) {
   // model picker shows all configured models (single source of truth),
   // and register the actually-resolved launch route's provider so it
   // always matches config.model (the "sole input" invariant — see #61).
+  // A multi-model shared server (fanout, #61 Task 7.3) has no single
+  // config.model — options.models carries EVERY leg's resolved id instead,
+  // and takes precedence over the single-id options.model fallback.
   const { buildProviderModels } = require('./utils/config');
-  config.provider = buildProviderModels(options.model ? [options.model] : []);
+  const resolvedForProvider = (Array.isArray(options.models) && options.models.length)
+    ? options.models
+    : (options.model ? [options.model] : []);
+  config.provider = buildProviderModels(resolvedForProvider);
 
   // Register custom 'chat' agent: reads auto-approved, writes/bash require permission
   const chatAgent = {
@@ -607,6 +617,10 @@ function buildServerHandle(sdkServer, deps = {}) {
  * @param {AbortSignal} [options.signal] - Abort signal to stop server
  * @param {object} [options.mcp] - MCP server configurations
  * @param {string} [options.model] - Default model
+ * @param {string[]} [options.models] - Resolved executable id(s) actually launched (#61 Task
+ *   4.6/7.3 sole-input invariant) — a multi-model shared server (fanout) has no single
+ *   default model, so ALL of them register in provider.models via this instead of `model`.
+ *   Takes precedence over the `options.model` single-id fallback when non-empty.
  * @param {string} [options.client] - Client type ('cowork', 'code-local', etc.)
  * @returns {Promise<{client: object, server: {url: string, close: Function}}>}
  */
