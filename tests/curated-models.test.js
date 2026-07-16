@@ -48,6 +48,7 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.sonnet).toBe('anthropic/claude-sonnet-4.6');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4.5');
     expect(defaults.opus).toBe('anthropic/claude-opus-4.8');
+    expect(defaults.fable).toBe('anthropic/claude-fable-5');
     expect(defaults.gemini).toBe('google/gemini-3.5-flash');
     expect(defaults['gemini-pro']).toBe('google/gemini-3.1-pro-preview');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
