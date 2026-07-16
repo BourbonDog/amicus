@@ -88,7 +88,7 @@ Build on the previous sidecar's findings. The user wants to continue or extend t
 
 /** Create session metadata for continuation */
 function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
-  const { model, briefing, headless, agent } = options;
+  const { model, briefing, headless, agent, gateway, resolutionVersion } = options;
 
   const sessionDir = SessionPaths.sessionDir(project, taskId);
   fs.mkdirSync(sessionDir, { recursive: true });
@@ -104,6 +104,12 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
     createdAt: new Date().toISOString(),
     continuesFrom: oldTaskId
   };
+  // #61 Task 5.2 (best-effort provenance): only present when THIS continue
+  // call freshly routed an explicit --model through the gateway router — the
+  // no-model inherit path never re-resolves, so gateway/resolutionVersion
+  // stay undefined there and are simply omitted (never written as `undefined`).
+  if (gateway !== undefined) { metadata.gateway = gateway; }
+  if (resolutionVersion !== undefined) { metadata.resolutionVersion = resolutionVersion; }
 
   writeFileAtomic(SessionPaths.metadataFile(sessionDir), JSON.stringify(metadata, null, 2));
 
@@ -123,7 +129,8 @@ async function continueSidecar(options) {
     headless = false,
     timeout = 15,
     agent,
-    mcp, mcpConfig, client, noMcp, excludeMcp, json = false
+    mcp, mcpConfig, client, noMcp, excludeMcp, json = false,
+    gateway, resolutionVersion, // #61 Task 5.2 (best-effort provenance)
   } = options;
 
   // Load previous session data
@@ -168,7 +175,7 @@ async function continueSidecar(options) {
   logger.info('New continuation task', { newTaskId, oldTaskId });
 
   const sessionDir = createContinueSessionMetadata(newTaskId, project, {
-    model, briefing, headless, agent: effectiveAgent
+    model, briefing, headless, agent: effectiveAgent, gateway, resolutionVersion,
   }, oldTaskId);
 
   // Lock the NEW continuation session dir too — not just the previous one — so a

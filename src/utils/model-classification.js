@@ -16,10 +16,19 @@
  * - gateway === 'openrouter': id looks like `openrouter/<vendor>/<model>`, so
  *   vendor = id.split('/')[1]; namespace prefix is `openrouter/${vendor}/`.
  *
+ * Non-authoritative rows (`authoritative: false`, e.g. the hardcoded Anthropic
+ * floor-fallback tagged by model-fetcher.js when a keyed live fetch fails or no
+ * key is present — see fetchModelsFromProvider('anthropic', key)) cannot assert
+ * absence either: if EVERY row in the matched namespace is non-authoritative and
+ * the exact id is not among them, a miss returns `unknown`, not `invalid` — the
+ * floor is a stale/synthesized list, not a confirmed model roster, so it must
+ * never hard-block a launch (#61 4.3). A namespace containing at least one
+ * authoritative (live-fetched) row still yields `invalid` on a genuine miss.
+ *
  * Pure: the caller passes catalogInfo (from model-catalog.getCatalogInfo()).
  * @param {string} id       exact model id as the user gave it
  * @param {'direct'|'openrouter'} gateway  which namespace to match against
- * @param {{models: Array<{id:string}>, lastRefreshError?: string|null}} catalogInfo
+ * @param {{models: Array<{id:string, authoritative?: boolean}>, lastRefreshError?: string|null}} catalogInfo
  * @returns {'valid'|'invalid'|'unknown'}
  */
 function classifyModel(id, gateway, catalogInfo) {
@@ -43,7 +52,14 @@ function classifyModel(id, gateway, catalogInfo) {
   if (namespaceRows.length === 0) { return 'unknown'; }
 
   const present = namespaceRows.some(m => m.id === id);
-  return present ? 'valid' : 'invalid';
+  if (present) { return 'valid'; }
+
+  // Every matched row is a non-authoritative floor-fallback row (never live-
+  // fetched) -> a miss cannot be trusted as a confirmed absence. Never block.
+  const allNonAuthoritative = namespaceRows.every(m => m.authoritative === false);
+  if (allNonAuthoritative) { return 'unknown'; }
+
+  return 'invalid';
 }
 
 module.exports = { classifyModel };

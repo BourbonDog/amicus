@@ -1,16 +1,23 @@
 // tests/sidecar/fanout.test.js
 'use strict';
 
-const mockValidateAgainstCatalog = jest.fn(async (m) => m);
-jest.mock('../../src/utils/model-validator', () => ({
-  validateAgainstCatalog: mockValidateAgainstCatalog,
+// #61 Task 7.3: fanout leg models now route through resolveRouteForLaunch
+// (the gateway router bridge) instead of tryResolveModel/validateApiKey/
+// validateAgainstCatalog directly — mock the bridge so these tests never
+// depend on the real machine's configured API keys or a live catalog fetch.
+// Default: echo the requested model back as the resolved executableId (every
+// orchestrator-test model string below is already a fully-qualified
+// `vendor/model` or `openrouter/vendor/model` literal), matching the old
+// tryResolveModel passthrough for a slash-bearing input byte for byte.
+const mockResolveRouteForLaunch = jest.fn(async ({ model }) => ({
+  kind: 'resolved',
+  executableId: model,
+  gateway: model.startsWith('openrouter/') ? 'openrouter' : 'direct',
+  provenance: {},
 }));
-
-const mockValidateApiKey = jest.fn(() => ({ valid: true }));
-jest.mock('../../src/utils/validators', () => {
-  const actual = jest.requireActual('../../src/utils/validators');
-  return { ...actual, validateApiKey: mockValidateApiKey };
-});
+jest.mock('../../src/utils/route-launch', () => ({
+  resolveRouteForLaunch: (...args) => mockResolveRouteForLaunch(...args),
+}));
 
 jest.mock('../../src/utils/logger', () => ({
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -94,36 +101,88 @@ describe('fanout validation helpers', () => {
       expect(r2.legs).toHaveLength(11);
     });
 
-    it('resolves every model and keeps the original input alongside (with pricing field)', async () => {
+    it('routes every model through the gateway router and keeps the original input alongside (with pricing field)', async () => {
       const r = await validateFanoutModels('openrouter/a/b,c/d');
       expect(r.legs).toHaveLength(2);
-      expect(r.legs[0]).toMatchObject({ modelInput: 'openrouter/a/b', model: 'openrouter/a/b' });
-      expect(r.legs[1]).toMatchObject({ modelInput: 'c/d', model: 'c/d' });
+      expect(r.legs[0]).toMatchObject({ modelInput: 'openrouter/a/b', ok: true, model: 'openrouter/a/b' });
+      expect(r.legs[1]).toMatchObject({ modelInput: 'c/d', ok: true, model: 'c/d' });
       // pricing field is present (may be null if not in catalog)
       expect(Object.prototype.hasOwnProperty.call(r.legs[0], 'pricing')).toBe(true);
       expect(Object.prototype.hasOwnProperty.call(r.legs[1], 'pricing')).toBe(true);
-      expect(mockValidateAgainstCatalog).toHaveBeenCalledTimes(2);
+      expect(mockResolveRouteForLaunch).toHaveBeenCalledTimes(2);
     });
 
-    it('fails fast on a missing API key', async () => {
-      mockValidateApiKey.mockReturnValueOnce({ valid: false, error: 'Error: no key for provider a' });
+    // #61 whole-branch review FIX 2: a resolved leg carries its router notice
+    // (or null) forward so runFanout can surface it on the wave doc — fanout
+    // has no CLI-single stderr path to print it on directly.
+    it('carries a resolved leg\'s routeResult.notice forward (null when absent)', async () => {
+      mockResolveRouteForLaunch
+        .mockImplementationOnce(async ({ model }) => ({
+          kind: 'resolved', executableId: model, gateway: 'direct', provenance: {}, notice: 'migrated notice',
+        }))
+        .mockImplementationOnce(async ({ model }) => ({
+          kind: 'resolved', executableId: model, gateway: 'direct', provenance: {},
+        }));
       const r = await validateFanoutModels('a/b,c/d');
-      expect(r.error).toMatch(/no key/);
+      expect(r.legs[0].notice).toBe('migrated notice');
+      expect(r.legs[1].notice).toBeNull();
     });
 
-    it('fails fast on catalog rejection unless noValidateModel', async () => {
-      mockValidateAgainstCatalog.mockRejectedValueOnce(new Error('Model not in catalog: a/zzz'));
-      const r = await validateFanoutModels('a/zzz');
-      expect(r.error).toMatch(/not in catalog/);
+    // #61 Task 7.3: a routing failure (missing key, catalog miss, unresolvable
+    // alias) is now a PER-LEG outcome (`ok:false` + the router's RouteResult),
+    // not a whole-list `{error}` — sibling legs must still resolve. The
+    // pre-#61 fail-fast behavior for these three cases is superseded by the
+    // gateway router (resolveRoute's key/catalog checks), which
+    // validateFanoutModels now delegates to instead of tryResolveModel/
+    // validateApiKey/validateAgainstCatalog directly.
+    it('a leg with no key for its vendor fails ONLY that leg, not the whole list', async () => {
+      mockResolveRouteForLaunch.mockImplementationOnce(async () => ({
+        kind: 'error', type: 'model_route_error', field: 'model', requested: 'a/b',
+        reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [],
+      }));
+      const r = await validateFanoutModels('a/b,c/d');
+      expect(r.error).toBeUndefined();
+      expect(r.legs[0]).toMatchObject({ modelInput: 'a/b', ok: false });
+      expect(r.legs[0].routeResult.reason).toBe('no_key_for_vendor');
+      expect(r.legs[1]).toMatchObject({ modelInput: 'c/d', ok: true, model: 'c/d' });
+    });
 
+    it('a catalog miss fails ONLY that leg; --no-validate-model flips validateModel through to the router', async () => {
+      mockResolveRouteForLaunch.mockImplementationOnce(async () => ({
+        kind: 'error', type: 'model_route_error', field: 'model', requested: 'a/zzz',
+        reason: 'model_not_found', preferredGateway: 'direct', suggestions: [],
+      }));
+      const r = await validateFanoutModels('a/zzz');
+      expect(r.legs).toHaveLength(1);
+      expect(r.legs[0]).toMatchObject({ modelInput: 'a/zzz', ok: false });
+      expect(r.legs[0].routeResult.reason).toBe('model_not_found');
+
+      mockResolveRouteForLaunch.mockClear();
       const r2 = await validateFanoutModels('a/zzz', { noValidateModel: true });
       expect(r2.legs).toHaveLength(1);
+      expect(mockResolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ validateModel: false }));
     });
 
-    it('fails fast on an unresolvable alias', async () => {
-      // 'nosuchalias' has no slash → resolveModel throws (no such alias in config)
+    it('an unresolvable/invalid model string fails ONLY that leg', async () => {
+      mockResolveRouteForLaunch.mockImplementationOnce(async () => ({
+        kind: 'error', type: 'model_route_error', field: 'model', requested: 'nosuchalias-xyz-f4',
+        reason: 'invalid_descriptor', preferredGateway: 'auto', suggestions: [],
+      }));
       const r = await validateFanoutModels('nosuchalias-xyz-f4');
-      expect(r.error).toBeDefined();
+      expect(r.legs).toHaveLength(1);
+      expect(r.legs[0]).toMatchObject({ modelInput: 'nosuchalias-xyz-f4', ok: false });
+      expect(r.legs[0].routeResult.reason).toBe('invalid_descriptor');
+    });
+
+    it('forwards gatewayMode to the router per leg (defaults to auto when unset)', async () => {
+      await validateFanoutModels('a/b');
+      expect(mockResolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({
+        model: 'a/b', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: true,
+      }));
+
+      mockResolveRouteForLaunch.mockClear();
+      await validateFanoutModels('a/b', { gatewayMode: 'direct' });
+      expect(mockResolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ gatewayMode: 'direct' }));
     });
 
     it('treats invalid AMICUS_FANOUT_MAX_LEGS values as unset (default cap applies)', async () => {
@@ -190,6 +249,34 @@ describe('runFanout orchestrator', () => {
     expect(exitCode).toBe(0);
   });
 
+  it('feeds the shared server every resolved leg id (#61 Task 4.6/7.3 sole-input invariant)', async () => {
+    await runFanout(baseOpts());
+    expect(mockStartOpenCodeServer).toHaveBeenCalledTimes(1);
+    const serverOpts = mockStartOpenCodeServer.mock.calls[0][1];
+    expect(serverOpts).toMatchObject({ models: ['openrouter/a/b', 'openrouter/c/d'] });
+  });
+
+  // #61 whole-branch review FIX 2: a leg's migration notice (routeResult.notice)
+  // had no CLI stderr to land on in fanout — one process resolves MANY legs,
+  // not a single launch — so it must surface on the wave doc instead.
+  it('surfaces a leg-level migration notice on the wave doc (FIX 2)', async () => {
+    mockResolveRouteForLaunch.mockImplementationOnce(async ({ model }) => ({
+      kind: 'resolved', executableId: model, gateway: 'direct', provenance: {},
+      notice: 'Routing openai via direct API (previously OpenRouter). ' +
+        'Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.',
+    }));
+    const { wave } = await runFanout(baseOpts());
+    expect(wave.notices).toEqual([
+      'Routing openai via direct API (previously OpenRouter). ' +
+        'Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.',
+    ]);
+  });
+
+  it('an ordinary wave (no migration) has an empty notices array', async () => {
+    const { wave } = await runFanout(baseOpts());
+    expect(wave.notices).toEqual([]);
+  });
+
   it('derives leg ids from the wave id and persists legs as ordinary sessions with parentWave', async () => {
     const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafe1234' });
     expect(wave.waveId).toBe('cafe1234');
@@ -216,6 +303,59 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[0].status).toBe('complete');
     expect(wave.legs[1].status).toBe('timeout');
     expect(wave.legs[0].summary).toMatch(/^summary /);
+  });
+
+  // #61 perf cleanup: when EVERY leg fails routing, runFanout must short-
+  // circuit straight to the error wave BEFORE starting the shared OpenCode
+  // server — starting (and immediately tearing down) a server no leg will
+  // ever touch is pure waste. The resulting wave doc/counts/exitCode must be
+  // identical to what the old code produced via the server round-trip.
+  it('all legs unroutable short-circuits to an error wave WITHOUT starting the server (#61 perf)', async () => {
+    // .mockImplementationOnce (not .mockImplementation) x2, matching the two
+    // legs in baseOpts(): a persistent override here would leak into every
+    // later test in this file (jest.clearAllMocks() in beforeEach clears call
+    // data, not implementations set via .mockImplementation).
+    const routingFailure = async () => ({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'x',
+      reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [],
+    });
+    mockResolveRouteForLaunch.mockImplementationOnce(routingFailure).mockImplementationOnce(routingFailure);
+    const { wave, exitCode } = await runFanout({ ...baseOpts(), waveId: 'cafe3333' });
+
+    expect(mockStartOpenCodeServer).not.toHaveBeenCalled();
+    expect(mockRunHeadless).not.toHaveBeenCalled();
+    expect(wave.status).toBe('error');
+    expect(exitCode).toBe(1);
+    expect(wave.counts).toMatchObject({ total: 2, complete: 0, error: 2 });
+    expect(wave.legs.every(l => l.status === 'error')).toBe(true);
+    expect(wave.notices).toEqual([]);
+
+    // wave.json on disk agrees with the returned doc (same aggregation path).
+    const stored = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe3333', 'wave.json'), 'utf-8'));
+    expect(stored.status).toBe('error');
+    expect(stored.counts).toMatchObject({ total: 2, error: 2 });
+    const meta = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe3333', 'metadata.json'), 'utf-8'));
+    expect(meta.status).toBe('error');
+  });
+
+  it('a leg whose MODEL never routes fails ONLY that leg — sibling still runs (#61 Task 7.3)', async () => {
+    mockResolveRouteForLaunch.mockImplementationOnce(async () => ({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'openrouter/a/b',
+      reason: 'no_openrouter_key', preferredGateway: 'openrouter', suggestions: [],
+    }));
+    const { wave, exitCode } = await runFanout(baseOpts());
+    expect(wave.status).toBe('partial');
+    expect(exitCode).toBe(2);
+    expect(wave.legs[0].status).toBe('error');
+    expect(wave.legs[0].error).toMatch(/OpenRouter/i);
+    expect(wave.legs[1].status).toBe('complete');
+    // The unroutable leg never reaches the model runner — only the sibling does.
+    expect(mockRunHeadless).toHaveBeenCalledTimes(1);
+    // The shared server only registers the leg that actually resolved.
+    const serverOpts = mockStartOpenCodeServer.mock.calls[0][1];
+    expect(serverOpts.models).toEqual(['openrouter/c/d']);
   });
 
   it('a leg that REJECTS becomes an error leg, never sinks siblings', async () => {

@@ -12,6 +12,8 @@
 
 'use strict';
 
+const { isDirectProvider } = require('./provider-registry');
+
 /**
  * Wizard quick-pick families. `idPattern` matches the model segment after
  * `<vendorPath>/` (openrouter ns) or `<provider>/` (direct ns).
@@ -91,15 +93,42 @@ function getFamilies() {
 }
 
 /**
- * @returns {Object<string,string>} alias → pinned route (openrouter first). STATIC — runtime-safe.
+ * Direct-first canonicalization for a pinned `openrouter/<vendor>/<rest>`
+ * route: when `<vendor>` has a direct integration (provider-registry
+ * `isDirectProvider`), strip the `openrouter/` prefix so the resulting bare
+ * `<vendor>/<rest>` id is policy-routed by the gateway router (direct when a
+ * direct key exists, OpenRouter otherwise). Gateway-only vendors (no direct
+ * integration — e.g. qwen, x-ai, z-ai, mistralai, minimax, moonshotai,
+ * bytedance-seed) are returned unchanged, since OpenRouter is their only
+ * route anyway. Non-openrouter routes (already bare, or malformed) pass
+ * through unchanged.
+ * @param {string} route
+ * @returns {string}
+ */
+function toCanonicalDefault(route) {
+  if (typeof route === 'string' && route.startsWith('openrouter/')) {
+    const rest = route.slice('openrouter/'.length); // '<vendor>/<rest...>'
+    const slashIdx = rest.indexOf('/');
+    const vendor = slashIdx > 0 ? rest.slice(0, slashIdx) : null;
+    if (vendor && isDirectProvider(vendor)) { return rest; }
+  }
+  return route;
+}
+
+/**
+ * @returns {Object<string,string>} alias → pinned route, direct-first for
+ * direct-capable vendors (bare `vendor/model`), openrouter-prefixed for
+ * gateway-only vendors. STATIC — runtime-safe.
  */
 function toDefaultAliases() {
   const out = {};
   for (const f of FAMILIES) {
-    out[f.alias] = f.fallback.openrouter || Object.values(f.fallback)[0];
+    const route = f.fallback.openrouter || Object.values(f.fallback)[0];
+    out[f.alias] = toCanonicalDefault(route);
   }
   for (const e of CARDLESS) {
-    out[e.alias] = e.routes.openrouter || Object.values(e.routes)[0];
+    const route = e.routes.openrouter || Object.values(e.routes)[0];
+    out[e.alias] = toCanonicalDefault(route);
   }
   return out;
 }
@@ -122,4 +151,4 @@ function listCuratedRoutes() {
   return out;
 }
 
-module.exports = { getFamilies, toDefaultAliases, listCuratedRoutes };
+module.exports = { getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes };

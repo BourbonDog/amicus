@@ -42,20 +42,23 @@ describe('classifyModel', () => {
     expect(classifyModel('openai/gpt-5.5', 'direct', c)).toBe('unknown');
   });
 
-  // Judgment call (see task-4-report.md "Whole-branch fix" section): a query for
-  // an anthropic id not in the hardcoded floor list correctly returns 'invalid',
-  // not 'unknown', under per-vendor namespace matching. The anthropic rows are
-  // synthesized in-process unconditionally (never live-fetched — see
-  // model-fetcher.js ANTHROPIC_MODELS / model-catalog.js refreshCatalog()), so
-  // the anthropic namespace is never "empty" the way a failed-fetch vendor's
-  // namespace is. Per-vendor scoping fixes the described masking bug (another
-  // vendor's empty namespace being hidden behind the floor); it does not — and
-  // structurally cannot, without a floor-provenance flag not present in
-  // catalogInfo — distinguish "stale hardcoded floor" from "confirmed absent"
-  // for anthropic's own namespace. That is a pre-existing, orthogonal property
-  // of the hardcoded floor, unchanged by this fix.
-  test('anthropic id absent from the hardcoded floor -> invalid (floor is never "empty")', () => {
-    const c = catalog([{ id: 'anthropic/claude-opus-4-6' }]); // hardcoded floor
+  // #61 Task 4.3 (closes the carry-forward noted in task-4-report.md "Whole-branch
+  // fix" section): the anthropic hardcoded floor is a stale, synthesized list, not
+  // a confirmed model roster (see model-fetcher.js ANTHROPIC_MODELS / the
+  // fetchModelsFromProvider('anthropic', key) no-key and live-fetch-failure
+  // fallback paths). model-fetcher.js now tags every floor-fallback row
+  // `authoritative: false`. A miss against a namespace where EVERY matched row is
+  // non-authoritative can no longer be trusted as a confirmed absence, so it
+  // returns 'unknown' instead of 'invalid' — never hard-blocking a launch on a
+  // stale floor. Rows without the flag are authoritative (real live-fetched data),
+  // so a genuine miss there still returns 'invalid' (see the next test).
+  test('anthropic id absent from a non-authoritative floor -> unknown (never blocks)', () => {
+    const c = catalog([{ id: 'anthropic/claude-opus-4-6', authoritative: false }]); // floor-fallback row
+    expect(classifyModel('anthropic/claude-opus-4-8', 'direct', c)).toBe('unknown');
+  });
+
+  test('anthropic id absent from an authoritative (live-fetched) row -> invalid', () => {
+    const c = catalog([{ id: 'anthropic/claude-opus-4-6' }]); // no flag => authoritative
     expect(classifyModel('anthropic/claude-opus-4-8', 'direct', c)).toBe('invalid');
   });
 });

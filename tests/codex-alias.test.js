@@ -2,9 +2,9 @@
 const { getDefaultAliases } = require('../src/utils/config');
 
 describe('codex alias (#18)', () => {
-  test('resolves to a concrete openrouter codex model id', () => {
+  test('resolves to a concrete codex model id (bare, direct-capable — Task 8.1a)', () => {
     const codex = getDefaultAliases().codex;
-    expect(codex).toBe('openrouter/openai/gpt-5.3-codex');
+    expect(codex).toBe('openai/gpt-5.3-codex');
   });
 
   test('every default alias is a fully-qualified provider/model string', () => {

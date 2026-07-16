@@ -16,7 +16,7 @@ const { resolve } = require('node:path');
 
 const CONFIG = {
   maxLines: 300,
-  include: ['src/**/*.js'],
+  include: ['src/**/*.js', 'electron/**/*.js'],
   exclude: [
     'src/utils/config.js',
     // Grandfathered: already over the limit when the '**' glob bug was fixed
@@ -33,6 +33,12 @@ const CONFIG = {
     // Grandfathered: was 348 lines before Task 8 (seedFreeCouncil + deriveFreeAlias landed
     // before the staged-file gate caught sidecar/setup.js). Shrink below 300, then remove.
     'src/sidecar/setup.js',
+    // Grandfathered (#61 cleanup): already over the limit when electron/**/*.js
+    // was added to `include` — electron/ was never size-gated before this.
+    // Shrink below 300, then remove from this list.
+    'electron/setup-ui.js',
+    'electron/main.js',
+    'electron/setup-ui-styles.js',
   ],
 };
 

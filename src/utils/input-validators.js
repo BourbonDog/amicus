@@ -3,7 +3,8 @@
 /**
  * @module input-validators
  * MCP input validation with structured error responses.
- * Composes validators from validators.js and adds model resolution.
+ * Composes validators from validators.js for prompt/timeout/agent checks.
+ * Model resolution/routing lives in mcp-server.js (#61 Task 6.2), not here.
  */
 
 // Lazy require to avoid circular dependency (validators.js re-exports from here)
@@ -14,25 +15,14 @@ function getValidators() {
 }
 
 /**
- * Find candidates that start with the input or vice versa.
- * @param {string} input
- * @param {string[]} candidates
- * @returns {string[]} Up to 3 matching candidates
- */
-function findSimilar(input, candidates) {
-  if (!input) { return []; }
-  const lower = input.toLowerCase();
-  return candidates.filter(c => {
-    const cl = c.toLowerCase();
-    return cl.startsWith(lower) || lower.startsWith(cl);
-  }).slice(0, 3);
-}
-
-/**
  * Validate sidecar_start inputs before session creation.
- * Composes existing validators and adds model resolution.
+ * Composes existing validators for prompt/timeout/agent. Model resolution is
+ * NOT this function's concern (#61 Task 6.2): it is routed separately by the
+ * mcp-server.js amicus_start handler via resolveRouteForLaunch, so a routing
+ * failure can be rendered as a structured `model_route_error` (parity with the
+ * CLI's resolveLaunchModel) rather than the `validation_error` shape below.
  * @param {Object} input - Raw MCP tool input
- * @returns {{ valid: true, resolvedModel: string } | { valid: false, error: Object }}
+ * @returns {{ valid: true } | { valid: false, error: Object }}
  */
 function validateStartInputs(input) {
   // 1. Prompt
@@ -49,27 +39,7 @@ function validateStartInputs(input) {
     };
   }
 
-  // 2. Model: resolve alias to full provider/model string
-  const { tryResolveModel, getEffectiveAliases } = require('./config');
-  const { model: resolved, error: modelError } = tryResolveModel(input.model);
-  if (modelError) {
-    const aliases = Object.keys(getEffectiveAliases());
-    const suggestions = findSimilar(input.model, aliases);
-    return {
-      valid: false,
-      error: {
-        type: 'validation_error',
-        field: 'model',
-        message: input.model
-          ? `Model '${input.model}' not found. ${modelError}`
-          : `No model specified and no default configured. ${modelError}`,
-        suggestions,
-        available: aliases,
-      },
-    };
-  }
-
-  // 3. Timeout: positive number, max 60 minutes
+  // 2. Timeout: positive number, max 60 minutes
   if (input.timeout !== undefined) {
     const t = Number(input.timeout);
     if (isNaN(t) || t <= 0) {
@@ -94,7 +64,7 @@ function validateStartInputs(input) {
     }
   }
 
-  // 4. Agent + headless compatibility
+  // 3. Agent + headless compatibility
   // Note: MCP Zod schema defaults agent to 'Chat'. The handler auto-converts
   // Chat to Build for headless mode (line ~92 in mcp-server.js). Only reject
   // if the user explicitly set agent to Chat with noUi (not the Zod default).
@@ -121,7 +91,7 @@ function validateStartInputs(input) {
     }
   }
 
-  return { valid: true, resolvedModel: resolved };
+  return { valid: true };
 }
 
 /**
@@ -175,4 +145,4 @@ function suggestCommand(input, candidates, maxDistance = 2, maxSuggestions = 3) 
     .map(({ c }) => c);
 }
 
-module.exports = { validateStartInputs, findSimilar, levenshteinDistance, suggestCommand };
+module.exports = { validateStartInputs, levenshteinDistance, suggestCommand };

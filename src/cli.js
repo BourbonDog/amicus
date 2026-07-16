@@ -18,6 +18,7 @@ const {
 } = require('./utils/validators');
 const { resolvePromptSource } = require('./utils/prompt-source');
 const { logger } = require('./utils/logger');
+const { GATEWAY_MODES } = require('./utils/model-descriptor');
 
 /**
  * Default values per spec §4.1
@@ -245,6 +246,15 @@ function validateStartArgs(args) {
     }
   }
 
+  // Validate --gateway (if provided) — #61 Task 7.1. resolveGatewayMode()
+  // already treats any non-'direct'/'openrouter' string as a pass-through
+  // (effectively silent auto fallback), so this pre-flight check exists
+  // purely to catch typos with a clear error instead of letting them slip
+  // through unnoticed.
+  if (args.gateway !== undefined && !GATEWAY_MODES.includes(args.gateway)) {
+    return { valid: false, error: `Error: --gateway must be one of: ${GATEWAY_MODES.join(', ')}` };
+  }
+
   // Validate MCP spec format (if provided)
   const mcpCheck = validateMcpSpec(args.mcp);
   if (!mcpCheck.valid) {
@@ -401,6 +411,7 @@ Options for 'start':
   --exclude-mcp <name>           Exclude specific MCP server (repeatable)
   --validate-model             (Deprecated: validation is on by default)
   --no-validate-model          Skip model-catalog validation before launch
+  --gateway <mode>             Routing: auto (direct-first), direct, or openrouter
   --position <pos>             Window position: right (default), left, center
 `,
   fanout: `
@@ -415,6 +426,7 @@ Options for 'fanout':
   --json                       Emit the wave result as stable JSON on stdout
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
+  --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -456,6 +468,7 @@ Options for 'continue':
   <task_id>                    Required. Session to build on (positional)
   --prompt <text>              Required. Briefing for the new session
   --model <model>              Optional. Override the model (alias or provider/model)
+  --gateway <mode>             Routing when --model is given: auto (direct-first), direct, or openrouter
   --cwd <path>                 Project directory (default: cwd)
   --no-ui                      Run without GUI (autonomous mode)
   --json                       With --no-ui: emit the run result as stable JSON

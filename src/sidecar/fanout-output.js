@@ -32,6 +32,11 @@ function formatWaveHuman(wave) {
     lines.push('');
   }
   if (wave.error) { lines.push(`Error: ${wave.error}`); }
+  // #61 whole-branch review FIX 2: advisory per-leg migration notices (no
+  // routing effect) surfaced here since fanout has no CLI-single stderr path.
+  if (Array.isArray(wave.notices) && wave.notices.length) {
+    for (const notice of wave.notices) { lines.push(`Notice: ${notice}`); }
+  }
   lines.push('─'.repeat(40));
   const counts = wave.counts || { complete: '?', total: '?' };
   lines.push(`Wave ${wave.waveId}: ${wave.status} — ${counts.complete}/${counts.total} complete in ${fmtDuration(wave.durationMs)}`);

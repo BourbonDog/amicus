@@ -7,10 +7,7 @@
  */
 
 const readline = require('readline');
-const { fetchModelsFromProvider } = require('./model-fetcher');
-const { readApiKeyValues } = require('./api-key-store');
 const { loadConfig, saveConfig, getConfigPath } = require('./config');
-const { logger } = require('./logger');
 
 /**
  * Normalize a model ID to include the provider prefix.
@@ -34,54 +31,6 @@ const ALIAS_SEARCH_TERMS = {
 };
 
 /**
- * Validate a direct-API fallback model exists on the provider.
- * Returns silently if valid. On failure: prompts (interactive) or throws (headless).
- *
- * @param {string} resolvedModel - e.g. 'google/gemini-3.1-flash-lite-preview'
- * @param {string} alias - Original alias name (e.g. 'gemini')
- * @param {object} [options]
- * @param {boolean} [options.headless] - If true, throw instead of prompting
- * @returns {Promise<string>} Confirmed model string
- */
-async function validateDirectModel(resolvedModel, alias, options = {}) {
-  const parts = resolvedModel.split('/');
-  if (parts.length < 2) { return resolvedModel; }
-
-  const provider = parts[0];
-  const modelId = parts.slice(1).join('/');
-
-  const keys = readApiKeyValues();
-  const providerKey = keys[provider];
-  if (!providerKey) { return resolvedModel; }
-
-  let models;
-  try {
-    models = await fetchModelsFromProvider(provider, providerKey);
-  } catch (err) {
-    logger.debug({ msg: 'Model fetch failed, skipping validation', error: err.message });
-    return resolvedModel;
-  }
-
-  if (!models || models.length === 0) { return resolvedModel; }
-
-  const found = models.some(m => m.id === resolvedModel || m.id === modelId);
-  if (found) { return resolvedModel; }
-
-  const relevant = filterRelevantModels(models, alias);
-
-  if (options.headless || !process.stdin.isTTY) {
-    const list = relevant.slice(0, 10).map(m => `  ${normalizeModelId(provider, m.id)}`).join('\n');
-    throw new Error(
-      `Model '${modelId}' not found on ${provider} API.\n` +
-      `Available models:\n${list}\n` +
-      `Fix with: amicus setup --add-alias ${alias}=${relevant[0] ? normalizeModelId(provider, relevant[0].id) : 'provider/model'}`
-    );
-  }
-
-  return promptModelSelection(relevant, alias, provider, modelId);
-}
-
-/**
  * Filter models to those relevant to the alias
  * @param {Array<{id: string, name: string}>} models
  * @param {string} alias - e.g. 'gemini', 'gpt', 'opus'
@@ -101,54 +50,83 @@ function filterRelevantModels(models, alias) {
   return filtered.slice(0, 15);
 }
 
-/** Interactive prompt — ask user to pick from available models */
-async function promptModelSelection(models, alias, provider, failedModelId) {
-  process.stderr.write(`\n  Model '${failedModelId}' not found on ${provider} API.\n`);
-  process.stderr.write('  Available models:\n');
-  models.forEach((m, i) => {
-    const label = (m.name && m.name !== m.id) ? `${m.name} (${m.id})` : m.id;
-    process.stderr.write(`    ${i + 1}. ${label}\n`);
+/**
+ * Interactive alternatives picker for a direct-model miss (#61 Task 6.3, spec
+ * Decision 10). Presents `selectionResult.suggestions` (built upstream by
+ * route-launch.js's buildSuggestions) as a labeled numbered menu and lets the
+ * user pick one, or cancel. Uses the same readline + persist pattern (same
+ * save-with-malformed-config guard) as other model pickers in this module,
+ * adapted to the `{model, gateway, note}` suggestion shape instead of
+ * provider `{id, name}` rows.
+ *
+ * Never auto-selects — even a single suggestion still requires an explicit
+ * pick. Cancellation (empty input, an out-of-range number, or no suggestions
+ * to offer) always throws; the caller (resolveLaunchModel) is expected to
+ * catch and translate that into a "cancelled" stderr message + exit(1).
+ *
+ * @param {{requested: string, suggestions: Array<{model:string, gateway:string, note?:string}>}} selectionResult
+ * @param {string|undefined} alias - alias to persist the choice under, if any
+ * @returns {Promise<{model: string, gateway: string}>}
+ */
+async function promptRouteSelection(selectionResult, alias) {
+  const suggestions = (selectionResult && Array.isArray(selectionResult.suggestions))
+    ? selectionResult.suggestions : [];
+  const requested = selectionResult && selectionResult.requested;
+
+  process.stderr.write(`\n  Model '${requested}' isn't available on the direct API.\n`);
+
+  if (suggestions.length === 0) {
+    process.stderr.write('  No alternatives available.\n\n');
+    throw new Error('Model selection cancelled.');
+  }
+
+  process.stderr.write('  Alternatives:\n');
+  suggestions.forEach((s, i) => {
+    const note = s && s.note ? ` — ${s.note}` : '';
+    process.stderr.write(`    ${i + 1}. ${s && s.model}  [${s && s.gateway}]${note}\n`);
   });
   process.stderr.write('\n');
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
 
   const answer = await new Promise(resolve => {
-    rl.question(`  Select a model (1-${models.length}) or press Enter to cancel: `, resolve);
+    rl.question(`  Select (1-${suggestions.length}) or Enter to cancel: `, resolve);
   });
   rl.close();
 
   const idx = parseInt(answer, 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= models.length) {
+  if (isNaN(idx) || idx < 0 || idx >= suggestions.length) {
     throw new Error('Model selection cancelled.');
   }
 
-  const selected = models[idx];
-  const newModel = normalizeModelId(provider, selected.id);
+  const chosen = suggestions[idx];
+  const newModel = chosen.model;
 
-  let config = loadConfig();
-  if (!config) {
-    const fs = require('fs');
-    const configPath = getConfigPath();
-    if (fs.existsSync(configPath)) {
-      throw new Error(
-        `Cannot save model selection: config file at ${configPath} is malformed. ` +
-        'Fix it manually or run \'amicus setup\'.'
-      );
+  if (alias) {
+    let config = loadConfig();
+    if (!config) {
+      const fs = require('fs');
+      const configPath = getConfigPath();
+      if (fs.existsSync(configPath)) {
+        throw new Error(
+          `Cannot save model selection: config file at ${configPath} is malformed. ` +
+          'Fix it manually or run \'amicus setup\'.'
+        );
+      }
+      config = {};
     }
-    config = {};
+    if (!config.aliases) { config.aliases = {}; }
+    config.aliases[alias] = newModel;
+    try {
+      saveConfig(config);
+      process.stderr.write(`  Saved: ${alias} -> ${newModel}\n`);
+    } catch (err) {
+      process.stderr.write(`  Warning: Could not save selection (${err.message}). Using for this session only.\n`);
+    }
   }
-  if (!config.aliases) { config.aliases = {}; }
-  config.aliases[alias] = newModel;
-  try {
-    saveConfig(config);
-    process.stderr.write(`  Saved: ${alias} → ${newModel}\n`);
-  } catch (err) {
-    process.stderr.write(`  Warning: Could not save selection (${err.message}). Using for this session only.\n`);
-  }
-  process.stderr.write(`  (To change later: amicus setup --add-alias ${alias}=...)\n\n`);
+  process.stderr.write('\n');
 
-  return newModel;
+  return { model: newModel, gateway: chosen.gateway };
 }
 
 /**
@@ -204,4 +182,10 @@ async function warnIfNotInCatalog(model) {
   }
 }
 
-module.exports = { validateDirectModel, filterRelevantModels, normalizeModelId, validateAgainstCatalog, warnIfNotInCatalog };
+module.exports = {
+  filterRelevantModels,
+  normalizeModelId,
+  validateAgainstCatalog,
+  warnIfNotInCatalog,
+  promptRouteSelection,
+};

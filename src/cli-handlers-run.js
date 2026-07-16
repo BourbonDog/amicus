@@ -14,9 +14,10 @@
 
 const { validateStartArgs } = require('./cli');
 const { validateTaskId } = require('./utils/validators');
-const { resolveModelFromArgs, validateFallbackModel } = require('./utils/start-helpers');
+const { resolveLaunchModel } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
+const { GATEWAY_MODES } = require('./utils/model-descriptor');
 
 /**
  * Handle 'sidecar start' command
@@ -43,9 +44,8 @@ async function handleStart(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
 
-  const { model, alias } = resolveModelFromArgs(args);
+  const { model, alias } = await resolveLaunchModel(args);
   args.model = model;
-  args.model = await validateFallbackModel(args, alias);
 
   // Normalize agent: --agent takes precedence, otherwise use --mode
   args.agent = args.agent || args.mode;
@@ -108,6 +108,14 @@ async function handleStart(args) {
 async function handleFanout(args) {
   const useJson = !!args.json;
 
+  // FIX 4 (#61 whole-branch review, cheap parity): handleStart validates
+  // --gateway via validateStartArgs (cli.js) — fanout never did, so a typo'd
+  // value silently fell through to resolveGatewayMode's pass-through instead
+  // of failing fast with a clear error.
+  if (args.gateway !== undefined && !GATEWAY_MODES.includes(args.gateway)) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --gateway must be one of: ${GATEWAY_MODES.join(', ')}` }));
+  }
+
   const { resolvePromptSource } = require('./utils/prompt-source');
   const promptRes = resolvePromptSource(args);
   if (promptRes.error) {
@@ -161,7 +169,7 @@ async function handleFanout(args) {
 
   // Direct require — the src/index.js public re-export is added later (Task 13)
   const { runFanout } = require('./sidecar/fanout');
-  const { loadConfig } = require('./utils/config');
+  const { loadConfig, resolveGatewayMode } = require('./utils/config');
   const cfg = loadConfig() || {};
   const { exitCode } = await runFanout({
     models: args.models,
@@ -187,6 +195,9 @@ async function handleFanout(args) {
     noMcp: args['no-mcp'],
     excludeMcp: args['exclude-mcp'],
     noValidateModel: args['no-validate-model'],
+    // #61 Task 7.3: --gateway merged with routing.prefer, applied per leg
+    // by validateFanoutModels' router call.
+    gatewayMode: resolveGatewayMode(args.gateway),
     json: !!args.json,
     client: args.client,
     maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost,

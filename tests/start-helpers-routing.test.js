@@ -1,0 +1,282 @@
+'use strict';
+
+// resolveLaunchModel (#61 gateway routing integration, Task 4.5) — routes
+// every launch (start, continue via Task 7.3, MCP amicus_start via Task 6.2)
+// through resolveRouteForLaunch. This replaced the legacy
+// resolveModelFromArgs/validateFallbackModel pair, retired in Task 4.7 once
+// no launch path depended on it anymore.
+//
+// route-launch (network/catalog-touching) is mocked per test, mirroring the
+// pattern in tests/route-launch.test.js. route-error is NOT mocked — it's
+// pure, so its real rendering is exercised end to end.
+
+function loadStartHelpers({ resolveRouteForLaunch, loadConfig = () => null, promptRouteSelection } = {}) {
+  jest.resetModules();
+  jest.doMock('../src/utils/config', () => ({
+    loadConfig,
+    resolveGatewayMode: () => 'auto',
+  }));
+  if (resolveRouteForLaunch) {
+    jest.doMock('../src/utils/route-launch', () => ({ resolveRouteForLaunch }));
+  }
+  if (promptRouteSelection) {
+    jest.doMock('../src/utils/model-validator', () => ({ promptRouteSelection }));
+  }
+  return require('../src/utils/start-helpers');
+}
+
+afterEach(() => {
+  jest.dontMock('../src/utils/config');
+  jest.dontMock('../src/utils/route-launch');
+  jest.dontMock('../src/utils/model-validator');
+  jest.resetModules();
+});
+
+describe('resolveLaunchModel', () => {
+  test('resolved: returns {model, alias, gateway} and writes nothing to stderr when there is no notice', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: { source: 'cli' },
+    });
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    const out = await resolveLaunchModel({ model: 'gpt' });
+
+    expect(out).toMatchObject({ model: 'openai/gpt-5.5', alias: 'gpt', gateway: 'direct' });
+    expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gpt', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: true,
+    }));
+    expect(errSpy).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  test('resolved: --no-validate-model flips validateModel to false', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: {},
+    });
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await resolveLaunchModel({ model: 'gpt', 'no-validate-model': true });
+
+    expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ validateModel: false }));
+    errSpy.mockRestore();
+  });
+
+  test('resolved: prints the notice to stderr when present', async () => {
+    const notice = "Model 'x' is unverified against the direct catalog; attempting anyway.";
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'resolved', gateway: 'openrouter', executableId: 'openrouter/openai/gpt-5.5', provenance: {}, notice,
+    });
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    const out = await resolveLaunchModel({ model: 'gpt' });
+
+    expect(out.model).toBe('openrouter/openai/gpt-5.5');
+    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining(notice));
+    errSpy.mockRestore();
+  });
+
+  test('error: writes the human CLI message to stderr and exits 1', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'ghost/model',
+      reason: 'model_not_found', preferredGateway: null, suggestions: [],
+    });
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({ model: 'ghost/model' })).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toMatch(/not found in the catalog/);
+    expect(written).not.toContain('"type":"model_route_error"'); // human text, not JSON
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  test('error with args.json:true writes structured JSON (type:model_route_error) to stderr and exits 1', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'ghost/model',
+      reason: 'model_not_found', preferredGateway: null, suggestions: [],
+    });
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({ model: 'ghost/model', json: true })).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toContain('"type":"model_route_error"');
+    const doc = JSON.parse(written.trim());
+    expect(doc).toMatchObject({ type: 'model_route_error', reason: 'model_not_found', requested: 'ghost/model' });
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  // selection_required now routes through the interactive alternatives picker
+  // (#61 Task 6.3) instead of always rendering as a structured error — the
+  // router only ever returns kind:'selection_required' when allowSelection
+  // was true (see gateway-router.js's catalogGate), i.e. a real interactive
+  // TTY session. The picker itself (promptRouteSelection) is mocked here;
+  // its own behavior is covered by tests/model-picker.test.js.
+
+  test('selection_required: a cancelled picker writes the cancel message to stderr and exits 1', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'selection_required', requested: 'gpt-5', suggestions: [{ model: 'openai/gpt-5.5', gateway: 'direct' }],
+    });
+    const promptRouteSelection = jest.fn().mockRejectedValue(new Error('Model selection cancelled.'));
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, promptRouteSelection });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({ model: 'gpt-5' })).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(promptRouteSelection).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'selection_required', requested: 'gpt-5' }),
+      'gpt-5' // deriveAlias({model:'gpt-5'}) -> the raw no-slash token
+    );
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toMatch(/cancelled/i);
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  test('selection_required with args.json:true still routes through the picker; a cancel writes plain text, not JSON', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'selection_required', requested: 'gpt-5', suggestions: [{ model: 'openai/gpt-5.5', gateway: 'direct' }],
+    });
+    const promptRouteSelection = jest.fn().mockRejectedValue(new Error('Model selection cancelled.'));
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, promptRouteSelection });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({ model: 'gpt-5', json: true })).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).not.toContain('"type":"model_route_error"');
+    expect(written).toMatch(/cancelled/i);
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  test('selection_required: interactive TTY resolves through the picker and returns the chosen model', async () => {
+    const origIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+    try {
+      const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+        kind: 'selection_required', requested: 'gpt-5', suggestions: [{ model: 'openai/gpt-5.5', gateway: 'direct' }],
+      });
+      const promptRouteSelection = jest.fn().mockResolvedValue({ model: 'openai/gpt-5.5', gateway: 'direct' });
+      const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, promptRouteSelection });
+      const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+      const out = await resolveLaunchModel({ model: 'gpt-5' });
+
+      expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ allowSelection: true }));
+      expect(out).toMatchObject({ model: 'openai/gpt-5.5', alias: 'gpt-5', gateway: 'direct' });
+      errSpy.mockRestore();
+    } finally {
+      process.stdin.isTTY = origIsTTY;
+    }
+  });
+
+  test('allowSelection is false on a non-TTY run even without --no-ui (headless default)', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: {},
+    });
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await resolveLaunchModel({ model: 'gpt' });
+
+    expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ allowSelection: false }));
+    errSpy.mockRestore();
+  });
+
+  test('allowSelection is false when --no-ui is passed, even on a TTY', async () => {
+    const origIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+    try {
+      const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+        kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: {},
+      });
+      const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+      const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+      await resolveLaunchModel({ model: 'gpt', 'no-ui': true });
+
+      expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ allowSelection: false }));
+      errSpy.mockRestore();
+    } finally {
+      process.stdin.isTTY = origIsTTY;
+    }
+  });
+
+  test('no --model given: resolves the configured default and passes it to resolveRouteForLaunch (regression #61 Task 4.5)', async () => {
+    const resolveRouteForLaunch = jest.fn().mockResolvedValue({
+      kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: { source: 'cli' },
+    });
+    const { resolveLaunchModel } = loadStartHelpers({
+      resolveRouteForLaunch,
+      loadConfig: () => ({ default: 'gpt' }),
+    });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    const out = await resolveLaunchModel({});
+
+    expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt' }));
+    expect(out).toMatchObject({ model: 'openai/gpt-5.5', gateway: 'direct' });
+    errSpy.mockRestore();
+  });
+
+  test('no --model given and no default configured: writes the no-default message to stderr and exits 1', async () => {
+    const resolveRouteForLaunch = jest.fn();
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, loadConfig: () => null });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({})).rejects.toThrow('exit:1');
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toContain(
+      'No model specified and no default configured. Run \'amicus setup\' to set a default model.'
+    );
+    expect(resolveRouteForLaunch).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+});
+
+describe('deriveAlias', () => {
+  test('explicit no-slash alias is returned as-is', () => {
+    const { deriveAlias } = loadStartHelpers();
+    expect(deriveAlias({ model: 'gpt' })).toBe('gpt');
+  });
+
+  test('explicit slash-bearing model id -> undefined (not treated as an alias)', () => {
+    const { deriveAlias } = loadStartHelpers();
+    expect(deriveAlias({ model: 'openai/gpt-5.5' })).toBeUndefined();
+  });
+
+  test('undefined model + no-slash config default -> the config default', () => {
+    const { deriveAlias } = loadStartHelpers({ loadConfig: () => ({ default: 'opus' }) });
+    expect(deriveAlias({})).toBe('opus');
+  });
+
+  test('undefined model + slash-bearing config default -> undefined', () => {
+    const { deriveAlias } = loadStartHelpers({ loadConfig: () => ({ default: 'anthropic/claude-opus-4-6' }) });
+    expect(deriveAlias({})).toBeUndefined();
+  });
+
+  test('undefined model + no config at all -> undefined', () => {
+    const { deriveAlias } = loadStartHelpers({ loadConfig: () => null });
+    expect(deriveAlias({})).toBeUndefined();
+  });
+});

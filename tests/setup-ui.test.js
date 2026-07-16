@@ -208,6 +208,90 @@ describe('setup-ui wizard', () => {
     });
   });
 
+  describe('#61: direct-first canonicalization for auto-selected routes', () => {
+    it('injects directProviders with the 4 direct-capable vendors', () => {
+      expect(html).toContain('var directProviders =');
+      const m = html.match(/var directProviders = (\[[^\]]*\]);/);
+      expect(m).toBeTruthy();
+      const directProviders = JSON.parse(m[1].replace(/'/g, '"'));
+      expect(directProviders.sort()).toEqual(['anthropic', 'deepseek', 'google', 'openai'].sort());
+      expect(directProviders).not.toContain('openrouter');
+    });
+
+    it('tracks genuine pill clicks via explicitRouteChoices', () => {
+      expect(html).toContain('var explicitRouteChoices = {};');
+    });
+
+    it('defines the toBareIfDirect canonicalization helper', () => {
+      expect(html).toContain('function toBareIfDirect(route)');
+      expect(html).toContain("route.indexOf('openrouter/') !== 0");
+    });
+
+    it('route-pill click handler marks the alias as an explicit choice', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const clickIdx = script.indexOf("routingChoices[alias] = provider;");
+      expect(clickIdx).toBeGreaterThan(-1);
+      const nearby = script.slice(clickIdx, clickIdx + 200);
+      expect(nearby).toContain('explicitRouteChoices[alias] = true;');
+    });
+
+    it('pickRouteFor canonicalizes auto-picks but returns explicit pill choices unchanged', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const pickIdx = script.indexOf('function pickRouteFor(mc)');
+      const bodyEnd = script.indexOf('\n  }', pickIdx);
+      const pickRouteForSrc = script.slice(pickIdx, bodyEnd + 4);
+      expect(pickRouteForSrc).toContain('!explicitRouteChoices[mc.alias]');
+      expect(pickRouteForSrc).toContain('toBareIfDirect(route)');
+      // Auto-switch (updateRoutingPills) and the alias-route fallback
+      // (updateAliasRoutes) must NOT flag a choice as explicit — only a
+      // genuine pill click should.
+      const autoSwitchIdx = script.indexOf('Auto-switch routing if selected');
+      const autoSwitchBlock = script.slice(autoSwitchIdx, autoSwitchIdx + 300);
+      expect(autoSwitchBlock).toContain('routingChoices[mc.alias] = available[0];'); // sanity: window covers the assignment
+      expect(autoSwitchBlock).not.toContain('explicitRouteChoices');
+      const fallbackIdx = script.indexOf('Pick first provider with a configured key');
+      const fallbackBlock = script.slice(fallbackIdx, fallbackIdx + 500);
+      expect(fallbackBlock).toContain('routingChoices[mc.alias] = provs[i];'); // sanity: window covers the assignment
+      expect(fallbackBlock).not.toContain('explicitRouteChoices');
+    });
+
+    it('logic: auto-picked openrouter/<direct-vendor>/<model> canonicalizes to bare, gateway-only vendor and explicit choices pass through unchanged', () => {
+      const script = html.match(/<script>([\s\S]*)<\/script>/)[1];
+      const directProvidersMatch = script.match(/var directProviders = (\[[^\]]*\]);/);
+      const toBareMatch = script.match(/function toBareIfDirect\(route\) \{[\s\S]*?\n  \}/);
+      const pickRouteForMatch = script.match(/function pickRouteFor\(mc\) \{[\s\S]*?\n  \}/);
+      expect(directProvidersMatch).toBeTruthy();
+      expect(toBareMatch).toBeTruthy();
+      expect(pickRouteForMatch).toBeTruthy();
+
+      // eslint-disable-next-line no-new-func
+      const build = new Function(
+        'directProviders', 'routingChoices', 'configuredKeys', 'explicitRouteChoices',
+        `${toBareMatch[0]}\n${pickRouteForMatch[0]}\nreturn pickRouteFor;`
+      );
+
+      const directProviders = JSON.parse(directProvidersMatch[1].replace(/'/g, '"'));
+
+      // Case 1: no explicit pill click, no configured keys (falls back to
+      // provs[0] === 'openrouter') — openrouter/google/x must canonicalize.
+      const mcDirect = { alias: 'gemini', routes: { openrouter: 'openrouter/google/gemini-x', google: 'google/gemini-x' } };
+      let pickRouteFor = build(directProviders, {}, {}, {});
+      expect(pickRouteFor(mcDirect)).toBe('google/gemini-x');
+
+      // Case 2: gateway-only vendor (qwen not in directProviders) stays unchanged.
+      const mcGatewayOnly = { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen-x' } };
+      pickRouteFor = build(directProviders, {}, {}, {});
+      expect(pickRouteFor(mcGatewayOnly)).toBe('openrouter/qwen/qwen-x');
+
+      // Case 3: explicit pill choice for a direct-capable vendor's OpenRouter
+      // route is honored unchanged (user deliberately chose "via OpenRouter").
+      const routingChoices = { gemini: 'openrouter' };
+      const explicitRouteChoices = { gemini: true };
+      pickRouteFor = build(directProviders, routingChoices, {}, explicitRouteChoices);
+      expect(pickRouteFor(mcDirect)).toBe('openrouter/google/gemini-x');
+    });
+  });
+
   describe('Step 3 - Alias Editor', () => {
     it('should contain the alias-editor section', () => {
       expect(html).toContain('alias-editor');

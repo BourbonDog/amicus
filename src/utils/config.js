@@ -8,7 +8,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { applyDirectApiFallback, autoRepairAlias } = require('./alias-resolver');
+const { autoRepairAlias } = require('./alias-resolver');
+const { isDirectProvider } = require('./provider-registry');
 
 /** Default model alias map — derived from the curated-models single source (F5) */
 const { toDefaultAliases } = require('./curated-models');
@@ -111,7 +112,9 @@ function resolveModel(modelArg) {
       if (!resolved || resolved === 'null') {
         return autoRepairAlias(modelArg, config, DEFAULT_ALIASES, saveConfig);
       }
-      return applyDirectApiFallback(resolved);
+      // Router (route-launch.js / gateway-router.js, #61) owns the
+      // direct-vs-OpenRouter decision now — return the stored id verbatim.
+      return resolved;
     }
 
     // Unknown alias
@@ -140,7 +143,8 @@ function resolveModel(modelArg) {
     if (!resolved || resolved === 'null') {
       return autoRepairAlias(defaultValue, config, DEFAULT_ALIASES, saveConfig);
     }
-    return applyDirectApiFallback(resolved);
+    // Router owns the direct-vs-OpenRouter decision now — return verbatim.
+    return resolved;
   }
 
   // Default alias not found anywhere
@@ -235,16 +239,42 @@ function tryResolveModel(modelArg) {
   }
 }
 
-/** Build OpenCode provider.models config from sidecar aliases.
+/** Build OpenCode provider.models config from sidecar aliases, plus the
+ * actually-resolved launch route(s). The alias-derived entries let the UI
+ * model picker show every configured model (single source of truth for the
+ * picker); resolvedRoutes ensures the id OpenCode is ACTUALLY told to launch
+ * (config.model) is always registered under its correct provider, even when
+ * an alias maps to a different provider for the same model (e.g. an alias
+ * stores `openrouter/openai/gpt-5.5` but the router resolves DIRECT to
+ * `openai/gpt-5.5` — without this, only `openrouter` would be registered,
+ * mismatching config.model).
+ *
+ * Catalog broadening (#61 whole-branch review, FIX 1): a resolvedRoutes entry
+ * only covers the route(s) resolved AT SERVER-CREATION TIME. A long-lived,
+ * multi-session server (the MCP shared server, `utils/shared-server.js`) is
+ * created ONCE via `sharedServer.ensureServer()` and then serves MANY
+ * sessions over its lifetime, each of which independently asks the gateway
+ * router (direct-first policy) to route the SAME bare alias — some sessions
+ * land DIRECT, others land on OpenRouter, depending on which keys happen to
+ * be configured when each session starts. Since the shared server's
+ * `provider.models` is fixed at creation and never rebuilt per-session,
+ * threading only that first session's resolved id is insufficient. So for
+ * every alias that resolves to a BARE direct-capable-vendor id (post-#61
+ * default aliases are bare, e.g. `openai/gpt-5.5`), this ALSO registers the
+ * `openrouter/<vendor>/<model>` form — broadening the catalog to cover BOTH
+ * routes the router might pick, regardless of which session created the
+ * server. This does NOT change what the alias itself resolves to (still
+ * bare, still direct-first) — it only widens what's pre-registered.
+ * @param {string[]} [resolvedRoutes] executable model id(s) actually launched
  * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.3": {}, ... } } } */
-function buildProviderModels() {
+function buildProviderModels(resolvedRoutes = []) {
   const aliases = getEffectiveAliases();
   const providers = {};
 
-  for (const fullModel of Object.values(aliases)) {
-    if (!fullModel || typeof fullModel !== 'string') { continue; }
+  const addRoute = (fullModel) => {
+    if (!fullModel || typeof fullModel !== 'string') { return; }
     const parts = fullModel.split('/');
-    if (parts.length < 2) { continue; }
+    if (parts.length < 2) { return; }
 
     const providerID = parts[0];
     const modelID = parts.slice(1).join('/');
@@ -253,16 +283,28 @@ function buildProviderModels() {
       providers[providerID] = { models: {} };
     }
     providers[providerID].models[modelID] = {};
+  };
+
+  for (const fullModel of Object.values(aliases)) {
+    addRoute(fullModel);
+
+    // Broaden: a bare direct-capable-vendor route also gets an OpenRouter
+    // mirror registered (see catalog-broadening note above). Gateway-only
+    // aliases (already `openrouter/...`, e.g. grok/qwen/x-ai) are untouched —
+    // OpenRouter is their only possible route anyway, already covered above.
+    if (typeof fullModel === 'string' && !fullModel.startsWith('openrouter/')) {
+      const vendor = fullModel.split('/')[0];
+      if (isDirectProvider(vendor)) {
+        addRoute(`openrouter/${fullModel}`);
+      }
+    }
+  }
+
+  for (const resolved of resolvedRoutes) {
+    addRoute(resolved);
   }
 
   return providers;
-}
-
-/** Detect if direct API fallback was applied during alias resolution */
-function detectFallback(alias, resolvedModel) {
-  if (!alias || alias.includes('/')) { return false; }
-  const val = getEffectiveAliases()[alias];
-  return !!(val && val.startsWith('openrouter/') && !resolvedModel.startsWith('openrouter/'));
 }
 
 /** @returns {Object<string,string[]>} the councils map (empty if none) */
@@ -339,6 +381,44 @@ function resolveCouncilMembers(name, catalog = []) {
   return { models, dropped };
 }
 
+/** @returns {{prefer:'direct'|'openrouter', migration_notified:Object}} routing config with defaults */
+function getRoutingConfig() {
+  const config = loadConfig() || {};
+  const r = (config.routing && typeof config.routing === 'object') ? config.routing : {};
+  const prefer = r.prefer === 'openrouter' ? 'openrouter' : 'direct';
+  const migration_notified = (r.migration_notified && typeof r.migration_notified === 'object') ? r.migration_notified : {};
+  return { prefer, migration_notified };
+}
+
+/** Merge --gateway (perCall) with routing.prefer into a router gatewayMode.
+ * @param {string|undefined} perCall 'auto'|'direct'|'openrouter'|undefined
+ * @returns {'auto'|'direct'|'openrouter'} */
+function resolveGatewayMode(perCall) {
+  if (perCall && perCall !== 'auto') { return perCall; }
+  const { prefer } = getRoutingConfig();
+  return prefer === 'openrouter' ? 'openrouter' : 'auto';
+}
+
+/**
+ * Persist the one-time direct-migration notice flag for a vendor (#61 Task
+ * 5.1 — visible-migration guarantee). Best-effort: swallows any saveConfig
+ * failure so a persistence hiccup never breaks the launch that triggered it.
+ * @param {string} vendor
+ */
+function markMigrationNotified(vendor) {
+  try {
+    const config = loadConfig() || {};
+    if (!config.routing || typeof config.routing !== 'object') { config.routing = {}; }
+    if (!config.routing.migration_notified || typeof config.routing.migration_notified !== 'object') {
+      config.routing.migration_notified = {};
+    }
+    config.routing.migration_notified[vendor] = true;
+    saveConfig(config);
+  } catch (_err) {
+    // best-effort: never fail the launch over a persistence error
+  }
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -346,7 +426,6 @@ module.exports = {
   saveConfig,
   getDefaultAliases,
   resolveModel,
-  detectFallback,
   computeConfigHash,
   buildAliasTable,
   checkConfigChanged,
@@ -358,4 +437,7 @@ module.exports = {
   getCouncil,
   getCouncilWithSource,
   resolveCouncilMembers,
+  getRoutingConfig,
+  resolveGatewayMode,
+  markMigrationNotified,
 };

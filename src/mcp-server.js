@@ -4,7 +4,6 @@ const path = require('path');
 const { writeFileAtomic } = require('./utils/atomic-write');
 const { spawn } = require('child_process');
 const { getTools, getGuideText } = require('./mcp-tools');
-const { tryResolveModel } = require('./utils/config');
 const os = require('os');
 const { logger } = require('./utils/logger');
 const { safeSessionDir } = require('./utils/validators');
@@ -241,7 +240,7 @@ function spawnSidecarProcess(args, sessionDir) {
 /** Tool handler implementations */
 const handlers = {
   async amicus_start(input, project, mcpServer) {
-    // Validate all inputs before any session creation
+    // Validate non-model inputs (prompt/timeout/agent) before any session creation.
     const { validateStartInputs } = require('./utils/input-validators');
     const validation = validateStartInputs(input);
     if (!validation.valid) {
@@ -250,7 +249,40 @@ const handlers = {
         content: [{ type: 'text', text: JSON.stringify(validation.error) }],
       };
     }
-    const resolvedModel = validation.resolvedModel;
+
+    // Model routing (#61 Task 6.2): route through the gateway router for MCP
+    // parity with the CLI's resolveLaunchModel (start-helpers.js). Unlike the
+    // CLI, this handler must never process.exit — the MCP server is long-lived
+    // and serves many tool calls — so a routing failure returns a structured
+    // model_route_error response instead.
+    //
+    // Default resolution mirrors resolveLaunchModel: an omitted input.model
+    // falls back to the configured default before hitting the router, so
+    // "no model, no default" produces a clean invalid_descriptor structured
+    // error (via the router) rather than a crash. Shared with the CLI's
+    // resolveLaunchModel (start-helpers.js) via model-input-default.js.
+    const { resolveGatewayMode } = require('./utils/config');
+    const { resolveRouteForLaunch } = require('./utils/route-launch');
+    const { toStructuredError } = require('./utils/route-error');
+    const { resolveModelInputOrDefault } = require('./utils/model-input-default');
+
+    const modelInput = resolveModelInputOrDefault(input.model);
+    // input.gateway is now exposed by the MCP tool schema (#61 Task 7.2);
+    // resolveGatewayMode(undefined) falls back to config routing.prefer / 'auto'.
+    const routeResult = await resolveRouteForLaunch({
+      model: modelInput,
+      gatewayMode: resolveGatewayMode(input.gateway),
+      source: 'mcp',
+      allowSelection: false,
+      validateModel: true,
+    });
+    if (routeResult.kind !== 'resolved') {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: JSON.stringify(toStructuredError(routeResult)) }],
+      };
+    }
+    const resolvedModel = routeResult.executableId;
 
     const cwd = project || getProjectDir(input.project);
     const { generateTaskId } = require('./sidecar/start');
@@ -268,7 +300,9 @@ const handlers = {
     const briefingPath = path.join(sessionDir, 'briefing.md');
     const detectedClient = detectClient(mcpServer);
     const args = ['start', '--prompt-file', briefingPath, '--task-id', taskId, '--client', detectedClient];
-    if (resolvedModel) { args.push('--model', resolvedModel); }
+    // resolvedModel is always defined here — a routing failure already
+    // returned above — and is the router's executableId, not the raw alias.
+    args.push('--model', resolvedModel);
     const agent = (input.noUi && (!input.agent || input.agent.toLowerCase() === 'chat'))
       ? 'build' : input.agent;
     if (agent) { args.push('--agent', agent); }
@@ -296,7 +330,8 @@ const handlers = {
         const { runHeadless } = require('./headless');
         const { generateFoldNonce } = require('./utils/fold-marker');
         const { finalizeHeadlessResult } = require('./sidecar/session-finalize');
-        // resolvedModel is already available from validateStartInputs() above
+        // resolvedModel (the router's executableId) is already available from
+        // the model-routing step above
 
         // #47: the shared OpenCode server is shared across projects, so the
         // session must be created scoped to the resolved project directory
@@ -441,7 +476,15 @@ const handlers = {
           taskId, status: 'running', mode: 'headless',
           message: 'Amicus started in headless mode. Use amicus_status to check progress.',
         });
-        return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
+        // FIX 2 (#61 whole-branch review): surface the router's one-shot
+        // migration notice here too — resolveRouteForLaunch already burned
+        // the migration_notified flag for this vendor when it built
+        // routeResult above, so this is the only chance to show it on the
+        // shared-server path (no CLI stderr exists for an MCP caller).
+        const sharedServerContent = [{ type: 'text', text: body }];
+        if (routeResult.notice) { sharedServerContent.push({ type: 'text', text: routeResult.notice }); }
+        sharedServerContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
+        return { content: sharedServerContent };
       } catch (err) {
         logger.warn('Shared server path failed, falling back to spawn', { error: err.message });
         // Clean up partial shared server state before falling through
@@ -490,10 +533,16 @@ const handlers = {
         'Then wait for the user to tell you. Use amicus_read to get results once they confirm.';
 
     const body = JSON.stringify({ taskId, status: 'running', mode, message });
+    // FIX 2 (#61 whole-branch review): the spawn path never touches stderr of
+    // the CLI child that will do the routing print — this handler already
+    // resolved the route in-process above, so surface its notice here.
+    const spawnContent = [{ type: 'text', text: body }];
+    if (routeResult.notice) { spawnContent.push({ type: 'text', text: routeResult.notice }); }
     if (isHeadless) {
-      return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
+      spawnContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
+      return { content: spawnContent };
     }
-    return textResult(body);
+    return { content: spawnContent };
   },
 
   async amicus_status(input, project) {
@@ -795,11 +844,37 @@ const handlers = {
   },
 
   async amicus_continue(input, project, mcpServer) {
+    // Model routing parity with amicus_start (#61 whole-branch review FIX 3,
+    // Task 6.2 follow-up): an explicit --model on continue used to be
+    // pre-checked only with the legacy tryResolveModel (alias-existence-only),
+    // so an unroutable model (e.g. a gateway-only vendor with no OpenRouter
+    // key) spawned a child that then died opaquely trying to launch it.
+    // Route it through the SAME gateway router amicus_start uses instead, and
+    // return the same structured model_route_error on failure — never spawn.
+    // The no-`--model` inherit-prior-session-model path is UNCHANGED: nothing
+    // below runs, and handleContinue reuses the prior concrete model verbatim.
+    let resolvedModel;
     if (input.model) {
-      const modelCheck = tryResolveModel(input.model);
-      if (modelCheck.error) {
-        return textResult(modelCheck.error, true);
+      const { resolveGatewayMode } = require('./utils/config');
+      const { resolveRouteForLaunch } = require('./utils/route-launch');
+      const { toStructuredError } = require('./utils/route-error');
+      const { resolveModelInputOrDefault } = require('./utils/model-input-default');
+
+      const modelInput = resolveModelInputOrDefault(input.model);
+      const routeResult = await resolveRouteForLaunch({
+        model: modelInput,
+        gatewayMode: resolveGatewayMode(input.gateway),
+        source: 'mcp',
+        allowSelection: false,
+        validateModel: true,
+      });
+      if (routeResult.kind !== 'resolved') {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: JSON.stringify(toStructuredError(routeResult)) }],
+        };
       }
+      resolvedModel = routeResult.executableId;
     }
 
     const cwd = project || getProjectDir(input.project);
@@ -814,7 +889,15 @@ const handlers = {
     const briefingPath = path.join(sessionDir, 'briefing.md');
     const args = ['continue', input.taskId, '--prompt-file', briefingPath,
       '--task-id', newTaskId, '--client', detectClient(mcpServer), '--cwd', cwd];
-    if (input.model) { args.push('--model', input.model); }
+    // resolvedModel is the router's executableId (never the raw alias) — a
+    // routing failure already returned above, so this is only reached when
+    // input.model was absent (resolvedModel stays undefined) or resolved.
+    if (resolvedModel) { args.push('--model', resolvedModel); }
+    // #61 Task 7.3: forward the caller's gateway preference to the spawned
+    // CLI child too — handleContinue still does its OWN routing (it's the
+    // one wiring --model/--gateway into a resolved session), this just keeps
+    // the child's own resolution consistent with what was already decided.
+    if (input.gateway) { args.push('--gateway', input.gateway); }
     if (input.noUi) { args.push('--no-ui', '--agent', 'build'); }
     if (input.timeout) { args.push('--timeout', String(input.timeout)); }
     if (input.contextTurns)     { args.push('--context-turns', String(input.contextTurns)); }
@@ -955,6 +1038,10 @@ const handlers = {
     ];
     const agent = input.agent || 'Build';
     args.push('--agent', agent);
+    // #61 Task 7.3: forward the caller's gateway preference to the spawned
+    // CLI child, which routes each leg's model (piece 2) — unlike
+    // amicus_start, this handler never resolves any leg's route itself.
+    if (input.gateway) { args.push('--gateway', input.gateway); }
     if (input.thinking)      { args.push('--thinking', input.thinking); }
     if (input.timeout)       { args.push('--timeout', String(input.timeout)); }
     if (input.summaryLength) { args.push('--summary-length', input.summaryLength); }

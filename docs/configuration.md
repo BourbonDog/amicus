@@ -16,14 +16,53 @@ Amicus reads API keys from `~/.config/amicus/.env` and from `process.env`. Envir
 | `ANTHROPIC_API_KEY` | Direct Anthropic access. |
 | `DEEPSEEK_API_KEY` | Direct DeepSeek access. |
 
-The model prefix decides which credentials are used:
+**Bare `provider/model` is the canonical, policy-routed form.** Amicus routes it **direct-first**:
+your direct provider key when one is configured, falling back to `OPENROUTER_API_KEY`
+automatically when it isn't. `openrouter/provider/model` is an **explicit override** that always
+forces OpenRouter, even when a direct key exists — reach for it deliberately, or for gateway-only
+vendors with no direct integration (Qwen, Grok, Mistral, GLM, …), which require this form. See
+[Routing](#routing) below for the full picture (`routing.prefer`, `--gateway`, the migration
+notice).
 
 | Model prefix | Credential consumed |
 |-------------|-------------------|
-| `openrouter/provider/model` | `OPENROUTER_API_KEY` |
-| `google/model` | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| `openai/model` | `OPENAI_API_KEY` |
-| `anthropic/model` | `ANTHROPIC_API_KEY` |
+| `provider/model` (bare, canonical) | Direct key for that vendor if configured, else `OPENROUTER_API_KEY` |
+| `openrouter/provider/model` | `OPENROUTER_API_KEY`, always |
+
+Per vendor, the bare form's direct key is: `google/...` → `GOOGLE_GENERATIVE_AI_API_KEY`,
+`openai/...` → `OPENAI_API_KEY`, `anthropic/...` → `ANTHROPIC_API_KEY`, `deepseek/...` →
+`DEEPSEEK_API_KEY`.
+
+---
+
+## Routing
+
+`routing.prefer` in `config.json` sets the global default gateway policy; `--gateway` (CLI) or the
+MCP `gateway` param overrides it per call.
+
+| Setting | Values | Default | Effect |
+|---------|--------|---------|--------|
+| `routing.prefer` (config.json) | `"direct"` \| `"openrouter"` | `"direct"` | Global default: prefer the direct provider key when one exists, or always prefer OpenRouter. |
+| `--gateway <mode>` (CLI, all commands that resolve a model) | `auto` \| `direct` \| `openrouter` | `auto` | Per-call override. `auto` means direct-first (honors `routing.prefer`); `direct`/`openrouter` force a specific gateway for this call and error if the required key is missing. |
+| `gateway` (MCP: `amicus_start`, `amicus_continue`, `amicus_fanout`) | `"auto"` \| `"direct"` \| `"openrouter"` | `"auto"` | Same semantics as `--gateway`, for MCP callers. |
+
+There is no `amicus setup` wizard step for `routing.prefer` yet — set it by hand-editing
+`~/.config/amicus/config.json`'s top-level `routing.prefer` field (see the config.json example
+below).
+
+**One-time migration notice.** If you hold both an OpenRouter key and a direct key for a vendor,
+the first launch that resolves a bare canonical id to that vendor via direct-first auto-routing
+prints a one-time notice, e.g.:
+
+```
+Routing openai via direct API (previously OpenRouter).
+Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.
+```
+
+The notice fires once per vendor (tracked in `config.json`'s `routing.migration_notified` map) —
+not on every launch, and not when you explicitly chose the gateway with `--gateway`. Set
+`routing.prefer: "openrouter"` (or pass `--gateway openrouter` per call) to keep routing everything
+through OpenRouter as before.
 
 ---
 
@@ -117,20 +156,20 @@ amicus models --check && echo "aliases ok"
 
 ## Model Aliases
 
-Aliases are short names that resolve to full provider-prefixed model IDs. `amicus setup` seeds a curated default set (e.g. `gemini`, `gpt`, `opus`, `deepseek`). You add or override aliases with:
+Aliases are short names that resolve to full provider-prefixed model IDs. `amicus setup` seeds a curated default set (e.g. `gemini`, `gpt`, `opus`, `deepseek`) to the bare canonical form for direct-capable vendors. You add or override aliases with:
 
 ```bash
-amicus setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
+amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview
 ```
 
 Aliases are stored in `~/.config/amicus/config.json`. The source of truth for what resolves on your machine is `amicus models`, not this document.
 
-**Full-id passthrough.** You can always bypass aliases and specify a model by its full provider-prefixed ID:
+**Full-id passthrough.** You can always bypass aliases and specify a model by its full ID — bare `provider/model` (canonical, direct-first) or `openrouter/provider/model` (explicit force-OpenRouter override):
 
 ```bash
-amicus start --model openrouter/google/gemini-3.1-flash-lite-preview --prompt "..."
-amicus start --model google/gemini-3-pro-preview --prompt "..."
-amicus start --model anthropic/claude-opus-4 --prompt "..."
+amicus start --model google/gemini-3-pro-preview --prompt "..."       # bare canonical, direct-first
+amicus start --model anthropic/claude-opus-4 --prompt "..."           # bare canonical, direct-first
+amicus start --model openrouter/google/gemini-3.1-flash-lite-preview --prompt "..."  # explicit override
 ```
 
 ---
@@ -156,7 +195,7 @@ Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/confi
 
 | File | Written by | Contains |
 |---|---|---|
-| `config.json` | `amicus setup` / `saveConfig()` (`src/utils/config.js`) | Three top-level keys: `default` (your default model alias), `aliases` (your alias → `provider/model` map), `councils` (saved council presets, e.g. `councils.free`). `0600` permissions. |
+| `config.json` | `amicus setup` / `saveConfig()` (`src/utils/config.js`) | Top-level keys: `default` (your default model alias), `aliases` (your alias → `provider/model` map), `councils` (saved council presets, e.g. `councils.free`), `routing` (`prefer`: `"direct"` \| `"openrouter"`; `migration_notified`: per-vendor flags for the one-time direct-migration notice — see [Routing](#routing)). `0600` permissions. |
 | `.env` | `amicus setup` / `amicus key` | API keys (`OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`). `0600` permissions. |
 | `model-catalog.json` | `refreshCatalog()` (`src/utils/model-catalog.js`) | The cached provider model list, schema-versioned, with a **24-hour TTL**. Also carries refresh-outcome fields — `lastRefreshAttempt` and `lastRefreshError` — stamped on a *failed* refresh without touching the last-good `models`/`fetchedAt` (a bad fetch never clobbers a good cache). Human-readable JSON; safe to delete, it rebuilds on next use. |
 | `sessions-index.json` | `session-index.js` (`recordSession`, written at session start) | A **global** map of `taskId → project path`, consulted only when a per-project session lookup misses (e.g. an MCP server whose cwd differs from where the session was created). Navigation aid only, never authoritative — a corrupt index degrades to "no entry," never a crash. |
@@ -232,19 +271,29 @@ level includes everything above it.
   // Default alias, resolved via `aliases` below when --model is omitted.
   "default": "gemini",
 
-  // Short name -> full provider-prefixed model id. `amicus setup` seeds a
-  // curated set; `amicus setup --add-alias name=provider/model` adds more.
+  // Short name -> full model id. Bare `provider/model` (canonical) routes direct-first;
+  // `amicus setup` seeds direct-capable vendors this way automatically.
+  // `amicus setup --add-alias name=provider/model` adds more.
   "aliases": {
     "gemini": "google/gemini-3-pro-preview",
     "gpt": "openai/gpt-5",
     "opus": "anthropic/claude-opus-4",
-    "deepseek": "openrouter/deepseek/deepseek-v3"
+    "deepseek": "deepseek/deepseek-v3"
   },
 
   // Named council member lists, e.g. seeded by the Free OpenRouter council
   // wizard step. Run with `amicus fanout --council <name>`.
   "councils": {
     "free": ["free-gemini", "free-deepseek", "free-llama"]
+  },
+
+  // Gateway routing policy (see Routing above). `prefer` defaults to "direct"
+  // when this key is absent entirely. `migration_notified` is written
+  // automatically the first time the one-time direct-migration notice fires
+  // for a vendor — don't hand-edit it.
+  "routing": {
+    "prefer": "direct",
+    "migration_notified": { "openai": true }
   }
 }
 ```

@@ -163,6 +163,13 @@ describe('MCP Tool Definitions', () => {
       expect(startTool.inputSchema).toHaveProperty('parentSession');
     });
 
+    test('has gateway enum in input schema, not required (#61 Task 7.2)', () => {
+      const schema = startTool.inputSchema.gateway;
+      expect(schema).toBeDefined();
+      expect(schema.isOptional()).toBe(true);
+      expect(schema.unwrap().options).toEqual(['auto', 'direct', 'openrouter']);
+    });
+
     test('description contains mode routing guidance', () => {
       const tool = getTools().find(t => t.name === 'amicus_start');
       expect(tool.description).toContain('When in doubt, use interactive');
@@ -261,6 +268,14 @@ describe('MCP Tool Definitions', () => {
       expect(tool.inputSchema.contextMaxTokens.description).toContain('Default: 80000.');
     });
 
+    test('has gateway enum in input schema, not required (#61 Task 7.2)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_continue');
+      const schema = tool.inputSchema.gateway;
+      expect(schema).toBeDefined();
+      expect(schema.isOptional()).toBe(true);
+      expect(schema.unwrap().options).toEqual(['auto', 'direct', 'openrouter']);
+    });
+
     test('description recommends amicus_wait, with amicus_status as fallback (B16)', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_continue');
       expect(tool.description).toContain('amicus_wait');
@@ -307,6 +322,13 @@ describe('MCP Tool Definitions', () => {
 
     test('has parentSession in input schema (#10)', () => {
       expect(fanoutTool.inputSchema).toHaveProperty('parentSession');
+    });
+
+    test('has gateway enum in input schema, not required (#61 Task 7.2)', () => {
+      const schema = fanoutTool.inputSchema.gateway;
+      expect(schema).toBeDefined();
+      expect(schema.isOptional()).toBe(true);
+      expect(schema.unwrap().options).toEqual(['auto', 'direct', 'openrouter']);
     });
 
     test('description recommends amicus_wait, with sleep+amicus_status as fallback (B16)', () => {

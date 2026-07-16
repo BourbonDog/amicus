@@ -52,26 +52,8 @@ describe('validateAgainstCatalog', () => {
   });
 });
 
-describe('validateFallbackModel default-on', () => {
-  beforeEach(() => jest.resetModules());
-
-  test('--no-validate-model short-circuits (no catalog call)', async () => {
-    const getCatalog = jest.fn();
-    jest.doMock('../src/utils/model-catalog', () => ({ getCatalog }));
-    const { validateFallbackModel } = require('../src/utils/start-helpers');
-    const out = await validateFallbackModel(
-      { model: 'openrouter/openai/whatever', 'no-validate-model': true, 'no-ui': true }, 'gpt');
-    expect(out).toBe('openrouter/openai/whatever');
-    expect(getCatalog).not.toHaveBeenCalled();
-  });
-
-  test('validates against the catalog by default', async () => {
-    jest.doMock('../src/utils/model-catalog', () => ({
-      getCatalog: jest.fn().mockResolvedValue([{ id: 'openrouter/openai/gpt-5.4', name: 'gpt' }]),
-    }));
-    const { validateFallbackModel } = require('../src/utils/start-helpers');
-    const out = await validateFallbackModel(
-      { model: 'openrouter/openai/gpt-5.4', 'no-ui': true }, 'gpt');
-    expect(out).toBe('openrouter/openai/gpt-5.4');
-  });
-});
+// validateFallbackModel + resolveModelFromArgs (start-helpers.js) and their
+// detectFallback dispatch (config.js) were retired in #61 Task 4.7 — zero
+// production callers remained once continue migrated to resolveLaunchModel
+// (Task 7.3). resolveLaunchModel's own behavior is covered by
+// tests/start-helpers-routing.test.js.

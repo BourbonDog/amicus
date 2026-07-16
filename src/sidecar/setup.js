@@ -288,6 +288,7 @@ async function runReadlineSetup() {
 
     const { getCatalog } = require('../utils/model-catalog');
     const { resolveQuickPicks, toLiveSeedAliases } = require('../utils/quick-picks');
+    const { toCanonicalDefault } = require('../utils/curated-models');
     let catalog = [];
     try { catalog = await getCatalog(); } catch (_err) { /* offline: pinned */ }
     const picks = resolveQuickPicks(catalog);
@@ -316,7 +317,7 @@ async function runReadlineSetup() {
       cfg.default = chosen.alias;
       const pick = picks.find(p => p.alias === chosen.alias);
       if (pick && !chosen.noUpgrade) {
-        cfg.aliases[chosen.alias] = pick.routes.openrouter || Object.values(pick.routes)[0];
+        cfg.aliases[chosen.alias] = toCanonicalDefault(pick.routes.openrouter || Object.values(pick.routes)[0]);
       } else if (cfg.aliases[chosen.alias] === undefined) {
         const fallback = getDefaultAliases()[chosen.alias];
         if (fallback !== undefined) { cfg.aliases[chosen.alias] = fallback; }

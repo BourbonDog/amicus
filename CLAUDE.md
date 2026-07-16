@@ -129,6 +129,7 @@ src/
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
+│   ├── fanout-validate.js
 │   ├── fanout.js
 │   ├── interactive-abort.js
 │   ├── interactive-mirror.js
@@ -181,6 +182,7 @@ src/
 │   ├── model-classification.js  # Tri-state catalog classification (#61).
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
+│   ├── model-input-default.js
 │   ├── model-validator.js  # Model Validator
 │   ├── node-version-guard.js
 │   ├── path-setup.js
@@ -193,8 +195,11 @@ src/
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
 │   ├── remediation-hints.js
+│   ├── result-schema-rebuild.js
 │   ├── result-schema-version.js  # The single SCHEMA_VERSION constant shared by result-schema.js and
 │   ├── result-schema.js
+│   ├── route-error.js  # Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a
+│   ├── route-launch.js  # Route-launch views (#61 gateway routing integration, Task 4.2).
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
 │   ├── session-index-tmp-sweep.js
@@ -350,8 +355,9 @@ evals/
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
-| `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()` |
+| `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()`, `buildRoutingFailureLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
+| `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
 | `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `readAbortedMarker()`, `DEFAULT_INTERVAL_MS()` |
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
@@ -374,7 +380,7 @@ evals/
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
 | `utils/agent-mapping.js` | Agent Mapping Module | `PRIMARY_AGENTS()`, `OPENCODE_AGENTS()`, `HEADLESS_SAFE_AGENTS()`, `mapAgentToOpenCode()`, `isValidAgent()` |
 | `utils/alias-audit.js` | Alias Audit (F5) — report + suggest, never auto-repair. | `collectAliasSources()`, `findStaleAliases()`, `suggestReplacements()` |
-| `utils/alias-resolver.js` | Alias Resolver Utilities | `applyDirectApiFallback()`, `autoRepairAlias()` |
+| `utils/alias-resolver.js` | Alias Resolver Utilities | `autoRepairAlias()` |
 | `utils/api-key-store.js` | API Key Store — reading, saving, and validating API keys. | `getEnvPath()`, `loadEnvEntries()`, `readApiKeys()`, `readApiKeyHints()`, `readApiKeyValues()` |
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
@@ -383,7 +389,7 @@ evals/
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
-| `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `listCuratedRoutes()` |
+| `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `toCanonicalDefault()`, `listCuratedRoutes()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
@@ -392,7 +398,7 @@ evals/
 | `utils/free-models.js` | Free OpenRouter model detection (Unit A). | `isFreeModel()`, `listFreeModels()`, `suggestFreeCouncil()`, `PINNED_FREE_MODELS()` |
 | `utils/gateway-router.js` | Pure gateway router (#61). Decides direct vs OpenRouter for a request using | `resolveRoute()` |
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
-| `utils/input-validators.js` |  | `validateStartInputs()`, `findSimilar()`, `levenshteinDistance()`, `suggestCommand()` |
+| `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
@@ -403,7 +409,8 @@ evals/
 | `utils/model-classification.js` | Tri-state catalog classification (#61). | `classifyModel()` |
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
-| `utils/model-validator.js` | Model Validator | `validateDirectModel()`, `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()` |
+| `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
+| `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
@@ -415,8 +422,11 @@ evals/
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
+| `utils/result-schema-rebuild.js` |  | `buildRunResultFromSession()`, `buildWaveResultFromSession()` |
 | `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION()` |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
+| `utils/route-error.js` | Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a | `toStructuredError()`, `toCliMessage()`, `REASON_TEXT()`, `ROUTE_ERROR_REASONS()`, `SELECTION_REQUIRED_REASON()` |
+| `utils/route-launch.js` | Route-launch views (#61 gateway routing integration, Task 4.2). | `buildLaunchKeys()`, `getRouteCatalogInfo()`, `resolveRouteForLaunch()`, `buildSuggestions()`, `ROUTE_VERSION()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
 | `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
@@ -425,7 +435,7 @@ evals/
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
-| `utils/start-helpers.js` | Start Command Helpers | `resolveModelFromArgs()`, `validateFallbackModel()` |
+| `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |

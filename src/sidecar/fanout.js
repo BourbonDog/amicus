@@ -13,22 +13,10 @@
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('../utils/logger');
-const { runLeg } = require('./fanout-leg');
+const { runLeg, buildRoutingFailureLeg } = require('./fanout-leg');
+const { parseModelsList, DEFAULT_MAX_LEGS, validateFanoutModels } = require('./fanout-validate');
 const { ERROR_CODES } = require('../utils/error-doc');
 const { writeFileAtomic } = require('../utils/atomic-write');
-
-/** Default max legs per wave (env-overridable). */
-const DEFAULT_MAX_LEGS = 10;
-
-/**
- * Split a --models value into trimmed, non-empty entries (duplicates allowed).
- * @param {string|boolean|undefined} modelsArg
- * @returns {string[]}
- */
-function parseModelsList(modelsArg) {
-  if (typeof modelsArg !== 'string') { return []; }
-  return modelsArg.split(',').map(s => s.trim()).filter(Boolean);
-}
 
 /**
  * Derive leg task IDs: <waveId>-1 .. <waveId>-N (matches TASK_ID_PATTERN).
@@ -38,53 +26,6 @@ function parseModelsList(modelsArg) {
  */
 function deriveLegIds(waveId, count) {
   return Array.from({ length: count }, (_, i) => `${waveId}-${i + 1}`);
-}
-
-/**
- * Fail-fast validation of the whole model list BEFORE any leg launches:
- * alias resolution, API-key presence, live-catalog validation (F3 machinery).
- * @param {string} modelsArg - Raw --models value
- * @param {{noValidateModel?: boolean}} [opts]
- * @returns {Promise<{legs: Array<{modelInput: string, model: string}>} | {error: string}>}
- */
-async function validateFanoutModels(modelsArg, opts = {}) {
-  const raw = parseModelsList(modelsArg);
-  if (raw.length === 0) {
-    return { error: 'Error: --models requires a comma-separated list (e.g. gemini,gpt,deepseek)', code: 'BAD_ARGS' };
-  }
-  // Invalid or non-positive AMICUS_FANOUT_MAX_LEGS (0, negative, garbage) falls back to the default.
-  const envCap = Number(process.env.AMICUS_FANOUT_MAX_LEGS);
-  const maxLegs = (Number.isInteger(envCap) && envCap > 0) ? envCap : DEFAULT_MAX_LEGS;
-  if (raw.length > maxLegs) {
-    return { error: `Error: --models exceeds the fan-out cap of ${maxLegs} legs (set AMICUS_FANOUT_MAX_LEGS to raise)`, code: 'BAD_ARGS' };
-  }
-
-  const { tryResolveModel } = require('../utils/config');
-  const { validateApiKey } = require('../utils/validators');
-  const { validateAgainstCatalog } = require('../utils/model-validator');
-  const { lookupPricing } = require('../utils/pricing');
-  const legs = [];
-  for (const modelInput of raw) {
-    const resolved = tryResolveModel(modelInput);
-    if (resolved.error) {
-      return { error: `Error: model '${modelInput}': ${resolved.error}`, code: 'BAD_MODEL' };
-    }
-    let model = resolved.model;
-    const keyCheck = validateApiKey(model);
-    if (!keyCheck.valid) {
-      return { error: keyCheck.error, code: 'MISSING_KEY' };
-    }
-    if (!opts.noValidateModel) {
-      const alias = modelInput.includes('/') ? undefined : modelInput;
-      try {
-        model = await validateAgainstCatalog(model, alias);
-      } catch (err) {
-        return { error: err.message, code: 'BAD_MODEL' };
-      }
-    }
-    legs.push({ modelInput, model, pricing: lookupPricing(model) });
-  }
-  return { legs };
 }
 
 /**
@@ -114,7 +55,9 @@ function writeWaveMetadata(waveDir, patch) {
  *   thinking?, timeout? (minutes), summaryLength?, includeContext?, sessionId?,
  *   coworkProcess? (#10: Cowork parent-session pin, forwarded to buildContext),
  *   contextTurns?, contextSince?, contextMaxTokens?, mcp?, mcpConfig?, noMcp?,
- *   excludeMcp?, noValidateModel?, json?, client?, quiet? (suppress stdout — tests)
+ *   excludeMcp?, noValidateModel?, gatewayMode? (#61 Task 7.3: --gateway merged
+ *   with routing.prefer, applied per leg), json?, client?, quiet? (suppress
+ *   stdout — tests)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -158,19 +101,33 @@ async function runFanout(options) {
     return { wave: null, errorDoc: { code, message }, exitCode: 1 };
   };
 
-  // 1. Fail-fast validation
-  const validated = await validateFanoutModels(options.models, { noValidateModel: options.noValidateModel });
+  // 1. Fail-fast validation (list-level only — see validateFanoutModels).
+  // Per-leg routing is resolved here too (#61 Task 7.3): a leg that fails to
+  // route is NOT a wave-level failure — it comes back `ok:false` and still
+  // occupies its slot in `legs`, so sibling legs launch normally (step 6).
+  const validated = await validateFanoutModels(options.models, {
+    noValidateModel: options.noValidateModel,
+    gatewayMode: options.gatewayMode,
+  });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
+  const okLegs = legs.filter(l => l.ok);
+  // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
+  // stderr to land on (fanout is one process resolving many legs, not one
+  // launch) — surface it on the wave doc instead, deduped in case two legs
+  // for the same vendor happen to both migrate (only the first ever fires
+  // since markMigrationNotified is one-shot per vendor, but dedupe defensively).
+  const notices = [...new Set(legs.map(l => l.notice).filter(Boolean))];
 
-  // 1b. Budget gate (pre-creation; refuse before spending)
+  // 1b. Budget gate (pre-creation; refuse before spending). Only legs that
+  // will actually run cost anything — a leg that never routed never spends.
   if (!options.noCostGate) {
     const { checkBudget, formatBudgetError } = require('./budget');
     const { loadConfig } = require('../utils/config');
     const cfg = loadConfig() || {};
     const maxCostPerMtok = options.maxCostPerMtok !== undefined ? options.maxCostPerMtok : cfg.maxCostPerMtok;
     const promptChars = (options.promptMeta && options.promptMeta.chars) || (options.prompt ? options.prompt.length : 0);
-    const budget = checkBudget(legs, { maxCostPerMtok, maxCost: options.maxCost !== null && options.maxCost !== undefined ? options.maxCost : cfg.maxCost, promptChars });
+    const budget = checkBudget(okLegs, { maxCostPerMtok, maxCost: options.maxCost !== null && options.maxCost !== undefined ? options.maxCost : cfg.maxCost, promptChars });
     if (!budget.ok) {
       return failPre(ERROR_CODES.BUDGET_EXCEEDED, 'Error: budget gate refused the wave', formatBudgetError(budget));
     }
@@ -184,11 +141,31 @@ async function runFanout(options) {
   fs.writeFileSync(path.join(waveDir, 'briefing.md'), options.prompt, { mode: 0o600 });
   writeWaveMetadata(waveDir, {
     taskId: waveId, type: 'wave', status: 'running', mode: 'headless',
-    models: legs.map(l => l.model), legs: legIds,
+    models: legs.map(l => (l.ok ? l.model : l.modelInput)), legs: legIds,
     briefing: String(options.prompt).slice(0, 200),
     promptMeta: options.promptMeta || null,
     pid: process.pid, project, createdAt,
   });
+
+  // 2b. All legs failed to route (#61 perf): no leg will ever touch the
+  // shared server, so starting one (and immediately tearing it down) is pure
+  // waste. Short-circuit straight to the same routing-failure wave the
+  // normal path would eventually produce — same per-leg docs
+  // (buildRoutingFailureLeg), same aggregation (buildWaveResult /
+  // waveStatusFromLegs via the default status param), same exit-code mapping
+  // (waveExitCode) — just without the server round-trip.
+  if (okLegs.length === 0) {
+    const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
+    const completedAt = new Date().toISOString();
+    const wave = buildWaveResult({
+      waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt, notices,
+    });
+    const wavePath = path.join(waveDir, 'wave.json');
+    writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
+    writeWaveMetadata(waveDir, { status: wave.status, completedAt });
+    emit(wave);
+    return { wave, exitCode: waveExitCode(wave.status) };
+  }
 
   // 3. Context + prompts built ONCE (model-independent)
   const context = options.includeContext !== false
@@ -207,14 +184,18 @@ async function runFanout(options) {
     options.prompt, context, project, true, options.agent || 'build', options.summaryLength, options.client, foldNonce
   );
 
-  // 4. One shared OpenCode server
+  // 4. One shared OpenCode server. Sole-input invariant (#61 Task 4.6/7.3):
+  // register EVERY leg's actually-resolved executable id in provider.models,
+  // not just the alias-derived defaults, so a leg whose router decision
+  // diverges from its alias (e.g. alias stores openrouter/... but the router
+  // picked direct) still matches what the leg is actually told to launch.
   const mcpServers = buildMcpConfig({
     mcp: options.mcp, mcpConfig: options.mcpConfig, clientType: options.client,
     noMcp: options.noMcp, excludeMcp: options.excludeMcp,
   });
   let client, server;
   try {
-    ({ client, server } = await startOpenCodeServer(mcpServers));
+    ({ client, server } = await startOpenCodeServer(mcpServers, { models: okLegs.map(l => l.model) }));
   } catch (err) {
     writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
     return errorWave(waveId, `Failed to start server: ${err.message}`);
@@ -244,7 +225,11 @@ async function runFanout(options) {
     },
   });
 
-  // 6. Launch all legs concurrently (runLeg never rejects)
+  // 6. Launch all ROUTABLE legs concurrently (runLeg never rejects). A leg
+  // that failed to route (leg.ok === false) never touches the shared server —
+  // it resolves immediately to an error run document (buildRoutingFailureLeg)
+  // in its own slot, so it fails only itself, never the sibling legs or the
+  // whole wave (#61 Task 7.3).
   const heartbeat = options.quiet
     ? { stop() {} }
     : createWaveHeartbeat(
@@ -255,12 +240,15 @@ async function runFanout(options) {
   const reasoning = options.thinking ? { effort: options.thinking } : undefined;
   let legDocs;
   try {
-    legDocs = await Promise.all(legs.map((leg, i) => runLeg({
-      leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
-      timeoutMs, agent: options.agent, client, server,
-      summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
-      foldNonce,
-    })));
+    legDocs = await Promise.all(legs.map((leg, i) => (leg.ok
+      ? runLeg({
+          leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
+          timeoutMs, agent: options.agent, client, server,
+          summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
+          foldNonce,
+        })
+      : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
+    )));
   } finally {
     heartbeat.stop();
     uninstallSignals();
@@ -271,7 +259,7 @@ async function runFanout(options) {
   const completedAt = new Date().toISOString();
   const wave = buildWaveResult({
     waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
-    status: signalled ? 'aborted' : null,
+    status: signalled ? 'aborted' : null, notices,
   });
   const wavePath = path.join(waveDir, 'wave.json');
   writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });

@@ -28,11 +28,40 @@ describe('curated-models v2 (families)', () => {
 
   test('toDefaultAliases stays static and covers families + cardless', () => {
     const defaults = toDefaultAliases();
-    expect(defaults.gemini).toBe('openrouter/google/gemini-3.5-flash');
-    expect(defaults.opus).toBe('openrouter/anthropic/claude-opus-4.8');
-    expect(defaults.deepseek).toBe('openrouter/deepseek/deepseek-v4-pro');
+    // Direct-capable vendors (Task 8.1a) resolve to the BARE canonical id so
+    // the gateway router can route direct-first; gateway-only vendors keep
+    // their openrouter/ prefix since OpenRouter is their only route.
+    expect(defaults.gemini).toBe('google/gemini-3.5-flash');
+    expect(defaults.opus).toBe('anthropic/claude-opus-4.8');
+    expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
+  });
+
+  test('toDefaultAliases: direct-capable vendors resolve bare, gateway-only vendors keep openrouter/ (Task 8.1a)', () => {
+    const defaults = toDefaultAliases();
+    // Direct-capable (openai/anthropic/google/deepseek) — bare, policy-routed.
+    expect(defaults.gpt).toBe('openai/gpt-5.5');
+    expect(defaults['gpt-pro']).toBe('openai/gpt-5.5-pro');
+    expect(defaults.codex).toBe('openai/gpt-5.3-codex');
+    expect(defaults.claude).toBe('anthropic/claude-sonnet-4.6');
+    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-4.6');
+    expect(defaults.haiku).toBe('anthropic/claude-haiku-4.5');
+    expect(defaults.opus).toBe('anthropic/claude-opus-4.8');
+    expect(defaults.gemini).toBe('google/gemini-3.5-flash');
+    expect(defaults['gemini-pro']).toBe('google/gemini-3.1-pro-preview');
+    expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
+    // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
+    expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
+    expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
+    expect(defaults['qwen-coder']).toBe('openrouter/qwen/qwen3-coder-next');
+    expect(defaults['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
+    expect(defaults.glm).toBe('openrouter/z-ai/glm-5.1');
+    expect(defaults.mistral).toBe('openrouter/mistralai/mistral-medium-3-5');
+    expect(defaults.devstral).toBe('openrouter/mistralai/devstral-2512');
+    expect(defaults.minimax).toBe('openrouter/minimax/minimax-m2.7');
+    expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
+    expect(defaults.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');
   });
 
   test('listCuratedRoutes flattens family fallbacks and cardless routes', () => {

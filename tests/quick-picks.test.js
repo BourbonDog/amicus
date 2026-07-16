@@ -75,10 +75,17 @@ describe('resolveQuickPicks', () => {
 });
 
 describe('toLiveSeedAliases', () => {
-  test('overlays live family openrouter routes on the static defaults', () => {
-    const seeds = toLiveSeedAliases([row('openrouter/google/gemini-9.9-flash')]);
-    expect(seeds.gemini).toBe('openrouter/google/gemini-9.9-flash');
-    expect(seeds.qwen).toBe('openrouter/qwen/qwen3.7-max'); // cardless stays pinned
+  test('direct-capable family alias overlays live catalog route as bare canonical (direct-first)', () => {
+    const seeds = toLiveSeedAliases([
+      row('openrouter/google/gemini-9.9-flash'),
+      row('openrouter/qwen/qwen4-max'),
+    ]);
+    expect(seeds.gemini).toBe('google/gemini-9.9-flash');
+    // gateway-only vendor (qwen): cardless, never overlaid by resolveQuickPicks,
+    // and even if it were, toCanonicalDefault leaves non-direct vendors
+    // openrouter/-prefixed — stays pinned + openrouter/-prefixed regardless
+    // of the live catalog containing a qwen row.
+    expect(seeds.qwen).toBe('openrouter/qwen/qwen3.7-max');
   });
   test('null/empty catalog returns the static defaults unchanged', () => {
     const { toDefaultAliases } = require('../src/utils/curated-models');
