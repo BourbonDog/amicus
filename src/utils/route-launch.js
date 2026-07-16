@@ -162,7 +162,10 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   // catalogGate short-circuits to { ok:true } as soon as validateModel === false,
   // never consulting catalogInfo, so fetching it here would be wasted
   // latency/network (and can hit the network on a cold cache) for no benefit.
-  const catalogInfo = validateModel ? await getRouteCatalogInfo() : { models: [], lastRefreshError: null };
+  // Strict === false (not just falsy) so this stays in lockstep with catalogGate's
+  // own `=== false` guard: any other value (incl. an omitted flag) still fetches,
+  // so a caller can never skip the fetch while the gate still classifies against it.
+  const catalogInfo = validateModel === false ? { models: [], lastRefreshError: null } : await getRouteCatalogInfo();
   let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
