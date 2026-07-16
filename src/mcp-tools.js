@@ -10,6 +10,7 @@
 const { z } = require('zod');
 const { formatAliasNames } = require('./utils/config');
 const { READ_CAP_BYTES } = require('./utils/read-slice');
+const { GATEWAY_MODES } = require('./utils/model-descriptor');
 
 /** Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only) */
 const safeTaskId = z.string().regex(
@@ -57,6 +58,10 @@ function getTools() {
       model: safeModel.optional().describe(
         `Short alias (${aliasNames}) or full provider/model ID. ` +
         'If omitted, uses the configured default. Call amicus_guide to see all aliases.'
+      ),
+      gateway: z.enum(GATEWAY_MODES).optional().describe(
+        'Routing preference: auto (direct-first, default), direct (require a ' +
+        'direct provider key), or openrouter (force OpenRouter).'
       ),
       prompt: z.string().describe(
         'Detailed task briefing. Include: objective, background, ' +
@@ -253,6 +258,10 @@ function getTools() {
       model: safeModel.optional().describe(
         `Override model — short alias (${aliasNames}) or full provider/model ID. Defaults to the original session's model.`
       ),
+      gateway: z.enum(GATEWAY_MODES).optional().describe(
+        'Routing preference: auto (direct-first, default), direct (require a ' +
+        'direct provider key), or openrouter (force OpenRouter).'
+      ),
       noUi: z.boolean().optional().default(false).describe(
         'Run headless. Default false (opens Electron window).'
       ),
@@ -314,6 +323,10 @@ function getTools() {
         "Run a saved council, or a built-in bench ('free', 'budget', 'frontier'), instead of 'models'. " +
         "Expands to the council's members; a saved council of the same name shadows a built-in. " +
         'Mutually exclusive with \'models\'.'
+      ),
+      gateway: z.enum(GATEWAY_MODES).optional().describe(
+        'Routing preference: auto (direct-first, default), direct (require a ' +
+        'direct provider key), or openrouter (force OpenRouter).'
       ),
       prompt: z.string().describe(
         'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'

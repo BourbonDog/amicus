@@ -268,7 +268,7 @@ const handlers = {
     const { resolveModelInputOrDefault } = require('./utils/model-input-default');
 
     const modelInput = resolveModelInputOrDefault(input.model);
-    // input.gateway is not yet exposed by the MCP tool schema (a later task);
+    // input.gateway is now exposed by the MCP tool schema (#61 Task 7.2);
     // resolveGatewayMode(undefined) falls back to config routing.prefer / 'auto'.
     const routeResult = await resolveRouteForLaunch({
       model: modelInput,
