@@ -415,7 +415,19 @@ function __rawWizardCSS() {
     content: ''; position: absolute; inset: 0;
     border-radius: 50%; background: var(--ok);
     animation: amicusPulse 1.6s var(--ease-out) infinite;
-  }`;
+  }
+
+  /* Per-provider default picker (Step 1, Task 8) */
+  .provider-default-section { margin-top: 14px; }
+  .provider-default-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .provider-default-list { display: flex; flex-direction: column; gap: 2px; }
+  .provider-default-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; font-size: 12px; color: var(--text); cursor: pointer;
+    border-radius: var(--r-6);
+  }
+  .provider-default-row:hover { background: var(--surface-hover); }
+  .provider-default-row input[type="radio"] { accent-color: var(--accent); flex-shrink: 0; }`;
 }
 
 function buildWizardCSS() {

@@ -266,6 +266,7 @@ electron/
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
+├── setup-ui-provider-default.js  # Setup UI — Per-provider default model picker (Part 2, Task 8).
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles (clay/gold token-driven)
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API

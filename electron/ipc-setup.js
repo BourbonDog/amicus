@@ -42,10 +42,43 @@ function registerSetupHandlers(getMainWindow) {
             require('../src/utils/model-catalog').refreshCatalog().catch(() => {});
           } catch { /* best-effort */ }
         });
+        // Task 8: per-provider default picker choices for the key step.
+        // Per-provider defaults only make sense for DIRECT model vendors --
+        // openrouter is the GATEWAY, not a vendor, so it's skipped entirely
+        // (mirrors provider-default-prompt.js's runProviderDefaultFlow gate;
+        // this path calls the picker core directly instead of that
+        // readline-oriented helper, so it re-checks isDirectProvider itself).
+        const { isDirectProvider } = require('../src/utils/provider-registry');
+        if (isDirectProvider(provider)) {
+          try {
+            const { getCatalog } = require('../src/utils/model-catalog');
+            const { buildProviderDefaultChoices } = require('../src/utils/provider-default-picker');
+            const catalog = await getCatalog();
+            result.providerDefault = buildProviderDefaultChoices(provider, { catalog });
+          } catch (err) {
+            logger.error('save-key providerDefault error', { error: err.message });
+            result.providerDefault = null;
+          }
+        } else {
+          result.providerDefault = null;
+        }
       }
       return result;
     } catch (err) {
       logger.error('save-key handler error', { error: err.message });
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Task 8: apply a per-provider default picker choice. Read-modify-write,
+  // no-clobber -- applyProviderDefault only ever writes aliases[vendor] and
+  // seeds config.default when absent (see provider-default-picker.js).
+  ipcMain.handle('sidecar:set-provider-default', (_event, provider, chosenId) => {
+    try {
+      const { applyProviderDefault } = require('../src/utils/provider-default-picker');
+      return applyProviderDefault(provider, chosenId, { seedDefaultIfAbsent: true });
+    } catch (err) {
+      logger.error('set-provider-default handler error', { error: err.message });
       return { success: false, error: err.message };
     }
   });

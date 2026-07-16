@@ -19,6 +19,8 @@ function buildKeysScript() {
       var prov = providers.find(function(p) { return p.id === id; });
       if (!prov) { return; }
       selectedProvider = prov;
+      // Task 8: a picker rendered for the previously-selected provider is stale here.
+      if (window.hideProviderDefaultPicker) { window.hideProviderDefaultPicker(); }
       document.querySelectorAll('.provider-btn').forEach(function(b) { b.classList.remove('selected'); });
       this.classList.add('selected');
       keySection.classList.add('visible');
@@ -64,7 +66,7 @@ function buildKeysScript() {
     try {
       var res = await window.sidecarSetup.invoke('sidecar:validate-key', selectedProvider.id, key);
       if (res.valid) {
-        await window.sidecarSetup.invoke('sidecar:save-key', selectedProvider.id, key);
+        var saveResult = await window.sidecarSetup.invoke('sidecar:save-key', selectedProvider.id, key);
         configuredKeys[selectedProvider.id] = true;
         var c = document.getElementById('check-' + selectedProvider.id);
         if (c) { c.textContent = '\\u2713'; }
@@ -72,6 +74,10 @@ function buildKeysScript() {
         setInputState('valid'); keyValid = true; validatedKey = key;
         keyHints[selectedProvider.id] = key.slice(0, 8) + '\\u2022'.repeat(Math.min(key.length - 8, 12));
         removeBtn.style.display = ''; updateNextState();
+        // Task 8: inline per-provider default picker beneath the just-saved key.
+        if (window.renderProviderDefaultPicker) {
+          window.renderProviderDefaultPicker(selectedProvider.id, selectedProvider.name, saveResult && saveResult.providerDefault);
+        }
       } else {
         statusMsg.textContent = res.error || 'Invalid key'; statusMsg.className = 'status-invalid';
         setInputState('invalid'); keyValid = false;
@@ -107,6 +113,7 @@ function buildKeysScript() {
       keyInput.value = ''; keyInput.type = 'password'; keyValid = false; setInputState(null);
       statusMsg.textContent = 'Key removed'; statusMsg.className = 'status-testing';
       removeBtn.style.display = 'none'; updateNextState();
+      if (window.hideProviderDefaultPicker) { window.hideProviderDefaultPicker(); }
     } catch (_e) { statusMsg.textContent = 'Failed to remove'; statusMsg.className = 'status-invalid'; }
     removeBtn.disabled = false;
   });`;
