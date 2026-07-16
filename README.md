@@ -338,7 +338,16 @@ amicus models                 # list the catalog
 amicus models --search gemini # filter by substring
 ```
 
-`start`/`fanout` validate your model against the catalog before launching (skip with `--no-validate-model`). You can also always bypass aliases and pass a full `provider/model` or `openrouter/provider/model` ID directly. Catalog internals, alias management, and the full-id passthrough table are in **[docs/usage.md § Models](./docs/usage.md#amicus-models--the-model-catalog)**.
+`start`/`fanout` validate your model against the catalog before launching (skip with `--no-validate-model`). You can also always bypass aliases and pass a full model ID directly — bare `provider/model` (canonical) or `openrouter/provider/model` (explicit override); see Routing below. Catalog internals, alias management, and the full-id passthrough table are in **[docs/usage.md § Models](./docs/usage.md#amicus-models--the-model-catalog)**.
+
+### Routing
+
+- **Bare `provider/model`** (e.g. `openai/gpt-5.5`, `anthropic/claude-opus-4.8`, `google/gemini-3.5-flash`) is the canonical, policy-routed form — Amicus routes it **direct-first**: your direct provider key when one is configured, falling back to OpenRouter automatically when only an OpenRouter key exists.
+- **`openrouter/provider/model`** is an explicit override that always forces OpenRouter, even when a direct key is present — reach for it deliberately, or for gateway-only vendors with no direct integration (Qwen, Grok, Mistral, GLM, …).
+- **`--gateway auto|direct|openrouter`** (CLI, also on the MCP tools) overrides routing for one call; `auto` is the direct-first default. `routing.prefer` in `config.json` (`"direct"` by default, or `"openrouter"`) sets the global default.
+- **One-time migration notice:** if you hold both an OpenRouter key and a direct key for a vendor, the first launch that resolves to that vendor prints a one-time notice that routing moved to direct API; set `routing.prefer: "openrouter"` to restore the old all-OpenRouter behavior.
+
+Full details, the API-key/prefix table, and the migration notice are in **[docs/configuration.md](./docs/configuration.md)**.
 
 ---
 
@@ -417,7 +426,7 @@ Run `amicus doctor` first — it checks keys, catalog, OpenCode binary, Electron
 | "council review this" does nothing | The `second-opinion` skill isn't installed | Check `~/.claude/skills/second-opinion/SKILL.md` exists; re-run `npm install -g amicus` (postinstall installs both skills) |
 | `npm install -g amicus` fails with `EEXIST: … claude-sidecar` | The old upstream `claude-sidecar` package is still installed globally; npm won't overwrite another package's bin shims | `npm uninstall -g claude-sidecar`, then `npm install -g amicus`. Your keys and past sessions are not lost, but v2.0.0 no longer reads the old paths automatically — see [docs/SHIMS.md](./docs/SHIMS.md) for the one-time migration steps (rename `~/.config/sidecar/` and any `.claude/sidecar_sessions/` dirs). |
 | Install fails partway, or `amicus doctor` reports the OpenCode binary "not found" | A **transient** error during the OpenCode engine's own postinstall (a spawn `ENOENT`, or an antivirus file-lock while it lays down its 11 per-platform binaries) can roll back the whole atomic install — retrying usually succeeds | Just re-run `npm install -g amicus`. If it still fails, clear the cache first: `npm cache clean --force && npm install -g amicus`. |
-| `401` / auth error | API key missing, or the model prefix doesn't match the key you have | Run `amicus setup`; make sure the prefix (`openrouter/…` vs `google/…` vs `openai/…` vs `anthropic/…`) matches the credentials you configured. |
+| `401` / auth error | No usable key for the model's vendor — bare `provider/model` ids fall back to `OPENROUTER_API_KEY` automatically, so this means neither the direct key nor an OpenRouter key is configured (or `--gateway direct`/`openrouter` forced a gateway whose key is missing) | Run `amicus setup`, or `amicus key <provider> <key>` to add the missing key; see [Routing](#routing). |
 | `402` / "Payment Required" on first council review / `start` / `fanout` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. (The `amicus council` subcommand itself is deterministic math and never calls a model.) | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See "Free council (zero-cost)" under [The Council](#the-council) above. |
 | Session not found | No session matches the given ID | Run `amicus list`, or omit `--session-id` to use the most recent. |
 | No conversation history found | Project-path encoding | Check `~/.claude/projects/`; `/` and `_` in the project path are encoded as `-` in the directory name. |

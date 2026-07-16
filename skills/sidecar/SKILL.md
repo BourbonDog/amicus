@@ -75,9 +75,19 @@ Amicus uses the OpenCode SDK to communicate with LLM providers. You need to conf
 
 **Recommended:** run `amicus setup` — a guided wizard that stores keys in `~/.config/amicus/.env`, picks your default model from the live catalog, and seeds aliases. The options below are manual alternatives.
 
+### Model Naming: Bare Canonical Is the Normal Form
+
+Read this before picking a model string — it decides both routing and which credentials get used:
+
+- **Bare `provider/model`** (e.g. `openai/gpt-5.5`, `anthropic/claude-opus-4.8`, `google/gemini-3.5-flash`) is the **canonical, policy-routed** form — use it by default. Amicus routes it **direct-first**: your direct provider key when one is configured, falling back to OpenRouter automatically when only `OPENROUTER_API_KEY` exists. You never pick the gateway by hand.
+- **`openrouter/provider/model`** (e.g. `openrouter/google/gemini-3.5-flash`) is an **explicit force-OpenRouter override** — it always routes through OpenRouter even when a direct key is present. Reach for it deliberately, or for gateway-only vendors with no direct integration at all (Qwen, Grok, Mistral, GLM, MiniMax, Kimi, Seed, …) — those *require* the `openrouter/` prefix.
+- Short aliases (`gemini`, `gpt`, `opus`, `claude`, `deepseek`, …) resolve to one of the two forms above via your config; `amicus setup` seeds direct-capable vendors to the bare canonical form automatically.
+- **Routing controls:** `routing.prefer` in `~/.config/amicus/config.json` sets the global default — `"direct"` (the default) or `"openrouter"` to always prefer OpenRouter. Per call, `--gateway auto|direct|openrouter` overrides it (`auto` = direct-first, same as the default).
+- **One-time migration notice:** if you hold both an OpenRouter key and a direct key for a vendor, the first launch that resolves to that vendor prints a one-time notice that routing moved to direct API (previously OpenRouter); set `routing.prefer: "openrouter"` (or pass `--gateway openrouter`) to restore the old all-OpenRouter behavior.
+
 ### Option A: OpenRouter (Recommended for Multi-Model Access)
 
-OpenRouter provides unified access to many models (Gemini, GPT-4, Claude, o3, etc.) with a single API key. If you'd rather not hand-edit JSON, run `amicus setup` instead — it stores the key for you.
+OpenRouter provides unified access to many models (Gemini, GPT, Claude, o3, etc.) with a single API key. If you'd rather not hand-edit JSON, run `amicus setup` instead — it stores the key for you.
 
 **Step 1: Get an OpenRouter API key**
 - Sign up at https://openrouter.ai
@@ -103,12 +113,11 @@ EOF
 amicus start --model gemini --prompt "Say hello" --no-ui
 ```
 
-**Model names with OpenRouter:**
-When using OpenRouter, prefix the model with `openrouter/`:
+**With OpenRouter as your only key**, aliases and bare canonical ids both work — the router falls back to OpenRouter automatically since no direct key exists for the vendor:
 ```bash
-amicus start --model gemini --prompt "..."
-amicus start --model gpt --prompt "..."
-amicus start --model claude --prompt "..."
+amicus start --model gemini --prompt "..."                              # alias
+amicus start --model google/gemini-3.5-flash --prompt "..."             # bare canonical, falls back to OpenRouter
+amicus start --model openrouter/google/gemini-3.5-flash --prompt "..."  # explicit override — same result here
 ```
 
 ### Option B: Direct API Keys (Provider-Specific)
@@ -136,8 +145,8 @@ Add these to your shell profile (`~/.bashrc`, `~/.zshrc`) for persistence.
 - Run `amicus setup` to store keys in amicus's config (recommended)
 - Move your exports to `~/.zshenv` (sourced by all zsh shell types)
 
-**Model names with direct API keys:**
-When using direct API keys, use the provider/model format WITHOUT the `openrouter/` prefix:
+**Model names with a direct key configured:**
+Use the bare canonical `provider/model` form — direct-first routing picks up these keys automatically, no `openrouter/` prefix needed:
 ```bash
 amicus start --model google/<model-name> --prompt "..."
 amicus start --model openai/<model-name> --prompt "..."
@@ -146,18 +155,15 @@ amicus start --model anthropic/<model-name> --prompt "..."
 
 ### Model Naming Summary
 
-| Provider Access | Model Name Format | Example |
-|-----------------|-------------------|---------|
-| OpenRouter | `openrouter/provider/model` | `openrouter/google/<model-name>` |
-| Direct Google API | `google/model` | `google/<model-name>` |
-| Direct OpenAI API | `openai/model` | `openai/<model-name>` |
-| Direct Anthropic API | `anthropic/model` | `anthropic/<model-name>` |
+| Form | Meaning | Credentials used |
+|------|---------|-------------------|
+| `provider/model` (bare, canonical) | Policy-routed, direct-first | Direct provider key if configured, else `OPENROUTER_API_KEY` |
+| `openrouter/provider/model` | Explicit force-OpenRouter override (required for gateway-only vendors) | `OPENROUTER_API_KEY`, always |
 
-**Important:** The model name format tells the SDK which authentication to use:
-- `openrouter/...` → Uses OpenRouter API key from auth.json
-- `google/...` → Uses `GOOGLE_GENERATIVE_AI_API_KEY` environment variable
-- `openai/...` → Uses `OPENAI_API_KEY` environment variable
-- `anthropic/...` → Uses `ANTHROPIC_API_KEY` environment variable
+**Important:** the bare form is not tied to one credential — the router decides at launch time:
+- `google/...`, `openai/...`, `anthropic/...`, `deepseek/...` (bare) → that vendor's direct key if present, else `OPENROUTER_API_KEY`
+- `openrouter/...` → always `OPENROUTER_API_KEY`
+- `--gateway direct` forces the direct key (errors if it's missing); `--gateway openrouter` forces OpenRouter (errors if that key is missing); omit `--gateway` (or pass `auto`) for the default direct-first behavior described above
 
 ---
 
@@ -252,6 +258,10 @@ amicus start \
 - `--json`: With `--no-ui`, emit the run result as one stable JSON document on stdout
   (`schemaVersion: 2`; the `summary` field is the model's output).
 - `--no-validate-model`: Skip the model-catalog pre-flight check (validation is on by default).
+- `--gateway <mode>`: Routing override for this launch — `auto` (default, direct-first: your
+  direct provider key when present, else OpenRouter), `direct` (require a direct provider key,
+  errors if missing), or `openrouter` (force OpenRouter, errors if that key is missing). Omit to
+  fall back to the `routing.prefer` config default (`"direct"` unless changed).
 - `--agent <agent>`: Agent mode (controls tool permissions). If omitted, defaults to
   **Chat** in interactive mode and **Build** in headless (`--no-ui`) mode — `chat`
   stalls without user interaction, so headless runs need an agent that doesn't wait
@@ -281,17 +291,26 @@ The CLI validates all inputs **before** launching the sidecar. Invalid inputs fa
 | `--timeout` | Must be positive number | `Error: --timeout must be a positive number` |
 | `--context-turns` | Must be positive number | `Error: --context-turns must be a positive number` |
 | `--context-since` | Must match format: `30m`, `2h`, `1d` | `Error: --context-since must be in format: 30m, 2h, or 1d` |
-| API Key | Must be set for model's provider | `Error: <KEY_NAME> environment variable is required for <Provider> models` |
+| `--gateway` | If provided, must be one of `auto`, `direct`, `openrouter` | `Error: --gateway must be one of: auto, direct, openrouter` |
+| API Key | The router must be able to resolve *some* usable key for the requested model (see below) | Reason sentence + fix hint, e.g. `No API key was found for this vendor via any gateway.` / `Add a provider key or an OpenRouter key.` |
 
 **API Key Requirements by Provider:**
 
-| Model Prefix | Required Env Var | Example |
-|--------------|------------------|---------|
-| `openrouter/...` | `OPENROUTER_API_KEY` | `export OPENROUTER_API_KEY=sk-or-...` |
-| `google/...` | `GOOGLE_GENERATIVE_AI_API_KEY` | `export GOOGLE_GENERATIVE_AI_API_KEY=...` |
-| `openai/...` | `OPENAI_API_KEY` | `export OPENAI_API_KEY=sk-...` |
-| `anthropic/...` | `ANTHROPIC_API_KEY` | `export ANTHROPIC_API_KEY=sk-ant-...` |
-| `deepseek/...` | `DEEPSEEK_API_KEY` | `export DEEPSEEK_API_KEY=...` |
+Bare canonical ids (`google/...`, `openai/...`, `anthropic/...`, `deepseek/...`) are policy-routed —
+the direct key for that vendor if configured, else `OPENROUTER_API_KEY` as fallback. Only
+`openrouter/...` (the explicit override) and gateway-only vendors (Qwen, Grok, Mistral, GLM, …)
+strictly require `OPENROUTER_API_KEY`:
+
+| Model Prefix | Env Var Amicus Will Use | Notes |
+|--------------|--------------------------|-------|
+| `openrouter/...` | `OPENROUTER_API_KEY` | Always required for this form |
+| `google/...` (bare) | `GOOGLE_GENERATIVE_AI_API_KEY`, else `OPENROUTER_API_KEY` | Errors only if neither is set |
+| `openai/...` (bare) | `OPENAI_API_KEY`, else `OPENROUTER_API_KEY` | Errors only if neither is set |
+| `anthropic/...` (bare) | `ANTHROPIC_API_KEY`, else `OPENROUTER_API_KEY` | Errors only if neither is set |
+| `deepseek/...` (bare) | `DEEPSEEK_API_KEY`, else `OPENROUTER_API_KEY` | Errors only if neither is set |
+
+`--gateway direct` narrows this to "the direct key specifically" (errors if only OpenRouter is
+configured); `--gateway openrouter` narrows it to `OPENROUTER_API_KEY` specifically.
 
 **Handling validation errors:**
 
@@ -310,8 +329,8 @@ amicus start --model gemini --prompt "Task" --agent Build
 # Fix: Provide a non-empty briefing
 amicus start --model gemini --prompt "Detailed task description"
 
-# Error: OPENROUTER_API_KEY environment variable is required
-# Fix: Set the API key for your provider
+# Error: No API key was found for this vendor via any gateway.
+# Fix: add a direct provider key or an OpenRouter key
 export OPENROUTER_API_KEY=sk-or-your-key
 amicus start --model gemini --prompt "Task"
 ```
@@ -325,10 +344,11 @@ amicus fanout --models "gemini,gpt,deepseek" --prompt-file ./briefing.md --json
 Runs the same prompt on every listed model in parallel (one shared engine server, headless),
 then prints ONE JSON wave document: `status` (`complete`|`partial`|`error`), `counts`, and
 `legs[]` where each leg's `summary` is that model's answer. Exit codes: 0 complete, 2 partial,
-1 error/aborted. Aliases and full `provider/model` IDs both work; duplicates are allowed
+1 error/aborted. Aliases and full `provider/model` IDs both work — bare canonical ids route
+direct-first, `openrouter/provider/model` forces OpenRouter; duplicates are allowed
 (distinct legs). `--wave-id <id>` pins leg IDs to `<id>-1..N`. Shared per-leg knobs: `--agent`,
 `--thinking`, `--timeout`, `--summary-length`, `--no-context`, `--context-*`, `--mcp*`,
-`--no-validate-model`, `--cwd`.
+`--no-validate-model`, `--gateway`, `--cwd`.
 
 ### Inspect the Model Catalog
 
@@ -386,7 +406,10 @@ Starts a **new** sidecar session that inherits the old session's conversation as
 - `--prompt`: New task description for the continuation
 
 **Optional:**
-- `--model <model>`: Override model (defaults to original session's model)
+- `--model <model>`: Override model (defaults to original session's model) — bare canonical ids
+  route direct-first; `openrouter/provider/model` forces OpenRouter
+- `--gateway <mode>`: Routing override for the new session (`auto`|`direct`|`openrouter`), same
+  semantics as `start`. Only meaningful when `--model` is also given
 - `--context-turns <N>`: Max turns from previous session to include (default: 50)
 - `--context-max-tokens <N>`: Max tokens for context (default: 80000)
 - `--no-ui`: Run in autonomous mode
@@ -427,7 +450,9 @@ Use short aliases (run `amicus models` to see the live catalog, and `amicus mode
 - `--model deepseek` -- DeepSeek
 - Omit `--model` entirely to use your configured default
 
-Full model strings also work: `--model openrouter/provider/model-id`
+Full model strings also work: `--model provider/model-id` (bare canonical, direct-first — e.g.
+`--model anthropic/claude-opus-4.8`) or `--model openrouter/provider/model-id` (explicit
+force-OpenRouter override).
 
 ### Verifying Model Names
 
@@ -891,8 +916,8 @@ echo $ANTHROPIC_API_KEY # For Anthropic models
 ### "401 Unauthorized" or authentication errors
 
 1. Verify you're using the correct model name format:
-   - OpenRouter models: `openrouter/provider/model`
-   - Direct API models: `provider/model`
+   - Bare canonical (policy-routed, direct-first): `provider/model`
+   - Explicit force-OpenRouter override: `openrouter/provider/model`
 
 2. Check your API key is valid and has credits
 
@@ -967,11 +992,14 @@ amicus start --model ... --prompt "..." --agent Explore
 amicus start --model ... --prompt "..." --agent MyCustomAgent
 ```
 
-**"Error: <KEY_NAME> environment variable is required for <Provider> models"**
+**"No API key was found for this vendor via any gateway." / "No API key is configured for this vendor's direct API."**
 
-The API key for the model's provider is not set:
+A bare canonical id needs *some* usable key for the vendor — either its direct key or
+`OPENROUTER_API_KEY` as a fallback. `--gateway direct` narrows that to "the direct key
+specifically" (fails if only OpenRouter is configured); `--gateway openrouter` narrows it to
+`OPENROUTER_API_KEY` specifically:
 ```bash
-# For OpenRouter models (openrouter/...)
+# OPENROUTER_API_KEY is the fallback for every direct-capable vendor
 export OPENROUTER_API_KEY=sk-or-your-key
 
 # For Google models (google/...)

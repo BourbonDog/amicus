@@ -20,7 +20,7 @@ amicus abort --all [--json]
 # Setup & maintenance
 amicus setup                              # Full wizard: keys, default model, aliases
 amicus setup --api-keys                   # Open just the API-key step
-amicus setup --add-alias fast=openrouter/google/gemini-3.1-flash-lite-preview
+amicus setup --add-alias fast=google/gemini-3.1-flash-lite-preview  # bare canonical, direct-first
 amicus models                             # List the live catalog
 amicus models --search gemini             # Filter by substring
 amicus models --refresh                   # Force-fetch from provider APIs
@@ -54,7 +54,7 @@ amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--model <model>` | Alias, `provider/model`, or `openrouter/provider/model`. | config default |
+| `--model <model>` | Alias, or a full id: bare `provider/model` (canonical, direct-first) or `openrouter/provider/model` (explicit force-OpenRouter). | config default |
 | `--prompt <text>` | Task description. | *(required unless `--prompt-file`)* |
 | `--prompt-file <path>` | Read the prompt from a UTF-8 file (XOR `--prompt`). | |
 | `--agent <agent>` | OpenCode agent: `Chat`, `Build`, `Plan`. | `Chat` interactive / `Build` headless |
@@ -80,6 +80,7 @@ amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 | `--session-dir <path>` | Explicit session-data directory. | |
 | `--setup` | Force-open configuration before launching. Does **not** relax the `--prompt`/`--prompt-file` requirement — `start --setup` still fails fast with "Error: --prompt or --prompt-file is required" if neither is given. | |
 | `--no-validate-model` | Skip model-catalog validation before launch. | validation on |
+| `--gateway <mode>` | Routing override for this launch: `auto` (direct-first), `direct` (require a direct provider key), or `openrouter` (force OpenRouter). Overrides `routing.prefer` for one call. | `auto` |
 
 > Agents: **Chat** auto-approves reads and asks before writes/bash (interactive default); **Build** has full tool access (headless default); **Plan** is read-only analysis. `--agent Chat` is interactive-only and incompatible with `--no-ui`.
 
@@ -103,7 +104,7 @@ amicus fanout --council free --prompt "Review this design" --json
 
 | Option | Description |
 |--------|-------------|
-| `--models <a,b,c>` | Comma-separated aliases or full provider IDs. Required unless `--council` is given; mutually exclusive with `--council`. |
+| `--models <a,b,c>` | Comma-separated aliases or full model IDs (bare `provider/model` routes direct-first; `openrouter/provider/model` forces OpenRouter). Required unless `--council` is given; mutually exclusive with `--council`. |
 | `--council <name>` | Run a saved council, or one of the built-in benches `free` \| `budget` \| `frontier`, instead of `--models`; mutually exclusive with `--models`. A saved council of the same name as a built-in always takes precedence (see `amicus council list`/`show`). |
 | `--prompt <text>` | Shared briefing (mutually exclusive with `--prompt-file`). |
 | `--prompt-file <path>` | Read the shared briefing from a file. Preferred for long briefs and required on Windows when content exceeds ~32 KB. |
@@ -113,10 +114,11 @@ amicus fanout --council free --prompt "Review this design" --json
 | `--max-cost <$>` | Refuse the wave if the estimated total exceeds `$` (soft ceiling). |
 | `--no-cost-gate` | Disable the budget gate (per-$/Mtok threshold + ceiling) for this run. |
 | `--no-validate-model` | Skip catalog validation. |
+| `--gateway <mode>` | Routing override applied to every leg: `auto` (direct-first), `direct`, or `openrouter`. |
 
 **Shared per-leg knobs.** Every leg in the wave also accepts the same per-leg options as `start`:
 `--agent`, `--thinking`, `--timeout`, `--summary-length`, `--no-context`, `--context-*`, `--mcp*`,
-`--no-validate-model`, `--cwd`.
+`--no-validate-model`, `--gateway`, `--cwd`.
 
 **Exit codes:** `0` all legs complete · `2` partial wave (at least one leg failed) · `1` none complete / hard failure · `130` SIGINT · `143` SIGTERM.
 
@@ -185,14 +187,12 @@ amicus models --check         # Audit your aliases against the catalog
 
 **Aliases are a curated seed, not a fixed list.** `amicus setup` seeds a curated set of short aliases (e.g. `gemini`, `gpt`, `opus`, `deepseek`), and you add or override them with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth.
 
-**Full-id passthrough.** You can always bypass aliases and name a model directly. The prefix decides which credentials are used:
+**Full-id passthrough.** You can always bypass aliases and name a model directly. Bare `provider/model` is the canonical, policy-routed form; `openrouter/provider/model` is an explicit override. See [Routing](../README.md#routing) for the full explanation — summary:
 
-| Format | Example | Credentials |
-|--------|---------|-------------|
-| `openrouter/provider/model` | `openrouter/google/gemini-2.5-flash` | `OPENROUTER_API_KEY` |
-| `google/model` | `google/gemini-2.5-flash` | `GOOGLE_GENERATIVE_AI_API_KEY` |
-| `openai/model` | `openai/gpt-5` | `OPENAI_API_KEY` |
-| `anthropic/model` | `anthropic/claude-opus-4` (the `opus` alias resolves here by default) | `ANTHROPIC_API_KEY` |
+| Format | Example | Routing | Credentials |
+|--------|---------|---------|-------------|
+| `provider/model` (bare, canonical) | `google/gemini-2.5-flash`, `openai/gpt-5`, `anthropic/claude-opus-4` (the `opus` alias resolves here by default) | Direct-first (`auto`) | That vendor's direct key if configured, else `OPENROUTER_API_KEY` |
+| `openrouter/provider/model` | `openrouter/google/gemini-2.5-flash` | Always OpenRouter | `OPENROUTER_API_KEY` |
 
 ---
 
@@ -225,7 +225,7 @@ amicus abort --all                   # Stop all running sessions in this project
 amicus abort --all --json            # Machine-readable abort result (scope: "all")
 
 amicus setup --api-keys              # Open just the API-key window
-amicus setup --add-alias fast=openrouter/google/gemini-2.5-flash   # Add/override one alias
+amicus setup --add-alias fast=google/gemini-2.5-flash   # Add/override one alias (bare canonical)
 ```
 
 **`amicus status <id>` output.** Human-readable:

@@ -56,7 +56,9 @@ function getTools() {
       ' Pass includeContext: false when the briefing is fully self-contained.',
     inputSchema: {
       model: safeModel.optional().describe(
-        `Short alias (${aliasNames}) or full provider/model ID. ` +
+        `Short alias (${aliasNames}) or full model ID ` +
+        '(bare provider/model is canonical and routes direct-first, e.g. anthropic/claude-opus-4.8; ' +
+        'openrouter/provider/model forces OpenRouter). ' +
         'If omitted, uses the configured default. Call amicus_guide to see all aliases.'
       ),
       gateway: z.enum(GATEWAY_MODES).optional().describe(
@@ -256,7 +258,9 @@ function getTools() {
         'New task description for the continuation.'
       ),
       model: safeModel.optional().describe(
-        `Override model — short alias (${aliasNames}) or full provider/model ID. Defaults to the original session's model.`
+        `Override model — short alias (${aliasNames}) or full model ID. Bare provider/model routes ` +
+        'direct-first (canonical); openrouter/provider/model forces OpenRouter. Defaults to the ' +
+        "original session's model."
       ),
       gateway: z.enum(GATEWAY_MODES).optional().describe(
         'Routing preference: auto (direct-first, default), direct (require a ' +
@@ -317,7 +321,9 @@ function getTools() {
       'inside). Each leg is also an ordinary session readable by taskId.',
     inputSchema: {
       models: z.array(safeModel).min(1).max(10).optional().describe(
-        `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full provider/model IDs. Duplicates allowed. Omit when using 'council'.`
+        `1-10 models (2+ for genuine fan-out). Short aliases (${aliasNames}) or full model IDs — ` +
+        'bare provider/model routes direct-first (canonical), openrouter/provider/model forces ' +
+        "OpenRouter. Duplicates allowed. Omit when using 'council'."
       ),
       council: z.string().optional().describe(
         "Run a saved council, or a built-in bench ('free', 'budget', 'frontier'), instead of 'models'. " +
@@ -505,7 +511,10 @@ Include: Objective, Background, Files of interest, Success criteria, Constraints
 |-------|-------|
 ${aliasRows}
 
-Or use full IDs in provider/model format (e.g., openrouter/provider/model-id).
+Or use a full model ID. Bare \`provider/model\` (e.g. anthropic/claude-opus-4.8) is the canonical,
+policy-routed form — it routes direct-first (your direct provider key if configured, else
+OpenRouter). \`openrouter/provider/model\` is an explicit override that forces OpenRouter. The
+\`gateway\` param (or \`routing.prefer\` in config.json) controls this per call or globally.
 Run amicus_setup to configure defaults and add custom aliases.
 
 ## Session Matching
