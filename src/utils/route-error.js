@@ -15,16 +15,28 @@
  * Selection shape (`selectionRequired()`):
  *   {kind:'selection_required', requested, suggestions}
  *
- * The router's error `reason` is a closed set of 7 values (ROUTE_ERROR_REASONS
- * below). A `selection_required` result has no `reason` of its own — it is
- * synthesized here as SELECTION_REQUIRED_REASON, kept in the same documented
- * REASON_TEXT map rather than invented ad hoc, so callers can treat every
- * rendered structured error the same way regardless of which RouteResult
- * produced it.
+ * The router's error `reason` is NOT limited to the 7 values in
+ * ROUTE_ERROR_REASONS below — that array is just the original/base set,
+ * intentionally pinned as-is (see its own doc comment). The router can also
+ * emit availability reasons (`direct_unavailable`, `openrouter_unavailable`),
+ * which have REASON_TEXT/FIX_HINTS entries but are deliberately excluded from
+ * ROUTE_ERROR_REASONS. A `selection_required` result has no `reason` of its
+ * own — it is synthesized here as SELECTION_REQUIRED_REASON, kept in the same
+ * documented REASON_TEXT map rather than invented ad hoc, so callers can
+ * treat every rendered structured error the same way regardless of which
+ * RouteResult produced it.
  */
 'use strict';
 
-/** The closed set of reasons a router `error` result can carry. */
+/**
+ * The original/base set of router error reasons — NOT an exhaustive list of
+ * every reason a router error can carry. Pinned to exactly these 7 values by
+ * a back-compat test (route-error.test.js:14-24), so this array must not be
+ * extended when new reasons are added. The router also emits
+ * `direct_unavailable` and `openrouter_unavailable` (REASON_TEXT/FIX_HINTS
+ * below have entries for both); those are intentionally left out of this
+ * array. Do not use ROUTE_ERROR_REASONS as an exhaustive switch/allow-list.
+ */
 const ROUTE_ERROR_REASONS = Object.freeze([
   'gateway_conflict',
   'no_openrouter_key',
