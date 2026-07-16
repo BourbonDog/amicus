@@ -44,9 +44,11 @@ async function promptForChoice(ask, print, choices) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const answer = (await ask(`Pick a number (1-${choices.rows.length}, Enter for recommended): `) || '').trim();
     if (answer === '') { return choices.preselectedId; }
-    const num = Number.parseInt(answer, 10);
-    if (Number.isInteger(num) && num >= 1 && num <= choices.rows.length) {
-      return choices.rows[num - 1].id;
+    if (/^\d+$/.test(answer)) {
+      const num = Number.parseInt(answer, 10);
+      if (num >= 1 && num <= choices.rows.length) {
+        return choices.rows[num - 1].id;
+      }
     }
     if (attempt === 0) { print(`Invalid choice: "${answer}".`); }
   }

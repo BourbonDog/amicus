@@ -22,11 +22,15 @@ jest.mock('../src/utils/model-catalog', () => ({
 jest.mock('../src/utils/provider-default-prompt', () => ({
   runProviderDefaultFlow: jest.fn(),
 }));
+jest.mock('readline', () => ({
+  createInterface: jest.fn(),
+}));
 
 const { readApiKeys, readApiKeyHints, saveApiKey, removeApiKey } = require('../src/utils/api-key-store');
 const { validateApiKey } = require('../src/utils/api-key-validation');
 const { getCatalog } = require('../src/utils/model-catalog');
 const { runProviderDefaultFlow } = require('../src/utils/provider-default-prompt');
+const { createInterface } = require('readline');
 const { handleKey } = require('../src/cli-handlers');
 
 let consoleSpy;
@@ -42,6 +46,7 @@ beforeEach(() => {
     setAsDefault: false,
     summaryLine: 'stub summary line',
   });
+  createInterface.mockReset();
 });
 afterEach(() => {
   consoleSpy.mockRestore();
@@ -152,6 +157,78 @@ describe('handleKey — provider-default picker after save', () => {
     expect(runProviderDefaultFlow).toHaveBeenCalledTimes(1);
     const [, opts] = runProviderDefaultFlow.mock.calls[0];
     expect(opts.catalog).toEqual([]);
+  });
+});
+
+describe('handleKey — interactivity gate (cli-handlers.js:181)', () => {
+  // These pin the REAL gate expression `!!process.stdin.isTTY && !args.json
+  // && !args.quiet` -- every test here sets process.stdin.isTTY = true (the
+  // other tests above run in the real jest process, which has no TTY, so
+  // they can't distinguish the gate from a hardcoded `false`). Each test
+  // restores the original isTTY value, including on failure.
+  let origIsTTY;
+
+  beforeEach(() => {
+    origIsTTY = process.stdin.isTTY;
+    validateApiKey.mockResolvedValue({ valid: true });
+    saveApiKey.mockReturnValue({ success: true });
+    getCatalog.mockResolvedValue([{ id: 'deepseek/deepseek-v4' }]);
+  });
+  afterEach(() => {
+    process.stdin.isTTY = origIsTTY;
+  });
+
+  test('isTTY=true, no --json/--quiet: picker runs INTERACTIVE -- a readline interface is created and its ask is consulted', async () => {
+    process.stdin.isTTY = true;
+
+    const question = jest.fn((_prompt, cb) => cb('1'));
+    const close = jest.fn();
+    createInterface.mockReturnValue({ question, close });
+
+    runProviderDefaultFlow.mockImplementation(async (provider, opts) => {
+      expect(opts.interactive).toBe(true);
+      expect(typeof opts.ask).toBe('function');
+      const answer = await opts.ask('Pick a number: ');
+      return { chosenId: 'deepseek/deepseek-v4', setAsDefault: true, summaryLine: `picked ${answer}` };
+    });
+
+    await handleKey({ _: ['key', 'deepseek', 'sk-test123'] });
+
+    expect(createInterface).toHaveBeenCalledTimes(1);
+    expect(createInterface).toHaveBeenCalledWith(expect.objectContaining({
+      input: process.stdin, output: process.stdout,
+    }));
+    expect(question).toHaveBeenCalledTimes(1); // ask was actually consulted
+    expect(close).toHaveBeenCalledTimes(1); // rl closed in the finally
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('picked 1'));
+
+    // This is what would fail if line 181 were hardcoded to `true`: nothing
+    // extra to assert (it already passes) -- the *false* tests below are
+    // what catch that mutation.
+  });
+
+  test('isTTY=true BUT args.json=true: interactive is FORCED false -- no readline interface, no ask, silent preselection', async () => {
+    process.stdin.isTTY = true;
+
+    await handleKey({ _: ['key', 'deepseek', 'sk-test123'], json: true });
+
+    expect(createInterface).not.toHaveBeenCalled();
+    expect(runProviderDefaultFlow).toHaveBeenCalledTimes(1);
+    const [, opts] = runProviderDefaultFlow.mock.calls[0];
+    expect(opts.interactive).toBe(false);
+    expect(opts.ask).toBeUndefined();
+  });
+
+  test('isTTY=true BUT args.quiet=true: interactive is FORCED false -- no readline interface, no ask, silent preselection', async () => {
+    process.stdin.isTTY = true;
+
+    await handleKey({ _: ['key', 'deepseek', 'sk-test123'], quiet: true });
+
+    expect(createInterface).not.toHaveBeenCalled();
+    expect(runProviderDefaultFlow).toHaveBeenCalledTimes(1);
+    const [, opts] = runProviderDefaultFlow.mock.calls[0];
+    expect(opts.interactive).toBe(false);
+    expect(opts.ask).toBeUndefined();
   });
 });
 

@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { runProviderDefaultFlow } = require('../src/utils/provider-default-prompt');
+const { runProviderDefaultFlow, formatPrice, formatRow } = require('../src/utils/provider-default-prompt');
 
 /**
  * Fixture: a vendor with no per-vendor tier table (model-tiers.js) and no
@@ -107,5 +107,62 @@ describe('runProviderDefaultFlow', () => {
 
     expect(ask).not.toHaveBeenCalled();
     expect(result.chosenId).toBeNull();
+  });
+
+  test('interactive: a "clean-integer-only" non-empty entry like "2abc" is invalid -- re-prompts once then falls back to preselected', async () => {
+    const ask = jest.fn()
+      .mockResolvedValueOnce('2abc')
+      .mockResolvedValueOnce('');
+    const print = jest.fn();
+
+    const result = await runProviderDefaultFlow('testvendor', { interactive: true, ask, catalog, print });
+
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.chosenId).toBe('testvendor/model-b'); // preselected fallback
+    expect(print).toHaveBeenCalledWith(expect.stringContaining('Invalid choice: "2abc"'));
+  });
+
+  test('interactive: a non-integer decimal like "2.9" is invalid -- re-prompts once then falls back to preselected', async () => {
+    const ask = jest.fn()
+      .mockResolvedValueOnce('2.9')
+      .mockResolvedValueOnce('');
+    const print = jest.fn();
+
+    const result = await runProviderDefaultFlow('testvendor', { interactive: true, ask, catalog, print });
+
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(result.chosenId).toBe('testvendor/model-b');
+    expect(print).toHaveBeenCalledWith(expect.stringContaining('Invalid choice: "2.9"'));
+  });
+});
+
+describe('formatPrice / formatRow', () => {
+  test('formatPrice renders a $/M-input string for a priced row', () => {
+    expect(formatPrice(2.5)).toBe('$2.50/M in');
+  });
+
+  test('formatPrice renders "n/a" for null/undefined pricing', () => {
+    expect(formatPrice(null)).toBe('n/a');
+    expect(formatPrice(undefined)).toBe('n/a');
+  });
+
+  test('formatRow includes the price string for a priced row and no recommended marker when not preselected', () => {
+    const row = { id: 'v/a', name: 'Model A', contextLength: 128000, pricePerMInput: 2.5, isPreselected: false };
+    const line = formatRow(row, 1);
+    expect(line).toContain('Model A');
+    expect(line).toContain('$2.50/M in');
+    expect(line).not.toContain('(recommended)');
+  });
+
+  test('formatRow shows "n/a" for an unpriced row', () => {
+    const row = { id: 'v/b', name: 'Model B', contextLength: null, pricePerMInput: null, isPreselected: false };
+    const line = formatRow(row, 2);
+    expect(line).toContain('n/a');
+  });
+
+  test('formatRow marks the preselected row as "(recommended)"', () => {
+    const row = { id: 'v/c', name: 'Model C', contextLength: 32000, pricePerMInput: 0.5, isPreselected: true };
+    const line = formatRow(row, 3);
+    expect(line).toContain('(recommended)');
   });
 });
