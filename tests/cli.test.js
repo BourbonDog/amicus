@@ -201,6 +201,16 @@ describe('CLI Argument Parser', () => {
         expect(result.client).toBe('code-local');
       });
 
+      it('should parse --gateway option', () => {
+        const result = parseArgs(['start', '--gateway', 'direct', '--model', 'x', '--prompt', 'y']);
+        expect(result.gateway).toBe('direct');
+      });
+
+      it('should default --gateway to undefined when not specified', () => {
+        const result = parseArgs(['start', '--model', 'x', '--prompt', 'y']);
+        expect(result.gateway).toBeUndefined();
+      });
+
       it('should parse --session-dir option', () => {
         const result = parseArgs(['start', '--session-dir', '/tmp/sessions']);
         expect(result['session-dir']).toBe('/tmp/sessions');
@@ -504,6 +514,30 @@ describe('CLI Argument Parser', () => {
       const result = validateStartArgs(args);
       expect(result.valid).toBe(false);
       expect(result.error).toContain('context-since');
+    });
+
+    describe('--gateway validation (#61 Task 7.1)', () => {
+      it('should accept each valid --gateway mode', () => {
+        ['auto', 'direct', 'openrouter'].forEach(gateway => {
+          const args = { _: ['start'], model: 'google/gemini-2.5', prompt: 'test', gateway };
+          const result = validateStartArgs(args);
+          expect(result.valid).toBe(true);
+        });
+      });
+
+      it('should accept when --gateway is not specified', () => {
+        const args = { _: ['start'], model: 'google/gemini-2.5', prompt: 'test' };
+        const result = validateStartArgs(args);
+        expect(result.valid).toBe(true);
+      });
+
+      it('should reject an invalid --gateway value with a clear error', () => {
+        const args = { _: ['start'], model: 'google/gemini-2.5', prompt: 'test', gateway: 'bogus' };
+        const result = validateStartArgs(args);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('--gateway');
+        expect(result.error).toContain('auto, direct, openrouter');
+      });
     });
   });
 
