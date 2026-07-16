@@ -185,6 +185,7 @@ src/
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
 │   ├── model-input-default.js
+│   ├── model-tiers.js  # Per-vendor cost tiers (economy/balanced/frontier) + resolution against the
 │   ├── model-validator.js  # Model Validator
 │   ├── node-version-guard.js
 │   ├── path-setup.js
@@ -414,6 +415,7 @@ evals/
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
+| `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()` |
