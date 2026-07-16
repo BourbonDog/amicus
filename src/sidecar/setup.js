@@ -238,13 +238,53 @@ async function runFreeCouncilBranch(rl) {
 }
 
 /**
+ * Run the shared per-provider default-model picker (Task 6, `runProviderDefaultFlow`)
+ * once for each keyed provider, in `foundKeys` detection order -- whichever
+ * comes first seeds `config.default` (`applyProviderDefault`'s
+ * seed-only-when-absent rule; see `provider-default-picker.js`). Each provider
+ * is its own read-modify-write against the real config file, so an alias
+ * written here is on disk before the standard model step's own `loadConfig()`
+ * runs -- no clobber, no shared in-memory object to race.
+ *
+ * Skippable and crash-proof: `runProviderDefaultFlow` already degrades to a
+ * graceful summary line on an empty/offline catalog (never calls `ask`), and
+ * a per-provider try/catch means one provider's failure can't block the rest
+ * of setup (mirrors `cli-handlers.js`'s `offerProviderDefault`).
+ * @param {readline.Interface} rl
+ * @param {string[]} foundKeys keyed providers, in detection order
+ * @param {Array<object>} catalog
+ */
+async function runProviderDefaultPickers(rl, foundKeys, catalog) {
+  if (foundKeys.length === 0) { return; }
+  const { runProviderDefaultFlow } = require('../utils/provider-default-prompt');
+  for (const provider of foundKeys) {
+    try {
+      const { summaryLine } = await runProviderDefaultFlow(provider, {
+        interactive: true,
+        ask: (q) => askQuestion(rl, q),
+        catalog,
+        print: console.log,
+      });
+      console.log(summaryLine);
+    } catch (err) {
+      console.log(
+        `Note: couldn't set a default for ${provider} (${err.message}). ` +
+        `Run \`amicus key ${provider}\` again later.`
+      );
+    }
+  }
+  console.log('');
+}
+
+/**
  * Run the readline-based setup wizard (headless fallback)
  *
  * Guides the user through:
  * 1. API key detection
- * 2. Mode selection (standard or free council)
- * 3. Default model selection from live quick-picks (read-modify-write, no clobber)
- * 4. Config file save
+ * 2. Per-provider default-model picker (Task 7) -- once per keyed provider
+ * 3. Mode selection (standard or free council)
+ * 4. Default model selection from live quick-picks (read-modify-write, no clobber)
+ * 5. Config file save
  */
 async function runReadlineSetup() {
   const rl = readline.createInterface({
@@ -279,6 +319,14 @@ async function runReadlineSetup() {
       await warnOnLowOpenRouterCredit();
     }
 
+    const { getCatalog } = require('../utils/model-catalog');
+    let catalog = [];
+    try { catalog = await getCatalog(); } catch (_err) { /* offline: pinned */ }
+
+    // Task 7 (cost-aware defaults P2): per-provider picker, once per keyed
+    // provider, BEFORE the mode prompt -- orthogonal to standard-vs-free-council.
+    await runProviderDefaultPickers(rl, foundKeys, catalog);
+
     const mode = await askQuestion(rl,
       'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
     if (mode === '2') {
@@ -286,11 +334,8 @@ async function runReadlineSetup() {
       return;
     }
 
-    const { getCatalog } = require('../utils/model-catalog');
     const { resolveQuickPicks, toLiveSeedAliases } = require('../utils/quick-picks');
     const { toCanonicalDefault } = require('../utils/curated-models');
-    let catalog = [];
-    try { catalog = await getCatalog(); } catch (_err) { /* offline: pinned */ }
     const picks = resolveQuickPicks(catalog);
 
     console.log('Choose your default model:');
