@@ -1,9 +1,10 @@
 /**
  * Route-launch views (#61 gateway routing integration, Task 4.2).
  *
- * Additive, read-only helpers consumed by Task 4.4's resolveRouteForLaunch
- * (not wired into any launch path yet). Pure-ish: all I/O goes through the
- * stubbable api-key-store / auth-json / model-catalog modules.
+ * Read-only helpers consumed by resolveRouteForLaunch, which IS wired into
+ * live launch paths (start-helpers.js, mcp-server.js, sidecar/fanout-validate.js).
+ * Pure-ish: all I/O goes through the stubbable api-key-store / auth-json /
+ * model-catalog modules.
  */
 'use strict';
 
@@ -52,12 +53,20 @@ const ROUTE_VERSION = 1;
 /**
  * Build up to ~6 labeled alternatives for a `selection_required` RouteResult
  * (#61 Task 6.3, spec Decision 10). Pure: reads only the already-parsed
- * descriptor plus the live keys/catalogInfo the caller already assembled.
+ * descriptor plus the live keys/catalogInfo/gatewayIds the caller already
+ * assembled.
  *
  * Two categories, in order:
  *  1. The SAME model via OpenRouter — only when an OpenRouter key is present
- *     AND the OR-namespaced id (`openrouter/<vendor>/<model>`) is actually
- *     present in the catalog (never suggest an id we can't confirm exists).
+ *     AND the OR-namespaced id is actually present in the catalog (never
+ *     suggest an id we can't confirm exists). For divergent vendors (e.g.
+ *     Anthropic) `descriptor.model` may be the DASH-form direct id, so a
+ *     reconstructed `openrouter/<vendor>/<model>` would never match the
+ *     catalog's dot-form OR id -- when the caller's `gatewayIds.openrouter`
+ *     is available (the catalog-correct form), it is used instead of
+ *     reconstructing. Falls back to reconstruction when `gatewayIds` is
+ *     absent (non-alias / full-id / non-divergent requests), so behavior
+ *     there is unchanged.
  *  2. Up to 5 OTHER models in the same direct vendor namespace (ids starting
  *     `<vendor>/`, excluding the requested id itself and excluding any
  *     `openrouter/`-prefixed rows, which share the `<vendor>/` prefix check
@@ -68,9 +77,13 @@ const ROUTE_VERSION = 1;
  *   openrouter-literal — both carry vendor/model)
  * @param {Object<string,boolean>} keys per-provider key-presence map (buildLaunchKeys() shape)
  * @param {{models: Array<{id:string}>}} catalogInfo
+ * @param {{direct?: string, openrouter?: string}} [gatewayIds] the same
+ *   per-gateway id map resolveRouteForLaunch threads through resolveRoute
+ *   (Task 3's bridge for divergent curated aliases); absent for non-alias /
+ *   full-id / non-divergent requests
  * @returns {Array<{model:string, gateway:string, note:string}>}
  */
-function buildSuggestions(descriptor, keys, catalogInfo) {
+function buildSuggestions(descriptor, keys, catalogInfo, gatewayIds) {
   const suggestions = [];
   const vendor = descriptor && descriptor.vendor;
   const model = descriptor && descriptor.model;
@@ -80,7 +93,7 @@ function buildSuggestions(descriptor, keys, catalogInfo) {
   const requestedDirectId = `${vendor}/${model}`;
 
   if (keys && keys.openrouter) {
-    const orId = `openrouter/${vendor}/${model}`;
+    const orId = (gatewayIds && gatewayIds.openrouter) || `openrouter/${vendor}/${model}`;
     if (models.some(m => m && m.id === orId)) {
       suggestions.push({ model: orId, gateway: 'openrouter', note: 'same model via OpenRouter' });
     }
@@ -160,7 +173,8 @@ function maybeMigrationNotice({ result, descriptor, gatewayMode, keys }) {
  * non-alias inputs are likewise unaffected (no gatewayIds).
  *
  * Assembles live key/catalog state and delegates the actual decision to the
- * pure gateway-router. Additive: not wired into any launch path yet.
+ * pure gateway-router. Wired into start-helpers.js, mcp-server.js, and
+ * sidecar/fanout-validate.js.
  * @param {{model:string, gatewayMode:string, source:string, allowSelection?:boolean, validateModel?:boolean}} opts
  * @returns {Promise<object>} RouteResult (resolved | selection_required | error)
  */
@@ -197,7 +211,7 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
     result = maybeMigrationNotice({ result, descriptor, gatewayMode, keys });
   } else if (result.kind === 'selection_required') {
-    result.suggestions = buildSuggestions(descriptor, keys, catalogInfo);
+    result.suggestions = buildSuggestions(descriptor, keys, catalogInfo, gatewayIds);
   }
   return result;
 }
