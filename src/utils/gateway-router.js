@@ -1,8 +1,9 @@
 /**
  * Pure gateway router (#61). Decides direct vs OpenRouter for a request using
  * only injected state (keys, catalogInfo, gatewayMode) — no I/O. Returns a
- * RouteResult (resolved | selection_required | error). Wiring into launch paths
- * is Plan 2; this module is behavior-neutral until then.
+ * RouteResult (resolved | selection_required | error). Wired into live launch
+ * paths via route-launch.js's resolveRouteForLaunch (start-helpers.js,
+ * mcp-server.js, sidecar/fanout-validate.js).
  */
 'use strict';
 
@@ -36,9 +37,18 @@ function catalogGate({ id, gateway, req }) {
     preferredGateway: gateway, suggestions: [] }) };
 }
 
+/**
+ * True when the given gateway is usable for this request: either the caller
+ * didn't supply per-gateway ids at all (back-compat: nothing to check), or it
+ * did and this specific gateway has a form in it.
+ */
+function hasForm(req, gateway) {
+  return !req.gatewayIds || req.gatewayIds[gateway] !== undefined;
+}
+
 /** Resolve to a concrete gateway after the catalog gate passes. */
 function finish(gateway, vendor, model, req) {
-  const id = executableFor(gateway, vendor, model);
+  const id = (req.gatewayIds && req.gatewayIds[gateway]) || executableFor(gateway, vendor, model);
   const gate = catalogGate({ id, gateway, req });
   if (!gate.ok) { return gate.result; }
   return resolved({ model: id, gateway, executableId: id,
@@ -93,6 +103,9 @@ function resolveRoute(req) {
     if (!rq.keys.openrouter) {
       return routeError({ requested: d.raw, reason: 'no_openrouter_key', preferredGateway: 'openrouter', suggestions: [] });
     }
+    if (!hasForm(rq, 'openrouter')) {
+      return routeError({ requested: d.raw, reason: 'openrouter_unavailable', preferredGateway: 'openrouter', suggestions: [] });
+    }
     return finish('openrouter', vendor, model, rq);
   }
   // 6. Explicit --gateway direct
@@ -100,13 +113,16 @@ function resolveRoute(req) {
     if (!rq.keys[vendor]) {
       return routeError({ requested: d.raw, reason: 'no_direct_key', preferredGateway: 'direct', suggestions: [] });
     }
+    if (!hasForm(rq, 'direct')) {
+      return routeError({ requested: d.raw, reason: 'direct_unavailable', preferredGateway: 'direct', suggestions: [] });
+    }
     return finish('direct', vendor, model, rq);
   }
   // 7. auto (direct-first)
-  if (rq.keys[vendor]) {
+  if (rq.keys[vendor] && hasForm(rq, 'direct')) {
     return finish('direct', vendor, model, rq);
   }
-  if (rq.keys.openrouter) {
+  if (rq.keys.openrouter && hasForm(rq, 'openrouter')) {
     return finish('openrouter', vendor, model, rq);
   }
   return routeError({ requested: d.raw, reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [] });

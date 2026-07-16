@@ -44,8 +44,8 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.gpt).toBe('openai/gpt-5.5');
     expect(defaults['gpt-pro']).toBe('openai/gpt-5.5-pro');
     expect(defaults.codex).toBe('openai/gpt-5.3-codex');
-    expect(defaults.claude).toBe('anthropic/claude-sonnet-4.6');
-    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-4.6');
+    expect(defaults.claude).toBe('anthropic/claude-sonnet-5');
+    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4.5');
     expect(defaults.opus).toBe('anthropic/claude-opus-4.8');
     expect(defaults.fable).toBe('anthropic/claude-fable-5');

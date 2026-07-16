@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "mcpName": "io.github.BourbonDog/amicus",
   "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "keywords": [
@@ -59,6 +59,7 @@
     "refresh-models": "node bin/amicus.js models --refresh",
     "models:info": "node bin/amicus.js models",
     "models:check": "node bin/amicus.js models --check",
+    "models:check:strict": "node bin/amicus.js models --check --strict",
     "generate-icon": "node scripts/generate-icon.js",
     "generate-docs": "node scripts/generate-docs.js",
     "generate-docs:check": "node scripts/generate-docs.js --check",

@@ -11,7 +11,7 @@ const CATALOG = [
     contextLength: 1048576, pricing: null },
 ];
 
-function loadHandler({ catalog = CATALOG, sources, stale } = {}) {
+function loadHandler({ catalog = CATALOG, sources, stale, gatewayFindings } = {}) {
   jest.resetModules();
   jest.doMock('../../src/utils/model-catalog', () => ({
     getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000 })),
@@ -23,6 +23,11 @@ function loadHandler({ catalog = CATALOG, sources, stale } = {}) {
       collectAliasSources: () => sources || [],
       findStaleAliases: () => stale || [],
       suggestReplacements: () => ['openrouter/x-ai/grok-4.3'],
+    }));
+  }
+  if (gatewayFindings !== undefined) {
+    jest.doMock('../../src/utils/gateway-route-audit', () => ({
+      auditGatewayRoutes: () => gatewayFindings,
     }));
   }
   return require('../../src/sidecar/models');
@@ -292,6 +297,84 @@ describe('amicus models', () => {
       expect(doc.fetchedAt).toBe(1718000000000);
       expect(doc.lastRefreshAttempt).toBe(1718003600000);
       expect(doc.lastRefreshError).toBe('network-error: all providers unreachable');
+    });
+  });
+
+  // Task 6 (#gwid): per-gateway-form audit (toGatewayRoutes() vs. the live
+  // catalog) layered onto the existing flat alias audit above. Non-strict:
+  // informational only (never changes the exit code). --strict: gates the
+  // exit code on these findings so CI can fail the build on drift.
+  describe('--check per-gateway audit + --strict (Task 6, #gwid)', () => {
+    const oneFinding = [{ alias: 'opus', gateway: 'direct', kind: 'stale', model: 'anthropic/claude-opus-4-1' }];
+
+    it('non-strict: gateway findings are reported but never affect the exit code', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], gatewayFindings: oneFinding });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('opus');
+      expect(out).toContain('anthropic/claude-opus-4-1');
+    });
+
+    it('--strict: exits non-zero when a curated default alias is stale/divergent per-gateway, even if the flat audit is clean', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], gatewayFindings: oneFinding });
+      const { code } = await captureStdout(() => handleModels({ _: ['models'], check: true, strict: true }));
+      expect(code).toBeGreaterThan(0);
+    });
+
+    it('--strict: exits 0 when both audits are clean', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], gatewayFindings: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, strict: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('All aliases resolve');
+    });
+
+    it('--strict --json: includes gatewayFindings in the alias-audit document and exits non-zero', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], gatewayFindings: oneFinding });
+      const { code, out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, strict: true, json: true }));
+      expect(code).toBeGreaterThan(0);
+      const doc = JSON.parse(out);
+      expect(doc.type).toBe('alias-audit');
+      expect(doc.gatewayFindingsCount).toBe(1);
+      expect(doc.gatewayFindings).toEqual(oneFinding);
+    });
+
+    it('--json without --strict still carries gatewayFindings, but exit code is unaffected', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], gatewayFindings: oneFinding });
+      const { code, out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.gatewayFindingsCount).toBe(1);
+    });
+
+    it('reports divergent-missing and divergent-mismatch findings with distinct, readable text', async () => {
+      const findings = [
+        { alias: 'fable', gateway: 'direct', kind: 'divergent-missing', model: 'anthropic/claude-fable-5' },
+        { alias: 'haiku', gateway: 'direct', kind: 'divergent-mismatch',
+          model: 'anthropic/claude-haiku-4-5-old', expected: 'anthropic/claude-haiku-4-5-new' },
+      ];
+      const { handleModels } = loadHandler({ sources: [], stale: [], gatewayFindings: findings });
+      const { out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(out).toContain('fable');
+      expect(out).toContain('anthropic/claude-fable-5');
+      expect(out).toContain('haiku');
+      expect(out).toContain('anthropic/claude-haiku-4-5-old');
+      expect(out).toContain('anthropic/claude-haiku-4-5-new');
+    });
+
+    it('empty catalog (cannot check) short-circuits before the gateway audit runs, still exit 0 with --strict', async () => {
+      const { handleModels } = loadHandler({ catalog: [], gatewayFindings: oneFinding });
+      const { code, out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, strict: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('Catalog unavailable');
+    });
+
+    it('usage text documents --strict for models --check', () => {
+      const { getUsage } = require('../../src/cli');
+      const usage = getUsage();
+      expect(usage).toContain('--strict');
     });
   });
 });

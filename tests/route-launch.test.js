@@ -19,10 +19,14 @@ const ALIASES = {
   gpt: 'openai/gpt-5.5',
 };
 
-function loadRouteLaunch({ aliases = {}, apiKeys = ALL_FALSE, authKeys = {}, catalogModels = [], getCatalogInfoSpy } = {}) {
+function loadRouteLaunch({ aliases = {}, defaultAliases, apiKeys = ALL_FALSE, authKeys = {}, catalogModels = [], getCatalogInfoSpy } = {}) {
   jest.resetModules();
   jest.doMock('../src/utils/config', () => ({
     getEffectiveAliases: () => aliases,
+    // Defaults to `aliases` itself (trivially "not overridden") when the
+    // caller doesn't care about the override-guard distinction; tests that
+    // exercise Task 3's gatewayIds bridge pass a distinct `defaultAliases`.
+    getDefaultAliases: () => (defaultAliases !== undefined ? defaultAliases : aliases),
   }));
   jest.doMock('../src/utils/api-key-store', () => ({
     readApiKeys: () => apiKeys,
@@ -199,6 +203,83 @@ describe('resolveRouteForLaunch', () => {
   });
 });
 
+describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Task 3)', () => {
+  // Real (unmocked) curated-models.toGatewayRoutes().opus, so this test tracks
+  // the actual curated Anthropic ids rather than hand-duplicating them.
+  const { toGatewayRoutes, toDefaultAliases } = require('../src/utils/curated-models');
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' }
+  const opusDefault = toDefaultAliases().opus; // whatever config stores as the effective alias today
+
+  test('opus alias (curated default, not overridden) resolves direct via the bridged dash-form gatewayIds id', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, opus: opusDefault },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, anthropic: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: opusRoutes.direct });
+    expect(r.executableId).toBe('anthropic/claude-opus-4-8');
+  });
+
+  test('opus alias (curated default, not overridden), OR-only key, resolves openrouter via the bridged gatewayIds id', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, opus: opusDefault },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, openrouter: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: opusRoutes.openrouter });
+    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-4.8');
+  });
+
+  test('user-overridden opus alias does NOT get curated gatewayIds — resolves the user\'s custom target', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      // User has repointed `opus` at some other model — effective alias
+      // differs from the curated default, so the override guard must skip
+      // the curated Anthropic gatewayIds entirely.
+      aliases: { ...ALIASES, opus: 'openai/gpt-9-custom' },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, openai: true },
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-9-custom' });
+    // Must not have been coerced onto the curated Anthropic direct id.
+    expect(r.executableId).not.toBe(opusRoutes.direct);
+  });
+
+  // Fast-follow fix (final whole-branch review): when a divergent alias's
+  // bridged direct id (dash-form, e.g. anthropic/claude-opus-4-8) misses the
+  // catalog and allowSelection kicks in, buildSuggestions used to reconstruct
+  // `openrouter/${vendor}/${model}` from that same dash-form descriptor --
+  // producing `openrouter/anthropic/claude-opus-4-8`, which never matches
+  // OpenRouter's real dot-form catalog id and silently dropped the "try via
+  // OpenRouter" suggestion. It must now prefer the bridged gatewayIds.openrouter
+  // (dot-form) instead.
+  test('opus alias reaching selection_required suggests the dot-form OpenRouter id, not a reconstructed dash-form id (Fix 2)', async () => {
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: { ...ALIASES, opus: opusDefault },
+      defaultAliases: { opus: opusDefault },
+      apiKeys: { ...ALL_FALSE, anthropic: true, openrouter: true },
+      catalogModels: [
+        // Another authoritative row in the anthropic/ namespace so the direct
+        // dash-form id (opusRoutes.direct) is a genuine catalog MISS -> 'invalid',
+        // not 'unknown' (an empty/all-non-authoritative namespace would never
+        // reach selection_required at all).
+        { id: 'anthropic/claude-sonnet-5', authoritative: true },
+        // The real OpenRouter catalog entry: dot-form.
+        { id: opusRoutes.openrouter, authoritative: true },
+      ],
+    });
+    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: true, validateModel: true });
+    expect(r.kind).toBe('selection_required');
+    expect(r.suggestions).toContainEqual({ model: opusRoutes.openrouter, gateway: 'openrouter', note: 'same model via OpenRouter' });
+    // The buggy reconstruction would have produced this dash-form id instead.
+    const reconstructedDashId = `openrouter/anthropic/${opusRoutes.direct.split('/')[1]}`;
+    expect(reconstructedDashId).not.toBe(opusRoutes.openrouter); // sanity: fixture actually distinguishes dash vs dot
+    expect(r.suggestions.some((s) => s.model === reconstructedDashId)).toBe(false);
+  });
+});
+
 describe('buildSuggestions', () => {
   test('includes the OpenRouter alternative when an OR key is present and the OR-namespaced id is in the catalog', () => {
     const { buildSuggestions } = loadRouteLaunch();
@@ -276,5 +357,34 @@ describe('buildSuggestions', () => {
     const { buildSuggestions } = loadRouteLaunch();
     expect(buildSuggestions({}, {}, { models: [] })).toEqual([]);
     expect(buildSuggestions(undefined, {}, { models: [] })).toEqual([]);
+  });
+
+  // Fix 2 (final whole-branch review fast-follow): divergent-vendor descriptors
+  // (e.g. Anthropic) carry the DASH-form direct id as `descriptor.model`, so
+  // reconstructing `openrouter/<vendor>/<model>` yields the wrong (dash) id.
+  // `gatewayIds.openrouter`, when supplied, is the catalog-correct (dot) form
+  // and must be preferred.
+  test('prefers gatewayIds.openrouter over reconstruction when provided', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'anthropic', model: 'claude-opus-4-8' }, // dash-form, as bridged for divergent aliases
+      { openrouter: true },
+      { models: [{ id: 'openrouter/anthropic/claude-opus-4.8' }] }, // real catalog id: dot-form
+      { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' }
+    );
+    expect(result).toContainEqual({ model: 'openrouter/anthropic/claude-opus-4.8', gateway: 'openrouter', note: 'same model via OpenRouter' });
+    // The naive reconstruction (openrouter/anthropic/claude-opus-4-8, dash) must not appear.
+    expect(result.some((s) => s.model === 'openrouter/anthropic/claude-opus-4-8')).toBe(false);
+  });
+
+  test('falls back to reconstruction when gatewayIds is absent (non-alias / non-divergent, unchanged behavior)', () => {
+    const { buildSuggestions } = loadRouteLaunch();
+    const result = buildSuggestions(
+      { vendor: 'openai', model: 'gpt-5' },
+      { openrouter: true },
+      { models: [{ id: 'openrouter/openai/gpt-5' }] }
+      // no 4th arg -> gatewayIds undefined
+    );
+    expect(result).toContainEqual({ model: 'openrouter/openai/gpt-5', gateway: 'openrouter', note: 'same model via OpenRouter' });
   });
 });

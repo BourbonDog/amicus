@@ -1,0 +1,36 @@
+name: Model Drift Check
+
+# Scheduled, NOT a per-PR gate: a curated model id can go stale the moment a
+# provider ships/retires a model, independent of any code change in this
+# repo. Wiring this into ci.yml would flake unrelated PRs whenever that
+# happens. Instead this runs on its own cadence (+ workflow_dispatch for an
+# on-demand check) and fails ONLY this scheduled run when drift is detected,
+# surfacing it in the Actions run rather than blocking anyone's merge.
+#
+# Uses ONLY the keyless OpenRouter catalog path (#gwid Task 6): no provider
+# secrets are configured here, so `models --check --strict` naturally skips
+# every direct namespace it has no key for (never reports a false STALE —
+# see src/utils/gateway-route-audit.js) and audits the OpenRouter forms live.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: models --check --strict (keyless OpenRouter catalog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Refresh the model catalog (keyless OpenRouter + hardcoded Anthropic floor)
+        run: npm run refresh-models
+      - name: Audit curated aliases (flat + per-gateway) — fail the run on drift
+        run: npm run models:check:strict

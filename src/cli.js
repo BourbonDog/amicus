@@ -138,6 +138,7 @@ function isBooleanFlag(key) {
      'html',                 // council report: emit a self-contained HTML page
      'md',                   // council report: emit Markdown (default)
      'fix',                  // doctor: self-heal fixable checks in place (#56)
+     'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
    ];
   return booleanFlags.includes(key);
 }
@@ -436,6 +437,9 @@ Options for 'models':
   --search <q>                 Filter by substring over model id and name
   --refresh                    Force-refresh the catalog from provider APIs
   --check                      Audit aliases against the catalog (exit = stale count)
+  --strict                     With --check: also exit non-zero on curated
+                               per-gateway drift (stale/divergent direct or
+                               openrouter forms). Informational without it.
   --json                       Machine-readable output
 `,
   list: `

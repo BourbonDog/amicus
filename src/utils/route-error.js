@@ -6,8 +6,9 @@
  *   - `toCliMessage`      -> a human stderr string for the CLI
  *
  * Pure module: no I/O, no requires of launch modules (cli.js/headless.js/
- * mcp-server.js/etc). Additive only — not imported by any launch path yet;
- * wiring is a later task in the #61 Integration plan.
+ * mcp-server.js/etc). Wired into live launch paths — start-helpers.js,
+ * sidecar/fanout-leg.js, and mcp-server.js all render RouteResults through
+ * toStructuredError/toCliMessage.
  *
  * Router error shape (src/utils/model-descriptor.js `routeError()`):
  *   {kind:'error', type:'model_route_error', field, requested, reason,
@@ -15,16 +16,28 @@
  * Selection shape (`selectionRequired()`):
  *   {kind:'selection_required', requested, suggestions}
  *
- * The router's error `reason` is a closed set of 7 values (ROUTE_ERROR_REASONS
- * below). A `selection_required` result has no `reason` of its own — it is
- * synthesized here as SELECTION_REQUIRED_REASON, kept in the same documented
- * REASON_TEXT map rather than invented ad hoc, so callers can treat every
- * rendered structured error the same way regardless of which RouteResult
- * produced it.
+ * The router's error `reason` is NOT limited to the 7 values in
+ * ROUTE_ERROR_REASONS below — that array is just the original/base set,
+ * intentionally pinned as-is (see its own doc comment). The router can also
+ * emit availability reasons (`direct_unavailable`, `openrouter_unavailable`),
+ * which have REASON_TEXT/FIX_HINTS entries but are deliberately excluded from
+ * ROUTE_ERROR_REASONS. A `selection_required` result has no `reason` of its
+ * own — it is synthesized here as SELECTION_REQUIRED_REASON, kept in the same
+ * documented REASON_TEXT map rather than invented ad hoc, so callers can
+ * treat every rendered structured error the same way regardless of which
+ * RouteResult produced it.
  */
 'use strict';
 
-/** The closed set of reasons a router `error` result can carry. */
+/**
+ * The original/base set of router error reasons — NOT an exhaustive list of
+ * every reason a router error can carry. Pinned to exactly these 7 values by
+ * a back-compat test (route-error.test.js:14-24), so this array must not be
+ * extended when new reasons are added. The router also emits
+ * `direct_unavailable` and `openrouter_unavailable` (REASON_TEXT/FIX_HINTS
+ * below have entries for both); those are intentionally left out of this
+ * array. Do not use ROUTE_ERROR_REASONS as an exhaustive switch/allow-list.
+ */
 const ROUTE_ERROR_REASONS = Object.freeze([
   'gateway_conflict',
   'no_openrouter_key',
@@ -51,6 +64,8 @@ const REASON_TEXT = Object.freeze({
   no_key_for_vendor: 'No API key was found for this vendor via any gateway.',
   model_not_found: 'The requested model was not found in the catalog.',
   invalid_descriptor: 'The model identifier could not be parsed.',
+  direct_unavailable: "This model isn't available on the vendor's direct API; use OpenRouter or a different model.",
+  openrouter_unavailable: "This model isn't on OpenRouter; use --gateway direct or a different model.",
   [SELECTION_REQUIRED_REASON]: 'Multiple models match your request; a specific one must be selected.',
 });
 
@@ -63,6 +78,8 @@ const FIX_HINTS = Object.freeze({
   no_key_for_vendor: 'Add a provider key or an OpenRouter key.',
   model_not_found: 'Run `amicus models --refresh`, or pass --no-validate-model.',
   invalid_descriptor: 'Use a vendor/model id or a configured alias.',
+  direct_unavailable: 'Drop --gateway direct (use auto or --gateway openrouter), or pick a different model.',
+  openrouter_unavailable: 'Use --gateway direct, or pick a different model.',
   [SELECTION_REQUIRED_REASON]: 'Pick one of the suggestions below, or narrow the model id.',
 });
 

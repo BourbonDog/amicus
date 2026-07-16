@@ -182,15 +182,22 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
 
 /**
  * Build an alias-audit document (`models --check --json`).
- * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean}} opts
+ * `gatewayFindings` (Task 6, #gwid) is additive: the per-gateway-form audit
+ * of curated DEFAULT aliases (toGatewayRoutes() vs. the live catalog),
+ * distinct from the flat `stale` audit above. Defaults to [] so existing
+ * callers that omit it are unaffected.
+ * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean,
+ *   gatewayFindings?: Array<{alias,gateway,kind,model,expected?}>}} opts
  */
-function buildAuditDoc({ stale, catalogAvailable }) {
+function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [] }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'alias-audit',
     catalogAvailable,
     staleCount: stale.length,
     stale,
+    gatewayFindingsCount: gatewayFindings.length,
+    gatewayFindings,
   };
 }
 

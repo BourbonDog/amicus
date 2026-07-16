@@ -1,9 +1,10 @@
 /**
  * Route-launch views (#61 gateway routing integration, Task 4.2).
  *
- * Additive, read-only helpers consumed by Task 4.4's resolveRouteForLaunch
- * (not wired into any launch path yet). Pure-ish: all I/O goes through the
- * stubbable api-key-store / auth-json / model-catalog modules.
+ * Read-only helpers consumed by resolveRouteForLaunch, which IS wired into
+ * live launch paths (start-helpers.js, mcp-server.js, sidecar/fanout-validate.js).
+ * Pure-ish: all I/O goes through the stubbable api-key-store / auth-json /
+ * model-catalog modules.
  */
 'use strict';
 
@@ -52,12 +53,20 @@ const ROUTE_VERSION = 1;
 /**
  * Build up to ~6 labeled alternatives for a `selection_required` RouteResult
  * (#61 Task 6.3, spec Decision 10). Pure: reads only the already-parsed
- * descriptor plus the live keys/catalogInfo the caller already assembled.
+ * descriptor plus the live keys/catalogInfo/gatewayIds the caller already
+ * assembled.
  *
  * Two categories, in order:
  *  1. The SAME model via OpenRouter — only when an OpenRouter key is present
- *     AND the OR-namespaced id (`openrouter/<vendor>/<model>`) is actually
- *     present in the catalog (never suggest an id we can't confirm exists).
+ *     AND the OR-namespaced id is actually present in the catalog (never
+ *     suggest an id we can't confirm exists). For divergent vendors (e.g.
+ *     Anthropic) `descriptor.model` may be the DASH-form direct id, so a
+ *     reconstructed `openrouter/<vendor>/<model>` would never match the
+ *     catalog's dot-form OR id -- when the caller's `gatewayIds.openrouter`
+ *     is available (the catalog-correct form), it is used instead of
+ *     reconstructing. Falls back to reconstruction when `gatewayIds` is
+ *     absent (non-alias / full-id / non-divergent requests), so behavior
+ *     there is unchanged.
  *  2. Up to 5 OTHER models in the same direct vendor namespace (ids starting
  *     `<vendor>/`, excluding the requested id itself and excluding any
  *     `openrouter/`-prefixed rows, which share the `<vendor>/` prefix check
@@ -68,9 +77,13 @@ const ROUTE_VERSION = 1;
  *   openrouter-literal — both carry vendor/model)
  * @param {Object<string,boolean>} keys per-provider key-presence map (buildLaunchKeys() shape)
  * @param {{models: Array<{id:string}>}} catalogInfo
+ * @param {{direct?: string, openrouter?: string}} [gatewayIds] the same
+ *   per-gateway id map resolveRouteForLaunch threads through resolveRoute
+ *   (Task 3's bridge for divergent curated aliases); absent for non-alias /
+ *   full-id / non-divergent requests
  * @returns {Array<{model:string, gateway:string, note:string}>}
  */
-function buildSuggestions(descriptor, keys, catalogInfo) {
+function buildSuggestions(descriptor, keys, catalogInfo, gatewayIds) {
   const suggestions = [];
   const vendor = descriptor && descriptor.vendor;
   const model = descriptor && descriptor.model;
@@ -80,7 +93,7 @@ function buildSuggestions(descriptor, keys, catalogInfo) {
   const requestedDirectId = `${vendor}/${model}`;
 
   if (keys && keys.openrouter) {
-    const orId = `openrouter/${vendor}/${model}`;
+    const orId = (gatewayIds && gatewayIds.openrouter) || `openrouter/${vendor}/${model}`;
     if (models.some(m => m && m.id === orId)) {
       suggestions.push({ model: orId, gateway: 'openrouter', note: 'same model via OpenRouter' });
     }
@@ -137,25 +150,52 @@ function maybeMigrationNotice({ result, descriptor, gatewayMode, keys }) {
 }
 
 /**
- * Bridge: alias -> descriptor -> resolveRoute (Task 4.4).
+ * Bridge: alias -> descriptor -> resolveRoute (Task 4.4; gatewayIds bridging
+ * Task 3 of #61's gateway-correct-model-ids fix).
  * Resolves a raw model string to a Descriptor — if it is a known no-slash
  * alias (per getEffectiveAliases()), its concrete id is parsed instead, so an
  * alias pointing at an `openrouter/...` value is treated as an explicit,
  * force-OR literal while an alias pointing at a bare `vendor/model` is
- * policy-routed like any other canonical id. Assembles live key/catalog state
- * and delegates the actual decision to the pure gateway-router. Additive:
- * not wired into any launch path yet.
+ * policy-routed like any other canonical id.
+ *
+ * When the alias is UNMODIFIED from its curated default (effective value ===
+ * getDefaultAliases()[alias]), this also looks up curated-models'
+ * toGatewayRoutes()[alias] and threads it through as `gatewayIds`, and parses
+ * the descriptor from the gateway-native direct form (falling back to the
+ * openrouter form) rather than the single pinned alias string — the pinned
+ * string can be the wrong per-gateway form for divergent vendors (e.g.
+ * Anthropic's dash ids vs. OpenRouter's dot ids), so `toGatewayRoutes()` is
+ * the source of truth for actually-correct ids. A USER OVERRIDE (the
+ * effective alias differs from the curated default) or an alias with no
+ * curated route map intentionally skips all of this: no gatewayIds, and the
+ * user's own alias string is parsed as before — we must never impose curated
+ * Anthropic-style ids onto a target the user chose themselves. Full-id /
+ * non-alias inputs are likewise unaffected (no gatewayIds).
+ *
+ * Assembles live key/catalog state and delegates the actual decision to the
+ * pure gateway-router. Wired into start-helpers.js, mcp-server.js, and
+ * sidecar/fanout-validate.js.
  * @param {{model:string, gatewayMode:string, source:string, allowSelection?:boolean, validateModel?:boolean}} opts
  * @returns {Promise<object>} RouteResult (resolved | selection_required | error)
  */
 async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelection, validateModel }) {
-  // Lazy-required so jest.doMock('./config' | './model-descriptor' | './gateway-router', ...)
+  // Lazy-required so jest.doMock('./config' | './model-descriptor' | './gateway-router' | './curated-models', ...)
   // can intercept them per-test, matching the pattern already used above for model-catalog.
-  const { getEffectiveAliases } = require('./config');
+  const { getEffectiveAliases, getDefaultAliases } = require('./config');
   const { parseDescriptor } = require('./model-descriptor');
   const { resolveRoute } = require('./gateway-router');
+  const { toGatewayRoutes } = require('./curated-models');
   const aliases = getEffectiveAliases();
-  const concrete = (typeof model === 'string' && !model.includes('/') && aliases[model]) ? aliases[model] : model;
+  const isAlias = typeof model === 'string' && !model.includes('/') && !!aliases[model];
+  let concrete = isAlias ? aliases[model] : model;
+  let gatewayIds;
+  if (isAlias && aliases[model] === getDefaultAliases()[model]) {
+    const routes = toGatewayRoutes()[model];
+    if (routes) {
+      gatewayIds = routes;
+      concrete = routes.direct || routes.openrouter;
+    }
+  }
   const descriptor = parseDescriptor(concrete, { aliases });
   const keys = buildLaunchKeys();
   // Skip the catalog fetch entirely under --no-validate-model: gateway-router's
@@ -166,12 +206,12 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   // own `=== false` guard: any other value (incl. an omitted flag) still fetches,
   // so a caller can never skip the fetch while the gate still classifies against it.
   const catalogInfo = validateModel === false ? { models: [], lastRefreshError: null } : await getRouteCatalogInfo();
-  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
+  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo, gatewayIds });
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
     result = maybeMigrationNotice({ result, descriptor, gatewayMode, keys });
   } else if (result.kind === 'selection_required') {
-    result.suggestions = buildSuggestions(descriptor, keys, catalogInfo);
+    result.suggestions = buildSuggestions(descriptor, keys, catalogInfo, gatewayIds);
   }
   return result;
 }
