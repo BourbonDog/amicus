@@ -147,6 +147,26 @@ async function runFanout(options) {
     pid: process.pid, project, createdAt,
   });
 
+  // 2b. All legs failed to route (#61 perf): no leg will ever touch the
+  // shared server, so starting one (and immediately tearing it down) is pure
+  // waste. Short-circuit straight to the same routing-failure wave the
+  // normal path would eventually produce — same per-leg docs
+  // (buildRoutingFailureLeg), same aggregation (buildWaveResult /
+  // waveStatusFromLegs via the default status param), same exit-code mapping
+  // (waveExitCode) — just without the server round-trip.
+  if (okLegs.length === 0) {
+    const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
+    const completedAt = new Date().toISOString();
+    const wave = buildWaveResult({
+      waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt, notices,
+    });
+    const wavePath = path.join(waveDir, 'wave.json');
+    writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
+    writeWaveMetadata(waveDir, { status: wave.status, completedAt });
+    emit(wave);
+    return { wave, exitCode: waveExitCode(wave.status) };
+  }
+
   // 3. Context + prompts built ONCE (model-independent)
   const context = options.includeContext !== false
     ? buildContext(project, options.sessionId || 'current', {

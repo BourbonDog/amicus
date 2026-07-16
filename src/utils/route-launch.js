@@ -158,7 +158,11 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
   const concrete = (typeof model === 'string' && !model.includes('/') && aliases[model]) ? aliases[model] : model;
   const descriptor = parseDescriptor(concrete, { aliases });
   const keys = buildLaunchKeys();
-  const catalogInfo = await getRouteCatalogInfo();
+  // Skip the catalog fetch entirely under --no-validate-model: gateway-router's
+  // catalogGate short-circuits to { ok:true } as soon as validateModel === false,
+  // never consulting catalogInfo, so fetching it here would be wasted
+  // latency/network (and can hit the network on a cold cache) for no benefit.
+  const catalogInfo = validateModel ? await getRouteCatalogInfo() : { models: [], lastRefreshError: null };
   let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo });
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };

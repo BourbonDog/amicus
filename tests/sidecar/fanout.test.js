@@ -305,6 +305,41 @@ describe('runFanout orchestrator', () => {
     expect(wave.legs[0].summary).toMatch(/^summary /);
   });
 
+  // #61 perf cleanup: when EVERY leg fails routing, runFanout must short-
+  // circuit straight to the error wave BEFORE starting the shared OpenCode
+  // server — starting (and immediately tearing down) a server no leg will
+  // ever touch is pure waste. The resulting wave doc/counts/exitCode must be
+  // identical to what the old code produced via the server round-trip.
+  it('all legs unroutable short-circuits to an error wave WITHOUT starting the server (#61 perf)', async () => {
+    // .mockImplementationOnce (not .mockImplementation) x2, matching the two
+    // legs in baseOpts(): a persistent override here would leak into every
+    // later test in this file (jest.clearAllMocks() in beforeEach clears call
+    // data, not implementations set via .mockImplementation).
+    const routingFailure = async () => ({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'x',
+      reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [],
+    });
+    mockResolveRouteForLaunch.mockImplementationOnce(routingFailure).mockImplementationOnce(routingFailure);
+    const { wave, exitCode } = await runFanout({ ...baseOpts(), waveId: 'cafe3333' });
+
+    expect(mockStartOpenCodeServer).not.toHaveBeenCalled();
+    expect(mockRunHeadless).not.toHaveBeenCalled();
+    expect(wave.status).toBe('error');
+    expect(exitCode).toBe(1);
+    expect(wave.counts).toMatchObject({ total: 2, complete: 0, error: 2 });
+    expect(wave.legs.every(l => l.status === 'error')).toBe(true);
+    expect(wave.notices).toEqual([]);
+
+    // wave.json on disk agrees with the returned doc (same aggregation path).
+    const stored = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe3333', 'wave.json'), 'utf-8'));
+    expect(stored.status).toBe('error');
+    expect(stored.counts).toMatchObject({ total: 2, error: 2 });
+    const meta = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafe3333', 'metadata.json'), 'utf-8'));
+    expect(meta.status).toBe('error');
+  });
+
   it('a leg whose MODEL never routes fails ONLY that leg — sibling still runs (#61 Task 7.3)', async () => {
     mockResolveRouteForLaunch.mockImplementationOnce(async () => ({
       kind: 'error', type: 'model_route_error', field: 'model', requested: 'openrouter/a/b',

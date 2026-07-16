@@ -19,7 +19,7 @@ const ALIASES = {
   gpt: 'openai/gpt-5.5',
 };
 
-function loadRouteLaunch({ aliases = {}, apiKeys = ALL_FALSE, authKeys = {}, catalogModels = [] } = {}) {
+function loadRouteLaunch({ aliases = {}, apiKeys = ALL_FALSE, authKeys = {}, catalogModels = [], getCatalogInfoSpy } = {}) {
   jest.resetModules();
   jest.doMock('../src/utils/config', () => ({
     getEffectiveAliases: () => aliases,
@@ -30,8 +30,9 @@ function loadRouteLaunch({ aliases = {}, apiKeys = ALL_FALSE, authKeys = {}, cat
   jest.doMock('../src/utils/auth-json', () => ({
     readAuthJsonKeys: () => authKeys,
   }));
+  const getCatalogInfo = getCatalogInfoSpy || (async () => ({ models: catalogModels, lastRefreshError: null }));
   jest.doMock('../src/utils/model-catalog', () => ({
-    getCatalogInfo: async () => ({ models: catalogModels, lastRefreshError: null }),
+    getCatalogInfo,
   }));
   return require('../src/utils/route-launch');
 }
@@ -144,6 +145,37 @@ describe('resolveRouteForLaunch', () => {
     const r = await resolveRouteForLaunch({ model: 'openai/gpt-5.5', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: true });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5' });
     expect(r.provenance.resolutionVersion).toBe(1);
+  });
+
+  // #61 perf cleanup: validateModel:false must skip the catalog fetch
+  // entirely — gateway-router's catalogGate short-circuits to { ok:true }
+  // before ever consulting catalogInfo when validateModel is false, so
+  // fetching the catalog for that path is wasted latency/network.
+  test('validateModel:false does not call getRouteCatalogInfo / getCatalogInfo, still resolves correctly', async () => {
+    const getCatalogInfoSpy = jest.fn(async () => ({ models: [], lastRefreshError: null }));
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: ALIASES,
+      apiKeys: { ...ALL_FALSE, openai: true },
+      getCatalogInfoSpy,
+    });
+    const r = await resolveRouteForLaunch({ model: 'openai/gpt-5.5', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
+    expect(getCatalogInfoSpy).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5' });
+    expect(r.provenance.resolutionVersion).toBe(1);
+  });
+
+  test('validateModel:true still fetches the catalog (getRouteCatalogInfo -> getCatalogInfo called once)', async () => {
+    const getCatalogInfoSpy = jest.fn(async () => ({
+      models: [{ id: 'openai/gpt-5.5', authoritative: true }], lastRefreshError: null,
+    }));
+    const { resolveRouteForLaunch } = loadRouteLaunch({
+      aliases: ALIASES,
+      apiKeys: { ...ALL_FALSE, openai: true },
+      getCatalogInfoSpy,
+    });
+    const r = await resolveRouteForLaunch({ model: 'openai/gpt-5.5', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: true });
+    expect(getCatalogInfoSpy).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5' });
   });
 
   test('selection_required (direct key present, model invalid, allowSelection) carries populated suggestions (#61 Task 6.3)', async () => {
