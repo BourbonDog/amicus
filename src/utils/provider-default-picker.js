@@ -17,7 +17,7 @@
 const { resolveTier } = require('./model-tiers');
 const { getCostTier } = require('./config');
 const { pairAcrossGateways } = require('./gateway-route-catalog');
-const { toCanonicalDefault } = require('./curated-models');
+const { toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
 
 /**
  * @param {{pricing?: {prompt?: string|number|null}|null}|null|undefined} orRow
@@ -48,11 +48,46 @@ function vendorRowsIn(catalog, vendor) {
 }
 
 /**
+ * Choose the verbatim catalog id a single catalog `row` should surface as in
+ * the picker -- NEVER fabricates an id.
+ *
+ * A direct-namespace row always keeps its own (real, direct-callable) id,
+ * regardless of what `pairAcrossGateways` could resolve for it -- this is
+ * what keeps BOTH direct rows around when two direct ids are ambiguous to
+ * `pairAcrossGateways` (e.g. a bare alias and a dated pinned snapshot that
+ * normalize to the same key): each is still a real, distinct, callable id
+ * and must not be dropped or silently merged.
+ *
+ * An OpenRouter-namespace row is collapsed onto a direct id only when
+ * `pairAcrossGateways` found exactly one (unambiguous) direct twin -- that's
+ * a real catalog id, safe to reuse for dedup. Otherwise: for
+ * `DIVERGENT_VENDORS` (direct ids don't share a string form with
+ * OpenRouter's -- e.g. anthropic's dash-vs-dot versioning), the row keeps
+ * its OpenRouter-prefixed id as-is; stripping the prefix would fabricate a
+ * non-direct-callable dot-form id no row actually carries. Non-divergent
+ * vendors keep the pre-existing strip via `toCanonicalDefault`, which is
+ * safe because their direct and OpenRouter ids are identical once the
+ * `openrouter/<vendor>/` prefix is removed (mirrors curated-models.js's
+ * `directFormFor` policy).
+ * @param {string} vendor
+ * @param {boolean} isDirect whether `row.id` is itself a direct-namespace id
+ * @param {{id:string}} row
+ * @param {{direct?:string, openrouter?:string}} paired
+ * @returns {string|null}
+ */
+function chooseRowId(vendor, isDirect, row, paired) {
+  if (isDirect) { return row.id; }
+  if (paired.direct) { return paired.direct; }
+  if (!paired.openrouter) { return null; }
+  return DIVERGENT_VENDORS.has(vendor) ? paired.openrouter : toCanonicalDefault(paired.openrouter);
+}
+
+/**
  * Dedupe `vendor`'s catalog rows across gateways into one row per logical
  * model, reusing `pairAcrossGateways` (never re-deriving the pairing logic).
- * Ambiguous models pairAcrossGateways can't confidently resolve on EITHER
- * side are dropped -- omit rather than guess, same policy as the helper
- * itself.
+ * Every row id is verbatim from the catalog (see `chooseRowId`) -- never
+ * fabricated, and a direct row is never dropped even when its OpenRouter
+ * twin is ambiguous.
  * @param {Array<{id:string,name:string,contextLength:(number|null)}>} catalog
  * @param {string} vendor
  * @returns {Array<{id:string,name:string,contextLength:(number|null),pricePerMInput:(number|null),isPreselected:boolean}>}
@@ -70,12 +105,12 @@ function buildRows(catalog, vendor) {
     const isDirect = row.id.startsWith(directPrefix);
     const token = isDirect ? row.id.slice(directPrefix.length) : row.id.slice(orPrefix.length);
     const paired = pairAcrossGateways(vendor, token, catalogInfo);
-    const chosenId = paired.direct || (paired.openrouter ? toCanonicalDefault(paired.openrouter) : null);
+    const chosenId = chooseRowId(vendor, isDirect, row, paired);
     if (!chosenId || seenIds.has(chosenId)) { continue; }
     seenIds.add(chosenId);
 
     const orRow = paired.openrouter ? byId.get(paired.openrouter) : null;
-    const sourceRow = (paired.direct && byId.get(paired.direct)) || orRow || row;
+    const sourceRow = isDirect ? row : ((paired.direct && byId.get(paired.direct)) || orRow || row);
 
     rows.push({
       id: chosenId,
@@ -86,6 +121,26 @@ function buildRows(catalog, vendor) {
     });
   }
   return rows;
+}
+
+/**
+ * Canonicalize `resolveTier`'s verbatim catalog-id output the same way row
+ * ids are built (`chooseRowId`), so it can be matched against `rows`
+ * exactly. `resolveTier` already prefers a real direct id when one matches
+ * the tier pattern (`model-tiers.js`'s `pickForTier` tries the direct
+ * namespace first), so this only has an effect when it fell back to an
+ * OpenRouter id (no matching direct-namespace row at all). For
+ * `DIVERGENT_VENDORS`, that OpenRouter id must stay OpenRouter-prefixed --
+ * stripping it would fabricate a non-direct-callable dot-form id that no row
+ * carries. Non-divergent vendors keep the pre-existing strip, safe because
+ * their direct and OpenRouter ids are identical once the prefix is removed.
+ * @param {string} vendor
+ * @param {string|null} resolved verbatim catalog id from `resolveTier`, or null
+ * @returns {string|null}
+ */
+function canonicalizeResolved(vendor, resolved) {
+  if (!resolved) { return null; }
+  return DIVERGENT_VENDORS.has(vendor) ? resolved : toCanonicalDefault(resolved);
 }
 
 /**
@@ -103,7 +158,7 @@ function buildRows(catalog, vendor) {
 function computePreselectedId(vendor, tier, catalog, rows) {
   const effectiveTier = tier || getCostTier();
   const resolved = resolveTier(vendor, effectiveTier, catalog);
-  const canonical = resolved ? toCanonicalDefault(resolved) : null;
+  const canonical = canonicalizeResolved(vendor, resolved);
   if (canonical && rows.some(r => r.id === canonical)) { return canonical; }
 
   const priced = rows.filter(r => r.pricePerMInput !== null);

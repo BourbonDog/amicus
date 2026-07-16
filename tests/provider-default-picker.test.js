@@ -118,6 +118,60 @@ describe('buildProviderDefaultChoices — resolveTier-null fallback (unknown ven
   });
 });
 
+describe('buildProviderDefaultChoices — anthropic divergent-vendor id fabrication guard (regression)', () => {
+  // anthropic is a DIVERGENT_VENDOR (curated-models.js): OpenRouter uses dot
+  // versions (claude-opus-4.8) but the direct Anthropic API uses
+  // dashes/dates (claude-opus-4-8). Stripping 'openrouter/' off an
+  // OpenRouter-only id would fabricate a non-direct-callable dot-form id.
+
+  const orOnlyAnthropicCatalog = [
+    // Mirrors the real 'fable' cardless entry (curated-models.js): an
+    // OpenRouter-only model with NO direct twin at all.
+    { id: 'openrouter/anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: 200000,
+      pricing: { prompt: '0.000002', completion: '0.00001' } },
+  ];
+
+  test('OR-only anthropic model keeps the OpenRouter-prefixed id -- never fabricates a dot-form direct id', () => {
+    const { preselectedId, rows } = buildProviderDefaultChoices('anthropic', { catalog: orOnlyAnthropicCatalog, tier: 'balanced' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('openrouter/anthropic/claude-fable-5');
+    expect(rows.some(r => r.id === 'anthropic/claude-fable-5')).toBe(false); // fabricated dot-form id must never appear
+    expect(preselectedId).toBe('openrouter/anthropic/claude-fable-5'); // not dropped from preselection either
+  });
+
+  const ambiguousHaikuCatalog = [
+    // Bare alias and a dated pinned snapshot both normalize (per
+    // gateway-route-catalog.js) to the same key -> pairAcrossGateways
+    // reports the direct side as ambiguous and omits it. Both must still
+    // survive as their own real, direct-callable rows.
+    { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: 200000, pricing: null },
+    { id: 'anthropic/claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5 (pinned)', contextLength: 200000, pricing: null },
+    { id: 'openrouter/anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', contextLength: 200000,
+      pricing: { prompt: '0.0000008', completion: '0.000004' } },
+  ];
+
+  test('ambiguous bare+dated direct ids are both preserved, never collapsed into a fabricated dot-form id', () => {
+    const { preselectedId, rows } = buildProviderDefaultChoices('anthropic', { catalog: ambiguousHaikuCatalog, tier: 'economy' });
+    const ids = rows.map(r => r.id);
+    expect(ids).toContain('anthropic/claude-haiku-4-5');
+    expect(ids).toContain('anthropic/claude-haiku-4-5-20251001');
+    expect(ids).not.toContain('anthropic/claude-haiku-4.5'); // fabricated dot-form id must never appear
+    // preselectedId must be one of the row ids as actually built, never the fabricated id.
+    expect(ids).toContain(preselectedId);
+  });
+
+  test('never-fabricate guarantee: every returned row id is verbatim present in the input catalog, for anthropic', () => {
+    const fixtures = [anthropicCatalog, orOnlyAnthropicCatalog, ambiguousHaikuCatalog];
+    for (const catalog of fixtures) {
+      const catalogIds = catalog.map(r => r.id);
+      const { rows } = buildProviderDefaultChoices('anthropic', { catalog, tier: 'balanced' });
+      for (const row of rows) {
+        expect(catalogIds.includes(row.id)).toBe(true);
+      }
+    }
+  });
+});
+
 describe('buildProviderDefaultChoices — degenerate input, must not crash', () => {
   test('absent catalog for the vendor -> empty rows, null preselectedId', () => {
     expect(buildProviderDefaultChoices('anthropic', {})).toEqual({ preselectedId: null, rows: [] });
