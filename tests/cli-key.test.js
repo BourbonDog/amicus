@@ -16,9 +16,17 @@ jest.mock('../src/utils/api-key-store', () => ({
 jest.mock('../src/utils/api-key-validation', () => ({
   validateApiKey: jest.fn(),
 }));
+jest.mock('../src/utils/model-catalog', () => ({
+  getCatalog: jest.fn(),
+}));
+jest.mock('../src/utils/provider-default-prompt', () => ({
+  runProviderDefaultFlow: jest.fn(),
+}));
 
 const { readApiKeys, readApiKeyHints, saveApiKey, removeApiKey } = require('../src/utils/api-key-store');
 const { validateApiKey } = require('../src/utils/api-key-validation');
+const { getCatalog } = require('../src/utils/model-catalog');
+const { runProviderDefaultFlow } = require('../src/utils/provider-default-prompt');
 const { handleKey } = require('../src/cli-handlers');
 
 let consoleSpy;
@@ -28,6 +36,12 @@ beforeEach(() => {
   jest.clearAllMocks();
   consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
   consoleErrSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  getCatalog.mockResolvedValue([]);
+  runProviderDefaultFlow.mockResolvedValue({
+    chosenId: null,
+    setAsDefault: false,
+    summaryLine: 'stub summary line',
+  });
 });
 afterEach(() => {
   consoleSpy.mockRestore();
@@ -89,6 +103,55 @@ describe('handleKey — save', () => {
     await expect(handleKey({ _: ['key', 'deepseek', 'sk-test'] })).rejects.toThrow('exit');
     expect(consoleErrSpy).toHaveBeenCalledWith(expect.stringContaining('File permission denied'));
     exitSpy.mockRestore();
+  });
+});
+
+describe('handleKey — provider-default picker after save', () => {
+  test('runs the picker non-interactively (no TTY in test env) and prints its summary line', async () => {
+    validateApiKey.mockResolvedValue({ valid: true });
+    saveApiKey.mockReturnValue({ success: true });
+    getCatalog.mockResolvedValue([{ id: 'deepseek/deepseek-v4' }]);
+    runProviderDefaultFlow.mockResolvedValue({
+      chosenId: 'deepseek/deepseek-v4',
+      setAsDefault: true,
+      summaryLine: '`amicus start --model deepseek` → deepseek/deepseek-v4, set as your default model',
+    });
+
+    await handleKey({ _: ['key', 'deepseek', 'sk-test123'] });
+
+    expect(runProviderDefaultFlow).toHaveBeenCalledTimes(1);
+    const [provider, opts] = runProviderDefaultFlow.mock.calls[0];
+    expect(provider).toBe('deepseek');
+    expect(opts.interactive).toBe(false); // jest test process has no TTY
+    expect(opts.ask).toBeUndefined();
+    expect(opts.catalog).toEqual([{ id: 'deepseek/deepseek-v4' }]);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('set as your default model'));
+  });
+
+  test('a picker failure never aborts the already-successful key save', async () => {
+    validateApiKey.mockResolvedValue({ valid: true });
+    saveApiKey.mockReturnValue({ success: true });
+    runProviderDefaultFlow.mockRejectedValue(new Error('catalog exploded'));
+
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    await handleKey({ _: ['key', 'deepseek', 'sk-test123'] });
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('saved'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('catalog exploded'));
+    exitSpy.mockRestore();
+  });
+
+  test('a getCatalog failure (offline) is swallowed -- picker still runs with an empty catalog', async () => {
+    validateApiKey.mockResolvedValue({ valid: true });
+    saveApiKey.mockReturnValue({ success: true });
+    getCatalog.mockRejectedValue(new Error('network unreachable'));
+
+    await handleKey({ _: ['key', 'deepseek', 'sk-test123'] });
+
+    expect(runProviderDefaultFlow).toHaveBeenCalledTimes(1);
+    const [, opts] = runProviderDefaultFlow.mock.calls[0];
+    expect(opts.catalog).toEqual([]);
   });
 });
 
