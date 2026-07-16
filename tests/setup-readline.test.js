@@ -39,7 +39,9 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     await runReadlineSetup();
     const written = saveConfig.mock.calls[0][0];
     expect(written.default).toBe('gemini');
-    expect(written.aliases.gemini).toBe('openrouter/google/gemini-9.9-flash'); // touched: upgraded
+    // touched: upgraded to bare canonical (direct-capable vendor 'google' —
+    // Task 8.1a setup-seeding fix strips the openrouter/ prefix here too).
+    expect(written.aliases.gemini).toBe('google/gemini-9.9-flash');
     expect(written.aliases.qwen).toBe('user/qwen');                            // untouched: preserved
   });
 
@@ -61,7 +63,10 @@ describe('runReadlineSetup (live picks, no clobber)', () => {
     const { runReadlineSetup } = require('../src/sidecar/setup');
     await runReadlineSetup();
     const written = saveConfig.mock.calls[0][0];
-    expect(written.aliases.gemini).toBe('openrouter/google/gemini-9.9-flash');
+    // Chosen-alias write always runs through toCanonicalDefault (Task 8.1a
+    // setup-seeding fix), regardless of whether toLiveSeedAliases (mocked
+    // here) seeded the fresh config — bare canonical for direct-capable 'google'.
+    expect(written.aliases.gemini).toBe('google/gemini-9.9-flash');
     expect(written.default).toBe('gemini');
   });
 

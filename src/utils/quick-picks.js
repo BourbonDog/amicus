@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { getFamilies, toDefaultAliases } = require('./curated-models');
+const { getFamilies, toDefaultAliases, toCanonicalDefault } = require('./curated-models');
 
 const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)+$/;
 
@@ -67,13 +67,21 @@ function resolveQuickPicks(catalog) {
 
 /**
  * Seed map for fresh configs: static defaults overlaid with live family
- * openrouter routes (cardless aliases stay pinned).
+ * routes (cardless aliases stay pinned). The overlaid route is run through
+ * `toCanonicalDefault` so a direct-capable vendor (e.g. google, openai)
+ * lands as bare `vendor/model` (direct-first via the gateway router)
+ * instead of the raw `openrouter/<vendor>/<rest>` pick — otherwise a fresh
+ * `amicus setup` with a live catalog would silently defeat the direct-first
+ * default `toDefaultAliases()` establishes. Gateway-only vendors are
+ * returned unchanged by `toCanonicalDefault`.
  * @returns {Object<string,string>}
  */
 function toLiveSeedAliases(catalog) {
   const seeds = toDefaultAliases();
   for (const r of resolveQuickPicks(catalog || [])) {
-    if (r.source === 'live' && r.routes.openrouter) { seeds[r.alias] = r.routes.openrouter; }
+    if (r.source === 'live' && r.routes.openrouter) {
+      seeds[r.alias] = toCanonicalDefault(r.routes.openrouter);
+    }
   }
   return seeds;
 }

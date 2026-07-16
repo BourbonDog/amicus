@@ -151,4 +151,4 @@ function listCuratedRoutes() {
   return out;
 }
 
-module.exports = { getFamilies, toDefaultAliases, listCuratedRoutes };
+module.exports = { getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes };
