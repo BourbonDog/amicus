@@ -147,4 +147,36 @@ describe('pairAcrossGateways — verbatim, conservative cross-gateway pairing', 
     expect(pairAcrossGateways('openai', 'foo-1', catalogInfo)).toEqual({ direct: 'openai/foo-1' });
     expect(pairAcrossGateways('deepseek', 'foo-1', catalogInfo)).toEqual({ openrouter: 'openrouter/deepseek/foo-1' });
   });
+
+  // Task 6 (#gwid): Task 5 left the shape of `versionToken` untested beyond the
+  // documented "bare model segment" contract. Task 6's caller (gateway-route-audit.js)
+  // always strips `openrouter/<vendor>/` before calling -- these tests lock down
+  // what happens on either side of a misuse of that contract, so a future caller
+  // that forgets to strip can never silently corrupt a pairing.
+  test('a versionToken still carrying the full openrouter/<vendor>/ prefix normalizes identically to the bare segment (robust, not a wrong match)', () => {
+    const catalogInfo = cat([
+      'anthropic/claude-opus-4-8',
+      'openrouter/anthropic/claude-opus-4.8',
+    ]);
+    const bare = pairAcrossGateways('anthropic', 'claude-opus-4-8', catalogInfo);
+    const prefixed = pairAcrossGateways('anthropic', 'openrouter/anthropic/claude-opus-4-8', catalogInfo);
+    expect(prefixed).toEqual(bare);
+    expect(prefixed).toEqual({
+      direct: 'anthropic/claude-opus-4-8',
+      openrouter: 'openrouter/anthropic/claude-opus-4.8',
+    });
+  });
+
+  test('a versionToken prefixed with a DIFFERENT vendor than the `vendor` argument fails closed (=> {}, never a fabricated cross-vendor pair)', () => {
+    const catalogInfo = cat([
+      'anthropic/claude-opus-4-8',
+      'openrouter/anthropic/claude-opus-4.8',
+      'openai/gpt-5.5',
+      'openrouter/openai/gpt-5.5',
+    ]);
+    // Caller passes an openai-shaped token while asking to pair against 'anthropic' --
+    // normalizeKey only strips the DECLARED vendor's own prefix, so the mismatched
+    // 'openai/' segment survives into the comparison key and matches nothing.
+    expect(pairAcrossGateways('anthropic', 'openai/gpt-5.5', catalogInfo)).toEqual({});
+  });
 });
