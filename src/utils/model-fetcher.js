@@ -7,12 +7,18 @@
 
 const https = require('https');
 
-/** Hardcoded Anthropic models (no public listing endpoint) */
+/**
+ * Hardcoded Anthropic models (no public listing endpoint). This is the
+ * DIRECT-API floor only — Fable is OpenRouter-only (see curated-models.js
+ * DIVERGENT_VENDORS / CARDLESS 'fable' entry, which has no `anthropic` route)
+ * and must never appear here: classifyModel() returns 'valid' on a floor HIT
+ * before it ever checks `authoritative`, so listing an OR-only model here
+ * would mislabel a direct-API request for it as valid.
+ */
 const ANTHROPIC_MODELS = [
   { id: 'anthropic/claude-opus-4-8', name: 'Claude Opus 4.8', contextLength: null, pricing: null },
   { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-haiku-4-5', name: 'Claude Haiku 4.5', contextLength: null, pricing: null },
-  { id: 'anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: null, pricing: null },
   { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6', contextLength: null, pricing: null }
 ];
 

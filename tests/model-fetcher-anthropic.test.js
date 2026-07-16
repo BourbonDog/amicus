@@ -56,7 +56,6 @@ test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapsh
     'anthropic/claude-opus-4-8',
     'anthropic/claude-sonnet-5',
     'anthropic/claude-haiku-4-5',
-    'anthropic/claude-fable-5',
     'anthropic/claude-sonnet-4-6',
   ]);
   // Stale flagships from the prior family must be gone.
@@ -64,4 +63,9 @@ test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapsh
   expect(ids).not.toContain('anthropic/claude-opus-4-6');
   expect(ids).not.toContain('anthropic/claude-sonnet-4-5');
   expect(ids).not.toContain('anthropic/claude-3-5-haiku');
+  // Fable is OpenRouter-only (curated-models.js CARDLESS has no `anthropic`
+  // route for it) -- it must never be listed in the DIRECT-API floor, or a
+  // full-id `anthropic/claude-fable-5` direct request would be mislabeled
+  // 'valid' by classifyModel's present-before-authoritative check.
+  expect(ids).not.toContain('anthropic/claude-fable-5');
 });
