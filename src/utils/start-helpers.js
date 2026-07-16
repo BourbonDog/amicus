@@ -6,80 +6,11 @@
  */
 
 /**
- * Resolve model from args: resolve alias or config default.
- * Returns { model, alias } or calls process.exit(1) on error.
- * @param {object} args - Parsed CLI arguments
- * @returns {{ model: string, alias: string|undefined }}
- */
-function resolveModelFromArgs(args) {
-  const { resolveModel, loadConfig } = require('./config');
-  const rawAlias = args.model;
-  let model;
-  try {
-    model = resolveModel(args.model);
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-
-  // Determine the alias used (explicit or config default)
-  let alias = rawAlias;
-  if (alias === undefined) {
-    const cfg = loadConfig();
-    if (cfg && cfg.default && !cfg.default.includes('/')) {
-      alias = cfg.default;
-    }
-  }
-  return { model, alias };
-}
-
-/**
- * Validate models before launch (F3 #18: default-on).
- * --no-validate-model opts out; the old opt-in --validate-model is a no-op kept for back-compat.
- * Returns the (possibly corrected) model string.
- * @param {object} args - Parsed CLI arguments
- * @param {string|undefined} alias - The alias used for resolution
- * @returns {Promise<string>} Validated model string
- */
-async function validateFallbackModel(args, alias) {
-  // F3 #18: validation is default-on. --no-validate-model opts out; the old
-  // opt-in --validate-model is now a no-op kept for back-compat.
-  if (args['no-validate-model']) { return args.model; }
-
-  const headless = args['no-ui'] || !process.stdin.isTTY;
-  const { detectFallback } = require('./config');
-
-  // Direct-API fallback path: keep the provider-API existence check.
-  if (alias && detectFallback(alias, args.model)) {
-    const { validateDirectModel } = require('./model-validator');
-    try {
-      return await validateDirectModel(args.model, alias, { headless });
-    } catch (err) {
-      console.error(err.message);
-      process.exit(1);
-    }
-  }
-
-  // OpenRouter (and any) resolved model: validate against the live catalog.
-  const { validateAgainstCatalog } = require('./model-validator');
-  try {
-    return await validateAgainstCatalog(args.model, alias);
-  } catch (err) {
-    console.error(err.message);
-    process.exit(1);
-  }
-}
-
-/**
  * Derive the alias used for resolution (needed downstream by the budget gate,
  * which reports `alias || args.model` as the pricing lookup's modelInput).
- * Mirrors the alias-derivation half of resolveModelFromArgs, but — per the
- * #61 Task 4.5 design — only ever returns a no-slash token: an explicit
- * `--model` containing '/' or a slash-bearing config default both resolve to
- * undefined here (resolveModelFromArgs, by contrast, echoes a slash-bearing
- * explicit --model back as "alias"; that's fine there because detectFallback/
- * validateDirectModel both no-op on a slash-bearing alias, but this router
- * path has no such tolerant caller).
+ * Per the #61 Task 4.5 design, only ever returns a no-slash token: an
+ * explicit `--model` containing '/' or a slash-bearing config default both
+ * resolve to undefined here.
  * @param {object} args - Parsed CLI arguments
  * @returns {string|undefined}
  */
@@ -99,10 +30,11 @@ function deriveAlias(args) {
 }
 
 /**
- * Resolve the model for a `start` launch through the Foundation gateway
- * router (#61 Task 4.5), replacing the resolveModelFromArgs +
- * validateFallbackModel pipeline for the start path only — resume/continue
- * keep using that legacy pair (above) until Tasks 5.2/7.3 migrate them too.
+ * Resolve the model for a launch through the Foundation gateway router (#61
+ * Task 4.5), used by every launch path — start, continue (Task 7.3), and the
+ * MCP amicus_start handler (via the same router, Task 6.2). This replaced the
+ * legacy resolveModelFromArgs + validateFallbackModel pair, which was retired
+ * once no launch path depended on it (#61 Task 4.7).
  *
  * On `resolved`, returns `{ model, alias, gateway, provenance }` (and prints
  * any advisory `notice` to stderr). On `error` or `selection_required`,
@@ -127,8 +59,7 @@ async function resolveLaunchModel(args) {
   const allowSelection = !args['no-ui'] && !!process.stdin.isTTY;
 
   // No --model given: the parser does not inject a default, so resolve the
-  // configured default here (mirroring the pre-#61 resolveModelFromArgs
-  // behavior) before handing off to the router. Without this, `undefined`
+  // configured default here before handing off to the router. Without this, `undefined`
   // would reach resolveRouteForLaunch -> parseDescriptor(undefined) -> an
   // `invalid` result, breaking the common `amicus start` (no --model) case.
   // Shared with the MCP amicus_start handler (mcp-server.js, #61 Task 6.2)
@@ -193,8 +124,6 @@ async function resolveLaunchModel(args) {
 }
 
 module.exports = {
-  resolveModelFromArgs,
-  validateFallbackModel,
   resolveLaunchModel,
   deriveAlias,
 };

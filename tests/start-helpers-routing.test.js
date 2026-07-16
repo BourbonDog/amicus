@@ -1,9 +1,10 @@
 'use strict';
 
-// resolveLaunchModel (#61 gateway routing integration, Task 4.5) — routes the
-// `start` launch through resolveRouteForLaunch instead of the legacy
-// resolveModelFromArgs/validateFallbackModel pair (those two are untouched;
-// resume/continue still use them — see tests/start-helpers.test.js).
+// resolveLaunchModel (#61 gateway routing integration, Task 4.5) — routes
+// every launch (start, continue via Task 7.3, MCP amicus_start via Task 6.2)
+// through resolveRouteForLaunch. This replaced the legacy
+// resolveModelFromArgs/validateFallbackModel pair, retired in Task 4.7 once
+// no launch path depended on it anymore.
 //
 // route-launch (network/catalog-touching) is mocked per test, mirroring the
 // pattern in tests/route-launch.test.js. route-error is NOT mocked — it's

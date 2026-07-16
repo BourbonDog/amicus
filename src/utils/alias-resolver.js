@@ -1,40 +1,12 @@
 /**
  * Alias Resolver Utilities
  *
- * Handles alias auto-repair and direct API fallback logic,
- * extracted from config.js to keep it under the 300-line limit.
+ * Handles alias auto-repair, extracted from config.js to keep it under the
+ * 300-line limit. The direct-vs-OpenRouter gateway decision that used to live
+ * here (applyDirectApiFallback, a prefix-stripping heuristic) is now owned
+ * end-to-end by the gateway router (route-launch.js / gateway-router.js,
+ * #61) on every launch path — this module no longer makes that call.
  */
-
-const { PROVIDER_ENV_MAP, readApiKeyValues } = require('./api-key-store');
-const { logger } = require('./logger');
-
-/**
- * Strip openrouter/ prefix when direct provider API key is available
- * but OPENROUTER_API_KEY is not.
- * @param {string} model - Full model identifier
- * @returns {string} Model with or without openrouter/ prefix
- */
-function applyDirectApiFallback(model) {
-  if (!model.startsWith('openrouter/')) {
-    return model;
-  }
-  const persistedKeys = readApiKeyValues();
-  if (process.env.OPENROUTER_API_KEY || persistedKeys.openrouter) {
-    return model;
-  }
-  const direct = model.slice('openrouter/'.length);
-  const provider = direct.split('/')[0];
-  const envVar = PROVIDER_ENV_MAP[provider];
-  if (envVar && (process.env[envVar] || persistedKeys[provider])) {
-    logger.warn({ msg: 'Using direct provider API (OPENROUTER_API_KEY not set)', original: model, resolved: direct });
-    process.stderr.write(
-      `Notice: Using direct ${provider} API (OPENROUTER_API_KEY not set). ` +
-      'Model availability is validated automatically; pass --no-validate-model to skip.\n'
-    );
-    return direct;
-  }
-  return model;
-}
 
 /**
  * Auto-repair a null alias by falling back to DEFAULT_ALIASES.
@@ -63,7 +35,7 @@ function autoRepairAlias(alias, config, defaultAliases, saveConfig) {
         );
       }
     }
-    return applyDirectApiFallback(defaultModel);
+    return defaultModel;
   }
   throw new Error(
     `Alias '${alias}' is configured but has no model value. ` +
@@ -72,6 +44,5 @@ function autoRepairAlias(alias, config, defaultAliases, saveConfig) {
 }
 
 module.exports = {
-  applyDirectApiFallback,
   autoRepairAlias,
 };

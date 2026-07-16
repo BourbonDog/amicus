@@ -1,8 +1,15 @@
 /**
- * Config Direct API Fallback Tests
+ * Config Model Resolution — No-Strip Contract (#61 Task 4.7)
  *
- * Tests that applyDirectApiFallback checks both process.env
- * and persisted keys from api-key-store.
+ * `applyDirectApiFallback` (the old "strip openrouter/ when a direct
+ * provider key exists but no OR key does" heuristic) has been retired.
+ * The gateway router (route-launch.js / gateway-router.js) now owns the
+ * direct-vs-OpenRouter decision on every launch path — `resolveModel` just
+ * returns an alias's stored id verbatim, regardless of which API keys are
+ * present in the environment or the persisted key store.
+ *
+ * Routing behavior itself (when the router picks direct vs. openrouter) is
+ * covered by tests/gateway-router.test.js and tests/route-launch.test.js.
  */
 
 jest.mock('../src/utils/api-key-store', () => ({
@@ -23,7 +30,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-describe('applyDirectApiFallback with persisted keys', () => {
+describe('resolveModel does not mutate the resolved id (no-strip contract)', () => {
   let tempDir;
   let originalEnv;
   let resolveModel;
@@ -52,7 +59,6 @@ describe('applyDirectApiFallback with persisted keys', () => {
     readApiKeyValues = store.readApiKeyValues;
     readApiKeyValues.mockReturnValue({});
 
-    // Re-require config to pick up env changes
     jest.resetModules();
     jest.mock('../src/utils/api-key-store', () => ({
       PROVIDER_ENV_MAP: {
@@ -78,56 +84,43 @@ describe('applyDirectApiFallback with persisted keys', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('should return openrouter model when OPENROUTER_API_KEY is in persisted keys', () => {
-    // Persisted key for openrouter but not in process.env
-    readApiKeyValues.mockReturnValue({ openrouter: 'sk-or-persisted-key' });
-
+  it('returns the stored openrouter/ id unchanged when no keys exist anywhere', () => {
+    readApiKeyValues.mockReturnValue({});
     const result = resolveModel('gemini');
-    // Should NOT strip the openrouter/ prefix since openrouter key exists in store
     expect(result).toBe('openrouter/google/gemini-3-flash');
   });
 
-  it('should fallback to direct API when provider key is in persisted keys', () => {
-    // No openrouter key anywhere, but google key in persisted store
-    readApiKeyValues.mockReturnValue({ google: 'google-persisted-key' });
-
-    // Suppress stderr
-    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  it('returns the stored openrouter/ id unchanged even when a persisted OpenRouter key exists', () => {
+    readApiKeyValues.mockReturnValue({ openrouter: 'sk-or-persisted-key' });
     const result = resolveModel('gemini');
-    spy.mockRestore();
-
-    // Should strip openrouter/ prefix and use direct google API
-    expect(result).toBe('google/gemini-3-flash');
+    expect(result).toBe('openrouter/google/gemini-3-flash');
   });
 
-  it('should still check process.env for OPENROUTER_API_KEY', () => {
+  it('returns the stored openrouter/ id unchanged when only a persisted direct-provider key exists', () => {
+    // No openrouter key anywhere, but a google key in the persisted store —
+    // the old heuristic used to strip openrouter/ here; the router decides
+    // this now, so resolveModel must not.
+    readApiKeyValues.mockReturnValue({ google: 'google-persisted-key' });
+    const result = resolveModel('gemini');
+    expect(result).toBe('openrouter/google/gemini-3-flash');
+  });
+
+  it('returns the stored openrouter/ id unchanged when OPENROUTER_API_KEY is set via process.env', () => {
     process.env.OPENROUTER_API_KEY = 'sk-or-env-key';
     readApiKeyValues.mockReturnValue({});
-
     const result = resolveModel('gemini');
     expect(result).toBe('openrouter/google/gemini-3-flash');
   });
 
-  it('should still check process.env for provider key fallback', () => {
+  it('returns the stored openrouter/ id unchanged when only a direct-provider env key is set', () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'google-env-key';
     readApiKeyValues.mockReturnValue({});
-
-    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    const result = resolveModel('gemini');
-    spy.mockRestore();
-
-    expect(result).toBe('google/gemini-3-flash');
-  });
-
-  it('should return model unchanged when neither env nor persisted keys exist', () => {
-    readApiKeyValues.mockReturnValue({});
-
     const result = resolveModel('gemini');
     expect(result).toBe('openrouter/google/gemini-3-flash');
   });
 });
 
-describe('applyDirectApiFallback un-mocked integration', () => {
+describe('resolveModel no-strip contract — un-mocked integration', () => {
   let tempDir;
   let tempEnvDir;
   let originalEnv;
@@ -163,14 +156,15 @@ describe('applyDirectApiFallback un-mocked integration', () => {
     fs.rmSync(tempEnvDir, { recursive: true, force: true });
   });
 
-  it('should fallback to direct API using real .env file with persisted key', () => {
-    // Write a real .env file with a Google API key (no openrouter key)
+  it('returns the stored openrouter/ id unchanged with a real .env file holding a direct-provider key', () => {
+    // Write a real .env file with a Google API key (no openrouter key) — the
+    // pre-#61 code used to strip the openrouter/ prefix here via the real
+    // loadEnvEntries()/resolveKeyValue() chain; resolveModel must not anymore.
     fs.writeFileSync(
       path.join(tempEnvDir, '.env'),
       'GOOGLE_GENERATIVE_AI_API_KEY=real-google-key-from-env-file\n'
     );
 
-    // Reset modules and unmock api-key-store so the real implementation runs
     jest.resetModules();
     jest.unmock('../src/utils/api-key-store');
     jest.mock('../src/utils/logger', () => ({
@@ -178,12 +172,8 @@ describe('applyDirectApiFallback un-mocked integration', () => {
     }));
     const config = require('../src/utils/config');
 
-    const spy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const result = config.resolveModel('gemini');
-    spy.mockRestore();
 
-    // Real loadEnvEntries() -> resolveKeyValue() chain should detect
-    // the persisted google key and strip the openrouter/ prefix
-    expect(result).toBe('google/gemini-3-flash');
+    expect(result).toBe('openrouter/google/gemini-3-flash');
   });
 });

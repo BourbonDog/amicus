@@ -8,7 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { applyDirectApiFallback, autoRepairAlias } = require('./alias-resolver');
+const { autoRepairAlias } = require('./alias-resolver');
 
 /** Default model alias map — derived from the curated-models single source (F5) */
 const { toDefaultAliases } = require('./curated-models');
@@ -111,7 +111,9 @@ function resolveModel(modelArg) {
       if (!resolved || resolved === 'null') {
         return autoRepairAlias(modelArg, config, DEFAULT_ALIASES, saveConfig);
       }
-      return applyDirectApiFallback(resolved);
+      // Router (route-launch.js / gateway-router.js, #61) owns the
+      // direct-vs-OpenRouter decision now — return the stored id verbatim.
+      return resolved;
     }
 
     // Unknown alias
@@ -140,7 +142,8 @@ function resolveModel(modelArg) {
     if (!resolved || resolved === 'null') {
       return autoRepairAlias(defaultValue, config, DEFAULT_ALIASES, saveConfig);
     }
-    return applyDirectApiFallback(resolved);
+    // Router owns the direct-vs-OpenRouter decision now — return verbatim.
+    return resolved;
   }
 
   // Default alias not found anywhere
@@ -275,13 +278,6 @@ function buildProviderModels(resolvedRoutes = []) {
   return providers;
 }
 
-/** Detect if direct API fallback was applied during alias resolution */
-function detectFallback(alias, resolvedModel) {
-  if (!alias || alias.includes('/')) { return false; }
-  const val = getEffectiveAliases()[alias];
-  return !!(val && val.startsWith('openrouter/') && !resolvedModel.startsWith('openrouter/'));
-}
-
 /** @returns {Object<string,string[]>} the councils map (empty if none) */
 function getCouncils() {
   const config = loadConfig();
@@ -401,7 +397,6 @@ module.exports = {
   saveConfig,
   getDefaultAliases,
   resolveModel,
-  detectFallback,
   computeConfigHash,
   buildAliasTable,
   checkConfigChanged,
