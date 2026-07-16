@@ -4,7 +4,7 @@
 
 **A multi-model LLM Council for Claude — with a parallel AI window underneath.**
 
-![The Amicus council mid-ritual: five models — Gemini 3 Pro, Llama 4, Grok 4, Claude Opus — reading the same material independently, chaired by GPT-5](./docs/council.png)
+![The Amicus council mid-ritual: five models — Gemini, Llama, Grok, Claude Opus — reading the same material independently, chaired by GPT](./docs/council.png)
 
 Hand Claude a plan, a design, a diff, an architecture decision, a manuscript — anything — and say *council review this*: Amicus routes it through several models from different families, has them anonymously cross-review each other, and a non-Claude chair synthesizes a verdict you turn into accept/deny edits. Or skip the ceremony and **fork** a single conversation to Gemini, GPT, DeepSeek, or any other model — it works in parallel with full context, and you **fold** the result back when you're ready. Claude orchestrates throughout; you stay in your editor.
 

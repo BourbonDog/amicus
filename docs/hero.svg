@@ -48,7 +48,7 @@
   <text x="400" y="65" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" font-weight="600" fill="#D97757" text-anchor="middle">AMICUS</text>
   <!-- Model badge -->
   <rect x="340" y="82" width="120" height="18" rx="9" fill="#D97757" opacity="0.15" />
-  <text x="400" y="94" font-family="SF Mono, Menlo, monospace" font-size="9" font-weight="600" fill="#E28E73" text-anchor="middle">Gemini 3 Pro</text>
+  <text x="400" y="94" font-family="SF Mono, Menlo, monospace" font-size="9" font-weight="600" fill="#E28E73" text-anchor="middle">Gemini</text>
   <!-- Chat lines -->
   <rect x="318" y="108" width="80" height="3" rx="1.5" fill="#4A4C5C" />
   <rect x="318" y="116" width="110" height="3" rx="1.5" fill="#4A4C5C" />
@@ -74,16 +74,16 @@
     <text x="100" y="0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#A5A9B5" text-anchor="middle" letter-spacing="1">ANY MODEL</text>
 
     <rect x="20" y="14" width="160" height="26" fill="url(#box)" stroke="#3A3C4C" stroke-width="1" rx="5" />
-    <text x="100" y="31" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">Gemini 3 Pro</text>
+    <text x="100" y="31" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">Gemini</text>
 
     <rect x="20" y="48" width="160" height="26" fill="url(#box)" stroke="#3A3C4C" stroke-width="1" rx="5" />
-    <text x="100" y="65" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">GPT-5.4</text>
+    <text x="100" y="65" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">GPT</text>
 
     <rect x="20" y="82" width="160" height="26" fill="url(#box)" stroke="#3A3C4C" stroke-width="1" rx="5" />
-    <text x="100" y="99" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">DeepSeek R1</text>
+    <text x="100" y="99" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">DeepSeek</text>
 
     <rect x="20" y="116" width="160" height="26" fill="url(#box)" stroke="#3A3C4C" stroke-width="1" rx="5" />
-    <text x="100" y="133" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">Llama 4 Maverick</text>
+    <text x="100" y="133" font-family="SF Mono, Menlo, monospace" font-size="10" fill="#E8E0D8" text-anchor="middle">Llama</text>
 
     <text x="100" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" fill="#6A6E7A" text-anchor="middle">via OpenRouter</text>
   </g>

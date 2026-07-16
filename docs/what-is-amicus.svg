@@ -67,7 +67,7 @@
 
   <!-- Model badge -->
   <rect x="448" y="58" width="120" height="18" rx="9" fill="#D97757" opacity="0.15" />
-  <text x="508" y="70" font-family="SF Mono, Menlo, monospace" font-size="9" font-weight="600" fill="#E28E73" text-anchor="middle">Gemini 3 Pro</text>
+  <text x="508" y="70" font-family="SF Mono, Menlo, monospace" font-size="9" font-weight="600" fill="#E28E73" text-anchor="middle">Gemini</text>
 
   <!-- Context indicator -->
   <rect x="578" y="58" width="170" height="18" rx="9" fill="#3A3C4C" />

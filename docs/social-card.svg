@@ -106,7 +106,7 @@
     <text x="90" y="16" text-anchor="middle" font-family="monospace" font-size="9" font-weight="600" fill="#D97757">Amicus</text>
     <!-- Model label -->
     <rect x="12" y="32" width="70" height="16" rx="4" fill="rgba(74,222,128,0.1)" stroke="rgba(74,222,128,0.3)" stroke-width="0.8"/>
-    <text x="47" y="43" text-anchor="middle" font-family="monospace" font-size="8" fill="#4ade80">Gemini Pro</text>
+    <text x="47" y="43" text-anchor="middle" font-family="monospace" font-size="8" fill="#4ade80">Gemini</text>
     <!-- Chat lines -->
     <rect x="12" y="56" width="100" height="3" rx="1.5" fill="#2c2c30"/>
     <rect x="12" y="66" width="140" height="3" rx="1.5" fill="#2c2c30"/>
