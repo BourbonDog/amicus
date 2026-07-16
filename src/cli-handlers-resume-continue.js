@@ -13,6 +13,7 @@
 const { resolveLaunchModel } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson, requireValidTaskId } = require('./utils/cli-preflight');
+const { GATEWAY_MODES } = require('./utils/model-descriptor');
 
 /**
  * Handle 'amicus resume' command
@@ -69,6 +70,16 @@ async function handleContinue(args) {
   }
 
   requireNoUiForJson(args, useJson);
+
+  // FIX 4 (#61 whole-branch review, cheap parity): handleStart validates
+  // --gateway via validateStartArgs (cli.js) — continue never did, so a
+  // typo'd value silently fell through to resolveGatewayMode's pass-through
+  // instead of failing fast with a clear error. Checked unconditionally
+  // (not just when --model is also given) since --gateway alone is still a
+  // user-facing typo worth catching.
+  if (args.gateway !== undefined && !GATEWAY_MODES.includes(args.gateway)) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --gateway must be one of: ${GATEWAY_MODES.join(', ')}` }));
+  }
 
   // F5/#61 Task 7.3: an explicitly passed --model routes through the gateway
   // router exactly like start (resolveLaunchModel), so --gateway / direct-first

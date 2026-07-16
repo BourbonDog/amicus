@@ -151,6 +151,40 @@ describe('MCP eager model validation', () => {
       expect(spawnCalled).toBe(true);
     });
 
+    // #61 whole-branch review FIX 2: maybeMigrationNotice (route-launch.js)
+    // builds routeResult.notice AND burns the one-shot migration_notified
+    // flag at resolution time — before this fix, amicus_start never surfaced
+    // it anywhere (no CLI stderr exists for an MCP caller), so the flag-burn
+    // never corresponded to anything the user/agent actually saw.
+    test('a both-keys user routed direct: the response surfaces the router migration notice', async () => {
+      let capturedArgs;
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('child_process', () => ({
+          spawn: jest.fn((cmd, args) => {
+            capturedArgs = args;
+            return { pid: 99999, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+          }),
+        }));
+        const resolveRouteForLaunch = jest.fn(async () => ({
+          kind: 'resolved', gateway: 'direct', executableId: 'openai/gpt-5.5', provenance: {},
+          notice: 'Routing openai via direct API (previously OpenRouter). ' +
+            'Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.',
+        }));
+        jest.doMock('../src/utils/route-launch', () => ({ resolveRouteForLaunch }));
+        const { handlers } = require('../src/mcp-server');
+        const result = await handlers.amicus_start(
+          { model: 'gpt', prompt: 'test', noUi: true }, tempDir
+        );
+
+        expect(result.isError).toBeUndefined();
+        const texts = result.content.map(c => c.text);
+        expect(texts.some(t => t.includes('Routing openai via direct API'))).toBe(true);
+      });
+      // Spawn path (the shared server cannot start in this test environment) —
+      // confirms the model still routed correctly alongside the notice.
+      expect(capturedArgs.includes('--model')).toBe(true);
+    });
+
     test('no model and no config default: model routing still returns a structured error, never a crash', async () => {
       // No config file at all.
       let spawnCalled = false;
@@ -206,8 +240,14 @@ describe('MCP eager model validation', () => {
     });
   });
 
+  // #61 whole-branch review FIX 3: amicus_continue's explicit --model now
+  // routes through the SAME gateway router as amicus_start (resolveRouteForLaunch)
+  // instead of the legacy tryResolveModel (alias-existence-only) pre-check, so
+  // an unroutable model returns a structured model_route_error and never
+  // spawns a child doomed to die opaquely. The no-model inherit-prior-session
+  // path (last test below) is unchanged.
   describe('amicus_continue', () => {
-    test('returns isError for invalid model override', async () => {
+    test('returns isError for invalid model override (real router: unparseable descriptor never reaches a key check)', async () => {
       writeConfig({
         default: 'gemini',
         aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' },
@@ -228,16 +268,16 @@ describe('MCP eager model validation', () => {
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('bogus-alias');
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed).toMatchObject({ type: 'model_route_error', reason: 'invalid_descriptor' });
       });
       expect(spawnCalled).toBe(false);
     });
 
-    test('proceeds when model override is valid', async () => {
-      writeConfig({
-        default: 'gemini',
-        aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' },
-      });
-
+    // #61 whole-branch review FIX 3 acceptance test (named in the task brief):
+    // an unroutable new model on continue (gateway-only vendor forced direct)
+    // returns the structured error and never spawns.
+    test('unroutable new model (grok, --gateway direct): returns a structured model_route_error, never spawns', async () => {
       let spawnCalled = false;
       await jest.isolateModulesAsync(async () => {
         jest.doMock('child_process', () => ({
@@ -246,12 +286,60 @@ describe('MCP eager model validation', () => {
             return { pid: 99999, unref: jest.fn() };
           }),
         }));
+        const resolveRouteForLaunch = jest.fn(async () => ({
+          kind: 'error', type: 'model_route_error', field: 'model', requested: 'grok',
+          reason: 'no_direct_integration', preferredGateway: 'direct', suggestions: [],
+        }));
+        jest.doMock('../src/utils/route-launch', () => ({ resolveRouteForLaunch }));
+        const { handlers } = require('../src/mcp-server');
+        const result = await handlers.amicus_continue(
+          { taskId: 'prev-task', prompt: 'continue work', model: 'grok', gateway: 'direct' }, tempDir
+        );
+
+        expect(result.isError).toBe(true);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed).toMatchObject({ type: 'model_route_error', reason: 'no_direct_integration' });
+        expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: 'grok', gatewayMode: 'direct' }));
+      });
+      expect(spawnCalled).toBe(false);
+    });
+
+    test('proceeds when model override is valid: forwards the router executableId, not the raw alias', async () => {
+      writeConfig({
+        default: 'gemini',
+        aliases: { gemini: 'openrouter/google/gemini-3-flash-preview' },
+      });
+
+      let spawnCalled = false;
+      let capturedArgs;
+      await jest.isolateModulesAsync(async () => {
+        jest.doMock('child_process', () => ({
+          spawn: jest.fn((cmd, args) => {
+            spawnCalled = true;
+            capturedArgs = args;
+            return { pid: 99999, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+          }),
+        }));
+        // Deterministic — mirrors the amicus_start tests above; a real router
+        // call here would depend on whichever API keys happen to be
+        // configured on the machine running the suite (auth.json is NOT
+        // scoped by AMICUS_CONFIG_DIR), which the alias-existence-only
+        // legacy check this replaces never had to account for.
+        const resolveRouteForLaunch = jest.fn(async () => ({
+          kind: 'resolved', gateway: 'openrouter',
+          executableId: 'openrouter/google/gemini-3-flash-preview', provenance: {},
+        }));
+        jest.doMock('../src/utils/route-launch', () => ({ resolveRouteForLaunch }));
         const { handlers } = require('../src/mcp-server');
         const result = await handlers.amicus_continue(
           { taskId: 'prev-task', prompt: 'continue', model: 'gemini' }, tempDir
         );
 
         expect(result.isError).toBeUndefined();
+        expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini' }));
+        const idx = capturedArgs.indexOf('--model');
+        expect(idx).toBeGreaterThan(-1);
+        expect(capturedArgs[idx + 1]).toBe('openrouter/google/gemini-3-flash-preview');
       });
       expect(spawnCalled).toBe(true);
     });

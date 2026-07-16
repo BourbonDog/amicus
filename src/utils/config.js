@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { autoRepairAlias } = require('./alias-resolver');
+const { isDirectProvider } = require('./provider-registry');
 
 /** Default model alias map — derived from the curated-models single source (F5) */
 const { toDefaultAliases } = require('./curated-models');
@@ -247,6 +248,23 @@ function tryResolveModel(modelArg) {
  * stores `openrouter/openai/gpt-5.5` but the router resolves DIRECT to
  * `openai/gpt-5.5` — without this, only `openrouter` would be registered,
  * mismatching config.model).
+ *
+ * Catalog broadening (#61 whole-branch review, FIX 1): a resolvedRoutes entry
+ * only covers the route(s) resolved AT SERVER-CREATION TIME. A long-lived,
+ * multi-session server (the MCP shared server, `utils/shared-server.js`) is
+ * created ONCE via `sharedServer.ensureServer()` and then serves MANY
+ * sessions over its lifetime, each of which independently asks the gateway
+ * router (direct-first policy) to route the SAME bare alias — some sessions
+ * land DIRECT, others land on OpenRouter, depending on which keys happen to
+ * be configured when each session starts. Since the shared server's
+ * `provider.models` is fixed at creation and never rebuilt per-session,
+ * threading only that first session's resolved id is insufficient. So for
+ * every alias that resolves to a BARE direct-capable-vendor id (post-#61
+ * default aliases are bare, e.g. `openai/gpt-5.5`), this ALSO registers the
+ * `openrouter/<vendor>/<model>` form — broadening the catalog to cover BOTH
+ * routes the router might pick, regardless of which session created the
+ * server. This does NOT change what the alias itself resolves to (still
+ * bare, still direct-first) — it only widens what's pre-registered.
  * @param {string[]} [resolvedRoutes] executable model id(s) actually launched
  * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.3": {}, ... } } } */
 function buildProviderModels(resolvedRoutes = []) {
@@ -269,6 +287,17 @@ function buildProviderModels(resolvedRoutes = []) {
 
   for (const fullModel of Object.values(aliases)) {
     addRoute(fullModel);
+
+    // Broaden: a bare direct-capable-vendor route also gets an OpenRouter
+    // mirror registered (see catalog-broadening note above). Gateway-only
+    // aliases (already `openrouter/...`, e.g. grok/qwen/x-ai) are untouched —
+    // OpenRouter is their only possible route anyway, already covered above.
+    if (typeof fullModel === 'string' && !fullModel.startsWith('openrouter/')) {
+      const vendor = fullModel.split('/')[0];
+      if (isDirectProvider(vendor)) {
+        addRoute(`openrouter/${fullModel}`);
+      }
+    }
   }
 
   for (const resolved of resolvedRoutes) {

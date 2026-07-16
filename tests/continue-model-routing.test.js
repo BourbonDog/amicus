@@ -39,6 +39,50 @@ afterEach(() => {
   jest.resetModules();
 });
 
+// #61 whole-branch review FIX 4 (cheap parity): handleStart validates
+// --gateway via validateStartArgs (cli.js) — continue never did, so a
+// typo'd value silently fell through to resolveGatewayMode's pass-through
+// instead of failing fast with a clear error.
+describe('handleContinue validates --gateway (#61 whole-branch review FIX 4)', () => {
+  test('an invalid --gateway value fails fast, before any routing occurs (json mode)', async () => {
+    const resolveRouteForLaunch = jest.fn();
+    const { handleContinue } = loadHandleContinue({ resolveRouteForLaunch });
+    const outSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(handleContinue({
+      _: ['continue', 'sometask'], json: true, 'no-ui': true, prompt: 'hi', gateway: 'bogus',
+    })).rejects.toThrow('exit:1');
+
+    expect(resolveRouteForLaunch).not.toHaveBeenCalled();
+    const written = outSpy.mock.calls.map((c) => c[0]).join('');
+    const doc = JSON.parse(written.trim());
+    expect(doc.error).toMatchObject({ code: 'BAD_ARGS' });
+    expect(doc.error.message).toContain('--gateway must be one of: auto, direct, openrouter');
+
+    outSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  test('an invalid --gateway value fails fast even with no --model given', async () => {
+    const resolveRouteForLaunch = jest.fn();
+    const { handleContinue } = loadHandleContinue({ resolveRouteForLaunch });
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(handleContinue({
+      _: ['continue', 'sometask'], 'no-ui': true, prompt: 'hi', gateway: 'bogus',
+    })).rejects.toThrow('exit:1');
+
+    expect(resolveRouteForLaunch).not.toHaveBeenCalled();
+    const written = errSpy.mock.calls.map((c) => c[0]).join('');
+    expect(written).toContain('--gateway must be one of: auto, direct, openrouter');
+
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+});
+
 describe('handleContinue --model routes through the gateway router (#61 Task 7.3)', () => {
   test('a gateway-only vendor with no OpenRouter key routes and fails with the structured route error (mirrors start)', async () => {
     // x-ai has no direct integration (provider-registry.js) — resolveRoute's

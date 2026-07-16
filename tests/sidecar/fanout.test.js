@@ -112,6 +112,22 @@ describe('fanout validation helpers', () => {
       expect(mockResolveRouteForLaunch).toHaveBeenCalledTimes(2);
     });
 
+    // #61 whole-branch review FIX 2: a resolved leg carries its router notice
+    // (or null) forward so runFanout can surface it on the wave doc — fanout
+    // has no CLI-single stderr path to print it on directly.
+    it('carries a resolved leg\'s routeResult.notice forward (null when absent)', async () => {
+      mockResolveRouteForLaunch
+        .mockImplementationOnce(async ({ model }) => ({
+          kind: 'resolved', executableId: model, gateway: 'direct', provenance: {}, notice: 'migrated notice',
+        }))
+        .mockImplementationOnce(async ({ model }) => ({
+          kind: 'resolved', executableId: model, gateway: 'direct', provenance: {},
+        }));
+      const r = await validateFanoutModels('a/b,c/d');
+      expect(r.legs[0].notice).toBe('migrated notice');
+      expect(r.legs[1].notice).toBeNull();
+    });
+
     // #61 Task 7.3: a routing failure (missing key, catalog miss, unresolvable
     // alias) is now a PER-LEG outcome (`ok:false` + the router's RouteResult),
     // not a whole-list `{error}` — sibling legs must still resolve. The
@@ -238,6 +254,27 @@ describe('runFanout orchestrator', () => {
     expect(mockStartOpenCodeServer).toHaveBeenCalledTimes(1);
     const serverOpts = mockStartOpenCodeServer.mock.calls[0][1];
     expect(serverOpts).toMatchObject({ models: ['openrouter/a/b', 'openrouter/c/d'] });
+  });
+
+  // #61 whole-branch review FIX 2: a leg's migration notice (routeResult.notice)
+  // had no CLI stderr to land on in fanout — one process resolves MANY legs,
+  // not a single launch — so it must surface on the wave doc instead.
+  it('surfaces a leg-level migration notice on the wave doc (FIX 2)', async () => {
+    mockResolveRouteForLaunch.mockImplementationOnce(async ({ model }) => ({
+      kind: 'resolved', executableId: model, gateway: 'direct', provenance: {},
+      notice: 'Routing openai via direct API (previously OpenRouter). ' +
+        'Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.',
+    }));
+    const { wave } = await runFanout(baseOpts());
+    expect(wave.notices).toEqual([
+      'Routing openai via direct API (previously OpenRouter). ' +
+        'Set routing.prefer: "openrouter" (or use --gateway openrouter) to restore.',
+    ]);
+  });
+
+  it('an ordinary wave (no migration) has an empty notices array', async () => {
+    const { wave } = await runFanout(baseOpts());
+    expect(wave.notices).toEqual([]);
   });
 
   it('derives leg ids from the wave id and persists legs as ordinary sessions with parentWave', async () => {

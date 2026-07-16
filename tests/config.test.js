@@ -447,5 +447,32 @@ describe('Sidecar Config Module', () => {
       const result = config.buildProviderModels([null, undefined, '', 'no-slash-model']);
       expect(result).toEqual(before);
     });
+
+    // #61 whole-branch review, FIX 1: the MCP shared server registers
+    // provider.models ONCE (alias-derived only) but then serves many
+    // sessions over its life, each independently routed direct-or-OpenRouter
+    // by the gateway router. A resolvedRoutes entry threaded at creation time
+    // only covers the FIRST session's route, so the alias-derived catalog
+    // must itself cover both possible routes for every direct-capable alias.
+    it('registers BOTH the direct and openrouter form for a bare direct-capable default alias', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels();
+      // gpt is a bare canonical default (Task 8.1a) — registered under its
+      // own direct provider...
+      expect(result.openai.models['gpt-5.5']).toEqual({});
+      // ...AND mirrored under openrouter, so whichever route a given
+      // session's router picks is already registered on the shared server.
+      expect(result.openrouter.models['openai/gpt-5.5']).toEqual({});
+    });
+
+    it('registers a gateway-only default alias only under openrouter (no direct-provider mirror)', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels();
+      // grok has no direct integration (x-ai isn't a direct-capable vendor) —
+      // openrouter is its only route, already covered by the normal alias
+      // loop; the broadening must not invent an 'x-ai' top-level bucket.
+      expect(result.openrouter.models['x-ai/grok-4.3']).toEqual({});
+      expect(result['x-ai']).toBeUndefined();
+    });
   });
 });

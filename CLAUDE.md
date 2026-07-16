@@ -195,6 +195,7 @@ src/
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
 │   ├── remediation-hints.js
+│   ├── result-schema-rebuild.js
 │   ├── result-schema-version.js  # The single SCHEMA_VERSION constant shared by result-schema.js and
 │   ├── result-schema.js
 │   ├── route-error.js  # Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a
@@ -421,6 +422,7 @@ evals/
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
 | `utils/remediation-hints.js` |  |  |
+| `utils/result-schema-rebuild.js` |  | `buildRunResultFromSession()`, `buildWaveResultFromSession()` |
 | `utils/result-schema-version.js` | The single SCHEMA_VERSION constant shared by result-schema.js and | `SCHEMA_VERSION()` |
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
 | `utils/route-error.js` | Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a | `toStructuredError()`, `toCliMessage()`, `REASON_TEXT()`, `ROUTE_ERROR_REASONS()`, `SELECTION_REQUIRED_REASON()` |

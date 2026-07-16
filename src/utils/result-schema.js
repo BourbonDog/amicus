@@ -121,9 +121,10 @@ function waveExitCode(waveStatus) {
  * @param {string|null} [opts.createdAt]
  * @param {string|null} [opts.completedAt]
  * @param {string|null} [opts.status] - Override (e.g. 'aborted' on signal); default aggregates legs
+ * @param {string[]} [opts.notices] - Advisory per-leg migration notices (#61 FIX 2); never affects status/exitCode.
  * @returns {object} wave document
  */
-function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null }) {
+function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null, notices = [] }) {
   const { sumWaveUsage } = require('./pricing');
   // Named buckets only (see "COUNTS REMAINDER RULE" above). 'crashed' and
   // 'idle-timeout' legs are intentionally NOT bucketed — they land in `total`
@@ -149,84 +150,13 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
     completedAt,
     durationMs,
     usage: sumWaveUsage(legs),
+    notices: Array.isArray(notices) ? notices.filter(Boolean) : [],
   };
 }
 
-/**
- * Rebuild a run document from a persisted session directory.
- * @param {string} project - Project dir
- * @param {string} taskId
- * @returns {object} run document
- * @throws {Error} if the session does not exist or metadata.json is missing/corrupt
- */
-function buildRunResultFromSession(project, taskId) {
-  const fs = require('fs');
-  const path = require('path');
-  const { resolveExistingSessionDir } = require('../session-manager');
-  const sessionDir = resolveExistingSessionDir(project, taskId);
-  const metaPath = path.join(sessionDir, 'metadata.json');
-  if (!fs.existsSync(metaPath)) {
-    throw new Error(`Session ${taskId} not found`);
-  }
-  let metadata;
-  try {
-    metadata = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-  } catch (err) {
-    throw new Error(`Session ${taskId}: metadata is corrupt (${err.message})`);
-  }
-  const summaryPath = path.join(sessionDir, 'summary.md');
-  const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf-8') : null;
-  return buildRunResult({ taskId, metadata, summary, sessionDir });
-}
-
-/**
- * Rebuild a wave document. Prefers the stored wave.json (written atomically at
- * fanout exit); falls back to a live rebuild from leg sessions (e.g. after a
- * hard kill of the fanout process).
- * @param {string} project
- * @param {string} waveId
- * @returns {object} wave document
- * @throws {Error} if the wave session does not exist or metadata.json is missing/corrupt
- */
-function buildWaveResultFromSession(project, waveId) {
-  const fs = require('fs');
-  const path = require('path');
-  const { resolveExistingSessionDir } = require('../session-manager');
-  const waveDir = resolveExistingSessionDir(project, waveId);
-  const wavePath = path.join(waveDir, 'wave.json');
-  if (fs.existsSync(wavePath)) {
-    try {
-      return JSON.parse(fs.readFileSync(wavePath, 'utf-8'));
-    } catch {
-      // Corrupt wave.json (e.g. hard-kill mid-write) — fall through to live rebuild
-    }
-  }
-  const metaPath = path.join(waveDir, 'metadata.json');
-  if (!fs.existsSync(metaPath)) {
-    throw new Error(`Wave ${waveId} not found`);
-  }
-  let meta;
-  try {
-    meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-  } catch (err) {
-    throw new Error(`Wave ${waveId}: metadata is corrupt (${err.message})`);
-  }
-  const legs = (meta.legs || []).map((legId) => {
-    try { return buildRunResultFromSession(project, legId); }
-    catch (err) {
-      const { logger } = require('./logger');
-      logger.warn('Failed to rebuild leg session; using unknown stub', { legId, error: err.message });
-      return buildRunResult({ taskId: legId, metadata: { status: 'unknown', parentWave: waveId } });
-    }
-  });
-  return buildWaveResult({
-    waveId,
-    legs,
-    promptMeta: meta.promptMeta || null,
-    createdAt: meta.createdAt || null,
-    completedAt: meta.completedAt || null,
-  });
-}
+// buildRunResultFromSession/buildWaveResultFromSession live in
+// ./result-schema-rebuild.js (size-gate split); re-exported below.
+const { buildRunResultFromSession, buildWaveResultFromSession } = require('./result-schema-rebuild');
 
 /**
  * Build a model-catalog document (`models [--search] [--refresh] --json`).

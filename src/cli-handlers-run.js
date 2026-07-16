@@ -17,6 +17,7 @@ const { validateTaskId } = require('./utils/validators');
 const { resolveLaunchModel } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
+const { GATEWAY_MODES } = require('./utils/model-descriptor');
 
 /**
  * Handle 'sidecar start' command
@@ -106,6 +107,14 @@ async function handleStart(args) {
  */
 async function handleFanout(args) {
   const useJson = !!args.json;
+
+  // FIX 4 (#61 whole-branch review, cheap parity): handleStart validates
+  // --gateway via validateStartArgs (cli.js) — fanout never did, so a typo'd
+  // value silently fell through to resolveGatewayMode's pass-through instead
+  // of failing fast with a clear error.
+  if (args.gateway !== undefined && !GATEWAY_MODES.includes(args.gateway)) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --gateway must be one of: ${GATEWAY_MODES.join(', ')}` }));
+  }
 
   const { resolvePromptSource } = require('./utils/prompt-source');
   const promptRes = resolvePromptSource(args);

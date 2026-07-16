@@ -63,6 +63,11 @@ async function validateFanoutModels(modelsArg, opts = {}) {
         modelInput, ok: true, model: routeResult.executableId,
         pricing: lookupPricing(routeResult.executableId),
         gateway: routeResult.gateway, provenance: routeResult.provenance,
+        // FIX 2 (#61 whole-branch review): resolveRouteForLaunch already
+        // burned the one-shot migration_notified flag for this vendor when it
+        // built routeResult — carry the notice out so runFanout can surface
+        // it on the wave doc (fanout had no other path to show it).
+        notice: routeResult.notice || null,
       });
     } else {
       // 'error' (headless: allowSelection false, so the router never hands

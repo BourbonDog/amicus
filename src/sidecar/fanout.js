@@ -112,6 +112,12 @@ async function runFanout(options) {
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
   const okLegs = legs.filter(l => l.ok);
+  // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
+  // stderr to land on (fanout is one process resolving many legs, not one
+  // launch) — surface it on the wave doc instead, deduped in case two legs
+  // for the same vendor happen to both migrate (only the first ever fires
+  // since markMigrationNotified is one-shot per vendor, but dedupe defensively).
+  const notices = [...new Set(legs.map(l => l.notice).filter(Boolean))];
 
   // 1b. Budget gate (pre-creation; refuse before spending). Only legs that
   // will actually run cost anything — a leg that never routed never spends.
@@ -233,7 +239,7 @@ async function runFanout(options) {
   const completedAt = new Date().toISOString();
   const wave = buildWaveResult({
     waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
-    status: signalled ? 'aborted' : null,
+    status: signalled ? 'aborted' : null, notices,
   });
   const wavePath = path.join(waveDir, 'wave.json');
   writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
