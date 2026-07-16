@@ -5,6 +5,27 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-07-16
+
+### Added
+
+- **Cost-aware per-provider default model picker at key-add.** Adding a provider API key (`amicus key
+  <provider>`, the setup wizard, or the Electron key step) now offers a picker that pre-selects a
+  **balanced**-tier model instead of the priciest flagship, shows live `$/M` input pricing, and writes
+  your choice as a vendor-named alias (e.g. `--model anthropic`) — seeding your overall default
+  (`config.default`) on your first key. Applies to direct model vendors (OpenAI, Anthropic, Google,
+  DeepSeek).
+- **`routing.tier` preference** (`frontier` | `balanced` | `economy`, default `balanced`) biasing the
+  picker's per-vendor pre-selection.
+- A one-time onboarding tip on `amicus start` pointing existing users to the new picker.
+
+### Changed
+
+- Model aliases now resolve their per-gateway executable ids **by model**, so user-defined and
+  vendor-named aliases route correctly across the direct and OpenRouter gateways (extends the v3.1.1
+  gateway-correct-ids fix beyond the curated defaults). An alias whose value is an explicit
+  `openrouter/…` id still forces OpenRouter.
+
 ## [3.1.1] - 2026-07-16
 
 ### Fixed
