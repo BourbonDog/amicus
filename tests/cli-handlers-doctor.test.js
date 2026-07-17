@@ -34,6 +34,8 @@ const allGood = {
   // engine-mcp: deterministic scan — without it the check probes the real
   // machine's installs (non-deterministic). 'none' → the check reports ok.
   scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  // engine self-heal (--fix): deterministic no-op unless a test overrides it.
+  repairEngine: async () => ({ repaired: false }),
 };
 
 const byId = (checks) => Object.fromEntries(checks.map(c => [c.id, c]));
@@ -91,6 +93,22 @@ describe('runDoctorChecks', () => {
         mcpLaunch: 'npx',
       }) });
     expect(byId(checks)['engine-mcp'].status).toBe('ok');
+  });
+
+  test('engine-mcp --fix: a broken single npx copy is self-healed → ok', async () => {
+    const healed = { v: false };
+    const pkgDir = 'C:\\cache\\_npx\\h1\\node_modules\\amicus';
+    const checks = await runDoctorChecks({ ...allGood,
+      fix: true,
+      scanEngineInstalls: () => ({
+        installs: [{ kind: 'npx', pkgDir, engineOk: healed.v, roots: [pkgDir + '\\node_modules'] }],
+        mcpLaunch: 'npx',
+      }),
+      repairEngine: async ({ destPkgDir }) => { healed.v = true; return { repaired: true, destPkgDir }; },
+    });
+    const engine = byId(checks)['engine-mcp'];
+    expect(engine.status).toBe('ok');
+    expect(engine.message).toMatch(/self-healed/i);
   });
 
   test('missing Electron → warn only (headless still works)', async () => {

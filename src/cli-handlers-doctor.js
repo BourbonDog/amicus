@@ -42,6 +42,8 @@ function realDeps() {
     // engine-mcp check: probe the engine in every install that could serve the
     // MCP (running/global/npx-cache), not just the one doctor runs from (#1).
     scanEngineInstalls: () => require('./utils/engine-install-scan').scanEngineInstalls(),
+    // report #2: copy-from-sibling self-heal for `doctor --fix`.
+    repairEngine: (o) => require('./utils/engine-repair').repairEngine(o),
     getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
     // #56: self-heal primitive for `doctor --fix`. Pure probe (getElectronPath)
     // stays separate; repair only runs when fix is requested.
@@ -150,7 +152,7 @@ async function runDoctorChecks(depsOverride = {}) {
   // Cross-install: verify the engine in the npx-cache copies the MCP actually
   // launches (`npx -y amicus@latest mcp`), so a green 'opencode-bin' (the running
   // install) can't hide a broken copy the MCP would spawn (bug report #1/#4).
-  checks.push(guard('engine-mcp', 'OpenCode engine (MCP launch path)', () => engineCheck.evaluateEngineInstalls(d)));
+  checks.push(await guardAsync('engine-mcp', 'OpenCode engine (MCP launch path)', () => engineCheck.evaluateEngineMcp(d)));
 
   checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
     if (d.getElectronPath()) {

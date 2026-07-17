@@ -68,4 +68,37 @@ function evaluateEngineInstalls(d) {
   return { id, name, status, message: `${lead}: ${detail}`, hint: HINTS.reinstallEngineAv };
 }
 
-module.exports = { evaluateEngineInstalls };
+/**
+ * Fix-aware wrapper. When d.fix and the scan shows broken npx-cache copies, copy
+ * the engine into each via d.repairEngine, then re-report from a fresh scan.
+ * Without d.fix — or when nothing is copy-fixable — returns the plain verdict.
+ * @param {object} d doctor deps (scanEngineInstalls, fix?, repairEngine?)
+ * @returns {Promise<{id,name,status,message,hint}>}
+ */
+async function evaluateEngineMcp(d) {
+  const verdict = evaluateEngineInstalls(d);
+  if (!d.fix || verdict.status === 'ok') { return verdict; }
+
+  const { installs } = d.scanEngineInstalls();
+  const broken = installs.filter((i) => i.kind === 'npx' && !i.engineOk);
+  if (broken.length === 0) { return verdict; }
+
+  const results = [];
+  for (const b of broken) {
+    let r;
+    try { r = await d.repairEngine({ destPkgDir: b.pkgDir }); }
+    catch (e) { r = { repaired: false, reason: e && e.message }; }
+    results.push({ pkgDir: b.pkgDir, ...r });
+  }
+
+  const after = evaluateEngineInstalls(d); // fresh scan reflects the copies
+  if (after.status === 'ok') {
+    const n = results.length;
+    return { ...after, message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')})` };
+  }
+  const failed = results.filter((r) => !r.repaired)
+    .map((r) => `${r.pkgDir}${r.reason ? ` — ${r.reason}` : ''}`).join('; ');
+  return { ...after, message: `${after.message}; self-heal incomplete: ${failed}` };
+}
+
+module.exports = { evaluateEngineInstalls, evaluateEngineMcp };

@@ -81,3 +81,57 @@ describe('evaluateEngineInstalls', () => {
     expect(r.status).toBe('error');
   });
 });
+
+const { evaluateEngineMcp } = require('../../src/utils/doctor-engine-check');
+
+describe('evaluateEngineMcp (--fix)', () => {
+  test('without fix, returns the plain verdict (single broken → error)', async () => {
+    const r = await evaluateEngineMcp(withScan({ installs: [npxCopy('only', false)], mcpLaunch: 'npx' }));
+    expect(r.status).toBe('error');
+  });
+
+  test('--fix heals a broken npx copy and reports self-healed', async () => {
+    const healed = { v: false };
+    const scan = () => ({
+      installs: [{ kind: 'npx', pkgDir: npxDir('h1'), engineOk: healed.v, roots: [] }],
+      mcpLaunch: 'npx',
+    });
+    const repairEngine = jest.fn(async ({ destPkgDir }) => { healed.v = true; return { repaired: true, destPkgDir }; });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(repairEngine).toHaveBeenCalledWith({ destPkgDir: npxDir('h1') });
+    expect(r.status).toBe('ok');
+    expect(r.message).toMatch(/self-healed/i);
+  });
+
+  test('--fix that cannot heal reports "self-heal incomplete" with the reason', async () => {
+    const scan = () => ({ installs: [{ kind: 'npx', pkgDir: npxDir('h1'), engineOk: false, roots: [] }], mcpLaunch: 'npx' });
+    const repairEngine = jest.fn(async () => ({ repaired: false, reason: 'no healthy sibling install to copy the engine from' }));
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(r.status).not.toBe('ok');
+    expect(r.message).toMatch(/self-heal incomplete/i);
+    expect(r.message).toMatch(/no healthy sibling/i);
+  });
+
+  test('--fix does not call repairEngine when already healthy', async () => {
+    const repairEngine = jest.fn();
+    const r = await evaluateEngineMcp({
+      scanEngineInstalls: () => ({ installs: [npxCopy('h1', true)], mcpLaunch: 'npx' }),
+      fix: true, repairEngine,
+    });
+    expect(repairEngine).not.toHaveBeenCalled();
+    expect(r.status).toBe('ok');
+  });
+
+  test('--fix leaves the "no cached copy yet" warn untouched (nothing to copy)', async () => {
+    const repairEngine = jest.fn();
+    const r = await evaluateEngineMcp({
+      scanEngineInstalls: () => ({
+        installs: [{ kind: 'running', pkgDir: path.join('C:', 'g', 'amicus'), engineOk: true, roots: [] }],
+        mcpLaunch: 'npx',
+      }),
+      fix: true, repairEngine,
+    });
+    expect(repairEngine).not.toHaveBeenCalled();
+    expect(r.status).toBe('warn');
+  });
+});
