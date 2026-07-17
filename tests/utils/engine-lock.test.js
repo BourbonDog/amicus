@@ -52,6 +52,14 @@ describe('engine-lock (stale-aware single-flight)', () => {
       expect(isStaleLock(lockPath, fs)).toBe(true);
     });
 
+    it('a recent lock whose holder is alive-but-unsignalable (EPERM) is NOT stale', () => {
+      jest.spyOn(process, 'kill').mockImplementation(() => {
+        const e = new Error('operation not permitted'); e.code = 'EPERM'; throw e;
+      });
+      writeLock({ pid: 424242, at: Date.now() });
+      expect(isStaleLock(lockPath, fs)).toBe(false);
+    });
+
     it('an absent lockfile is not stale', () => {
       expect(isStaleLock(lockPath, fs)).toBe(false);
     });
@@ -72,6 +80,17 @@ describe('engine-lock (stale-aware single-flight)', () => {
       writeLock('');
       const lock = acquireRepairLock({ pkgDir, fs });
       expect(JSON.parse(fs.readFileSync(lockPath, 'utf-8')).pid).toBe(process.pid);
+      lock.release();
+    });
+
+    it('STEALS a lock whose holder process is dead (ESRCH)', () => {
+      jest.spyOn(process, 'kill').mockImplementation((pid) => {
+        if (pid === 424242) { const e = new Error('gone'); e.code = 'ESRCH'; throw e; }
+        return true;
+      });
+      writeLock({ pid: 424242, at: Date.now() });
+      const lock = acquireRepairLock({ pkgDir, fs });
+      expect(fs.existsSync(lockPath)).toBe(true);
       lock.release();
     });
 
