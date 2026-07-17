@@ -134,4 +134,45 @@ describe('evaluateEngineMcp (--fix)', () => {
     expect(repairEngine).not.toHaveBeenCalled();
     expect(r.status).toBe('warn');
   });
+
+  test('--fix with two broken copies, only one healable → self-heal incomplete listing the failure', async () => {
+    const healed = { h1: false };
+    const scan = () => ({
+      installs: [
+        { kind: 'npx', pkgDir: npxDir('h1'), engineOk: healed.h1, roots: [] },
+        { kind: 'npx', pkgDir: npxDir('h2'), engineOk: false, roots: [] },
+      ],
+      mcpLaunch: 'npx',
+    });
+    const repairEngine = jest.fn(async ({ destPkgDir }) => {
+      if (destPkgDir === npxDir('h1')) { healed.h1 = true; return { repaired: true }; }
+      return { repaired: false, reason: 'no healthy sibling install to copy the engine from' };
+    });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(repairEngine).toHaveBeenCalledTimes(2);
+    expect(r.status).not.toBe('ok');
+    expect(r.message).toMatch(/self-heal incomplete/i);
+    expect(r.message).toContain(npxDir('h2'));
+    expect(r.message).not.toContain(npxDir('h1'));
+  });
+
+  test('--fix heals TWO broken copies → "self-healed 2 ... copies" (plural)', async () => {
+    const healed = { h1: false, h2: false };
+    const scan = () => ({
+      installs: [
+        { kind: 'npx', pkgDir: npxDir('h1'), engineOk: healed.h1, roots: [] },
+        { kind: 'npx', pkgDir: npxDir('h2'), engineOk: healed.h2, roots: [] },
+      ],
+      mcpLaunch: 'npx',
+    });
+    const repairEngine = jest.fn(async ({ destPkgDir }) => {
+      if (destPkgDir === npxDir('h1')) { healed.h1 = true; }
+      if (destPkgDir === npxDir('h2')) { healed.h2 = true; }
+      return { repaired: true };
+    });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(repairEngine).toHaveBeenCalledTimes(2);
+    expect(r.status).toBe('ok');
+    expect(r.message).toMatch(/self-healed 2 npx-cache copies/i);
+  });
 });

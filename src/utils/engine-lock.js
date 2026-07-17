@@ -23,7 +23,7 @@ const STALE_MS = 15 * 60 * 1000;
 
 /** Temp-dir lockfile path, keyed by the destination install dir. */
 function lockPathFor(pkgDir) {
-  const key = Buffer.from(pkgDir).toString('hex').slice(0, 16);
+  const key = require('crypto').createHash('sha1').update(pkgDir).digest('hex').slice(0, 16);
   return path.join(os.tmpdir(), `amicus-engine-repair-${key}.lock`);
 }
 

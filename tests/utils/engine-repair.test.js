@@ -80,6 +80,7 @@ describe('repairEngine', () => {
       'opencode-ai', 'opencode-windows-x64', 'opencode-windows-x64-baseline',
       path.join('.bin', 'opencode'), path.join('.bin', 'opencode.cmd'),
     ]));
+    expect(r.copied).not.toContain('other-dep');
     // Copied FROM the donor nested root INTO the dest nested root.
     const win = b.cpCalls.find((c) => c.dst.endsWith(path.normalize(path.join('node_modules', 'opencode-windows-x64'))));
     expect(win.src).toBe(path.normalize(path.join(DONOR_NM, 'opencode-windows-x64')));
