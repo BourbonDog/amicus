@@ -419,6 +419,60 @@ function markMigrationNotified(vendor) {
   }
 }
 
+/**
+ * Existing-user one-time onboarding offer (Part 2, Task 9). Mirrors
+ * markMigrationNotified's flag pattern: a single boolean persisted at
+ * config.routing.tier_onboarded once the notice has fired, so it never
+ * repeats.
+ * @returns {boolean} true once the notice has fired
+ */
+function hasTierOnboarded() {
+  const config = loadConfig() || {};
+  return !!(config.routing && config.routing.tier_onboarded === true);
+}
+
+/**
+ * Persist the one-time onboarding-notice flag, preserving any other routing
+ * keys (prefer, tier, migration_notified). Best-effort: swallows any
+ * saveConfig failure so a persistence hiccup never breaks the command that
+ * triggered it (mirrors markMigrationNotified).
+ */
+function markTierOnboarded() {
+  try {
+    const config = loadConfig() || {};
+    if (!config.routing || typeof config.routing !== 'object') { config.routing = {}; }
+    config.routing.tier_onboarded = true;
+    saveConfig(config);
+  } catch (_err) {
+    // best-effort: never fail the command over a persistence error
+  }
+}
+
+/** Global cost-tier preference (Part 2, Task 1) — priciest-to-cheapest. */
+const COST_TIERS = ['frontier', 'balanced', 'economy'];
+
+/** @returns {'frontier'|'balanced'|'economy'} config.routing.tier, defaulting/coercing to 'balanced' */
+function getCostTier() {
+  const config = loadConfig() || {};
+  const tier = config.routing && config.routing.tier;
+  return COST_TIERS.includes(tier) ? tier : 'balanced';
+}
+
+/**
+ * Persist the global cost-tier preference under routing.tier, preserving any
+ * other routing keys (prefer, migration_notified).
+ * @param {string} tier one of COST_TIERS
+ * @throws {Error} when tier is not a recognized cost tier
+ */
+function setCostTier(tier) {
+  if (!COST_TIERS.includes(tier)) {
+    throw new Error(`Invalid cost tier '${tier}'. Must be one of: ${COST_TIERS.join(', ')}`);
+  }
+  const config = loadConfig() || {};
+  config.routing = { ...(config.routing || {}), tier };
+  saveConfig(config);
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -440,4 +494,9 @@ module.exports = {
   getRoutingConfig,
   resolveGatewayMode,
   markMigrationNotified,
+  COST_TIERS,
+  getCostTier,
+  setCostTier,
+  hasTierOnboarded,
+  markTierOnboarded,
 };

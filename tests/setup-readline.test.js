@@ -15,8 +15,17 @@ jest.mock('../src/utils/config', () => {
   const real = jest.requireActual('../src/utils/config');
   return { ...real, loadConfig: jest.fn(), saveConfig: jest.fn(), getConfigDir: jest.fn(() => 'X:/cfg') };
 });
+// Task 7 (cost-aware defaults P2): default to NO keyed providers so the new
+// per-provider picker phase (runProviderDefaultPickers) is a no-op for every
+// pre-existing test below -- they exercise the mode-prompt/standard-model-step
+// path only and never intended to drive the per-provider picker. Coverage for
+// the per-provider picker itself lives in tests/sidecar/setup.test.js, which
+// uses the real config.js against an isolated temp dir (this file fully mocks
+// config.js, and provider-default-picker.js's `getCostTier()` reads config via
+// an internal closure that a config.js mock can't intercept -- see that file
+// for the full explanation).
 jest.mock('../src/utils/api-key-store', () => ({
-  readApiKeys: jest.fn(() => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false })),
+  readApiKeys: jest.fn(() => ({ openrouter: false, google: false, openai: false, anthropic: false, deepseek: false })),
 }));
 
 function mockReadline(answer) {

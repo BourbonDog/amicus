@@ -159,6 +159,46 @@ async function handleKey(args) {
     process.exit(1);
   }
   console.log(`${provider} key validated and saved.`);
+
+  await offerProviderDefault(provider, args);
+}
+
+/**
+ * After a successful key save, run the per-provider cost-aware default
+ * picker (Part 2, Task 6) and print its one-line summary. Wrapped end-to-end
+ * in try/catch: the key is ALREADY saved by the time this runs, so a picker
+ * failure (offline catalog, bad input, etc.) must never abort `amicus key`
+ * -- it just prints a soft notice instead.
+ * @param {string} provider
+ * @param {object} args parsed CLI args (checked for --json/--quiet to gate interactivity)
+ */
+async function offerProviderDefault(provider, args) {
+  let rl = null;
+  try {
+    const { runProviderDefaultFlow } = require('./utils/provider-default-prompt');
+    const { getCatalog } = require('./utils/model-catalog');
+
+    const interactive = !!process.stdin.isTTY && !args.json && !args.quiet;
+
+    let catalog = [];
+    try { catalog = await getCatalog(); } catch { /* offline/empty: handled gracefully by the picker */ }
+
+    let ask;
+    if (interactive) {
+      const readline = require('readline');
+      rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      ask = (q) => new Promise((resolve) => rl.question(q, (answer) => resolve((answer || '').trim())));
+    }
+
+    const { summaryLine } = await runProviderDefaultFlow(provider, {
+      interactive, ask, catalog, print: console.log,
+    });
+    console.log(summaryLine);
+  } catch (err) {
+    console.log(`Note: couldn't set a per-provider default (${err.message}). Run 'amicus key ${provider}' again later.`);
+  } finally {
+    if (rl) { rl.close(); }
+  }
 }
 
 module.exports = {

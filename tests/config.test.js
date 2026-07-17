@@ -475,4 +475,152 @@ describe('Sidecar Config Module', () => {
       expect(result['x-ai']).toBeUndefined();
     });
   });
+
+  /**
+   * Cost-aware per-provider defaults (Part 2, Task 1): a global cost-tier
+   * preference stored at config.routing.tier.
+   */
+  describe('getCostTier / setCostTier', () => {
+    it('exports COST_TIERS as the three known tiers', () => {
+      const config = loadModule();
+      expect(config.COST_TIERS).toEqual(['frontier', 'balanced', 'economy']);
+    });
+
+    it('getCostTier returns balanced by default when no config exists', () => {
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('balanced');
+    });
+
+    it('getCostTier returns balanced when routing exists but tier is unset', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { prefer: 'openrouter' } })
+      );
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('balanced');
+    });
+
+    it('getCostTier returns the saved value when config.routing.tier is set', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { tier: 'economy' } })
+      );
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('economy');
+    });
+
+    it('getCostTier coerces a garbage tier value to balanced', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { tier: 'bogus' } })
+      );
+      const config = loadModule();
+      expect(config.getCostTier()).toBe('balanced');
+    });
+
+    it('setCostTier persists under routing.tier, preserving prefer and migration_notified', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({
+          routing: { prefer: 'openrouter', migration_notified: { openai: true } },
+        })
+      );
+      const config = loadModule();
+      config.setCostTier('economy');
+
+      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
+      expect(written.routing.tier).toBe('economy');
+      expect(written.routing.prefer).toBe('openrouter');
+      expect(written.routing.migration_notified).toEqual({ openai: true });
+    });
+
+    it('setCostTier creates routing when absent', () => {
+      const config = loadModule();
+      config.setCostTier('frontier');
+
+      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
+      expect(written.routing).toEqual({ tier: 'frontier' });
+    });
+
+    it('setCostTier throws on an invalid tier', () => {
+      const config = loadModule();
+      expect(() => config.setCostTier('bogus')).toThrow();
+    });
+  });
+
+  /**
+   * Existing-user one-time onboarding offer (Part 2, Task 9): a one-time
+   * flag stored at config.routing.tier_onboarded, mirroring
+   * markMigrationNotified's read-modify-write/best-effort pattern.
+   */
+  describe('hasTierOnboarded / markTierOnboarded', () => {
+    it('hasTierOnboarded returns false by default when no config exists', () => {
+      const config = loadModule();
+      expect(config.hasTierOnboarded()).toBe(false);
+    });
+
+    it('hasTierOnboarded returns false when routing exists but tier_onboarded is unset', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { prefer: 'openrouter' } })
+      );
+      const config = loadModule();
+      expect(config.hasTierOnboarded()).toBe(false);
+    });
+
+    it('hasTierOnboarded coerces a non-boolean tier_onboarded value to false', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { tier_onboarded: 'yes' } })
+      );
+      const config = loadModule();
+      expect(config.hasTierOnboarded()).toBe(false);
+    });
+
+    it('hasTierOnboarded returns true when config.routing.tier_onboarded is true', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({ routing: { tier_onboarded: true } })
+      );
+      const config = loadModule();
+      expect(config.hasTierOnboarded()).toBe(true);
+    });
+
+    it('markTierOnboarded persists routing.tier_onboarded=true, preserving other routing keys', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'config.json'),
+        JSON.stringify({
+          routing: { prefer: 'openrouter', tier: 'economy', migration_notified: { openai: true } },
+          aliases: { foo: 'bar/baz' },
+        })
+      );
+      const config = loadModule();
+      config.markTierOnboarded();
+
+      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
+      expect(written.routing).toEqual({
+        prefer: 'openrouter', tier: 'economy', migration_notified: { openai: true }, tier_onboarded: true,
+      });
+      expect(written.aliases).toEqual({ foo: 'bar/baz' });
+      expect(config.hasTierOnboarded()).toBe(true);
+    });
+
+    it('markTierOnboarded creates routing when absent', () => {
+      const config = loadModule();
+      config.markTierOnboarded();
+
+      const written = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8'));
+      expect(written.routing).toEqual({ tier_onboarded: true });
+    });
+
+    it('markTierOnboarded is best-effort: never throws when saveConfig fails', () => {
+      // Point AMICUS_CONFIG_DIR at a path that collides with an existing file,
+      // so saveConfig's mkdirSync(configDir) throws (ENOTDIR) rather than succeeding.
+      const blockerFile = path.join(tempDir, 'blocker-not-a-dir');
+      fs.writeFileSync(blockerFile, 'not a directory');
+      process.env.AMICUS_CONFIG_DIR = path.join(blockerFile, 'nested');
+      const config = loadModule();
+      expect(() => config.markTierOnboarded()).not.toThrow();
+    });
+  });
 });

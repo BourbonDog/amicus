@@ -45,6 +45,7 @@ describe('Setup Wizard', () => {
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
   });
 
   afterEach(() => {
@@ -324,6 +325,144 @@ describe('Setup Wizard', () => {
         fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8')
       );
       expect(saved.default).toBe('opus');
+    });
+  });
+
+  describe('runReadlineSetup — per-provider default picker (Task 7, cost-aware defaults P2)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('runs the shared per-provider picker once per keyed provider (detection order), seeds config.default from the FIRST, and preserves both vendor aliases through the final save', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key';
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
+
+      const { getCatalog } = require('../../src/utils/model-catalog');
+      getCatalog.mockResolvedValueOnce([
+        { id: 'anthropic/claude-cheap', name: 'Claude Cheap', contextLength: 100000, pricing: null },
+        { id: 'openrouter/anthropic/claude-cheap', name: 'Claude Cheap', contextLength: 100000, pricing: { prompt: '0.000001' } },
+        { id: 'deepseek/deepseek-cheap', name: 'DeepSeek Cheap', contextLength: 32000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-cheap', name: 'DeepSeek Cheap', contextLength: 32000, pricing: { prompt: '0.0000005' } },
+      ]);
+
+      // Snapshotted the instant the mode prompt fires -- by construction this is
+      // AFTER runProviderDefaultPickers has fully completed (both providers'
+      // applyProviderDefault saves are on disk) but BEFORE the standard model
+      // step's own save. Reading real on-disk state here (rather than spying on
+      // config.js's exported saveConfig) sidesteps a CommonJS trap: setup.js and
+      // provider-default-picker.js each destructure `saveConfig` from `require
+      // ('./config')` at module-load time, so a `jest.spyOn(configModule,
+      // 'saveConfig')` installed afterward would only intercept whichever of
+      // those modules happened to load AFTER the spy -- order-dependent and
+      // unreliable. A real fs read has no such gap.
+      let midFlowConfig = null;
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((prompt, callback) => {
+        if (prompt.includes('Pick a number')) { callback(''); return; } // Enter -> accept preselected, per provider
+        if (prompt.includes('Setup mode')) {
+          try {
+            midFlowConfig = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+          } catch (_err) { midFlowConfig = null; }
+          callback('1'); // standard mode
+          return;
+        }
+        callback('1'); // standard model step -> picks[0] ('gemini')
+      });
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+
+      const providerDefaultPrompt = require('../../src/utils/provider-default-prompt');
+      const flowSpy = jest.spyOn(providerDefaultPrompt, 'runProviderDefaultFlow');
+
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      // Invoked once per keyed provider, in detection order (anthropic before deepseek --
+      // readApiKeys()'s result object is always declared openrouter/google/openai/anthropic/deepseek).
+      expect(flowSpy).toHaveBeenCalledTimes(2);
+      expect(flowSpy.mock.calls[0][0]).toBe('anthropic');
+      expect(flowSpy.mock.calls[1][0]).toBe('deepseek');
+
+      // Mid-flow (right after the per-provider phase, before the standard step):
+      // config.default is seeded from the FIRST keyed provider, and both vendor
+      // aliases are already written.
+      expect(midFlowConfig).not.toBeNull();
+      expect(midFlowConfig.default).toBe('anthropic');
+      expect(midFlowConfig.aliases.anthropic).toBe('anthropic/claude-cheap');
+      expect(midFlowConfig.aliases.deepseek).toBe('deepseek/deepseek-cheap');
+
+      // Final on-disk state: the standard model step's explicit choice legitimately
+      // overrides config.default (deliberate, runs last) but must NOT clobber the
+      // vendor aliases the per-provider phase already wrote.
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(saved.aliases.anthropic).toBe('anthropic/claude-cheap');
+      expect(saved.aliases.deepseek).toBe('deepseek/deepseek-cheap');
+      expect(saved.default).toBe('gemini');
+    });
+
+    it('degrades gracefully (no crash, prints a soft notice, standard step still completes) when a keyed provider has no catalog rows', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-test-key';
+      // model-catalog mock (file-level) resolves to [] by default -- offline/empty.
+
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((_prompt, callback) => callback('1'));
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup(); // must not throw
+
+      const printed = logSpy.mock.calls.map(c => c.join(' ')).join('\n');
+      expect(printed).toMatch(/Couldn't reach the model catalog for anthropic/);
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(saved.default).toBe('gemini'); // standard step still ran normally
+    });
+
+    it('Fix 2: standard step selecting the quick-pick family that collides with a just-written vendor alias (deepseek) keeps the tier-chosen id -- does not clobber it with the curated flagship', async () => {
+      process.env.DEEPSEEK_API_KEY = 'sk-deepseek-test-key';
+
+      const { getCatalog } = require('../../src/utils/model-catalog');
+      getCatalog.mockResolvedValueOnce([
+        // 'balanced' tier (default cost tier) match for deepseek -- the
+        // per-provider phase's tier-chosen pick.
+        { id: 'deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v3', name: 'DeepSeek V3', contextLength: 64000, pricing: { prompt: '0.0000005' } },
+        // Newest/highest-version id -- what the standard step's quick-pick
+        // family resolver (resolveQuickPicks) would treat as the curated
+        // flagship for the 'deepseek' family alias.
+        { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: null },
+        { id: 'openrouter/deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextLength: 128000, pricing: { prompt: '0.00001' } },
+      ]);
+
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((prompt, callback) => {
+        if (prompt.includes('Pick a number')) { callback(''); return; } // per-provider phase: accept preselected (tier-chosen)
+        if (prompt.includes('Setup mode')) { callback('1'); return; } // standard mode
+        callback('5'); // standard model step -> quick-pick families are
+        // [gemini, gemini-pro, gpt, opus, deepseek] (curated-models.js
+        // FAMILIES order) -> '5' selects the 'deepseek' family, whose alias
+        // name collides with the vendor alias the per-provider phase just wrote.
+      });
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      // The standard step's explicit choice legitimately becomes config.default...
+      expect(saved.default).toBe('deepseek');
+      // ...but the alias's VALUE must stay the per-provider phase's tier
+      // choice (deepseek-v3), NOT get overwritten with the curated flagship
+      // (deepseek-v4-pro) the standard step would otherwise upgrade it to.
+      expect(saved.aliases.deepseek).toBe('deepseek/deepseek-v3');
     });
   });
 

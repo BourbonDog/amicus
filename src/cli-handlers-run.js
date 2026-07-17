@@ -14,7 +14,7 @@
 
 const { validateStartArgs } = require('./cli');
 const { validateTaskId } = require('./utils/validators');
-const { resolveLaunchModel } = require('./utils/start-helpers');
+const { resolveLaunchModel, maybeOfferProviderDefaults } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
@@ -54,6 +54,14 @@ async function handleStart(args) {
   if (!validation.valid) {
     process.exit(failJson(useJson, { code: validation.code || ERROR_CODES.BAD_ARGS, message: validation.error }));
   }
+
+  // Existing-user one-time onboarding offer (Part 2, Task 9): a non-blocking
+  // notice, printed at most once ever, pointing users who already have direct
+  // provider keys at the per-provider cost-aware default picker. No-ops on
+  // any non-interactive/--json run (see maybeOfferProviderDefaults). Fired
+  // only after validateStartArgs succeeds so a failed first `amicus start`
+  // doesn't burn the one-time flag.
+  maybeOfferProviderDefaults(args);
 
   // Budget gate for solo start
   if (!args['no-cost-gate']) {

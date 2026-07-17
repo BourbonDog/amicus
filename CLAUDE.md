@@ -185,6 +185,7 @@ src/
 │   ├── model-descriptor.js  # Model-descriptor grammar + RouteResult factories (#61).
 │   ├── model-fetcher.js  # Model Fetcher
 │   ├── model-input-default.js
+│   ├── model-tiers.js  # Per-vendor cost tiers (economy/balanced/frontier) + resolution against the
 │   ├── model-validator.js  # Model Validator
 │   ├── node-version-guard.js
 │   ├── path-setup.js
@@ -193,6 +194,8 @@ src/
 │   ├── project-path.js  # Canonical project-path helper.
 │   ├── project-root-sanity.js
 │   ├── prompt-source.js
+│   ├── provider-default-picker.js  # Provider-default picker core (Part 2, Task 4).
+│   ├── provider-default-prompt.js  # Provider-default prompt flow (Part 2, Task 6/7 shared helper).
 │   ├── provider-registry.js  # Provider-capability registry — the single source of truth for provider
 │   ├── quick-picks.js  # Quick-pick resolution (wizard Step 2) — resolves each curated family to
 │   ├── read-slice.js  # Byte-bounded slicing for amicus_read (15a.3 / B17).
@@ -263,6 +266,7 @@ electron/
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
+├── setup-ui-provider-default.js  # Setup UI — Per-provider default model picker (Part 2, Task 8).
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles (clay/gold token-driven)
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API
@@ -414,6 +418,7 @@ evals/
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
+| `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()` |
@@ -422,6 +427,8 @@ evals/
 | `utils/project-path.js` | Canonical project-path helper. | `canonicalProjectPath()` |
 | `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
+| `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()` |
+| `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
 | `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()` |
 | `utils/read-slice.js` | Byte-bounded slicing for amicus_read (15a.3 / B17). | `sliceForRead()`, `READ_CAP_BYTES()` |
@@ -439,7 +446,7 @@ evals/
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
-| `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()` |
+| `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
