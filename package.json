@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "mcpName": "io.github.BourbonDog/amicus",
   "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "keywords": [

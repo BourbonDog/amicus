@@ -5,6 +5,34 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-07-17
+
+### Fixed
+
+- **`opencode` engine now resolves under the npx-launched MCP.** The MCP server is
+  registered as `npx -y amicus@latest mcp`, which npm installs with the
+  `opencode-windows-*` engine packages **hoisted** beside `amicus/` rather than
+  nested under it. The resolver only probed the nested location, so a present,
+  runnable engine read as missing and every `amicus_fanout` / `amicus_start` leg
+  failed instantly with `engineMissing`. Both the PATH builder and the shared
+  binary resolver now probe the hoisted root too (#69).
+- **The AVX2 (default) `opencode` build is searched before the `-baseline`
+  fallback.** `ensureNodeModulesBinInPath()` prepended PATH one entry at a time, so
+  the search order was the reverse of the source order and AVX2-capable machines
+  silently ran the slower pre-AVX2 baseline build. PATH is now built as one ordered
+  group (default → baseline → `.bin`, across every candidate root).
+
+### Added
+
+- **`amicus doctor` cross-install engine check.** A new "OpenCode engine (MCP launch
+  path)" check enumerates every install that could serve the MCP — running, global,
+  and each npx-cache copy — and verifies the engine in each, so a green doctor can
+  no longer hide a broken copy the MCP actually launches. A broken single npx copy
+  (the unambiguous failure) is an error; ambiguous cases warn and name the exact
+  path.
+- The runtime `engineMissing` error now prints the roots it searched, making an
+  npx-cache-vs-global install divergence visible at the point of failure.
+
 ## [3.2.0] - 2026-07-16
 
 ### Added
