@@ -636,7 +636,11 @@ async function startServer(options = {}) {
     || require('./utils/path-setup').hasOpencodeBinary;
   if (!hasOpencodeBinary()) {
     const HINTS = require('./utils/remediation-hints');
-    throw new Error(HINTS.engineMissing);
+    // Append the roots we actually probed so an npx-cache-vs-global divergence is
+    // visible at the point of failure, not just in `amicus doctor` (report #4).
+    const opencodeRoots = options._opencodeRoots
+      || require('./utils/path-setup').opencodeRoots;
+    throw new Error(`${HINTS.engineMissing} Searched: ${opencodeRoots().join(', ')}`);
   }
 
   const createOpencodeServer = await getCreateOpencodeServer();

@@ -48,4 +48,17 @@ describe('startServer — missing opencode engine binary', () => {
     ).rejects.toThrow();
     expect(mockCreateOpencodeServer).not.toHaveBeenCalled();
   });
+
+  test('the error names the roots it searched, so the npx-vs-global divergence is visible (report #4)', async () => {
+    let err;
+    try {
+      await startServer({
+        _hasOpencodeBinary: () => false,
+        _opencodeRoots: () => ['C:\\npx\\_npx\\h1\\node_modules', 'C:\\npx\\_npx\\h1'],
+      });
+    } catch (e) { err = e; }
+    expect(err).toBeDefined();
+    expect(err.message).toMatch(/searched:/i);
+    expect(err.message).toContain('C:\\npx\\_npx\\h1\\node_modules');
+  });
 });

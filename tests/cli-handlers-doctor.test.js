@@ -31,6 +31,9 @@ const allGood = {
   // B15: deterministic fixture — without this the check would fall through to
   // the real config dir on whatever machine runs the suite (non-deterministic).
   listSessionIndexTmpFiles: () => [],
+  // engine-mcp: deterministic scan — without it the check probes the real
+  // machine's installs (non-deterministic). 'none' → the check reports ok.
+  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
 };
 
 const byId = (checks) => Object.fromEntries(checks.map(c => [c.id, c]));
@@ -67,6 +70,27 @@ describe('runDoctorChecks', () => {
     const checks = await runDoctorChecks({ ...allGood, hasOpencodeBinary: () => false });
     const hint = byId(checks)['opencode-bin'].hint;
     expect(hint).toMatch(/antivirus|quarantin|allow-list/i);
+  });
+
+  test('engine-mcp: a broken single npx-cache copy the MCP launches → error naming the path', async () => {
+    const pkgDir = 'C:\\cache\\_npx\\h1\\node_modules\\amicus';
+    const checks = await runDoctorChecks({ ...allGood,
+      scanEngineInstalls: () => ({
+        installs: [{ kind: 'npx', pkgDir, engineOk: false, roots: [pkgDir + '\\node_modules'] }],
+        mcpLaunch: 'npx',
+      }) });
+    const engine = byId(checks)['engine-mcp'];
+    expect(engine.status).toBe('error');
+    expect(engine.message).toContain(pkgDir);
+  });
+
+  test('engine-mcp: healthy npx-cache copies → ok', async () => {
+    const checks = await runDoctorChecks({ ...allGood,
+      scanEngineInstalls: () => ({
+        installs: [{ kind: 'npx', pkgDir: 'C:\\c\\amicus', engineOk: true, roots: [] }],
+        mcpLaunch: 'npx',
+      }) });
+    expect(byId(checks)['engine-mcp'].status).toBe('ok');
   });
 
   test('missing Electron → warn only (headless still works)', async () => {

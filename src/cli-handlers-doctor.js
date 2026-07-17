@@ -4,6 +4,9 @@
 const HINTS = require('./utils/remediation-hints');
 // B14/4.3: 'mcp' + 'mcp-legacy' check bodies (mirrors the B15 tmpSweep split — see file header).
 const mcpChecks = require('./utils/doctor-mcp-checks');
+// engine-mcp check body — verifies the engine in the npx-cache copies the MCP
+// actually launches (bug report #1). Split out to keep this file under the gate.
+const engineCheck = require('./utils/doctor-engine-check');
 
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
@@ -36,6 +39,9 @@ function realDeps() {
       ensureNodeModulesBinInPath();
       return hasOpencodeBinary();
     },
+    // engine-mcp check: probe the engine in every install that could serve the
+    // MCP (running/global/npx-cache), not just the one doctor runs from (#1).
+    scanEngineInstalls: () => require('./utils/engine-install-scan').scanEngineInstalls(),
     getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
     // #56: self-heal primitive for `doctor --fix`. Pure probe (getElectronPath)
     // stays separate; repair only runs when fix is requested.
@@ -140,6 +146,11 @@ async function runDoctorChecks(depsOverride = {}) {
       ? { id: 'opencode-bin', name: 'OpenCode binary', status: 'ok', message: 'found', hint: null }
       : { id: 'opencode-bin', name: 'OpenCode binary', status: 'error', message: 'not found', hint: HINTS.reinstallEngineAv }
   )));
+
+  // Cross-install: verify the engine in the npx-cache copies the MCP actually
+  // launches (`npx -y amicus@latest mcp`), so a green 'opencode-bin' (the running
+  // install) can't hide a broken copy the MCP would spawn (bug report #1/#4).
+  checks.push(guard('engine-mcp', 'OpenCode engine (MCP launch path)', () => engineCheck.evaluateEngineInstalls(d)));
 
   checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
     if (d.getElectronPath()) {

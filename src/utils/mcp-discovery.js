@@ -227,6 +227,32 @@ function discoverCoworkMcps(configDir) {
 }
 
 /**
+ * The RAW amicus MCP registration config (never stripped) from either client —
+ * the first entry keyed 'amicus' or whose command/args resolve to an amicus MCP
+ * launch (isAmicusMcpConfig). Used by the doctor engine-scan to classify HOW the
+ * MCP launches (npx vs a fixed path). Distinct from hasAmicusRegistration (which
+ * returns only a boolean and reads Claude Code alone).
+ *
+ * @param {string} [claudeDir] - ~/.claude directory (for testing)
+ * @param {string} [claudeJsonPath] - ~/.claude.json path (for testing)
+ * @param {string} [coworkConfigDir] - Claude Desktop config dir (for testing)
+ * @returns {object|null} The amicus server config, or null if none is registered
+ */
+function readAmicusMcpConfig(claudeDir, claudeJsonPath, coworkConfigDir) {
+  const sources = [
+    readRawClaudeCodeMcpServers(claudeDir, claudeJsonPath),
+    discoverCoworkMcps(coworkConfigDir),
+  ];
+  for (const servers of sources) {
+    if (!servers || typeof servers !== 'object') { continue; }
+    for (const [name, config] of Object.entries(servers)) {
+      if (name === 'amicus' || isAmicusMcpConfig(config)) { return config; }
+    }
+  }
+  return null;
+}
+
+/**
  * Discover MCP servers from the parent LLM's configuration.
  *
  * @param {string} [clientType] - Client type: 'code-local', 'code-web', 'cowork'
@@ -248,5 +274,6 @@ module.exports = {
   discoverClaudeCodeMcps,
   discoverCoworkMcps,
   hasAmicusRegistration,
+  readAmicusMcpConfig,
   normalizeMcpJson
 };
