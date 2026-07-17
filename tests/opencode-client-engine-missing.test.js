@@ -82,6 +82,7 @@ describe('startServer — engine self-heal', () => {
     // What IS provable, and is the actual contract under test: the guard did
     // NOT throw the engineMissing error, i.e. self-heal succeeding lets
     // startServer proceed past the missing-binary check.
+    expect(err).toBeDefined();
     expect(err && err.message).not.toMatch(/OpenCode engine binary not found/i);
   });
 
@@ -97,5 +98,18 @@ describe('startServer — engine self-heal', () => {
     expect(err).toBeDefined();
     expect(err.message).toMatch(/OpenCode engine binary not found/i);
     expect(err.message).toMatch(/self-heal: no healthy sibling/i);
+  });
+
+  test('a THROWN self-heal still degrades to the missing-binary error (never an unhandled rejection)', async () => {
+    let err;
+    try {
+      await startServer({
+        _hasOpencodeBinary: () => false,
+        _ensureEngine: async () => { throw new Error('boom'); },
+      });
+    } catch (e) { err = e; }
+    expect(err).toBeDefined();
+    expect(err.message).toMatch(/OpenCode engine binary not found/i);
+    expect(err.message).not.toMatch(/boom/);
   });
 });
