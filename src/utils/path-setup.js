@@ -2,37 +2,82 @@ const path = require('path');
 const os = require('os');
 
 /**
+ * The node_modules roots that may hold the opencode engine sub-packages.
+ *
+ * npm only NESTS a dependency under <pkg>/node_modules when it cannot hoist it.
+ * `npm i -g amicus` nests opencode-windows-*; `npx -y amicus@latest` — which is
+ * exactly how postinstall registers the MCP server — HOISTS it to a sibling of
+ * amicus/, leaving <pkg>/node_modules nonexistent. Both are valid installs, so
+ * probe both roots rather than assuming a layout. Assuming the nested one made a
+ * present, runnable engine read as missing and threw engineMissing on every
+ * fanout leg under npx (#69).
+ *
+ * Order is search priority: nested (amicus's own copy) before hoisted.
+ *
+ * @param {object} [deps] - test seams
+ * @param {string} [deps.nodeModulesRoot] - exact root override (wins outright)
+ * @param {string} [deps.pkgDir] - amicus package dir override
+ * @returns {string[]} candidate node_modules roots
+ */
+function opencodeRoots(deps = {}) {
+  if (deps.nodeModulesRoot) {
+    return [deps.nodeModulesRoot];
+  }
+  const pkgDir = deps.pkgDir || path.join(__dirname, '..', '..');
+  return [
+    path.join(pkgDir, 'node_modules'), // nested  — npm i -g
+    path.dirname(pkgDir), // hoisted — npx/pnpm: the node_modules holding amicus
+  ];
+}
+
+/**
  * Ensures that the project's node_modules/.bin directory is included in the PATH,
  * and on Windows also adds the platform-specific native opencode binary directory
  * so that `spawn('opencode', ...)` without shell:true can resolve the .exe.
  * The OpenCode SDK spawns the 'opencode' command, and this ensures it can be found.
+ * Walks every candidate root so hoisted installs resolve too (#69).
+ *
+ * PATH is a first-match search, so the array below IS the priority order — built
+ * highest-priority-first, then prepended as ONE group. Two orderings matter and
+ * both were once inverted by prepending one dir at a time (LIFO reverses intent):
+ *   - default (AVX2) before -baseline: an AVX2 machine must run the fast build,
+ *     with baseline only as the older-CPU fallback.
+ *   - every native .exe dir before any .bin: on Windows .bin holds a .cmd shim
+ *     that bare spawn() cannot execute, so a real .exe must always win — even a
+ *     .exe in the other candidate root beats a shim in this one.
+ * Hence the three tiers: all defaults, then all baselines, then all .bin — each
+ * tier spanning every root in opencodeRoots() priority order.
+ *
+ * @param {object} [deps] - test seams, forwarded to opencodeRoots()
+ * @param {string} [deps.nodeModulesRoot] - exact root override (wins outright)
+ * @param {string} [deps.pkgDir] - amicus package dir override
  */
-function ensureNodeModulesBinInPath() {
-  const nodeModulesRoot = path.join(__dirname, '..', '..', 'node_modules');
-  const nodeModulesBin = path.join(nodeModulesRoot, '.bin');
+function ensureNodeModulesBinInPath(deps = {}) {
+  const roots = opencodeRoots(deps);
+  const dirs = [];
 
-  if (!process.env.PATH.includes(nodeModulesBin)) {
-    process.env.PATH = `${nodeModulesBin}${path.delimiter}${process.env.PATH}`;
-  }
-
-  // On Windows, Node's spawn() does not execute .cmd shims without shell:true.
-  // Add the platform-specific native binary directory so `opencode` resolves
-  // to opencode.exe directly (Windows searches PATHEXT-aware when .exe is present).
   if (os.platform() === 'win32') {
     const archMap = { x64: 'x64', arm64: 'arm64' };
     const arch = archMap[os.arch()] || os.arch();
-    const nativeBin = path.join(nodeModulesRoot, `opencode-windows-${arch}`, 'bin');
-    if (!process.env.PATH.includes(nativeBin)) {
-      process.env.PATH = `${nativeBin}${path.delimiter}${process.env.PATH}`;
+    // Tier 1: default (AVX2) build in every root.
+    for (const root of roots) {
+      dirs.push(path.join(root, `opencode-windows-${arch}`, 'bin'));
     }
-    // Baseline variant: the default build needs AVX2; opencode ships a
-    // -baseline (pre-AVX2) build for older CPUs. Windows resolves the first
-    // PATH entry containing a real opencode.exe, so default-before-baseline
-    // order matters — do not delete this block as "dead code".
-    const nativeBinBaseline = path.join(nodeModulesRoot, `opencode-windows-${arch}-baseline`, 'bin');
-    if (!process.env.PATH.includes(nativeBinBaseline)) {
-      process.env.PATH = `${nativeBinBaseline}${path.delimiter}${process.env.PATH}`;
+    // Tier 2: -baseline (pre-AVX2) fallback in every root — searched only after
+    // every default build. Do not delete these entries as "dead code".
+    for (const root of roots) {
+      dirs.push(path.join(root, `opencode-windows-${arch}-baseline`, 'bin'));
     }
+  }
+  // Tier 3: node_modules/.bin in every root, last (its shims spawn() cannot run).
+  for (const root of roots) {
+    dirs.push(path.join(root, '.bin'));
+  }
+
+  // Prepend the not-yet-present dirs as one group, preserving the order above.
+  const missing = dirs.filter((dir) => !process.env.PATH.includes(dir));
+  if (missing.length > 0) {
+    process.env.PATH = `${missing.join(path.delimiter)}${path.delimiter}${process.env.PATH}`;
   }
 }
 
@@ -48,6 +93,8 @@ function ensureNodeModulesBinInPath() {
  *
  * Mirrors the PATH resolution order: on Windows the platform sub-package (and
  * its -baseline variant) bin/opencode.exe; elsewhere node_modules/.bin/opencode.
+ * Probes every candidate root (nested AND hoisted — see opencodeRoots), so a
+ * layout npm chose for us can never masquerade as a missing engine (#69).
  * Never throws — a probe failure reads as not-found.
  *
  * @param {object} [deps] - test seams
@@ -55,19 +102,24 @@ function ensureNodeModulesBinInPath() {
  * @param {string} [deps.platform] - process.platform override
  * @param {string} [deps.arch] - os.arch() override
  * @param {string} [deps.nodeModulesRoot] - node_modules root override
+ * @param {string} [deps.pkgDir] - amicus package dir override
  * @returns {boolean} true only when a real opencode binary resolves on disk
  */
 function hasOpencodeBinary(deps = {}) {
   const fs = deps.fs || require('fs');
   const platform = deps.platform || process.platform;
   const arch = deps.arch || os.arch();
-  const root = deps.nodeModulesRoot || path.join(__dirname, '..', '..', 'node_modules');
 
   const a = arch === 'arm64' ? 'arm64' : 'x64';
-  const candidates = platform === 'win32'
-    ? [path.join(root, `opencode-windows-${a}`, 'bin', 'opencode.exe'),
-       path.join(root, `opencode-windows-${a}-baseline`, 'bin', 'opencode.exe')]
-    : [path.join(root, '.bin', 'opencode')];
+  const candidates = [];
+  for (const root of opencodeRoots(deps)) {
+    if (platform === 'win32') {
+      candidates.push(path.join(root, `opencode-windows-${a}`, 'bin', 'opencode.exe'));
+      candidates.push(path.join(root, `opencode-windows-${a}-baseline`, 'bin', 'opencode.exe'));
+    } else {
+      candidates.push(path.join(root, '.bin', 'opencode'));
+    }
+  }
 
   return candidates.some((p) => { try { return fs.existsSync(p); } catch (_e) { return false; } });
 }
@@ -75,4 +127,5 @@ function hasOpencodeBinary(deps = {}) {
 module.exports = {
   ensureNodeModulesBinInPath,
   hasOpencodeBinary,
+  opencodeRoots,
 };

@@ -87,3 +87,68 @@ describe('hasOpencodeBinary (shared resolver)', () => {
     expect(ok).toBe(false);
   });
 });
+
+// Layout regression (#69): npm only NESTS deps under amicus/node_modules when it
+// cannot hoist them. Under `npx -y amicus@latest mcp` — which is exactly how the
+// postinstall registers the MCP server — opencode-windows-* is HOISTED to a
+// sibling of amicus/. The engine is present and runnable, but a resolver that
+// hard-codes <pkgDir>/node_modules reports "not found" and startServer throws
+// engineMissing, killing every fanout leg instantly.
+describe('hasOpencodeBinary (hoisted layout — npx / pnpm / workspaces)', () => {
+  const PKG_DIR = path.join('C:', 'npx', 'cache', 'node_modules', 'amicus');
+  const HOISTED = path.join('C:', 'npx', 'cache', 'node_modules');
+
+  test('windows x64: true when opencode.exe is hoisted beside amicus/', () => {
+    const exe = path.join(HOISTED, 'opencode-windows-x64', 'bin', 'opencode.exe');
+    const ok = hasOpencodeBinary({
+      fs: fakeFs([exe]),
+      platform: 'win32',
+      arch: 'x64',
+      pkgDir: PKG_DIR,
+    });
+    expect(ok).toBe(true);
+  });
+
+  test('windows x64: true when only the hoisted -baseline variant exists', () => {
+    const exe = path.join(HOISTED, 'opencode-windows-x64-baseline', 'bin', 'opencode.exe');
+    const ok = hasOpencodeBinary({
+      fs: fakeFs([exe]),
+      platform: 'win32',
+      arch: 'x64',
+      pkgDir: PKG_DIR,
+    });
+    expect(ok).toBe(true);
+  });
+
+  test('windows x64: nested layout (npm -g) still resolves', () => {
+    const exe = path.join(PKG_DIR, 'node_modules', 'opencode-windows-x64', 'bin', 'opencode.exe');
+    const ok = hasOpencodeBinary({
+      fs: fakeFs([exe]),
+      platform: 'win32',
+      arch: 'x64',
+      pkgDir: PKG_DIR,
+    });
+    expect(ok).toBe(true);
+  });
+
+  test('windows: false when the binary exists in neither layout', () => {
+    const ok = hasOpencodeBinary({
+      fs: fakeFs([]),
+      platform: 'win32',
+      arch: 'x64',
+      pkgDir: PKG_DIR,
+    });
+    expect(ok).toBe(false);
+  });
+
+  test('non-windows: true when .bin/opencode is hoisted beside amicus/', () => {
+    const bin = path.join(HOISTED, '.bin', 'opencode');
+    const ok = hasOpencodeBinary({
+      fs: fakeFs([bin]),
+      platform: 'linux',
+      arch: 'x64',
+      pkgDir: PKG_DIR,
+    });
+    expect(ok).toBe(true);
+  });
+});
