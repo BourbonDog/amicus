@@ -6,9 +6,11 @@ const { ensureNodeModulesBinInPath } = require('../../src/utils/path-setup');
 
 // The two layouts opencodeRoots() probes (#69), pinned to fixtures so the
 // assertions do not depend on where this checkout happens to live.
-const PKG_DIR = path.join('C:', 'npx', 'cache', 'node_modules', 'amicus');
+// Fixtures MUST stay colon-free: entries() splits on path.delimiter, which is
+// ':' on POSIX CI — a 'C:'-style drive prefix would shatter every entry there.
+const PKG_DIR = path.join(path.sep, 'npx', 'cache', 'node_modules', 'amicus');
 const NESTED = path.join(PKG_DIR, 'node_modules'); // npm i -g
-const HOISTED = path.join('C:', 'npx', 'cache', 'node_modules'); // npx / pnpm
+const HOISTED = path.join(path.sep, 'npx', 'cache', 'node_modules'); // npx / pnpm
 
 const nativeBin = (root, arch, variant = '') =>
   path.join(root, `opencode-windows-${arch}${variant}`, 'bin');
@@ -75,7 +77,7 @@ describe('ensureNodeModulesBinInPath (PATH search order)', () => {
 
   test('a single explicit root (nodeModulesRoot seam) is honoured on its own', () => {
     onWindows('x64');
-    const ROOT = path.join('C:', 'app', 'node_modules');
+    const ROOT = path.join(path.sep, 'app', 'node_modules');
 
     ensureNodeModulesBinInPath({ nodeModulesRoot: ROOT });
 
