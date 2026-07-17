@@ -166,6 +166,7 @@ src/
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
 │   ├── doctor-mcp-checks.js  # B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
 │   ├── engine-install-scan.js  # Discover + probe every amicus install that could serve the MCP (running,
+│   ├── engine-lock.js  # Stale-aware single-flight lock for the engine self-heal (report #2).
 │   ├── env-loader.js  # Credential Loader
 │   ├── error-doc.js
 │   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
@@ -401,6 +402,7 @@ evals/
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()` |
+| `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
 | `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
