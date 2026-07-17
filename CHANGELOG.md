@@ -5,6 +5,23 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-07-17
+
+### Fixed
+
+- **A missing `opencode` engine now self-heals instead of failing every call.**
+  When the engine binary is absent at a fanout/start — a skipped
+  optional-dependency install or an antivirus quarantine of the npx-cache copy
+  the MCP launches — amicus recovers in place by copying the `opencode-*`
+  packages from a healthy sibling install (running, global, or another npx
+  copy), then proceeds, instead of throwing `engineMissing` on every leg
+  (report #2).
+
+### Added
+
+- **`amicus doctor --fix` repairs broken npx-cache engine copies**, self-healing
+  the copies the MCP actually launches, not just the running install.
+
 ## [3.2.1] - 2026-07-17
 
 ### Fixed

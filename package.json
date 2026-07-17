@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "mcpName": "io.github.BourbonDog/amicus",
   "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "keywords": [
@@ -48,8 +48,8 @@
   "scripts": {
     "start": "node --experimental-top-level-await --experimental-vm-modules bin/amicus.js",
     "test": "jest",
-    "test:integration": "jest --testPathIgnorePatterns='\\.worktrees/' --testMatch='**/tests/**/*.integration.test.js'",
-    "test:all": "jest --testPathIgnorePatterns='/node_modules/' --testPathIgnorePatterns='\\.worktrees/' && node scripts/mark-test-passed.js",
+    "test:integration": "jest --testPathIgnorePatterns='worktrees' --testMatch='**/tests/**/*.integration.test.js'",
+    "test:all": "jest --testPathIgnorePatterns='/node_modules/' --testPathIgnorePatterns='worktrees' && node scripts/mark-test-passed.js",
     "test:e2e:mcp": "jest tests/mcp-repomix-e2e.integration.test.js --testTimeout=180000 --forceExit",
     "posttest": "node scripts/mark-test-passed.js",
     "lint": "eslint src/",
