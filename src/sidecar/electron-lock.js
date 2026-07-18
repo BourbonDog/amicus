@@ -22,7 +22,10 @@ const STALE_MS = 15 * 60 * 1000;
 
 /** Temp-dir lockfile path, keyed by the electron install dir. */
 function lockPathFor(electronDir) {
-  const key = Buffer.from(electronDir).toString('hex').slice(0, 16);
+  // Hash the FULL path: a truncated hex prefix collapsed distinct installs that
+  // share a leading path segment (C:\Users…, /home/us…) onto one lockfile,
+  // defeating per-install isolation. Mirrors src/utils/engine-lock.js.
+  const key = require('crypto').createHash('sha1').update(electronDir).digest('hex').slice(0, 16);
   return path.join(os.tmpdir(), `amicus-electron-repair-${key}.lock`);
 }
 

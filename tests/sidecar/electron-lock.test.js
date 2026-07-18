@@ -38,6 +38,12 @@ describe('electron-lock (stale-aware single-flight)', () => {
 
   const writeLock = (obj) => fs.writeFileSync(lockPath, typeof obj === 'string' ? obj : JSON.stringify(obj));
 
+  it('derives distinct lock paths for distinct installs that share a path prefix', () => {
+    const a = path.join('C:', 'Users', 'me', 'AppData', 'Roaming', 'npm', 'node_modules', 'amicus');
+    const b = path.join('C:', 'Users', 'me', 'AppData', 'Local', 'npm-cache', '_npx', 'abc123', 'node_modules', 'amicus');
+    expect(lockPathFor(a)).not.toBe(lockPathFor(b));
+  });
+
   describe('isStaleLock', () => {
     it('an EMPTY / pre-v1.7.3 lockfile is stale (the field case)', () => {
       writeLock('');
