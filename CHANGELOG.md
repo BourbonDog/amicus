@@ -5,6 +5,21 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [3.2.3] - 2026-07-18
+
+### Fixed
+
+- **The Electron repair lockfile key is per-install again.** `lockPathFor()`
+  derived its temp-lockfile key from only the first 8 characters of the Electron
+  dir path (its hex encoding truncated to 16 chars), so distinct installs that
+  share a leading path segment (`C:\Users…`, `/home/us…`) collapsed onto a single
+  shared lockfile — defeating the intended per-install isolation and causing
+  intermittent cross-worktree test failures, where suites run from different
+  `.claude/worktrees/*` raced on the same lock. The key now hashes the full
+  Electron dir with sha1, mirroring the engine-lock fix shipped in v3.2.2. The
+  public `acquireRepairLock` interface is unchanged, so there is no downstream
+  impact; stale lockfiles from the old key simply age out (#69).
+
 ## [3.2.2] - 2026-07-17
 
 ### Fixed
