@@ -9,7 +9,7 @@ This page exists because `amicus council tally|stats|report|validate|verdict|sav
 **deterministic local math and file I/O** — none of them call a model. The one exception is
 [`amicus council run`](#amicus-council-run) (v4.0), the **headless engine**: it drives the whole
 pipeline below — Stage-1 reviews → anonymized cross-review → tally → chair verdict — in one
-command, and it does call models. The models run in the
+command, and it does call models. In the interactive path, the models run in the
 `second-opinion` skill's Stage 1/2/3 waves (`amicus fanout` / `amicus start`); these subcommands
 consume and produce the JSON that glues those stages together. If you're driving a live council
 run, follow **[skills/second-opinion/SKILL.md](../skills/second-opinion/SKILL.md)** — it's the
@@ -133,12 +133,12 @@ Key semantics:
 | Condition | Behavior | Exit |
 |---|---|---|
 | All stages complete, chair verdict parsed | full run | 0 |
-| Fewer than 2 completed Stage-1 reviews | stop; error doc `council_quorum` | 1 |
+| Fewer than 2 completed Stage-1 reviews | stop; error doc `COUNCIL_QUORUM` | 1 |
 | At least 2 reviews but fewer than 2 completed judges | proceed; tally `judged:false` | 2 |
 | Chair fails (1 retry + 1 fallback promotion) | `verdict.json` written, `overallVerdict:null` | 2 |
 | Chair output missing `VERDICT:` line after 1 repair | chair prose kept, `overallVerdict:null` | 2 |
 | Cost ceiling hit after the tally exists | verdict written (no chair), `overallVerdict:null` | 2 |
-| Cost ceiling hit before the tally | stop; error doc `cost_exceeded` | 1 |
+| Cost ceiling hit before the tally | stop; error doc `COST_EXCEEDED` | 1 |
 | Aborted | `run.json` status `aborted` | 130/143 |
 
 **The run directory** (durable state; skill-compatible layout):
@@ -552,7 +552,7 @@ Council tally (pricing-page-council)
 
 ```bash
 $ amicus council verdict tally.json --decisions decisions.json -o verdict.json
-Verdict (schema v1, pricing-page-council) → verdict.json
+Verdict (schema v2, pricing-page-council) → verdict.json
   accepted 2  deferred 1
 ```
 
