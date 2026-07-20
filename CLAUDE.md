@@ -99,6 +99,7 @@ src/
 │   ├── briefings.js
 │   ├── findings.js
 │   ├── ledger.js
+│   ├── parse-stage2.js
 │   ├── presets-cli.js
 │   ├── report-html.js
 │   ├── report.js
@@ -355,6 +356,7 @@ evals/
 | `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `buildSeatBriefing()`, `buildCriticBriefing()`, `buildLensBriefing()` |
 | `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES()`, `lastJsonBlock()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE()` |
+| `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/report-html.js` |  | `renderHtml()` |
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
