@@ -107,6 +107,7 @@ src/
 │   ├── run-launch.js
 │   ├── run-stages.js
 │   ├── run-state.js
+│   ├── run.js
 │   ├── tally.js
 │   └── verdict.js
 ├── design/
@@ -368,6 +369,7 @@ evals/
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `sanitizeName()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `checkpoint()`, `updateStage()` |
+| `council/run.js` |  | `runCouncil()`, `SIGNAL_EXIT()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
