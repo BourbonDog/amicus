@@ -244,12 +244,14 @@ override wins over the tally record's, if both are present — the effective `ti
 `adjudications`, `streetCred`, `runStats`, `tierCounts`) passes through from the tally record
 unchanged.
 
-**Output schema** (`verdict.json`, schema v1 — independent of the tally record's own
+**Output schema** (`verdict.json`, schema v2 — independent of the tally record's own
 `schemaVersion`):
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "type": "council-verdict",
+  "overallVerdict": null,
   "runId": "...", "runType": "...", "date": "...", "chair": "...",
   "council": ["deepseek", "gpt"],
   "claudeInCouncil": false,
@@ -264,6 +266,12 @@ unchanged.
   "tierCounts": { "Confirmed": 1, "Contested": 1, "Singleton": 1, "Disputed": 0 }
 }
 ```
+
+**Key notes:**
+- `schemaVersion` — verdict-document schema version (currently `2`).
+- `type` — document-type discriminator; always `"council-verdict"` (council family v2 envelope).
+- `overallVerdict` — the chair's verdict-scale outcome: one of `"Ship it"`, `"Fix these first"`, `"Fundamental rethink"`, or `null` when no chair verdict was produced (populated by the headless engine during Stage 3; `null` for a plain `council verdict` merge without engine integration).
+- All other keys (`runId`, `council`, `findings`, `streetCred`, `runStats`, `tierCounts`) are passed through unchanged from the tally record.
 
 **Write path:** always atomic — a `<out>.tmp-<pid>` file is written first, then renamed over the
 target (`writeVerdictAtomic`), matching the repo's `wave.json` convention. Default output path is

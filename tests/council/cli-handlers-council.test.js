@@ -233,7 +233,7 @@ test('verdict: happy path writes verdict.json atomically to the default path and
   const outPath = path.join(dir, 'verdict.json');
   expect(fs.existsSync(outPath)).toBe(true);
   const written = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
-  expect(written.schemaVersion).toBe(1);
+  expect(written.schemaVersion).toBe(2);
   expect(written.runId).toBe('av-receiver-council');
   const denied = written.findings.find(f => f.id === 'C6');
   expect(denied.decision).toBe('denied');
@@ -250,7 +250,7 @@ test('verdict: --json prints the full verdict document', async () => {
   }));
   expect(code).toBe(0);
   const doc = JSON.parse(out);
-  expect(doc.schemaVersion).toBe(1);
+  expect(doc.schemaVersion).toBe(2);
   expect(doc.findings.length).toBeGreaterThan(0);
   expect(fs.existsSync(outPath)).toBe(true);
 });
