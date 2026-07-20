@@ -9,6 +9,7 @@
 'use strict';
 
 const { validateTaskId } = require('./utils/validators');
+const { failJson, ERROR_CODES } = require('./utils/error-doc');
 
 /** Render a key-value block for a single-session status payload. */
 function formatRunHuman(d) {
@@ -49,20 +50,35 @@ function formatWaveHumanStatus(d) {
  * @returns {Promise<number>}
  */
 async function handleStatus(args) {
+  const useJson = !!args.json;
   const taskId = args.wave || args._[1];
   if (!taskId || taskId === true) {
+    // v4.0 §7: --json failures land on stdout as the error doc; human stderr
+    // is byte-identical to pre-4.0.
+    if (useJson) {
+      return failJson(true, { code: ERROR_CODES.BAD_SESSION, message: 'task_id is required for status',
+        hint: 'amicus status <task_id> [--json]   (or: amicus status --wave <wave_id>)' });
+    }
     process.stderr.write('Error: task_id is required for status\n');
     process.stderr.write('Usage: amicus status <task_id> [--json]   (or: amicus status --wave <wave_id>)\n');
     return 1;
   }
   const check = validateTaskId(String(taskId));
-  if (!check.valid) { process.stderr.write(`${check.error}\n`); return 1; }
+  if (!check.valid) {
+    if (useJson) { return failJson(true, { code: ERROR_CODES.BAD_SESSION, message: check.error }); }
+    process.stderr.write(`${check.error}\n`);
+    return 1;
+  }
 
   const project = args.cwd || process.cwd();
   const { handlers } = require('./mcp-server');
   const result = await handlers.amicus_status({ taskId: String(taskId) }, project);
   const text = result.content[0].text;
-  if (result.isError) { process.stderr.write(`${text}\n`); return 1; }
+  if (result.isError) {
+    if (useJson) { return failJson(true, { code: ERROR_CODES.BAD_SESSION, message: text }); }
+    process.stderr.write(`${text}\n`);
+    return 1;
+  }
 
   let data;
   try { data = JSON.parse(text); } catch { process.stdout.write(`${text}\n`); return 0; }
