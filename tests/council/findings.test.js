@@ -76,3 +76,16 @@ test('buildValidateDoc stamps the council v2 envelope onto a validateFindings re
   expect(doc.findings).toEqual(result.findings);
   expect(doc.errors).toEqual([]);
 });
+
+describe('lastJsonBlock (exported for parse-stage2)', () => {
+  const { lastJsonBlock } = require('../../src/council/findings');
+
+  test('returns the LAST fenced json block body', () => {
+    const text = 'prose\n```json\n{"a":1}\n```\nmore\n```json\n{"b":2}\n```\n';
+    expect(JSON.parse(lastJsonBlock(text))).toEqual({ b: 2 });
+  });
+
+  test('returns null when no fenced json block exists', () => {
+    expect(lastJsonBlock('no blocks here')).toBeNull();
+  });
+});

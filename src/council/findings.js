@@ -57,4 +57,4 @@ function buildValidateDoc(result) {
   return { schemaVersion: COUNCIL_SCHEMA_VERSION, type: 'council-validate', ...result };
 }
 
-module.exports = { validateFindings, buildValidateDoc, SEVERITIES };
+module.exports = { validateFindings, buildValidateDoc, SEVERITIES, lastJsonBlock };
