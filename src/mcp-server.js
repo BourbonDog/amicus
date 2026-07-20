@@ -1121,6 +1121,13 @@ const handlers = {
     } catch (err) { return textResult(`verdict build failed: ${err.message}`, true); }
   },
 
+  async amicus_council_run(input, project, mcpServer) {
+    const cwd = project || getProjectDir(input.project);
+    return require('./mcp-council-run').handleCouncilRunTool(input, cwd, {
+      spawnFn: spawnSidecarProcess, clientName: detectClient(mcpServer),
+    });
+  },
+
   async amicus_setup() {
     const { checkElectronAvailable } = require('./sidecar/interactive-process');
     if (!checkElectronAvailable()) {

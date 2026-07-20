@@ -252,6 +252,7 @@ src/
 ├── headless.js  # Headless Mode Runner
 ├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
+├── mcp-council-run.js
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
 ├── mcp-tools.js  # MCP Tool Definitions for Amicus
 ├── mcp-wait.js  # Engine for the amicus_wait MCP tool: blocks inside one tool call until a session/wave reaches a terminal state or the wait window closes.
@@ -350,6 +351,7 @@ evals/
 | `headless.js` | Headless Mode Runner | `runHeadless()`, `waitForServer()`, `withTimeout()`, `extractSummary()`, `findTrailingFoldMarker()` |
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
+| `mcp-council-run.js` |  | `handleCouncilRunTool()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
 | `mcp-wait.js` | Engine for the amicus_wait MCP tool: blocks inside one tool call until a session/wave reaches a terminal state or the wait window closes. | `runWait()`, `registerInProcessRun()`, `settleInProcessRun()`, `hasInProcessRun()`, `clampTimeout()` |
