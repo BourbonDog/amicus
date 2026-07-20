@@ -654,13 +654,13 @@ describe('Headless Mode Runner', () => {
   });
 
   describe('formatFoldOutput', () => {
-    it('should format with all fields', () => {
+    it('should format with all fields (nonced marker header)', () => {
       const output = formatFoldOutput({
         model: 'google/gemini-2.5-pro', sessionId: 'abc123',
         client: 'code-local', cwd: '/projects/myapp',
-        mode: 'interactive', summary: 'Test summary'
+        mode: 'interactive', summary: 'Test summary', nonce: NONCE
       });
-      expect(output).toContain('[SIDECAR_FOLD]');
+      expect(output).toContain(NONCED_MARKER);
       expect(output).toContain('Model: google/gemini-2.5-pro');
       expect(output).toContain('Session: abc123');
       expect(output).toContain('Client: code-local');
@@ -671,7 +671,7 @@ describe('Headless Mode Runner', () => {
     });
 
     it('should use defaults for missing optional fields', () => {
-      const output = formatFoldOutput({ model: 'test', sessionId: 'x', summary: 'hi' });
+      const output = formatFoldOutput({ model: 'test', sessionId: 'x', summary: 'hi', nonce: NONCE });
       expect(output).toContain('Client: code-local');
       expect(output).toContain('Mode: headless');
     });
@@ -685,9 +685,9 @@ describe('Headless Mode Runner', () => {
       expect(output).not.toContain('[SIDECAR_FOLD]');
     });
 
-    it('falls back to the legacy bare marker when no nonce is provided (back-compat)', () => {
-      const output = formatFoldOutput({ model: 'test', sessionId: 'x', summary: 'hi' });
-      expect(output).toContain('[SIDECAR_FOLD]');
+    it('throws when no nonce is provided (v4.0 §9 — bare-writer fallback retired)', () => {
+      expect(() => formatFoldOutput({ model: 'test', sessionId: 'x', summary: 'hi' }))
+        .toThrow(/requires a per-run nonce/);
     });
   });
 

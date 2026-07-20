@@ -44,7 +44,9 @@ jest.mock('../src/opencode-client', () => ({
     const nonce = mockExtractFoldNonce();
     return Promise.resolve([{
       info: { role: 'assistant', id: 'msg-1', time: { completed: Date.now() } },
-      parts: [{ type: 'text', text: nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]' }]
+      // v4.0 §9: no bare-marker fallback — every real path bakes a nonce into
+      // the system prompt; a missing nonce must fail LOUDLY, not complete.
+      parts: [{ type: 'text', text: buildFoldMarker(nonce || 'e2e-missing-nonce') }]
     }]);
   }),
   checkHealth: jest.fn().mockResolvedValue(true),
@@ -179,7 +181,7 @@ describe('End-to-End Sidecar Flow', () => {
       const { buildFoldMarker } = require('../src/utils/fold-marker');
       getMessages.mockImplementation(() => {
         const nonce = mockExtractFoldNonce();
-        const marker = nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]';
+        const marker = buildFoldMarker(nonce || 'e2e-missing-nonce');
         return Promise.resolve([{
           info: { role: "assistant", id: "msg-1", time: { completed: Date.now() } },
           parts: [{ type: "text", text: `${mockSummaryBody}\n${marker}` }]
@@ -263,7 +265,7 @@ describe('End-to-End Sidecar Flow', () => {
       const { buildFoldMarker } = require('../src/utils/fold-marker');
       getMessages2.mockImplementation(() => {
         const nonce = mockExtractFoldNonce();
-        const marker = nonce ? buildFoldMarker(nonce) : '[SIDECAR_FOLD]';
+        const marker = buildFoldMarker(nonce || 'e2e-missing-nonce');
         return Promise.resolve([{
           info: { role: "assistant", id: "msg-1", time: { completed: Date.now() } },
           parts: [{ type: "text", text: `## Test Summary\nThis is the analysis result.\n${marker}` }]
@@ -484,7 +486,7 @@ describe('End-to-End Sidecar Flow', () => {
       expect(index.COMPLETE_MARKER).toBe('[SIDECAR_FOLD]');
     });
 
-    it('should export formatFoldOutput', () => {
+    it('should export formatFoldOutput (nonce now required — v4.0 §9)', () => {
       const index = require('../src/index');
       expect(typeof index.formatFoldOutput).toBe('function');
 
@@ -494,11 +496,14 @@ describe('End-to-End Sidecar Flow', () => {
         client: 'code-local',
         cwd: '/test',
         mode: 'headless',
-        summary: 'Test summary'
+        summary: 'Test summary',
+        nonce: 'e2etestnonce1234'
       });
-      expect(output).toContain('[SIDECAR_FOLD]');
+      expect(output).toContain('[SIDECAR_FOLD:e2etestnonce1234]');
       expect(output).toContain('Client: code-local');
       expect(output).toContain('CWD: /test');
+      expect(() => index.formatFoldOutput({ model: 'm', sessionId: 's', summary: 'x' }))
+        .toThrow(/requires a per-run nonce/);
     });
   });
 });

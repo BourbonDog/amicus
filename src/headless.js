@@ -22,7 +22,8 @@ const { buildFoldMarker, trailingFoldMarkerRegex, generateFoldNonce } = require(
  *
  * #BL-7 residual (15b.3): the bare `[SIDECAR_FOLD]` string is now a LEGACY
  * literal only, kept exported for external consumers with no nonce context
- * (see extractSummary/formatFoldOutput's no-nonce fallback paths below).
+ * (the no-nonce fallback paths were retired in v4.0 §9 — the constant is
+ * export-only back-compat now).
  * NOTE for anyone `.toContain('[SIDECAR_FOLD]')`-checking real run output:
  * that substring check does NOT match the real nonced marker — a nonced
  * marker is `[SIDECAR_FOLD:<nonce>]`, which lacks the literal closing
@@ -748,6 +749,10 @@ function extractSummary(output, nonce) {
 
 /**
  * Format a structured fold output with metadata
+ * v4.0 §9: `nonce` is REQUIRED — the pre-15b.3 bare-`[SIDECAR_FOLD]` writer
+ * fallback is retired; the bare literal is never written by any path. The
+ * FOLD_MARKER/COMPLETE_MARKER constants remain exported for external
+ * consumers' greps/back-compat only (docs/SHIMS.md).
  * @param {Object} options - Fold output options
  * @param {string} options.model - Model identifier
  * @param {string} options.sessionId - Session identifier
@@ -755,14 +760,16 @@ function extractSummary(output, nonce) {
  * @param {string} [options.cwd] - Working directory (defaults to process.cwd())
  * @param {string} [options.mode='headless'] - Execution mode
  * @param {string} options.summary - Summary text
- * @param {string} [options.nonce] - This run's fold nonce (15b.3). When omitted,
- *   falls back to the legacy bare `[SIDECAR_FOLD]` marker for back-compat with
- *   external callers of this exported utility that predate the nonce scheme.
+ * @param {string} options.nonce - This run's fold nonce (required)
  * @returns {string} Formatted fold output
+ * @throws {TypeError} when nonce is missing/empty
  */
 function formatFoldOutput({ model, sessionId, client, cwd, mode, summary, nonce }) {
+  if (!nonce) {
+    throw new TypeError('formatFoldOutput requires a per-run nonce (15b.3/v4.0 §9)');
+  }
   return [
-    nonce ? buildFoldMarker(nonce) : FOLD_MARKER,
+    buildFoldMarker(nonce),
     `Model: ${model}`,
     `Session: ${sessionId}`,
     `Client: ${client || 'code-local'}`,
