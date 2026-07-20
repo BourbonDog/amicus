@@ -15,6 +15,31 @@ const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildAbortResult } = require('./utils/result-schema');
 
 /**
+ * Council-run abort via the sessions-dir pointer (v4.0 §8). Returns the exit
+ * code when the taskId was a council run, or null to fall through to the
+ * ordinary session/wave paths.
+ */
+function tryCouncilAbort(project, taskId, useJson) {
+  const { abortCouncilRun } = require('./mcp-council-run');
+  const res = abortCouncilRun(project, taskId);
+  if (!res) { return null; }
+  if (res.alreadyTerminal) {
+    if (useJson) {
+      console.log(JSON.stringify(buildAbortResult({ scope: 'council-run', taskId, aborted: [] }), null, 2));
+    } else {
+      console.log(`Council run ${taskId} is not running (status: ${res.status}).`);
+    }
+    return 0;
+  }
+  if (useJson) {
+    console.log(JSON.stringify(buildAbortResult({ scope: 'council-run', taskId, aborted: [taskId] }), null, 2));
+  } else {
+    console.log(`Council run ${taskId} marked as aborted (${res.cascaded} running leg(s) aborted).`);
+  }
+  return 0;
+}
+
+/**
  * Handle 'amicus abort --all --json': mark every running session aborted.
  * @returns {number} exit code (always 0 — even a no-op --all is a success)
  */
@@ -45,6 +70,8 @@ async function handleAbortTaskJson(args, taskId) {
   const metaPath = path.join(sessionDir, 'metadata.json');
 
   if (!fs.existsSync(metaPath)) {
+    const council = tryCouncilAbort(project, taskId, true);
+    if (council !== null) { return council; }
     process.exit(failJson(true, { code: ERROR_CODES.BAD_SESSION, message: `Session ${taskId} not found` }));
   }
 
@@ -171,6 +198,8 @@ async function handleAbort(args) {
   const metaPath = path.join(sessionDir, 'metadata.json');
 
   if (!fs.existsSync(metaPath)) {
+    const council = tryCouncilAbort(project, taskId, false);
+    if (council !== null) { return council; }
     console.error(`Session ${taskId} not found`);
     process.exit(1);
   }

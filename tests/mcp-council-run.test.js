@@ -1,0 +1,138 @@
+// tests/mcp-council-run.test.js
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { handleCouncilRunTool } = require('../src/mcp-council-run');
+const { getTools } = require('../src/mcp-tools');
+
+let tmp; let briefingFile;
+beforeEach(() => {
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-council-'));
+  briefingFile = path.join(tmp, 'briefing.md');
+  fs.writeFileSync(briefingFile, 'Review this.');
+});
+afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+const helpers = (spawnCalls = []) => ({
+  spawnFn: (args, dir) => { spawnCalls.push({ args, dir }); },
+  clientName: 'claude-code',
+});
+const input = (extra = {}) => ({ briefingFile, models: ['gemini', 'gpt', 'qwen'], ...extra });
+const parseFenced = (res) => {
+  const text = res.content[0].text;
+  expect(text).toContain('<untrusted_sidecar_output');           // born-fenced (spec §8)
+  const m = text.match(/\{[\s\S]*\}/);
+  return JSON.parse(m[0]);
+};
+
+describe('amicus_council_run handler', () => {
+  test('spawns the CLI child and returns {runId, runDir} immediately, fenced', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input(), tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    const body = parseFenced(res);
+    expect(body.type).toBe('council-run');
+    expect(body.schemaVersion).toBe(2);
+    expect(body.status).toBe('running');
+    expect(body.runDir).toBe(path.join(tmp, `council-${body.runId}`));
+    // Pre-seeded state: pointer + run.json exist BEFORE the child starts.
+    const ptr = JSON.parse(fs.readFileSync(
+      path.join(tmp, '.claude', 'amicus_sessions', `council-${body.runId}.json`), 'utf-8'));
+    expect(ptr.runDir).toBe(body.runDir);
+    const run = JSON.parse(fs.readFileSync(path.join(body.runDir, 'run.json'), 'utf-8'));
+    expect(run).toMatchObject({ type: 'council-run', status: 'running', chair: 'deepseek' });
+    // Briefing copied into the run dir; child launched with --prompt-file on the COPY.
+    expect(fs.readFileSync(path.join(body.runDir, 'briefing.md'), 'utf-8')).toBe('Review this.');
+    const args = calls[0].args;
+    expect(args.slice(0, 2)).toEqual(['council', 'run']);
+    expect(args).toContain('--run-id');
+    expect(args[args.indexOf('--prompt-file') + 1]).toBe(path.join(body.runDir, 'briefing.md'));
+    expect(args[args.indexOf('--models') + 1]).toBe('gemini,gpt,qwen');
+    expect(args[args.indexOf('--cwd') + 1]).toBe(tmp);
+    expect(args).toContain('--json');
+  });
+
+  test('forwards chair/critic/lenses/maxCost/timeoutMinutes/gateway', async () => {
+    const calls = [];
+    await handleCouncilRunTool(input({
+      chair: 'mistral', critic: 'gpt', maxCost: 2.5, timeoutMinutes: 10, gateway: 'openrouter',
+    }), tmp, helpers(calls));
+    const args = calls[0].args;
+    expect(args[args.indexOf('--chair') + 1]).toBe('mistral');
+    expect(args[args.indexOf('--critic') + 1]).toBe('gpt');
+    expect(args[args.indexOf('--max-cost') + 1]).toBe('2.5');
+    expect(args[args.indexOf('--timeout') + 1]).toBe('10');
+    expect(args[args.indexOf('--gateway') + 1]).toBe('openrouter');
+  });
+
+  test.each([
+    ['missing briefingFile', { briefingFile: undefined }, /briefingFile/],
+    ['unreadable briefingFile', { briefingFile: '/nope/missing.md' }, /cannot read/i],
+    ['models + council', { council: 'budget' }, /exactly one/],
+    ['<2 seats', { models: ['gemini'] }, /at least 2/],
+    ['chair in bench', { chair: 'gpt' }, /bench seat/],
+    ['critic outside bench', { critic: 'mistral' }, /must be one of the bench/],
+    ['critic + lenses', { critic: 'gpt', lenses: ['a', 'b', 'c'] }, /mutually exclusive/],
+    ['lens count mismatch', { lenses: ['a'] }, /one lens per seat/],
+  ])('validation: %s → isError, no spawn', async (_n, extra, msgRe) => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input(extra), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(msgRe);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('spawn failure marks run.json error (no orphan running record)', async () => {
+    const res = await handleCouncilRunTool(input(), tmp, {
+      spawnFn: () => { throw new Error('spawn boom'); }, clientName: 'claude-code',
+    });
+    expect(res.isError).toBe(true);
+    const dirs = fs.readdirSync(tmp).filter(d => d.startsWith('council-'));
+    const run = JSON.parse(fs.readFileSync(path.join(tmp, dirs[0], 'run.json'), 'utf-8'));
+    expect(run.status).toBe('error');
+  });
+
+  test('maxCost <= 0 → isError, no spawn, no orphan run.json directory', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ maxCost: -1 }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/maxCost/);
+    expect(calls).toHaveLength(0);
+    expect(fs.readdirSync(tmp).filter(d => d.startsWith('council-'))).toHaveLength(0);
+  });
+
+  test('timeoutMinutes <= 0 → isError, no spawn, no orphan run.json directory', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ timeoutMinutes: -5 }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/timeoutMinutes/);
+    expect(calls).toHaveLength(0);
+    expect(fs.readdirSync(tmp).filter(d => d.startsWith('council-'))).toHaveLength(0);
+  });
+
+  test('outDir escaping the project directory → isError, no spawn, escaped dir not created', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      input({ outDir: path.join('..', 'escaped-council') }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/outDir must resolve to a path inside the project directory/);
+    expect(calls).toHaveLength(0);
+    expect(fs.existsSync(path.resolve(tmp, '..', 'escaped-council'))).toBe(false);
+  });
+});
+
+describe('tool registration', () => {
+  test('amicus_council_run is the 15th default tool', () => {
+    const tools = getTools();
+    expect(tools.map(t => t.name)).toContain('amicus_council_run');
+    expect(tools).toHaveLength(15);
+  });
+
+  test('mcp-server wires the handler and injects spawn helpers (source check)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../src/mcp-server.js'), 'utf-8');
+    expect(src).toContain('amicus_council_run');
+    expect(src).toContain("require('./mcp-council-run')");
+    expect(src.indexOf('handleCouncilRunTool')).toBeGreaterThan(-1);
+  });
+});

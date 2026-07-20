@@ -9,13 +9,14 @@
  * marked as data, not instructions.
  *
  * Applies to every prose channel a sidecar model's output reaches an agent
- * through: MCP amicus_read (summary, wave summary, conversation) and the
- * CLI's non-JSON stdout (read summary/conversation/wave-human, and the
- * foreground start/continue/resume summary echo). It must NOT be applied to
- * JSON contracts (--json stdout, amicus_council_tally/verdict) or metadata
- * (amicus_read mode=metadata) — those are structured data a caller parses,
- * not prose read directly by an LLM, and wrapping them would break the
- * contract.
+ * through: MCP amicus_read (summary, wave summary, conversation), the CLI's
+ * non-JSON stdout (read summary/conversation/wave-human, and the foreground
+ * start/continue/resume summary echo), and — since v4.0 (H9) — the council
+ * MCP tools' JSON returns (amicus_council_tally / amicus_council_stats /
+ * amicus_verdict), whose docs embed untrusted model-raised findings; the JSON
+ * stays intact inside the fence. It must NOT be applied to CLI --json stdout
+ * (the byte-parseable programmatic channel) or amicus_read mode=metadata —
+ * structured data a caller parses, where wrapping would break the contract.
  */
 'use strict';
 

@@ -66,7 +66,8 @@ function computeStreetCred(rankings, models) {
   });
 }
 
-const COUNCIL_SCHEMA_VERSION = 1;
+// v4.0 §7: council family v2 — every council doc carries {schemaVersion, type}.
+const COUNCIL_SCHEMA_VERSION = 2;
 const VERDICTS = { agree: 'a', dispute: 'd', neutral: 'n' };
 
 function countTiers(findings) {
@@ -106,6 +107,7 @@ function tally(input) {
   });
   return {
     schemaVersion: COUNCIL_SCHEMA_VERSION,
+    type: 'council-tally',
     meta,
     judged: Array.isArray(rankings) && rankings.length >= 2,
     streetCred: computeStreetCred(rankings || [], meta.models),

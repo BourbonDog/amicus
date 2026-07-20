@@ -33,6 +33,13 @@ Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval),
 
 **Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest fanout --models "m1,m2,m3" --prompt-file <path> --json`), or use the equivalent MCP tools (`amicus_fanout`, `amicus_start`, `amicus_wait`, `amicus_status`, `amicus_read`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) — council briefings are always self-contained (`--no-context`), so MCP transport is equivalent.
 
+**Headless contexts (v4.0):** CI and scripted environments with no Claude runtime can run the
+whole mechanical pipeline (Stages 1–3 plus the deterministic Stage-5 artifacts) as one command —
+`amicus council run --prompt-file <briefing.md> --models "a,b,c" --chair <model> --json` — see
+[docs/council.md](../../docs/council.md#amicus-council-run). This skill's staged, human-in-the-loop
+orchestration remains the interactive path: Stage 0 intake, Stage 4 decisions, and Stage 6 lessons
+are human stages the engine never automates.
+
 ## When to use
 
 - The user provides documents, artifacts, or links **and** an analysis request **and** criteria, and wants other models to weigh in independently.
@@ -169,6 +176,7 @@ file) returns `{waveId, taskIds[]}` immediately. Preferred: call `amicus_wait` w
 one blocking call per wave; re-call it while it returns `timedOut: true`. Fallback: poll
 `amicus_status`. Either way, `amicus_read` each leg when done. The council's briefings are always
 self-contained (`--no-context`), so MCP transport is equivalent.
+Council JSON returned by the MCP tools (`amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) arrives wrapped in the `<untrusted_sidecar_output>` fence since v4.0 — parse the JSON from inside the fence; CLI `--json` output remains unfenced.
 
 **Required structured output from every model.** Instruct each council model to produce:
 

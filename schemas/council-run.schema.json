@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-run.schema.json",
+  "title": "amicus council-run manifest",
+  "description": "Headless council run manifest (run.json, spec 2026-07-19 §4). Authored ahead of the engine (v4.0 Plan B) — the run-state writer must satisfy this schema.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "runId", "status", "stages", "bench", "chair"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "council-run" },
+    "runId": { "type": "string" },
+    "status": { "type": "string" },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "startedAt": { "type": ["string", "null"] },
+          "completedAt": { "type": ["string", "null"] },
+          "waveId": { "type": "string" },
+          "taskIds": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "bench": { "type": "array", "items": { "type": "string" } },
+    "chair": { "type": "string" },
+    "critic": { "type": ["string", "null"] },
+    "lenses": { "type": ["array", "null"], "items": { "type": "string" } },
+    "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
+    "options": { "type": "object" },
+    "usage": { "type": "object" },
+    "exitCode": { "type": ["number", "null"] }
+  }
+}

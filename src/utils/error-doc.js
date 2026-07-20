@@ -20,6 +20,8 @@ const ERROR_CODES = Object.freeze({
   BAD_SESSION: 'BAD_SESSION',       // task id missing / invalid / not found
   BUDGET_EXCEEDED: 'BUDGET_EXCEEDED', // the WS-2 #10 spend gate
   INTERNAL: 'INTERNAL',             // unexpected pre-flight throw
+  COUNCIL_QUORUM: 'COUNCIL_QUORUM', // council run: <2 surviving Stage-1 reviews (v4.0 §4)
+  COST_EXCEEDED: 'COST_EXCEEDED',   // council run: whole-run --max-cost ceiling hit pre-tally (v4.0 §4)
 });
 
 /**

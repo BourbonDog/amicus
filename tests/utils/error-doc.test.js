@@ -23,6 +23,7 @@ describe('error-doc', () => {
     expect(Object.isFrozen(ERROR_CODES)).toBe(true);
     expect(new Set(Object.values(ERROR_CODES))).toEqual(new Set([
       'BAD_ARGS', 'MISSING_PROMPT', 'BAD_MODEL', 'MISSING_KEY', 'BAD_SESSION', 'BUDGET_EXCEEDED', 'INTERNAL',
+      'COUNCIL_QUORUM', 'COST_EXCEEDED',
     ]));
   });
 });

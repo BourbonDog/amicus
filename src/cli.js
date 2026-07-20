@@ -357,6 +357,7 @@ Commands:
   continue    New session building on previous
   read        Output session summary/conversation
   models      List/search the model catalog, refresh it, audit aliases
+  council run <briefing.md> (--models a,b,c | --council <name>)   Headless council: reviews → cross-review → tally → chair → verdict
   council tally <input.json> [--json]   Tally council findings → tiers/street-cred
   council stats [--json]                Reviewer-reliability from the ledger
   council report <verdict.json> [--wave <wave.json>] [--md|--html]   Disagreement+verdict report
@@ -507,6 +508,14 @@ Subcommands for 'council':
     --decisions <d.json>       Optional. Stage-4 decisions array (default [])
     -o, --out <out.json>       Output path (default ./verdict.json)
     --json                     Print the full verdict document
+  run --prompt-file <briefing.md> (--models a,b,c | --council <name>)
+      [--chair <model>] [--critic <model>] [--lenses s1,s2,...]
+      [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]
+      [--gateway auto|direct|openrouter] [--no-validate-model]
+                                Run the full headless council engine (v4.0).
+                                Chair default: deepseek (must NOT be a bench seat).
+                                --critic and --lenses are mutually exclusive.
+                                Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output
   list                          List saved councils plus the built-in benches

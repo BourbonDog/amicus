@@ -35,6 +35,7 @@ amicus council stats [--json]             # Reviewer reliability from the ledger
 amicus council report <verdict.json> [--md|--html]   # Render the council run report
 amicus council validate <file> [--json]   # Validate a Stage-1 findings block (exit 0/2/1)
 amicus council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]  # Build + write verdict.json
+amicus council run --prompt-file <b.md> --models a,b,c --chair <m> [--json]  # Headless engine: reviews, cross-review, tally, chair verdict
 amicus council save <name> --models a,b,c # Save a named council preset (>=2 resolvable members)
 amicus council list [--json]              # List saved councils + built-ins (free/budget/frontier)
 amicus council show <name> [--json]       # Resolve a council (saved or built-in) and show its members
@@ -147,6 +148,44 @@ amicus fanout --council free --prompt "Review this design" --json
 
 ---
 
+## `amicus council run` — Headless Council Engine
+
+Runs the **entire adjudicated council pipeline in one command with no Claude runtime** (v4.0):
+Stage-1 independent reviews → anonymized peer cross-review (with bounded repair re-prompts) →
+deterministic tally → non-Claude chair verdict → `verdict.json` + `report.html`, all written to a
+durable run directory. Stage-4 accept/deny decisions stay human — the engine is report-only.
+
+```bash
+amicus council run --prompt-file briefing.md --models gemini,glm --chair deepseek \
+  --out-dir council-run --json --max-cost 2.00 --timeout 10
+```
+
+**Key options:**
+
+| Option | Description |
+|--------|-------------|
+| `--prompt-file <path>` | The council briefing. **Required** — there is no inline `--prompt` for councils. |
+| `--models <a,b,c>` \| `--council <name>` | The bench (≥2 seats); mutually exclusive, same semantics as `fanout`. |
+| `--chair <model>` | Verdict synthesizer. Default `deepseek`; must **not** be a bench seat (pre-flight error). |
+| `--critic <model>` | Optional adversarial seat; must **be** a bench seat. Mutually exclusive with `--lenses`. |
+| `--lenses <s1,s2,...>` | Expert lenses, one per seat (count must equal seat count); forces `--no-ledger` semantics. |
+| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. |
+| `--json` | Emit the council-run document on stdout (error envelope + documented exit codes on failure). |
+| `--max-cost <$>` | **Whole-run** ceiling, checked before each paid stage launch. |
+| `--timeout <min>` | **Per-leg** timeout (fanout semantics); bound the aggregate with your CI job timeout. |
+| `--gateway <mode>` / `--no-validate-model` | Same routing/validation semantics as `start`/`fanout`. |
+
+**Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
+`overallVerdict: null` — or cost ceiling hit after the tally) · `1` quorum/pre-tally failure
+(error doc) · `130`/`143` signals. `amicus status|wait|abort <councilRunId>` work on council runs
+via the sessions-dir pointer file.
+
+Field-by-field run-directory contents, the degradation table, and `verdict.json`'s
+`overallVerdict` are documented in **[docs/council.md](./council.md#amicus-council-run)**. This is
+the command the repo's Council Review GitHub Action (v2) runs on labeled PRs.
+
+---
+
 ## `amicus council save|list|show` — Council Presets
 
 A council preset is a named list of `--models`-style members (aliases or full `provider/model` IDs) that `--council <name>` (on `fanout` and the `amicus_fanout` MCP tool) can run in one shot.
@@ -246,7 +285,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "3.2.3",
+  "version": "4.0.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
@@ -263,7 +302,7 @@ A running session additionally reports `messages`, `lastActivity`/`latest`, and 
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`, `amicus_council_run`
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
 

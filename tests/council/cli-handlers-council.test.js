@@ -42,6 +42,16 @@ test('tally auto-appends a ledger row that council stats then reflects', async (
   expect(gpt.runs).toBe(1);
 });
 
+test('stats --json emits the wrapped council-stats doc, not a bare array (v4.0 §7)', async () => {
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'], json: true }));
+  expect(code).toBe(0);
+  const doc = JSON.parse(out);
+  expect(Array.isArray(doc)).toBe(false);
+  expect(doc.schemaVersion).toBe(2);
+  expect(doc.type).toBe('council-stats');
+  expect(Array.isArray(doc.models)).toBe(true);
+});
+
 test('tally --no-ledger computes the record without appending a row', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-'));
   const file = path.join(dir, 'input.json');
@@ -199,6 +209,18 @@ test('validate: no path argument → BAD_ARGS envelope, exit 1', async () => {
   expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
 });
 
+test('validate --json carries the council v2 envelope, additive over ok/findings/errors (v4.0 §7)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-validate-env-'));
+  const p = path.join(dir, 'review.md');
+  fs.writeFileSync(p, 'prose\n```json\n{"findings":[{"id":1,"severity":"minor","claim":"c","location":"l","rationale":"r"}]}\n```');
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'validate', p], json: true }));
+  expect(code).toBe(0);
+  const doc = JSON.parse(out);
+  expect(doc.schemaVersion).toBe(2);
+  expect(doc.type).toBe('council-validate');
+  expect(doc.ok).toBe(true);
+});
+
 // ---------------------------------------------------------------------------
 // council verdict
 // ---------------------------------------------------------------------------
@@ -233,7 +255,7 @@ test('verdict: happy path writes verdict.json atomically to the default path and
   const outPath = path.join(dir, 'verdict.json');
   expect(fs.existsSync(outPath)).toBe(true);
   const written = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
-  expect(written.schemaVersion).toBe(1);
+  expect(written.schemaVersion).toBe(2);
   expect(written.runId).toBe('av-receiver-council');
   const denied = written.findings.find(f => f.id === 'C6');
   expect(denied.decision).toBe('denied');
@@ -250,7 +272,7 @@ test('verdict: --json prints the full verdict document', async () => {
   }));
   expect(code).toBe(0);
   const doc = JSON.parse(out);
-  expect(doc.schemaVersion).toBe(1);
+  expect(doc.schemaVersion).toBe(2);
   expect(doc.findings.length).toBeGreaterThan(0);
   expect(fs.existsSync(outPath)).toBe(true);
 });

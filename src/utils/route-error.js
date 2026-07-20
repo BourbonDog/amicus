@@ -145,9 +145,35 @@ function toCliMessage(result) {
   return lines.join('\n');
 }
 
+/**
+ * v4.0 §7: map a RouteResult onto error-doc fields ({code, message, hint})
+ * for buildErrorDoc/failJson — the CLI --json and MCP failure surfaces.
+ * Key-shaped reasons map to MISSING_KEY; everything else is BAD_MODEL.
+ * Suggestions are inlined into the message text (the error doc has no
+ * structured suggestions slot; the hint carries the fix line).
+ * @param {object} result a RouteResult with kind 'error' or 'selection_required'
+ * @returns {{code: string, message: string, hint: (string|null)}}
+ */
+function toErrorDocFields(result) {
+  const { ERROR_CODES } = require('./error-doc');
+  const KEY_REASONS = ['no_openrouter_key', 'no_direct_key', 'no_key_for_vendor'];
+  const err = toStructuredError(result);
+  const sentence = REASON_TEXT[err.reason] || `Model routing error (${err.reason}).`;
+  let message = err.requested ? `${sentence} (requested "${err.requested}")` : sentence;
+  if (err.suggestions.length > 0) {
+    message += ` Did you mean: ${err.suggestions.map((s) => s && s.model).filter(Boolean).join(', ')}?`;
+  }
+  return {
+    code: KEY_REASONS.includes(err.reason) ? ERROR_CODES.MISSING_KEY : ERROR_CODES.BAD_MODEL,
+    message,
+    hint: FIX_HINTS[err.reason] || null,
+  };
+}
+
 module.exports = {
   toStructuredError,
   toCliMessage,
+  toErrorDocFields,
   REASON_TEXT,
   ROUTE_ERROR_REASONS,
   SELECTION_REQUIRED_REASON,

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-tally.schema.json",
+  "title": "amicus council-tally document",
+  "description": "Deterministic council tally (`council tally --json`, amicus_council_tally). Council family v2.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "meta", "judged", "streetCred", "findings", "runStats", "tierCounts"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "council-tally" },
+    "meta": {
+      "type": "object",
+      "required": ["runId", "models"],
+      "properties": {
+        "runId": { "type": "string" },
+        "runType": { "type": "string" },
+        "date": { "type": "string" },
+        "models": { "type": "array", "items": { "type": "string" } },
+        "chair": { "type": ["string", "null"] },
+        "claudeInCouncil": { "type": "boolean" }
+      }
+    },
+    "judged": { "type": "boolean" },
+    "streetCred": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["model"],
+        "properties": {
+          "model": { "type": "string" },
+          "withSelf": { "type": ["number", "null"] },
+          "peersOnly": { "type": ["number", "null"] },
+          "perJudgeRank": { "type": "object" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "tier", "basis", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "raiser": { "type": ["string", "null"] },
+          "severity": { "type": ["string", "null"] },
+          "tier": { "enum": ["Confirmed", "Contested", "Singleton", "Disputed"] },
+          "basis": {
+            "type": "object",
+            "required": ["a", "d", "n"],
+            "properties": { "a": { "type": "number" }, "d": { "type": "number" }, "n": { "type": "number" } }
+          },
+          "confidence": { "enum": ["thin", "solid"] },
+          "tierOverride": { "type": ["object", "null"] },
+          "adjudications": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    },
+    "runStats": { "type": "array", "items": { "type": "object" } },
+    "tierCounts": {
+      "type": "object",
+      "required": ["Confirmed", "Contested", "Singleton", "Disputed"],
+      "properties": {
+        "Confirmed": { "type": "number" },
+        "Contested": { "type": "number" },
+        "Singleton": { "type": "number" },
+        "Disputed": { "type": "number" }
+      }
+    }
+  }
+}

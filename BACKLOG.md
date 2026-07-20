@@ -242,12 +242,14 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   behind, same failure mode B15's `src/utils/session-index-tmp-sweep.js` already sweeps for
   `sessions-index.json.*.tmp`. Extend that same age-gated list/sweep pattern to per-session dirs and wire
   it into `amicus doctor --fix`.
-- [ ] **Resume nonce-echo hazard.** `buildResumeUserMessage` (`src/sidecar/resume.js`) replays the prior
+- [x] **Resume nonce-echo hazard.** `buildResumeUserMessage` (`src/sidecar/resume.js`) replays the prior
   conversation verbatim, including the previous turn's valid nonced `[SIDECAR_FOLD:<nonce>]` marker — since
   each run mints a fresh nonce, the echoed old marker can't itself trigger a premature fold today, but the
   replay is still carrying a stale wire-format token into the new prompt. Strip trailing fold-marker lines
   from the replayed conversation before it's embedded. Narrow: inherent to prompt-verbatim resume, not a new
-  regression.
+  regression. **DONE (v4.0 Plan A, Task 2):** `buildResumeUserMessage` now runs the replayed conversation
+  through `stripFoldMarkers` (`src/utils/fold-marker.js`) — bare and nonced marker lines are removed before
+  embedding. BL-7 is done-done (see also the legacy bare-marker path retirement in `src/headless.js`).
 - [ ] **`waitThenKill`'s `exited` array overstates under escalation.** Where `waitThenKill` is used
   (`src/cli-handlers-abort.js`, `src/mcp-server.js`, `src/opencode-client.js`, `src/utils/abort-coordinator.js`),
   a pid that only died after being escalated to SIGKILL still lands in the `exited` array alongside pids

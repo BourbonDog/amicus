@@ -64,7 +64,7 @@ function buildRoutingFailureLeg({ leg, legId, waveId, quiet }) {
  * Run one leg end-to-end: session record → runHeadless (shared server) →
  * leg finalize. Never throws — always resolves to a run document.
  */
-async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce }) {
+async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce, directory }) {
   const { IdleWatchdog } = require('../utils/idle-watchdog');
   const { markAborted } = require('../utils/session-abort');
   const { runHeadless } = require('../headless');
@@ -107,7 +107,7 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
     result = await runHeadless(
       leg.model, systemPrompt, userMessage, legId, project,
       timeoutMs, agent || 'build',
-      { client, server, watchdog, summaryLength, reasoning, nonce: foldNonce }
+      { client, server, watchdog, summaryLength, reasoning, nonce: foldNonce, directory }
     );
   } catch (err) {
     result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: legId };

@@ -422,6 +422,56 @@ function getTools() {
     },
   },
   {
+    name: 'amicus_council_run',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description:
+      'Run the FULL headless council engine: Stage-1 independent reviews → ' +
+      'anonymized peer cross-review → deterministic tally → non-bench chair ' +
+      'synthesis → verdict.json + report.html, without any orchestrating agent. ' +
+      'Returns {runId, runDir} immediately (async). Preferred: call amicus_wait ' +
+      'with the runId; re-call while it returns timedOut: true. Artifacts land ' +
+      'in runDir. Exit semantics: run.json status complete (full run), partial ' +
+      '(degraded: dead leg / thin judging / no chair verdict), error, aborted.',
+    inputSchema: {
+      briefingFile: z.string().describe(
+        'Path to the briefing file (self-contained material + criteria). The file is ' +
+        'copied into the run dir; councils always brief via file (no inline prompt).'
+      ),
+      models: z.array(safeModel).min(2).max(10).optional().describe(
+        `2-10 bench seats. Short aliases (${aliasNames}) or full model IDs. Omit when using 'council'.`
+      ),
+      council: z.string().optional().describe(
+        "Run a saved council or built-in bench ('free', 'budget', 'frontier') instead of 'models'."
+      ),
+      chair: z.string().optional().describe(
+        "Chair model (default 'deepseek'). Must NOT be a bench seat; synthesizes the verdict."
+      ),
+      critic: z.string().optional().describe(
+        'Optional critic seat: one bench member swaps to an adversarial brief. Must BE a bench seat. ' +
+        'Mutually exclusive with lenses.'
+      ),
+      lenses: z.array(z.string()).optional().describe(
+        'Optional expert lenses, one per seat (count must equal seat count). Forces no-ledger. ' +
+        'Mutually exclusive with critic.'
+      ),
+      outDir: z.string().optional().describe(
+        'Run directory (default <project>/council-<runId>/).'
+      ),
+      maxCost: z.number().optional().describe(
+        'Whole-run USD ceiling, checked before each paid stage launch.'
+      ),
+      timeoutMinutes: z.number().optional().describe(
+        'Per-leg timeout in minutes (existing fanout semantics). Default: 15.'
+      ),
+      gateway: z.enum(GATEWAY_MODES).optional().describe(
+        'Routing preference: auto (default), direct, or openrouter.'
+      ),
+      project: z.string().optional().describe(
+        'Optional project directory path. Auto-detected from working directory if omitted.'
+      ),
+    },
+  },
+  {
     name: 'amicus_guide',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:

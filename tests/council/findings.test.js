@@ -1,6 +1,6 @@
 // tests/council/findings.test.js
 'use strict';
-const { validateFindings } = require('../../src/council/findings');
+const { validateFindings, buildValidateDoc } = require('../../src/council/findings');
 
 const valid = '```json\n' + JSON.stringify({
   overall: 'ok',
@@ -64,5 +64,28 @@ describe('validateFindings', () => {
       { id: 1, severity: 'minor', claim: 'a' },
     ] }) + '\n```';
     expect(validateFindings(miss).errors.map(e => e.code)).toContain('MISSING_FIELD');
+  });
+});
+
+test('buildValidateDoc stamps the council v2 envelope onto a validateFindings result (v4.0 §7)', () => {
+  const result = validateFindings('prose\n```json\n{"findings":[{"id":1,"severity":"minor","claim":"c","location":"l","rationale":"r"}]}\n```');
+  const doc = buildValidateDoc(result);
+  expect(doc.schemaVersion).toBe(2);
+  expect(doc.type).toBe('council-validate');
+  expect(doc.ok).toBe(true);
+  expect(doc.findings).toEqual(result.findings);
+  expect(doc.errors).toEqual([]);
+});
+
+describe('lastJsonBlock (exported for parse-stage2)', () => {
+  const { lastJsonBlock } = require('../../src/council/findings');
+
+  test('returns the LAST fenced json block body', () => {
+    const text = 'prose\n```json\n{"a":1}\n```\nmore\n```json\n{"b":2}\n```\n';
+    expect(JSON.parse(lastJsonBlock(text))).toEqual({ b: 2 });
+  });
+
+  test('returns null when no fenced json block exists', () => {
+    expect(lastJsonBlock('no blocks here')).toBeNull();
   });
 });

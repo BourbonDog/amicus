@@ -1,0 +1,47 @@
+# JSON output schemas
+
+Every JSON document Amicus emits carries a versioned envelope: `{ "schemaVersion": <n>, "type": "<doc-type>", … }`.
+Published JSON Schemas (draft 2020-12) live in [`schemas/`](../schemas/) at the repo root and ship in the npm tarball —
+validate any `--json` output with them (e.g. `ajv validate -s node_modules/amicus/schemas/run.schema.json -d out.json`).
+
+**Stability contract:** within a `schemaVersion`, fields are only ever ADDED. Any rename/removal bumps the family's version.
+Schemas leave `additionalProperties` open for exactly this reason — a doc with extra fields still validates.
+
+## Families
+
+| Family | schemaVersion | Types |
+|---|---|---|
+| result | 2 | `run`, `wave`, `abort`, `error`, `spend`, `model-catalog`, `alias-audit`, `doctor` |
+| council | 2 (v4.0 bumped 1→2) | `council-tally`, `council-verdict`, `council-stats`, `council-validate`, `council-run` |
+
+## Files
+
+| Schema | Emitted by |
+|---|---|
+| [`run.schema.json`](../schemas/run.schema.json) | `start`/`read`/`resume`/`continue --json`; every wave leg |
+| [`wave.schema.json`](../schemas/wave.schema.json) | `fanout --json`; `wave.json` |
+| [`abort.schema.json`](../schemas/abort.schema.json) | `abort <id|--all> --json` |
+| [`error.schema.json`](../schemas/error.schema.json) | every `--json` pre-flight/validation/route failure (stdout, exit 1) and every MCP error tool-text |
+| [`spend.schema.json`](../schemas/spend.schema.json) | `spend --json` |
+| [`model-catalog.schema.json`](../schemas/model-catalog.schema.json) | `models --json` |
+| [`alias-audit.schema.json`](../schemas/alias-audit.schema.json) | `models --check --json` |
+| [`doctor.schema.json`](../schemas/doctor.schema.json) | `doctor --json` |
+| [`council-tally.schema.json`](../schemas/council-tally.schema.json) | `council tally --json`; `amicus_council_tally` |
+| [`council-verdict.schema.json`](../schemas/council-verdict.schema.json) | `council verdict --json`; `amicus_verdict`; `verdict.json` |
+| [`council-stats.schema.json`](../schemas/council-stats.schema.json) | `council stats --json`; `amicus_council_stats` |
+| [`council-validate.schema.json`](../schemas/council-validate.schema.json) | `council validate --json` |
+| [`council-run.schema.json`](../schemas/council-run.schema.json) | the headless engine's `run.json` manifest (`amicus council run` — lands after the trust-foundation phase; the schema is published ahead as the contract) |
+
+## Breaking change at v4.0 — `council stats --json`
+
+Pre-4.0, `council stats --json` (and the `amicus_council_stats` MCP tool) emitted a **bare array** of per-model rows.
+v4.0 wraps it: `{ "schemaVersion": 2, "type": "council-stats", "models": [ … ] }`. The row shape is unchanged.
+This is the one non-additive shape change in the envelope unification; migrate `doc[0]` → `doc.models[0]`.
+
+## Documented exclusions
+
+- **Council ledger** (`council-ledger.jsonl`): internal append-only storage, stays at its own v1 row format — not an emitted doc.
+- **`amicus_list`** (MCP): returns a bare JSON array of session rows; a wrap would be a second breaking change and is deliberately not taken.
+- **`setup` / `update` / `key`**: interactive-only commands with no `--json` mode.
+- **MCP acks and live-status snapshots** (start/resume/continue/abort acks, `amicus_status`/`amicus_wait` bodies): carry the envelope keys with subject-family types (`run`/`wave`/`abort`) but are point-in-time snapshots, not the durable result docs the published schemas describe.
+- **Fencing:** MCP council tool text arrives wrapped in the `<untrusted_sidecar_output>` fence with the JSON intact inside; CLI `--json` stdout is never fenced.

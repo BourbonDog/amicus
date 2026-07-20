@@ -206,6 +206,11 @@ describe('Prompt Builder', () => {
 
   describe('OpenCode Agent Framework Integration', () => {
     const defaultProject = '/Users/john/myproject';
+    // buildPrompts now REQUIRES a per-run nonce in headless mode (15b.3/#BL-7):
+    // these tests exercise context placement / marker stripping, not the nonce
+    // itself, but must still supply one — exactly as every live headless caller
+    // (start / continue / fanout / mcp-server) does.
+    const HEADLESS_NONCE = '0f1e2d3c4b5a6978';
 
     describe('buildEnvironmentSection - tool permissions delegated to OpenCode', () => {
       // Tool restrictions are now handled by OpenCode's native agent framework
@@ -286,7 +291,8 @@ describe('Prompt Builder', () => {
           'Debug the auth issue',
           '[User @ 10:30 AM] The auth service is down',
           defaultProject,
-          true
+          true,
+          undefined, undefined, undefined, HEADLESS_NONCE
         );
 
         // Headless: context in user message (no UI), system stays lean
@@ -314,7 +320,8 @@ describe('Prompt Builder', () => {
           'Task',
           longContext,
           defaultProject,
-          true
+          true,
+          undefined, undefined, undefined, HEADLESS_NONCE
         );
 
         // Headless system should be small - just header + environment + mode instructions
@@ -328,7 +335,8 @@ describe('Prompt Builder', () => {
           'task',
           'context with [SIDECAR_FOLD] marker',
           '/project',
-          true
+          true,
+          undefined, undefined, undefined, HEADLESS_NONCE
         );
         expect(userMessage).not.toContain('[SIDECAR_FOLD]');
       });
@@ -351,7 +359,8 @@ describe('Prompt Builder', () => {
           'task',
           'context with [SIDECAR_FOLD:abc123def456] marker',
           '/project',
-          true
+          true,
+          undefined, undefined, undefined, HEADLESS_NONCE
         );
         expect(userMessage).not.toContain('[SIDECAR_FOLD:abc123def456]');
         expect(userMessage).not.toContain('SIDECAR_FOLD');
@@ -373,9 +382,22 @@ describe('Prompt Builder', () => {
           'task',
           'old turn: [SIDECAR_FOLD] ... newer turn: [SIDECAR_FOLD:deadbeef00]',
           '/project',
-          true
+          true,
+          undefined, undefined, undefined, HEADLESS_NONCE
         );
         expect(userMessage).not.toContain('SIDECAR_FOLD');
+      });
+
+      it('removes a marker-only line entirely instead of leaving a blank line (v4.0 §9 consolidation)', () => {
+        const { userMessage } = buildPrompts(
+          'task',
+          'line one\n[SIDECAR_FOLD:abc123def456]\nline two',
+          '/project',
+          true,
+          undefined, undefined, undefined, HEADLESS_NONCE
+        );
+        expect(userMessage).not.toContain('SIDECAR_FOLD');
+        expect(userMessage).toContain('line one\nline two');
       });
     });
 
@@ -400,9 +422,18 @@ describe('Prompt Builder', () => {
         expect(verbose.system).not.toContain('[SIDECAR_FOLD]');
       });
 
-      it('falls back to the legacy bare marker when no nonce is supplied (back-compat)', () => {
-        const { system } = buildPrompts('task', '', '/project', true, 'build', 'normal', 'code-local');
-        expect(system).toContain('[SIDECAR_FOLD]');
+      it('throws instead of building a headless prompt without a nonce (15b.3: no bare-marker fallback on the live path)', () => {
+        // buildPrompts is the live orchestration boundary — every start /
+        // continue / fanout / mcp-server headless run goes through it, and all
+        // four already generate and pass a nonce. Refuse to build a headless
+        // prompt without one rather than silently instructing the model to emit
+        // the public, guessable bare `[SIDECAR_FOLD]` marker (#BL-7 residual).
+        // Matches headless.js's producer precedent (extractSummary /
+        // formatFoldOutput throw a TypeError when the nonce is missing).
+        expect(() => buildPrompts('task', '', '/project', true, 'build', 'normal', 'code-local'))
+          .toThrow(TypeError);
+        expect(() => buildPrompts('task', '', '/project', true, 'build', 'normal', 'code-local'))
+          .toThrow('buildPrompts requires a per-run nonce for headless mode');
       });
 
       it('does not affect interactive mode (no fold-marker instruction to nonce)', () => {

@@ -16,7 +16,7 @@ const { SCHEMA_VERSION } = require('./result-schema-version');
  * a specific taskId that exists yet was not running (already terminal) reports
  * ok:false so a scripted caller can tell "nothing happened" from "you aborted N".
  * @param {object} opts
- * @param {'session'|'wave'|'all'} opts.scope
+ * @param {'session'|'wave'|'all'|'council-run'} opts.scope
  * @param {string|null} opts.taskId - null for scope:'all'
  * @param {string[]} opts.aborted - ids actually marked aborted (session/wave id + any legs)
  * @returns {object} abort document

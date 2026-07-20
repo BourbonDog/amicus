@@ -79,4 +79,16 @@ function deriveReliability(opts = {}) {
   });
 }
 
-module.exports = { buildLedgerRows, appendRun, deriveReliability, LEDGER_FILE, LEDGER_SCHEMA_VERSION };
+/**
+ * v4.0 §7: wrap the deriveReliability() rows in the council v2 envelope —
+ * THE one sanctioned breaking shape change (`council stats --json` used to
+ * emit the bare array). Human rendering keeps consuming the bare rows.
+ * @param {Array<object>} models deriveReliability() output
+ * @returns {{schemaVersion: number, type: 'council-stats', models: Array<object>}}
+ */
+function buildStatsDoc(models) {
+  const { COUNCIL_SCHEMA_VERSION } = require('./tally');
+  return { schemaVersion: COUNCIL_SCHEMA_VERSION, type: 'council-stats', models };
+}
+
+module.exports = { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_FILE, LEDGER_SCHEMA_VERSION };

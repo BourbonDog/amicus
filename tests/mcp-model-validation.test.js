@@ -79,10 +79,9 @@ describe('MCP eager model validation', () => {
 
         expect(result.isError).toBe(true);
         const parsed = JSON.parse(result.content[0].text);
-        expect(parsed).toMatchObject({
-          type: 'model_route_error', field: 'model',
-          requested: 'nonexistent-model', reason: 'invalid_descriptor',
-        });
+        expect(parsed).toMatchObject({ schemaVersion: 2, type: 'error', ok: false });
+        expect(parsed.error.code).toBe('BAD_MODEL');
+        expect(parsed.error.message).toContain('could not be parsed');
       });
       expect(spawnCalled).toBe(false);
     });
@@ -114,9 +113,8 @@ describe('MCP eager model validation', () => {
 
         expect(result.isError).toBe(true);
         const parsed = JSON.parse(result.content[0].text);
-        expect(parsed).toMatchObject({
-          type: 'model_route_error', reason: 'no_openrouter_key', preferredGateway: 'openrouter',
-        });
+        expect(parsed).toMatchObject({ schemaVersion: 2, type: 'error', ok: false });
+        expect(parsed.error.code).toBe('MISSING_KEY'); // for the no_openrouter_key case
       });
       expect(spawnCalled).toBe(false);
     });
@@ -206,7 +204,7 @@ describe('MCP eager model validation', () => {
         expect(result.isError).toBe(true);
         expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: undefined }));
         const parsed = JSON.parse(result.content[0].text);
-        expect(parsed.type).toBe('model_route_error');
+        expect(parsed.type).toBe('error');
       });
       expect(spawnCalled).toBe(false);
     });
@@ -237,6 +235,16 @@ describe('MCP eager model validation', () => {
         expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: 'gemini' }));
       });
       expect(spawnCalled).toBe(true);
+    });
+
+    test('validation failure returns the {schemaVersion, type:error} doc (v4.0 §7)', async () => {
+      const handlers = require('../src/mcp-server').handlers;
+      const res = await handlers.amicus_start({ prompt: '' }, process.cwd());
+      expect(res.isError).toBe(true);
+      const parsed = JSON.parse(res.content[0].text);
+      expect(parsed).toMatchObject({ schemaVersion: 2, type: 'error', ok: false });
+      expect(parsed.error.code).toBe('MISSING_PROMPT');
+      expect(parsed.error.message).toContain('prompt');
     });
   });
 
@@ -269,7 +277,8 @@ describe('MCP eager model validation', () => {
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('bogus-alias');
         const parsed = JSON.parse(result.content[0].text);
-        expect(parsed).toMatchObject({ type: 'model_route_error', reason: 'invalid_descriptor' });
+        expect(parsed.type).toBe('error');
+        expect(parsed.error.message).toContain('could not be parsed');
       });
       expect(spawnCalled).toBe(false);
     });
@@ -298,7 +307,8 @@ describe('MCP eager model validation', () => {
 
         expect(result.isError).toBe(true);
         const parsed = JSON.parse(result.content[0].text);
-        expect(parsed).toMatchObject({ type: 'model_route_error', reason: 'no_direct_integration' });
+        expect(parsed.type).toBe('error');
+        expect(parsed.error.message).toContain('no direct API integration');
         expect(resolveRouteForLaunch).toHaveBeenCalledWith(expect.objectContaining({ model: 'grok', gatewayMode: 'direct' }));
       });
       expect(spawnCalled).toBe(false);

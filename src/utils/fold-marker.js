@@ -70,10 +70,31 @@ function extractNonceFromText(text) {
   return m ? m[1] : null;
 }
 
+/**
+ * v4.0 §9 (BL-7 done-done): remove every fold-marker occurrence — bare
+ * `[SIDECAR_FOLD]` and nonced `[SIDECAR_FOLD:<nonce>]` — from a text.
+ * A line consisting of ONLY a marker (plus horizontal whitespace) is removed
+ * together with its line terminator; a marker embedded mid-line is removed in
+ * place, keeping the rest of the line. Superset of prompt-builder.js's old
+ * inline regex (which left empty lines behind) — used by the resume replay
+ * (src/sidecar/resume.js) and buildPrompts (src/prompt-builder.js) so a
+ * replayed conversation never carries a stale wire-format token.
+ * @param {string|null|undefined} text
+ * @returns {string|null|undefined} falsy input is returned unchanged
+ */
+function stripFoldMarkers(text) {
+  if (!text) { return text; }
+  const marker = `\\[${FOLD_MARKER_PREFIX}(:[^\\]]*)?\\]`;
+  const markerOnlyLine = new RegExp(`^[^\\S\\r\\n]*${marker}[^\\S\\r\\n]*(?:\\r?\\n|$)`, 'gm');
+  const inlineMarker = new RegExp(marker, 'g');
+  return text.replace(markerOnlyLine, '').replace(inlineMarker, '');
+}
+
 module.exports = {
   FOLD_MARKER_PREFIX,
   generateFoldNonce,
   buildFoldMarker,
   trailingFoldMarkerRegex,
   extractNonceFromText,
+  stripFoldMarkers,
 };

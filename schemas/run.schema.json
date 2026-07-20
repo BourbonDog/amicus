@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/run.schema.json",
+  "title": "amicus run result document",
+  "description": "Single-session result (`start|read|resume|continue --json`; every wave leg). Fields are only ADDED within a schemaVersion.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "taskId", "status"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "run" },
+    "taskId": { "type": "string" },
+    "waveId": { "type": ["string", "null"] },
+    "model": { "type": ["string", "null"] },
+    "modelInput": { "type": ["string", "null"] },
+    "agent": { "type": ["string", "null"] },
+    "status": { "type": "string" },
+    "summary": { "type": ["string", "null"] },
+    "error": { "type": ["string", "null"] },
+    "createdAt": { "type": ["string", "null"] },
+    "completedAt": { "type": ["string", "null"] },
+    "durationMs": { "type": ["number", "null"] },
+    "sessionDir": { "type": ["string", "null"] },
+    "opencodeSessionId": { "type": ["string", "null"] },
+    "usage": { "type": ["object", "null"] }
+  }
+}

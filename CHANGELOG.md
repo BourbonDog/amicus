@@ -5,6 +5,69 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-07-20
+
+The **headless council engine** release. `amicus council run` (CLI) and `amicus_council_run`
+(MCP) execute the full adjudicated pipeline — Stage-1 independent reviews → anonymized peer
+cross-review → deterministic tally → non-Claude chair verdict — with **no Claude runtime**,
+reusing the existing pure primitives (`validateFindings`, `tally`, `buildVerdict`, the report
+renderers, the ledger) under a run-directory state machine. On top of it, the **Council Review
+GitHub Action v2** posts a real adjudicated verdict on labeled PRs (check run + annotations,
+sticky comment, evidence artifact, opt-in gating). The major bump exists for the three trust
+changes below — see **Migration**.
+
+### Migration (v3 → v4)
+
+| v3 behavior | v4 behavior / remedy |
+| --- | --- |
+| MCP council tools (`amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) returned **bare JSON** tool text | Their JSON is now wrapped in the `<untrusted_sidecar_output>` fence (same mechanism as `amicus_read`), and the new `amicus_council_run` returns fenced text too. MCP consumers that parse the tool text must unwrap the fence first; the JSON inside is byte-intact. **CLI `--json` output is unchanged and stays the byte-stable programmatic channel.** |
+| `amicus council stats --json` printed a **bare array** of per-model rows | It now prints `{"schemaVersion": 2, "type": "council-stats", "models": [...]}` — the one breaking shape change in the envelope unification. Update scripts to read `.models`. Every other envelope change is additive (`schemaVersion`/`type` injected onto existing docs; council family bumps 1 → 2; `verdict.json` gains nullable `overallVerdict`). |
+| Some `--json` failure paths printed **plain text on stderr** (no model configured, model-selection cancelled, route errors, `status` with a missing/invalid task id; MCP validation/route errors as unstructured text) | Under `--json` these now emit the standard **error envelope on stdout** with the documented exit codes; MCP error text is error-doc-shaped (`{schemaVersion, type: "error", ...}`). Scripts that scraped stderr strings must read the stdout envelope. Human-mode (no `--json`) stderr behavior is unchanged. |
+| Bare `[SIDECAR_FOLD]` markers were still written/parsed on legacy internal paths | The fold marker is **nonce-required** end to end: the bare literal survives only as the prefix inside the nonced form, resume replay strips residual fold-marker lines, and the internal legacy bare-marker finder/writer fallbacks are removed (`docs/SHIMS.md` updated). Wire-format consumers of the **nonced** form are unaffected. |
+| Council Review Action v1 (fanout + synthesis; `max_cost` default `1.00`) | Action v2 runs `amicus council run` and posts an adjudicated verdict. `workflow_call` callers: new optional inputs `chair` (default `deepseek`), `critic`, `fail_on` (`none`\|`fix`\|`rethink`, default `none` = report-only); **`max_cost` default is now `2.00`** (a council is ~2 waves + chair + repairs vs v1's wave + synthesis) — pass `max_cost: '1.00'` explicitly to keep the old ceiling. `models`/`require_label`/secrets semantics unchanged. A chair listed in `models` is excluded from the bench at run time (the engine requires the chair not to be seated). |
+
+### Added
+
+- **`amicus council run`** — the headless council engine (CLI): `--prompt-file` briefing,
+  `--models`/`--council` bench (≥2 seats), `--chair` (default `deepseek`, never a bench seat),
+  optional `--critic` / `--lenses` (mutually exclusive), whole-run `--max-cost`, per-leg
+  `--timeout`, durable `--out-dir` run directory (`review-*.md`, `bundle-stage2.md`,
+  `judge-*.md`, `chair-output.md`, `tally-input.json`, `tally.json`, `verdict.json` with
+  **`overallVerdict`**, `report.html`, `run.json`), exit contract `0` full / `2` degraded /
+  `1` failed, SIGINT/SIGTERM finalization, and `status`/`wait`/`list`/`abort` integration via a
+  sessions-dir pointer file. Stage 4 stays human: the engine is report-only.
+- **`amicus_council_run`** MCP tool (15th tool): briefing-via-file like `amicus_fanout`, returns
+  `{runId, runDir}` immediately (async).
+- **Council Review GitHub Action v2** (`.github/workflows/council-review.yml`): adjudicated
+  verdict as a **check run** ("Council Review") with Confirmed-finding annotations (best-effort
+  `file:line` parse, 50-per-request chunking, file-level fallback, unmapped findings listed in
+  the summary), **sticky comment v2** (chair verdict line, tier table, per-tier lists,
+  street-cred table, cost line, artifact link), **evidence artifact** (the full run directory),
+  and opt-in gating via `fail_on`. Label gate, fork soft-skip, no-checkout, and the duplicated
+  `neutralize()` rules carry forward from v1.
+- **Published JSON Schemas** (`schemas/`, draft 2020-12, one file per doc type) shipped in the
+  npm tarball and documented in `docs/schemas.md`; every builder's real output is
+  schema-validated in tests (ajv as a devDependency only).
+- `docs/council.md` § `amicus council run` (headless reference), usage.md/README coverage, and a
+  headless-context pointer in the `second-opinion` skill.
+
+### Changed
+
+- **Unified JSON envelope convention:** every emitted doc carries `{schemaVersion, type}`; the
+  council family bumps **1 → 2** (additive fields, no re-nesting); `council validate --json`
+  gains the envelope fields; CLI `status --json` gains `schemaVersion`; MCP success returns get
+  `schemaVersion`/`type` injected additively. Ledger JSONL stays internal at v1 (documented
+  exclusion). Interactive-only commands (`setup`, `update`, `key`) are documented envelope
+  exclusions.
+- `--json` failure paths routed through the error envelope on stdout (see Migration).
+- MCP council-tool JSON is fenced with `<untrusted_sidecar_output>` (see Migration);
+  `untrusted-fence.js`'s module doc and the skill's Cowork-transport note updated to match.
+
+### Removed
+
+- The legacy bare fold-marker internals: `findLegacyBareTrailingMarker` and the bare-writer
+  fallback in `formatFoldOutput` (`nonce` is now a required argument). See Migration.
+
 ## [3.2.3] - 2026-07-18
 
 ### Fixed

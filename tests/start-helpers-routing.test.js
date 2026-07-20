@@ -97,22 +97,28 @@ describe('resolveLaunchModel', () => {
     exitSpy.mockRestore();
   });
 
-  test('error with args.json:true writes structured JSON (type:model_route_error) to stderr and exits 1', async () => {
+  test('error with args.json:true writes the error doc to STDOUT and exits 1 (v4.0 §7)', async () => {
     const resolveRouteForLaunch = jest.fn().mockResolvedValue({
       kind: 'error', type: 'model_route_error', field: 'model', requested: 'ghost/model',
       reason: 'model_not_found', preferredGateway: null, suggestions: [],
     });
     const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch });
+    const outSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
 
     await expect(resolveLaunchModel({ model: 'ghost/model', json: true })).rejects.toThrow('exit:1');
 
     expect(exitSpy).toHaveBeenCalledWith(1);
-    const written = errSpy.mock.calls.map((c) => c[0]).join('');
-    expect(written).toContain('"type":"model_route_error"');
+    const written = outSpy.mock.calls.map((c) => c[0]).join('');
     const doc = JSON.parse(written.trim());
-    expect(doc).toMatchObject({ type: 'model_route_error', reason: 'model_not_found', requested: 'ghost/model' });
+    expect(doc).toMatchObject({
+      schemaVersion: 2, type: 'error', ok: false,
+      error: { code: 'BAD_MODEL' },
+    });
+    expect(doc.error.message).toContain('not found in the catalog');
+    expect(errSpy).not.toHaveBeenCalled();
+    outSpy.mockRestore();
     errSpy.mockRestore();
     exitSpy.mockRestore();
   });
@@ -146,21 +152,24 @@ describe('resolveLaunchModel', () => {
     exitSpy.mockRestore();
   });
 
-  test('selection_required with args.json:true still routes through the picker; a cancel writes plain text, not JSON', async () => {
+  test('selection_required with args.json:true: a cancelled picker writes the error doc to stdout (v4.0 §7)', async () => {
     const resolveRouteForLaunch = jest.fn().mockResolvedValue({
       kind: 'selection_required', requested: 'gpt-5', suggestions: [{ model: 'openai/gpt-5.5', gateway: 'direct' }],
     });
     const promptRouteSelection = jest.fn().mockRejectedValue(new Error('Model selection cancelled.'));
     const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, promptRouteSelection });
+    const outSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
 
     await expect(resolveLaunchModel({ model: 'gpt-5', json: true })).rejects.toThrow('exit:1');
 
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    const written = errSpy.mock.calls.map((c) => c[0]).join('');
-    expect(written).not.toContain('"type":"model_route_error"');
-    expect(written).toMatch(/cancelled/i);
+    const written = outSpy.mock.calls.map((c) => c[0]).join('');
+    const doc = JSON.parse(written.trim());
+    expect(doc.type).toBe('error');
+    expect(doc.error.code).toBe('BAD_MODEL');
+    expect(doc.error.message).toMatch(/cancelled/i);
+    outSpy.mockRestore();
     errSpy.mockRestore();
     exitSpy.mockRestore();
   });
@@ -249,6 +258,26 @@ describe('resolveLaunchModel', () => {
       'No model specified and no default configured. Run \'amicus setup\' to set a default model.'
     );
     expect(resolveRouteForLaunch).not.toHaveBeenCalled();
+    errSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  test('no model + no default with args.json:true writes the error doc to stdout and exits 1 (v4.0 §7)', async () => {
+    const resolveRouteForLaunch = jest.fn();
+    const { resolveLaunchModel } = loadStartHelpers({ resolveRouteForLaunch, loadConfig: () => null });
+    const outSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
+
+    await expect(resolveLaunchModel({ json: true })).rejects.toThrow('exit:1');
+
+    const doc = JSON.parse(outSpy.mock.calls.map((c) => c[0]).join('').trim());
+    expect(doc.type).toBe('error');
+    expect(doc.error.code).toBe('BAD_MODEL');
+    expect(doc.error.message).toContain('No model specified and no default configured');
+    expect(errSpy).not.toHaveBeenCalled();
+    expect(resolveRouteForLaunch).not.toHaveBeenCalled();
+    outSpy.mockRestore();
     errSpy.mockRestore();
     exitSpy.mockRestore();
   });

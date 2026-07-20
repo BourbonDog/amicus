@@ -2,11 +2,11 @@
 'use strict';
 const fs = require('fs');
 const { tally } = require('./council/tally');
-const { deriveReliability, appendRun } = require('./council/ledger');
+const { deriveReliability, appendRun, buildStatsDoc } = require('./council/ledger');
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
-const { validateFindings } = require('./council/findings');
+const { validateFindings, buildValidateDoc } = require('./council/findings');
 const { buildVerdict, writeVerdictAtomic } = require('./council/verdict');
 const {
   runSave: runCouncilSave,
@@ -44,7 +44,9 @@ function runTally(inputPath, useJson, opts = {}) {
 
 function runStats(useJson) {
   const agg = deriveReliability();
-  process.stdout.write(useJson ? JSON.stringify(agg, null, 2) + '\n' : renderStats(agg));
+  // v4.0 §7: --json emits the enveloped doc (breaking: was a bare array);
+  // human output is unchanged (renderStats still takes the rows).
+  process.stdout.write(useJson ? JSON.stringify(buildStatsDoc(agg), null, 2) + '\n' : renderStats(agg));
   return 0;
 }
 
@@ -117,7 +119,7 @@ function runValidate(filePath, useJson) {
       hint: 'pass a Stage-1 reviewer output file (prose + trailing ```json findings block)' });
   }
   const result = validateFindings(text);
-  process.stdout.write(useJson ? JSON.stringify(result, null, 2) + '\n' : renderValidate(result));
+  process.stdout.write(useJson ? JSON.stringify(buildValidateDoc(result), null, 2) + '\n' : renderValidate(result));
   return result.ok ? 0 : 2;
 }
 
@@ -185,6 +187,7 @@ function renderVerdict(v, outPath) {
 async function handleCouncil(args) {
   const sub = args._[1];
   const useJson = !!args.json;
+  if (sub === 'run') { return require('./cli-handlers-council-run').handleCouncilRun(args); }
   if (sub === 'tally') { return runTally(args._[2], useJson, { append: !args['no-ledger'] }); }
   if (sub === 'stats') { return runStats(useJson); }
   if (sub === 'report') { return runReport(args, useJson); }
@@ -195,7 +198,7 @@ async function handleCouncil(args) {
   if (sub === 'show') { return runCouncilShow(args._[2], useJson); }
   return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
     message: `unknown council subcommand '${sub || ''}'`,
-    hint: 'amicus council tally|stats|report|validate|verdict|save|list|show' });
+    hint: 'amicus council run|tally|stats|report|validate|verdict|save|list|show' });
 }
 
 module.exports = { handleCouncil };

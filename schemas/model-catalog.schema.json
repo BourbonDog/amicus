@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/model-catalog.schema.json",
+  "title": "amicus model-catalog document",
+  "description": "`models [--search|--refresh] --json` result.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "count", "models"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "model-catalog" },
+    "fetchedAt": { "type": ["number", "null"] },
+    "refreshed": { "type": "boolean" },
+    "search": { "type": ["string", "null"] },
+    "count": { "type": "number" },
+    "models": { "type": "array", "items": { "type": "object" } },
+    "lastRefreshAttempt": { "type": ["number", "null"] },
+    "lastRefreshError": { "type": ["string", "null"] }
+  }
+}

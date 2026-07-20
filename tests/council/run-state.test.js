@@ -1,0 +1,143 @@
+// tests/council/run-state.test.js
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const rs = require('../../src/council/run-state');
+
+let tmp;
+beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-state-')); });
+afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+const runDirOf = () => path.join(tmp, 'council-abc123');
+
+describe('run.json init + checkpoint', () => {
+  test('initRun creates the dir and writes the seed', () => {
+    const run = rs.initRun(runDirOf(), {
+      schemaVersion: 2, type: 'council-run', runId: 'abc123', status: 'running',
+      stages: [], createdAt: '2026-07-19T00:00:00.000Z',
+    });
+    expect(run.type).toBe('council-run');
+    const onDisk = JSON.parse(fs.readFileSync(path.join(runDirOf(), 'run.json'), 'utf-8'));
+    expect(onDisk.runId).toBe('abc123');
+    expect(onDisk.schemaVersion).toBe(2);
+  });
+
+  test('initRun over an existing run.json preserves createdAt (MCP pre-seed then CLI child)', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running', createdAt: 'T0' });
+    const run = rs.initRun(runDirOf(), { runId: 'abc123', status: 'running', createdAt: 'T1', pid: 42 });
+    expect(run.createdAt).toBe('T0');
+    expect(run.pid).toBe(42);
+  });
+
+  test('checkpoint merges and survives crash-resume reads', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running', stages: [] });
+    rs.checkpoint(runDirOf(), { labelMap: { 'Review A': 'deepseek' } });
+    const back = rs.readRun(runDirOf());
+    expect(back.labelMap).toEqual({ 'Review A': 'deepseek' });
+    expect(back.status).toBe('running');
+  });
+
+  test('abort-wins: a later checkpoint cannot demote status aborted', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted', exitCode: 130 });
+    const run = rs.checkpoint(runDirOf(), { status: 'complete', usage: null });
+    expect(run.status).toBe('aborted');
+    expect(run.usage).toBeNull(); // non-status fields still merge
+  });
+
+  test('abort-wins: falsy status (null) cannot overwrite aborted', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted', exitCode: 130 });
+    const run = rs.checkpoint(runDirOf(), { status: null, usage: { tokens: 5 } });
+    expect(run.status).toBe('aborted');
+    expect(run.usage).toEqual({ tokens: 5 });
+  });
+
+  test('abort-wins: omitted status cannot change aborted', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted', exitCode: 130 });
+    const run = rs.checkpoint(runDirOf(), { usage: { tokens: 9 } }); // no status key
+    expect(run.status).toBe('aborted');
+    expect(run.usage).toEqual({ tokens: 9 });
+  });
+
+  test('abort-wins: initRun after aborted checkpoint keeps aborted', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted', exitCode: 130 });
+    const run = rs.initRun(runDirOf(), { runId: 'abc123', status: 'complete', pid: 42 });
+    expect(run.status).toBe('aborted');
+    expect(run.pid).toBe(42);
+  });
+
+  // Whole-branch review FIX 3: abort-wins pinned only `status`; a later
+  // (racing) success finalize's exitCode:0 still overwrote, yielding
+  // {status:'aborted', exitCode:0}. Plan C's Action v2 branches on exitCode
+  // (0 and 2 proceed), so an aborted run would be consumed as clean success.
+  // exitCode must be pinned to a signal-abort code (130/143) too.
+  test('abort-wins: a racing success finalize cannot demote exitCode 130 to 0', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted', exitCode: 130 });
+    const run = rs.checkpoint(runDirOf(), { status: 'complete', exitCode: 0, usage: { cost: { amount: 1 } } });
+    expect(run.status).toBe('aborted');
+    expect(run.exitCode).toBe(130);
+    expect(run.usage).toEqual({ cost: { amount: 1 } }); // non-exitCode fields still merge
+  });
+
+  test('abort-wins: no recorded abort exitCode defaults the pin to 143 (SIGTERM), never 0', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted' }); // no exitCode recorded on the abort itself
+    const run = rs.checkpoint(runDirOf(), { status: 'complete', exitCode: 0 });
+    expect(run.status).toBe('aborted');
+    expect(run.exitCode).toBe(143);
+  });
+
+  test('abort-wins: FIRST write that sets status aborted WITHOUT exitCode pins exitCode to 143 (MF-3 fix)', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    // First write sets status to aborted without an exitCode (e.g. abortCouncilRun)
+    const run = rs.checkpoint(runDirOf(), { status: 'aborted', completedAt: '2026-07-20T00:00:00.000Z' });
+    expect(run.status).toBe('aborted');
+    expect(run.exitCode).toBe(143); // must pin to canonical abort code, not undefined
+  });
+
+  test('readRun returns null for a missing/corrupt file', () => {
+    expect(rs.readRun(path.join(tmp, 'nope'))).toBeNull();
+  });
+});
+
+describe('updateStage', () => {
+  test('upserts by name, preserving other stages', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running', stages: [] });
+    rs.updateStage(runDirOf(), 'stage1', { status: 'running', startedAt: 'T0', waveId: 'abc123-s1' });
+    rs.updateStage(runDirOf(), 'stage2', { status: 'running', startedAt: 'T1' });
+    const run = rs.updateStage(runDirOf(), 'stage1', { status: 'complete', completedAt: 'T2' });
+    expect(run.stages).toEqual([
+      { name: 'stage1', status: 'complete', startedAt: 'T0', completedAt: 'T2', waveId: 'abc123-s1' },
+      { name: 'stage2', status: 'running', startedAt: 'T1' },
+    ]);
+  });
+});
+
+describe('pointer files', () => {
+  test('writePointer + readPointer roundtrip, with and without the council- prefix', () => {
+    rs.writePointer(tmp, 'abc123', runDirOf());
+    expect(rs.pointerPath(tmp, 'abc123')).toBe(
+      path.join(tmp, '.claude', 'amicus_sessions', 'council-abc123.json'));
+    expect(rs.readPointer(tmp, 'abc123')).toEqual({ runId: 'abc123', runDir: runDirOf() });
+    expect(rs.readPointer(tmp, 'council-abc123')).toEqual({ runId: 'abc123', runDir: runDirOf() });
+  });
+
+  test('readPointer returns null when absent', () => {
+    expect(rs.readPointer(tmp, 'nope99')).toBeNull();
+  });
+
+  test('listPointers enumerates only well-formed council pointers', () => {
+    rs.writePointer(tmp, 'abc123', runDirOf());
+    rs.writePointer(tmp, 'def456', path.join(tmp, 'council-def456'));
+    const root = path.join(tmp, '.claude', 'amicus_sessions');
+    fs.writeFileSync(path.join(root, 'council-broken.json'), '{nope');
+    fs.mkdirSync(path.join(root, 'a1b2c3d4'), { recursive: true }); // ordinary session dir
+    const ids = rs.listPointers(tmp).map(p => p.runId).sort();
+    expect(ids).toEqual(['abc123', 'def456']);
+  });
+});

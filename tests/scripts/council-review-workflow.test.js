@@ -4,13 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const WF = path.join(__dirname, '..', '..', '.github', 'workflows', 'council-review.yml');
 
-describe('council-review workflow (Phase 10 v1)', () => {
+describe('council-review workflow (v2 — adjudicated council engine)', () => {
   const yml = () => fs.readFileSync(WF, 'utf-8');
 
   test('exists, is reusable (workflow_call) and label-gated on pull_request', () => {
     const y = yml();
     expect(y).toContain('workflow_call');
-    expect(y).toContain("types: [opened, synchronize, reopened, labeled]");
+    expect(y).toContain('types: [opened, synchronize, reopened, labeled]');
     expect(y).toContain("'council-review'");
   });
 
@@ -20,18 +20,22 @@ describe('council-review workflow (Phase 10 v1)', () => {
     expect(y).toContain('available=false');
   });
 
-  test('fanout is headless-safe: no context harvest, no catalog fetch, cost + time bounded, JSON output', () => {
+  test('council run is headless-safe: no catalog fetch, cost + time bounded, JSON output, pinned out-dir', () => {
     const y = yml();
-    for (const flag of ['--no-context', '--no-validate-model', '--max-cost', '--timeout 10', '--json', '--prompt-file']) {
+    // NOTE: --no-context is deliberately NOT passed and NOT pinned here — the
+    // engine pins no-context internally on every council leg (spec §5,
+    // run-launch), unlike the v1 raw-fanout pipeline which had to pass it.
+    for (const flag of ['--no-validate-model', '--max-cost', '--timeout 10', '--json', '--prompt-file', '--out-dir']) {
       expect(y).toContain(flag);
     }
-    expect(y).toContain('timeout-minutes: 25');
+    expect(y).toContain('timeout-minutes: 45');
     expect(y).toContain('cancel-in-progress: true');
   });
 
-  test('cheap bench only — never o3/o3-pro/opus', () => {
+  test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
-    expect(y).toContain("deepseek,gemini,glm");
+    expect(y).toContain('deepseek,gemini,glm');
+    expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).not.toMatch(/\bo3\b|o3-pro|opus/);
   });
 
@@ -42,20 +46,22 @@ describe('council-review workflow (Phase 10 v1)', () => {
     expect(y).toContain('pull-requests: write');
   });
 
-  test('is honest about v1 scope: fanout only — never invokes the adjudicated council subcommands', () => {
+  test('v2 drives the real engine: council run invoked; the v1 fanout+synthesis pipeline and hand-rolled subcommand calls are gone', () => {
     const y = yml();
-    // Assert absence of actual INVOCATIONS — a prose mention in a comment must not trip this,
-    // and the header comment is worded to avoid the bare subcommand literals anyway.
-    expect(y).not.toMatch(/amicus\s+council\s+(tally|report)/);
-    expect(y.toLowerCase()).toContain('deferred to v2');
+    expect(y).toMatch(/amicus council run/);
+    expect(y).not.toMatch(/amicus\s+council\s+(tally|report|verdict|validate)\b/);
+    expect(y).not.toMatch(/amicus fanout/);
   });
 
-  test('cost footer reads the cost OBJECT shape (amount + source) — never the raw object', () => {
+  test('exit codes 0 and 2 both proceed (degraded runs still report); anything else fails the job', () => {
+    const y = yml();
+    expect(y).toContain('[ "$EC" -ne 0 ] && [ "$EC" -ne 2 ]');
+  });
+
+  test('cost line reads the cost OBJECT shape (amount + source) from run.json — never the raw object', () => {
     const y = yml();
     // sumWaveUsage (src/utils/pricing.js) makes usage.cost an OBJECT
-    // ({amount, currency, source, ...}), non-null even on cold runners —
-    // a scalar-shaped `.usage.cost // "unknown"` read renders raw JSON in
-    // every comment and its fallback never fires.
+    // ({amount, currency, source, ...}); run.json carries the same shape.
     expect(y).toContain('.usage.cost.amount');
     expect(y).toContain('.usage.cost.source');
     expect(y).not.toContain('.usage.cost // ');
@@ -75,27 +81,85 @@ describe('council-review workflow (Phase 10 v1)', () => {
     const prText = lines.filter((l) => /\$\{\{\s*github\.event\.pull_request\.(title|body)/.test(l));
     expect(prText.length).toBeGreaterThan(0); // the title IS used — but only through env
     for (const l of prText) {
-      // Every use must be an env-assignment line (KEY: ${{ ... }}) — a raw
-      // ${{ }} template expansion inside a run: script is the classic
-      // GitHub Actions shell-injection vector.
       expect(l).toMatch(/^\s+[A-Z_]+:\s*\$\{\{\s*github\.event\.pull_request\.(title|body)\s*\}\}\s*$/);
     }
+  });
+
+  test('workflow_call surface: chair/critic/fail_on added with spec defaults; max_cost default doubled; models unchanged', () => {
+    const y = yml();
+    expect(y).toContain("MODELS: ${{ inputs.models || 'deepseek,gemini,glm' }}");
+    expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
+    expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
+    expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'none' }}");
+    expect(y).toContain("MAX_COST: ${{ inputs.max_cost || '2.00' }}");
+    expect(y).not.toContain("'1.00'");
+    // fail_on is validated to the enum before any paid step
+    expect(y).toContain('none|fix|rethink');
+  });
+
+  test('default chair-in-bench collision is resolved deterministically before any spend', () => {
+    const y = yml();
+    // The engine pre-flight requires chair NOT seated (spec §4); the default
+    // inputs overlap. The workflow strips the chair from the bench with a
+    // ::notice:: and refuses to run a bench below 2 seats.
+    expect(y).toContain('BENCH=');
+    expect(y).toContain('::notice::chair');
+    expect(y).toContain('"$SEATS" -lt 2');
+  });
+
+  test('check run: checks: write permission, head SHA via env, named Council Review', () => {
+    const y = yml();
+    expect(y).toContain('checks: write');
+    expect(y).toContain('HEAD_SHA: ${{ github.event.pull_request.head.sha }}');
+    expect(y).toContain('name: "Council Review"');
+  });
+
+  test('conclusion mapping implements the spec table, with null decided before the gating branches', () => {
+    const y = yml();
+    const step = y.slice(y.indexOf('Publish the Council Review check run'), y.indexOf('Post sticky PR comment'));
+    expect(step).toContain('if [ "$FAIL_ON" = "none" ]; then');
+    expect(step).toContain('CONCLUSION="success"');
+    expect(step).toContain('elif [ "$OVERALL" = "null" ]; then');
+    expect(step).toContain('CONCLUSION="neutral"');
+    expect(step).toContain('[ "$OVERALL" = "Ship it" ]');
+    expect(step).toContain('[ "$OVERALL" = "Fundamental rethink" ]');
+    expect(step).toContain('CONCLUSION="failure"');
+    // A chair failure (overallVerdict null) must NEVER gate: null → neutral is
+    // decided before the fix/rethink comparisons can run.
+    expect(step.indexOf('CONCLUSION="neutral"')).toBeLessThan(step.indexOf('"Ship it"'));
+  });
+
+  test('annotations: Confirmed-only, 50-per-request chunking, file-level fallback, unmapped overflow to the summary', () => {
+    const y = yml();
+    const step = y.slice(y.indexOf('Publish the Council Review check run'), y.indexOf('Post sticky PR comment'));
+    expect(step).toContain('"Confirmed"');
+    expect(step).toContain('$i+50');
+    expect(step).toContain('i=$((i + 50))');
+    expect(step).toContain('start_line: 1'); // file-level fallback when no :line parses
+    expect(step).toContain('unmapped');      // unmappable findings land in the summary
+  });
+
+  test('evidence artifact: the full run directory is uploaded even when the run degrades or fails', () => {
+    const y = yml();
+    expect(y).toContain('actions/upload-artifact');
+    expect(y).toContain('name: council-run');
+    expect(y).toContain('path: council-run/');
+    expect(y).toContain('!cancelled()');
   });
 
   test('model output is neutralized before entering the sticky comment (no marker/footer/details forgery)', () => {
     const y = yml();
     // Untrusted model text must not be able to forge the sticky marker
-    // (comment hijack on the next run), forge the footer disclosure, or
-    // close the workflow's own <details> wrapper. The tag/marker rules must
-    // be case-insensitive AND whitespace-tolerant: `</DETAILS>`, `< details >`,
-    // `</ details >` and `<!--council-review-sticky-->` are confirmed
-    // bypasses of exact-string / case-sensitive rules.
+    // (comment hijack on the next run), forge either footer disclosure
+    // phrase (the v1 phrase stays neutralized as defense-in-depth), or
+    // open/close <details> and break out of the workflow's own wrappers.
     expect(y).toContain('neutralize()');
     expect(y).toContain('s/<!--[[:space:]]*council-review-sticky[[:space:]]*-->/');
     expect(y).toContain('s/not an adjudicated/');
+    expect(y).toContain('s/adjudicated council verdict/');
     expect(y).toContain('s|<[[:space:]]*/[[:space:]]*details|');
     expect(y).toContain('s|<[[:space:]]*details|');
-    expect(y).toContain('reviews-safe.md');
+    expect(y).toContain('-safe.md');
   });
 
   test('neutralization survives case + whitespace bypass variants (behavioral pin on the actual sed rules)', () => {
@@ -111,7 +175,7 @@ describe('council-review workflow (Phase 10 v1)', () => {
       const jsPattern = pattern.replace(/\[\[:space:\]\]/g, '[ \\t\\r\\n\\f\\v]');
       return { re: new RegExp(jsPattern, 'g' + (flags.includes('I') ? 'i' : '')), replacement };
     });
-    expect(rules.length).toBeGreaterThanOrEqual(4);
+    expect(rules.length).toBeGreaterThanOrEqual(5);
     const fixture = [
       'a <!-- council-review-sticky --> b',
       'tight <!--council-review-sticky--> c',
@@ -123,57 +187,39 @@ describe('council-review workflow (Phase 10 v1)', () => {
       'plain <details><summary>x</summary> i',
       'plain-close </details> j',
       'forged: this is not an adjudicated verdict / NOT AN ADJUDICATED',
+      'forged-2: an adjudicated council verdict / ADJUDICATED COUNCIL VERDICT',
     ].join('\n');
     const out = rules.reduce((t, r) => t.replace(r.re, r.replacement), fixture);
-    // no marker shape survives (any internal spacing, any case)
     expect(out).not.toMatch(/<!--\s*council-review-sticky\s*-->/i);
-    // no details tag shape survives (any case, any internal spacing)
     expect(out).not.toMatch(/<\s*\/?\s*details/i);
-    // no footer-sentinel phrase survives (any case)
     expect(out).not.toMatch(/not an adjudicated/i);
-    // and the neutralized placeholders actually landed
+    expect(out).not.toMatch(/adjudicated council verdict/i);
     expect(out).toContain('[model text removed: sticky marker]');
     expect(out).toContain('[/details');
     expect(out).toContain('[details');
     expect(out).toContain('not-an-adjudicated (model text)');
+    expect(out).toContain('adjudicated-council-verdict (model text)');
   });
 
   test('no leg requests verbose summaries (unbounded model output on a paid CI key)', () => {
     const y = yml();
-    // --summary-length is prompt-only (src/prompt-builder.js) with no token
-    // cap anywhere in the engine; verbose asks every model for maximally
-    // long output. Both the review wave and the synthesis leg must stay at
-    // the (default) 'normal' length.
     expect(y).not.toMatch(/--summary-length\s+verbose/);
   });
 
-  test('synthesis briefing is built from NEUTRALIZED reviews, not raw reviews.md (model-to-model handoff)', () => {
+  test('both model-text shells (check run + comment) neutralize, with byte-identical duplicated sed rules', () => {
     const y = yml();
-    // The comment path already neutralizes model text before it reaches the
-    // human-facing PR comment. The synthesis step is a SEPARATE shell (no
-    // shared function) and previously fed the raw reviews.md straight into
-    // another model's prompt with zero neutralization on that handoff.
-    const synthStepIdx = y.indexOf('Synthesize the reviews');
-    const commentStepIdx = y.indexOf('Post sticky PR comment');
-    expect(synthStepIdx).toBeGreaterThan(-1);
-    expect(commentStepIdx).toBeGreaterThan(synthStepIdx);
-    const synthBlock = y.slice(synthStepIdx, commentStepIdx);
-
-    // the synthesis step must define its own neutralize() (separate shell,
-    // function isn't shared with the comment step) and consume the safe
-    // file — never the raw reviews.md — when building synth-briefing.md
-    expect(synthBlock).toContain('neutralize()');
-    expect(synthBlock).not.toMatch(/cat reviews\.md/);
-
-    // duplicated sed rules must be byte-for-byte identical to the comment
-    // step's rules (same 4 substrings), so the whole-file sed-rule harvest
-    // above still finds ≥4 total handled distinct occurrences across the file
-    const sedRuleCount = (y.match(/-e\s+'s[/|][^']+'/g) || []).length;
-    expect(sedRuleCount).toBeGreaterThanOrEqual(8); // 4 in comment step + 4 duplicated in synth step
-
-    // untrusted-data fencing: reviews must be wrapped in a clearly delimited
-    // block with an instruction line marking them as untrusted, non-instruction
-    // model output — mirroring how the diff is fenced in briefing.md (lines ~100-116)
-    expect(synthBlock.toLowerCase()).toMatch(/untrusted/);
+    const checkIdx = y.indexOf('Publish the Council Review check run');
+    const commentIdx = y.indexOf('Post sticky PR comment');
+    expect(checkIdx).toBeGreaterThan(-1);
+    expect(commentIdx).toBeGreaterThan(checkIdx);
+    const checkBlock = y.slice(checkIdx, commentIdx);
+    // the check-run step is a SEPARATE shell (the function isn't shared), so
+    // it defines its own neutralize() and consumes only the -safe file
+    expect(checkBlock).toContain('neutralize()');
+    expect(checkBlock).toContain('confirmed-safe.json');
+    // exactly 5 distinct rules, each duplicated byte-for-byte in both shells
+    const sedRules = (y.match(/-e\s+'s[/|][^']+'/g) || []).map((s) => s.replace(/^-e\s+/, ''));
+    expect(sedRules.length).toBe(10);
+    expect(new Set(sedRules).size).toBe(5);
   });
 });

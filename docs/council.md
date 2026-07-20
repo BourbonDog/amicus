@@ -6,7 +6,10 @@
 > example below is real and was run against the CLI while writing this doc.
 
 This page exists because `amicus council tally|stats|report|validate|verdict|save|list|show` are
-**deterministic local math and file I/O** — none of them call a model. The models run in the
+**deterministic local math and file I/O** — none of them call a model. The one exception is
+[`amicus council run`](#amicus-council-run) (v4.0), the **headless engine**: it drives the whole
+pipeline below — Stage-1 reviews → anonymized cross-review → tally → chair verdict — in one
+command, and it does call models. In the interactive path, the models run in the
 `second-opinion` skill's Stage 1/2/3 waves (`amicus fanout` / `amicus start`); these subcommands
 consume and produce the JSON that glues those stages together. If you're driving a live council
 run, follow **[skills/second-opinion/SKILL.md](../skills/second-opinion/SKILL.md)** — it's the
@@ -17,6 +20,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 ## Table of contents
 
 - [The pipeline, end to end](#the-pipeline-end-to-end)
+- [`amicus council run`](#amicus-council-run)
 - [`amicus council validate`](#amicus-council-validate)
 - [`amicus council tally`](#amicus-council-tally)
 - [`amicus council verdict`](#amicus-council-verdict)
@@ -82,6 +86,105 @@ Three things to hold onto:
    mode runs the Stage-2 tally with `--no-ledger` (provisional) and re-tallies after the rebuttal
    round (that second, post-rebuttal tally is the ledger-recorded one), and lens runs always pass
    `--no-ledger` so non-comparable reviews never feed `stats`.
+
+---
+
+## `amicus council run`
+
+```
+amicus council run --prompt-file <briefing.md>
+    (--council <preset> | --models a,b,c)   # >=2 seats, XOR (fanout semantics)
+    [--chair <model>]                       # default deepseek; must NOT be a bench seat
+    [--critic <model>]                      # must BE a bench seat; adversarial brief
+    [--lenses s1,s2,...]                    # count == seat count; forces no-ledger;
+                                            #   mutually exclusive with --critic in v4.0
+    [--out-dir <dir>]                       # default ./council-<runId>/
+    [--json] [--max-cost <usd>] [--timeout <min>]
+    [--gateway auto|direct|openrouter] [--no-validate-model]
+```
+
+**The headless engine (v4.0).** Everything the `second-opinion` skill orchestrates by hand in
+Stages 1–3+5 — seat briefings (anti-sycophancy clause included), the Stage-1 review wave,
+anonymization and run-global finding-id rewriting, the identical judge bundle, the Stage-2
+cross-review wave with bounded repair re-prompts, the tally, chair synthesis with the verdict
+scale, and the deterministic report — runs as **one command with no Claude runtime**. Stage 4
+stays human: the engine is report-only and never fabricates accept/deny decisions
+(`amicus council verdict --decisions` remains the post-hoc path).
+
+Key semantics:
+
+- `--prompt-file` is **required** — councils always have real briefings (no inline `--prompt`).
+- Seat/chair/critic/lens validation happens **pre-flight** and fails through the error envelope
+  (exit 1) before any spend. The chair must not be a bench seat.
+- `--timeout` is the **per-leg** timeout (existing fanout semantics); there is no run-level
+  watchdog in v4.0 — bound the aggregate with your CI job timeout.
+- `--max-cost` is a **whole-run** ceiling checked before each paid stage launch (Stage-1 wave,
+  repair solos, Stage-2 wave, chair). Hitting it mid-run stops launching and finalizes what
+  exists; in-flight legs are never aborted for cost.
+- Chair failure recovery: one retry of the same chair → promote the highest peers-only
+  street-cred model (from `amicus council stats`) that is not a bench seat → give up and write
+  the verdict with `overallVerdict: null`.
+- SIGINT/SIGTERM abort the active wave/solo, finalize `run.json` as `aborted`, exit 130/143.
+  `amicus abort <councilRunId>` (and the MCP tools via the sessions-dir pointer file
+  `council-<runId>.json`) work on council runs; `status`/`wait`/`list` resolve them the same way.
+
+**Exit codes and degradation:**
+
+| Condition | Behavior | Exit |
+|---|---|---|
+| All stages complete, chair verdict parsed | full run | 0 |
+| Fewer than 2 completed Stage-1 reviews | stop; error doc `COUNCIL_QUORUM` | 1 |
+| At least 2 reviews but fewer than 2 completed judges | proceed; tally `judged:false` | 2 |
+| Chair fails (1 retry + 1 fallback promotion) | `verdict.json` written, `overallVerdict:null` | 2 |
+| Chair output missing `VERDICT:` line after 1 repair | chair prose kept, `overallVerdict:null` | 2 |
+| Cost ceiling hit after the tally exists | verdict written (no chair), `overallVerdict:null` | 2 |
+| Cost ceiling hit before the tally | stop; error doc `COST_EXCEEDED` | 1 |
+| Aborted | `run.json` status `aborted` | 130/143 |
+
+**The run directory** (durable state; skill-compatible layout):
+
+```
+council-<runId>/
+  briefing-stage1.md          # composed seat briefing (user briefing + templates)
+  review-<model>.md x N       # Stage-1 outputs
+  bundle-stage2.md            # anonymized judge bundle (identical for all judges)
+  judge-<model>.md x N        # Stage-2 raw outputs
+  chair-packet.md             # de-anonymized chair packet (+ verdict-scale addendum)
+  chair-output.md             # chair raw output
+  tally-input.json            # the assembled five-keys object (auditability)
+  tally.json                  # engine tally record (council family v2)
+  verdict.json                # undecided verdict (tiers + overallVerdict)
+  report.html                 # deterministic renderer output
+  run.json                    # manifest: schemaVersion 2, type council-run, stages, usage
+  _scratch/                   # cwd for judge legs (isolation)
+```
+
+`verdict.json` here is the **undecided** verdict — same schema as [`amicus council
+verdict`](#amicus-council-verdict)'s output (council family v2) plus **`overallVerdict`**
+(`"Ship it" | "Fix these first" | "Fundamental rethink" | null`), parsed from the chair's final
+`VERDICT:` line. Example excerpt:
+
+```json
+{
+  "schemaVersion": 2,
+  "runId": "pr-142-council",
+  "chair": "deepseek",
+  "overallVerdict": "Fix these first",
+  "tierCounts": { "Confirmed": 2, "Contested": 1, "Singleton": 1, "Disputed": 0 }
+}
+```
+
+One-shot CI-shaped example (this is exactly what the Council Review GitHub Action runs):
+
+```bash
+$ amicus council run --models gemini,glm --chair deepseek \
+    --prompt-file briefing.md --out-dir council-run \
+    --json --max-cost 2.00 --timeout 10 --no-validate-model
+```
+
+Consumers gate on **tiers + the chair verdict line** (`overallVerdict`), per the engine's
+report-only Stage-4 policy. Headless runs pin `meta.claudeInCouncil: false`,
+`meta.runType: "headless"`, and the chair is excluded from the street-cred universe.
 
 ---
 
@@ -172,7 +275,8 @@ assembly recipe"). It needs **all five top-level keys** — `tally()` throws
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "type": "council-tally",
   "meta": { "...": "echoed from input" },
   "judged": true,
   "streetCred": [ { "model": "gpt", "withSelf": 1, "peersOnly": 1, "perJudgeRank": { "...": "..." } } ],
@@ -188,7 +292,8 @@ assembly recipe"). It needs **all five top-level keys** — `tally()` throws
 
 | Field | Notes |
 |---|---|
-| `schemaVersion` | Tally-record schema version (currently `1`). Independent of the `--json` **error-envelope** schema version used by `BAD_ARGS` failures (currently `2`) — don't conflate the two when scripting against output. |
+| `schemaVersion` | Tally-record schema version (currently `2`, council family v2 — see `type` below). This is a *separate* version line from the `--json` **error-envelope** schema version used by `BAD_ARGS` failures (also currently `2`) — the two happen to share a value right now but evolve independently; don't conflate them when scripting against output. |
+| `type` | Document-type discriminator; always `"council-tally"` (council family v2 envelope). |
 | `judged` | `true` only when `rankings.length >= 2`. `false` (1 or 0 rankings) means street-cred numbers exist but rest on thin cross-review. |
 | `streetCred[].withSelf` | Mean rank position across **all** judges' rankings (lower = better). |
 | `streetCred[].peersOnly` | Mean rank position **excluding** the model's own ranking of itself. This is the number used everywhere else (ledger, `stats`, bench recommendations). |
@@ -244,12 +349,14 @@ override wins over the tally record's, if both are present — the effective `ti
 `adjudications`, `streetCred`, `runStats`, `tierCounts`) passes through from the tally record
 unchanged.
 
-**Output schema** (`verdict.json`, schema v1 — independent of the tally record's own
+**Output schema** (`verdict.json`, schema v2 — independent of the tally record's own
 `schemaVersion`):
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "type": "council-verdict",
+  "overallVerdict": null,
   "runId": "...", "runType": "...", "date": "...", "chair": "...",
   "council": ["deepseek", "gpt"],
   "claudeInCouncil": false,
@@ -264,6 +371,12 @@ unchanged.
   "tierCounts": { "Confirmed": 1, "Contested": 1, "Singleton": 1, "Disputed": 0 }
 }
 ```
+
+**Key notes:**
+- `schemaVersion` — verdict-document schema version (currently `2`).
+- `type` — document-type discriminator; always `"council-verdict"` (council family v2 envelope).
+- `overallVerdict` — the chair's verdict-scale outcome: one of `"Ship it"`, `"Fix these first"`, `"Fundamental rethink"`, or `null` when no chair verdict was produced (populated by the headless engine during Stage 3; `null` for a plain `council verdict` merge without engine integration).
+- All other keys (`runId`, `council`, `findings`, `streetCred`, `runStats`, `tierCounts`) are passed through unchanged from the tally record.
 
 **Write path:** always atomic — a `<out>.tmp-<pid>` file is written first, then renamed over the
 target (`writeVerdictAtomic`), matching the repo's `wave.json` convention. Default output path is
@@ -313,6 +426,10 @@ Reads the **append-only ledger** (`council-ledger.jsonl`, written by every non-`
 `council tally` call) and aggregates per-model reliability across **all past council runs on this
 machine** — this is historical, cross-run data, not anything from a single tally/verdict. Thin CLI
 wrapper over `deriveReliability()` (`src/council/ledger.js`).
+
+Since v4.0 (council schema v2), `--json` wraps the rows in the family envelope —
+`{ "schemaVersion": 2, "type": "council-stats", "models": [ … ] }` — the per-model row
+shape below is unchanged. (Pre-4.0 emitted the bare array.)
 
 **Output**, one row per model that has ever appeared in `meta.models`:
 
@@ -435,7 +552,7 @@ Council tally (pricing-page-council)
 
 ```bash
 $ amicus council verdict tally.json --decisions decisions.json -o verdict.json
-Verdict (schema v1, pricing-page-council) → verdict.json
+Verdict (schema v2, pricing-page-council) → verdict.json
   accepted 2  deferred 1
 ```
 

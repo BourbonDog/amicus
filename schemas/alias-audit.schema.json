@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/alias-audit.schema.json",
+  "title": "amicus alias-audit document",
+  "description": "`models --check --json` result.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "catalogAvailable", "staleCount", "stale"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "alias-audit" },
+    "catalogAvailable": { "type": "boolean" },
+    "staleCount": { "type": "number" },
+    "stale": { "type": "array", "items": { "type": "object" } },
+    "gatewayFindingsCount": { "type": "number" },
+    "gatewayFindings": { "type": "array", "items": { "type": "object" } }
+  }
+}

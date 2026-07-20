@@ -148,3 +148,31 @@ describe('route-error renderer (#61 Task 6.1)', () => {
     expect(result).toEqual(before);
   });
 });
+
+describe('toErrorDocFields (v4.0 §7 — envelope failure paths)', () => {
+  const { toErrorDocFields } = require('../src/utils/route-error');
+  const { ERROR_CODES } = require('../src/utils/error-doc');
+
+  test('maps a key-shaped reason to MISSING_KEY with the fix hint', () => {
+    const fields = toErrorDocFields({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'x-ai/grok-4.3',
+      reason: 'no_openrouter_key', preferredGateway: 'openrouter', suggestions: [],
+    });
+    expect(fields.code).toBe(ERROR_CODES.MISSING_KEY);
+    expect(fields.message).toContain('No OpenRouter API key is configured.');
+    expect(fields.message).toContain('x-ai/grok-4.3');
+    expect(fields.hint).toContain('OPENROUTER_API_KEY');
+  });
+
+  test('maps a catalog miss to BAD_MODEL and inlines suggestions into the message', () => {
+    const fields = toErrorDocFields({
+      kind: 'error', type: 'model_route_error', field: 'model', requested: 'ghost/model',
+      reason: 'model_not_found', preferredGateway: null,
+      suggestions: [{ model: 'openai/gpt-5.5', gateway: 'direct' }],
+    });
+    expect(fields.code).toBe(ERROR_CODES.BAD_MODEL);
+    expect(fields.message).toContain('not found in the catalog');
+    expect(fields.message).toContain('openai/gpt-5.5');
+    expect(fields.hint).toContain('--no-validate-model');
+  });
+});

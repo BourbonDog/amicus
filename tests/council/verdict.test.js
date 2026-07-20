@@ -9,13 +9,20 @@ const avInput = require('./fixtures/av-receiver-input');
 
 const record = tally(avInput);
 
-test('buildVerdict lifts meta to top-level and stamps schemaVersion', () => {
+test('buildVerdict lifts meta to top-level and stamps the v2 envelope (v4.0 §7)', () => {
   const v = buildVerdict(record, []);
-  expect(v.schemaVersion).toBe(1);
+  expect(v.schemaVersion).toBe(2);
+  expect(v.type).toBe('council-verdict');
+  expect(v.overallVerdict).toBeNull();
   expect(v.runId).toBe('av-receiver-council');
   expect(v.chair).toBe('deepseek');
   expect(v.council).toEqual(['deepseek', 'gpt', 'mistral']);
   expect(v.tierCounts).toEqual(record.tierCounts);
+});
+
+test('opts.overallVerdict populates the chair verdict (Plan-B engine hook)', () => {
+  const v = buildVerdict(record, [], { overallVerdict: 'Ship it' });
+  expect(v.overallVerdict).toBe('Ship it');
 });
 
 test('decisions merge per finding; tierOverride rewrites the tier', () => {

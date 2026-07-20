@@ -240,7 +240,9 @@ describe('resolved project flows into session path / context / prompt', () => {
       const { getProjectDir } = require('../src/mcp-server');
       const { buildPrompts } = require('../src/prompt-builder');
       const project = getProjectDir(`${tmp}/`);
-      const { system } = buildPrompts('hello', null, project, true, undefined, undefined);
+      // headless mode now requires a per-run nonce (15b.3/#BL-7); this test
+      // only asserts the project path, so any valid nonce suffices.
+      const { system } = buildPrompts('hello', null, project, true, undefined, undefined, undefined, '0f1e2d3c4b5a6978');
       expect(system).toContain(`Project: ${canonicalProjectPath(tmp)}`);
     } finally {
       fs.rmSync(tmp, { recursive: true });

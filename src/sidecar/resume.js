@@ -17,7 +17,7 @@ const {
 } = require('./session-utils');
 const { acquireLock, releaseLock } = require('../utils/session-lock');
 const { runHeadless } = require('../headless');
-const { extractNonceFromText, generateFoldNonce } = require('../utils/fold-marker');
+const { extractNonceFromText, generateFoldNonce, stripFoldMarkers } = require('../utils/fold-marker');
 const { logger } = require('../utils/logger');
 
 /** Load session metadata from session directory */
@@ -83,7 +83,12 @@ function buildResumeUserMessage(briefing, conversation) {
 
   if (conversation) {
     parts.push('## PREVIOUS CONVERSATION\n');
-    parts.push(conversation);
+    // v4.0 §9: the replay used to carry the previous turn's valid nonced
+    // [SIDECAR_FOLD:<nonce>] marker verbatim (BACKLOG "Resume nonce-echo
+    // hazard"). Each run mints a fresh nonce so the stale marker could never
+    // fold the new run, but a wire-format token has no business riding into
+    // the new prompt — strip every marker line before embedding.
+    parts.push(stripFoldMarkers(conversation));
     parts.push('\n---\n');
     parts.push('## RESUME\n');
     parts.push('You are resuming a previous session. Continue from where you left off.');

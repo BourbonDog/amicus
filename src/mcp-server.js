@@ -199,6 +199,18 @@ function appendVersionWarning(content) {
 }
 
 /**
+ * v4.0 §7: stamp the additive {schemaVersion, type} envelope keys onto an MCP
+ * JSON success body. `type` reflects the doc's subject family — 'run' for
+ * session status/acks, 'wave' for wave status + fanout acks, 'abort' for abort
+ * acks. Published result-doc schemas (schemas/) describe the durable --json
+ * docs; these snapshots/acks share the family type names (docs/schemas.md).
+ */
+function stampEnvelope(type, body) {
+  const { SCHEMA_VERSION } = require('./utils/result-schema-version');
+  return { schemaVersion: SCHEMA_VERSION, type, ...body };
+}
+
+/**
  * Compute next poll hint for headless sessions.
  * @returns {{ hint: string }}
  */
@@ -244,9 +256,17 @@ const handlers = {
     const { validateStartInputs } = require('./utils/input-validators');
     const validation = validateStartInputs(input);
     if (!validation.valid) {
+      // v4.0 §7: error-doc-shaped tool text (was the raw validation_error object).
+      const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
+      const verr = validation.error;
       return {
         isError: true,
-        content: [{ type: 'text', text: JSON.stringify(validation.error) }],
+        content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
+          code: verr.field === 'prompt' ? ERROR_CODES.MISSING_PROMPT : ERROR_CODES.BAD_ARGS,
+          message: `${verr.field}: ${verr.message}`,
+          hint: Array.isArray(verr.suggestions) && verr.suggestions.length
+            ? `Valid values: ${verr.suggestions.join(', ')}` : null,
+        })) }],
       };
     }
 
@@ -263,7 +283,7 @@ const handlers = {
     // resolveLaunchModel (start-helpers.js) via model-input-default.js.
     const { resolveGatewayMode } = require('./utils/config');
     const { resolveRouteForLaunch } = require('./utils/route-launch');
-    const { toStructuredError } = require('./utils/route-error');
+    const { toErrorDocFields } = require('./utils/route-error');
     const { resolveModelInputOrDefault } = require('./utils/model-input-default');
 
     const modelInput = resolveModelInputOrDefault(input.model);
@@ -277,9 +297,10 @@ const handlers = {
       validateModel: true,
     });
     if (routeResult.kind !== 'resolved') {
+      const { buildErrorDoc } = require('./utils/error-doc');
       return {
         isError: true,
-        content: [{ type: 'text', text: JSON.stringify(toStructuredError(routeResult)) }],
+        content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(toErrorDocFields(routeResult))) }],
       };
     }
     const resolvedModel = routeResult.executableId;
@@ -472,10 +493,10 @@ const handlers = {
         });
 
         // Return immediately
-        const body = JSON.stringify({
+        const body = JSON.stringify(stampEnvelope('run', {
           taskId, status: 'running', mode: 'headless',
           message: 'Amicus started in headless mode. Use amicus_status to check progress.',
-        });
+        }));
         // FIX 2 (#61 whole-branch review): surface the router's one-shot
         // migration notice here too — resolveRouteForLaunch already burned
         // the migration_notified flag for this vendor when it built
@@ -532,7 +553,7 @@ const handlers = {
         "Tell the user: 'Let me know when you're done with the session and have clicked Fold.' " +
         'Then wait for the user to tell you. Use amicus_read to get results once they confirm.';
 
-    const body = JSON.stringify({ taskId, status: 'running', mode, message });
+    const body = JSON.stringify(stampEnvelope('run', { taskId, status: 'running', mode, message }));
     // FIX 2 (#61 whole-branch review): the spawn path never touches stderr of
     // the CLI child that will do the routing print — this handler already
     // resolved the route in-process above, so surface its notice here.
@@ -550,6 +571,17 @@ const handlers = {
     const sessionDir = safeSessionDir(cwd, input.taskId);
     const metadata = readMetadata(input.taskId, cwd);
     if (!metadata) {
+      // Council runs live behind sessions-dir pointer files, not session dirs
+      // (v4.0 spec §8). Resolve them before failing.
+      const council = require('./mcp-council-run').buildCouncilStatusPayload(cwd, input.taskId);
+      if (council) {
+        const content = [{ type: 'text', text: JSON.stringify(council) }];
+        appendVersionWarning(content);
+        if (council.status === 'running') {
+          content.push({ type: 'text', text: HEADLESS_STATUS_REMINDER });
+        }
+        return { content };
+      }
       return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
         'If you ran it in a different project, pass the original "project".', true);
     }
@@ -608,12 +640,12 @@ const handlers = {
       }
 
       const ms = elapsedMs(metadata);
-      const response = {
-        taskId: metadata.taskId, type: 'wave', status: metadata.status,
+      const response = stampEnvelope('wave', {
+        taskId: metadata.taskId, status: metadata.status,
         legsComplete: done, legsTotal: legs.length, legs,
         elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
         version: RUNNING_VERSION,
-      };
+      });
       if (metadata.status === 'crashed' || metadata.status === 'error') {
         response.reason = metadata.reason || 'Unknown error';
       }
@@ -641,11 +673,11 @@ const handlers = {
     }
 
     const ms = elapsedMs(metadata);
-    const response = {
+    const response = stampEnvelope('run', {
       taskId: metadata.taskId, status: metadata.status,
       elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
       version: RUNNING_VERSION,
-    };
+    });
     if (metadata.model) { response.model = metadata.model; }
 
     // F6: agent-visible mode (headless|interactive). metadata.mode is written at
@@ -817,7 +849,10 @@ const handlers = {
       }
     }
 
-    let sessions = Array.from(byId.values())
+    // v4.0 §8: council runs are pointer files in the same sessions root — merge
+    // them as first-class rows (type 'council-run') before sorting/filtering.
+    const councilRows = require('./mcp-council-run').listCouncilRuns(cwd);
+    let sessions = Array.from(byId.values()).concat(councilRows)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     if (input.status && input.status !== 'all') {
@@ -837,10 +872,10 @@ const handlers = {
     try { spawnSidecarProcess(args, sessionDir); } catch (err) {
       return textResult(`Failed to resume: ${err.message}`, true);
     }
-    return textResult(JSON.stringify({
+    return textResult(JSON.stringify(stampEnvelope('run', {
       taskId: input.taskId, status: 'running',
       message: 'Session resumed. Use amicus_status to check progress.',
-    }));
+    })));
   },
 
   async amicus_continue(input, project, mcpServer) {
@@ -857,7 +892,7 @@ const handlers = {
     if (input.model) {
       const { resolveGatewayMode } = require('./utils/config');
       const { resolveRouteForLaunch } = require('./utils/route-launch');
-      const { toStructuredError } = require('./utils/route-error');
+      const { toErrorDocFields } = require('./utils/route-error');
       const { resolveModelInputOrDefault } = require('./utils/model-input-default');
 
       const modelInput = resolveModelInputOrDefault(input.model);
@@ -869,9 +904,10 @@ const handlers = {
         validateModel: true,
       });
       if (routeResult.kind !== 'resolved') {
+        const { buildErrorDoc } = require('./utils/error-doc');
         return {
           isError: true,
-          content: [{ type: 'text', text: JSON.stringify(toStructuredError(routeResult)) }],
+          content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(toErrorDocFields(routeResult))) }],
         };
       }
       resolvedModel = routeResult.executableId;
@@ -910,16 +946,29 @@ const handlers = {
       return textResult(`Failed to continue: ${err.message}`, true);
     }
     recordSession(newTaskId, cwd); // #40: global index for cross-project lookup
-    return textResult(JSON.stringify({
+    return textResult(JSON.stringify(stampEnvelope('run', {
       taskId: newTaskId, status: 'running',
       message: 'Continuation started. Use amicus_status to check progress.',
-    }));
+    })));
   },
 
   async amicus_abort(input, project) {
     const cwd = project || getProjectDir(input.project);
     const metadata = readMetadata(input.taskId, cwd);
     if (!metadata) {
+      // Council runs resolve via the sessions-dir pointer file (v4.0 §8):
+      // mark run.json aborted + cascade to the active wave/leg records.
+      const council = require('./mcp-council-run').abortCouncilRun(cwd, input.taskId);
+      if (council) {
+        if (council.alreadyTerminal) {
+          return textResult(`Council run ${input.taskId} is not running (status: ${council.status}).`);
+        }
+        return textResult(JSON.stringify({
+          taskId: input.taskId, status: 'aborted', legsAborted: council.cascaded,
+          message: `Council run abort requested. ${council.cascaded} running leg(s) marked aborted; ` +
+            'the engine process will finalize run.json as aborted shortly.',
+        }));
+      }
       return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
         'If you ran it in a different project, pass the original "project".', true);
     }
@@ -953,11 +1002,11 @@ const handlers = {
       // if they outlive the grace window. Fire-and-forget — the tool result
       // must not block on the grace period.
       waitThenKill([metadata.pid, metadata.goPid]).catch(() => { /* best-effort */ });
-      return textResult(JSON.stringify({
+      return textResult(JSON.stringify(stampEnvelope('abort', {
         taskId: input.taskId, status: 'aborted', legsAborted,
         message: `Wave abort requested. ${legsAborted} running leg(s) marked aborted; ` +
           'the fan-out process will terminate shortly.',
-      }));
+      })));
     }
 
     // Single session: marker FIRST — the headless loop and the interactive
@@ -969,10 +1018,10 @@ const handlers = {
     markAborted(sessionDir, 'manual abort (MCP)');
     waitThenKill(metadata.pid).catch(() => { /* best-effort */ });
 
-    return textResult(JSON.stringify({
+    return textResult(JSON.stringify(stampEnvelope('abort', {
       taskId: input.taskId, status: 'aborted',
       message: 'Session abort requested. The Amicus process will terminate shortly.',
-    }));
+    })));
   },
 
   async amicus_fanout(input, project, mcpServer) {
@@ -1062,12 +1111,12 @@ const handlers = {
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }
 
-    const body = JSON.stringify({
+    const body = JSON.stringify(stampEnvelope('wave', {
       waveId, taskIds: legIds, status: 'running', mode: 'headless',
       message: 'Fan-out started. Preferred: call amicus_wait with the waveId — one blocking call ' +
         'replaces polling; re-call it while it returns timedOut: true. Fallback: poll amicus_status ' +
         'with the waveId. Either way, amicus_read the waveId when complete.',
-    });
+    }));
     return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
   },
 
@@ -1078,22 +1127,32 @@ const handlers = {
       // Auto-append to the reliability ledger (parity with `amicus council
       // tally`). Best-effort: a ledger write failure must not fail the tally.
       try { require('./council/ledger').appendRun(record); } catch { /* best-effort */ }
-      return textResult(JSON.stringify(record));
+      // v4.0 §8 (H9): fence the JSON — council output summarizes untrusted
+      // model prose entering the orchestrating agent's context. JSON intact
+      // inside the fence; CLI --json stays unfenced (the programmatic channel).
+      return textResult(fenceSidecarOutput(JSON.stringify(record)));
     } catch (err) { return textResult(`council tally failed: ${err.message}`, true); }
   },
 
   async amicus_council_stats() {
     try {
-      const { deriveReliability } = require('./council/ledger');
-      return textResult(JSON.stringify(deriveReliability()));
+      const { deriveReliability, buildStatsDoc } = require('./council/ledger');
+      return textResult(fenceSidecarOutput(JSON.stringify(buildStatsDoc(deriveReliability()))));
     } catch (err) { return textResult(`council stats failed: ${err.message}`, true); }
   },
 
   async amicus_verdict(input) {
     try {
       const { buildVerdict } = require('./council/verdict');
-      return textResult(JSON.stringify(buildVerdict(input.record, input.decisions || [])));
+      return textResult(fenceSidecarOutput(JSON.stringify(buildVerdict(input.record, input.decisions || []))));
     } catch (err) { return textResult(`verdict build failed: ${err.message}`, true); }
+  },
+
+  async amicus_council_run(input, project, mcpServer) {
+    const cwd = project || getProjectDir(input.project);
+    return require('./mcp-council-run').handleCouncilRunTool(input, cwd, {
+      spawnFn: spawnSidecarProcess, clientName: detectClient(mcpServer),
+    });
   },
 
   async amicus_setup() {

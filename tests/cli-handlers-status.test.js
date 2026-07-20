@@ -103,4 +103,54 @@ describe('amicus status CLI', () => {
     expect(unknown.code).toBe(1);
     expect(unknown.err.length).toBeGreaterThan(0);
   });
+
+  test('missing task_id with --json emits the error doc on stdout, exit 1 (v4.0 §7)', async () => {
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status'], cwd: tmpDir, json: true }));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ schemaVersion: 2, type: 'error', ok: false, error: { code: 'BAD_SESSION' } });
+    expect(doc.error.message).toContain('task_id is required');
+    expect(err).toBe('');
+  });
+
+  test('invalid task_id with --json emits the error doc on stdout, exit 1', async () => {
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status', '../evil'], cwd: tmpDir, json: true }));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out);
+    expect(doc.type).toBe('error');
+    expect(doc.error.code).toBe('BAD_SESSION');
+    expect(err).toBe('');
+  });
+
+  test('invalid task_id in human mode: exact stderr text, empty stdout, exit 1', async () => {
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status', '../evil'], cwd: tmpDir }));
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(err).toBe('Invalid task ID format. Must be 1-64 alphanumeric, hyphen, or underscore characters.\n');
+  });
+
+  test('unknown task_id with --json emits the error doc on stdout, exit 1', async () => {
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status', 'no-such-task'], cwd: tmpDir, json: true }));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out);
+    expect(doc.type).toBe('error');
+    expect(doc.error.code).toBe('BAD_SESSION');
+    expect(doc.error.message).toContain('no-such-task');
+    expect(err).toBe('');
+  });
+
+  test('unknown task_id in human mode: exact stderr text, empty stdout, exit 1', async () => {
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status', 'no-such-task'], cwd: tmpDir }));
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(err).toBe(`Session no-such-task not found in project ${tmpDir}. If you ran it in a different project, pass the original "project".\n`);
+  });
+
+  test('human mode failure output is unchanged (stderr text, empty stdout)', async () => {
+    const { code, out, err } = await capture(() => handleStatus({ _: ['status'], cwd: tmpDir }));
+    expect(code).toBe(1);
+    expect(out).toBe('');
+    expect(err).toContain('Error: task_id is required for status');
+    expect(err).toContain('Usage: amicus status');
+  });
 });
