@@ -2,7 +2,7 @@
 'use strict';
 const fs = require('fs');
 const { tally } = require('./council/tally');
-const { deriveReliability, appendRun } = require('./council/ledger');
+const { deriveReliability, appendRun, buildStatsDoc } = require('./council/ledger');
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
@@ -44,7 +44,9 @@ function runTally(inputPath, useJson, opts = {}) {
 
 function runStats(useJson) {
   const agg = deriveReliability();
-  process.stdout.write(useJson ? JSON.stringify(agg, null, 2) + '\n' : renderStats(agg));
+  // v4.0 §7: --json emits the enveloped doc (breaking: was a bare array);
+  // human output is unchanged (renderStats still takes the rows).
+  process.stdout.write(useJson ? JSON.stringify(buildStatsDoc(agg), null, 2) + '\n' : renderStats(agg));
   return 0;
 }
 

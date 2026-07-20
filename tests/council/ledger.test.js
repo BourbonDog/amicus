@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildLedgerRows, appendRun, deriveReliability } = require('../../src/council/ledger');
+const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc } = require('../../src/council/ledger');
 const { tally } = require('../../src/council/tally');
 const avInput = require('./fixtures/av-receiver-input');
 
@@ -59,4 +59,11 @@ test('aggregates rows written under a newer schemaVersion', () => {
   const future = { ...gptRow, schemaVersion: 2 };
   fs.appendFileSync(path.join(dir, 'council-ledger.jsonl'), JSON.stringify(future) + '\n');
   expect(deriveReliability({ dir }).find(a => a.model === 'gpt').runs).toBe(2);
+});
+
+test('buildStatsDoc wraps the reliability rows in the council v2 envelope (v4.0 §7 — breaking)', () => {
+  const rows = [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4,
+    lifetimeConfirmRate: 0.5, lifetimeFactErrorRate: 0, conformance: { clean: 3 } }];
+  const doc = buildStatsDoc(rows);
+  expect(doc).toEqual({ schemaVersion: 2, type: 'council-stats', models: rows });
 });

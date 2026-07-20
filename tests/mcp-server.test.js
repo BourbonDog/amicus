@@ -2245,15 +2245,21 @@ describe('council MCP handlers', () => {
     expect(v.findings.find(f => f.id === 'A1').decision).toBe('accepted');
   });
 
-  test('amicus_council_stats returns aggregated reliability', async () => {
+  test('amicus_council_stats returns the wrapped council-stats doc (v4.0 §7)', async () => {
     jest.resetModules();
-    jest.doMock('../src/council/ledger', () => ({
-      deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4 }],
-    }));
+    jest.doMock('../src/council/ledger', () => {
+      const real = jest.requireActual('../src/council/ledger');
+      return {
+        ...real,
+        deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4 }],
+      };
+    });
     const h = require('../src/mcp-server').handlers;
     const res = await h.amicus_council_stats({}, process.cwd());
-    const agg = JSON.parse(res.content[0].text);
-    expect(agg[0].model).toBe('gpt');
+    const doc = JSON.parse(res.content[0].text);
+    expect(doc.schemaVersion).toBe(2);
+    expect(doc.type).toBe('council-stats');
+    expect(doc.models[0].model).toBe('gpt');
     jest.dontMock('../src/council/ledger');
     jest.resetModules();
   });

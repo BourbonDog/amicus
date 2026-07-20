@@ -1084,8 +1084,8 @@ const handlers = {
 
   async amicus_council_stats() {
     try {
-      const { deriveReliability } = require('./council/ledger');
-      return textResult(JSON.stringify(deriveReliability()));
+      const { deriveReliability, buildStatsDoc } = require('./council/ledger');
+      return textResult(JSON.stringify(buildStatsDoc(deriveReliability())));
     } catch (err) { return textResult(`council stats failed: ${err.message}`, true); }
   },
 

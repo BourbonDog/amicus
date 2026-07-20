@@ -42,6 +42,16 @@ test('tally auto-appends a ledger row that council stats then reflects', async (
   expect(gpt.runs).toBe(1);
 });
 
+test('stats --json emits the wrapped council-stats doc, not a bare array (v4.0 §7)', async () => {
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'], json: true }));
+  expect(code).toBe(0);
+  const doc = JSON.parse(out);
+  expect(Array.isArray(doc)).toBe(false);
+  expect(doc.schemaVersion).toBe(2);
+  expect(doc.type).toBe('council-stats');
+  expect(Array.isArray(doc.models)).toBe(true);
+});
+
 test('tally --no-ledger computes the record without appending a row', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-cli-'));
   const file = path.join(dir, 'input.json');

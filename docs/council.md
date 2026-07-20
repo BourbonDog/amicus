@@ -322,6 +322,10 @@ Reads the **append-only ledger** (`council-ledger.jsonl`, written by every non-`
 machine** — this is historical, cross-run data, not anything from a single tally/verdict. Thin CLI
 wrapper over `deriveReliability()` (`src/council/ledger.js`).
 
+Since v4.0 (council schema v2), `--json` wraps the rows in the family envelope —
+`{ "schemaVersion": 2, "type": "council-stats", "models": [ … ] }` — the per-model row
+shape below is unchanged. (Pre-4.0 emitted the bare array.)
+
 **Output**, one row per model that has ever appeared in `meta.models`:
 
 | Field | Meaning |
