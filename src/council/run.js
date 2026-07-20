@@ -100,6 +100,13 @@ async function runCouncil(options, deps = {}) {
       status: 'complete', completedAt: now(),
       taskIds: s1.reviews.map(r => (r.leg && r.leg.taskId)).filter(Boolean),
     });
+    if (s1.deadLegs.length > 0) { degraded.value = true; } // bench shrank → never a "full run"
+    if (s1.reviews.length < 2) {
+      return finalize(1, {
+        code: 'COUNCIL_QUORUM',
+        message: `Only ${s1.reviews.length} Stage-1 review(s) survived; a council needs at least 2`,
+      });
+    }
 
     // ---- Stage 2: anonymized cross-review ----
     const labels = assignLabels(s1.reviews.map(r => r.model));
@@ -114,6 +121,7 @@ async function runCouncil(options, deps = {}) {
       { status: 'running', startedAt: now(), waveId: `${o.runId}-s2`, project: ctx.scratchDir });
     const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings });
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
+    if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
 
     // Merge Stage-2 judging conformance into each seat's row (worst wins).
     const byJudge = new Map(s2.judgeResults.map(j => [j.judge, j]));
