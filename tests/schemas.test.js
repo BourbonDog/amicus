@@ -171,3 +171,32 @@ describe('published council-family schemas validate real builder output (v4.0 §
     expectValid(compile('council-run'), fixture);
   });
 });
+
+describe('schema publishing (v4.0 §7)', () => {
+  test('exactly the 13 published schema files exist', () => {
+    const files = fs.readdirSync(SCHEMAS_DIR).filter((f) => f.endsWith('.schema.json')).sort();
+    expect(files).toEqual([
+      'abort.schema.json', 'alias-audit.schema.json',
+      'council-run.schema.json', 'council-stats.schema.json', 'council-tally.schema.json',
+      'council-validate.schema.json', 'council-verdict.schema.json',
+      'doctor.schema.json', 'error.schema.json', 'model-catalog.schema.json',
+      'run.schema.json', 'spend.schema.json', 'wave.schema.json',
+    ]);
+  });
+
+  test('schemas/ ships in the npm tarball (package.json files entry)', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+    expect(pkg.files).toContain('schemas/');
+    expect(pkg.devDependencies.ajv).toBeDefined();
+    expect(pkg.dependencies.ajv).toBeUndefined();
+  });
+
+  test('docs/schemas.md exists and indexes every schema file', () => {
+    const doc = fs.readFileSync(path.join(__dirname, '..', 'docs', 'schemas.md'), 'utf-8');
+    for (const f of fs.readdirSync(SCHEMAS_DIR).filter((x) => x.endsWith('.schema.json'))) {
+      expect(doc).toContain(f);
+    }
+    expect(doc).toContain('council stats');
+    expect(doc).toContain('ledger');
+  });
+});

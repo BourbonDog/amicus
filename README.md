@@ -400,7 +400,7 @@ With `--json`, Amicus emits stable, versioned run/wave documents on stdout — b
 }
 ```
 
-The wave-document shape (for `fanout`), field meanings, and the full exit-code table are in **[docs/usage.md § JSON Output](./docs/usage.md#json-output)**.
+The wave-document shape (for `fanout`), field meanings, and the full exit-code table are in **[docs/usage.md § JSON Output](./docs/usage.md#json-output)**. Every `--json` document also has a published JSON Schema — see **[docs/schemas.md](./docs/schemas.md)** (shipped in the npm tarball under `schemas/`).
 
 ---
 
