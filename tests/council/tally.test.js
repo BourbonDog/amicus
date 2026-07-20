@@ -107,8 +107,9 @@ describe('tally() — av-receiver golden fixture', () => {
     expect(record.runStats.every(r => r.durationMs === null)).toBe(true);
   });
 
-  test('schemaVersion is the council version, independent of WS-2', () => {
-    expect(record.schemaVersion).toBe(1);
+  test('schemaVersion is council family v2 with type council-tally (v4.0 §7)', () => {
+    expect(record.schemaVersion).toBe(2);
+    expect(record.type).toBe('council-tally');
   });
 });
 
