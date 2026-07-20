@@ -108,6 +108,14 @@ async function runCouncil(options, deps = {}) {
       });
     }
 
+    // ---- Cost gate: Stage 2 is a paid launch; no tally exists yet (spec §4) ----
+    if (overBudget()) {
+      return finalize(1, {
+        code: 'COST_EXCEEDED',
+        message: `Cost ceiling $${o.maxCost} reached before cross-review; no tally exists`,
+      });
+    }
+
     // ---- Stage 2: anonymized cross-review ----
     const labels = assignLabels(s1.reviews.map(r => r.model));
     runState.checkpoint(o.runDir, { labelMap: labels.labelMap });
@@ -145,19 +153,35 @@ async function runCouncil(options, deps = {}) {
       tierCounts: provisional.tierCounts,
     });
     fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
-    runState.updateStage(o.runDir, 'chair', { status: 'running', startedAt: now(), project: o.runDir });
-    const chairSolo = await launchers.launchSolo({
-      model: o.chair, prompt: packet, project: o.runDir, waveId: `${o.runId}-ch1`,
-      timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-    });
-    addWave(chairSolo.wave);
-    const chairLeg = (chairSolo.leg && chairSolo.leg.status === 'complete'
-      && chairSolo.leg.summary && chairSolo.leg.summary.trim()) ? chairSolo.leg : null;
-    const actualChair = chairLeg ? o.chair : null;
+    const attemptChair = async (model, waveId) => {
+      const solo = await launchers.launchSolo({
+        model, prompt: packet, project: o.runDir, waveId,
+        timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
+      });
+      addWave(solo.wave);
+      const ok = solo.leg && solo.leg.status === 'complete'
+        && solo.leg.summary && solo.leg.summary.trim();
+      return { leg: ok ? solo.leg : null, exitCode: solo.exitCode };
+    };
+
+    let chairLeg = null;
+    let actualChair = null;
+    if (overBudget()) {
+      // Ceiling hit after the tally is computable: skip the chair, write the
+      // verdict with overallVerdict null, exit 2 (spec §4 degradation table).
+      // Never abort in-flight legs for cost — this only stops NEW launches.
+      degraded.value = true;
+      runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
+    } else {
+      runState.updateStage(o.runDir, 'chair', { status: 'running', startedAt: now(), project: o.runDir });
+      const first = await attemptChair(o.chair, `${o.runId}-ch1`);
+      chairLeg = first.leg;
+      if (chairLeg) { actualChair = o.chair; }
+      runState.updateStage(o.runDir, 'chair',
+        { status: chairLeg ? 'complete' : 'error', completedAt: now() });
+    }
     const chairText = chairLeg ? chairLeg.summary : null;
     const chairConformance = 'clean';
-    runState.updateStage(o.runDir, 'chair',
-      { status: chairLeg ? 'complete' : 'error', completedAt: now() });
 
     // ---- Chair VERDICT line ----
     const overallVerdict = chairText ? parseChairVerdict(chairText) : null;
