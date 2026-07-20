@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-validate.schema.json",
+  "title": "amicus council-validate document",
+  "description": "Stage-1 findings validation (`council validate --json`). Tri-state exit: 0 ok, 2 parsed-but-invalid, 1 BAD_ARGS error doc.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "ok", "findings", "errors"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "council-validate" },
+    "ok": { "type": "boolean" },
+    "findings": { "type": "array", "items": { "type": "object" } },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "detail"],
+        "properties": { "code": { "type": "string" }, "detail": { "type": "string" } }
+      }
+    }
+  }
+}

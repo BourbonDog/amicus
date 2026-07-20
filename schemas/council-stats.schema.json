@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-stats.schema.json",
+  "title": "amicus council-stats document",
+  "description": "Ledger-derived reviewer reliability (`council stats --json`, amicus_council_stats). v2 wraps the pre-4.0 bare array in {schemaVersion, type, models} — THE one breaking council shape change.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "models"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "council-stats" },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["model", "runs", "lowN"],
+        "properties": {
+          "model": { "type": "string" },
+          "runs": { "type": "number" },
+          "lowN": { "type": "boolean" },
+          "avgStreetCredPeersOnly": { "type": ["number", "null"] },
+          "lifetimeConfirmRate": { "type": ["number", "null"] },
+          "lifetimeFactErrorRate": { "type": ["number", "null"] },
+          "conformance": { "type": "object" }
+        }
+      }
+    }
+  }
+}

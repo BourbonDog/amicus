@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-verdict.schema.json",
+  "title": "amicus council-verdict document",
+  "description": "Verdict record (`council verdict --json`, amicus_verdict, verdict.json). overallVerdict is the chair's parsed VERDICT line — null in every Stage-4 manual path, populated by the headless engine.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "runId", "council", "overallVerdict", "findings", "streetCred", "runStats", "tierCounts"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "council-verdict" },
+    "runId": { "type": "string" },
+    "runType": { "type": ["string", "null"] },
+    "date": { "type": ["string", "null"] },
+    "chair": { "type": ["string", "null"] },
+    "council": { "type": "array", "items": { "type": "string" } },
+    "claudeInCouncil": { "type": "boolean" },
+    "overallVerdict": {
+      "oneOf": [
+        { "enum": ["Ship it", "Fix these first", "Fundamental rethink"] },
+        { "type": "null" }
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "tier", "decision", "applied"],
+        "properties": {
+          "id": { "type": "string" },
+          "raiser": { "type": ["string", "null"] },
+          "severity": { "type": ["string", "null"] },
+          "tier": { "enum": ["Confirmed", "Contested", "Singleton", "Disputed"] },
+          "basis": { "type": "object" },
+          "confidence": { "enum": ["thin", "solid"] },
+          "tierOverride": { "type": ["object", "null"] },
+          "duplicateOf": { "type": ["string", "null"] },
+          "adjudications": { "type": "array" },
+          "decision": { "type": ["string", "null"] },
+          "applied": { "type": "boolean" }
+        }
+      }
+    },
+    "streetCred": { "type": "array", "items": { "type": "object" } },
+    "runStats": { "type": "array", "items": { "type": "object" } },
+    "tierCounts": { "type": "object" }
+  }
+}

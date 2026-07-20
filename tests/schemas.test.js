@@ -107,3 +107,67 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(compile('doctor'), doc);
   });
 });
+
+describe('published council-family schemas validate real builder output (v4.0 §7)', () => {
+  const avInput = require('./council/fixtures/av-receiver-input');
+  const { tally } = require('../src/council/tally');
+  const { buildVerdict } = require('../src/council/verdict');
+  const { buildStatsDoc } = require('../src/council/ledger');
+  const { validateFindings, buildValidateDoc } = require('../src/council/findings');
+
+  const record = tally(avInput);
+
+  test('council-tally.schema.json accepts tally() output', () => {
+    expectValid(compile('council-tally'), record);
+  });
+
+  test('council-verdict.schema.json accepts buildVerdict output (null and set overallVerdict)', () => {
+    expectValid(compile('council-verdict'), buildVerdict(record, []));
+    expectValid(compile('council-verdict'), buildVerdict(record, [], { overallVerdict: 'Ship it' }));
+  });
+
+  test('council-stats.schema.json accepts buildStatsDoc output', () => {
+    const doc = buildStatsDoc([{
+      model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4,
+      lifetimeConfirmRate: 0.5, lifetimeFactErrorRate: 0, conformance: { clean: 3 },
+    }]);
+    expectValid(compile('council-stats'), doc);
+    expectValid(compile('council-stats'), buildStatsDoc([]));
+  });
+
+  test('council-validate.schema.json accepts buildValidateDoc output (ok and invalid)', () => {
+    const good = buildValidateDoc(validateFindings(
+      'prose\n```json\n{"findings":[{"id":1,"severity":"minor","claim":"c","location":"l","rationale":"r"}]}\n```'));
+    expectValid(compile('council-validate'), good);
+    const bad = buildValidateDoc(validateFindings('no block here'));
+    expectValid(compile('council-validate'), bad);
+  });
+
+  test('council-run.schema.json accepts the spec-§4 run.json shape (Plan-B emitter pending)', () => {
+    // Hand-built fixture matching spec §4's run.json manifest. The Plan-B
+    // engine's run-state writer MUST keep satisfying this schema.
+    const fixture = {
+      schemaVersion: 2,
+      type: 'council-run',
+      runId: 'council-20260719-abc123',
+      status: 'complete',
+      stages: [
+        { name: 'stage1', status: 'complete', startedAt: '2026-07-19T10:00:00.000Z',
+          completedAt: '2026-07-19T10:08:00.000Z', waveId: 'wv-1', taskIds: ['wv-1-1', 'wv-1-2'] },
+        { name: 'stage2', status: 'complete', startedAt: '2026-07-19T10:08:00.000Z',
+          completedAt: '2026-07-19T10:15:00.000Z', waveId: 'wv-2' },
+        { name: 'chair', status: 'complete', startedAt: '2026-07-19T10:15:00.000Z',
+          completedAt: '2026-07-19T10:18:00.000Z', taskIds: ['solo-chair'] }
+      ],
+      bench: ['gemini', 'gpt', 'mistral'],
+      chair: 'deepseek',
+      critic: null,
+      lenses: null,
+      labelMap: { 'Review A': 'gemini', 'Review B': 'gpt', 'Review C': 'mistral' },
+      options: { maxCost: 2, timeoutMinutes: 10, gateway: 'auto' },
+      usage: { cost: { amount: 1.1, source: 'reported' } },
+      exitCode: 0
+    };
+    expectValid(compile('council-run'), fixture);
+  });
+});
