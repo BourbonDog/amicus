@@ -78,17 +78,19 @@ function buildSystemPrompt(briefing, context, project, headless, mode, client) {
  * @param {string} [mode='code'] - Agent mode ('code', 'ask', or 'plan')
  * @param {string} [summaryLength='normal'] - Desired summary length for headless mode
  * @param {string} [client='code-local'] - Client type for branding
- * @param {string} [nonce] - Per-run fold nonce (15b.3, #BL-7 residual). Only used in
- *   headless mode: the model is instructed to emit `[SIDECAR_FOLD:<nonce>]` instead of
- *   the legacy bare `[SIDECAR_FOLD]`, so runHeadless's detector (which must be given
- *   this SAME nonce) can't be forced into completing by a model that merely echoes the
- *   public, guessable bare marker. Callers that build a headless prompt and intend to
- *   run it should generate one nonce (utils/fold-marker.generateFoldNonce()) BEFORE
- *   calling buildPrompts, pass it here, and pass the SAME value to runHeadless's
- *   options.nonce. Omitted in interactive mode (GUI fold is exit-code driven, not
- *   marker-detected) and harmless to omit in headless mode too — buildHeadlessModeSection
- *   falls back to the legacy bare marker, matching runHeadless's own no-nonce fallback.
+ * @param {string} [nonce] - Per-run fold nonce (15b.3, #BL-7 residual). REQUIRED in
+ *   headless mode; ignored in interactive mode. In headless mode the model is instructed
+ *   to emit `[SIDECAR_FOLD:<nonce>]` instead of the legacy bare `[SIDECAR_FOLD]`, so
+ *   runHeadless's detector (which must be given this SAME nonce) can't be forced into
+ *   completing by a model that merely echoes the public, guessable bare marker. Callers
+ *   that build a headless prompt generate one nonce (utils/fold-marker.generateFoldNonce())
+ *   BEFORE calling buildPrompts, pass it here, and pass the SAME value to runHeadless's
+ *   options.nonce. Omitting it in headless mode THROWS (see @throws) — there is no
+ *   bare-marker fallback on this live path: a real prompt must never advertise the
+ *   guessable marker. Interactive mode ignores the nonce entirely (GUI fold is
+ *   exit-code driven, not marker-detected).
  * @returns {{system: string, userMessage: string}} Separated prompts
+ * @throws {TypeError} If `headless` is true and no `nonce` is supplied.
  *
  * @example
  * const { system, userMessage } = buildPrompts(
@@ -101,6 +103,19 @@ function buildSystemPrompt(briefing, context, project, headless, mode, client) {
  * // Use: POST /session/:id/message { system, parts: [{ type: 'text', text: userMessage }] }
  */
 function buildPrompts(briefing, context, project, headless, mode, summaryLength = 'normal', client, nonce) {
+  // 15b.3 (#BL-7 residual): a headless run MUST carry a per-run nonce so the
+  // model is instructed to emit the unguessable `[SIDECAR_FOLD:<nonce>]` — never
+  // the public, guessable bare `[SIDECAR_FOLD]`. buildPrompts is the live
+  // orchestration boundary (start / continue / fanout / mcp-server all route
+  // through it, and all four already generate and pass a nonce), so a forgotten
+  // nonce fails loud HERE rather than silently baking the bare marker into an
+  // executed prompt. Mirrors headless.js's producer precedent — extractSummary /
+  // formatFoldOutput throw a TypeError when the nonce is missing. Interactive
+  // mode is exempt: its fold is exit-code driven, not marker-detected.
+  if (headless && !nonce) {
+    throw new TypeError('buildPrompts requires a per-run nonce for headless mode (15b.3/v4.0 §9)');
+  }
+
   const systemSections = [
     buildHeader(client),
     buildEnvironmentSection(project, mode),
@@ -254,9 +269,11 @@ Keep track of key findings as you work.`;
  * @param {string} [nonce] - Per-run fold nonce (15b.3, #BL-7 residual). When provided,
  *   the model is instructed to emit `[SIDECAR_FOLD:<nonce>]` instead of the legacy bare
  *   `[SIDECAR_FOLD]` — see buildPrompts' @param doc for the full rationale. Falls back to
- *   the legacy bare marker when omitted (keeps this function usable standalone / by the
- *   deprecated buildSystemPrompt(), which has no orchestration-layer caller to source a
- *   nonce from).
+ *   the legacy bare marker when omitted. NOTE: buildPrompts — the live orchestration path —
+ *   now THROWS rather than reach this helper without a nonce in headless mode, so the
+ *   fallback branch is reachable ONLY via the deprecated buildSystemPrompt(), which has no
+ *   orchestration-layer caller to source a nonce from and launches no real runs. Its bare
+ *   marker is therefore inert: nothing on a live run path ever advertises the guessable form.
  * @returns {string}
  */
 function buildHeadlessModeSection(summaryLength, nonce) {

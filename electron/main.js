@@ -74,7 +74,10 @@ const WINDOW_POSITION = process.env.AMICUS_WINDOW_POSITION || 'right';
 // 15b.3: per-run fold nonce (#BL-7 residual). Set by the interactive launcher
 // (src/sidecar/interactive-process.js buildElectronEnv) from the SAME value
 // baked into the system prompt's fold instruction. undefined when a launcher
-// predates this env var — fold.js falls back to the legacy bare marker.
+// predates this env var — fold.js then falls back to a freshly generated nonce
+// (createFoldHandler: `state.nonce || generateFoldNonce()`), NOT the legacy bare
+// marker. That's safe here because the GUI fold write is exit-code driven, not
+// marker-detected, so an un-advertised fallback nonce can't be exploited.
 const FOLD_NONCE = process.env.AMICUS_FOLD_NONCE;
 
 const OPENCODE_URL = `http://localhost:${OPENCODE_PORT}`;
