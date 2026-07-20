@@ -29,7 +29,7 @@
     "chair": { "type": "string" },
     "critic": { "type": ["string", "null"] },
     "lenses": { "type": ["array", "null"], "items": { "type": "string" } },
-    "labelMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
     "options": { "type": "object" },
     "usage": { "type": "object" },
     "exitCode": { "type": ["number", "null"] }
