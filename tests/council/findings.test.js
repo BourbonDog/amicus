@@ -1,6 +1,6 @@
 // tests/council/findings.test.js
 'use strict';
-const { validateFindings } = require('../../src/council/findings');
+const { validateFindings, buildValidateDoc } = require('../../src/council/findings');
 
 const valid = '```json\n' + JSON.stringify({
   overall: 'ok',
@@ -65,4 +65,14 @@ describe('validateFindings', () => {
     ] }) + '\n```';
     expect(validateFindings(miss).errors.map(e => e.code)).toContain('MISSING_FIELD');
   });
+});
+
+test('buildValidateDoc stamps the council v2 envelope onto a validateFindings result (v4.0 §7)', () => {
+  const result = validateFindings('prose\n```json\n{"findings":[{"id":1,"severity":"minor","claim":"c","location":"l","rationale":"r"}]}\n```');
+  const doc = buildValidateDoc(result);
+  expect(doc.schemaVersion).toBe(2);
+  expect(doc.type).toBe('council-validate');
+  expect(doc.ok).toBe(true);
+  expect(doc.findings).toEqual(result.findings);
+  expect(doc.errors).toEqual([]);
 });

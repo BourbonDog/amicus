@@ -209,6 +209,18 @@ test('validate: no path argument → BAD_ARGS envelope, exit 1', async () => {
   expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
 });
 
+test('validate --json carries the council v2 envelope, additive over ok/findings/errors (v4.0 §7)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-validate-env-'));
+  const p = path.join(dir, 'review.md');
+  fs.writeFileSync(p, 'prose\n```json\n{"findings":[{"id":1,"severity":"minor","claim":"c","location":"l","rationale":"r"}]}\n```');
+  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'validate', p], json: true }));
+  expect(code).toBe(0);
+  const doc = JSON.parse(out);
+  expect(doc.schemaVersion).toBe(2);
+  expect(doc.type).toBe('council-validate');
+  expect(doc.ok).toBe(true);
+});
+
 // ---------------------------------------------------------------------------
 // council verdict
 // ---------------------------------------------------------------------------

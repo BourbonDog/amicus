@@ -6,7 +6,7 @@ const { deriveReliability, appendRun, buildStatsDoc } = require('./council/ledge
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
-const { validateFindings } = require('./council/findings');
+const { validateFindings, buildValidateDoc } = require('./council/findings');
 const { buildVerdict, writeVerdictAtomic } = require('./council/verdict');
 const {
   runSave: runCouncilSave,
@@ -119,7 +119,7 @@ function runValidate(filePath, useJson) {
       hint: 'pass a Stage-1 reviewer output file (prose + trailing ```json findings block)' });
   }
   const result = validateFindings(text);
-  process.stdout.write(useJson ? JSON.stringify(result, null, 2) + '\n' : renderValidate(result));
+  process.stdout.write(useJson ? JSON.stringify(buildValidateDoc(result), null, 2) + '\n' : renderValidate(result));
   return result.ok ? 0 : 2;
 }
 

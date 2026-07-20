@@ -45,4 +45,16 @@ function validateFindings(jsonText) {
   return { ok: errors.length === 0, findings: errors.length === 0 ? findings : [], errors };
 }
 
-module.exports = { validateFindings, SEVERITIES };
+/**
+ * v4.0 §7: stamp the council v2 envelope onto a validateFindings result
+ * (additive — ok/findings/errors stay top-level; existing key-readers keep
+ * working). Used by `amicus council validate --json`.
+ * @param {{ok:boolean, findings:Array, errors:Array}} result
+ * @returns {object} enveloped validate doc
+ */
+function buildValidateDoc(result) {
+  const { COUNCIL_SCHEMA_VERSION } = require('./tally');
+  return { schemaVersion: COUNCIL_SCHEMA_VERSION, type: 'council-validate', ...result };
+}
+
+module.exports = { validateFindings, buildValidateDoc, SEVERITIES };
