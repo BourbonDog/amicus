@@ -178,13 +178,15 @@ Append to the chair packet (`_tmp-chair-packet.md`) when the element is toggled 
 > 1. **HARD QUESTIONS** — three to five questions the artifact's author has probably not
 >    asked themselves, chosen so that an unanswerable question reveals a structural gap in
 >    the artifact (not gotchas — questions whose answers should exist).
-> 2. A final line, alone on the last line, in exactly this format:
+> 2. A final line, alone on the last line, containing ONLY the phrase — no rationale, no
+>    dash, no trailing text of any kind — exactly one of:
 >
 >    `VERDICT: Ship it` | `VERDICT: Fix these first` | `VERDICT: Fundamental rethink`
 >
 >    Pick one. "Ship it" = solid, nothing blocking. "Fix these first" = specific gaps must
->    be resolved before the artifact is useful — name them. "Fundamental rethink" =
->    structural problems that cannot be patched — say what is wrong at the foundation.
+>    be resolved first. "Fundamental rethink" = structural problems that cannot be patched.
+>    Name the gaps or the structural problems in the synthesis ABOVE, not on the VERDICT
+>    line itself — that line carries the phrase and nothing else.
 
 **Orchestration note:** surface the chair's `VERDICT:` line verbatim at the top of
 `report.md` and in the inline chat presentation of the results.
