@@ -95,6 +95,7 @@ bin/
 src/
 ├── council/
 │   ├── anonymize.js
+│   ├── briefings.js
 │   ├── findings.js
 │   ├── ledger.js
 │   ├── presets-cli.js
@@ -349,6 +350,7 @@ evals/
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
+| `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `buildSeatBriefing()`, `buildCriticBriefing()`, `buildLensBriefing()` |
 | `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES()`, `lastJsonBlock()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
