@@ -46,7 +46,8 @@ function deriveAlias(args) {
 async function resolveLaunchModel(args) {
   const { resolveGatewayMode } = require('./config');
   const { resolveRouteForLaunch } = require('./route-launch');
-  const { toCliMessage, toStructuredError } = require('./route-error');
+  const { toCliMessage, toErrorDocFields } = require('./route-error');
+  const { failJson, ERROR_CODES } = require('./error-doc');
   const { resolveModelInputOrDefault } = require('./model-input-default');
 
   const gatewayMode = resolveGatewayMode(args.gateway);
@@ -66,9 +67,13 @@ async function resolveLaunchModel(args) {
   // via model-input-default.js, so this lookup lives in exactly one place.
   const modelInput = resolveModelInputOrDefault(args.model);
   if (modelInput === undefined) {
-    process.stderr.write(
-      'No model specified and no default configured. Run \'amicus setup\' to set a default model.\n'
-    );
+    const message = 'No model specified and no default configured. Run \'amicus setup\' to set a default model.';
+    if (args.json) {
+      // v4.0 §7: --json pre-flight failures land on STDOUT as the error doc.
+      failJson(true, { code: ERROR_CODES.BAD_MODEL, message, hint: 'amicus setup' });
+    } else {
+      process.stderr.write(`${message}\n`);
+    }
     process.exit(1);
   }
 
@@ -106,17 +111,21 @@ async function resolveLaunchModel(args) {
         provenance: result.provenance || {},
       };
     } catch (err) {
-      process.stderr.write(`${err.message || 'Model selection cancelled.'}\n`);
+      const message = err.message || 'Model selection cancelled.';
+      if (args.json) {
+        failJson(true, { code: ERROR_CODES.BAD_MODEL, message,
+          hint: 'Pass --model <vendor/model> explicitly to skip the picker.' });
+      } else {
+        process.stderr.write(`${message}\n`);
+      }
       process.exit(1);
     }
   }
 
-  // 'error': render and exit. (A non-interactive run never reaches
-  // kind:'selection_required' — allowSelection is false there, so the router
-  // resolves a catalog miss straight to kind:'error' with reason
-  // 'model_not_found' instead; see gateway-router.js's catalogGate.)
+  // 'error': render and exit. Under --json the error doc goes to STDOUT
+  // (v4.0 §7 — was toStructuredError on stderr); human stderr is unchanged.
   if (args.json) {
-    process.stderr.write(`${JSON.stringify(toStructuredError(result))}\n`);
+    failJson(true, toErrorDocFields(result));
   } else {
     process.stderr.write(`${toCliMessage(result)}\n`);
   }

@@ -93,6 +93,7 @@ describe('handleContinue --model routes through the gateway router (#61 Task 7.3
     });
     const { handleContinue } = loadHandleContinue({ resolveRouteForLaunch });
     const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const outSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation((c) => { throw new Error(`exit:${c}`); });
 
     await expect(handleContinue({
@@ -103,12 +104,13 @@ describe('handleContinue --model routes through the gateway router (#61 Task 7.3
       model: 'x-ai/grok-4.3', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: true,
     }));
     expect(exitSpy).toHaveBeenCalledWith(1);
-    const written = errSpy.mock.calls.map((c) => c[0]).join('');
-    expect(written).toContain('"type":"model_route_error"');
+    const written = outSpy.mock.calls.map((c) => c[0]).join('');
     const doc = JSON.parse(written.trim());
-    expect(doc).toMatchObject({ type: 'model_route_error', reason: 'no_openrouter_key', requested: 'x-ai/grok-4.3' });
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'MISSING_KEY' } });
+    expect(doc.error.message).toContain('x-ai/grok-4.3');
 
     errSpy.mockRestore();
+    outSpy.mockRestore();
     exitSpy.mockRestore();
   });
 
