@@ -66,6 +66,7 @@ describe('published result-family schemas validate real builder output (v4.0 §7
   test('abort.schema.json accepts buildAbortResult output', () => {
     expectValid(compile('abort'), buildAbortResult({ scope: 'session', taskId: 't1', aborted: ['t1'] }));
     expectValid(compile('abort'), buildAbortResult({ scope: 'all', taskId: null, aborted: [] }));
+    expectValid(compile('abort'), buildAbortResult({ scope: 'council-run', taskId: 'c1', aborted: ['c1'] }));
   });
 
   test('error.schema.json accepts buildErrorDoc output', () => {

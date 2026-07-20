@@ -9,7 +9,7 @@
     "schemaVersion": { "const": 2 },
     "type": { "const": "abort" },
     "ok": { "type": "boolean" },
-    "scope": { "enum": ["session", "wave", "all"] },
+    "scope": { "enum": ["session", "wave", "all", "council-run"] },
     "taskId": { "type": ["string", "null"] },
     "aborted": { "type": "array", "items": { "type": "string" } },
     "count": { "type": "number" }

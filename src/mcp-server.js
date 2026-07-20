@@ -956,6 +956,19 @@ const handlers = {
     const cwd = project || getProjectDir(input.project);
     const metadata = readMetadata(input.taskId, cwd);
     if (!metadata) {
+      // Council runs resolve via the sessions-dir pointer file (v4.0 §8):
+      // mark run.json aborted + cascade to the active wave/leg records.
+      const council = require('./mcp-council-run').abortCouncilRun(cwd, input.taskId);
+      if (council) {
+        if (council.alreadyTerminal) {
+          return textResult(`Council run ${input.taskId} is not running (status: ${council.status}).`);
+        }
+        return textResult(JSON.stringify({
+          taskId: input.taskId, status: 'aborted', legsAborted: council.cascaded,
+          message: `Council run abort requested. ${council.cascaded} running leg(s) marked aborted; ` +
+            'the engine process will finalize run.json as aborted shortly.',
+        }));
+      }
       return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
         'If you ran it in a different project, pass the original "project".', true);
     }
