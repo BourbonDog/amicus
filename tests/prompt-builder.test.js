@@ -377,6 +377,17 @@ describe('Prompt Builder', () => {
         );
         expect(userMessage).not.toContain('SIDECAR_FOLD');
       });
+
+      it('removes a marker-only line entirely instead of leaving a blank line (v4.0 §9 consolidation)', () => {
+        const { userMessage } = buildPrompts(
+          'task',
+          'line one\n[SIDECAR_FOLD:abc123def456]\nline two',
+          '/project',
+          true
+        );
+        expect(userMessage).not.toContain('SIDECAR_FOLD');
+        expect(userMessage).toContain('line one\nline two');
+      });
     });
 
     describe('per-run fold nonce in the headless instruction (15b.3, #BL-7 residual)', () => {

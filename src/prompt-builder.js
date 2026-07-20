@@ -4,7 +4,7 @@
  * Spec Reference: §6 Fold Mechanism, §9 Implementation
  * Constructs system prompts for sidecar sessions in both interactive and headless modes.
  */
-const { buildFoldMarker } = require('./utils/fold-marker');
+const { buildFoldMarker, stripFoldMarkers } = require('./utils/fold-marker');
 
 /**
  * Summary template for fold output per spec §6.1
@@ -108,11 +108,11 @@ function buildPrompts(briefing, context, project, headless, mode, summaryLength 
   ];
 
   // Strip fold markers from context so the model doesn't mimic them from
-  // previous sidecar outputs in the conversation history. Matches BOTH the
-  // legacy bare `[SIDECAR_FOLD]` and any nonced `[SIDECAR_FOLD:<nonce>]` —
-  // a resumed/continued conversation's history can carry either shape
-  // depending on when the prior turn ran (15b.3).
-  const cleanContext = context ? context.replace(/\[SIDECAR_FOLD(:[^\]]*)?\]/g, '') : context;
+  // previous sidecar outputs in the conversation history. stripFoldMarkers
+  // (src/utils/fold-marker.js) removes BOTH the legacy bare `[SIDECAR_FOLD]`
+  // and any nonced `[SIDECAR_FOLD:<nonce>]` — marker-only lines vanish
+  // entirely; inline occurrences are removed in place (v4.0 §9).
+  const cleanContext = stripFoldMarkers(context);
 
   let userMessage;
   if (headless) {
