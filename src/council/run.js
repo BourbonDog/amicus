@@ -33,6 +33,22 @@ const { sumWaveUsage } = require('../utils/pricing');
 const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 
 /**
+ * Chair fallback promotion (spec §4): the highest peers-only street-cred
+ * model from `council stats` that is not a bench seat and not the failed
+ * chair. "Highest street-cred" = BEST = numerically LOWEST mean rank
+ * (deriveReliability's avgStreetCredPeersOnly; lower is better).
+ * @returns {string|null}
+ */
+function pickFallbackChair(statsRows, bench, failedChair) {
+  const benchSet = new Set(bench);
+  const candidates = (statsRows || [])
+    .filter(r => !benchSet.has(r.model) && r.model !== failedChair
+      && typeof r.avgStreetCredPeersOnly === 'number')
+    .sort((a, b) => a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly);
+  return candidates.length ? candidates[0].model : null;
+}
+
+/**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project,
  *   runId, runDir, timeout?, maxCost?, gateway?, noValidateModel?, date}
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?}
@@ -42,6 +58,7 @@ async function runCouncil(options, deps = {}) {
   const o = { critic: null, lenses: null, maxCost: null, ...options };
   const launchers = deps.launchers || createLaunchers();
   const appendRunFn = deps.appendRunFn || require('./ledger').appendRun;
+  const statsFn = deps.statsFn || require('./ledger').deriveReliability;
   const installSignals = deps.installSignalAbortFn
     || require('../utils/session-abort').installSignalAbort;
   const now = () => new Date().toISOString();
@@ -174,17 +191,42 @@ async function runCouncil(options, deps = {}) {
       runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
     } else {
       runState.updateStage(o.runDir, 'chair', { status: 'running', startedAt: now(), project: o.runDir });
-      const first = await attemptChair(o.chair, `${o.runId}-ch1`);
-      chairLeg = first.leg;
-      if (chairLeg) { actualChair = o.chair; }
+      // Fallback chain (spec §4): retry same chair once → promote best
+      // non-bench model from the ledger → give up (no Claude fallback headless).
+      let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
+      if (!attempt.leg && !overBudget()) {
+        attempt = await attemptChair(o.chair, `${o.runId}-ch2`);
+      }
+      if (attempt.leg) { actualChair = o.chair; }
+      else if (!overBudget()) {
+        let statsRows = [];
+        try { statsRows = statsFn(); } catch { /* no ledger yet */ }
+        const fallback = pickFallbackChair(statsRows, o.models, o.chair);
+        if (fallback) {
+          attempt = await attemptChair(fallback, `${o.runId}-ch3`);
+          if (attempt.leg) { actualChair = fallback; }
+        }
+      }
+      chairLeg = attempt.leg;
       runState.updateStage(o.runDir, 'chair',
         { status: chairLeg ? 'complete' : 'error', completedAt: now() });
     }
     const chairText = chairLeg ? chairLeg.summary : null;
-    const chairConformance = 'clean';
+    let chairConformance = 'clean';
 
-    // ---- Chair VERDICT line ----
-    const overallVerdict = chairText ? parseChairVerdict(chairText) : null;
+    // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
+    let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
+    if (chairText && !overallVerdict && !overBudget()) {
+      const repair = await launchers.launchSolo({
+        model: actualChair, prompt: stage2.buildChairRepairPrompt(),
+        project: o.runDir, waveId: `${o.runId}-ch4`,
+        timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
+      });
+      addWave(repair.wave);
+      overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
+      chairConformance = overallVerdict ? 'repaired' : 'unstructured';
+    }
+    if (!chairLeg || !overallVerdict) { degraded.value = true; } // spec table: exit 2 rows
 
     // ---- Final tally (chair row included) + ledger + artifacts ----
     const chairStats = chairLeg ? asm.buildRunStatsEntry({
@@ -209,4 +251,4 @@ async function runCouncil(options, deps = {}) {
   }
 }
 
-module.exports = { runCouncil, SIGNAL_EXIT };
+module.exports = { runCouncil, pickFallbackChair, SIGNAL_EXIT };
