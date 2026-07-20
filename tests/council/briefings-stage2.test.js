@@ -68,6 +68,11 @@ describe('chair packet', () => {
     expect(packet).toContain('VERDICT: Fix these first');
     expect(packet).toContain('VERDICT: Fundamental rethink');
   });
+
+  test('the addendum tells the chair the VERDICT line carries no trailing rationale', () => {
+    expect(s2.VERDICT_SCALE_ADDENDUM).toContain('no rationale');
+    expect(s2.VERDICT_SCALE_ADDENDUM.toLowerCase()).toContain('nothing else');
+  });
 });
 
 describe('repair prompts', () => {

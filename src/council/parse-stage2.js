@@ -70,8 +70,17 @@ function parseJudgeOutput(text, { labels, findingIds }) {
   return { ok: true, ranking: parsed.ranking, adjudications: parsed.adjudications, errors: [] };
 }
 
+/** Per-phrase `^<phrase>(?![A-Za-z0-9])` matchers — prefix-anchored, case-sensitive. */
+const CHAIR_VERDICT_PREFIXES = CHAIR_VERDICTS.map(
+  (v) => new RegExp('^' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9])')
+);
+
 /**
- * Parse the chair's final verdict line. Last matching `VERDICT:` line wins.
+ * Parse the chair's final verdict line. Last matching `VERDICT:` line wins. A
+ * line matches when the text after `VERDICT:` equals a canonical phrase, or
+ * starts with one followed by a word boundary (trailing rationale, e.g.
+ * `VERDICT: Fix these first — <gaps>`). Returns the canonical phrase, not the
+ * trailing text.
  * @param {string} text
  * @returns {string|null} one of CHAIR_VERDICTS, or null
  */
@@ -79,7 +88,14 @@ function parseChairVerdict(text) {
   let found = null;
   for (const line of String(text || '').split('\n')) {
     const m = line.match(/^\s*VERDICT:\s*(.+?)\s*$/);
-    if (m && CHAIR_VERDICTS.includes(m[1])) { found = m[1]; }
+    if (!m) { continue; }
+    const rest = m[1];
+    for (let i = 0; i < CHAIR_VERDICTS.length; i++) {
+      if (rest === CHAIR_VERDICTS[i] || CHAIR_VERDICT_PREFIXES[i].test(rest)) {
+        found = CHAIR_VERDICTS[i];
+        break;
+      }
+    }
   }
   return found;
 }

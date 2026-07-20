@@ -95,4 +95,26 @@ describe('parseChairVerdict', () => {
   test('tolerates leading whitespace and trailing spaces', () => {
     expect(parseChairVerdict('  VERDICT: Ship it  ')).toBe('Ship it');
   });
+
+  test('tolerates trailing rationale after the phrase (live-gate bug, runId b89b67d1)', () => {
+    const text = 'Synthesis…\n\nVERDICT: Fix these first — SQL injection (all queries), ' +
+      'authorization checks (per-order ownership validation), and money-handling ' +
+      'correctness must all be resolved before this code touches production.';
+    expect(parseChairVerdict(text)).toBe('Fix these first');
+  });
+
+  test('tolerates trailing rationale for each of the other two phrases', () => {
+    expect(parseChairVerdict('VERDICT: Ship it — looks solid')).toBe('Ship it');
+    expect(parseChairVerdict('VERDICT: Fundamental rethink. The data model is unsound.'))
+      .toBe('Fundamental rethink');
+  });
+
+  test('is prefix-anchored — a canonical phrase appearing later in the rationale must not win', () => {
+    expect(parseChairVerdict('VERDICT: Fix these first — not a Ship it situation'))
+      .toBe('Fix these first');
+  });
+
+  test('does not over-match a longer word sharing the phrase as a prefix', () => {
+    expect(parseChairVerdict('VERDICT: Ship its all good')).toBeNull();
+  });
 });
