@@ -26,7 +26,7 @@ const stage2 = require('./briefings-stage2');
 const { parseChairVerdict } = require('./parse-stage2');
 const runState = require('./run-state');
 const { createLaunchers } = require('./run-launch');
-const { runStage1, runStage2 } = require('./run-stages');
+const { runStage1, runStage2, isAbortExit } = require('./run-stages');
 const asm = require('./run-assemble');
 const { sumWaveUsage } = require('../utils/pricing');
 
@@ -117,6 +117,7 @@ async function runCouncil(options, deps = {}) {
       status: 'complete', completedAt: now(),
       taskIds: s1.reviews.map(r => (r.leg && r.leg.taskId)).filter(Boolean),
     });
+    if (signalled || s1.aborted) { return finalize(s1.aborted || signalled); }
     if (s1.deadLegs.length > 0) { degraded.value = true; } // bench shrank → never a "full run"
     if (s1.reviews.length < 2) {
       return finalize(1, {
@@ -146,6 +147,7 @@ async function runCouncil(options, deps = {}) {
       { status: 'running', startedAt: now(), waveId: `${o.runId}-s2`, project: ctx.scratchDir });
     const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings });
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
+    if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
     if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
 
     // Merge Stage-2 judging conformance into each seat's row (worst wins).
@@ -194,8 +196,10 @@ async function runCouncil(options, deps = {}) {
       // Fallback chain (spec §4): retry same chair once → promote best
       // non-bench model from the ledger → give up (no Claude fallback headless).
       let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
+      if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
       if (!attempt.leg && !overBudget()) {
         attempt = await attemptChair(o.chair, `${o.runId}-ch2`);
+        if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
       }
       if (attempt.leg) { actualChair = o.chair; }
       else if (!overBudget()) {
@@ -204,6 +208,7 @@ async function runCouncil(options, deps = {}) {
         const fallback = pickFallbackChair(statsRows, o.models, o.chair);
         if (fallback) {
           attempt = await attemptChair(fallback, `${o.runId}-ch3`);
+          if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
           if (attempt.leg) { actualChair = fallback; }
         }
       }
@@ -223,6 +228,7 @@ async function runCouncil(options, deps = {}) {
         timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
       });
       addWave(repair.wave);
+      if (isAbortExit(repair.exitCode) || signalled) { return finalize(repair.exitCode || signalled); }
       overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
       chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     }
