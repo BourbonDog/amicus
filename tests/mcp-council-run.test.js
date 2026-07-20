@@ -92,6 +92,34 @@ describe('amicus_council_run handler', () => {
     const run = JSON.parse(fs.readFileSync(path.join(tmp, dirs[0], 'run.json'), 'utf-8'));
     expect(run.status).toBe('error');
   });
+
+  test('maxCost <= 0 → isError, no spawn, no orphan run.json directory', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ maxCost: -1 }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/maxCost/);
+    expect(calls).toHaveLength(0);
+    expect(fs.readdirSync(tmp).filter(d => d.startsWith('council-'))).toHaveLength(0);
+  });
+
+  test('timeoutMinutes <= 0 → isError, no spawn, no orphan run.json directory', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(input({ timeoutMinutes: -5 }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/timeoutMinutes/);
+    expect(calls).toHaveLength(0);
+    expect(fs.readdirSync(tmp).filter(d => d.startsWith('council-'))).toHaveLength(0);
+  });
+
+  test('outDir escaping the project directory → isError, no spawn, escaped dir not created', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      input({ outDir: path.join('..', 'escaped-council') }), tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/outDir must resolve to a path inside the project directory/);
+    expect(calls).toHaveLength(0);
+    expect(fs.existsSync(path.resolve(tmp, '..', 'escaped-council'))).toBe(false);
+  });
 });
 
 describe('tool registration', () => {

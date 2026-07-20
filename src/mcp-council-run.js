@@ -16,6 +16,7 @@ const path = require('path');
 const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
 const { RUNNING_VERSION } = require('./utils/version-info');
+const { isPathInside } = require('./project-root-allowlist');
 
 function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
@@ -76,12 +77,23 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (lenses && lenses.length !== bench.length) {
     return textResult(`lenses needs exactly one lens per seat (${bench.length} seats, got ${lenses.length}).`, true);
   }
+  if (input.timeoutMinutes !== undefined &&
+      (typeof input.timeoutMinutes !== 'number' || !Number.isFinite(input.timeoutMinutes) || input.timeoutMinutes <= 0)) {
+    return textResult('timeoutMinutes must be a positive number.', true);
+  }
+  if (input.maxCost !== undefined &&
+      (typeof input.maxCost !== 'number' || !Number.isFinite(input.maxCost) || input.maxCost <= 0)) {
+    return textResult('maxCost must be a positive number.', true);
+  }
 
   const { generateTaskId } = require('./sidecar/start');
   const runId = generateTaskId();
   const runDir = input.outDir
     ? path.resolve(project, String(input.outDir))
     : path.join(project, `council-${runId}`);
+  if (!isPathInside(runDir, project)) {
+    return textResult(`outDir must resolve to a path inside the project directory (${project}).`, true);
+  }
   const briefingPath = path.join(runDir, 'briefing.md');
   try {
     fs.mkdirSync(runDir, { recursive: true, mode: 0o700 });
