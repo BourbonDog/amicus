@@ -716,42 +716,34 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
  * Extract summary from output (everything before the trailing fold marker)
  * Spec Reference: §6.2 - Return summary (everything before the fold marker)
  *
+ * v4.0 §9 (BL-7 done-done): `nonce` is REQUIRED for any non-empty output.
+ * The pre-15b.3 no-nonce fallback (matching the legacy bare `[SIDECAR_FOLD]`
+ * marker) is retired — no code path, internal or external, may complete on a
+ * bare marker. Callers with no nonce have no valid marker to split on and
+ * must not call this.
+ *
  * @param {string} output - Raw output from OpenCode
- * @param {string} [nonce] - This run's fold nonce (15b.3). When omitted, falls
- *   back to matching the LEGACY bare `[SIDECAR_FOLD]` marker — this keeps
- *   extractSummary usable as a standalone string utility (e.g. re-processing
- *   output captured before the nonce scheme, or a caller that genuinely has
- *   no nonce context) without ever accepting a WRONG nonce as a match.
+ * @param {string} nonce - This run's fold nonce (required for non-empty output)
  * @returns {string} Extracted summary
+ * @throws {TypeError} when output is non-empty and nonce is missing/empty
  */
 function extractSummary(output, nonce) {
   if (!output) {
     return '';
+  }
+  if (!nonce) {
+    throw new TypeError('extractSummary requires a per-run nonce (15b.3/v4.0 §9)');
   }
 
   // Split on the fold marker only when it is the FINAL non-empty line (#BL-7).
   // A marker echoed mid-output (describing code, reproducing these
   // instructions, or from scraped content) is NOT a delimiter — keep it as
   // content. Only the true trailing marker is stripped.
-  const idx = nonce ? findTrailingFoldMarker(output, nonce) : findLegacyBareTrailingMarker(output);
+  const idx = findTrailingFoldMarker(output, nonce);
   if (idx !== -1) {
     return output.slice(0, idx).trim();
   }
   return output.trim();
-}
-
-/**
- * Legacy bare-marker trailing match (`[SIDECAR_FOLD]`, no nonce) — the
- * pre-15b.3 behavior, kept only for extractSummary's no-nonce fallback path.
- * NEVER used by runHeadless's own detection (that always carries a nonce —
- * see findTrailingFoldMarker), so no live completion path can be forced by a
- * bare marker.
- * @param {string} output
- * @returns {number}
- */
-function findLegacyBareTrailingMarker(output) {
-  const m = /^[^\S\r\n]*\[SIDECAR_FOLD\][^\S\r\n]*$(?![\s\S]*\S)/m.exec(output);
-  return m ? m.index : -1;
 }
 
 /**

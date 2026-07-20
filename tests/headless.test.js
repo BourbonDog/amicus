@@ -441,42 +441,50 @@ describe('Headless Mode Runner', () => {
   });
 
   describe('extractSummary', () => {
-    it('should extract content before [SIDECAR_FOLD]', () => {
-      const output = 'Summary content\n[SIDECAR_FOLD]';
-      expect(extractSummary(output)).toBe('Summary content');
+    it('extracts content before the trailing nonced marker', () => {
+      const output = `Summary content\n${NONCED_MARKER}`;
+      expect(extractSummary(output, NONCE)).toBe('Summary content');
     });
 
-    it('should handle output without marker', () => {
+    it('handles output without a marker', () => {
       const output = 'Just some text without marker';
-      expect(extractSummary(output)).toBe(output);
+      expect(extractSummary(output, NONCE)).toBe(output);
     });
 
-    it('should handle empty output', () => {
+    it('handles empty output without requiring a nonce', () => {
       expect(extractSummary('')).toBe('');
       expect(extractSummary(null)).toBe('');
       expect(extractSummary(undefined)).toBe('');
     });
 
-    it('should trim whitespace', () => {
-      const output = '  Summary  \n  [SIDECAR_FOLD]';
-      expect(extractSummary(output)).toBe('Summary');
+    it('throws when output is non-empty and no nonce is given (v4.0 §9 — legacy path retired)', () => {
+      expect(() => extractSummary('Summary content\n[SIDECAR_FOLD]'))
+        .toThrow(/requires a per-run nonce/);
+    });
+
+    it('no longer splits on the legacy bare marker even WITH a nonce (bare form retired)', () => {
+      const output = 'Summary content\n[SIDECAR_FOLD]';
+      expect(extractSummary(output, NONCE)).toBe(output.trim());
+    });
+
+    it('trims whitespace', () => {
+      const output = `  Summary  \n  ${NONCED_MARKER}`;
+      expect(extractSummary(output, NONCE)).toBe('Summary');
     });
 
     it('splits on a TRAILING marker even with blank lines after it (#BL-7)', () => {
-      const output = 'Summary content\n[SIDECAR_FOLD]\n\n  ';
-      expect(extractSummary(output)).toBe('Summary content');
+      const output = `Summary content\n${NONCED_MARKER}\n\n  `;
+      expect(extractSummary(output, NONCE)).toBe('Summary content');
     });
 
     it('does NOT strip a marker echoed mid-output — only the trailing one (#BL-7)', () => {
-      // A bare marker on its own line followed by MORE content is echoed prose,
-      // not the delimiter — it must survive in the extracted summary.
-      const output = 'Reproducing the format:\n[SIDECAR_FOLD]\nthen more analysis';
-      expect(extractSummary(output)).toBe(output.trim());
+      const output = `Reproducing the format:\n${NONCED_MARKER}\nthen more analysis`;
+      expect(extractSummary(output, NONCE)).toBe(output.trim());
     });
 
     it('splits on the trailing marker when an earlier one is echoed (#BL-7)', () => {
-      const output = 'See [SIDECAR_FOLD] usage above\nrest of summary\n[SIDECAR_FOLD]';
-      expect(extractSummary(output)).toBe('See [SIDECAR_FOLD] usage above\nrest of summary');
+      const output = `See ${NONCED_MARKER} usage above\nrest of summary\n${NONCED_MARKER}`;
+      expect(extractSummary(output, NONCE)).toBe(`See ${NONCED_MARKER} usage above\nrest of summary`);
     });
   });
 
