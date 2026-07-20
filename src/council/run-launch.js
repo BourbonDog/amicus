@@ -45,6 +45,13 @@ function createLaunchers(deps = {}) {
       noValidateModel: opts.noValidateModel,
       json: false,
       quiet: true,
+      // Spec §6 judge isolation: pin every leg's OpenCode tool-exec cwd to its
+      // own session dir (judges' `project` is `<runDir>/_scratch`, so this
+      // scopes them there) and strip inherited MCP servers, so a tool-capable
+      // judge can't read the de-anonymized review-*.md files or the plaintext
+      // labelMap in run.json sitting in the parent run dir.
+      directory: opts.project,
+      noMcp: true,
     });
     return { wave, exitCode };
   }

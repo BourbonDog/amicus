@@ -37,6 +37,26 @@ describe('launchWave (DI over runFanout)', () => {
     expect(seen[0].waveId).toBe('abc123-s1');
     expect(seen[0].project).toBe(tmp);
   });
+
+  // Spec §6 judge isolation: a tool-capable judge leg must not be able to read
+  // the de-anonymized review-*.md files or the plaintext labelMap in run.json.
+  // The transport enforces this via `directory` (pins the OpenCode tool-exec
+  // cwd) and `noMcp` (strips inherited MCP servers) — launchWave must forward
+  // both on every council call (reviewers, judges, critic, lenses, chair).
+  test('pins tool-exec directory to the run scope and disables MCP (spec §6 isolation)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => {
+      seen.push(opts);
+      return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 };
+    };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({
+      models: ['gemini', 'gpt'], prompt: 'briefing text', project: tmp,
+      waveId: 'abc123-s2',
+    });
+    expect(seen[0].directory).toBe(tmp);
+    expect(seen[0].noMcp).toBe(true);
+  });
 });
 
 describe('launchSolo (single-leg wave)', () => {
@@ -57,6 +77,18 @@ describe('launchSolo (single-leg wave)', () => {
     const { leg, exitCode } = await launchSolo({ model: 'x', prompt: 'p', project: tmp, waveId: 'w' });
     expect(leg).toBeNull();
     expect(exitCode).toBe(1);
+  });
+
+  test('inherits the spec §6 isolation knobs from launchWave (critic/lens/chair legs)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => {
+      seen.push(opts);
+      return { wave: { waveId: opts.waveId, status: 'complete', legs: [mkLeg('deepseek', 'x')] }, exitCode: 0 };
+    };
+    const { launchSolo } = createLaunchers({ fanoutFn });
+    await launchSolo({ model: 'deepseek', prompt: 'p', project: tmp, waveId: 'abc123-ch1' });
+    expect(seen[0].directory).toBe(tmp);
+    expect(seen[0].noMcp).toBe(true);
   });
 });
 

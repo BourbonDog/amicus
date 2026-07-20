@@ -245,7 +245,7 @@ async function runFanout(options) {
           leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
           timeoutMs, agent: options.agent, client, server,
           summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
-          foldNonce,
+          foldNonce, directory: options.directory,
         })
       : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
     )));

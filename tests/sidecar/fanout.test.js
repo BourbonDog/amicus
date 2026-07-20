@@ -256,6 +256,27 @@ describe('runFanout orchestrator', () => {
     expect(serverOpts).toMatchObject({ models: ['openrouter/a/b', 'openrouter/c/d'] });
   });
 
+  // Whole-branch review FIX 1 (spec §6 judge isolation): a caller-supplied
+  // `directory` must reach every leg's runHeadless call so its tool-exec cwd
+  // is scoped, not just its session-metadata `project`. A caller that omits
+  // it (every non-council fanout caller today) must see `undefined` reach
+  // runHeadless too — i.e. behavior stays byte-for-byte unchanged for them.
+  it('forwards a caller-supplied directory to every leg\'s runHeadless call', async () => {
+    await runFanout({ ...baseOpts(), directory: '/scoped/run-dir' });
+    expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+    for (const call of mockRunHeadless.mock.calls) {
+      expect(call[7].directory).toBe('/scoped/run-dir');
+    }
+  });
+
+  it('leaves runHeadless options.directory undefined when the caller omits it (non-council callers unaffected)', async () => {
+    await runFanout(baseOpts());
+    expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+    for (const call of mockRunHeadless.mock.calls) {
+      expect(call[7].directory).toBeUndefined();
+    }
+  });
+
   // #61 whole-branch review FIX 2: a leg's migration notice (routeResult.notice)
   // had no CLI stderr to land on in fanout — one process resolves MANY legs,
   // not a single launch — so it must surface on the wave doc instead.
