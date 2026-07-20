@@ -43,6 +43,18 @@ function formatWaveHumanStatus(d) {
   return [head, ...legLines].join('\n');
 }
 
+/** Render a council-run payload: header + one line per stage. */
+function formatCouncilHuman(d) {
+  const head = `Council run ${d.runId}: ${d.status}` +
+    (d.currentStage ? ` — ${d.currentStage}` : '') +
+    (d.legsTotal !== null && d.legsTotal !== undefined ? ` (${d.legsComplete}/${d.legsTotal} legs)` : '') +
+    ` (${d.elapsed})`;
+  const stageLines = (d.stages || []).map(s =>
+    `  ${String(s.name).padEnd(10)} ${String(s.status).padEnd(10)}${s.waveId ? ` wave ${s.waveId}` : ''}`);
+  const tail = d.reason ? [`  Reason: ${d.reason}`] : [];
+  return [head, ...stageLines, ...tail].join('\n');
+}
+
 /**
  * Handle 'amicus status'. Exit code 0 = status retrieved (any run state, even
  * a failed/crashed run — the QUERY succeeded); 1 = missing/invalid/unknown id.
@@ -85,8 +97,11 @@ async function handleStatus(args) {
   delete data.next_poll; // MCP-agent polling guidance, not CLI output
 
   if (args.json) { process.stdout.write(`${JSON.stringify(data, null, 2)}\n`); return 0; }
-  process.stdout.write(`${data.type === 'wave' ? formatWaveHumanStatus(data) : formatRunHuman(data)}\n`);
+  const rendered = data.type === 'wave' ? formatWaveHumanStatus(data)
+    : data.type === 'council-run' ? formatCouncilHuman(data)
+    : formatRunHuman(data);
+  process.stdout.write(`${rendered}\n`);
   return 0;
 }
 
-module.exports = { handleStatus, formatRunHuman, formatWaveHumanStatus };
+module.exports = { handleStatus, formatRunHuman, formatWaveHumanStatus, formatCouncilHuman };

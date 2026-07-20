@@ -571,6 +571,17 @@ const handlers = {
     const sessionDir = safeSessionDir(cwd, input.taskId);
     const metadata = readMetadata(input.taskId, cwd);
     if (!metadata) {
+      // Council runs live behind sessions-dir pointer files, not session dirs
+      // (v4.0 spec §8). Resolve them before failing.
+      const council = require('./mcp-council-run').buildCouncilStatusPayload(cwd, input.taskId);
+      if (council) {
+        const content = [{ type: 'text', text: JSON.stringify(council) }];
+        appendVersionWarning(content);
+        if (council.status === 'running') {
+          content.push({ type: 'text', text: HEADLESS_STATUS_REMINDER });
+        }
+        return { content };
+      }
       return textResult(`Session ${input.taskId} not found in project ${cwd}. ` +
         'If you ran it in a different project, pass the original "project".', true);
     }
