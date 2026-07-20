@@ -849,7 +849,10 @@ const handlers = {
       }
     }
 
-    let sessions = Array.from(byId.values())
+    // v4.0 §8: council runs are pointer files in the same sessions root — merge
+    // them as first-class rows (type 'council-run') before sorting/filtering.
+    const councilRows = require('./mcp-council-run').listCouncilRuns(cwd);
+    let sessions = Array.from(byId.values()).concat(councilRows)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     if (input.status && input.status !== 'all') {
