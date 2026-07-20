@@ -162,6 +162,22 @@ describe('Resume Operations', () => {
       expect(result).toContain('PREVIOUS CONVERSATION');
       expect(result).toContain('conversation data');
     });
+
+    it('strips a nonced fold marker from the replayed conversation (v4.0 §9 — BL-7 done-done)', () => {
+      const conversation = '[assistant @ 10:01] work done\n[SIDECAR_FOLD:cafef00d12345678]\n';
+      const result = buildResumeUserMessage('Task', conversation);
+      expect(result).not.toContain('SIDECAR_FOLD');
+      expect(result).toContain('work done');
+      expect(result).toContain('## PREVIOUS CONVERSATION');
+    });
+
+    it('strips a legacy bare fold marker from the replayed conversation', () => {
+      const conversation = 'earlier summary\n[SIDECAR_FOLD]\nmore turns';
+      const result = buildResumeUserMessage('', conversation);
+      expect(result).not.toContain('[SIDECAR_FOLD]');
+      expect(result).toContain('earlier summary');
+      expect(result).toContain('more turns');
+    });
   });
 
   describe('OpenCode session ID in metadata', () => {
