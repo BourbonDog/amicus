@@ -34,7 +34,7 @@ function mergeRun(existing, patch) {
   const merged = { ...existing, ...patch };
   // If the prior run was aborted, preserve that status regardless of patch content
   // (prevents falsy status values, null, '', or omitted status from overwriting)
-  if (existing.status === 'aborted') {
+  if (existing.status === 'aborted' || patch.status === 'aborted') {
     merged.status = 'aborted';
     // An aborted run is terminal: never let a later (racing) finalize report a
     // clean/degraded exitCode. Prefer a recorded abort code, then a patch abort

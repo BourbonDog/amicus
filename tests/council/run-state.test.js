@@ -92,6 +92,14 @@ describe('run.json init + checkpoint', () => {
     expect(run.exitCode).toBe(143);
   });
 
+  test('abort-wins: FIRST write that sets status aborted WITHOUT exitCode pins exitCode to 143 (MF-3 fix)', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    // First write sets status to aborted without an exitCode (e.g. abortCouncilRun)
+    const run = rs.checkpoint(runDirOf(), { status: 'aborted', completedAt: '2026-07-20T00:00:00.000Z' });
+    expect(run.status).toBe('aborted');
+    expect(run.exitCode).toBe(143); // must pin to canonical abort code, not undefined
+  });
+
   test('readRun returns null for a missing/corrupt file', () => {
     expect(rs.readRun(path.join(tmp, 'nope'))).toBeNull();
   });
