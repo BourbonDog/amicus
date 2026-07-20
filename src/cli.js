@@ -357,7 +357,7 @@ Commands:
   continue    New session building on previous
   read        Output session summary/conversation
   models      List/search the model catalog, refresh it, audit aliases
-  council run --prompt-file <f> (--models a,b,c | --council <name>)   Headless council: reviews → cross-review → tally → chair → verdict
+  council run <briefing.md> (--models a,b,c | --council <name>)   Headless council: reviews → cross-review → tally → chair → verdict
   council tally <input.json> [--json]   Tally council findings → tiers/street-cred
   council stats [--json]                Reviewer-reliability from the ledger
   council report <verdict.json> [--wave <wave.json>] [--md|--html]   Disagreement+verdict report
