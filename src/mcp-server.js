@@ -199,6 +199,18 @@ function appendVersionWarning(content) {
 }
 
 /**
+ * v4.0 §7: stamp the additive {schemaVersion, type} envelope keys onto an MCP
+ * JSON success body. `type` reflects the doc's subject family — 'run' for
+ * session status/acks, 'wave' for wave status + fanout acks, 'abort' for abort
+ * acks. Published result-doc schemas (schemas/) describe the durable --json
+ * docs; these snapshots/acks share the family type names (docs/schemas.md).
+ */
+function stampEnvelope(type, body) {
+  const { SCHEMA_VERSION } = require('./utils/result-schema-version');
+  return { schemaVersion: SCHEMA_VERSION, type, ...body };
+}
+
+/**
  * Compute next poll hint for headless sessions.
  * @returns {{ hint: string }}
  */
@@ -481,10 +493,10 @@ const handlers = {
         });
 
         // Return immediately
-        const body = JSON.stringify({
+        const body = JSON.stringify(stampEnvelope('run', {
           taskId, status: 'running', mode: 'headless',
           message: 'Amicus started in headless mode. Use amicus_status to check progress.',
-        });
+        }));
         // FIX 2 (#61 whole-branch review): surface the router's one-shot
         // migration notice here too — resolveRouteForLaunch already burned
         // the migration_notified flag for this vendor when it built
@@ -541,7 +553,7 @@ const handlers = {
         "Tell the user: 'Let me know when you're done with the session and have clicked Fold.' " +
         'Then wait for the user to tell you. Use amicus_read to get results once they confirm.';
 
-    const body = JSON.stringify({ taskId, status: 'running', mode, message });
+    const body = JSON.stringify(stampEnvelope('run', { taskId, status: 'running', mode, message }));
     // FIX 2 (#61 whole-branch review): the spawn path never touches stderr of
     // the CLI child that will do the routing print — this handler already
     // resolved the route in-process above, so surface its notice here.
@@ -617,12 +629,12 @@ const handlers = {
       }
 
       const ms = elapsedMs(metadata);
-      const response = {
-        taskId: metadata.taskId, type: 'wave', status: metadata.status,
+      const response = stampEnvelope('wave', {
+        taskId: metadata.taskId, status: metadata.status,
         legsComplete: done, legsTotal: legs.length, legs,
         elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
         version: RUNNING_VERSION,
-      };
+      });
       if (metadata.status === 'crashed' || metadata.status === 'error') {
         response.reason = metadata.reason || 'Unknown error';
       }
@@ -650,11 +662,11 @@ const handlers = {
     }
 
     const ms = elapsedMs(metadata);
-    const response = {
+    const response = stampEnvelope('run', {
       taskId: metadata.taskId, status: metadata.status,
       elapsed: `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`,
       version: RUNNING_VERSION,
-    };
+    });
     if (metadata.model) { response.model = metadata.model; }
 
     // F6: agent-visible mode (headless|interactive). metadata.mode is written at
@@ -846,10 +858,10 @@ const handlers = {
     try { spawnSidecarProcess(args, sessionDir); } catch (err) {
       return textResult(`Failed to resume: ${err.message}`, true);
     }
-    return textResult(JSON.stringify({
+    return textResult(JSON.stringify(stampEnvelope('run', {
       taskId: input.taskId, status: 'running',
       message: 'Session resumed. Use amicus_status to check progress.',
-    }));
+    })));
   },
 
   async amicus_continue(input, project, mcpServer) {
@@ -920,10 +932,10 @@ const handlers = {
       return textResult(`Failed to continue: ${err.message}`, true);
     }
     recordSession(newTaskId, cwd); // #40: global index for cross-project lookup
-    return textResult(JSON.stringify({
+    return textResult(JSON.stringify(stampEnvelope('run', {
       taskId: newTaskId, status: 'running',
       message: 'Continuation started. Use amicus_status to check progress.',
-    }));
+    })));
   },
 
   async amicus_abort(input, project) {
@@ -963,11 +975,11 @@ const handlers = {
       // if they outlive the grace window. Fire-and-forget — the tool result
       // must not block on the grace period.
       waitThenKill([metadata.pid, metadata.goPid]).catch(() => { /* best-effort */ });
-      return textResult(JSON.stringify({
+      return textResult(JSON.stringify(stampEnvelope('abort', {
         taskId: input.taskId, status: 'aborted', legsAborted,
         message: `Wave abort requested. ${legsAborted} running leg(s) marked aborted; ` +
           'the fan-out process will terminate shortly.',
-      }));
+      })));
     }
 
     // Single session: marker FIRST — the headless loop and the interactive
@@ -979,10 +991,10 @@ const handlers = {
     markAborted(sessionDir, 'manual abort (MCP)');
     waitThenKill(metadata.pid).catch(() => { /* best-effort */ });
 
-    return textResult(JSON.stringify({
+    return textResult(JSON.stringify(stampEnvelope('abort', {
       taskId: input.taskId, status: 'aborted',
       message: 'Session abort requested. The Amicus process will terminate shortly.',
-    }));
+    })));
   },
 
   async amicus_fanout(input, project, mcpServer) {
@@ -1072,12 +1084,12 @@ const handlers = {
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }
 
-    const body = JSON.stringify({
+    const body = JSON.stringify(stampEnvelope('wave', {
       waveId, taskIds: legIds, status: 'running', mode: 'headless',
       message: 'Fan-out started. Preferred: call amicus_wait with the waveId — one blocking call ' +
         'replaces polling; re-call it while it returns timedOut: true. Fallback: poll amicus_status ' +
         'with the waveId. Either way, amicus_read the waveId when complete.',
-    });
+    }));
     return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
   },
 
