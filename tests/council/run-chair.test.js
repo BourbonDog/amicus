@@ -110,4 +110,18 @@ describe('chair VERDICT-line repair (one re-prompt)', () => {
     expect(fs.readFileSync(path.join(tmp, 'council-abc123', 'chair-output.md'), 'utf-8'))
       .toContain('Prose only, forever.');
   });
+
+  test('chair completes verdict-less but its cost trips --max-cost: repair skipped, conformance unstructured, exit 2', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose but no verdict line at all.', 'complete', 0.03)]);
+    const launchers = scriptedLaunchers(script);
+    const { exitCode } = await runCouncil(baseOptions(tmp, { maxCost: 0.08 }), {
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(launchers.calls.some(c => c.waveId === 'abc123-ch4')).toBe(false); // repair skipped by budget
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.find(r => r.wasChair).conformance).toBe('unstructured');
+    expect(readVerdict().overallVerdict).toBeNull();
+  });
 });

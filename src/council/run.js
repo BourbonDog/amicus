@@ -226,6 +226,9 @@ async function runCouncil(options, deps = {}) {
       overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
       chairConformance = overallVerdict ? 'repaired' : 'unstructured';
     }
+    // A completed chair whose verdict never parsed is 'unstructured' even when
+    // the repair was skipped (e.g. the chair leg itself tripped --max-cost).
+    if (chairText && !overallVerdict) { chairConformance = 'unstructured'; }
     if (!chairLeg || !overallVerdict) { degraded.value = true; } // spec table: exit 2 rows
 
     // ---- Final tally (chair row included) + ledger + artifacts ----
