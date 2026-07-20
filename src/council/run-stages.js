@@ -160,7 +160,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings }) {
       ? parseJudgeOutput(leg.summary, parseCtx)
       : { ok: false, errors: [{ code: 'DEAD_LEG', detail: leg.error || leg.status }] };
     let attempts = 0;
-    while (!parsed.ok && leg.status === 'complete' && attempts < 2 && !ctx.overBudget()) {
+    while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
       const solo = await ctx.launchers.launchSolo({

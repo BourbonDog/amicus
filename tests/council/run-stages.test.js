@@ -117,6 +117,22 @@ describe('runStage1', () => {
     expect(reviews).toHaveLength(3);                 // never dropped for a formatting miss
   });
 
+  test('cost ceiling blocks findings repair: no solo fires, review ends unstructured (KEPT)', async () => {
+    let soloCalls = 0;
+    const ctx = makeCtx({
+      overBudget: () => true,
+      onWave: (opts) => okWave(opts.models.map(m =>
+        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m)))),
+      onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected over budget'); },
+    });
+    const { reviews } = await runStage1(ctx);
+    expect(soloCalls).toBe(0);
+    const gpt = reviews.find(r => r.model === 'gpt');
+    expect(gpt.conformance).toBe('unstructured');
+    expect(gpt.findings).toEqual([]);
+    expect(reviews).toHaveLength(3);                 // still KEPT, never dropped
+  });
+
   test('dead leg is reported in deadLegs and its review absent', async () => {
     const ctx = makeCtx({
       onWave: (opts) => okWave(opts.models.map(m =>
@@ -217,6 +233,45 @@ describe('runStage2', () => {
     });
     const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(soloCount).toBe(2);
+    const g = judgeResults.find(j => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.conformance).toBe('unstructured');
+  });
+
+  test('cost ceiling blocks judge repair: no solo fires, judge ends unstructured', async () => {
+    let soloCalls = 0;
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      overBudget: () => true,
+      onWave: () => okWave([
+        mkLeg('gemini', 'no json'),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected over budget'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(soloCalls).toBe(0);
+    const g = judgeResults.find(j => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.conformance).toBe('unstructured');
+  });
+
+  test('judge leg complete but empty summary: no repair solo fires, ok false unstructured', async () => {
+    // Regression: the repair while-loop used to guard only on leg.status === 'complete',
+    // so a complete-but-empty-summary leg (nothing to repair FROM) still fired up to 2
+    // paid repair solos — inconsistent with Stage-1, where materializeReviews filters
+    // empty-summary legs out before repair ever starts.
+    let soloCalls = 0;
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', ''),   // status 'complete' (default), summary empty
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected for an empty-summary complete leg'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(soloCalls).toBe(0);
     const g = judgeResults.find(j => j.judge === 'gemini');
     expect(g.ok).toBe(false);
     expect(g.conformance).toBe('unstructured');
