@@ -35,7 +35,7 @@ Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval),
 
 **Headless contexts (v4.0):** CI and scripted environments with no Claude runtime can run the
 whole mechanical pipeline (Stages 1–3 plus the deterministic Stage-5 artifacts) as one command —
-`amicus council run --prompt-file <briefing.md> --models a,b,c --chair <model> --json` — see
+`amicus council run --prompt-file <briefing.md> --models "a,b,c" --chair <model> --json` — see
 [docs/council.md](../../docs/council.md#amicus-council-run). This skill's staged, human-in-the-loop
 orchestration remains the interactive path: Stage 0 intake, Stage 4 decisions, and Stage 6 lessons
 are human stages the engine never automates.
