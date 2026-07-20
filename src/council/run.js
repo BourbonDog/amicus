@@ -215,6 +215,12 @@ async function runCouncil(options, deps = {}) {
       chairLeg = attempt.leg;
       runState.updateStage(o.runDir, 'chair',
         { status: chairLeg ? 'complete' : 'error', completedAt: now() });
+      // The chair chain may have promoted a fallback (or given up) — checkpoint
+      // the ACTUAL chair into run.json now so status/`--json`/the human summary
+      // never report the originally-requested chair after a promotion. Mirrors
+      // mkInput's actualChair || o.chair (a give-up with no actual chair keeps
+      // the requested chair).
+      runState.checkpoint(o.runDir, { chair: actualChair || o.chair });
     }
     const chairText = chairLeg ? chairLeg.summary : null;
     let chairConformance = 'clean';

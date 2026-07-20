@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { runCouncil, pickFallbackChair } = require('../../src/council/run');
+const runState = require('../../src/council/run-state');
 const { scriptedLaunchers, happyScript, baseOptions, mkLeg, okWave } =
   require('./helpers/fake-launchers');
 
@@ -67,6 +68,9 @@ describe('chair retry + fallback promotion', () => {
     expect(verdict.chair).toBe('grok');   // final tally meta.chair = actual chair
     const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
     expect(input.runStats.find(r => r.wasChair).model).toBe('grok');
+    // run.json must also reflect the promoted chair — status/report/`--json`
+    // consumers all read run.json.chair, not just the tally artifacts.
+    expect(runState.readRun(path.join(tmp, 'council-abc123')).chair).toBe('grok');
   });
 
   test('give up: no fallback candidate → overallVerdict null, exit 2', async () => {
