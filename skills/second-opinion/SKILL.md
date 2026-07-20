@@ -169,6 +169,7 @@ file) returns `{waveId, taskIds[]}` immediately. Preferred: call `amicus_wait` w
 one blocking call per wave; re-call it while it returns `timedOut: true`. Fallback: poll
 `amicus_status`. Either way, `amicus_read` each leg when done. The council's briefings are always
 self-contained (`--no-context`), so MCP transport is equivalent.
+Council JSON returned by the MCP tools (`amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) arrives wrapped in the `<untrusted_sidecar_output>` fence since v4.0 — parse the JSON from inside the fence; CLI `--json` output remains unfenced.
 
 **Required structured output from every model.** Instruct each council model to produce:
 

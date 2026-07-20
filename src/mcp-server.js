@@ -1100,21 +1100,24 @@ const handlers = {
       // Auto-append to the reliability ledger (parity with `amicus council
       // tally`). Best-effort: a ledger write failure must not fail the tally.
       try { require('./council/ledger').appendRun(record); } catch { /* best-effort */ }
-      return textResult(JSON.stringify(record));
+      // v4.0 §8 (H9): fence the JSON — council output summarizes untrusted
+      // model prose entering the orchestrating agent's context. JSON intact
+      // inside the fence; CLI --json stays unfenced (the programmatic channel).
+      return textResult(fenceSidecarOutput(JSON.stringify(record)));
     } catch (err) { return textResult(`council tally failed: ${err.message}`, true); }
   },
 
   async amicus_council_stats() {
     try {
       const { deriveReliability, buildStatsDoc } = require('./council/ledger');
-      return textResult(JSON.stringify(buildStatsDoc(deriveReliability())));
+      return textResult(fenceSidecarOutput(JSON.stringify(buildStatsDoc(deriveReliability()))));
     } catch (err) { return textResult(`council stats failed: ${err.message}`, true); }
   },
 
   async amicus_verdict(input) {
     try {
       const { buildVerdict } = require('./council/verdict');
-      return textResult(JSON.stringify(buildVerdict(input.record, input.decisions || [])));
+      return textResult(fenceSidecarOutput(JSON.stringify(buildVerdict(input.record, input.decisions || []))));
     } catch (err) { return textResult(`verdict build failed: ${err.message}`, true); }
   },
 

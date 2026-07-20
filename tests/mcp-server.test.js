@@ -2221,6 +2221,14 @@ describe('council MCP handlers', () => {
     else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
   });
 
+  // v4.0 §8 (H9): council tool JSON arrives inside the untrusted-output fence.
+  // Extract the JSON body from between the fence header's blank line and the
+  // closing tag.
+  function unfence(text) {
+    const m = /<untrusted_sidecar_output[^>]*>\n[\s\S]*?\n\n([\s\S]*)\n<\/untrusted_sidecar_output>$/.exec(text);
+    return m ? m[1] : text;
+  }
+
   test('amicus_council_tally auto-appends a ledger row visible to council stats', async () => {
     expect(deriveReliability({ dir: ledgerDir })).toEqual([]);
     const res = await handlers.amicus_council_tally(avInput, process.cwd());
@@ -2230,22 +2238,28 @@ describe('council MCP handlers', () => {
     expect(gpt.runs).toBe(1);
   });
 
-  test('amicus_council_tally returns a tally record as JSON content', async () => {
+  test('amicus_council_tally returns fenced JSON content (v4.0 §8 — H9)', async () => {
     const res = await handlers.amicus_council_tally(avInput, process.cwd());
     expect(res.isError).toBeFalsy();
-    const doc = JSON.parse(res.content[0].text);
+    const text = res.content[0].text;
+    expect(text).toContain('<untrusted_sidecar_output');
+    expect(text).toContain('</untrusted_sidecar_output>');
+    const doc = JSON.parse(unfence(text));
+    expect(doc.type).toBe('council-tally');
     expect(doc.tierCounts).toEqual({ Confirmed: 29, Contested: 2, Singleton: 1, Disputed: 3 });
   });
 
-  test('amicus_verdict merges decisions into the verdict', async () => {
+  test('amicus_verdict merges decisions into the verdict (fenced)', async () => {
     const tallyRes = await handlers.amicus_council_tally(avInput, process.cwd());
-    const record = JSON.parse(tallyRes.content[0].text);
+    const record = JSON.parse(unfence(tallyRes.content[0].text));
     const res = await handlers.amicus_verdict({ record, decisions: [{ id: 'A1', decision: 'accepted', applied: true }] }, process.cwd());
-    const v = JSON.parse(res.content[0].text);
+    expect(res.content[0].text).toContain('<untrusted_sidecar_output');
+    const v = JSON.parse(unfence(res.content[0].text));
+    expect(v.type).toBe('council-verdict');
     expect(v.findings.find(f => f.id === 'A1').decision).toBe('accepted');
   });
 
-  test('amicus_council_stats returns the wrapped council-stats doc (v4.0 §7)', async () => {
+  test('amicus_council_stats returns the fenced wrapped doc (v4.0 §7+§8)', async () => {
     jest.resetModules();
     jest.doMock('../src/council/ledger', () => {
       const real = jest.requireActual('../src/council/ledger');
@@ -2256,16 +2270,17 @@ describe('council MCP handlers', () => {
     });
     const h = require('../src/mcp-server').handlers;
     const res = await h.amicus_council_stats({}, process.cwd());
-    const doc = JSON.parse(res.content[0].text);
-    expect(doc.schemaVersion).toBe(2);
+    expect(res.content[0].text).toContain('<untrusted_sidecar_output');
+    const doc = JSON.parse(unfence(res.content[0].text));
     expect(doc.type).toBe('council-stats');
     expect(doc.models[0].model).toBe('gpt');
     jest.dontMock('../src/council/ledger');
     jest.resetModules();
   });
 
-  test('amicus_council_tally on malformed input returns isError', async () => {
+  test('amicus_council_tally on malformed input returns isError (unfenced plain text)', async () => {
     const res = await handlers.amicus_council_tally({ meta: { models: [] } }, process.cwd());
     expect(res.isError).toBe(true);
+    expect(res.content[0].text).not.toContain('<untrusted_sidecar_output');
   });
 });
