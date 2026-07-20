@@ -187,6 +187,7 @@ function renderVerdict(v, outPath) {
 async function handleCouncil(args) {
   const sub = args._[1];
   const useJson = !!args.json;
+  if (sub === 'run') { return require('./cli-handlers-council-run').handleCouncilRun(args); }
   if (sub === 'tally') { return runTally(args._[2], useJson, { append: !args['no-ledger'] }); }
   if (sub === 'stats') { return runStats(useJson); }
   if (sub === 'report') { return runReport(args, useJson); }
@@ -197,7 +198,7 @@ async function handleCouncil(args) {
   if (sub === 'show') { return runCouncilShow(args._[2], useJson); }
   return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
     message: `unknown council subcommand '${sub || ''}'`,
-    hint: 'amicus council tally|stats|report|validate|verdict|save|list|show' });
+    hint: 'amicus council run|tally|stats|report|validate|verdict|save|list|show' });
 }
 
 module.exports = { handleCouncil };

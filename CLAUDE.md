@@ -235,6 +235,7 @@ src/
 │   ├── validators.js  # Input Validators
 │   └── version-info.js  # After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
+├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
 ├── cli-handlers-resume-continue.js  # CLI Resume/Continue Handlers (B21-rest extraction)
@@ -332,6 +333,7 @@ evals/
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
+| `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
 | `cli-handlers-resume-continue.js` | CLI Resume/Continue Handlers (B21-rest extraction) | `handleResume()`, `handleContinue()` |
