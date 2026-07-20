@@ -244,9 +244,17 @@ const handlers = {
     const { validateStartInputs } = require('./utils/input-validators');
     const validation = validateStartInputs(input);
     if (!validation.valid) {
+      // v4.0 §7: error-doc-shaped tool text (was the raw validation_error object).
+      const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
+      const verr = validation.error;
       return {
         isError: true,
-        content: [{ type: 'text', text: JSON.stringify(validation.error) }],
+        content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
+          code: verr.field === 'prompt' ? ERROR_CODES.MISSING_PROMPT : ERROR_CODES.BAD_ARGS,
+          message: `${verr.field}: ${verr.message}`,
+          hint: Array.isArray(verr.suggestions) && verr.suggestions.length
+            ? `Valid values: ${verr.suggestions.join(', ')}` : null,
+        })) }],
       };
     }
 
@@ -263,7 +271,7 @@ const handlers = {
     // resolveLaunchModel (start-helpers.js) via model-input-default.js.
     const { resolveGatewayMode } = require('./utils/config');
     const { resolveRouteForLaunch } = require('./utils/route-launch');
-    const { toStructuredError } = require('./utils/route-error');
+    const { toErrorDocFields } = require('./utils/route-error');
     const { resolveModelInputOrDefault } = require('./utils/model-input-default');
 
     const modelInput = resolveModelInputOrDefault(input.model);
@@ -277,9 +285,10 @@ const handlers = {
       validateModel: true,
     });
     if (routeResult.kind !== 'resolved') {
+      const { buildErrorDoc } = require('./utils/error-doc');
       return {
         isError: true,
-        content: [{ type: 'text', text: JSON.stringify(toStructuredError(routeResult)) }],
+        content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(toErrorDocFields(routeResult))) }],
       };
     }
     const resolvedModel = routeResult.executableId;
@@ -857,7 +866,7 @@ const handlers = {
     if (input.model) {
       const { resolveGatewayMode } = require('./utils/config');
       const { resolveRouteForLaunch } = require('./utils/route-launch');
-      const { toStructuredError } = require('./utils/route-error');
+      const { toErrorDocFields } = require('./utils/route-error');
       const { resolveModelInputOrDefault } = require('./utils/model-input-default');
 
       const modelInput = resolveModelInputOrDefault(input.model);
@@ -869,9 +878,10 @@ const handlers = {
         validateModel: true,
       });
       if (routeResult.kind !== 'resolved') {
+        const { buildErrorDoc } = require('./utils/error-doc');
         return {
           isError: true,
-          content: [{ type: 'text', text: JSON.stringify(toStructuredError(routeResult)) }],
+          content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(toErrorDocFields(routeResult))) }],
         };
       }
       resolvedModel = routeResult.executableId;
