@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/doctor.schema.json",
+  "title": "amicus doctor document",
+  "description": "`doctor --json` health-check result.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "ok", "version", "timestamp", "checks"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "doctor" },
+    "ok": { "type": "boolean" },
+    "version": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "message": { "type": ["string", "null"] },
+          "hint": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

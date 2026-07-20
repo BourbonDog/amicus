@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/abort.schema.json",
+  "title": "amicus abort result document",
+  "description": "`abort <taskId|--all> --json` result.",
+  "type": "object",
+  "required": ["schemaVersion", "type", "ok", "scope", "aborted", "count"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "abort" },
+    "ok": { "type": "boolean" },
+    "scope": { "enum": ["session", "wave", "all"] },
+    "taskId": { "type": ["string", "null"] },
+    "aborted": { "type": "array", "items": { "type": "string" } },
+    "count": { "type": "number" }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/wave.schema.json",
+  "title": "amicus wave result document",
+  "description": "Fan-out wave result (`fanout --json`, wave.json). counts named buckets may not sum to total (see result-schema.js COUNTS REMAINDER RULE).",
+  "type": "object",
+  "required": ["schemaVersion", "type", "waveId", "status", "counts", "legs"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "type": { "const": "wave" },
+    "waveId": { "type": "string" },
+    "status": { "type": "string" },
+    "error": { "type": ["string", "null"] },
+    "counts": {
+      "type": "object",
+      "required": ["total", "complete", "error", "timeout", "aborted"],
+      "properties": {
+        "total": { "type": "number" },
+        "complete": { "type": "number" },
+        "error": { "type": "number" },
+        "timeout": { "type": "number" },
+        "aborted": { "type": "number" }
+      }
+    },
+    "legs": { "type": "array", "items": { "type": "object" } },
+    "prompt": { "type": ["object", "null"] },
+    "createdAt": { "type": ["string", "null"] },
+    "completedAt": { "type": ["string", "null"] },
+    "durationMs": { "type": ["number", "null"] },
+    "usage": { "type": "object" },
+    "notices": { "type": "array", "items": { "type": "string" } }
+  }
+}
