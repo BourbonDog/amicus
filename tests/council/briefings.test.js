@@ -68,4 +68,30 @@ describe('findings repair prompt', () => {
     expect(text).toContain("BAD_SEVERITY: bad severity 'high' on id 2");
     expect(text).toContain('ONLY the corrected findings JSON');
   });
+
+  test('does NOT tell the model to write a prose review (no two-part framing)', () => {
+    // Regression: buildFindingsRepairPrompt used to append the FULL
+    // FINDINGS_CONTRACT, whose own text opens with "Produce exactly two
+    // things... 1. A prose review... 2. A trailing json block" — directly
+    // contradicting this prompt's own "Re-emit ONLY the corrected JSON"
+    // line. It must reference only the json-shape rules now.
+    const text = b.buildFindingsRepairPrompt({
+      errors: [{ code: 'BAD_SEVERITY', detail: "bad severity 'high' on id 2" }],
+    });
+    expect(text).not.toContain('Produce exactly two things');
+    expect(text).not.toContain('A prose review');
+    expect(text).toContain('```json');                 // still carries the shape to re-emit
+    expect(text).toContain('sequential integer');
+  });
+});
+
+describe('FINDINGS_CONTRACT composition (fragment split)', () => {
+  test('is the two-part framing and the json-shape fragment, joined by a blank line', () => {
+    expect(b.FINDINGS_CONTRACT).toBe(`${b.FINDINGS_TWO_PART_FRAMING}\n\n${b.FINDINGS_JSON_SHAPE}`);
+  });
+
+  test('the two-part framing fragment is NOT itself the json-shape fragment', () => {
+    expect(b.FINDINGS_TWO_PART_FRAMING).toContain('Produce exactly two things');
+    expect(b.FINDINGS_JSON_SHAPE).not.toContain('Produce exactly two things');
+  });
 });

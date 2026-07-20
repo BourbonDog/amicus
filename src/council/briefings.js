@@ -16,13 +16,23 @@ const ANTI_SYCOPHANCY_CLAUSE =
   'if the artifact is mediocre, say so and show why. Do not pad: report every real ' +
   'finding and no invented ones. An empty severity category is a valid result.';
 
-/** Strict headless structured-output contract (prose + trailing ```json findings block). */
-const FINDINGS_CONTRACT = [
+/**
+ * "Produce exactly two things" framing (prose review, THEN the trailing json
+ * block). Stage-1 builders need this. The findings-repair prompt deliberately
+ * does NOT use it — a repair turn wants ONLY the corrected json, never a
+ * fresh prose review (keeping this fragment out of the repair prompt fixes
+ * the prior self-contradiction: "re-emit ONLY the JSON" followed by this
+ * "write prose then json" framing).
+ */
+const FINDINGS_TWO_PART_FRAMING = [
   'Produce exactly two things, in this order:',
   '',
   '1. A prose review — your full narrative assessment of the material.',
   '2. A trailing fenced ```json block immediately after the prose — no text after it:',
-  '',
+].join('\n');
+
+/** JSON shape + field rules — shared by the full Stage-1 contract AND the repair prompt. */
+const FINDINGS_JSON_SHAPE = [
   '```json',
   '{',
   '  "overall": "one-paragraph take",',
@@ -38,6 +48,9 @@ const FINDINGS_CONTRACT = [
   '- "claim", "location", "rationale" — non-empty strings.',
   'Emit the JSON verbatim after the prose, without preamble, so it parses cleanly.',
 ].join('\n');
+
+/** Strict headless structured-output contract (prose + trailing ```json findings block). */
+const FINDINGS_CONTRACT = [FINDINGS_TWO_PART_FRAMING, FINDINGS_JSON_SHAPE].join('\n\n');
 
 /** Adapted from SEAT-BRIEFS.md § Critic seat brief (quota deliberately absent). */
 const CRITIC_BRIEF = [
@@ -103,7 +116,12 @@ function buildLensBriefing({ lens, briefing, date }) {
   );
 }
 
-/** Bounded findings-repair re-prompt (solo; ≤ 2 per seat — SKILL.md Stage-1 repair loop). */
+/**
+ * Bounded findings-repair re-prompt (solo; ≤ 2 per seat — SKILL.md Stage-1
+ * repair loop). References ONLY the json-shape fragment — never the
+ * "prose review THEN json" framing — so a headless model isn't handed license
+ * to write a whole new prose review on a tight repair turn.
+ */
 function buildFindingsRepairPrompt({ errors }) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
   return [
@@ -113,11 +131,11 @@ function buildFindingsRepairPrompt({ errors }) {
     lines,
     'Re-emit ONLY the corrected findings JSON block (the same findings, fixed — do not ' +
     'add or remove findings), as a single fenced ```json block:',
-    FINDINGS_CONTRACT,
+    FINDINGS_JSON_SHAPE,
   ].join('\n\n');
 }
 
 module.exports = {
-  ANTI_SYCOPHANCY_CLAUSE, FINDINGS_CONTRACT,
+  ANTI_SYCOPHANCY_CLAUSE, FINDINGS_CONTRACT, FINDINGS_JSON_SHAPE, FINDINGS_TWO_PART_FRAMING,
   buildSeatBriefing, buildCriticBriefing, buildLensBriefing, buildFindingsRepairPrompt,
 };

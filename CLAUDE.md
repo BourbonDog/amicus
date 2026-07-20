@@ -105,6 +105,7 @@ src/
 │   ├── report.js
 │   ├── run-assemble.js
 │   ├── run-launch.js
+│   ├── run-stages.js
 │   ├── run-state.js
 │   ├── tally.js
 │   └── verdict.js
@@ -356,7 +357,7 @@ evals/
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
-| `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `buildSeatBriefing()`, `buildCriticBriefing()`, `buildLensBriefing()` |
+| `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `FINDINGS_JSON_SHAPE()`, `FINDINGS_TWO_PART_FRAMING()`, `buildSeatBriefing()` |
 | `council/findings.js` |  | `validateFindings()`, `buildValidateDoc()`, `SEVERITIES()`, `lastJsonBlock()` |
 | `council/ledger.js` |  | `buildLedgerRows()`, `appendRun()`, `deriveReliability()`, `buildStatsDoc()`, `LEDGER_FILE()` |
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()` |
@@ -365,6 +366,7 @@ evals/
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `sanitizeName()` |
+| `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `checkpoint()`, `updateStage()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
