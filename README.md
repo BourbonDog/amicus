@@ -227,6 +227,15 @@ Then the council waits for your confirmation.
 
 The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**. For what `amicus council tally|verdict|report|stats` actually take as input and produce — field-by-field schemas, verdict.json's provenance, and a full worked example run against the real CLI — see **[docs/council.md](./docs/council.md)**.
 
+**Headless council (CI).** The same pipeline runs with no Claude runtime at all: `amicus council
+run --prompt-file briefing.md --models gemini,glm --chair deepseek --json` executes the review
+waves, the anonymized cross-review, the tally, and the chair verdict in one command, and writes
+the full run directory (`verdict.json` with the chair's parsed `overallVerdict`, `report.html`,
+every review and judge output). That is what powers the repo's own **Council Review GitHub Action
+v2** — on PRs labeled `council-review` it posts an adjudicated verdict as a check run plus a
+sticky comment, uploads the run directory as an evidence artifact, and can optionally gate merges
+via its `fail_on` input (default: report-only). Reference: [docs/council.md](./docs/council.md#amicus-council-run).
+
 **Free council (zero-cost).** Want the cross-examination without the model spend? `amicus setup` offers a **Free OpenRouter council** mode — readline wizard option 2, and the Electron **Models** step. It detects the free `:free` models live from the catalog, lets you multi-pick (Enter takes a vendor-diverse default), and saves them as `councils.free` — a first-class `councils` config primitive seeded under collision-safe `free-*` aliases. Your `config.default` is left untouched, and all you need is an `OPENROUTER_API_KEY`.
 
 Run it anywhere a council runs:
@@ -292,6 +301,7 @@ amicus update
 | `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
+| `amicus council run` | The headless council engine (v4.0): Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |
@@ -353,7 +363,7 @@ Full details, the API-key/prefix table, and the migration notice are in **[docs/
 
 ## MCP integration
 
-The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes fourteen tools:
+The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes fifteen tools:
 
 | Tool | What it does |
 |------|--------------|
@@ -451,6 +461,7 @@ LOG_LEVEL=debug amicus start --model gemini --prompt "test" --no-ui
 |-----|-------------|
 | [docs/usage.md](./docs/usage.md) | The complete CLI & MCP reference — every flag, every subcommand, every example. |
 | [docs/council.md](./docs/council.md) | Council pipeline reference: `tally`/`verdict`/`report` schemas, provenance, and a worked example. |
+| [docs/schemas.md](./docs/schemas.md) | Published JSON Schemas for every `--json` document (result + council families). |
 | [docs/configuration.md](./docs/configuration.md) | Full configuration and environment reference. |
 | [docs/architecture.md](./docs/architecture.md) | How the engine, Electron shell, and context sharing fit together. |
 | [docs/opencode-integration.md](./docs/opencode-integration.md) | How Amicus drives the OpenCode runtime. |

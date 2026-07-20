@@ -35,6 +35,7 @@ amicus council stats [--json]             # Reviewer reliability from the ledger
 amicus council report <verdict.json> [--md|--html]   # Render the council run report
 amicus council validate <file> [--json]   # Validate a Stage-1 findings block (exit 0/2/1)
 amicus council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]  # Build + write verdict.json
+amicus council run --prompt-file <b.md> --models a,b,c --chair <m> [--json]  # Headless engine: reviews, cross-review, tally, chair verdict
 amicus council save <name> --models a,b,c # Save a named council preset (>=2 resolvable members)
 amicus council list [--json]              # List saved councils + built-ins (free/budget/frontier)
 amicus council show <name> [--json]       # Resolve a council (saved or built-in) and show its members
@@ -144,6 +145,44 @@ amicus fanout --council free --prompt "Review this design" --json
 `legs[]` come in `--models` order (or preset-membership order for `--council`), not completion order.
 
 **Fanout vs. N parallel starts.** Use `fanout` when every leg should receive the **same prompt** — this is what the council's independent review waves use. Use N separate `start` calls when each leg needs a **different prompt**.
+
+---
+
+## `amicus council run` — Headless Council Engine
+
+Runs the **entire adjudicated council pipeline in one command with no Claude runtime** (v4.0):
+Stage-1 independent reviews → anonymized peer cross-review (with bounded repair re-prompts) →
+deterministic tally → non-Claude chair verdict → `verdict.json` + `report.html`, all written to a
+durable run directory. Stage-4 accept/deny decisions stay human — the engine is report-only.
+
+```bash
+amicus council run --prompt-file briefing.md --models gemini,glm --chair deepseek \
+  --out-dir council-run --json --max-cost 2.00 --timeout 10
+```
+
+**Key options:**
+
+| Option | Description |
+|--------|-------------|
+| `--prompt-file <path>` | The council briefing. **Required** — there is no inline `--prompt` for councils. |
+| `--models <a,b,c>` \| `--council <name>` | The bench (≥2 seats); mutually exclusive, same semantics as `fanout`. |
+| `--chair <model>` | Verdict synthesizer. Default `deepseek`; must **not** be a bench seat (pre-flight error). |
+| `--critic <model>` | Optional adversarial seat; must **be** a bench seat. Mutually exclusive with `--lenses`. |
+| `--lenses <s1,s2,...>` | Expert lenses, one per seat (count must equal seat count); forces `--no-ledger` semantics. |
+| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. |
+| `--json` | Emit the council-run document on stdout (error envelope + documented exit codes on failure). |
+| `--max-cost <$>` | **Whole-run** ceiling, checked before each paid stage launch. |
+| `--timeout <min>` | **Per-leg** timeout (fanout semantics); bound the aggregate with your CI job timeout. |
+| `--gateway <mode>` / `--no-validate-model` | Same routing/validation semantics as `start`/`fanout`. |
+
+**Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
+`overallVerdict: null` — or cost ceiling hit after the tally) · `1` quorum/pre-tally failure
+(error doc) · `130`/`143` signals. `amicus status|wait|abort <councilRunId>` work on council runs
+via the sessions-dir pointer file.
+
+Field-by-field run-directory contents, the degradation table, and `verdict.json`'s
+`overallVerdict` are documented in **[docs/council.md](./council.md#amicus-council-run)**. This is
+the command the repo's Council Review GitHub Action (v2) runs on labeled PRs.
 
 ---
 
