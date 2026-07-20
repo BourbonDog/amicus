@@ -70,6 +70,28 @@ describe('run.json init + checkpoint', () => {
     expect(run.pid).toBe(42);
   });
 
+  // Whole-branch review FIX 3: abort-wins pinned only `status`; a later
+  // (racing) success finalize's exitCode:0 still overwrote, yielding
+  // {status:'aborted', exitCode:0}. Plan C's Action v2 branches on exitCode
+  // (0 and 2 proceed), so an aborted run would be consumed as clean success.
+  // exitCode must be pinned to a signal-abort code (130/143) too.
+  test('abort-wins: a racing success finalize cannot demote exitCode 130 to 0', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted', exitCode: 130 });
+    const run = rs.checkpoint(runDirOf(), { status: 'complete', exitCode: 0, usage: { cost: { amount: 1 } } });
+    expect(run.status).toBe('aborted');
+    expect(run.exitCode).toBe(130);
+    expect(run.usage).toEqual({ cost: { amount: 1 } }); // non-exitCode fields still merge
+  });
+
+  test('abort-wins: no recorded abort exitCode defaults the pin to 143 (SIGTERM), never 0', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { status: 'aborted' }); // no exitCode recorded on the abort itself
+    const run = rs.checkpoint(runDirOf(), { status: 'complete', exitCode: 0 });
+    expect(run.status).toBe('aborted');
+    expect(run.exitCode).toBe(143);
+  });
+
   test('readRun returns null for a missing/corrupt file', () => {
     expect(rs.readRun(path.join(tmp, 'nope'))).toBeNull();
   });

@@ -36,6 +36,12 @@ function mergeRun(existing, patch) {
   // (prevents falsy status values, null, '', or omitted status from overwriting)
   if (existing.status === 'aborted') {
     merged.status = 'aborted';
+    // An aborted run is terminal: never let a later (racing) finalize report a
+    // clean/degraded exitCode. Prefer a recorded abort code, then a patch abort
+    // code, else default SIGTERM's 143.
+    const prior = [130, 143].includes(existing.exitCode) ? existing.exitCode : null;
+    const fromPatch = [130, 143].includes(patch.exitCode) ? patch.exitCode : null;
+    merged.exitCode = prior || fromPatch || 143;
   }
   return merged;
 }
