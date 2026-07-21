@@ -41,6 +41,10 @@ jest.mock('../../src/sidecar/interactive-abort', () => {
   };
 });
 
+// The message both teardown sites reject with; also what identifies OUR
+// rejection in the process-global bucket (see ourRejections below).
+const CLOSE_REJECTION = 'SDK wrapper already dead';
+
 describe('runInteractive teardown vs. rejecting server.close() (adversarial-review finding)', () => {
   let project;
   let unhandledRejections;
@@ -69,8 +73,17 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
   // 'unhandledRejection' before we assert on the collected list.
   const flushMacrotasks = () => new Promise((resolve) => setImmediate(resolve));
 
+  // 'unhandledRejection' is a PROCESS-level event and a Jest worker runs many
+  // test files in one process, so the raw bucket also collects strays from
+  // unrelated suites that happen to surface inside our flush windows. Asserting
+  // on the whole bucket made this file pass in isolation but flake under
+  // full-suite parallel load (it aborted the v4.0.0 push). Only a rejection
+  // carrying our close()'s message can be the escape these tests pin.
+  const ourRejections = () =>
+    unhandledRejections.filter((r) => r?.message === CLOSE_REJECTION);
+
   itElectron('session-setup failure path (:104) — rejecting close() does not escape as unhandledRejection', async () => {
-    const rejectingClose = jest.fn().mockRejectedValue(new Error('SDK wrapper already dead'));
+    const rejectingClose = jest.fn().mockRejectedValue(new Error(CLOSE_REJECTION));
 
     jest.doMock('../../src/opencode-client', () => ({
       createSession: jest.fn().mockRejectedValue(new Error('session create failed')),
@@ -101,11 +114,11 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
     await flushMacrotasks();
     await flushMacrotasks();
 
-    expect(unhandledRejections).toEqual([]);
+    expect(ourRejections()).toEqual([]);
   });
 
   itElectron('normal Electron-exit path (:203) — rejecting close() does not escape as unhandledRejection', async () => {
-    const rejectingClose = jest.fn().mockRejectedValue(new Error('SDK wrapper already dead'));
+    const rejectingClose = jest.fn().mockRejectedValue(new Error(CLOSE_REJECTION));
 
     jest.doMock('../../src/opencode-client', () => ({
       createSession: jest.fn().mockResolvedValue('ses_test'),
@@ -145,6 +158,6 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
     await flushMacrotasks();
     await flushMacrotasks();
 
-    expect(unhandledRejections).toEqual([]);
+    expect(ourRejections()).toEqual([]);
   });
 });
