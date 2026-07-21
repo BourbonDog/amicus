@@ -69,3 +69,9 @@ evals/workspace/
 # Test output logs (Jest redirects; scratch only)
 test_output*.txt
 *.jestlog
+
+# Council run folders (raw model output + briefings; may embed the source under review).
+# Root-anchored deliberately: an unanchored `second-opinion/` would also match
+# skills/second-opinion/ and silently ignore the shipped skill files.
+/output/
+/second-opinion/
