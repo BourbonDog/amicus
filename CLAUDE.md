@@ -298,6 +298,7 @@ scripts/
 ├── check-tarball-lifecycle.js  # CI guard: assert every script referenced by an npm *lifecycle* hook actually
 ├── check-ui.js
 ├── debug-cdp.js
+├── dogfood-council-sample.js
 ├── eval-with-monitoring.sh
 ├── generate-docs-helpers.js  # Helper functions for generate-docs.js.
 ├── generate-docs.js  # Auto-generate CLAUDE.md sections from source code.
