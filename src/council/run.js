@@ -23,30 +23,14 @@ const { tally } = require('./tally');
 const { assignLabels, toGlobalFindings } = require('./anonymize');
 const briefings = require('./briefings');
 const stage2 = require('./briefings-stage2');
-const { parseChairVerdict } = require('./parse-stage2');
 const runState = require('./run-state');
 const { createLaunchers } = require('./run-launch');
-const { runStage1, runStage2, isAbortExit } = require('./run-stages');
+const { runStage1, runStage2 } = require('./run-stages');
+const { runChair, pickFallbackChair } = require('./run-chair');
 const asm = require('./run-assemble');
 const { sumWaveUsage } = require('../utils/pricing');
 
 const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
-
-/**
- * Chair fallback promotion (spec §4): the highest peers-only street-cred
- * model from `council stats` that is not a bench seat and not the failed
- * chair. "Highest street-cred" = BEST = numerically LOWEST mean rank
- * (deriveReliability's avgStreetCredPeersOnly; lower is better).
- * @returns {string|null}
- */
-function pickFallbackChair(statsRows, bench, failedChair) {
-  const benchSet = new Set(bench);
-  const candidates = (statsRows || [])
-    .filter(r => !benchSet.has(r.model) && r.model !== failedChair
-      && typeof r.avgStreetCredPeersOnly === 'number')
-    .sort((a, b) => a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly);
-  return candidates.length ? candidates[0].model : null;
-}
 
 /**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project,
@@ -178,78 +162,12 @@ async function runCouncil(options, deps = {}) {
       tierCounts: provisional.tierCounts,
     });
     fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
-    const attemptChair = async (model, waveId) => {
-      runState.appendStageWave(o.runDir, 'chair', waveId);
-      const solo = await launchers.launchSolo({
-        model, prompt: packet, project: o.runDir, waveId,
-        timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-      });
-      addWave(solo.wave);
-      const ok = solo.leg && solo.leg.status === 'complete'
-        && solo.leg.summary && solo.leg.summary.trim();
-      return { leg: ok ? solo.leg : null, exitCode: solo.exitCode };
-    };
 
-    let chairLeg = null;
-    let actualChair = null;
-    if (overBudget()) {
-      // Ceiling hit after the tally is computable: skip the chair, write the
-      // verdict with overallVerdict null, exit 2 (spec §4 degradation table).
-      // Never abort in-flight legs for cost — this only stops NEW launches.
-      degraded.value = true;
-      runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
-    } else {
-      runState.updateStage(o.runDir, 'chair', { status: 'running', startedAt: now(), project: o.runDir });
-      // Fallback chain (spec §4): retry same chair once → promote best
-      // non-bench model from the ledger → give up (no Claude fallback headless).
-      let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
-      if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
-      if (!attempt.leg && !overBudget()) {
-        attempt = await attemptChair(o.chair, `${o.runId}-ch2`);
-        if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
-      }
-      if (attempt.leg) { actualChair = o.chair; }
-      else if (!overBudget()) {
-        let statsRows = [];
-        try { statsRows = statsFn(); } catch { /* no ledger yet */ }
-        const fallback = pickFallbackChair(statsRows, o.models, o.chair);
-        if (fallback) {
-          attempt = await attemptChair(fallback, `${o.runId}-ch3`);
-          if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
-          if (attempt.leg) { actualChair = fallback; }
-        }
-      }
-      chairLeg = attempt.leg;
-      runState.updateStage(o.runDir, 'chair',
-        { status: chairLeg ? 'complete' : 'error', completedAt: now() });
-      // The chair chain may have promoted a fallback (or given up) — checkpoint
-      // the ACTUAL chair into run.json now so status/`--json`/the human summary
-      // never report the originally-requested chair after a promotion. Mirrors
-      // mkInput's actualChair || o.chair (a give-up with no actual chair keeps
-      // the requested chair).
-      runState.checkpoint(o.runDir, { chair: actualChair || o.chair });
-    }
-    const chairText = chairLeg ? chairLeg.summary : null;
-    let chairConformance = 'clean';
-
-    // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
-    let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
-    if (chairText && !overallVerdict && !overBudget()) {
-      runState.appendStageWave(o.runDir, 'chair', `${o.runId}-ch4`);
-      const repair = await launchers.launchSolo({
-        model: actualChair, prompt: stage2.buildChairRepairPrompt(),
-        project: o.runDir, waveId: `${o.runId}-ch4`,
-        timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-      });
-      addWave(repair.wave);
-      if (isAbortExit(repair.exitCode) || signalled) { return finalize(repair.exitCode || signalled); }
-      overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
-      chairConformance = overallVerdict ? 'repaired' : 'unstructured';
-    }
-    // A completed chair whose verdict never parsed is 'unstructured' even when
-    // the repair was skipped (e.g. the chair leg itself tripped --max-cost).
-    if (chairText && !overallVerdict) { chairConformance = 'unstructured'; }
-    if (!chairLeg || !overallVerdict) { degraded.value = true; } // spec table: exit 2 rows
+    const chairRes = await runChair(ctx, {
+      packet, degraded, statsFn, isSignalled: () => signalled,
+    });
+    if (chairRes.aborted !== null) { return finalize(chairRes.aborted); }
+    const { chairLeg, actualChair, chairText, chairConformance, overallVerdict } = chairRes;
 
     // ---- Final tally (chair row included) + ledger + artifacts ----
     const chairStats = chairLeg ? asm.buildRunStatsEntry({
