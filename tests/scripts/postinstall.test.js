@@ -35,11 +35,12 @@ describe('postinstall skill installation', () => {
     expect(COUNCIL_FILES).toEqual([
       { file: 'SKILL.md', mode: 'overwrite' },
       { file: 'COUNCIL-DESIGN.md', mode: 'overwrite' },
+      { file: 'SEAT-BRIEFS.md', mode: 'overwrite' },
       { file: 'MODEL-NOTES.md', mode: 'if-missing' },
     ]);
   });
 
-  test('fresh install copies all three council files', () => {
+  test('fresh install copies all council files', () => {
     installCouncilSkill();
     for (const { file } of COUNCIL_FILES) {
       expect(fs.existsSync(path.join(councilDest(), file))).toBe(true);
