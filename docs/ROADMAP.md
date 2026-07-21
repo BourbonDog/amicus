@@ -27,6 +27,7 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 (0 intake, 4 decisions, 6 lessons).
 - **Skill fast path** — SKILL.md orchestration rewired onto `amicus council run` *(M)*
 - **Debate mode headless** (Stage 2.5 rebuttal round in the engine; here or v4.2 at the latest) *(M)*
+- **README + docs update** — skill fast path and headless debate mode reflected in `README.md` and `docs/council.md` *(S)*
 > Why here: locked during the v4.0 design (2026-07-19) — the engine proves itself in CI first
 > (v4.0), then the flagship interactive UX adopts it before any new feature front opens.
 
@@ -35,6 +36,7 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 — free marginal cost, private, air-gapped. The single biggest adoption + cost unlock (5 of 6 lenses' #1).
 - **Local / OpenAI-compatible provider support** — `baseURL`/`type` discriminator, `$0`/offline pricing tier, setup-wizard support — A1/B3/C1/D1/E1 *(L)*
 - **Adoption polish** (rides the "easy to start" story): `amicus init --claude` (C2), `doctor` at end of setup wizard (C8), docs for `spend`/`doctor`/`key` (C10) *(S)*
+- **README + docs update** — local / OpenAI-compatible provider setup + `$0` pricing tier in `README.md` and `docs/configuration.md` *(S)*
 > Why here (not enterprise): local models are a broad user benefit — cost, privacy, offline — not an enterprise-only feature. Comes right after the engine so councils can run on free/local seats.
 
 ## v4.5 — "See runs live in the terminal — and never waste one" *(observability data layer, first)*
@@ -42,11 +44,13 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 - **Live wave observability data layer** + CLI/TUI `amicus watch <waveId>` + `--follow` streaming + `--on-complete <exec|mcp-notify>` hook — F3/D6 *(M)* — the shared data layer v4.6 builds on
 - **Failed-leg retry** `fanout --retry-failed <waveId>` + **cheaper-model fallback chains** + failed-leg partial-spend tracking — F2/E10/E8 *(M)*
 - **Spend visibility & attribution (basic):** fix continue/resume zero-spend rows, attribute waveId/council/project on every row, queryable `spend query` — A4(basic)/E3/E4/E9/D7/C9 *(M)*
+- **README + docs update** — `watch`/`--follow`, failed-leg retry, and `spend query` documented in `README.md` and `docs/usage.md` *(S)*
 > Why here / why first: this is the observability data layer + terminal surface. It ships **before** the GUI (v4.6) because the desktop workspace is a front-end on exactly this data. All M-effort, so it lands fast.
 
 ## v4.6 — "The Council Workspace" *(desktop GUI on the v4.5 data layer)*
 **Benefit:** the same live data as a rich desktop app — watch a council *think*, not just tail a log.
 - **★ Electron "Council Workspace" GUI** — live reviewer progress, anonymized peer packets, adjudication tiers, dissent, cost-by-seat, one-click fold into Claude Code — **B9** *(L)*
+- **README + docs update** — Council Workspace walkthrough + screenshots in `README.md` and `docs/` *(S)*
 > Why here: a GUI layer on top of v4.5's data layer. Split into its own point release because it's the one **L-effort** build in the observability arc — keeping v4.5 small and shippable.
 
 ## v4.7 — "Save, share, and compose your councils"
@@ -54,6 +58,7 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 - **Council policy packs + full run-profiles** (bench + lenses + options + briefing template, invoke by name) — B7/F5 *(M)*
 - **Composable/chained waves** (`--input-from <waveId>` / pipe) for generate→critique→refine — F6 *(M)*
 - **Briefing templates + library** (F9), **session/wave tagging + `--search` + grouped history** (F8), **GUI power ergonomics** (F10) *(S–M)*
+- **README + docs update** — policy packs, chained waves, and the briefing-template library in `README.md` and `docs/` *(S)*
 > Why here: velocity multipliers that only pay off once councils are a command (v4.0) and observable (v4.5/v4.6).
 
 ## v5.0 — Enterprise-readiness *(the deliberate major jump — a venture unto itself, gated on funding / cofounder)*
@@ -62,6 +67,7 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 - Audit & compliance: reproducibility manifests + replay (B11), seed/temp/version pinning (A7), spend export to SIEM/warehouse (A10), `/health` + metrics + structured logging (A8)
 - Team config `.amicusrc` (A9); spend **governance** (per-team caps/enforcement) — the governance half of A4
 - Learning loops that need scale anyway: reliability-aware seat selection (B4), calibration benchmarks (B5), decision-outcome feedback (B10), adaptive strategy planner (B8), evidence provenance (B6)
+- README + docs update: deployment/admin documentation for the above, in `README.md` and `docs/`
 > These cluster because they share one prerequisite you don't have yet: an org buyer + the org to support. Revisit as a funded track.
 
 ---
@@ -81,3 +87,4 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 - **`--dry-run` cost preview → backlog** (was in the observability rev).
 - **Enterprise/governance/audit/compliance/learning-loops → v5.0**, reframed as the deliberate *major-version venture* gated on funding.
 - The **cheap trust fixes** (envelope, injection fencing, fold nonce) pulled into **v4.0** because the engine needs them to be trustworthy in automation.
+- **Docs are part of the rev (2026-07-20):** every rev from v4.1 onward closes with a **README + docs update** line item, so each release ships its own documentation rather than deferring it.
