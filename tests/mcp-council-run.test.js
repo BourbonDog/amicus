@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { handleCouncilRunTool } = require('../src/mcp-council-run');
+const { handleCouncilRunTool, buildCouncilStatusPayload } = require('../src/mcp-council-run');
 const { getTools } = require('../src/mcp-tools');
 
 let tmp; let briefingFile;
@@ -91,6 +91,36 @@ describe('amicus_council_run handler', () => {
     const dirs = fs.readdirSync(tmp).filter(d => d.startsWith('council-'));
     const run = JSON.parse(fs.readFileSync(path.join(tmp, dirs[0], 'run.json'), 'utf-8'));
     expect(run.status).toBe('error');
+  });
+
+  test('records the spawned child pid in run.json before the child checkpoints its own', async () => {
+    const res = await handleCouncilRunTool(input(), tmp, {
+      spawnFn: () => ({ pid: 4242 }), clientName: 'claude-code',
+    });
+    const body = parseFenced(res);
+    const run = JSON.parse(fs.readFileSync(path.join(body.runDir, 'run.json'), 'utf-8'));
+    expect(run.pid).toBe(4242);
+    expect(run.status).toBe('running');
+  });
+
+  test('a child that dies before writing its own pid is still crash-detected (no pid-less orphan)', async () => {
+    // 999999999 is guaranteed dead — stands in for a child that died in the
+    // window between spawn and its own runState.initRun({pid}) checkpoint.
+    const res = await handleCouncilRunTool(input(), tmp, {
+      spawnFn: () => ({ pid: 999999999 }), clientName: 'claude-code',
+    });
+    const body = parseFenced(res);
+    const payload = buildCouncilStatusPayload(tmp, body.runId);
+    expect(payload.status).toBe('error');
+    expect(payload.reason).toContain('exited unexpectedly');
+  });
+
+  test('tolerates a spawnFn that returns no child (run stays running, no pid)', async () => {
+    const res = await handleCouncilRunTool(input(), tmp, helpers());
+    const body = parseFenced(res);
+    const run = JSON.parse(fs.readFileSync(path.join(body.runDir, 'run.json'), 'utf-8'));
+    expect(run.status).toBe('running');
+    expect(run.pid).toBeUndefined();
   });
 
   test('maxCost <= 0 → isError, no spawn, no orphan run.json directory', async () => {

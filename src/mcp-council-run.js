@@ -125,11 +125,18 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (typeof input.maxCost === 'number') { args.push('--max-cost', String(input.maxCost)); }
   if (input.gateway) { args.push('--gateway', input.gateway); }
 
-  try { helpers.spawnFn(args, runDir); } catch (err) {
+  let child;
+  try { child = helpers.spawnFn(args, runDir); } catch (err) {
     try {
       runState.checkpoint(runDir, { status: 'error', error: { code: 'INTERNAL', message: err.message }, completedAt: new Date().toISOString() });
     } catch { /* best-effort */ }
     return textResult(`Failed to start council run: ${err.message}`, true);
+  }
+  // Record the child's pid NOW: the engine writes its own pid at startup, but a
+  // child that dies before that leaves a pid-less status:'running' run.json that
+  // crash detection skips and abort cannot signal. Same value either way.
+  if (child && typeof child.pid === 'number') {
+    try { runState.checkpoint(runDir, { pid: child.pid }); } catch { /* best-effort */ }
   }
 
   const body = JSON.stringify({
