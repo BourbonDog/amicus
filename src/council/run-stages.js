@@ -36,9 +36,11 @@ function slug(text) {
 /** Launch all Stage-1 legs (wave + critic/lens solos), collect run docs. */
 async function launchStage1(ctx) {
   const { o, launchers } = ctx;
+  // `noCostGate` rides EVERY launch object in this file (here, the findings
+  // repair, the judge wave, the judge repair) — see run-launch.js's fanout call.
   const common = {
     project: o.runDir, timeout: o.timeout, gateway: o.gateway,
-    noValidateModel: o.noValidateModel,
+    noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
   };
   const launches = [];
   // Record every sub-wave BEFORE it launches: `amicus abort` cascades over
@@ -118,7 +120,7 @@ async function runStage1(ctx) {
       const solo = await ctx.launchers.launchSolo({
         model: m.modelInput, prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors }),
         project: o.runDir, waveId, timeout: o.timeout,
-        gateway: o.gateway, noValidateModel: o.noValidateModel,
+        gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, reviews, deadLegs }; }
@@ -167,6 +169,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   const { wave, exitCode } = await ctx.launchers.launchWave({
     models: judges, prompt: bundle, project: ctx.scratchDir, waveId: `${o.runId}-s2`,
     timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
+    noCostGate: o.noCostGate,
   });
   ctx.addWave(wave);
   if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [] }; }
@@ -191,7 +194,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       const solo = await ctx.launchers.launchSolo({
         model: judge, prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
-        gateway: o.gateway, noValidateModel: o.noValidateModel,
+        gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, judgeResults }; }

@@ -43,6 +43,13 @@ function createLaunchers(deps = {}) {
       includeContext: false,
       gatewayMode: opts.gateway,
       noValidateModel: opts.noValidateModel,
+      // v4.1 §4.5d: `--no-cost-gate` is a WHOLE-RUN opt-out (an intentional
+      // o3-class council), so it has to ride every council launch — otherwise
+      // fanout's per-$/Mtok gate refuses the first repair or the chair
+      // mid-council. Transport key is literally `noCostGate` (fanout.js
+      // guards with `if (!options.noCostGate)`); the CALLERS assemble these
+      // option objects, so run-stages/run-chair/run-debate each set it.
+      noCostGate: !!opts.noCostGate,
       json: false,
       quiet: true,
       // Spec §6 judge isolation: pin every leg's OpenCode tool-exec cwd to its

@@ -148,6 +148,15 @@ async function handleCouncilRun(args) {
     gateway: resolveGatewayMode(args.gateway),
     noValidateModel: !!args['no-validate-model'],
     date: new Date().toISOString().slice(0, 10),
+    // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
+    // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and
+    // 'claude may not chair' guards live there on purpose so MCP, the GitHub
+    // Action and direct `require('./council/run')` callers hit the same rule and
+    // the same COUNCIL_CLAUDE_REVIEW_INVALID code. Re-checking them here would
+    // give the identical mistake two different error codes by entry point.
+    debate: !!args.debate,
+    claudeReviewFile: args['claude-review'] ? path.resolve(args['claude-review']) : null,
+    noCostGate: !!args['no-cost-gate'],
   });
 
   if (useJson) {

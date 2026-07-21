@@ -64,6 +64,10 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
     const solo = await launchers.launchSolo({
       model, prompt: packet, project: o.runDir, waveId,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
+      // v4.1 §4.5d: the chair chain (ch1/ch2/ch3) and the ch4 VERDICT repair
+      // below are the launches a re-armed price gate would refuse LAST, after
+      // the whole bench has already been paid for.
+      noCostGate: o.noCostGate,
     });
     addWave(solo.wave);
     const ok = solo.leg && solo.leg.status === 'complete'
@@ -121,6 +125,7 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
       model: actualChair, prompt: stage2.buildChairRepairPrompt(),
       project: o.runDir, waveId: `${o.runId}-ch4`,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
+      noCostGate: o.noCostGate,
     });
     addWave(repair.wave);
     if (isAbortExit(repair.exitCode) || isSignalled()) { return bail(repair.exitCode || isSignalled()); }

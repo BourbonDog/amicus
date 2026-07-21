@@ -466,6 +466,18 @@ function getTools() {
       gateway: z.enum(GATEWAY_MODES).optional().describe(
         'Routing preference: auto (default), direct, or openrouter.'
       ),
+      debate: z.boolean().optional().describe(
+        'Add a Stage-2.5 rebuttal round: raisers defend Contested/Disputed findings and ' +
+        'disputing judges re-vote before the chair synthesizes.'
+      ),
+      claudeReviewFile: z.string().optional().describe(
+        "Path to Claude's own review file (prose + findings JSON) to include as a judged " +
+        'entry. Claude is reviewed and ranked like a seat, but never judges or chairs.'
+      ),
+      noCostGate: z.boolean().optional().describe(
+        'Disable the per-leg price gate for the WHOLE run (repairs and chair included). ' +
+        'Use for an intentional o3-class council. Independent of maxCost, which still caps the total.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
