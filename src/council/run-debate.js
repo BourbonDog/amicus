@@ -189,7 +189,10 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   // ('skipped-cost-ceiling' is a round-level outcome in spec §5.1's enum, not a per-leg one).
   // `appendStageWave` is sync fs and each solo registers its waveId before its first await,
   // so concurrency cannot interleave a read-modify-write of run.json.
-  const raisers = Object.keys(byRaiser);
+  // v4.1 §4.4: the reserved seat 'claude' is a FILE-sourced review with no leg to
+  // launch, so it is never asked to defend — its contested findings simply stand
+  // (the same "originals stand" outcome as a no-response).
+  const raisers = Object.keys(byRaiser).filter(m => m !== 'claude');
   const defenseResults = await Promise.all(
     raisers.map((raiser, i) => runDefenseSolo(ctx, raiser, byRaiser[raiser], i)));
   // A signal during the defense wave aborts the whole finalization (spec §5.7):

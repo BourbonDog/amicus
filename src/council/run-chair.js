@@ -25,12 +25,17 @@ const { isAbortExit } = require('./run-stages');
  * model from `council stats` that is not a bench seat and not the failed
  * chair. "Highest street-cred" = BEST = numerically LOWEST mean rank
  * (deriveReliability's avgStreetCredPeersOnly; lower is better).
+ *
+ * The reserved seat name 'claude' is never eligible (v4.1 §4.4 "never chairs"):
+ * a --claude-review run puts a real 'claude' row in the ledger, so without this
+ * filter a LATER run could promote it and walk straight past the pre-flight
+ * --chair claude guard — with no Claude leg to launch.
  * @returns {string|null}
  */
 function pickFallbackChair(statsRows, bench, failedChair) {
   const benchSet = new Set(bench);
   const candidates = (statsRows || [])
-    .filter(r => !benchSet.has(r.model) && r.model !== failedChair
+    .filter(r => r.model !== 'claude' && !benchSet.has(r.model) && r.model !== failedChair
       && typeof r.avgStreetCredPeersOnly === 'number')
     .sort((a, b) => a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly);
   return candidates.length ? candidates[0].model : null;

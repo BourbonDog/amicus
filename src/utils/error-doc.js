@@ -22,6 +22,8 @@ const ERROR_CODES = Object.freeze({
   INTERNAL: 'INTERNAL',             // unexpected pre-flight throw
   COUNCIL_QUORUM: 'COUNCIL_QUORUM', // council run: <2 surviving Stage-1 reviews (v4.0 §4)
   COST_EXCEEDED: 'COST_EXCEEDED',   // council run: whole-run --max-cost ceiling hit pre-tally (v4.0 §4)
+  // council run: --claude-review file unreadable/invalid, or --chair claude (v4.1 §4.4)
+  COUNCIL_CLAUDE_REVIEW_INVALID: 'COUNCIL_CLAUDE_REVIEW_INVALID',
 });
 
 /**

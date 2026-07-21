@@ -97,6 +97,12 @@ async function runCouncil(options, deps = {}) {
   const ctx = { o, launchers, addWave, overBudget, scratchDir: path.join(o.runDir, '_scratch') };
 
   try {
+    // v4.1 §4.4: Claude-in-council is a FILE input — validated after initRun (so the
+    // error doc lands in a run dir that exists) and before any launch (zero spend).
+    const pre = asm.preflightClaudeReview(o);
+    if (pre.error) { return finalize(1, pre.error); }
+    const claudeReview = pre.claudeReview;
+
     // Composed Stage-1 seat briefing persisted for auditability (spec §4 layout).
     fs.writeFileSync(path.join(o.runDir, 'briefing-stage1.md'),
       briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }), { mode: 0o600 });
@@ -133,17 +139,20 @@ async function runCouncil(options, deps = {}) {
     }
 
     // ---- Stage 2: anonymized cross-review ----
-    const labels = assignLabels(s1.reviews.map(r => r.model));
+    // A file-sourced Claude review is ALWAYS the last label — review N+1 (§4.4).
+    const labels = assignLabels(s1.reviews.map(r => r.model).concat(claudeReview ? ['claude'] : []));
     runState.checkpoint(o.runDir, { labelMap: labels.labelMap });
     // Attach each review's run-global findings (buildTallyInput reads
     // r.globalFindings per review, not a bare parallel array).
     s1.reviews.forEach((r, i) => {
       r.globalFindings = toGlobalFindings(labels.entries[i].letter, r.model, r.findings);
     });
-    const globalFindings = s1.reviews.flatMap(r => r.globalFindings);
+    const globalFindings = s1.reviews.flatMap(r => r.globalFindings)
+      .concat(claudeReview ? asm.labelClaudeReview(claudeReview, labels) : []);
     runState.updateStage(o.runDir, 'stage2',
       { status: 'running', startedAt: now(), waveId: `${o.runId}-s2`, project: ctx.scratchDir });
-    const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings });
+    const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings,
+      extraLabeled: claudeReview ? [{ label: claudeReview.label, text: claudeReview.text }] : [] });
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
     if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
     if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
@@ -158,7 +167,7 @@ async function runCouncil(options, deps = {}) {
     // ---- Chair synthesis (provisional tally feeds the packet) ----
     const mkInput = (chairStats, chairModel) => asm.buildTallyInput({
       runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
-      reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats,
+      reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
     });
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);
@@ -206,7 +215,10 @@ async function runCouncil(options, deps = {}) {
     }
 
     const packet = stage2.buildChairPacket({
-      reviews: s1.reviews.map(r => ({ model: r.model, text: r.text })),
+      // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
+      // no rankings/adjudications, so it appears ONLY as one more review block.
+      reviews: s1.reviews.map(r => ({ model: r.model, text: r.text }))
+        .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
       rankings: debatedInput.rankings,
       adjudications: debatedInput.adjudications,
       tierCounts: debatedRecord.tierCounts, date: o.date,

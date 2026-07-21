@@ -137,18 +137,27 @@ async function runStage1(ctx) {
 /**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
  * @param {object} ctx
- * @param {{reviews: Array, labels: {entries, labelMap}, globalFindings: Array}} args
+ * @param {{reviews: Array, labels: {entries, labelMap}, globalFindings: Array,
+ *   extraLabeled?: Array<{label: string, text: string}>}} args
+ *   `extraLabeled` (v4.1 §4.4) are labeled reviews sourced from a FILE rather than
+ *   a leg (the Claude review): they join the judged BUNDLE, never the judge ROSTER.
  * @returns {Promise<{aborted: number|null, judgeResults: Array}>}
  */
-async function runStage2(ctx, { reviews, labels, globalFindings }) {
+async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = [] }) {
   const { o } = ctx;
   const { rankingToOrder } = require('./anonymize');
   fs.mkdirSync(ctx.scratchDir, { recursive: true, mode: 0o700 });
 
-  const labeled = labels.entries.map((e, i) => ({ label: e.label, text: reviews[i].text }));
+  // Zip off `reviews` (never off `labels.entries`, which may be one longer than
+  // reviews when a file-sourced review is present) and append the extras.
+  const labeled = reviews
+    .map((r, i) => ({ label: labels.entries[i].label, text: r.text }))
+    .concat(extraLabeled);
   const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings, date: o.date });
   fs.writeFileSync(path.join(o.runDir, 'bundle-stage2.md'), bundle, { mode: 0o600 });
 
+  // ROSTER, not bundle: derived ONLY from legs that actually ran, so a file-sourced
+  // review is judged but never judges (v4.1 §4.4). Do not widen with extraLabeled.
   const judges = reviews.map(r => r.modelInput);
   const parseCtx = {
     labels: labels.entries.map(e => e.label),
