@@ -11,16 +11,23 @@ const path = require('path');
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
 const { mustSection, mustIndexOf } = require('./helpers/docs-extract');
 
-describe('B22 — Stage 1 validate transport', () => {
-  const skill = read('skills/second-opinion/SKILL.md');
+// Both skill docs are CRLF in the working tree; normalise before any
+// \n-anchored or line-bounded matching (repo idiom — see
+// tests/skill-second-opinion-docs.test.js and tests/skill-sidecar-docs.test.js).
+const readDoc = p => read(p).replace(/\r\n/g, '\n');
+// v4.1 §4.9: the engine runs validate/repair and the tally internally, so the
+// Stage-1 validate transport and the tally redirect moved out of SKILL.md and
+// into the manual fallback. The pins follow the prose.
+const MANUAL = readDoc('skills/second-opinion/MANUAL-ORCHESTRATION.md');
 
-  it('Stage 1 invokes `amicus council validate` instead of calling validateFindings directly', () => {
-    expect(skill).toMatch(/amicus council validate <leg-file> --json/);
+describe('B22 — Stage 1 validate transport (manual path)', () => {
+  it('the manual Stage 1 invokes `amicus council validate` instead of calling validateFindings directly', () => {
+    expect(MANUAL).toMatch(/amicus council validate <leg-file> --json/);
   });
 
   it('documents the tri-state exit contract (0 ok, 2 not-ok, 1 BAD_ARGS)', () => {
-    const idx = skill.indexOf('amicus council validate <leg-file>');
-    const section = skill.slice(idx, idx + 700);
+    const idx = MANUAL.indexOf('amicus council validate <leg-file>');
+    const section = MANUAL.slice(idx, idx + 700);
     expect(section).toMatch(/tri-state/);
     expect(section).toMatch(/`0`.*ok:true/);
     expect(section).toMatch(/`2`.*ok:false/);
@@ -28,27 +35,35 @@ describe('B22 — Stage 1 validate transport', () => {
   });
 
   it('still references the underlying validateFindings unit for provenance', () => {
-    const idx = skill.indexOf('amicus council validate <leg-file>');
-    const section = skill.slice(idx, idx + 300);
+    const idx = MANUAL.indexOf('amicus council validate <leg-file>');
+    const section = MANUAL.slice(idx, idx + 300);
     expect(section).toMatch(/validateFindings/);
     expect(section).toMatch(/src\/council\/findings\.js/);
   });
+
+  it('the fast-path SKILL.md no longer hand-drives validate (the engine does it internally)', () => {
+    expect(readDoc('skills/second-opinion/SKILL.md')).not.toMatch(/amicus council validate/);
+  });
 });
 
-describe('B22 — Stage 2 tally output is persisted for Stage 5 to consume', () => {
-  const skill = read('skills/second-opinion/SKILL.md');
-
+describe('B22 — Stage 2 tally output is persisted for Stage 5 to consume (manual path)', () => {
   it('the tally call redirects its --json output to <run-folder>/tally.json', () => {
-    expect(skill).toMatch(/amicus council tally <run-folder>\/tally-input\.json --json > <run-folder>\/tally\.json/);
+    expect(MANUAL).toMatch(/amicus council tally <run-folder>\/tally-input\.json --json > <run-folder>\/tally\.json/);
   });
 });
 
 describe('B22 — Stage 5 verdict transport', () => {
-  const skill = read('skills/second-opinion/SKILL.md');
-  const stage5 = skill.slice(skill.indexOf('### Stage 5'), skill.indexOf('### Stage 6'));
+  const skill = readDoc('skills/second-opinion/SKILL.md');
+  const stage5 = skill.slice(
+    mustIndexOf(skill, '### Stage 5', 'second-opinion SKILL.md "### Stage 5" heading'),
+    mustIndexOf(skill, '### Stage 6', 'second-opinion SKILL.md "### Stage 6" heading'));
 
   it('Stage 5 invokes `amicus council verdict` with --decisions and -o', () => {
     expect(stage5).toMatch(/amicus council verdict <run-folder>\/tally\.json --decisions <run-folder>\/decisions\.json -o <run-folder>\/verdict\.json/);
+  });
+
+  it('--render follows the pinned --decisions/-o tail so the decided report.html is refreshed (v4.1 §4.5c)', () => {
+    expect(stage5).toMatch(/amicus council verdict <run-folder>\/tally\.json --decisions <run-folder>\/decisions\.json -o <run-folder>\/verdict\.json --render/);
   });
 
   it('still references buildVerdict + writeVerdictAtomic for provenance and the atomic-write guarantee', () => {
