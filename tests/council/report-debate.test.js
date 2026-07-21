@@ -95,3 +95,78 @@ describe('HTML debate section follows the file\'s existing escaping discipline',
     expect(html).toContain('&lt;img src=x onerror=alert(2)&gt;');
   });
 });
+
+// Code-review fix: a report whose only debate-decorated findings are
+// 'no-response' (spec §5.7 — a dead defense leg, or one still unstructured
+// after its single repair, makes that raiser's bundled findings all
+// 'no-response') must not render a dangling "## Debate round" heading with no
+// content beneath it. no-response gets its own labelled list, same idiom as
+// withdrawn, rather than being silently dropped like a non-tier-moving
+// defended/amended finding.
+describe('no-response findings get their own list', () => {
+  function verdictAllNoResponse() {
+    return {
+      schemaVersion: 2, type: 'council-verdict', runId: 'r', runType: 'headless', date: 'd',
+      chair: 'deepseek', council: ['gemini', 'gpt', 'qwen'], claudeInCouncil: false, overallVerdict: 'x',
+      tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 },
+      streetCred: [], runStats: [],
+      findings: [
+        { id: 'A1', raiser: 'gemini', severity: 'major', tier: 'Contested', basis: { a: 1, d: 1, n: 0 },
+          adjudications: [], debate: { action: 'no-response', previousTier: 'Contested' } },
+      ],
+    };
+  }
+
+  test('toModel collects a noResponse list', () => {
+    const m = toModel(verdictAllNoResponse());
+    expect(m.debate.present).toBe(true);
+    expect(m.debate.withdrawn).toEqual([]);
+    expect(m.debate.movements).toEqual([]);
+    expect(m.debate.noResponse.map(x => x.id)).toEqual(['A1']);
+  });
+
+  test('markdown renders a No response list, not a bare heading', () => {
+    const md = buildReport({ verdict: verdictAllNoResponse() }, { format: 'md' });
+    expect(md).toContain('## Debate round');
+    expect(md).toContain('No response');
+    expect(md).toContain('A1');
+    // The heading must be followed by real content before the next section,
+    // not fall straight through to Cost.
+    expect(md).not.toMatch(/## Debate round\s*\n+\s*## Cost/);
+  });
+
+  test('html renders a No response list, not a bare heading', () => {
+    const html = buildReport({ verdict: verdictAllNoResponse() }, { format: 'html' });
+    expect(html).toContain('Debate round');
+    expect(html).toContain('No response');
+    expect(html).toContain('A1');
+    expect(html).not.toMatch(/<h2>Debate round<\/h2>\s*<h2>Cost<\/h2>/);
+  });
+});
+
+// Defensive belt-and-braces: even if some future debate action produces a
+// finding that lands in none of the three groupings (e.g. 'defended' with a
+// re-vote tier identical to previousTier — no withdrawal, no net movement,
+// not no-response), the section must not render a heading over nothing.
+describe('Debate round heading never renders with all three groupings empty', () => {
+  function verdictDefendedNoTierChange() {
+    return {
+      schemaVersion: 2, type: 'council-verdict', runId: 'r', runType: 'headless', date: 'd',
+      chair: 'deepseek', council: ['gemini', 'gpt', 'qwen'], claudeInCouncil: false, overallVerdict: 'x',
+      tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 },
+      streetCred: [], runStats: [],
+      findings: [
+        { id: 'A1', raiser: 'gemini', severity: 'major', tier: 'Contested', basis: { a: 1, d: 1, n: 0 },
+          adjudications: [], debate: { action: 'defended', previousTier: 'Contested' } },
+      ],
+    };
+  }
+  test('md omits the Debate round heading entirely', () => {
+    const md = buildReport({ verdict: verdictDefendedNoTierChange() }, { format: 'md' });
+    expect(md).not.toContain('## Debate round');
+  });
+  test('html omits the Debate round heading entirely', () => {
+    const html = buildReport({ verdict: verdictDefendedNoTierChange() }, { format: 'html' });
+    expect(html).not.toContain('Debate round');
+  });
+});

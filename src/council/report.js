@@ -37,6 +37,11 @@ function toModel(verdict, wave) {
   // was never "moved after re-vote". Listing it there would read as "still live,
   // just downgraded" when it was actually retracted; withdrawn findings get their
   // own list below so a reader can tell the two apart.
+  // no-response findings (spec §5.7: a dead defense leg, or one still
+  // unstructured after its single repair, makes that raiser's bundled
+  // findings all 'no-response') get their own list, same idiom as withdrawn —
+  // silently dropping them would leave a "## Debate round" heading with
+  // nothing beneath it whenever a run's only debating raiser never responded.
   const debate = {
     present: findings.some(f => f.debate) === true,
     withdrawn: verdict.findings.filter(f => f.debate && f.debate.action === 'withdrawn')
@@ -44,6 +49,8 @@ function toModel(verdict, wave) {
     movements: verdict.findings.filter(f => f.debate && f.debate.action !== 'withdrawn' && f.debate.action !== 'no-response'
         && f.debate.previousTier && f.debate.previousTier !== f.tier)
       .map(f => ({ id: f.id, action: f.debate.action, previousTier: f.debate.previousTier, tier: f.tier })),
+    noResponse: verdict.findings.filter(f => f.debate && f.debate.action === 'no-response')
+      .map(f => ({ id: f.id, previousTier: f.debate.previousTier, tier: f.tier })),
   };
   const runStats = verdict.runStats || [];
   const costRows = runStats.map(r => ({
@@ -106,7 +113,9 @@ function renderMd(m) {
     out.push('');
   }
 
-  if (m.debate.present) {
+  // Defensive: never emit the heading unless at least one grouping has
+  // content — a heading over nothing is worse than no heading.
+  if (m.debate.present && (m.debate.withdrawn.length || m.debate.movements.length || m.debate.noResponse.length)) {
     out.push('\n## Debate round\n');
     if (m.debate.withdrawn.length) {
       out.push('**Withdrawn by raiser:**');
@@ -119,6 +128,14 @@ function renderMd(m) {
     if (m.debate.movements.length) {
       out.push('**Tier movements after re-vote:**');
       for (const mv of m.debate.movements) { out.push(`- ${mv.id}: ${mv.previousTier} → ${mv.tier} (${mv.action})`); }
+      out.push('');
+    }
+    if (m.debate.noResponse.length) {
+      out.push('**No response (raiser did not defend):**');
+      for (const nr of m.debate.noResponse) {
+        const arrow = nr.previousTier && nr.previousTier !== nr.tier ? `${nr.previousTier} → ${nr.tier}` : (nr.previousTier || nr.tier);
+        out.push(`- ${nr.id}: ${arrow} (no response — original stands)`);
+      }
       out.push('');
     }
   }

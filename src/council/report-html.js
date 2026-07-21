@@ -58,7 +58,9 @@ function renderHtml(m) {
   // m.debate is absent on hand-built models (tests/council/report.test.js calls
   // renderHtml directly with no debate key) — the guard must tolerate that, and
   // absent/empty ⇒ no section at all so a no-debate report stays byte-identical
-  // to v4.0's HTML output.
+  // to v4.0's HTML output. no-response findings get their own list (same
+  // reasoning as report.js's renderMd) so the heading never dangles over
+  // nothing when a run's only debating raiser never responded.
   let debateSection = '';
   if (m.debate && m.debate.present) {
     const withdrawnItems = (m.debate.withdrawn || []).map((w) => {
@@ -67,9 +69,17 @@ function renderHtml(m) {
     }).join('');
     const movementItems = (m.debate.movements || []).map(mv =>
       `<li>${esc(mv.id)}: ${esc(mv.previousTier)} → ${esc(mv.tier)} (${esc(mv.action)})</li>`).join('');
-    debateSection = '\n<h2>Debate round</h2>' +
-      (withdrawnItems ? `<p><strong>Withdrawn by raiser:</strong></p><ul>${withdrawnItems}</ul>` : '') +
-      (movementItems ? `<p><strong>Tier movements after re-vote:</strong></p><ul>${movementItems}</ul>` : '');
+    const noResponseItems = (m.debate.noResponse || []).map((nr) => {
+      const arrow = nr.previousTier && nr.previousTier !== nr.tier ? `${esc(nr.previousTier)} → ${esc(nr.tier)}` : esc(nr.previousTier || nr.tier);
+      return `<li>${esc(nr.id)}: ${arrow} (no response — original stands)</li>`;
+    }).join('');
+    // Defensive: never emit the heading unless at least one grouping has content.
+    if (withdrawnItems || movementItems || noResponseItems) {
+      debateSection = '\n<h2>Debate round</h2>' +
+        (withdrawnItems ? `<p><strong>Withdrawn by raiser:</strong></p><ul>${withdrawnItems}</ul>` : '') +
+        (movementItems ? `<p><strong>Tier movements after re-vote:</strong></p><ul>${movementItems}</ul>` : '') +
+        (noResponseItems ? `<p><strong>No response (raiser did not defend):</strong></p><ul>${noResponseItems}</ul>` : '');
+    }
   }
 
   return `<!DOCTYPE html>
