@@ -162,11 +162,16 @@ does not fail on a release that already exists. The registry steps run
 strictly after `npm publish` because npm-side ownership validation reads
 `mcpName` from the *published* `package.json`.
 
-**Release-order dependency (carried over from the Phase 9 plan):** cut the
-first post-merge `v*` tag only after the Phase 4 tool-surface de-bloat lands
-(14 tools: 13 + `amicus_wait`) — today the live server also registers 13
-`sidecar_*` aliases that Phase 4 removes, and the first registry publish
-snapshots whatever tool surface exists at that time.
+**Release-order dependency (historical — satisfied before the first registry
+publish):** the first post-merge `v*` tag had to wait for the Phase 4
+tool-surface de-bloat, because the server still registered 13 deprecated
+`sidecar_*` aliases alongside the real tools and the first registry publish
+snapshots whatever surface exists at that time. Both have long since landed.
+The rule that outlives the episode: **a registry publish snapshots the tool
+surface, so land any tool-surface change before you cut the tag.** For the
+current tool count, see the MCP table in [README.md](../README.md) — it is the
+single source of truth and moves with each release (v4.0 added
+`amicus_council_run`).
 
 **Registry preview caveat:** the MCP Registry is still in preview per its
 own docs (breaking changes/data resets possible before general

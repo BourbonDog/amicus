@@ -159,6 +159,21 @@ council-<runId>/
   _scratch/                   # cwd for judge legs (isolation)
 ```
 
+Two more files appear when the run was started through **`amicus_council_run`** rather than the
+CLI, both written by the MCP handler before it spawns the engine:
+
+```
+  briefing.md                 # the briefing the tool copied in (the child briefs off this copy)
+  spawn.pid                   # the spawned child's pid
+```
+
+`spawn.pid` exists so a child that dies *before* the engine checkpoints its own pid into
+`run.json` is still detectable: `amicus status` crash detection and `amicus abort`'s process
+fallback both read `run.json`'s pid first and fall back to this file. It is deliberately a
+separate single-write file rather than a field patched into `run.json` — the spawning process and
+the engine child both write `run.json`, and its checkpoint is a read-merge-write with no
+cross-process lock.
+
 `verdict.json` here is the **undecided** verdict — same schema as [`amicus council
 verdict`](#amicus-council-verdict)'s output (council family v2) plus **`overallVerdict`**
 (`"Ship it" | "Fix these first" | "Fundamental rethink" | null`), parsed from the chair's final
