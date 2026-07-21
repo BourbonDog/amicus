@@ -135,9 +135,8 @@ async function handleCouncilRunTool(input, project, helpers) {
   // Record the child's pid NOW: the engine writes its own pid at startup, but a
   // child that dies before that leaves a pid-less status:'running' run.json that
   // crash detection skips and abort cannot signal. Same value either way.
-  if (child && typeof child.pid === 'number') {
-    try { runState.checkpoint(runDir, { pid: child.pid }); } catch { /* best-effort */ }
-  }
+  try { if (typeof child?.pid === 'number') { runState.checkpoint(runDir, { pid: child.pid }); } }
+  catch { /* best-effort */ }
 
   const body = JSON.stringify({
     schemaVersion: 2, type: 'council-run', runId, runDir, status: 'running',
