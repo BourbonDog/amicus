@@ -203,6 +203,13 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
 
   const defenseByRaiser = {};
   for (const dr of defenseResults) { defenseByRaiser[dr.raiser] = { ...dr.byId }; }
+  // v4.1 §4.4: claude never gets a defense leg (raisers filter above), but its
+  // contested/disputed findings still need an audit trail — the SAME spec §5.7
+  // "originals stand" fallback a dead/unrepaired defense leg gets. Seeded into
+  // defenseByRaiser ONLY (never defenseResults, which feeds the `bad(l)`
+  // degraded check below — a claude entry there would wrongly flip a clean run
+  // to degraded/exit 2).
+  if (byRaiser.claude) { defenseByRaiser.claude = allNoResponse(byRaiser.claude.map(f => f.id)); }
   // Stamp previousTier onto the tally input: applyDebate reads it off tallyInput.findings[]
   // (it ignores the provisional record), so without this every row's previousTier is null.
   const stampedInput = { ...tallyInput, findings: tallyInput.findings.map(f => ({ ...f, previousTier: previousTier[f.id] })) };

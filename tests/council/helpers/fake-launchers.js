@@ -115,7 +115,10 @@ function happyScriptMap() {
   return {
     'r-s1': (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
     'r-s2': () => okWave([
-      mkLeg('gemini', judgeOut(['Review B', 'Review C', 'Review A'],
+      // Follow-up 4: gemini's ranking includes Review D (claude) — the ONLY
+      // fixture ranking exercising claude's street-cred/ledger path; the
+      // other two judges' rankings are left bench-only on purpose.
+      mkLeg('gemini', judgeOut(['Review B', 'Review C', 'Review D', 'Review A'],
         [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }, { id: 'D1', verdict: 'agree' }])),
       mkLeg('gpt', judgeOut(['Review A', 'Review C', 'Review B'],
         [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'dispute' }, { id: 'D1', verdict: 'agree' }])),

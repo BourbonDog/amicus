@@ -45,6 +45,12 @@ describe('--claude-review valid file', () => {
     expect(row.wasChair).toBe(false);
     // claude's findings entered the tally with a run-global label id (D-series for a 3-seat bench)
     expect(tallyDoc.findings.some(f => f.id.startsWith('D'))).toBe(true);
+    // Follow-up 4: at least one judge ranks Review D (claude) too, exercising
+    // claude's street-cred/ledger path — the exact path pickFallbackChair's
+    // claude-exclusion guard defends against, and previously untouched by any
+    // fixture (every ranking array stopped at Review C).
+    const claudeSC = tallyDoc.streetCred.find(s => s.model === 'claude');
+    expect(claudeSC.peersOnly).not.toBeNull();
     // §4.4: the chair packet includes Claude's de-anonymized review like any other bench review.
     const packet = fs.readFileSync(path.join(tmp, 'chair-packet.md'), 'utf-8');
     expect(packet).toContain('Review by claude');
@@ -133,6 +139,29 @@ describe('--chair claude → pre-flight error', () => {
   });
 });
 
+// Finding 3: unreachable via the CLI's option whitelist, but MCP / the GitHub
+// Action / a direct require('./council/run') all bypass that whitelist — the
+// engine itself must refuse the collision, exactly like the sibling
+// `--chair claude` guard above, or a synthesized claude row permanently
+// corrupts the append-only ledger's real bench-leg claude row.
+describe('--models includes "claude" + --claude-review → pre-flight error (Finding 3)', () => {
+  test('exit 1, no launches, ledger never appended', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-bench-collision-'));
+    const reviewPath = writeReview(tmp, true);
+    let launches = 0;
+    const appendRunFn = jest.fn();
+    const { exitCode, run } = await runCouncil(
+      opts(tmp, { models: ['gemini', 'claude', 'qwen'], claudeReviewFile: reviewPath }),
+      { launchers: { launchWave: async () => { launches += 1; return { wave: { legs: [] } }; },
+        launchSolo: async () => { launches += 1; return { wave: { legs: [] }, leg: null }; } },
+        appendRunFn, statsFn: () => [], installSignalAbortFn: noSignals });
+    expect(exitCode).toBe(1);
+    expect(launches).toBe(0);
+    expect(run.error.code).toBe('COUNCIL_CLAUDE_REVIEW_INVALID');
+    expect(appendRunFn).not.toHaveBeenCalled();
+  });
+});
+
 describe('debate never launches a defense leg for claude (§4.4 no leg, ever)', () => {
   test('a Disputed claude-raised finding gets no defense solo — the original stands', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-debate-'));
@@ -168,7 +197,62 @@ describe('debate never launches a defense leg for claude (§4.4 no leg, ever)', 
     const dbg = await runDebate(ctx, { provisionalRecord, tallyInput });
     expect(seen).toEqual([]);                       // claude has no leg to launch
     expect(dbg.debateSummary.disputed).toBe(1);     // it is still counted as disputed
-    expect(dbg.debateFindings).toEqual([]);         // nothing defended/amended/withdrawn
+    // Finding 1 fix: claude's contested/disputed findings are recorded as
+    // 'no-response' (spec §5.7's dead/no-response fallback) — audit parity with
+    // a dead defense leg — WITHOUT ever adding a claude entry to defenseResults.
+    expect(dbg.debateFindings).toEqual([
+      { id: 'D1', raiser: 'claude', action: 'no-response', previousTier: 'Disputed' },
+    ]);
+    expect(dbg.debateSummary.noResponse).toBe(1);
+    expect(dbg.debateSummary.defended).toBe(0);
     expect(tally(dbg.debatedInput).findings.find(f => f.id === 'D1').tier).toBe('Disputed');
+  });
+});
+
+describe('Finding 1: debate round with claude as the ONLY raiser of a debatable finding', () => {
+  test('end-to-end: no dangling "--- Debate round outcomes ---" heading in the chair packet', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-debate-e2e-'));
+    const reviewPath = writeReview(tmp, true);
+    const { review, judgeOut, mkLeg, okWave, launchersFromScript } = require('./helpers/fake-launchers');
+    // A1/B1/C1 (bench) are uncontested (2 peer agrees each); D1 (claude's, the
+    // only claude-review finding) is Disputed by 2 of 3 bench judges — the ONLY
+    // debatable finding, and its raiser ('claude') has no leg to defend it.
+    const map = {
+      'r-s1': (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
+      'r-s2': () => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review C', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'agree' }, { id: 'D1', verdict: 'dispute' }])),
+        mkLeg('gpt', judgeOut(['Review A', 'Review C', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'agree' }, { id: 'D1', verdict: 'dispute' }])),
+        mkLeg('qwen', judgeOut(['Review A', 'Review B', 'Review C'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'agree' }, { id: 'D1', verdict: 'agree' }])),
+      ]),
+      'r-ch1': () => okWave([mkLeg('deepseek', 'Synthesis.\n\nVERDICT: Ship it', 'complete', 0.03)]),
+      // Deliberately NOT scripting 'r-d1'/'r-rv' — a launch attempt for either
+      // throws (launchersFromScript), proving no leg is ever launched for claude.
+    };
+    const { exitCode, run } = await runCouncil(
+      opts(tmp, { claudeReviewFile: reviewPath, debate: true }),
+      { launchers: launchersFromScript(map), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals });
+    expect(exitCode).toBe(0);          // no leg failed → not degraded
+    expect(run.debate).toMatchObject({ outcome: 'ran', disputed: 1, defended: 0, noResponse: 1 });
+
+    const debateDoc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+    expect(debateDoc.findings).toEqual([
+      { id: 'D1', raiser: 'claude', action: 'no-response', previousTier: 'Disputed' },
+    ]);
+    expect(debateDoc.revotes).toEqual([]);
+
+    const packet = fs.readFileSync(path.join(tmp, 'chair-packet.md'), 'utf-8');
+    expect(packet).toContain('--- Debate round outcomes ---');
+    expect(packet).toContain('D1');
+    expect(packet).toContain('no-response');
+    // The dangling-heading bug: the heading followed immediately by nothing but
+    // whitespace/EOF. Must NOT occur now that D1's outcome is real content.
+    expect(packet).not.toMatch(/--- Debate round outcomes ---\n\n$/);
+
+    const tallyDoc = JSON.parse(fs.readFileSync(path.join(tmp, 'tally.json'), 'utf-8'));
+    expect(tallyDoc.findings.find(f => f.id === 'D1').debate)
+      .toEqual({ action: 'no-response', previousTier: 'Disputed' });
   });
 });

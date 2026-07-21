@@ -201,7 +201,13 @@ async function runCouncil(options, deps = {}) {
         runState.updateStage(o.runDir, 'debate-revote', { status: 'complete', completedAt: now() });
         ({ debatedInput, debateFindings, debateSummary } = dbg);
         debatedRecord = tally(debatedInput);
-        debateOutcomes = dbg.addendumOutcomes;
+        // Defensive truthiness guard: `[]` is truthy in JS, so an empty outcomes
+        // list must be normalized to null here — otherwise the packet-assembly
+        // ternary below still calls buildDebateAddendum({outcomes: []}), which
+        // emits a bare "--- Debate round outcomes ---" heading with nothing
+        // under it (same defect class ee447b6 fixed on the report renderer).
+        debateOutcomes = (dbg.addendumOutcomes && dbg.addendumOutcomes.length > 0)
+          ? dbg.addendumOutcomes : null;
         // Dead/unstructured defense, partial/fully-dead re-vote or a cost-ceiling re-vote skip
         // each degrade the run → exit 2 (spec §5.7), same channel as a dead Stage-1 leg.
         if (dbg.degraded) { degraded.value = true; }

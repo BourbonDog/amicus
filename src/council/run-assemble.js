@@ -3,13 +3,17 @@
 
 /**
  * @module council/run-assemble
- * Pure assembly + artifact emission for the headless council engine (spec §5):
- * the five-keys tally input (meta pins: claudeInCouncil false, models = bench
- * seats exactly — critic included, chair excluded — runType 'headless'),
- * runStats rows copied verbatim from leg docs, and the run-dir artifact set
- * (tally-input.json, tally.json, verdict.json with overallVerdict, report.html,
- * chair-output.md). Raiser self-votes are INCLUDED in adjudications — exclusion
- * is tally's job (tally.js:95); judged is tally's job (tally.js:110).
+ * Assembly + artifact emission for the headless council engine (spec §5), plus
+ * the `--claude-review` pre-flight it now also owns: the five-keys tally input
+ * (meta pins: claudeInCouncil false, models = bench seats exactly — critic
+ * included, chair excluded — runType 'headless'), runStats rows copied
+ * verbatim from leg docs, the run-dir artifact set (tally-input.json,
+ * tally.json, verdict.json with overallVerdict, report.html, chair-output.md),
+ * v4.1 §4.4 pre-flight validation of the file-sourced Claude review
+ * (preflightClaudeReview — the reserved-seat/chair guards), its review-N+1
+ * labelling (labelClaudeReview), and its synthesized null-usage runStats row
+ * (claudeRunStatsRow). Raiser self-votes are INCLUDED in adjudications —
+ * exclusion is tally's job (tally.js:95); judged is tally's job (tally.js:110).
  */
 
 const fs = require('fs');
@@ -63,6 +67,18 @@ function preflightClaudeReview(o) {
     error: { code: CLAUDE_REVIEW_ERROR, message: `council_claude_review_invalid: ${detail}` } });
   if (o.chair === CLAUDE_SEAT) {
     return bad('claude may not chair (it is judged, never votes or chairs)');
+  }
+  if (Array.isArray(o.models) && o.models.includes(CLAUDE_SEAT)) {
+    // 'claude' is a reserved seat name for the file-sourced review N+1 (it
+    // joins meta.models synthetically — see buildTallyInput). A real bench
+    // leg ALSO named 'claude' would collide on that same key: labelMap gets
+    // two 'claude' entries, and ledger.js's Map join lets the synthesized
+    // claude row overwrite the real leg's role/conformance/wasChair and
+    // double-count findingsRaised — permanently, since the ledger is
+    // append-only. Reject it here so every entry point (CLI, MCP, GitHub
+    // Action, direct require('./council/run')) is covered, not just the
+    // CLI's option whitelist.
+    return bad("'claude' is a reserved seat name and cannot also appear in --models");
   }
   let text = '';
   try { text = fs.readFileSync(o.claudeReviewFile, 'utf-8'); }
