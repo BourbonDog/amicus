@@ -17,7 +17,13 @@ All notable changes to Amicus are documented here. Format follows
   faithful per-stage audit trail in `run.json`. Stage entries now carry a `waveIds` array
   recording every sub-wave at launch time (documented in `schemas/council-run.schema.json`), and
   the cascade targets the union of `waveId` + `waveIds`. In lens mode `stage1` previously
-  advertised only a phantom `-s1` wave that never launches, so *no* Stage-1 leg was reachable.
+  advertised only a phantom `-s1` wave that never launches, so *no* Stage-1 leg was reachable;
+  lens runs no longer record that `waveId` at all.
+- **`amicus status` now rolls up council legs across every sub-wave of the active stage.** It
+  counted only the stage's primary `waveId`, so a lens run — which has no seat wave — always
+  reported `legsTotal: null`, and a run with a critic omitted the critic's leg from the count
+  (e.g. `2` instead of `3` for two seats plus a critic). Note that `legsTotal` can now rise
+  mid-stage when a bounded repair re-prompt launches, which is a real additional model call.
 
 The **headless council engine** release. `amicus council run` (CLI) and `amicus_council_run`
 (MCP) execute the full adjudicated pipeline — Stage-1 independent reviews → anonymized peer

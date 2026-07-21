@@ -110,8 +110,14 @@ async function runCouncil(options, deps = {}) {
       briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }), { mode: 0o600 });
 
     // ---- Stage 1: independent reviews ----
-    runState.updateStage(o.runDir, 'stage1',
-      { status: 'running', startedAt: now(), waveId: `${o.runId}-s1`, project: o.runDir });
+    // Lens mode launches one solo per seat instead of a `-s1` seat wave, so it
+    // has no primary wave to name — run-stages records each real sub-wave into
+    // waveIds at launch. Advertising a `-s1` that never exists made both the
+    // abort cascade and the status leg rollup chase a phantom.
+    runState.updateStage(o.runDir, 'stage1', {
+      status: 'running', startedAt: now(), project: o.runDir,
+      ...(o.lenses ? {} : { waveId: `${o.runId}-s1` }),
+    });
     const s1 = await runStage1(ctx);
     runState.updateStage(o.runDir, 'stage1', {
       status: 'complete', completedAt: now(),

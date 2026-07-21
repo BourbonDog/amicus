@@ -33,6 +33,36 @@ function seedRun(status = 'running', extra = {}) {
   runState.writePointer(tmp, 'abc123', runDir);
   return runDir;
 }
+/** Seed a running run whose ONLY stage is the given stage1 entry. */
+function seedStage1(stage, extra = {}) {
+  const runDir = path.join(tmp, 'council-abc123');
+  runState.initRun(runDir, {
+    schemaVersion: 2, type: 'council-run', runId: 'abc123', status: 'running',
+    stages: [{ name: 'stage1', status: 'running', project: runDir, ...stage }],
+    bench: ['gemini', 'gpt', 'qwen'], chair: 'deepseek', critic: null, lenses: null,
+    labelMap: null, options: { outDir: runDir }, usage: null, pid: process.pid,
+    createdAt: new Date().toISOString(), ...extra,
+  });
+  runState.writePointer(tmp, 'abc123', runDir);
+  return runDir;
+}
+
+/** Write a wave record plus one leg per given status. */
+function seedWaveLegs(project, waveId, legStatuses) {
+  const dir = (id) => path.join(project, '.claude', 'amicus_sessions', id);
+  const legs = legStatuses.map((_, i) => `${waveId}-${i + 1}`);
+  fs.mkdirSync(dir(waveId), { recursive: true });
+  fs.writeFileSync(path.join(dir(waveId), 'metadata.json'), JSON.stringify({
+    taskId: waveId, type: 'wave', status: 'running', legs,
+  }));
+  legs.forEach((leg, i) => {
+    fs.mkdirSync(dir(leg), { recursive: true });
+    fs.writeFileSync(path.join(dir(leg), 'metadata.json'), JSON.stringify({
+      taskId: leg, status: legStatuses[i],
+    }));
+  });
+}
+
 const parse = (r) => JSON.parse(r.content[0].text);
 
 describe('amicus_status on council runIds (pointer resolution)', () => {
@@ -64,6 +94,27 @@ describe('amicus_status on council runIds (pointer resolution)', () => {
     const body = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
     expect(body.legsTotal).toBe(2);
     expect(body.legsComplete).toBe(1);
+  });
+
+  test('lens stage1 rolls up legs across its per-lens sub-waves', async () => {
+    // Lens mode has no seat wave at all — the rollup must sum the sub-waves.
+    const runDir = seedStage1({ waveIds: ['abc123-l1', 'abc123-l2'] },
+      { lenses: ['security', 'performance'], bench: ['gemini', 'gpt'] });
+    seedWaveLegs(runDir, 'abc123-l1', ['complete']);
+    seedWaveLegs(runDir, 'abc123-l2', ['running']);
+    const body = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
+    expect(body.legsTotal).toBe(2);
+    expect(body.legsComplete).toBe(1);
+  });
+
+  test('critic solo legs are counted alongside the seat wave', async () => {
+    const runDir = seedStage1(
+      { waveId: 'abc123-s1', waveIds: ['abc123-s1', 'abc123-c1'] }, { critic: 'qwen' });
+    seedWaveLegs(runDir, 'abc123-s1', ['complete', 'complete']);
+    seedWaveLegs(runDir, 'abc123-c1', ['running']);
+    const body = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
+    expect(body.legsTotal).toBe(3);      // 2 seats + the critic
+    expect(body.legsComplete).toBe(2);
   });
 
   test('council- prefixed id resolves too', async () => {

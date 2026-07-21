@@ -100,6 +100,30 @@ describe('stage entries record every sub-wave they launch (abort-cascade targeti
     expect(seen['abc123-l3']).toContain('abc123-l3');
     expect(stageOf('stage1').waveIds).toEqual(['abc123-l1', 'abc123-l2', 'abc123-l3']);
   });
+
+  test('lens mode does not advertise a phantom -s1 seat wave', async () => {
+    const script = happyScript();
+    delete script['abc123-s1'];
+    ['gemini', 'gpt', 'qwen'].forEach((m, i) => {
+      script[`abc123-l${i + 1}`] = (opts) => okWave([mkLeg(opts.model, review(opts.model))]);
+    });
+    const { exitCode } = await runCouncil(
+      baseOptions(tmp, { lenses: ['security', 'performance', 'ux'] }),
+      deps(scriptedLaunchers(script)));
+
+    expect(exitCode).toBe(0);
+    // `-s1` is never launched in lens mode; advertising it made every consumer
+    // (abort cascade, status leg rollup) chase a wave that does not exist.
+    expect(stageOf('stage1').waveId).toBeUndefined();
+  });
+
+  test('non-lens mode still records the -s1 seat wave as the primary waveId', async () => {
+    const { exitCode } = await runCouncil(
+      baseOptions(tmp), deps(scriptedLaunchers(happyScript())));
+
+    expect(exitCode).toBe(0);
+    expect(stageOf('stage1').waveId).toBe('abc123-s1');
+  });
 });
 
 /** Stand up the wave+leg session records the real launcher would have created. */

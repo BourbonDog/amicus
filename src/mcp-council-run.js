@@ -144,6 +144,34 @@ async function handleCouncilRunTool(input, project, helpers) {
 
 /** ---- council-awareness helpers (consumed by mcp-server status/list/abort) ---- */
 
+/**
+ * Every wave a stage launched: the primary `waveId` plus the recorded
+ * `waveIds` sub-waves (chair ch1..ch4, lens solos, critic solo, repairs).
+ */
+function subWaveIds(stage) {
+  return [...new Set(
+    [stage.waveId, ...(Array.isArray(stage.waveIds) ? stage.waveIds : [])].filter(Boolean))];
+}
+
+/** @returns {{total: number, complete: number}|null} null when not on disk yet */
+function countWaveLegs(project, waveId) {
+  const { getSessionDir } = require('./session-manager');
+  const { TERMINAL_STATUSES } = require('./utils/result-schema');
+  let legs;
+  try {
+    legs = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, waveId), 'metadata.json'), 'utf-8')).legs || [];
+  } catch { return null; }
+  const complete = legs.filter((id) => {
+    try {
+      const m = JSON.parse(fs.readFileSync(
+        path.join(getSessionDir(project, id), 'metadata.json'), 'utf-8'));
+      return TERMINAL_STATUSES.includes(m.status);
+    } catch { return false; }
+  }).length;
+  return { total: legs.length, complete };
+}
+
 function elapsedOf(run) {
   const end = run.completedAt || new Date().toISOString();
   const ms = Math.max(0, new Date(end).getTime() - new Date(run.createdAt || end).getTime());
@@ -176,22 +204,14 @@ function buildCouncilStatusPayload(project, taskId) {
   }));
   const active = (run.stages || []).find(s => s.status === 'running') || null;
   let legsTotal = null; let legsComplete = null;
-  if (active && active.waveId && active.project) {
-    try {
-      const { getSessionDir } = require('./session-manager');
-      const { TERMINAL_STATUSES } = require('./utils/result-schema');
-      const meta = JSON.parse(fs.readFileSync(
-        path.join(getSessionDir(active.project, active.waveId), 'metadata.json'), 'utf-8'));
-      const legs = meta.legs || [];
-      legsTotal = legs.length;
-      legsComplete = legs.filter((id) => {
-        try {
-          const m = JSON.parse(fs.readFileSync(
-            path.join(getSessionDir(active.project, id), 'metadata.json'), 'utf-8'));
-          return TERMINAL_STATUSES.includes(m.status);
-        } catch { return false; }
-      }).length;
-    } catch { /* stage wave not on disk yet */ }
+  // Sum across every sub-wave the active stage launched: a lens stage1 has no
+  // seat wave at all, and a critic solo runs beside one. Stays null until at
+  // least one sub-wave record exists on disk.
+  for (const waveId of active && active.project ? subWaveIds(active) : []) {
+    const c = countWaveLegs(active.project, waveId);
+    if (!c) { continue; }
+    legsTotal = (legsTotal || 0) + c.total;
+    legsComplete = (legsComplete || 0) + c.complete;
   }
   const payload = {
     taskId: run.runId, type: 'council-run', runId: run.runId, runDir: ptr.runDir,
@@ -257,12 +277,7 @@ function abortCouncilRun(project, taskId) {
   let cascaded = 0;
   for (const s of run.stages || []) {
     if (s.status !== 'running' || !s.project) { continue; }
-    // A stage can own several sub-waves — the chair's ch1..ch4 chain, lens
-    // solos, a critic solo beside the seat wave, bounded repairs. `waveId`
-    // names only the primary one, so target the union with `waveIds`.
-    const subWaves = new Set(
-      [s.waveId, ...(Array.isArray(s.waveIds) ? s.waveIds : [])].filter(Boolean));
-    for (const waveId of subWaves) {
+    for (const waveId of subWaveIds(s)) {
       try { cascaded += cascadeWave(s.project, waveId); } catch { /* skip sub-wave */ }
     }
   }
