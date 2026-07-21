@@ -43,7 +43,7 @@ into the bundle without ever being launched as a model leg.
 - **The Council Review Action no longer defaults to a bench that cannot lose a leg.** Its default
   `models` were `deepseek,gemini,glm` with `deepseek` as chair; because the chair is excluded from
   the bench, that left **two** seats against a quorum minimum of two, so one stalled leg failed the
-  entire review. The default is now four seats (`gpt,qwen,minimax,grok`), leaving real slack.
+  entire review. The default is now four seats (`glm,qwen,minimax,qwen-coder`), leaving real slack.
 - **`postinstall` now installs `SEAT-BRIEFS.md`.** It shipped in the tarball but was never copied
   into `~/.claude/skills/second-opinion/`, so the seat briefing reference has been missing from
   every installation to date.
