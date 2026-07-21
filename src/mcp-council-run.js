@@ -4,18 +4,17 @@
 /**
  * @module mcp-council-run
  * MCP surface for headless council runs (spec §8): the amicus_council_run
- * handler (15th tool, born-fenced) plus the council-awareness helpers that
- * amicus_status / amicus_list / amicus_abort call through the sessions-dir
- * pointer file. Lives outside mcp-server.js (grandfathered-oversized); the
- * spawn helper is INJECTED by mcp-server at call time to avoid a require
- * cycle.
+ * handler (15th tool, born-fenced). Lives outside mcp-server.js
+ * (grandfathered-oversized); the spawn helper is INJECTED by mcp-server at call
+ * time to avoid a require cycle. The council-awareness helpers that
+ * amicus_status / amicus_list / amicus_abort call now live in
+ * mcp-council-awareness.js and are re-exported from here.
  */
 
 const fs = require('fs');
 const path = require('path');
 const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
-const { RUNNING_VERSION } = require('./utils/version-info');
 const { isPathInside } = require('./project-root-allowlist');
 
 function textResult(text, isError) {
@@ -134,8 +133,10 @@ async function handleCouncilRunTool(input, project, helpers) {
   }
   // Record the child's pid NOW: the engine writes its own pid at startup, but a
   // child that dies before that leaves a pid-less status:'running' run.json that
-  // crash detection skips and abort cannot signal. Same value either way.
-  try { if (typeof child?.pid === 'number') { runState.checkpoint(runDir, { pid: child.pid }); } }
+  // crash detection skips and abort cannot signal. Written to its own file, not
+  // patched into run.json — the child owns run.json and a cross-process
+  // read-merge-write has no lock (see run-state.writeSpawnPid).
+  try { if (typeof child?.pid === 'number') { runState.writeSpawnPid(runDir, child.pid); } }
   catch { /* best-effort */ }
 
   const body = JSON.stringify({
@@ -148,153 +149,13 @@ async function handleCouncilRunTool(input, project, helpers) {
   return textResult(fenceSidecarOutput(body));
 }
 
-/** ---- council-awareness helpers (consumed by mcp-server status/list/abort) ---- */
-
-/**
- * Every wave a stage launched: the primary `waveId` plus the recorded
- * `waveIds` sub-waves (chair ch1..ch4, lens solos, critic solo, repairs).
- */
-function subWaveIds(stage) {
-  return [...new Set(
-    [stage.waveId, ...(Array.isArray(stage.waveIds) ? stage.waveIds : [])].filter(Boolean))];
-}
-
-/** @returns {{total: number, complete: number}|null} null when not on disk yet */
-function countWaveLegs(project, waveId) {
-  const { getSessionDir } = require('./session-manager');
-  const { TERMINAL_STATUSES } = require('./utils/result-schema');
-  let legs;
-  try {
-    legs = JSON.parse(fs.readFileSync(
-      path.join(getSessionDir(project, waveId), 'metadata.json'), 'utf-8')).legs || [];
-  } catch { return null; }
-  const complete = legs.filter((id) => {
-    try {
-      const m = JSON.parse(fs.readFileSync(
-        path.join(getSessionDir(project, id), 'metadata.json'), 'utf-8'));
-      return TERMINAL_STATUSES.includes(m.status);
-    } catch { return false; }
-  }).length;
-  return { total: legs.length, complete };
-}
-
-function elapsedOf(run) {
-  const end = run.completedAt || new Date().toISOString();
-  const ms = Math.max(0, new Date(end).getTime() - new Date(run.createdAt || end).getTime());
-  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
-}
-
-/** Status payload for a council runId, or null when the id is not a council run. */
-function buildCouncilStatusPayload(project, taskId) {
-  const ptr = runState.readPointer(project, taskId);
-  if (!ptr) { return null; }
-  const run = runState.readRun(ptr.runDir);
-  if (!run) { return null; }
-
-  // Crash detection: a running run.json whose engine pid is gone is 'error'.
-  if (run.status === 'running' && run.pid) {
-    try { process.kill(run.pid, 0); } catch (err) {
-      if (err.code !== 'EPERM') {
-        runState.checkpoint(ptr.runDir, {
-          status: 'error', completedAt: new Date().toISOString(),
-          error: { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' },
-        });
-        run.status = 'error';
-        run.error = { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' };
-      }
-    }
-  }
-
-  const stages = (run.stages || []).map(s => ({
-    name: s.name, status: s.status, waveId: s.waveId || null,
-  }));
-  const active = (run.stages || []).find(s => s.status === 'running') || null;
-  let legsTotal = null; let legsComplete = null;
-  // Sum across every sub-wave the active stage launched: a lens stage1 has no
-  // seat wave at all, and a critic solo runs beside one. Stays null until at
-  // least one sub-wave record exists on disk.
-  for (const waveId of active && active.project ? subWaveIds(active) : []) {
-    const c = countWaveLegs(active.project, waveId);
-    if (!c) { continue; }
-    legsTotal = (legsTotal || 0) + c.total;
-    legsComplete = (legsComplete || 0) + c.complete;
-  }
-  const payload = {
-    taskId: run.runId, type: 'council-run', runId: run.runId, runDir: ptr.runDir,
-    status: run.status, currentStage: active ? active.name : null, stages,
-    legsTotal, legsComplete, elapsed: elapsedOf(run),
-    exitCode: run.exitCode !== undefined ? run.exitCode : null,
-    version: RUNNING_VERSION,
-  };
-  if (run.error) { payload.reason = `${run.error.code}: ${run.error.message}`; }
-  return payload;
-}
-
-/** amicus_list entries for every council pointer in the project. */
-function listCouncilRuns(project) {
-  const { sanitizePreview } = require('./sidecar/progress-fields');
-  const out = [];
-  for (const ptr of runState.listPointers(project)) {
-    const run = runState.readRun(ptr.runDir);
-    if (!run) { continue; }
-    let briefing = '';
-    try { briefing = fs.readFileSync(path.join(ptr.runDir, 'briefing.md'), 'utf-8'); }
-    catch { /* optional */ }
-    const active = (run.stages || []).find(s => s.status === 'running');
-    out.push({
-      id: run.runId, type: 'council-run', status: run.status, mode: 'headless',
-      model: null, agent: 'Plan', createdAt: run.createdAt,
-      briefing: sanitizePreview(briefing, 80),
-      stage: active ? active.name : null,
-    });
-  }
-  return out;
-}
-
-/** Mark one sub-wave and its legs aborted. @returns {number} legs newly marked */
-function cascadeWave(project, waveId) {
-  const { markAborted } = require('./utils/session-abort');
-  const { getSessionDir } = require('./session-manager');
-  const waveDir = getSessionDir(project, waveId);
-  let meta = {};
-  try { meta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8')); }
-  catch { /* wave record may not exist yet */ }
-  let n = 0;
-  for (const legId of meta.legs || []) {
-    try { if (markAborted(getSessionDir(project, legId), 'council abort')) { n++; } }
-    catch { /* skip leg */ }
-  }
-  markAborted(waveDir, 'council abort');
-  return n;
-}
-
-/**
- * Abort a council run via its pointer: checkpoint run.json aborted (abort-wins)
- * and cascade to every in-flight sub-wave + its legs so they settle.
- * @returns {null|{notFound?: true}|{alreadyTerminal: true, status}|{aborted: true, cascaded: number}}
- */
-function abortCouncilRun(project, taskId) {
-  const ptr = runState.readPointer(project, taskId);
-  if (!ptr) { return null; }
-  const run = runState.readRun(ptr.runDir);
-  if (!run) { return null; }
-  if (run.status !== 'running') { return { alreadyTerminal: true, status: run.status }; }
-
-  let cascaded = 0;
-  for (const s of run.stages || []) {
-    if (s.status !== 'running' || !s.project) { continue; }
-    for (const waveId of subWaveIds(s)) {
-      try { cascaded += cascadeWave(s.project, waveId); } catch { /* skip sub-wave */ }
-    }
-  }
-  runState.checkpoint(ptr.runDir, { status: 'aborted', completedAt: new Date().toISOString() });
-  if (run.pid) {
-    try { require('./utils/abort-coordinator').waitThenKill(run.pid).catch(() => {}); }
-    catch { /* best-effort */ }
-  }
-  return { aborted: true, cascaded };
-}
+// The council-awareness helpers live in their own module; re-exported here so
+// mcp-server and cli-handlers-abort keep requiring one council MCP entry point.
+const awareness = require('./mcp-council-awareness');
 
 module.exports = {
-  handleCouncilRunTool, buildCouncilStatusPayload, listCouncilRuns, abortCouncilRun,
+  handleCouncilRunTool,
+  buildCouncilStatusPayload: awareness.buildCouncilStatusPayload,
+  listCouncilRuns: awareness.listCouncilRuns,
+  abortCouncilRun: awareness.abortCouncilRun,
 };
