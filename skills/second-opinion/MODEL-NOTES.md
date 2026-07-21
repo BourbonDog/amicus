@@ -40,6 +40,24 @@ claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see ch
   gpt/deepseek/grok have handled 82k-word agentic reads; gemini(-flash) and kimi stalled (narrate-
   stall / 25-min timeout / poller "Incomplete"). Pre-select proven long-read models or inline the
   text for large-context models.
+- **Debate mode rarely fires on correctness questions — design for it or expect a no-op.**
+  `--debate` only engages findings the tally marked Contested or Disputed, and judges agree far
+  more than expected: **2 disputes in 123 adjudications across four councils** (gemini/gpt/qwen).
+  Three of those four runs produced zero debatable findings, so the round never ran. Bug hunts
+  converge — a race condition either exists or it does not. If you want a rebuttal round, brief a
+  genuine judgement call (architecture, tradeoffs, "is this over-engineered"), not a defect hunt.
+- **Read spend from `run.json`, never from a provider credit balance.** `usage.cost.amount` is the
+  run total; per-leg costs are in `runStats[].usage.cost`. Only OpenRouter-routed legs move the
+  OpenRouter balance — gemini/gpt/anthropic bill directly against their own keys, so inferring cost
+  from that balance under-reports it badly (observed: ~6x low). A 3-model bench + chair + debate is
+  roughly **$0.60-0.80 per run**, not cents; budget `--max-cost` accordingly or the chair gets
+  skipped mid-run (exit 2, degraded) when the debate legs push the total past the ceiling.
+- **Expect agreement inflation in Stage-2 adjudication.** The judge contract defines `agree` by
+  worked example ("an 'I missed this — it's valid' counts as agree") but gives no example for
+  `dispute` and no positive definition of `neutral`, while requiring a verdict on EVERY finding —
+  including ones outside a judge's focus. A council reviewing this contract flagged the asymmetry
+  unanimously. Weigh a lone `Confirmed` tier accordingly, and prefer `Contested` evidence over
+  vote counts when a finding matters.
 - **Stage-6 approvals:** write the proposed MODEL-NOTES diff to a run-folder file and put that path
   in the approval prompt — chat-text diffs can be hidden behind the approval dialog.
 
