@@ -352,7 +352,7 @@ amicus models --search gemini # filter by substring
 
 ### Routing
 
-- **Bare `provider/model`** (e.g. `openai/gpt-5.5`, `anthropic/claude-opus-4.8`, `google/gemini-3.5-flash`) is the canonical, policy-routed form — Amicus routes it **direct-first**: your direct provider key when one is configured, falling back to OpenRouter automatically when only an OpenRouter key exists.
+- **Bare `provider/model`** (e.g. `openai/gpt-5.5`, `anthropic/claude-opus-4-8`, `google/gemini-3.6-flash`) is the canonical, policy-routed form — Amicus routes it **direct-first**: your direct provider key when one is configured, falling back to OpenRouter automatically when only an OpenRouter key exists.
 - **`openrouter/provider/model`** is an explicit override that always forces OpenRouter, even when a direct key is present — reach for it deliberately, or for gateway-only vendors with no direct integration (Qwen, Grok, Mistral, GLM, …).
 - **`--gateway auto|direct|openrouter`** (CLI, also on the MCP tools) overrides routing for one call; `auto` is the direct-first default. `routing.prefer` in `config.json` (`"direct"` by default, or `"openrouter"`) sets the global default.
 - **One-time migration notice:** if you hold both an OpenRouter key and a direct key for a vendor, the first launch that resolves to that vendor under **`auto`** routing (the default) prints a one-time notice that routing moved to direct API; set `routing.prefer: "openrouter"` to restore the old all-OpenRouter behavior. The notice never fires when you explicitly pass `--gateway direct` — that's your own choice, not a migration.

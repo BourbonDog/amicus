@@ -345,7 +345,7 @@ describe('buildSetupHTML (resolved picks)', () => {
   });
   test('defaults to pinned fallbacks when no picks are provided', () => {
     const html = buildSetupHTML();
-    expect(html).toContain('openrouter/google/gemini-3.5-flash'); // Task-1 pinned id
+    expect(html).toContain('openrouter/google/gemini-3.6-flash'); // Task-1 pinned id
   });
   test('Step-3 visit no longer stamps card aliases into aliasEdits', () => {
     const html = buildSetupHTML({ quickPicks: PICKS });

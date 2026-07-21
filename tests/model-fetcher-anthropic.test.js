@@ -56,6 +56,11 @@ test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapsh
     'anthropic/claude-opus-4-8',
     'anthropic/claude-sonnet-5',
     'anthropic/claude-haiku-4-5',
+    // The dated snapshot Anthropic's /v1/models actually lists, and the id
+    // curated-models.js authors as `haiku`'s direct route. Without it the
+    // floor reports the shipped `haiku` default stale for every keyless or
+    // OpenRouter-only user (see tests/utils/alias-audit-shipped-defaults).
+    'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-sonnet-4-6',
   ]);
   // Stale flagships from the prior family must be gone.

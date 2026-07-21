@@ -5,6 +5,28 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`amicus doctor` no longer warns about Amicus's own shipped defaults.** Every install reported
+  `⚠ Model aliases: 2 stale: opus, haiku` (and the scheduled Model Drift Check ran red) with no user
+  config involved. `toDefaultAliases()` built each alias's pinned id by string-stripping the
+  `openrouter/` prefix instead of routing through the module's own `directFormFor()`, so it emitted
+  OpenRouter's dot ids for Anthropic — `anthropic/claude-opus-4.8`, `anthropic/claude-haiku-4.5` —
+  which the direct API rejects, and invented a bare `anthropic/claude-fable-5` for a model OpenRouter
+  serves exclusively. Defaults now come from `toGatewayRoutes()`, so an alias resolves to its authored
+  direct form when one exists (`anthropic/claude-opus-4-8`,
+  `anthropic/claude-haiku-4-5-20251001`) and to its OpenRouter route when none does
+  (`openrouter/anthropic/claude-fable-5`). Council artifacts are unaffected — they record alias
+  strings, not resolved ids.
+- The offline Anthropic model floor now also lists `anthropic/claude-haiku-4-5-20251001`, the dated id
+  Anthropic's own listing returns. Without it, keyless and OpenRouter-only users saw the shipped
+  `haiku` default reported stale against the shipped floor.
+
+### Changed
+
+- Curated `gemini` pin moves from Gemini 3.5 Flash to **Gemini 3.6 Flash** on both gateways, clearing
+  the pinned-fallback drift notice from `amicus models --check`.
+
 ## [4.1.0] - 2026-07-21
 
 The `second-opinion` skill stops hand-driving councils. Stages 1–3 and the Stage-5 artifacts
