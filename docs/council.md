@@ -222,7 +222,7 @@ one round.
    line leaves that judge's original verdict standing.
 4. **Final tally.** The engine reassembles the tally input with the defense/re-vote outcomes
    folded in and re-tallies — this final, post-rebuttal tally is the one that appends to the
-   reliability ledger (unless `--no-ledger`/a lens run overrides that). Withdrawn findings stay
+   reliability ledger (a lens run is the only thing that suppresses the append — `council run` has no `--no-ledger` escape hatch; that flag is parsed only by `council tally`). Withdrawn findings stay
    in `findings[]` and are auto-recorded `denied` at Stage 4 — never presented for a user
    decision.
 
