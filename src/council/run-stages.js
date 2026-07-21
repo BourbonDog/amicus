@@ -146,7 +146,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings }) {
   fs.mkdirSync(ctx.scratchDir, { recursive: true, mode: 0o700 });
 
   const labeled = labels.entries.map((e, i) => ({ label: e.label, text: reviews[i].text }));
-  const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings });
+  const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings, date: o.date });
   fs.writeFileSync(path.join(o.runDir, 'bundle-stage2.md'), bundle, { mode: 0o600 });
 
   const judges = reviews.map(r => r.modelInput);
