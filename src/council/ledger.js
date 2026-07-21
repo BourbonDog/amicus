@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getConfigDir } = require('../utils/config');
+const { DEBATE_ROLES } = require('./debate');
 
 const LEDGER_SCHEMA_VERSION = 1;
 const LEDGER_FILE = 'council-ledger.jsonl';
@@ -17,7 +18,7 @@ function countSeverity(findings) {
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
   const sc = new Map(streetCred.map(s => [s.model, s]));
-  const rs = new Map(runStats.map(r => [r.model, r]));
+  const rs = new Map(runStats.filter(r => !DEBATE_ROLES.has(r.role)).map(r => [r.model, r]));
   return meta.models.map(model => {
     const raised = findings.filter(f => f.raiser === model);
     const s = sc.get(model) || {};

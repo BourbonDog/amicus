@@ -76,6 +76,17 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     }));
   });
 
+  // Finding 2 regression guard: data-driven over the EXPORTED ERROR_CODES object
+  // (not a hardcoded list) so a future code added to error-doc.js without a
+  // matching schema enum entry fails this test immediately, the way
+  // COUNCIL_QUORUM/COST_EXCEEDED/COUNCIL_CLAUDE_REVIEW_INVALID silently didn't.
+  test('every ERROR_CODES value round-trips through buildErrorDoc and validates', () => {
+    const validate = compile('error');
+    for (const code of Object.values(ERROR_CODES)) {
+      expectValid(validate, buildErrorDoc({ code, message: `test message for ${code}` }));
+    }
+  });
+
   test('spend.schema.json accepts buildSpendDoc output', () => {
     const total = { amount: 1.23, sourceMix: { reported: 1, estimated: 0, unknown: 0 } };
     const doc = buildSpendDoc({

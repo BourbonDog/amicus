@@ -25,12 +25,15 @@ const PROVISION_TIMEOUT_MS = 15000;
 const SKILL_SOURCE = path.join(__dirname, '..', 'skills', 'sidecar', 'SKILL.md');
 const COUNCIL_SOURCE_DIR = path.join(__dirname, '..', 'skills', 'second-opinion');
 
-/** Council files + per-file install semantics: SKILL/COUNCIL-DESIGN are product code
- * (overwrite on update); MODEL-NOTES is user data — its reviewer-reliability table evolves
- * per-run, so it is seeded once and never clobbered. */
+/** Council files + per-file install semantics: SKILL/COUNCIL-DESIGN/SEAT-BRIEFS are
+ * product code (overwrite on update, so upgrades keep them in sync with the package);
+ * MODEL-NOTES is user data — its reviewer-reliability table evolves per-run, so it is
+ * seeded once and never clobbered. */
 const COUNCIL_FILES = [
   { file: 'SKILL.md', mode: 'overwrite' },
   { file: 'COUNCIL-DESIGN.md', mode: 'overwrite' },
+  { file: 'SEAT-BRIEFS.md', mode: 'overwrite' },
+  { file: 'MANUAL-ORCHESTRATION.md', mode: 'overwrite' },
   { file: 'MODEL-NOTES.md', mode: 'if-missing' },
 ];
 

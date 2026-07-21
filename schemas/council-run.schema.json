@@ -33,6 +33,20 @@
     "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
     "options": { "type": "object" },
     "usage": { "type": "object" },
-    "exitCode": { "type": ["number", "null"] }
+    "exitCode": { "type": ["number", "null"] },
+    "debate": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "outcome": { "enum": ["ran", "nothing-to-debate", "skipped-cost-ceiling"] },
+        "contested": { "type": "integer" }, "disputed": { "type": "integer" },
+        "defended": { "type": "integer" }, "amended": { "type": "integer" },
+        "withdrawn": { "type": "integer" }, "noResponse": { "type": "integer" },
+        "revoteJudges": { "type": "integer" }, "revoteApplied": { "type": "integer" },
+        "verdictChanges": { "type": "integer" }
+      },
+      "required": ["enabled"],
+      "additionalProperties": false
+    }
   }
 }

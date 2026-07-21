@@ -55,6 +55,33 @@ function renderHtml(m) {
   const meta = [h.date, h.chair ? `chair: ${h.chair}` : null, `council: ${h.council.join(', ')}`,
     h.claudeInCouncil ? 'Claude in council' : null].filter(Boolean).map(esc).join(' · ');
 
+  // m.debate is absent on hand-built models (tests/council/report.test.js calls
+  // renderHtml directly with no debate key) — the guard must tolerate that, and
+  // absent/empty ⇒ no section at all so a no-debate report stays byte-identical
+  // to v4.0's HTML output. no-response findings get their own list (same
+  // reasoning as report.js's renderMd) so the heading never dangles over
+  // nothing when a run's only debating raiser never responded.
+  let debateSection = '';
+  if (m.debate && m.debate.present) {
+    const withdrawnItems = (m.debate.withdrawn || []).map((w) => {
+      const arrow = w.previousTier && w.previousTier !== w.tier ? `${esc(w.previousTier)} → ${esc(w.tier)}` : esc(w.previousTier || w.tier);
+      return `<li>${esc(w.id)}: ${arrow} (withdrawn — no longer live)</li>`;
+    }).join('');
+    const movementItems = (m.debate.movements || []).map(mv =>
+      `<li>${esc(mv.id)}: ${esc(mv.previousTier)} → ${esc(mv.tier)} (${esc(mv.action)})</li>`).join('');
+    const noResponseItems = (m.debate.noResponse || []).map((nr) => {
+      const arrow = nr.previousTier && nr.previousTier !== nr.tier ? `${esc(nr.previousTier)} → ${esc(nr.tier)}` : esc(nr.previousTier || nr.tier);
+      return `<li>${esc(nr.id)}: ${arrow} (no response — original stands)</li>`;
+    }).join('');
+    // Defensive: never emit the heading unless at least one grouping has content.
+    if (withdrawnItems || movementItems || noResponseItems) {
+      debateSection = '\n<h2>Debate round</h2>' +
+        (withdrawnItems ? `<p><strong>Withdrawn by raiser:</strong></p><ul>${withdrawnItems}</ul>` : '') +
+        (movementItems ? `<p><strong>Tier movements after re-vote:</strong></p><ul>${movementItems}</ul>` : '') +
+        (noResponseItems ? `<p><strong>No response (raiser did not defend):</strong></p><ul>${noResponseItems}</ul>` : '');
+    }
+  }
+
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Council Report — ${esc(h.runId)}</title>
@@ -91,7 +118,7 @@ td.c { text-align: center; }
 <table><tr><th>Finding</th><th>Sev</th><th>Raiser</th>${judgeHead}<th>Tier</th><th>Decision</th></tr>${matrixRows}</table>
 <p class="legend">✓ agree · ✗ dispute · – neutral · <sup>*</sup> raiser's own vote</p>
 <h2>Street-cred <span class="meta">(peers-only; lower = better)</span></h2>
-<table><tr><th>Model</th><th>peers-only</th><th>with-self</th></tr>${credRows}</table>
+<table><tr><th>Model</th><th>peers-only</th><th>with-self</th></tr>${credRows}</table>${debateSection}
 <h2>Cost</h2>
 <table><tr><th>Model</th><th>Status</th><th>Duration</th><th>Cost</th></tr>${costRows}
 <tr><td><strong>Wave total</strong></td><td></td><td></td><td>${esc(formatCost(m.cost.total))}</td></tr></table>

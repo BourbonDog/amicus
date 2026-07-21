@@ -290,4 +290,22 @@ describe('runStage2', () => {
     expect(judgeResults.find(j => j.judge === 'gemini').ok).toBe(false);
     expect(judgeResults.find(j => j.judge === 'gpt').ok).toBe(true);
   });
+
+  test('date-stamps the judge bundle it writes to bundle-stage2.md (spec §4.3)', async () => {
+    const s2 = require('../../src/council/briefings-stage2');
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+      ]),
+      onSolo: () => { throw new Error('no repairs expected'); },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const bundle = fs.readFileSync(path.join(ctx.o.runDir, 'bundle-stage2.md'), 'utf-8');
+    expect(bundle).toContain("Today's date is 2026-07-19.");
+    expect(bundle.split('\n')[0]).toBe(s2.JUDGE_NO_TOOLS_PREAMBLE);  // preamble is still line 1
+  });
 });

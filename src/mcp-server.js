@@ -13,7 +13,7 @@ const { deriveStage, sanitizePreview } = require('./sidecar/progress-fields');
 const { SharedServerManager } = require('./utils/shared-server');
 const { durationBetween } = require('./utils/result-schema');
 const { canonicalProjectPath } = require('./utils/project-path');
-const { isAllowedProjectRoot } = require('./project-root-allowlist');
+const { isAllowedProjectRoot, isPathInside } = require('./project-root-allowlist');
 const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
@@ -1141,10 +1141,35 @@ const handlers = {
     } catch (err) { return textResult(`council stats failed: ${err.message}`, true); }
   },
 
-  async amicus_verdict(input) {
+  async amicus_verdict(input, project) {
     try {
       const { buildVerdict } = require('./council/verdict');
-      return textResult(fenceSidecarOutput(JSON.stringify(buildVerdict(input.record, input.decisions || []))));
+      // The chair's synthesis lives only in the engine's verdict.json /
+      // chair-output.md, and this tool's output replaces verdict.json — so it
+      // must be carried through or it is destroyed. Unlike the CLI there is no
+      // run-folder path to anchor on (`record` arrives inline), so it is an
+      // explicit input; omitted → null, never fabricated.
+      const verdict = buildVerdict(input.record, input.decisions || [],
+        { overallVerdict: input.overallVerdict });
+      if (!input.render) {
+        return textResult(fenceSidecarOutput(JSON.stringify(verdict)));
+      }
+      // v4.1 §4.5c: return the markdown rendering (so Cowork can assemble report.md
+      // without Bash) and, when an outDir is given, refresh report.html on disk.
+      const { buildReport } = require('./council/report');
+      const md = buildReport({ verdict }, { format: 'md' });
+      if (input.outDir) {
+        // Containment parity with amicus_council_run (mcp-council-run.js): an
+        // MCP-supplied outDir must not write outside the project directory.
+        const cwd = project || getProjectDir(input.project);
+        const outDir = path.resolve(cwd, String(input.outDir));
+        if (!isPathInside(outDir, cwd)) {
+          return textResult(`outDir must resolve to a path inside the project directory (${cwd}).`, true);
+        }
+        fs.mkdirSync(outDir, { recursive: true, mode: 0o700 });
+        fs.writeFileSync(path.join(outDir, 'report.html'), buildReport({ verdict }, { format: 'html' }), { mode: 0o600 });
+      }
+      return textResult(fenceSidecarOutput(md));
     } catch (err) { return textResult(`verdict build failed: ${err.message}`, true); }
   },
 

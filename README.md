@@ -301,7 +301,7 @@ amicus update
 | `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
-| `amicus council run` | The headless council engine (v4.0): Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
+| `amicus council run` | The headless council engine: Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Add `--debate` for a Stage-2.5 rebuttal round (raisers defend/amend/withdraw, disputing judges re-vote) and `--claude-review <file>` to enter Claude's own review as judged review N+1. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |
@@ -329,7 +329,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
@@ -380,7 +380,7 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_fanout` | Launch a same-prompt wave; returns `{ waveId, taskIds[] }`. |
 | `amicus_council_tally` | Aggregate a council wave's reviews into a scored tally. |
 | `amicus_council_stats` | Reviewer-reliability stats from past council runs. |
-| `amicus_verdict` | Build the final council verdict from a tally + decisions. |
+| `amicus_verdict` | Build the final council verdict from a tally + decisions; writes `<outDir>/report.html` when `render:true` and `outDir` are given. |
 | `amicus_council_run` | Run the full headless council engine (Stage-1 reviews → anonymized cross-review → tally → chair verdict); returns `{ runId, runDir }`, async. |
 
 The async pattern is **start → status → read** — `amicus_start`/`amicus_fanout` return immediately, then you poll `amicus_status` and call `amicus_read`; `amicus_wait` collapses that poll loop into one blocking call.

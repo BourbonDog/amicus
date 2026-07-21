@@ -123,6 +123,13 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (input.timeoutMinutes) { args.push('--timeout', String(input.timeoutMinutes)); }
   if (typeof input.maxCost === 'number') { args.push('--max-cost', String(input.maxCost)); }
   if (input.gateway) { args.push('--gateway', input.gateway); }
+  // v4.1 §4.5b/§4.5d. claudeReviewFile is resolved against `project` for the same
+  // reason outDir is — an MCP client may send a relative path, and the child's cwd
+  // is the run dir. Validation of the file itself stays in the spawned engine's
+  // pre-flight (run-assemble.preflightClaudeReview), so every entry point shares it.
+  if (input.debate) { args.push('--debate'); }
+  if (input.claudeReviewFile) { args.push('--claude-review', path.resolve(project, String(input.claudeReviewFile))); }
+  if (input.noCostGate) { args.push('--no-cost-gate'); }
 
   let child;
   try { child = helpers.spawnFn(args, runDir); } catch (err) {

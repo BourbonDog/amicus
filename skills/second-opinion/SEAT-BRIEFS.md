@@ -14,6 +14,10 @@ findings, which waste the bench's adjudication capital), and the hard questions 
 Ship/Fix/Rethink verdict belong to the chair (synthesis-level judgments stay with the
 non-Claude chair, per the council's core rule)._
 
+**v4.1:** The engine composes its own stricter-JSON variants of these templates headlessly
+(`src/council/briefings.js` + `briefings-stage2.js` + `briefings-debate.js`). This file stays
+authoritative for the manual path and for element *semantics*.
+
 ---
 
 ## Standard anti-sycophancy clause (ALL Stage-1 briefings — not an optional element)

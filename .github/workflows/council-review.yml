@@ -16,7 +16,7 @@ on:
       models:
         description: Comma-separated amicus model aliases (cheap bench default)
         type: string
-        default: 'deepseek,gemini,glm'
+        default: 'glm,qwen,minimax,qwen-coder'
       chair:
         description: Chair model that synthesizes the verdict. Must not sit on the bench — if it appears in models, it is excluded from the bench for the run.
         type: string
@@ -25,6 +25,10 @@ on:
         description: Optional critic seat (must be one of the bench models); empty disables it
         type: string
         default: ''
+      debate:
+        description: Add a Stage-2.5 rebuttal round (defense + re-vote) inside the council run
+        type: boolean
+        default: false
       fail_on:
         description: 'Gate policy: none (report-only), fix (fail unless the chair says Ship it), rethink (fail only on Fundamental rethink)'
         type: string
@@ -74,9 +78,10 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      MODELS: ${{ inputs.models || 'deepseek,gemini,glm' }}
+      MODELS: ${{ inputs.models || 'glm,qwen,minimax,qwen-coder' }}
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
+      DEBATE: ${{ format('{0}', inputs.debate) }}
       FAIL_ON: ${{ inputs.fail_on || 'none' }}
       MAX_COST: ${{ inputs.max_cost || '2.00' }}
       DIFF_CAP: ${{ inputs.diff_cap_bytes || '120000' }}
@@ -168,6 +173,7 @@ jobs:
                 --out-dir "$RUN_DIR" --no-validate-model
                 --json --max-cost "$MAX_COST" --timeout 10)
           if [ -n "$CRITIC" ]; then ARGS+=(--critic "$CRITIC"); fi
+          if [ "$DEBATE" = "true" ]; then ARGS+=(--debate); fi
           set +e
           amicus council run "${ARGS[@]}" > council-cli.json
           EC=$?
@@ -226,10 +232,18 @@ jobs:
           fi
           # Confirmed findings, joined with claim/location from tally-input
           # (the tally record strips both; the assembled five-keys object in
-          # the run dir still carries the full validated findings).
+          # the run dir still carries the full validated findings). Belt-and-
+          # suspenders: a finding withdrawn during debate can never actually
+          # reach tier Confirmed (bundleFor excludes withdrawn findings from
+          # the re-vote, so a withdrawn finding's tier stays frozen at
+          # whatever made it debatable in the first place — Contested or
+          # Disputed, never Confirmed) — this select is defensive forward-
+          # cover against a future tier-computation change, not load-bearing
+          # today.
           jq -c --slurpfile ti "$RUN_DIR/tally-input.json" '
             (($ti[0].findings // []) | map({key: .id, value: .}) | from_entries) as $src
             | [ .findings[] | select(.tier == "Confirmed")
+                | select((.debate.action // "") != "withdrawn")
                 | . + { claim: (.claim // $src[.id].claim // "(no claim text recorded)"),
                         location: ((.location // $src[.id].location // "") | tostring) } ]
           ' "$RUN_DIR/verdict.json" > confirmed.json
@@ -323,15 +337,32 @@ jobs:
           fi
           # Per-tier finding lists are model text (claims joined back from
           # tally-input, same join as the check-run step) — neutralized.
+          # Withdrawn findings are excluded here too (same clause as the
+          # check-run step, but load-bearing here: a debated finding's tier
+          # stays frozen pre-debate, so withdrawn Contested/Disputed findings
+          # WOULD otherwise render in these lists) — see the comment below,
+          # they get their own "Withdrawn in debate" collapsible instead.
           for TIER in Confirmed Contested Disputed Singleton; do
             jq -r --arg tier "$TIER" --slurpfile ti "$RUN_DIR/tally-input.json" '
               (($ti[0].findings // []) | map({key: .id, value: .}) | from_entries) as $src
               | [ .findings[] | select(.tier == $tier)
+                  | select((.debate.action // "") != "withdrawn")
                   | "- **\(.id)** [\(.severity)] \((.claim // $src[.id].claim // "(no claim text recorded)")) _(raiser: \(.raiser) · a\(.basis.a)/d\(.basis.d)/n\(.basis.n) · \(.confidence))_" ]
               | if length == 0 then "_none_" else join("\n") end
             ' "$RUN_DIR/verdict.json" > "tier-${TIER}.md"
             neutralize < "tier-${TIER}.md" > "tier-${TIER}-safe.md"
           done
+          # Findings withdrawn during the Stage-2.5 debate round: retracted by
+          # their own raiser, so they never belong in the tier lists above, but
+          # they get their own collapsible for auditability (spec OQ-6). Same
+          # claim join as the tier lists; routed through the same neutralize().
+          jq -r --slurpfile ti "$RUN_DIR/tally-input.json" '
+            (($ti[0].findings // []) | map({key: .id, value: .}) | from_entries) as $src
+            | [ .findings[] | select(.debate.action == "withdrawn")
+                | "- **\(.id)** [\(.severity)] \((.claim // $src[.id].claim // "(no claim text recorded)")) _(raiser: \(.raiser) · previously: \(.debate.previousTier // "n/a"))_" ]
+            | if length == 0 then "_none_" else join("\n") end
+          ' "$RUN_DIR/verdict.json" > tier-Withdrawn.md
+          neutralize < tier-Withdrawn.md > tier-Withdrawn-safe.md
           STREET=$(jq -r '
             def r2: if . == null then "n/a" else ((. * 100 | round) / 100 | tostring) end;
             ["| Model | peers-only | with-self |", "|---|---|---|"]
@@ -376,6 +407,12 @@ jobs:
             echo "<details><summary>Singleton findings</summary>"
             echo
             cat tier-Singleton-safe.md
+            echo
+            echo "</details>"
+            echo
+            echo "<details><summary>Withdrawn in debate</summary>"
+            echo
+            cat tier-Withdrawn-safe.md
             echo
             echo "</details>"
             echo

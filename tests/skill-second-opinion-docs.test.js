@@ -27,13 +27,17 @@ describe('second-opinion SKILL.md frontmatter (B27)', () => {
 });
 
 describe('second-opinion SKILL.md amicus_wait guidance (B16)', () => {
-  it('transport-rule MCP tool list includes amicus_wait', () => {
+  it('transport-rule MCP tool list includes amicus_council_run and amicus_wait', () => {
     const transportRule = mustMatch(raw, /\*\*Transport rule[\s\S]*?equivalent\.\n/, 'skills/second-opinion/SKILL.md transport rule paragraph')[0];
     expect(transportRule).toContain('amicus_wait');
+    // v4.1 §4.9: the fast path's MCP transport is amicus_council_run, so the
+    // rule that tells a plugin-only install what to use must name it.
+    expect(transportRule).toContain('amicus_council_run');
   });
 
   it('Cowork/no-Bash path recommends amicus_wait, with amicus_status as fallback', () => {
     const coworkSection = mustMatch(raw, /\*\*Cowork \/ no-Bash environments:\*\*[\s\S]*?equivalent\.\n/, 'skills/second-opinion/SKILL.md Cowork/no-Bash paragraph')[0];
+    expect(coworkSection).toContain('amicus_council_run');
     expect(coworkSection).toContain('amicus_wait');
     expect(coworkSection).toContain('amicus_status');
     expect(coworkSection.indexOf('amicus_wait')).toBeLessThan(coworkSection.indexOf('amicus_status'));

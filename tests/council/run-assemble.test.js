@@ -75,6 +75,38 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
   });
 });
 
+// Finding 3: --models containing the reserved 'claude' seat, combined with
+// --claude-review, corrupts the append-only ledger (a synthesized claude row
+// collides with a real bench leg's claude row on ledger.js's Map join). The
+// CLI whitelist happens to block claudeReviewFile, but MCP/GitHub
+// Action/direct require('./council/run') callers all bypass it — so the guard
+// belongs at the engine level, next to the sibling `--chair claude` guard.
+describe('preflightClaudeReview rejects a reserved-seat collision in --models (Finding 3)', () => {
+  test('models containing "claude" + a claude-review file is a pre-flight error', () => {
+    // A REAL, valid review file: if the models-collision guard weren't there,
+    // pre-flight would succeed (claudeReview non-null, error null) rather than
+    // failing for the unrelated "cannot read" reason — so this proves the
+    // guard itself, not a file-read accident.
+    const reviewPath = path.join(tmp, 'review-claude.md');
+    fs.writeFileSync(reviewPath,
+      'Claude review prose.\n```json\n{"overall":"t","findings":[{"id":1,"severity":"major","claim":"c","location":"l","rationale":"r"}]}\n```\n');
+    const res = asm.preflightClaudeReview({
+      claudeReviewFile: reviewPath, chair: 'deepseek', models: ['gemini', 'claude', 'qwen'],
+    });
+    expect(res.claudeReview).toBeNull();
+    expect(res.error.code).toBe('COUNCIL_CLAUDE_REVIEW_INVALID');
+    expect(res.error.message).toContain('models');
+  });
+
+  test('the guard is scoped to --claude-review runs: no claudeReviewFile ⇒ untouched', () => {
+    // Without --claude-review there is no reserved seat at all — 'claude' in
+    // --models is somebody else's problem (model-catalog validation), not this
+    // pre-flight's.
+    expect(asm.preflightClaudeReview({ claudeReviewFile: null, chair: 'deepseek', models: ['claude'] }))
+      .toEqual({ claudeReview: null, error: null });
+  });
+});
+
 describe('buildRunStatsEntry / worseConformance', () => {
   test('missing leg → null duration and usage (never invent)', () => {
     const row = asm.buildRunStatsEntry({ leg: null, role: 'seat', wasChair: false, conformance: 'clean' });

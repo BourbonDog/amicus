@@ -134,11 +134,13 @@ function isBooleanFlag(key) {
      'no-validate-model',
      'remove',               // used by 'key' command only; other handlers ignore it
      'no-cost-gate',         // disable the budget gate for this run
+     'debate',               // council run: enable the Stage-2.5 rebuttal round
      'no-ledger',            // council tally: compute the record without appending to the reliability ledger
      'html',                 // council report: emit a self-contained HTML page
      'md',                   // council report: emit Markdown (default)
      'fix',                  // doctor: self-heal fixable checks in place (#56)
      'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
+     'render',               // council verdict: also refresh report.html next to the decided verdict
    ];
   return booleanFlags.includes(key);
 }
@@ -508,13 +510,19 @@ Subcommands for 'council':
     --decisions <d.json>       Optional. Stage-4 decisions array (default [])
     -o, --out <out.json>       Output path (default ./verdict.json)
     --json                     Print the full verdict document
+    --render                   Also refresh report.html next to the decided verdict
   run --prompt-file <briefing.md> (--models a,b,c | --council <name>)
       [--chair <model>] [--critic <model>] [--lenses s1,s2,...]
       [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]
       [--gateway auto|direct|openrouter] [--no-validate-model]
+      [--debate] [--claude-review <file>] [--no-cost-gate]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
+                                --debate adds a Stage-2.5 rebuttal round.
+                                --claude-review <file> enters Claude's own review as
+                                a judged entry; --no-cost-gate disables the per-leg
+                                price gate for the whole run (repairs + chair).
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

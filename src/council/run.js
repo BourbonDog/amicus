@@ -3,16 +3,16 @@
 
 /**
  * @module council/run
- * Headless council driver (spec §5): stage state machine over the DI launch
- * wrappers — Stage-1 reviews → anonymized Stage-2 cross-review → tally →
- * chair synthesis → verdict/report — checkpointing run.json after every
- * stage (run-state) and consuming the existing pure primitives unchanged
+ * Headless council driver (spec §5): stage state machine over the DI launch wrappers —
+ * Stage-1 reviews → anonymized Stage-2 cross-review → optional Stage-2.5 debate
+ * (run-debate) → tally → chair synthesis → verdict/report — checkpointing run.json after
+ * every stage (run-state) and consuming the existing pure primitives unchanged
  * (tally, buildVerdict via run-assemble, report renderers, ledger).
  *
- * Tally sequencing: an in-memory provisional tally feeds the chair packet;
- * the on-disk tally-input.json/tally.json are FINAL (chair runStats row
- * included, actual chair in meta) and only the final record is ledgered —
- * the skill's debate-mode provisional/final precedent.
+ * Tally sequencing: a provisional tally feeds the chair packet (and, under --debate, the
+ * debate round + tally-provisional.json); the on-disk tally-input.json/tally.json are
+ * FINAL (chair runStats row included, actual chair in meta) and only the final record is
+ * ledgered — the skill's debate-mode provisional/final precedent.
  *
  * Never rejects for run errors: always resolves {exitCode, run}.
  */
@@ -23,39 +23,27 @@ const { tally } = require('./tally');
 const { assignLabels, toGlobalFindings } = require('./anonymize');
 const briefings = require('./briefings');
 const stage2 = require('./briefings-stage2');
-const { parseChairVerdict } = require('./parse-stage2');
 const runState = require('./run-state');
 const { createLaunchers } = require('./run-launch');
-const { runStage1, runStage2, isAbortExit } = require('./run-stages');
+const { runStage1, runStage2 } = require('./run-stages');
+const { runChair, pickFallbackChair } = require('./run-chair');
+const runDebateMod = require('./run-debate');
+const { buildDebateAddendum } = require('./briefings-debate');
+const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { sumWaveUsage } = require('../utils/pricing');
 
 const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 
 /**
- * Chair fallback promotion (spec §4): the highest peers-only street-cred
- * model from `council stats` that is not a bench seat and not the failed
- * chair. "Highest street-cred" = BEST = numerically LOWEST mean rank
- * (deriveReliability's avgStreetCredPeersOnly; lower is better).
- * @returns {string|null}
- */
-function pickFallbackChair(statsRows, bench, failedChair) {
-  const benchSet = new Set(bench);
-  const candidates = (statsRows || [])
-    .filter(r => !benchSet.has(r.model) && r.model !== failedChair
-      && typeof r.avgStreetCredPeersOnly === 'number')
-    .sort((a, b) => a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly);
-  return candidates.length ? candidates[0].model : null;
-}
-
-/**
- * @param {object} options {briefing, models, chair, critic?, lenses?, project,
- *   runId, runDir, timeout?, maxCost?, gateway?, noValidateModel?, date}
+ * @param {object} options {briefing, models, chair, critic?, lenses?, project, runId,
+ *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?}
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?}
  * @returns {Promise<{exitCode: number, run: object}>}
  */
 async function runCouncil(options, deps = {}) {
-  const o = { critic: null, lenses: null, maxCost: null, ...options };
+  const o = { critic: null, lenses: null, maxCost: null, debate: false, claudeReviewFile: null,
+    noCostGate: false, ...options };
   const launchers = deps.launchers || createLaunchers();
   const appendRunFn = deps.appendRunFn || require('./ledger').appendRun;
   const statsFn = deps.statsFn || require('./ledger').deriveReliability;
@@ -75,6 +63,10 @@ async function runCouncil(options, deps = {}) {
     schemaVersion: 2, type: 'council-run', runId: o.runId, status: 'running', stages: [],
     bench: o.models.slice(), chair: o.chair, critic: o.critic, lenses: o.lenses,
     labelMap: null,
+    // Seeded ONLY under --debate (a `debate:null` seed would both break the v4.0
+    // "no debate key" contract and fail the object-typed schema), and with a VALID
+    // outcome from the first write so a run killed mid-debate stays schema-valid.
+    ...(o.debate ? { debate: { enabled: true, outcome: 'nothing-to-debate' } } : {}),
     options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
     usage: null, pid: process.pid, createdAt: now(),
   });
@@ -105,6 +97,12 @@ async function runCouncil(options, deps = {}) {
   const ctx = { o, launchers, addWave, overBudget, scratchDir: path.join(o.runDir, '_scratch') };
 
   try {
+    // v4.1 §4.4: Claude-in-council is a FILE input — validated after initRun (so the
+    // error doc lands in a run dir that exists) and before any launch (zero spend).
+    const pre = asm.preflightClaudeReview(o);
+    if (pre.error) { return finalize(1, pre.error); }
+    const claudeReview = pre.claudeReview;
+
     // Composed Stage-1 seat briefing persisted for auditability (spec §4 layout).
     fs.writeFileSync(path.join(o.runDir, 'briefing-stage1.md'),
       briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }), { mode: 0o600 });
@@ -141,17 +139,20 @@ async function runCouncil(options, deps = {}) {
     }
 
     // ---- Stage 2: anonymized cross-review ----
-    const labels = assignLabels(s1.reviews.map(r => r.model));
+    // A file-sourced Claude review is ALWAYS the last label — review N+1 (§4.4).
+    const labels = assignLabels(s1.reviews.map(r => r.model).concat(claudeReview ? ['claude'] : []));
     runState.checkpoint(o.runDir, { labelMap: labels.labelMap });
     // Attach each review's run-global findings (buildTallyInput reads
     // r.globalFindings per review, not a bare parallel array).
     s1.reviews.forEach((r, i) => {
       r.globalFindings = toGlobalFindings(labels.entries[i].letter, r.model, r.findings);
     });
-    const globalFindings = s1.reviews.flatMap(r => r.globalFindings);
+    const globalFindings = s1.reviews.flatMap(r => r.globalFindings)
+      .concat(claudeReview ? asm.labelClaudeReview(claudeReview, labels) : []);
     runState.updateStage(o.runDir, 'stage2',
       { status: 'running', startedAt: now(), waveId: `${o.runId}-s2`, project: ctx.scratchDir });
-    const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings });
+    const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings,
+      extraLabeled: claudeReview ? [{ label: claudeReview.label, text: claudeReview.text }] : [] });
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
     if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
     if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
@@ -166,105 +167,94 @@ async function runCouncil(options, deps = {}) {
     // ---- Chair synthesis (provisional tally feeds the packet) ----
     const mkInput = (chairStats, chairModel) => asm.buildTallyInput({
       runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
-      reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats,
+      reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
     });
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);
 
-    const packet = stage2.buildChairPacket({
-      reviews: s1.reviews.map(r => ({ model: r.model, text: r.text })),
-      rankings: provisionalInput.rankings,
-      adjudications: provisionalInput.adjudications,
-      tierCounts: provisional.tierCounts,
-    });
-    fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
-    const attemptChair = async (model, waveId) => {
-      runState.appendStageWave(o.runDir, 'chair', waveId);
-      const solo = await launchers.launchSolo({
-        model, prompt: packet, project: o.runDir, waveId,
-        timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-      });
-      addWave(solo.wave);
-      const ok = solo.leg && solo.leg.status === 'complete'
-        && solo.leg.summary && solo.leg.summary.trim();
-      return { leg: ok ? solo.leg : null, exitCode: solo.exitCode };
-    };
-
-    let chairLeg = null;
-    let actualChair = null;
-    if (overBudget()) {
-      // Ceiling hit after the tally is computable: skip the chair, write the
-      // verdict with overallVerdict null, exit 2 (spec §4 degradation table).
-      // Never abort in-flight legs for cost — this only stops NEW launches.
-      degraded.value = true;
-      runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
-    } else {
-      runState.updateStage(o.runDir, 'chair', { status: 'running', startedAt: now(), project: o.runDir });
-      // Fallback chain (spec §4): retry same chair once → promote best
-      // non-bench model from the ledger → give up (no Claude fallback headless).
-      let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
-      if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
-      if (!attempt.leg && !overBudget()) {
-        attempt = await attemptChair(o.chair, `${o.runId}-ch2`);
-        if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
-      }
-      if (attempt.leg) { actualChair = o.chair; }
-      else if (!overBudget()) {
-        let statsRows = [];
-        try { statsRows = statsFn(); } catch { /* no ledger yet */ }
-        const fallback = pickFallbackChair(statsRows, o.models, o.chair);
-        if (fallback) {
-          attempt = await attemptChair(fallback, `${o.runId}-ch3`);
-          if (isAbortExit(attempt.exitCode) || signalled) { return finalize(attempt.exitCode || signalled); }
-          if (attempt.leg) { actualChair = fallback; }
+    // ---- Stage 2.5: debate (optional, spec §5.1) ----
+    let debatedInput = provisionalInput, debatedRecord = provisional;
+    let debateOutcomes = null, debateFindings = null;
+    let debateSummary = o.debate ? { enabled: true, outcome: 'nothing-to-debate',
+      contested: 0, disputed: 0, defended: 0, amended: 0, withdrawn: 0, noResponse: 0,
+      revoteJudges: 0, revoteApplied: 0, verdictChanges: 0 } : null;
+    if (o.debate) {
+      // spec §5.1: the provisional tally is ALSO an audit artifact, not just a stage
+      // checkpoint — no ledger append, written before any debate leg launches.
+      fs.writeFileSync(path.join(o.runDir, 'tally-provisional.json'), JSON.stringify(provisional, null, 2), { mode: 0o600 });
+      runState.updateStage(o.runDir, 'tally-provisional', { status: 'complete', startedAt: now(), completedAt: now() });
+      const worthDebating = !runDebateMod.nothingToDebate(provisional);
+      if (worthDebating && !overBudget()) {
+        runState.updateStage(o.runDir, 'debate-defense', { status: 'running', startedAt: now(), project: ctx.scratchDir });
+        const dbg = await runDebateMod.runDebate(ctx, { provisionalRecord: provisional, tallyInput: provisionalInput });
+        // A signal mid-debate aborts finalization: no tally-final, no ledger (spec §5.7). Close
+        // the summary FIRST — the writer contract requires a valid `outcome` whenever the key exists.
+        if (dbg.aborted) {
+          runState.checkpoint(o.runDir, { debate: { ...debateSummary, outcome: 'ran',
+            contested: dbg.contested, disputed: dbg.disputed } });
+          return finalize(dbg.aborted);
         }
+        runState.updateStage(o.runDir, 'debate-defense', { status: 'complete', completedAt: now() });
+        // run-debate owns debate-revote's running/waveId/waveIds checkpoint — only it
+        // knows whether the wave launched. Never advertise a `-rv` id here: a skipped
+        // re-vote would leave the abort cascade chasing the v4.0 lens `-s1` phantom.
+        runState.updateStage(o.runDir, 'debate-revote', { status: 'complete', completedAt: now() });
+        ({ debatedInput, debateFindings, debateSummary } = dbg);
+        debatedRecord = tally(debatedInput);
+        // Defensive truthiness guard: `[]` is truthy in JS, so an empty outcomes
+        // list must be normalized to null here — otherwise the packet-assembly
+        // ternary below still calls buildDebateAddendum({outcomes: []}), which
+        // emits a bare "--- Debate round outcomes ---" heading with nothing
+        // under it (same defect class ee447b6 fixed on the report renderer).
+        debateOutcomes = (dbg.addendumOutcomes && dbg.addendumOutcomes.length > 0)
+          ? dbg.addendumOutcomes : null;
+        // Dead/unstructured defense, partial/fully-dead re-vote or a cost-ceiling re-vote skip
+        // each degrade the run → exit 2 (spec §5.7), same channel as a dead Stage-1 leg.
+        if (dbg.degraded) { degraded.value = true; }
+      } else if (worthDebating) {
+        // Budget gone before the defense wave launched, but there WAS something to debate — the
+        // other cost-ceiling branch (spec §5.7). Over budget AND nothing to debate stays the latter.
+        debateSummary.outcome = 'skipped-cost-ceiling';
+        degraded.value = true;
       }
-      chairLeg = attempt.leg;
-      runState.updateStage(o.runDir, 'chair',
-        { status: chairLeg ? 'complete' : 'error', completedAt: now() });
-      // The chair chain may have promoted a fallback (or given up) — checkpoint
-      // the ACTUAL chair into run.json now so status/`--json`/the human summary
-      // never report the originally-requested chair after a promotion. Mirrors
-      // mkInput's actualChair || o.chair (a give-up with no actual chair keeps
-      // the requested chair).
-      runState.checkpoint(o.runDir, { chair: actualChair || o.chair });
+      runState.checkpoint(o.runDir, { debate: debateSummary });
     }
-    const chairText = chairLeg ? chairLeg.summary : null;
-    let chairConformance = 'clean';
 
-    // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
-    let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
-    if (chairText && !overallVerdict && !overBudget()) {
-      runState.appendStageWave(o.runDir, 'chair', `${o.runId}-ch4`);
-      const repair = await launchers.launchSolo({
-        model: actualChair, prompt: stage2.buildChairRepairPrompt(),
-        project: o.runDir, waveId: `${o.runId}-ch4`,
-        timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-      });
-      addWave(repair.wave);
-      if (isAbortExit(repair.exitCode) || signalled) { return finalize(repair.exitCode || signalled); }
-      overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
-      chairConformance = overallVerdict ? 'repaired' : 'unstructured';
-    }
-    // A completed chair whose verdict never parsed is 'unstructured' even when
-    // the repair was skipped (e.g. the chair leg itself tripped --max-cost).
-    if (chairText && !overallVerdict) { chairConformance = 'unstructured'; }
-    if (!chairLeg || !overallVerdict) { degraded.value = true; } // spec table: exit 2 rows
+    const packet = stage2.buildChairPacket({
+      // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
+      // no rankings/adjudications, so it appears ONLY as one more review block.
+      reviews: s1.reviews.map(r => ({ model: r.model, text: r.text }))
+        .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
+      rankings: debatedInput.rankings,
+      adjudications: debatedInput.adjudications,
+      tierCounts: debatedRecord.tierCounts, date: o.date,
+    }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
+    fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
+
+    const chairRes = await runChair(ctx, {
+      packet, degraded, statsFn, isSignalled: () => signalled,
+    });
+    if (chairRes.aborted !== null) { return finalize(chairRes.aborted); }
+    const { chairLeg, actualChair, chairText, chairConformance, overallVerdict } = chairRes;
 
     // ---- Final tally (chair row included) + ledger + artifacts ----
     const chairStats = chairLeg ? asm.buildRunStatsEntry({
       leg: chairLeg, model: actualChair, role: 'chair', wasChair: true,
       conformance: chairConformance,
     }) : null;
-    const finalInput = mkInput(chairStats, actualChair || o.chair);
+    // Built on the (possibly debated) input so the debate's amended claims, replaced
+    // adjudications and rebuttal/revote runStats rows all reach the final record.
+    const finalInput = { ...debatedInput, meta: { ...debatedInput.meta, chair: actualChair || o.chair } };
+    if (chairStats) { finalInput.runStats = [...(finalInput.runStats || []), chairStats]; }
     const record = tally(finalInput);
+    if (debateFindings) { decorateRecord(record, debateFindings); }
     if (!o.lenses) {
       // Lens runs never feed cross-run reliability stats (spec §4 / skill rule).
       try { appendRunFn(record); }
       catch (e) { process.stderr.write(`Notice: council ledger append failed: ${e.message}\n`); }
     }
     asm.writeTallyFiles({ runDir: o.runDir, tallyInput: finalInput, record });
-    runState.updateStage(o.runDir, 'tally', { status: 'complete', completedAt: now() });
+    runState.updateStage(o.runDir, o.debate ? 'tally-final' : 'tally', { status: 'complete', completedAt: now() });
     asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText });
     runState.updateStage(o.runDir, 'verdict', { status: 'complete', completedAt: now() });
 

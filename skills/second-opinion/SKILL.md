@@ -24,21 +24,23 @@ Four principles govern this skill:
 
 1. **Secondary tool.** By the time this skill runs, Claude has already given its opinion in the main conversation. The skill exists to bring in *independent outside* views — it does not replace or re-run Claude's upstream analysis.
 2. **The council is the non-Claude bench by default.** Council members are models from families other than the orchestrator (Gemini, DeepSeek, GPT, etc.). Claude is not a first-opinion council member unless the optional "Claude in the council" toggle is on — and even then it is judged but does not vote or chair.
-3. **Claude orchestrates; Claude does not synthesize the verdict.** Claude preps material, recommends the council, anonymizes reviews, drives the stages, scores, and presents accept/deny decisions. A designated non-Claude chair model synthesizes the final verdict. Claude's role ends at presenting it.
+3. **Claude orchestrates; Claude does not synthesize the verdict.** Claude preps material, recommends the council, drives the run, presents accept/deny decisions, and applies them. A designated non-Claude chair model synthesizes the final verdict. Claude's role ends at presenting it.
 4. **The subject of cross-review is the other reviews, not the artifact again.** In the peer cross-review stage, models critique and rank *each other's reviews* — not re-review the original artifact. This is the mechanism that surfaces reviewer blind spots and inflated confidence.
+
+**The engine runs the mechanics (v4.1).** Stages 1–3 and the deterministic Stage-5 artifacts are
+ONE `amicus council run` call: the engine composes every model-facing briefing, runs the review
+wave, validates and repairs findings blocks, anonymizes into the judge bundle, runs the
+cross-review wave, optionally runs the rebuttal round, tallies (appending the reliability
+ledger once), chairs, and writes `verdict.json` + `report.html`. Claude owns the human stages —
+**Stage 0** (intake and briefing), **Stage 4** (tiered decisions), **Stage 5** (apply and present),
+**Stage 6** (lessons). The hand-orchestrated mechanics still exist, in
+**`MANUAL-ORCHESTRATION.md`** next to this file, as the documented fallback.
 
 Operating lessons from each run fold back into `MODEL-NOTES.md` (with approval), so the skill gets better at driving each model over time.
 
 **Before launching any model, READ `MODEL-NOTES.md`** (next to this file). It holds the operating rules and per-model quirks that decide whether a run succeeds or silently fails. These were learned the hard way; skipping them wastes runs and produces empty results that look like answers.
 
-**Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest fanout --models "m1,m2,m3" --prompt-file <path> --json`), or use the equivalent MCP tools (`amicus_fanout`, `amicus_start`, `amicus_wait`, `amicus_status`, `amicus_read`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) — council briefings are always self-contained (`--no-context`), so MCP transport is equivalent.
-
-**Headless contexts (v4.0):** CI and scripted environments with no Claude runtime can run the
-whole mechanical pipeline (Stages 1–3 plus the deterministic Stage-5 artifacts) as one command —
-`amicus council run --prompt-file <briefing.md> --models "a,b,c" --chair <model> --json` — see
-[docs/council.md](../../docs/council.md#amicus-council-run). This skill's staged, human-in-the-loop
-orchestration remains the interactive path: Stage 0 intake, Stage 4 decisions, and Stage 6 lessons
-are human stages the engine never automates.
+**Transport rule — CLI not on PATH:** every command below assumes the `amicus` CLI. If `amicus` is not on PATH (typical for **plugin-only installs**), run the identical commands as `npx -y amicus@latest <args>` (e.g. `npx -y amicus@latest council run --prompt-file <path> --models "m1,m2,m3" --json`), or use the equivalent MCP tools (`amicus_council_run`, `amicus_wait`, `amicus_status`, `amicus_verdict`, `amicus_council_stats`, plus `amicus_fanout` / `amicus_start` / `amicus_read` for the manual fallback) — council briefings are always self-contained, so MCP transport is equivalent.
 
 ## When to use
 
@@ -57,311 +59,222 @@ are human stages the engine never automates.
 
 ## The council flow
 
-The flow runs as a **Stage 0 intake/prep step** followed by **three sequential review waves** (Stage 1 → Stage 2 → Stage 3), each wave dependent on the prior — plus an optional **Stage 2.5 rebuttal round** when debate mode is on. Within each wave, models run in parallel. Track the stages as todos and do not advance until the prior wave's outputs are in hand.
+**Stage 0 (Claude + user)** → **ONE `amicus council run`** (Stages 1–3 plus the deterministic
+Stage-5 artifacts, all inside the engine) → **Stage 4 (Claude + user)** → **Stage 5 (Claude)** →
+**Stage 6 (Claude + user)**.
+
+Track those five steps as todos. Everything before and after the engine call is
+human-in-the-loop; the engine call itself is one background command you do not poll.
 
 ### Stage 0 — Intake & prep
 
 Confirm the three inputs before doing anything else: **source material**, **the analysis** (the thing to be reviewed), and **the criteria** (what quality/correctness means for this material). Ask only for what is missing; don't re-ask for what is already provided.
 
 **Establish the run folder first:** `output/<stem>-council/` (or `./second-opinion/<stem>-council/`
-if no `output/` directory exists). Create it now — every temp file, briefing, review, and artifact
-in this run is written here. Use its absolute path in all `--prompt-file` arguments.
+if no `output/` directory exists). Create it now — it is both your working directory and the
+engine's `--out-dir`, so every briefing, leg, and artifact for this run lands in one place. Use
+its absolute path in all path arguments.
 
 **Prepare material for council models:**
-- Large, linked, or heavily marked-up sources → extract clean text to a small, clearly-named temp
-  file in the run folder (briefing hygiene: token cost and model focus). Reference its absolute
-  path in the briefing, or inline it if small.
+- Large, linked, or heavily marked-up sources → extract clean text to a small, clearly-named file
+  in the run folder (briefing hygiene: token cost and model focus). Reference its absolute path in
+  the briefing, or inline it if small.
 - Small, clean text → feed inline in the briefing.
-- Write every briefing to a temp file (`_tmp-*.md` in the run folder) and pass it with
-  `--prompt-file` — never inline a briefing as a CLI argument. All `_tmp-*` files are cleaned up
-  after the run.
-- **Inject the current date into every briefing when the artifact is time-sensitive** (resumes, dated
-  plans, anything with start/end dates or 'present' ranges). Headless council models do not reliably
-  know "today" and have raised false "future-dated" blockers; state the date explicitly, e.g.
-  "Today's date is YYYY-MM-DD."
 
-**Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting both the reviewer-reliability data from `amicus council stats` (the authoritative quantitative source — runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee. **Disclose the run shape up front** before asking for confirmation — naming any enabled optional council elements and their cost impact (see the optional-elements menu below) — e.g.:
+**Author ONE briefing file: `<run-folder>/briefing.md`.** This is the only briefing Claude
+writes, and it carries only the *review request*:
 
-**Free council (zero-cost).** If the user asks for a "free council" / "zero-cost council",
-read `councils.free` from `~/.config/amicus/config.json` and run
-`amicus fanout --council free --prompt-file <briefing>`. Free-tier handling:
-- Cost ≈ \$0 — skip the paid-run cost framing (the budget gate is a no-op at zero price).
+- the material — inline when small and clean, otherwise the **absolute path** of the extracted
+  clean-text file (Stage-1 seats run agentically in the invoking cwd and can read referenced files);
+- the analysis request;
+- the criteria;
+- any material-specific cautions ("the appendix is out of scope", "treat the numbers as given").
+
+**Do not restate output contracts in `briefing.md`.** The anti-sycophancy clause, the findings-JSON
+schema, the judge tasks, the no-tools preambles, the chair packet and the verdict-scale addendum
+are all the engine's (`briefings.js` templates) — duplicated contracts drift and the engine's copy
+wins anyway. Keep `briefing.md` (it is run provenance, not a temp file); the engine derives its
+composed `briefing-stage1.md` from it.
+
+**Temporal context.** State the artifact's temporal context when it matters (resumes, dated plans,
+anything with start/end dates or "present" ranges) — but you no longer inject the current date by
+hand: **the engine stamps** `Today's date is YYYY-MM-DD.` onto every model-facing briefing it
+composes, which is what kills the false "future-dated" blocker class headless models used to raise.
+
+**Pick the council.** Default: **3 models from different families (non-Claude)**. Recommend them ranked by fit, consulting both the reviewer-reliability data from `amicus council stats` (the authoritative quantitative source — runs, avg peers-only street-cred, confirm-rate, fact-error rate) and the qualitative quirks in `MODEL-NOTES.md`. State the estimated cost. The estimate is the budget gate's pre-flight figure (per-$/Mtok pricing from the cached catalog; direct-provider legs without catalog pricing are disclosed as "cost unknown"). State it as an estimate, not a guarantee.
+
+**Pick the chair — it must NOT be a bench seat.** The engine refuses a chair that also reviews
+(`chair '<m>' is a bench seat — the chair must not review`), so recommend a strong reasoner from
+*outside* `--models`; the engine's own default is `deepseek`. Never put `claude` in `--models` or
+`--chair` — it is a **reserved seat name** for the Claude-in-the-council review (§5.4), and on a
+`--claude-review` run the engine rejects both outright. The engine needs at least **2 bench
+seats**; a 1-model run is the scale-down path below, not an engine run.
+
+**Free council (zero-cost bench, paid chair).** If the user asks for a "free council" /
+"zero-cost council", read `councils.free` from `~/.config/amicus/config.json` and launch with
+`--council free` instead of `--models`. Free-tier handling:
+- Bench cost ≈ \$0 — skip the paid-run cost framing for the reviewer legs (the budget gate is a
+  no-op at zero price). **The chair is not free — do not pick a free model as chair.**
+  `--council free` resolves the bench live from the catalog (`suggestFreeCouncil`, capped at 3
+  seats, one `:free` model per vendor), so which vendors land in the bench isn't known until
+  launch; naming a free model as chair risks colliding with it and tripping the engine's
+  bench-seat guard (`chair '<m>' is a bench seat — the chair must not review`, pre-flight, exit 1
+  before any spend). Leave `--chair` unset — it defaults to `deepseek`, which resolves to the
+  **paid** `deepseek-v4-pro` route (a different model from any `deepseek:free` bench pick) — or
+  name another non-bench paid model the user prefers. Either way, **disclose the chair as a small
+  paid cost** even though the bench is \$0; state the estimate.
 - No reliability history: free models have no `amicus council stats` / `MODEL-NOTES` record,
-  so don't rank on street-cred. Pick the most capable free model as chair and state lower confidence.
-- Weak structured output: small free models are less reliable at the strict findings JSON; expect
-  more `validateFindings` repair-loop hits.
-- Throttled/truncated legs: a mid-stream 429 can yield a leg marked `complete` with a truncated,
-  unparseable review. When a free-council leg is `complete` but `validateFindings` returns
-  `NO_FENCED_BLOCK`/`NOT_PARSEABLE`, treat it as suspect/throttled — don't burn the repair loop on the
-  same throttled model; disclose it and apply the ≥2-reviews-survive wave-degrade rule.
+  so don't rank the bench on street-cred; state lower confidence for the reviewers.
+- Weak structured output: small free models are less reliable at the strict findings JSON; the
+  engine's bounded repair loop absorbs this and marks the seat's `conformance` accordingly.
+- Throttled/truncated legs: a mid-stream 429 can yield a leg the engine records as degraded rather
+  than clean — read `run.json` and disclose it rather than presenting the run as full-strength.
 - Prerequisite: free models require enabling data-sharing in OpenRouter privacy settings
   (openrouter.ai/settings/privacy) or legs 404 at run time — catalog validation cannot catch this.
   State this up front.
 
-> This run uses 3 council models across 2 fanout waves + 1 chair call (~7 model runs), ~10 min.
+**Engine preflight probe — run this before disclosing the run shape.** The fast path needs
+`amicus council run`: CLI ≥ 4.1 for `--debate` / `--claude-review`, ≥ 4.0 for a plain run.
 
-or, with elements enabled:
-
-> This run uses 3 council models across 2 fanout waves + 1 chair call, with **critic seat + debate mode ON** (~7 base runs + up to 6 rebuttal calls), ~15 min.
-
-Then **wait for confirmation**. Never launch without it. The budget gate enforces the cost guardrail in code: by default it refuses any leg whose price exceeds the per-$/Mtok threshold (the o3/o3-pro guard). To run an intentionally expensive model the user explicitly asked for by name, pass `--no-cost-gate`; to raise only the total ceiling, pass `--max-cost <$>`.
-
-**Scale-down is explicit — state which mode applies:**
-- **1 model** → thorough single pass; Stage 2 (cross-review) and Stage 3 (chair synthesis) are skipped entirely; Claude synthesizes directly. Transport: a single solo `amicus start --no-ui --json` (no fanout).
-- **2 models** → Stage 2 runs but the ranking is thin (one ranker per review); note this limitation.
-- **3 models (default)** → full deep council with meaningful cross-review and tie-breaking.
-
-The scale-down levels count **non-Claude judges**; enabling "Claude in the council" adds a judged review but not a judge, so it does not change these levels. If the bench drops below 2 surviving reviews during the run, apply the Stage-1 wave-degrade rule (offer re-run or a disclosed single-pass downgrade).
+- **Shell contexts:** run `amicus --version`.
+- **Cowork / no-Bash contexts:** confirm the `amicus_council_run` MCP tool is present.
+- **Too old or missing →** run the identical command as `npx -y amicus@latest council run …`
+  (npx always resolves the current engine — which is exactly why the version probe is mandatory
+  rather than optional: a stale global install and a fresh npx cache can disagree).
+- **npx unavailable too →** fall back to **`MANUAL-ORCHESTRATION.md`** and say so before launching.
 
 **Present the optional council elements (all default OFF — explicit opt-in only).** After the
 bench and chair are picked and before asking for launch confirmation, present this menu once
 (adjust the run-shape numbers to the actual bench):
 
-> Optional council elements — all OFF unless you name them. Reply with any you want (e.g. "1 and 3", "critic + debate mode", or "none"):
+> Optional council elements — all OFF unless you name them. Reply with any you want (e.g. "1 and 3", "critic + debate mode", or "none"). Note the chair's **verdict scale is now standard** — the engine always makes the chair close with `VERDICT: Ship it | Fix these first | Fundamental rethink` plus its hard questions, so it is no longer something to opt into:
 >
-> 1. **Critic seat** — one reviewer swaps to an adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Same review count; that seat runs as a solo call. Trade-off: that reviewer can recognize its own review during cross-review (disclosed in the report).
-> 2. **Expert lenses** — each reviewer gets a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, custom). Same review count, launched as solo calls. Trade-offs: weakens cross-review anonymity (disclosed) and the run is not recorded to the reliability ledger.
-> 3. **Debate mode** — after cross-review, Contested and Disputed findings go back to their raisers to defend, amend, or withdraw, and the disputing judges re-vote before the final tally. Adds 1–2 short waves (up to ~2N extra calls, ~+5 min).
-> 4. **Chair verdict scale** — the chair ends its synthesis with `VERDICT: Ship it | Fix these first | Fundamental rethink` plus 3–5 hard questions. No extra calls.
-> 5. **Claude in the council** — I add my own fresh review to the bundle so the bench can rank and adjudicate it; I'm judged but do not vote (Stage 2) or chair (Stage 3), so the verdict stays independent. +1 review in the bundle, no extra council calls.
+> 1. **Critic seat** (`--critic <model>`) — one reviewer, which must be one of the bench seats, swaps to an adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Same review count. Trade-off: that reviewer can recognize its own review during cross-review (disclosed in the report).
+> 2. **Expert lenses** (`--lenses s1,s2,s3`) — each reviewer gets a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, custom), one lens per seat. Trade-offs: weakens cross-review anonymity (disclosed) and the run is **not** recorded to the reliability ledger.
+> 3. **Debate mode** (`--debate`) — after cross-review, Contested and Disputed findings go back to their raisers to defend, amend, or withdraw, and the disputing judges re-vote before the final tally. Adds 1–2 short waves (up to ~2N extra calls, ~+5 min).
+> 4. **Claude in the council** (`--claude-review`) — I add my own fresh review to the bundle so the bench can rank and adjudicate it; I'm judged but do not vote or chair, so the verdict stays independent. +1 review in the bundle, no extra council calls.
 
 Rules for this menu:
 
 - **Never enable an element the user did not explicitly name.** Silence, "no", or "none" = all off. Do not infer opt-in from the nature of the material ("this doc could use a critic…") — offer, don't decide.
 - If elements were **pre-requested in the invoking command** (e.g. `/council … with a critic seat and debate mode`), confirm them back by name ("Critic seat and debate mode are ON per your request; the others are off") instead of re-asking.
-- **The launch confirmation must enumerate the enabled elements by name** — an element not named in the confirmation is off. Restate its cost/shape impact there (see the run-shape disclosure above).
-- Elements compose freely, with one exception: **critic seat + expert lenses together** means one bench member takes the critic brief and the *remaining* seats take lenses — never stack both briefs on one seat.
-- Briefing boilerplate for elements 1–4 lives in **`SEAT-BRIEFS.md`** next to this file — read it when any of them is toggled on.
+- **The launch confirmation must enumerate the enabled elements by name** — an element not named in the confirmation is off. Restate its cost/shape impact there.
+- **Critic seat and expert lenses are mutually exclusive** — the engine rejects both together, so pick one.
+- Element *semantics* (what each brief actually asks for) live in **`SEAT-BRIEFS.md`** next to this file — read it when any of them is toggled on. The engine composes its own stricter-JSON variants of those templates; you do not paste them into `briefing.md`.
 
-When Claude-in-the-council is off, Claude does not contribute a review and does not appear in the bundle. When on, see Stage 1 and §5.4.
+**When "Claude in the council" is ON**, author `<run-folder>/review-claude.md` before launching: a
+**fresh** structured Stage-1 review of the artifact — prose plus a trailing fenced ` ```json ` block
+`{"overall": "…", "findings": [{"id": 1, "severity": "blocker", "claim": "…", "location": "…",
+"rationale": "…"}]}` — not a formalization of anything said upstream. The engine pre-flight-validates
+this file and fails the run *before any spend* if it is malformed, so a bad file costs nothing but a
+relaunch. See §5.4.
 
----
+**Disclose the run shape up front**, naming any enabled elements and their cost impact — e.g.:
 
-### Stage 1 — Independent reviews
+> This run uses 3 council models across 2 engine waves + 1 chair call (~7 model runs), ~10 min.
 
-Each council model reviews **the artifact** independently. Write one Stage-1 briefing file
-(`_tmp-briefing-stage1.md` in the run folder) and launch the whole wave as ONE background call:
+or, with elements enabled:
 
-```
-amicus fanout --models "<m1,m2,m3>" --prompt-file <run-folder>/_tmp-briefing-stage1.md --json \
-  --agent Plan --no-context --summary-length verbose --timeout <minutes>
-```
+> This run uses 3 council models across 2 engine waves + 1 chair call, with **critic seat + debate mode ON** (~7 base runs + up to 6 rebuttal calls), ~15 min.
 
-Always quote the `--models` list — unquoted, PowerShell splits on commas and the CLI receives one mangled alias (instant arg-parse failure).
+Then **wait for confirmation**. Never launch without it.
 
-Run it in the background (`run_in_background: true`); you are notified on completion — do not
-poll. `fanout` is headless by definition. The command exits when every leg is terminal and prints
-ONE JSON wave document on stdout (`schemaVersion: 2`; the wave's id field is `waveId`, each leg's id is `taskId`): check `status` (`complete` | `partial` |
-`error`), `counts`, and each leg in `legs[]` — a leg's `summary` field IS that model's review;
-`model`/`modelInput` identify the reviewer (`model` is the resolved id, `modelInput` the alias you passed — use the alias for `review-<model>.md` filenames); `status`/`error` identify failures. Exit code 0 =
-all legs complete, 2 = partial (apply the wave-degrade rules below), 1 = error/aborted. (To re-fetch a single leg later: `amicus read <taskId> --json`.)
+**Scale-down is explicit — state which mode applies:**
+- **1 model** → thorough single pass; cross-review and chair synthesis do not apply and Claude synthesizes directly. This is the one path that never touches the engine: a single solo `amicus start --no-ui --json --prompt-file <run-folder>/briefing.md --agent Plan --no-context --summary-length verbose`.
+- **2 models** → a valid engine run, but the ranking is thin (one ranker per review); note this limitation.
+- **3 models (default)** → full deep council with meaningful cross-review and tie-breaking.
 
-**Red-team variant:** fanout legs share a single prompt by design. When one model gets a distinct
-red-team brief, launch it as a separate concurrent solo run alongside the wave:
-
-```
-amicus start --model <redteam-model> --no-ui --json \
-  --prompt-file <run-folder>/_tmp-briefing-redteam.md \
-  --agent Plan --no-context --summary-length verbose --timeout <minutes>
-```
-
-Its stdout is a single run document; the `summary` field is the review.
-
-**Critic seat (optional element, when ON):** one bench member — recommended by Claude at Stage 0, typically a strong reasoner that is not the chair — receives the critic brief from `SEAT-BRIEFS.md § Critic seat brief` **instead of** the standard review brief. Launch it exactly like the red-team variant: a separate concurrent solo run (`_tmp-briefing-critic.md`) alongside the fanout wave of the remaining members — same total review count. Everything downstream is unchanged: same structured-output contract, same `council validate` + repair loop, same anonymization into the Stage-2 bundle (judges are never told a critic seat exists). Record `role: "critic"` on that seat's `runStats` entry. One standing disclosure for `report.md`: the critic model can recognize its own review in the Stage-2 bundle by its adversarial shape, so self-bias wash-out is weakened for that one seat.
-
-**Expert lenses (optional element, when ON):** every seat gets a distinct per-seat brief, so there is no shared-prompt wave — launch **all** legs as concurrent solo runs (`_tmp-briefing-lens-<slug>.md`, one per seat), using the lens templates and panel-scoping rules in `SEAT-BRIEFS.md § Expert lens briefs`. The lens↔model assignment is random and lives only in the private label map — no reviewer learns the other seats' lenses. Same structured-output contract and validation. Record `role: "lens:<slug>"` on each `runStats` entry. Two standing consequences, both disclosed in `report.md`: Stage-2 anonymity is weakened (each judge can spot its own lens-flavored review), and the Stage-2 tally runs `--no-ledger` (lens reviews are not comparable to standard reviews and must not feed cross-run reliability stats). Wave-degrade rules apply to these solos exactly as to fanout legs.
-
-**Cowork / no-Bash environments:** use the MCP tools instead — `amicus_fanout` (briefing via
-file) returns `{waveId, taskIds[]}` immediately. Preferred: call `amicus_wait` with the waveId —
-one blocking call per wave; re-call it while it returns `timedOut: true`. Fallback: poll
-`amicus_status`. Either way, `amicus_read` each leg when done. The council's briefings are always
-self-contained (`--no-context`), so MCP transport is equivalent.
-Council JSON returned by the MCP tools (`amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`) arrives wrapped in the `<untrusted_sidecar_output>` fence since v4.0 — parse the JSON from inside the fence; CLI `--json` output remains unfenced.
-
-**Required structured output from every model.** Instruct each council model to produce:
-
-1. A **prose review** — the reviewer's full narrative assessment of the artifact.
-
-2. A **trailing fenced ` ```json ` block** immediately after the prose, containing:
-   ```json
-   {
-     "overall": "one-paragraph take",
-     "findings": [
-       { "id": 1, "severity": "blocker",
-         "claim": "…", "location": "…", "rationale": "…" }
-     ]
-   }
-   ```
-   - `id` — sequential integer within this review (`1..n`); at Stage-2 assembly Claude rewrites each into a **run-global label id** (`A1`, `B1`, …) by prefixing the review's anonymized label.
-   - `severity ∈ {blocker, major, minor, nit}`
-   - `claim`, `location`, `rationale` — non-empty strings.
-
-Instruct models to emit the structured JSON verbatim after the prose, without preamble, so it parses cleanly.
-
-**Every Stage-1 briefing — standard seats included — must contain the standard anti-sycophancy clause from `SEAT-BRIEFS.md` verbatim** (do not soften, lead with the most severe finding, no praise cushions, no padding — an empty severity category is a valid result). This is briefing hygiene, not an optional element.
-
-Save each leg's full output (prose + findings block) to the run folder as `review-<model>.md`
-(one file per reviewer) before moving on.
-
-**After the wave returns, validate each leg's findings block** by running `amicus council validate <leg-file> --json` (a thin CLI wrapper over `validateFindings`, Unit A — `src/council/findings.js`). It reads the leg's saved `review-<model>.md` and prints `{ok, findings, errors}`. Exit codes are a **tri-state** contract: `0` when `ok:true` (well-formed, proceed), `2` when `ok:false` (validation failed — a distinct, scriptable outcome, not a crash), `1` (`BAD_ARGS`) for a missing/unreadable file. If a leg's JSON fails validation (`ok:false` / exit 2):
-1. Issue a **solo `start --json`** re-prompt to that one model: "re-emit only the findings JSON, fixing: \<errors\>." Keep the first-pass prose. (Solo `start` passes through the **same budget gate** as `fanout`. If launching the wave required `--max-cost <$>` or `--no-cost-gate`, pass the **same flag on every repair re-prompt and on the chair call** — otherwise the gate can refuse a repair or the chair mid-council.)
-2. If still malformed, retry **once more** (cap = **2** re-prompts total).
-3. If still malformed after 2 retries, mark the review `unstructured` and hand-parse its prose into the schema. The review proceeds — never dropped for a formatting miss.
-
-Record per-model **conformance** (`clean` | `repaired` | `unstructured`) for inclusion in the tally input's `runStats` and the Stage-6 MODEL-NOTES note.
-
-**"Claude in the council" (when toggled on):** Claude also produces a **fresh** Stage-1 review on the artifact in the identical findings format — a new structured pass on the artifact, not a formalization of anything said upstream. This review is added to the bundle as one more anonymous entry. Claude does not rank or adjudicate in Stage 2 (it holds the label map), and does not chair in Stage 3. Save it as `review-claude.md`.
-
-**Wave-degrade rules (Stage 1).** Read failures from the wave document — never silently ignore
-them:
-- All legs `complete` → proceed normally.
-- A leg ends `error`/`timeout`/`crashed`/`aborted` but **≥ 2 reviews survive** → proceed with the
-  survivors; name the dead leg and its `error` when presenting; the bench shrinks accordingly. If this leaves exactly 2 surviving reviews, the run is now effectively a 2-model council — apply the thin-ranking disclosure (Stage 0 / Stage 4) from here on.
-- **Fewer than 2 reviews survive** → offer the user a re-run of the dead leg(s) (solo
-  `amicus start --json`, same briefing file) or a disclosed downgrade to single-pass mode
-  (Stage 2 and Stage 3 skipped, per the scale-down rules).
+The scale-down levels count **non-Claude judges**; `--claude-review` adds a judged review but not a judge, so it does not change these levels.
 
 ---
 
-### Stage 2 — Cross-review
+### The engine run — Stages 1–3 plus the Stage-5 artifacts
 
-This is the peer-validation step. Claude builds one shared anonymized bundle, distributes it to every council model for ranking and finding adjudication, then de-anonymizes for scoring.
+ONE call. The engine executes the Stage-1 review wave, the per-leg findings validation and bounded
+repair loop, anonymization and run-global finding-id rewriting, the identical judge bundle and
+cross-review wave, the optional rebuttal round, the tally (which appends the reliability ledger
+**once**), the chair synthesis with the verdict scale, and the deterministic
+`verdict.json` + `report.html` — checkpointing `run.json` as it goes.
 
-**Build the shared anonymized bundle.** After all Stage-1 reviews are in hand, Claude:
-1. Assigns stable labels: **Review A**, **Review B**, **Review C**, … (one per review, including Claude's if the toggle is on).
-2. Keeps a **private label↔model map** (e.g., `Review A → deepseek`, `Review B → gemini`, `Review C → claude`) that is never sent to any sidecar model.
-3. Assembles one bundle document containing all labeled reviews. The bundle is identical for every judge.
-
-Each model **unknowingly ranks and adjudicates its own review** — this is the anti-favoritism mechanism, not a bug. Because no model knows which review is its own, self-bias washes out symmetrically across judges.
-
-**Distribute the same bundle to every council model** — this is exactly fanout's shared-prompt
-model. Write the bundle + judging instructions to `_tmp-bundle-stage2.md` and launch one wave:
+**Canonical launch (shell contexts):**
 
 ```
-amicus fanout --models "<m1,m2,m3>" --prompt-file <run-folder>/_tmp-bundle-stage2.md --json \
-  --agent Plan --no-context --summary-length verbose --timeout <minutes>
+amicus council run --prompt-file <run-folder>/briefing.md \
+  --models "<m1,m2,m3>" --chair <chair> --out-dir <run-folder> --json \
+  [--critic <m>] [--lenses s1,s2,s3] [--debate] \
+  [--claude-review <run-folder>/review-claude.md] \
+  [--max-cost <$> | --no-cost-gate] [--timeout <min>] [--gateway auto|direct|openrouter]
 ```
 
-(Background, same JSON handling as Stage 1.) Each judge's leg `summary` is its ranking +
-adjudication response. **Stage-2 degrade:** a judge leg dies → tally over the surviving judges
-(≥ 1) and disclose the reduced bench in `crossreview-matrix.md`; tier definitions are unchanged
-(they already count "judges engaged").
+Always quote the `--models` list — unquoted, PowerShell splits on commas and the CLI receives one
+mangled alias (instant arg-parse failure). For a free council, swap `--models "<m1,m2,m3>"` for
+`--council free`. Run it in the background (`run_in_background: true`); you are notified on
+completion — do not poll.
 
-**Judge-briefing hardening (required).** Open `_tmp-bundle-stage2.md` with this preamble, verbatim, as its first line:
+**Budget gate — one flag for the whole run.** By default the gate refuses any leg whose price
+exceeds the per-$/Mtok threshold (the o3/o3-pro guard). To run an intentionally expensive model the
+user asked for by name, pass `--no-cost-gate`; to raise only the total ceiling, pass
+`--max-cost <$>`. Either flag is forwarded to **every internal launch** the engine makes — the
+Stage-1 wave, the repair re-prompts, the Stage-2 judge wave, the debate legs, and the chair call —
+so a single invocation replaces the old per-call pass-through footgun entirely.
 
-> Do NOT use any tools or read any files; everything is in this message; begin immediately with A1:
+**Cowork / no-Bash environments:** use the MCP tools instead. `amicus_council_run`
+`{briefingFile, models|council, chair, critic?, lenses?, debate?, claudeReviewFile?, outDir,
+maxCost?|noCostGate?, timeoutMinutes?, gateway?}` returns `{runId, runDir}` immediately.
+Preferred: call `amicus_wait` with the runId — one blocking call; re-call it while it returns
+`timedOut: true`. Fallback: poll `amicus_status`, which shows stage progression. Then read the
+run-folder artifacts with the host's file tools. Council JSON returned by the MCP tools arrives
+wrapped in the `<untrusted_sidecar_output>` fence — parse the JSON from inside the fence; CLI
+`--json` output remains unfenced. The council's briefings are always self-contained, so MCP
+transport is equivalent.
 
-Plan-agent judges have wandered to tools mid-adjudication (reading files instead of judging and returning only narration), and a tool-capable judge can read the de-anonymized `review-<model>.md` files in the run folder — an anonymization leak. The preamble closes both. **Scratch-cwd (optional second layer):** launch the Stage-2 wave (and the Stage-3 chair call) with `--cwd <run-folder>/_scratch/` — create the empty directory first — so even a wandering agent finds nothing to read. Caveat: those legs' session records then live under `_scratch/.claude/amicus_sessions/`, so any later `amicus read <taskId>` for them needs the same `--cwd`.
+**When the run returns, read `run.json` and the exit code — never present a degraded run as
+clean.** The engine owns degradation; you own disclosure and the user's choice:
 
-Each judge is asked to do two things on the bundle:
+- **0 — full run.** Proceed to Stage 4.
+- **2 — degraded but usable.** Read `run.json` `stages[]` (which leg or stage died, and its error),
+  `tally.json` (the `judged` flag), and `verdict.json` (`overallVerdict` is null when the chair
+  never produced one). Name every dead leg and its error when presenting. Apply the standing
+  disclosures: a run left with 2 surviving reviews is effectively a 2-model council (thin ranking —
+  say so from here on); a failed chair means the report carries no chair verdict, so offer a solo
+  re-chair via `MANUAL-ORCHESTRATION.md` or proceed report-only; debate degradations are summarized
+  in `run.json`'s `debate` block. Then proceed to Stage 4 with what exists.
+- **1 — nothing usable.** Quorum, cost ceiling, or validation failed and the error doc says which.
+  Present it and offer: re-run (possibly with a smaller bench), a raised `--max-cost`, or the
+  manual/single-pass fallback.
+- **130 / 143 — aborted** (Ctrl-C or terminated). Offer a resume-as-a-new-run; the partial run
+  folder stays on disk for inspection.
 
-**Task A — Rank.** Order the reviews from most to least accurate and insightful. End the response with a parseable block in exactly this format (no other text on those lines):
-
-```
-FINAL RANKING:
-1. Review C
-2. Review A
-3. Review B
-```
-
-**Task B — Adjudicate findings.** For every finding in the bundle, state: `agree | dispute | neutral` plus one-line reason. Reference each finding as **review-label + finding-id** — for example, `A2` means Review A's 2nd finding, `B1` means Review B's 1st finding. An "I missed this — it's valid" counts as `agree`.
-
-**When critic seat or expert lenses are ON:** the bundle and judging instructions must not mention seats, lenses, or briefs — judges rank and adjudicate on accuracy and insight only. The element briefs are Stage-1 information; leaking them into Stage 2 tells every judge which review is which.
-
-As each judge's ranking + adjudication response returns, collect it (the raw per-judge responses are working intermediates, not separate run-folder artifacts). Once all are in, **assemble the de-anonymized tally input** and then call `amicus council tally`:
-
-**Stage-2 → tally assembly recipe (Claude's work before calling `tally`):**
-0. **Build `meta` and `findings[]` first — `tally` requires both** (missing either fails with `BAD_ARGS: Cannot read properties of undefined (reading 'map')`):
-   - `meta` = `{ "runId": "<run-folder stem>", "models": [<every reviewed model id, including "claude" when the toggle is on — this is the street-cred universe>], "chair": "<confirmed chair model id>", "claudeInCouncil": <Stage-0 toggle> }`. Optional extras: `runType`, `date`.
-   - `findings[]` = one entry per finding across ALL reviews: `{ "id": "<run-global label id from step 1, e.g. A1>", "raiser": "<de-anonymized model that raised it>", "severity": "<from the review JSON>" }` (`claim` may be carried along but is not required).
-1. **Rewrite finding ids to run-global label ids.** Each Stage-1 review's local integer ids (`1`, `2`, `3`…) become `A1`, `A2`, `A3`… (where `A` is that review's anonymized label). The label↔model map (`Review A → deepseek`, etc.) is the key.
-2. **Build `adjudications`** — for every judge across all findings: `findingId` = run-global label id; `judge` = the model id (de-anonymized via the map); `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding. The raiser's own adjudication of its own finding is **included in the input** (the tally engine excludes it when computing peers-only tiers — do not pre-filter it).
-3. **Translate each judge's `FINAL RANKING:` block** — convert the label order (`1. Review C / 2. Review A / 3. Review B`) into a model `order` array via the same map (e.g. `{C→mistral, A→deepseek, B→gpt}` ⇒ `order: ["mistral","deepseek","gpt"]`). This is each entry in `rankings[]`.
-4. **Populate `runStats`** from the per-leg run documents emitted by `fanout --json` (and any solo red-team/chair `start --json` docs): copy `model`, `status`, `durationMs`, `usage` verbatim. Any leg with no run doc gets `durationMs: null` and `usage: null` — never invent a value. Attach `role` (`council` | `redteam` | `claude`), `wasChair`, and `conformance` (`clean` | `repaired` | `unstructured`) as council-domain labels.
-
-**Five-keys checklist — verify `tally-input.json` has ALL of:** `meta` (with `meta.models`), `findings`, `adjudications`, `rankings`, `runStats` (`runStats` may be `[]`; the other four are required). Do not call `tally` until all five are present.
-
-Then call, saving the printed `record` to `<run-folder>/tally.json` (Stage 5's `amicus council verdict` reads it back from disk):
-
-```
-amicus council tally <run-folder>/tally-input.json --json > <run-folder>/tally.json
-```
-
-**Ledger flags for optional elements:** when **expert lenses** are ON, always pass `--no-ledger` — lens runs never feed cross-run reliability stats. When **debate mode** is ON, this Stage-2 tally is *provisional* — pass `--no-ledger` here; the final, ledger-recorded tally happens at the end of Stage 2.5 (the critic seat and Claude-in-the-council change nothing about ledger handling).
-
-**Windows PowerShell 5.1 caveat:** that `>` redirect writes UTF-16 under legacy Windows PowerShell 5.1 (fine on pwsh 7+ or bash), which corrupts `tally.json` for Stage 5's `amicus council verdict` and surfaces as a confusing `BAD_ARGS` there instead of here — on 5.1 pipe through `| Out-File -Encoding utf8` (or run under pwsh 7+) instead of a bare `>`.
-
-The output `record` carries the deterministic tiers (Disputed / Confirmed / Contested / Singleton), `confidence` (`solid` | `thin`), both street-cred numbers (`withSelf` and `peersOnly`), the validated `runStats`, and `tierCounts`. **Claude may override a `thin`-confidence tier at the margins** before Stage 4 — record the override in `tierOverride: {from, to, reason}`; the matrix and `verdict.json` surface it. De-anonymize and write the tally results to `crossreview-matrix.md` — the adjudication grid plus the street-cred table. This data feeds Stage 3 (chair briefing) and is never re-anonymized or forwarded to any council model.
-
----
-
-### Stage 2.5 — Rebuttal round ("debate mode", optional element — skip this entire stage when OFF)
-
-One structured challenge round on the findings the bench did not settle: every **Contested** and **Disputed** finding goes back to its raiser to defend, amend, or withdraw; the judges that disputed it re-vote; then the final tally. **Exactly ONE round, ever** — never iterate further; whatever remains unsettled after the re-vote keeps its final tier. Briefing templates are in `SEAT-BRIEFS.md § Rebuttal-round templates`; every rebuttal briefing opens with the no-tools preamble, same as Stage 2.
-
-The Stage-2 tally above ran `--no-ledger` (provisional). If it produced **zero Contested + Disputed findings**, skip the rebuttal waves entirely: re-run the tally on the unchanged input *without* `--no-ledger` to record it, note "debate mode: nothing to debate" for `report.md`, and proceed to Stage 3.
-
-**1. Defense mini-wave.** For each raiser with ≥ 1 Contested/Disputed finding, write `_tmp-rebuttal-<label>.md`: its findings (run-global ids and claims), each with the peers' dispute reasons — anonymized, no judge identities. Launch one concurrent solo run per raiser (same flags and budget-gate handling as the Stage-1 solos). Parse each response line: `<id>: DEFEND — …` | `<id>: AMEND — <replacement claim>` | `<id>: WITHDRAW`. A missing or unparseable line = the original claim stands undefended (original verdicts carry).
-
-**2. Re-vote mini-wave.** Build ONE shared `_tmp-revote-bundle.md` holding every defended or amended finding plus its (anonymous) defense. Send it as a single fanout wave to the judges that disputed at least one of those findings — judges that never disputed sit this round out. Parse verdict lines `<id>: agree | dispute | neutral — <reason>`; a judge's missing line = its original verdict stands.
-
-**3. Final tally.** Re-assemble the tally input: re-vote verdicts replace those judges' original adjudications on those findings; AMENDED claims replace the originals (`id`, `raiser`, and `severity` unchanged); WITHDRAWN findings **stay in `findings[]`** (they were raised) and take whatever tier the final cascade assigns. Run `amicus council tally` **without** `--no-ledger` (unless expert lenses are also ON — lens runs never ledger) and save this record as the run's `tally.json`. This final record — not the provisional one — is what Stages 3–5 consume; the chair packet and `crossreview-matrix.md` are built from it, with verdict changes from the re-vote called out before/after.
-
-**Withdrawals downstream:** WITHDRAWN findings are auto-recorded in `decisions.json` as `{"id": …, "decision": "denied"}` — never presented for a user decision in Stage 4 — and listed in `report.md` under "Withdrawn by raiser (debate mode)".
-
-**Degrade rules:** a dead defense leg → all of that raiser's contested findings stand undefended. A dead re-vote leg → that judge's original verdicts carry. Never re-run the round.
-
-**Cost/shape:** adds up to 2 short waves (≤ N defense solos + 1 re-vote fanout), disclosed at Stage 0. If the actual rebuttal surface turns out much larger than estimated (many contested findings), say so before launching the mini-waves.
-
----
-
-### Stage 3 — Council-chair synthesis
-
-A designated **non-Claude** chair synthesizes the verdict across all reviews, rankings, and adjudications. The chair produces an independent verdict that Claude then presents — Claude does not paraphrase, edit, or re-synthesize it.
-
-**Chair selection (confirmed in Stage 0).** Default: Claude recommends the strongest reasoner in the council (guided by `amicus council stats` (peers-only street-cred) and the qualitative quirks in `MODEL-NOTES.md`) and the user confirms before the run launches. The chair may be a council member who already participated in Stages 1 and 2 — it receives the de-anonymized full bundle, all ranking outputs, and all adjudications so it has the complete picture.
-
-**Fallback order if the chair fails:**
-1. Re-run the chair call (transient failure — `MODEL-NOTES.md` mitigations apply).
-2. Promote the next-best non-Claude council model as chair.
-3. **Claude chairs only as last resort — with explicit disclosure** that the verdict is no longer fully independent of the orchestrator.
-
-**Chair briefing.** Write the chair packet to `_tmp-chair-packet.md` and send one solo run
-(background):
-
-```
-amicus start --model <chair> --no-ui --json \
-  --prompt-file <run-folder>/_tmp-chair-packet.md \
-  --agent Plan --no-context --summary-length verbose --timeout <minutes>
-```
-
-(The budget gate applies to this solo call too — if Stage 0 needed `--max-cost <$>` or `--no-cost-gate` to launch the wave, the chair call needs the same flag.)
-
-The run document's `summary` is the verdict. The packet contains:
-- All Stage-1 reviews (de-anonymized — model attribution restored)
-- All cross-review ranking outputs (with model attribution)
-- All adjudication outputs (with model attribution and `agree | dispute | neutral` verdicts per finding)
-
-Open `_tmp-chair-packet.md` with the no-tools preamble, adjusted for the chair: *'Do NOT use any tools or read any files; everything is in this message; begin immediately with the verdict.'* The packet is complete by construction — the chair must never go looking for files.
-
-Instruct the chair to write a **synthesized verdict** that:
-- Weighs each reviewer's findings by their peer-validated standing (street-cred rank and adjudication pattern)
-- Distinguishes findings the bench broadly endorsed from contested or singleton claims
-- Arrives at an overall assessment of the artifact
-
-**Chair verdict scale (optional element, when ON):** append the addendum from `SEAT-BRIEFS.md § Chair verdict-scale addendum` to the chair packet — the chair must close with 3–5 **hard questions** the artifact's author probably hasn't asked themselves, then a final parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`. Surface that line verbatim at the top of `report.md` and in the inline chat presentation. When debate mode is also ON, the chair packet is built from the *final* (post-rebuttal) tally and includes the defense/re-vote outcomes.
-
-Save the chair's output to the run folder as `verdict.md`.
+**If the engine itself is the thing misbehaving** — or you need a fully custom per-seat brief
+beyond `--critic`/`--lenses`, or deliberate mid-stage inspection — switch to
+**`MANUAL-ORCHESTRATION.md`** and tell the user you are doing so.
 
 ---
 
 ### Stage 4 — Tiered decisions (peer-validated)
 
-All findings from the bundle are sorted into tiers based on the **peer-confidence tier assigned by `amicus council tally`** (see *Key mechanics → §5.2 Scoring* in COUNCIL-DESIGN.md for the full cascade): **Disputed** (strong peer pushback — `d ≥ 2` and `d > a`), **Confirmed** (≥ 2 peer agreements, agrees dominate), **Contested** (at least one live dispute), **Singleton** (at most one endorsement, no pushback). `confidence: thin` cells `(0,0)/(1,0)/(0,1)` are override-eligible (Claude records any override in `tierOverride`). Present the tiers in this order: Confirmed first (bulk decision), then Disputed and Contested and Singleton individually in the judgment tier.
+Read **two** run-folder artifacts and join them on each finding's `id` (the run-global label,
+e.g. `A1`): `tally.json` for the tier, the `basis` counts, the `adjudications` and any `debate`
+decoration, and `tally-input.json` for the `claim` and `location` text. The claim lives **only**
+in `tally-input.json` — `tally.json` findings carry `id, raiser, severity, tier, basis,
+confidence, tierOverride, adjudications` and no claim — so every "show the claim" instruction
+below needs both sides of the join.
 
-**Scale-down:** In a 1-model run, Stage 2 was skipped — there is no peer-confidence data, so present every finding individually for decision (no tiers). In a 2-model run, the Confirmed tier rests on thin cross-review (one ranker per review, per Stage 0) — say so when presenting it.
+Every finding already carries the **peer-confidence tier** the
+engine's tally computed (see *Key mechanics → §5.2 Scoring*, and COUNCIL-DESIGN.md for the full
+cascade): **Disputed** (strong peer pushback — `d ≥ 2` and `d > a`), **Confirmed** (≥ 2 peer
+agreements, agrees dominate), **Contested** (at least one live dispute), **Singleton** (at most one
+endorsement, no pushback). `confidence: thin` cells `(0,0)/(1,0)/(0,1)` are override-eligible —
+record any override in `tierOverride: {from, to, reason}` on that finding's decision entry. Present
+the tiers in this order: Confirmed first (bulk decision), then Disputed and Contested and Singleton
+individually in the judgment tier.
 
-**Debate mode:** the tiers below come from the *final* (post-rebuttal) tally. Findings WITHDRAWN by their raiser in Stage 2.5 are already recorded as `denied` — do not present them for decision; note them as withdrawn when walking the tiers.
+**Scale-down:** In a 1-model run there is no peer-confidence data, so present every finding individually for decision (no tiers). In a 2-model run the Confirmed tier rests on thin cross-review (one ranker per review, per Stage 0) — say so when presenting it.
+
+**Debate mode:** the tiers come from the *final* (post-rebuttal) tally. A finding whose raiser
+withdrew it in the rebuttal round (`findings[].debate.action === 'withdrawn'` in `tally.json`) is
+**auto-recorded `denied` in `decisions.json` and never presented for a user decision** — just note
+it as withdrawn when walking the tiers.
 
 **Consensus tier — Confirmed findings** (≥ 2 peer agreements, agrees dominate)
 
@@ -380,9 +293,15 @@ This is one tier with three sub-types presented separately. Present each finding
 - **Contested** (`d ≥ 1` with a meaningful split): For each finding show the claim and severity, which model raised it, who agreed, who disputed, and the one-line reasons from the adjudications. Ask for a decision before proceeding to the next: **accept / deny / modify**.
 - **Singleton** (only the original raiser; all other judges were neutral or silent — `d = 0` and `a < 2`): For each finding show the claim and severity and that no other judge engaged with it. Name the sole raiser. Ask for a decision before proceeding to the next: **accept / deny / modify**.
 
-**Recording decisions.** Keep a running decision log throughout this stage — every finding's outcome (accepted / denied / modified, with any modification noted). This log feeds Stage 5 (only accepted changes go into the reviewed copy) and Stage 6 (the run-folder report).
+**Recording decisions.** Keep a running decision log throughout this stage — every finding's
+outcome (accepted / denied / modified, with any modification noted) — and write it to
+`<run-folder>/decisions.json` as a **JSON array**, one object per finding:
+`{id, decision, applied?, duplicateOf?, tierOverride?}`. `id` is the run-global label id (e.g. `A1`);
+`decision` is the Stage-4 outcome (accepted / denied / modified / deferred); `applied` (optional
+bool) marks whether the accepted change was actually applied in Stage 5; `duplicateOf` (optional)
+links to another finding's id; `tierOverride` (optional) carries any `{from, to, reason}` override.
 
-Do not advance to Stage 5 until every finding in both tiers has a recorded decision.
+Do not advance to Stage 5 until every finding has a recorded decision.
 
 ---
 
@@ -397,35 +316,68 @@ Do not advance to Stage 5 until every finding in both tiers has a recorded decis
 - Do not attempt to produce a modified copy.
 - Write a **standalone reviewed report** instead: the full decision log, the chair's verdict, and clear callouts of what should be changed and where — formatted so the user can apply the changes manually.
 
-**Run-folder artifacts — always write these** regardless of source type. The full artifact set and naming conventions are defined in the *Output & naming* section of this skill; write every artifact specified there. The canonical run-folder files are:
-- `review-<model>.md` × N (already saved in Stage 1)
-- `crossreview-matrix.md` — the de-anonymized adjudication grid and street-cred table
-- `verdict.md` (already saved in Stage 3)
-- `verdict.json` — write by running `amicus council verdict <run-folder>/tally.json --decisions <run-folder>/decisions.json -o <run-folder>/verdict.json` (a thin CLI wrapper over `buildVerdict(record, decisions)` + `writeVerdictAtomic`, `src/council/verdict.js`). `<run-folder>/tally.json` is the `record` saved from the Stage-2 `amicus council tally` call. `<run-folder>/decisions.json` is a **JSON array**, one object per finding: `{id, decision, applied?, duplicateOf?, tierOverride?}` — `id` is the run-global label id (e.g. `A1`); `decision` is the Stage-4 outcome (accepted / denied / modified / deferred); `applied` (optional bool) marks whether the accepted change was actually applied to the artifact in Stage 5; `duplicateOf` (optional) links to another finding's id when Claude identified a duplicate; `tierOverride` (optional) carries any `{from, to, reason}` override recorded in Stage 2. Save this array to `<run-folder>/decisions.json` first, then run the command — it parses the tally record and the decisions file, calls `buildVerdict`, and writes the schema-stamped machine-readable record to the run folder via the same atomic tmp+rename convention the function always used.
-- `report.md` — the chair's synthesis + the full Stage-4 decision log + a summary of what was
-  applied (+ the "How Claude's review fared" readout when "Claude in the council" is on) + an
-  **Optional elements** section whenever any element was ON: which elements ran; the chair's
-  `VERDICT:` line verbatim at the top of the report (chair verdict scale); the "Withdrawn by
-  raiser (debate mode)" list and re-vote verdict changes (debate mode); and the standing
-  disclosures — critic self-identification in cross-review (critic seat), weakened anonymity +
-  non-comparable street-cred + `--no-ledger` (expert lenses) + a
-  **run-stats table**: one row per model call — **stage** (which stage you launched the call for)
-  plus **model, status, durationMs, and cost** read from the wave/run JSON `usage`
-  block. Cost is `usage.cost.amount` (USD); mark it with its `usage.cost.source`
-  — exact for `reported`, `~` for `estimated`, `?` for `unknown` — and never
-  invent a figure. Add a wave **total cost** row from the wave document's
-  `usage.cost` (`source: reported|estimated|mixed|unknown`). Any leg with no run doc → `durationMs: null`, `usage: null`; never invent a value.
-  - **Renderer:** once `verdict.json` is written, run
-    `amicus council report <run-folder>/verdict.json --html > <run-folder>/report.html` — a
-    **separate, deterministic** artifact, not report.md itself. **`report.html` is the default
-    final artifact to hand the user** — a self-contained, shareable page. This emits the
-    adjudication matrix (finding × judge), the peers-only street-cred table, the
-    findings-by-tier groupings (Disputed-first), and the per-model + wave cost —
-    deterministic data only. To assemble report.md, also run
-    `amicus council report <run-folder>/verdict.json --md` (no redirect — read its stdout) and
-    paste that Markdown into report.md as one section; reserve the rest of report.md's prose for
-    the chair's synthesis and the decision log. Prefer the renderer's Markdown over
-    hand-assembling the matrix by hand.
+**Run-folder artifacts.** The engine already wrote the deterministic set (see *Output & naming*).
+Two artifacts are yours:
+
+- `verdict.json` — the engine wrote an **undecided** verdict; replace it with the decided one:
+
+  ```
+  amicus council verdict <run-folder>/tally.json --decisions <run-folder>/decisions.json -o <run-folder>/verdict.json --render
+  ```
+
+  a thin CLI wrapper over `buildVerdict(record, decisions)` + `writeVerdictAtomic`
+  (`src/council/verdict.js`). `<run-folder>/tally.json` is the record the engine's tally wrote;
+  `<run-folder>/decisions.json` is the Stage-4 array. It parses both, calls `buildVerdict`, and
+  writes the schema-stamped machine-readable record via the same atomic tmp+rename convention the
+  function always used. The chair's `overallVerdict` is **carried forward automatically** from the
+  run folder — the engine's `verdict.json` first, else the closing `VERDICT:` line of
+  `chair-output.md` — because those are its only two homes (`tally.json` and `run.json` carry no
+  copy) and this command overwrites the first of them. A chair that produced no verdict stays
+  `null`; nothing is ever invented.
+
+  `--render` then refreshes `report.html` from the decided verdict — without
+  it you would hand the user a stale, pre-decision page. In Cowork this is **two `amicus_verdict`
+  calls, not one** (the tool is pure/stateless and writes nothing unless `render: true` *and*
+  `outDir` are both given): first call it with `record` (parsed `tally.json`) and `decisions`
+  (parsed `decisions.json`) and `overallVerdict` — read that last one from the engine's
+  `<run-folder>/verdict.json` before you overwrite it (`null` when the chair produced none); the
+  MCP tool receives `record` inline and has no run folder to recover it from, so unlike the CLI it
+  cannot carry it forward for you. With `render` omitted it returns the decided verdict as fenced JSON;
+  write that JSON to `<run-folder>/verdict.json` yourself with the host's file tools, since the
+  tool does not persist it. Then call it again with the same `record`/`decisions`/`overallVerdict` plus
+  `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on disk and
+  returns the Markdown rendering for `report.md` below; it still does **not** write `verdict.json`.
+- `report.md` — Claude-authored: the chair's synthesis (read verbatim from
+  `<run-folder>/chair-output.md`, including its closing `VERDICT:` line at the top of the report) +
+  the full Stage-4 decision log (one row per finding: `id` + claim + decision — the claim text
+  comes from `tally-input.json`, joined on `id` exactly as in Stage 4, since `decisions.json`
+  and `tally.json` both carry only the id) + a summary of what was applied (+ the "How Claude's
+  review fared"
+  readout when "Claude in the council" is on) + an **Optional elements** section whenever any
+  element was ON: which elements ran; the "Withdrawn by raiser (debate mode)" list and re-vote
+  verdict changes; and the standing disclosures — critic self-identification in cross-review
+  (critic seat), weakened anonymity + non-comparable street-cred + no ledger entry (expert
+  lenses) + a **run-stats table**: one row per model call — **stage**, **model, status,
+  durationMs, and cost** read from `run.json` / `tally.json` `runStats`. Cost is
+  `usage.cost.amount` (USD); mark it with its `usage.cost.source` — exact for `reported`, `~` for
+  `estimated`, `?` for `unknown` — and never invent a figure. Add a **total cost** row from
+  `run.json`'s `usage.cost`. Any entry with no run doc → `durationMs: null`, `usage: null`; never
+  invent a value.
+  - **Renderer:** the `--render` flag above already refreshed `<run-folder>/report.html` from the
+    decided verdict — a **separate, deterministic** artifact, not report.md itself (explicit
+    equivalent: `amicus council report <run-folder>/verdict.json --html > <run-folder>/report.html`).
+    To assemble report.md, also run `amicus council report <run-folder>/verdict.json --md`
+    (no redirect — read its stdout) and paste that Markdown into report.md as one section; reserve
+    the rest of report.md's prose for the chair's synthesis and the decision log. Prefer the
+    renderer's Markdown over hand-assembling the matrix by hand. **`report.html` is the default
+    final artifact to hand the user** — a self-contained, shareable page carrying the adjudication
+    matrix (finding × judge), the peers-only street-cred table, the findings-by-tier groupings
+    (Disputed-first), the debate round when `--debate` was on, and the per-model + total cost.
+
+The fast path retires the manual path's two hand-written artifacts: there is no
+`crossreview-matrix.md` (the adjudication grid and street-cred table are rendered into
+`report.html`/`report.md`) and no `verdict.md` (the chair's prose is `chair-output.md`, written by
+the engine). Do not recreate them — `MANUAL-ORCHESTRATION.md` is where they still live.
 
 Tell the user exactly which files were written and where, leading with `report.html`, **and present the verdict inline in chat** — the chair's overall assessment (verbatim or lightly trimmed) plus the tier counts (Confirmed/Disputed/Contested/Singleton) and what was applied. Never hand over only file paths.
 
@@ -438,13 +390,21 @@ This stage updates `MODEL-NOTES.md` to make future runs better. **Nothing is wri
 The `MODEL-NOTES.md` **next to this file** is your machine-local run ledger: npm updates never overwrite it (it is installed only if missing), so lessons accumulate per machine. Durable, machine-independent lessons get folded back into the version-controlled copy in the amicus repo at release time (see the release checklist in `docs/publishing.md`).
 
 **Reflect on this run.** Review the run for:
-- Failures, near-misses, and mitigations that worked (poller traps, empty responses, timeout issues, briefing problems)
-- Briefing wording that produced **richer or poorer** structured output than expected
+- Failures, near-misses, and mitigations that worked (dead legs, empty responses, timeouts, briefing problems — all visible in `run.json`)
+- Briefing wording that produced **richer or poorer** structured output than expected; per-model `conformance` (`clean` | `repaired` | `unstructured`) is in `run.json` / `tally.json` `runStats`
 - Chair or council model behavior worth noting
 
 Draft new or updated entries for the per-model sections of `MODEL-NOTES.md` that capture what was learned.
 
-**Ledger auto-append (automatic — no approval required).** Running `amicus council tally` (the finalize call — Stage 2, or the Stage-2.5 final tally when debate mode is on; skipped entirely on expert-lens runs, which always pass `--no-ledger`) appends one row per (run × model) to the append-only `council-ledger.jsonl` under `getConfigDir()` — no separate step is needed. Pass `--no-ledger` to compute a tally record *without* recording it (e.g. a re-tally that shouldn't double-count). The run summary shows the appended row. This is a deterministic, content-free model-level record (no finding text, no claim strings, no artifact body content). The quantitative reviewer-reliability data in `MODEL-NOTES.md` is now sourced entirely from `amicus council stats` (which aggregates the ledger) — **do not hand-edit reliability numbers in MODEL-NOTES**.
+**Ledger — already appended; do not touch it.** The engine's finalize tally appended one row per
+(run × model) to the append-only `council-ledger.jsonl` under `getConfigDir()` as part of the run
+(expert-lens runs are deliberately excluded). **In the fast path, never run `council tally`
+yourself.** The ledger is append-only, so a second tally over the same run double-appends and
+permanently skews every model's lifetime reliability averages — a double-append cannot be undone.
+Everything you would have wanted from it (tiers, both street-cred numbers, `runStats`,
+`tierCounts`) is already in `<run-folder>/tally.json`. The quantitative reviewer-reliability data
+in `MODEL-NOTES.md` is sourced entirely from `amicus council stats` (which aggregates the ledger) —
+**do not hand-edit reliability numbers in MODEL-NOTES**.
 
 **Compose the proposed MODEL-NOTES diff.** Combine the run-lessons updates and the reviewer-reliability table updates into a single proposed diff (old → new for every changed section). **Write the full diff to a file in the run folder** — `_tmp-proposed-model-notes-update.md` — so the user can open and review it before deciding. Presenting the diff as chat text alone is **not sufficient**: an approval dialog can hide the chat transcript, so the user may be asked to decide on a diff they never saw.
 
@@ -462,59 +422,81 @@ If the user approves, write the changes. If they say "edit", incorporate their c
 
 ### §5.1 Anonymization
 
-Stage 2 distributes a single anonymized bundle; this section details the mechanics that make that safe and fair.
-
-After all Stage-1 reviews are in hand, Claude assembles **one shared bundle** — every review relabeled with stable letter identifiers: **Review A**, **Review B**, **Review C**, and so on. Claude keeps a **private label↔model map** (e.g., `Review A → deepseek`, `Review B → gemini`, `Review C → claude`) that is never shared with any sidecar model.
+The engine assembles **one shared bundle** — every review relabeled with stable letter identifiers:
+**Review A**, **Review B**, **Review C**, and so on — and keeps the label↔model map in orchestrator
+memory and `run.json`, never in any judge-visible file. The judge legs run in a `_scratch/`
+subdirectory of the run folder precisely so a wandering judge cannot read the de-anonymized
+`review-<model>.md` files sitting next to it.
 
 The **identical** bundle goes to every judge. Because no judge can tell which review is its own, each model unknowingly ranks and adjudicates its own review — this is the anti-favoritism mechanism, not a bug. Self-bias washes out symmetrically across judges rather than systematically inflating any one model.
 
-Claude **de-anonymizes only** at two points: when computing scores and when writing `crossreview-matrix.md` and `report.md`. The label↔model map is never re-forwarded to any council model after de-anonymization.
+De-anonymization happens only when scoring and when rendering `report.html` / `report.md`. The map is never forwarded to any council model.
 
-**When "Claude in the council" is on:** Claude's own Stage-1 review enters the **same** bundle alongside the other reviews. Claude holds the label map and therefore cannot judge blind; see §5.4 for how this asymmetry is handled. Claude **never ranks or adjudicates** in Stage 2.
+**When "Claude in the council" is on:** the `review-claude.md` you authored enters the **same**
+bundle as one more labeled entry. Claude never judges (no judge leg is launched for it) and never
+chairs; see §5.4.
 
 ---
 
 ### §5.2 Scoring
 
-`amicus council tally` computes the two scoring signals from the assembled tally input. Claude's role is to assemble the input (Stage-2 assembly recipe in Stage 2 above) and to exercise judgment on `thin`-confidence overrides.
+The engine's tally stage computes the two scoring signals and writes them to
+`<run-folder>/tally.json`. Claude's job is to read them and to exercise judgment on
+`thin`-confidence overrides.
 
 **Street-cred** — computed two ways:
 - **withSelf** = each model's mean rank position across **all** judges' `FINAL RANKING:` blocks (lower is better).
 - **peersOnly** = mean rank excluding the model's own ranking of itself.
 
-Both are surfaced in `crossreview-matrix.md` and `report.md`. The ledger and Stage-0 bench recommendations use **peersOnly** only.
+Both are surfaced in `report.html` and `report.md`. The ledger and Stage-0 bench recommendations use **peersOnly** only.
 
-**Per-finding peer-confidence tier** — assigned by the peers-only cascade in `amicus council tally` (see COUNCIL-DESIGN.md §5.2 for the full table): **Disputed** → **Confirmed** → **Contested** → **Singleton**. The raiser's own adjudication is excluded from the cascade. `confidence: thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, `(0,1)`. **Claude may override a `thin` tier at the margins** before presenting Stage 4 — the override is recorded in `tierOverride: {from, to, reason}` and surfaced in the matrix and `verdict.json`.
+**Per-finding peer-confidence tier** — assigned by the peers-only cascade (see COUNCIL-DESIGN.md §5.2 for the full table): **Disputed** → **Confirmed** → **Contested** → **Singleton**. The raiser's own adjudication is excluded from the cascade. `confidence: thin` when total engaged peers `a + d ≤ 1` — cells `(0,0)`, `(1,0)`, `(0,1)`. **Claude may override a `thin` tier at the margins** before presenting Stage 4 — the override is recorded in `tierOverride: {from, to, reason}` and surfaced in `verdict.json`.
 
 ---
 
 ### §5.3 Chair selection & fallback
 
-The default is for Claude to **recommend a non-Claude chair** from the council — typically the model with the strongest reasoning capability or the best peers-only street-cred from `amicus council stats` — and the user confirms this recommendation before the run launches (Stage 0). The chair **may** be a council member who already participated in Stages 1 and 2; it receives the full de-anonymized picture (all reviews with model attribution, all rankings, all adjudications) so it can synthesize from a complete view.
+Claude **recommends a non-Claude chair** — typically the strongest reasoner available or the best
+peers-only street-cred from `amicus council stats` — and the user confirms it before launch
+(Stage 0). In the fast path the chair **must not be a bench seat**: the engine rejects
+`--chair <m>` when `<m>` is in `--models`, because a chair that also reviewed would be synthesizing
+over its own work. It still receives the full de-anonymized picture (all reviews with attribution,
+all rankings, all adjudications) in the chair packet.
 
-**Fallback chain if the chair call fails:**
+**Fallback chain, run by the engine when the chair call fails:**
 
-1. Re-run the chair call — transient provider failures are common; apply the mitigation from `MODEL-NOTES.md`.
-2. Promote the next-best non-Claude council model to chair.
-3. **Claude chairs only as last resort — with explicit disclosure** that the verdict is no longer fully independent of the orchestrator. State this clearly in the report.
+1. Retry the same chair once — transient provider failures are common.
+2. Promote the best non-bench model from the reliability ledger (never the reserved `claude` seat).
+3. Give up: the run finishes degraded (exit 2) with `overallVerdict: null` and no `chair-output.md`.
 
+On (3), disclose it and offer either a solo re-chair via `MANUAL-ORCHESTRATION.md` or a report-only
+outcome. **Claude chairing is a last resort that requires explicit disclosure** that the verdict is
+no longer independent of the orchestrator — it is never automatic, and the engine will not do it.
 Never silently degrade to Claude-chairs without informing the user.
 
 ---
 
 ### §5.4 Claude in the council (default off)
 
-Enabling this toggle lets the bench judge Claude's own take, so you can see how it compares to the independent council.
+Enabling this element lets the bench judge Claude's own take, so you can see how it compares to the independent council.
 
-**Asymmetric by design.** Claude is the orchestrator and holds the label↔model map, so it cannot judge blind. The rule is therefore **asymmetric**: Claude contributes a review to be judged by the council but does **not** vote (Stage 2) or chair (Stage 3). Claude participates on the supply side only; the verdict remains independent of the orchestrator.
+**Asymmetric by design.** Claude is the orchestrator and holds the label↔model map, so it cannot judge blind. The rule is therefore **asymmetric**: Claude contributes a review to be judged by the council but does **not** vote or chair. Claude participates on the supply side only; the verdict remains independent of the orchestrator.
 
-**Always fresh.** When the toggle is on, Claude performs a new structured Stage-1 review on the artifact — a fresh pass in the required findings format, not a formalization or summary of anything said earlier in the main conversation. Upstream feedback does not seed or constrain this review.
+**Always fresh.** Claude performs a new structured review on the artifact — a fresh pass in the required findings format, not a formalization or summary of anything said earlier in the main conversation. Upstream feedback does not seed or constrain this review. The engine cannot verify freshness; this is a skill-side rule and it is on you.
 
-**"How Claude's review fared" readout.** Included in both `crossreview-matrix.md` and `report.md` when the toggle is on:
-- Claude's street-cred rank among peers (its `peersOnly` average rank position in the judges' `FINAL RANKING:` blocks — `withSelf == peersOnly` for Claude since it never casts rankings).
+**Mechanics.** Author `<run-folder>/review-claude.md` at Stage 0 and pass
+`--claude-review <run-folder>/review-claude.md`. The engine validates it before any spend, enters
+its findings as one more labeled review, sets `meta.claudeInCouncil: true`, adds `claude` to
+`meta.models` (the street-cred universe), and records a `runStats` row with `durationMs: null` /
+`usage: null` — nothing was launched, and the never-invent rule holds. On such a run `claude` is a
+reserved seat name and the engine's pre-flight rejects it in `--models` or `--chair` (and therefore
+in `--critic`, which must be a bench seat) with `council_claude_review_invalid`.
+
+**"How Claude's review fared" readout.** Include in `report.md`:
+- Claude's peers-only street-cred rank (`withSelf == peersOnly` for Claude, since it casts no rankings).
 - The Disputed / Confirmed / Contested / Singleton split of Claude's findings — how many of its claims the bench pushed back on, endorsed, disputed, or ignored.
 
-**Integrity.** When Claude presents results — including the bench's assessment of its own review — it reports the verdict at face value. Claude does not defend, contextualize away, or re-litigate findings the bench disputed or ranked poorly. The point of the toggle is an honest external read on Claude's review; undermining that defeats the purpose.
+**Integrity.** When Claude presents results — including the bench's assessment of its own review — it reports the verdict at face value. Claude does not defend, contextualize away, or re-litigate findings the bench disputed or ranked poorly. The point of the element is an honest external read on Claude's review; undermining that defeats the purpose.
 
 ---
 
@@ -526,34 +508,38 @@ Use these together with `amicus council stats` (the ledger — authoritative qua
 - **Reasoning-heavy critique, structured argument evaluation, citations** → favor a strong reasoner (e.g., DeepSeek, GPT, Opus) that will interrogate claims rather than accept them.
 - **Code review** → favor a code-strong model (e.g., DeepSeek, GPT, Opus); general-purpose models often miss implementation-level issues.
 - **Independence matters** → pick models from **different families**; two models from the same family produce correlated opinions and reduce the value of the cross-review.
-- **Contrarian / red-team value** → when material is persuasive, consensus-prone, or high-stakes, assign one model an explicit red-team brief: argue against the others, hunt for what they will miss. This is especially valuable when the default council is likely to agree.
+- **Contrarian / red-team value** → when material is persuasive, consensus-prone, or high-stakes, turn on the critic seat (`--critic <model>`): that seat argues against the others and hunts for what they will miss. This is especially valuable when the default council is likely to agree.
 - **Consult `amicus council stats`** — a model's historical confirm-rate and avg peers-only street-cred (from the ledger) are the best predictors of council value for a given run type.
 
 Always **rank recommendations by fit**, state the trade-off for each option, and surface the estimated cost (an estimate, not a guarantee; unpriced legs disclosed as "cost unknown"). Never present a single option without explanation.
 
-**Model naming for council members.** Name bench members by alias (`gemini`, `gpt`, `deepseek`, `opus`, …) or by full `provider/model` id — both work with `--models`/`amicus_fanout`. A bare canonical id (e.g. `anthropic/claude-opus-4.8`) is policy-routed **direct-first**: Amicus uses the user's direct provider key when one is configured, falling back to OpenRouter automatically. `openrouter/provider/model` is an explicit force-OpenRouter override — reach for it only when the user deliberately wants a specific member to run through OpenRouter (e.g. to use a free-tier variant), or for gateway-only vendors with no direct integration. A per-run `--gateway auto|direct|openrouter` (also on `amicus_fanout`/`amicus_start`) overrides routing for the whole wave if the user asks for it; leave it unset (`auto`) by default.
+**Model naming for council members.** Name bench members by alias (`gemini`, `gpt`, `deepseek`, `opus`, …) or by full `provider/model` id — both work with `--models`. A bare canonical id (e.g. `anthropic/claude-opus-4.8`) is policy-routed **direct-first**: Amicus uses the user's direct provider key when one is configured, falling back to OpenRouter automatically. `openrouter/provider/model` is an explicit force-OpenRouter override — reach for it only when the user deliberately wants a specific member to run through OpenRouter (e.g. to use a free-tier variant), or for gateway-only vendors with no direct integration. A per-run `--gateway auto|direct|openrouter` overrides routing for the whole run if the user asks for it; leave it unset (`auto`) by default.
 
 ---
 
 ## Output & naming
 
-- Run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no `output/` exists), containing:
-  - `review-<model>.md` ×N — raw Stage 1 reviews (plus `review-claude.md` when "Claude in the council" is on)
-  - `crossreview-matrix.md` — adjudication grid + de-anonymized street-cred table
-  - `verdict.md` — the chair's synthesis (prose)
-  - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `amicus council verdict` at Stage 5
+- Run folder: `output/<stem>-council/` (or `./second-opinion/<stem>-council/` if no `output/` exists), passed to the engine as `--out-dir`. After a fast-path run it holds:
+  - `briefing.md` — the Stage-0 review request Claude authored (run provenance, not a temp file)
+  - `review-claude.md` — Claude's own fresh review, only when "Claude in the council" is on
+  - `run.json` — the engine's run manifest: stage log, wave ids, degradation, `runStats`, cost
+  - `review-<model>.md` ×N and `judge-<model>.md` ×N — the raw engine legs
+  - `briefing-stage1.md`, `bundle-stage2.md`, `chair-packet.md` — the model-facing briefings the engine composed
+  - `tally-input.json` and `tally.json` — the assembled input and the tiered record (plus `tally-provisional.json` and `debate.json` when `--debate` was on)
+  - `rebuttal-<model>.md` ×(raisers) and `revote-bundle.md` + `revote-<model>.md` ×(disputing judges) — the debate round's raw defense and re-vote leg outputs plus the shared re-vote prompt, only when `--debate` was on
+  - `chair-output.md` — the chair's synthesis prose, verbatim from the chair model
+  - `decisions.json` — the Stage-4 decision array Claude writes
+  - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `amicus council verdict` at Stage 5 (replacing the engine's undecided version)
   - `report.md` — Claude-authored; full contract defined once in *Stage 5 → Run-folder artifacts* above (chair's synthesis + Stage-4 decision log + run-stats table).
-  - `report.html` — a **separate, deterministic** artifact generated by the `amicus council report <verdict.json> --html` renderer directly from `verdict.json` (no chair prose, no decision-log narrative — see Stage 5's *Renderer* note); the default artifact to share.
+  - `report.html` — a **separate, deterministic** artifact rendered from `verdict.json` (no chair prose, no decision-log narrative — see Stage 5's *Renderer* note); the default artifact to share.
 - Reviewed copy: `<stem>-reviewed.<ext>`, next to the source.
-- Temp working files (`_tmp-*.md`: extracts, stage briefings, red-team brief, critic/lens seat briefs
-  (`_tmp-briefing-critic.md`, `_tmp-briefing-lens-<slug>.md`), rebuttal briefs (`_tmp-rebuttal-<label>.md`,
-  `_tmp-revote-bundle.md`), bundle, chair packet, proposed MODEL-NOTES diff) live in the run folder and are
-  cleaned up at the end of the run — the proposed-diff file only after the Stage-6 approval decision is resolved.
+- The only working file Claude writes in the fast path is the Stage-6 proposed MODEL-NOTES diff (`_tmp-proposed-model-notes-update.md`), cleaned up once the approval decision is resolved. The manual fallback's `_tmp-*.md` files are documented in `MANUAL-ORCHESTRATION.md`.
 
 ---
 
 ## Files
 
+- `MANUAL-ORCHESTRATION.md` — the **fallback path**: the hand-driven Stage 1/2/2.5/3 mechanics and the Stage-5 artifacts the engine replaced. **Read it when the engine is unavailable, too old, or misbehaving; when a seat needs a fully custom brief beyond `--critic`/`--lenses`; or when you need to inspect or intervene mid-stage.**
 - `MODEL-NOTES.md` — operating rules, per-model qualitative quirks, cost guardrail, and structural-conformance notes. **Read it before Stage 0 (council selection and launch); update qualitative notes (with approval) in Stage 6.** Quantitative reliability data (runs, avg street-cred, confirm-rate, fact-error rate) comes from `amicus council stats`, not this file. This copy is machine-local (never overwritten on update); the shipped seed lives in the amicus repo and absorbs durable lessons at release time.
-- `SEAT-BRIEFS.md` — briefing boilerplate for the optional council elements (critic seat, expert lenses, rebuttal round, chair verdict scale) plus the standard anti-sycophancy clause every Stage-1 briefing carries. **Read it whenever any element is toggled on at Stage 0** (the anti-sycophancy clause applies to every run).
-- `COUNCIL-DESIGN.md` — the design spec this skill implements (v3 + WS-3; §12 covers the optional council elements). Consult it if a mechanics question arises that the skill prose does not resolve.
+- `SEAT-BRIEFS.md` — the semantics of the optional council elements (critic seat, expert lenses, rebuttal round, chair verdict scale) plus the standard anti-sycophancy clause. The engine composes its own stricter-JSON variants of these headlessly; this file stays authoritative for the manual path and for what each element *means*. **Read it whenever any element is toggled on at Stage 0.**
+- `COUNCIL-DESIGN.md` — the design spec this skill implements (§12 covers the optional council elements). Consult it if a mechanics question arises that the skill prose does not resolve.

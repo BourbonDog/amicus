@@ -406,11 +406,12 @@ function getTools() {
   },
   {
     name: 'amicus_verdict',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
       "Merge a tally record with Claude's Stage-4 decisions into the verdict " +
       'object (final tiers after overrides, decisions, applied flags). Pure + ' +
-      'synchronous; returns the verdict — does NOT write it to disk.',
+      'synchronous; returns the verdict. Writes nothing unless render:true AND ' +
+      'outDir are given — then it also refreshes <outDir>/report.html.',
     inputSchema: {
       record: z.record(z.any()).describe('A tally() output record (from amicus_council_tally).'),
       decisions: z.array(z.object({
@@ -418,6 +419,13 @@ function getTools() {
         duplicateOf: z.string().nullable().optional(),
         tierOverride: z.object({ from: z.string(), to: z.string(), reason: z.string() }).nullable().optional(),
       })).optional().describe('Stage-4 per-finding decisions (default []).'),
+      overallVerdict: z.string().nullable().optional().describe(
+        "The chair's VERDICT line, read from the engine-written <runDir>/verdict.json " +
+        '(or the closing VERDICT: line of chair-output.md). Pass it through whenever you ' +
+        'overwrite verdict.json — it is the only copy, tally.json has none. Omit when the ' +
+        'chair was skipped; never author one yourself.'),
+      render: z.boolean().optional().describe('Also return the markdown rendering of the decided verdict (and refresh report.html when outDir is given).'),
+      outDir: z.string().optional().describe('Dir to write report.html into when render:true — resolved against the project dir and rejected if it escapes it. Omit to write nothing.'),
       project: z.string().optional().describe('Optional project directory path.'),
     },
   },
@@ -465,6 +473,18 @@ function getTools() {
       ),
       gateway: z.enum(GATEWAY_MODES).optional().describe(
         'Routing preference: auto (default), direct, or openrouter.'
+      ),
+      debate: z.boolean().optional().describe(
+        'Add a Stage-2.5 rebuttal round: raisers defend Contested/Disputed findings and ' +
+        'disputing judges re-vote before the chair synthesizes.'
+      ),
+      claudeReviewFile: z.string().optional().describe(
+        "Path to Claude's own review file (prose + findings JSON) to include as a judged " +
+        'entry. Claude is reviewed and ranked like a seat, but never judges or chairs.'
+      ),
+      noCostGate: z.boolean().optional().describe(
+        'Disable the per-leg price gate for the WHOLE run (repairs and chair included). ' +
+        'Use for an intentional o3-class council. Independent of maxCost, which still caps the total.'
       ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'

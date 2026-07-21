@@ -17,13 +17,13 @@ the **analysis request**, and the **criteria**. If any of the three is missing o
 ambiguous, ask for it before launching any model (the skill's Stage 0 covers this —
 don't re-ask for what is already present).
 
-Then follow the second-opinion skill end to end, in pipeline order: Stage 0
+Then follow the second-opinion skill's engine fast path, in pipeline order: Stage 0
 intake/prep and run-folder setup, then council selection with a cost estimate
-and explicit user confirmation; Stage 1 independent reviews, running
-`amicus council validate` on each leg's findings block as it lands; Stage 2
-cross-review, followed by `amicus council tally` once cross-review settles;
-Stage 3 council-chair synthesis; Stage 4 the accept/deny decision pass; and
-Stage 5, which runs `amicus council verdict` to write the final `verdict.json`.
+and explicit user confirmation; one `amicus council run` call — the engine runs
+validate, cross-review, tally, and chair internally, covering the Stage-1
+independent reviews through the Stage-3 chair synthesis with no Claude runtime
+in between; Stage 4, the accept/deny decision pass, once the run returns; and
+Stage 5, which runs `amicus council verdict` to write the decided `verdict.json`.
 
 The user may also name **optional council elements** in the arguments (critic seat,
 expert lenses, debate mode, verdict scale, Claude in the council). All elements

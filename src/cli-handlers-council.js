@@ -1,13 +1,14 @@
 // src/cli-handlers-council.js
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const { tally } = require('./council/tally');
 const { deriveReliability, appendRun, buildStatsDoc } = require('./council/ledger');
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 const { validateFindings, buildValidateDoc } = require('./council/findings');
-const { buildVerdict, writeVerdictAtomic } = require('./council/verdict');
+const { buildVerdict, readOverallVerdict, writeVerdictAtomic } = require('./council/verdict');
 const {
   runSave: runCouncilSave,
   runList: runCouncilList,
@@ -163,12 +164,29 @@ function runVerdict(args, useJson) {
   }
   const outPath = args.out || './verdict.json';
   let verdict;
-  try { verdict = buildVerdict(record, decisions); }
+  try {
+    // The Stage-5 replacement overwrites the engine's verdict.json, which is
+    // one of only two homes of the chair's synthesis (the other is
+    // chair-output.md); tally.json carries no copy. Recover it from the RUN
+    // folder — the tally's own directory, not `-o` — before rebuilding.
+    const overallVerdict = readOverallVerdict(path.dirname(path.resolve(tallyPath)), record.meta.runId);
+    verdict = buildVerdict(record, decisions, { overallVerdict });
+  }
   catch (e) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot build verdict: ${e.message}`,
       hint: 'either tally.json needs meta, findings[], streetCred[], runStats, tierCounts, or decisions.json must be a JSON array of {id, decision, …} objects' });
   }
   writeVerdictAtomic(outPath, verdict);
+  if (args.render) {
+    // v4.1 §4.5c: refresh report.html next to the decided verdict.
+    try {
+      const html = buildReport({ verdict }, { format: 'html' });
+      fs.writeFileSync(path.join(path.dirname(outPath), 'report.html'), html);
+    } catch (e) {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `verdict written but render failed: ${e.message}`,
+        hint: 'the verdict.json is valid; re-run `amicus council report <verdict.json> --html` manually' });
+    }
+  }
   process.stdout.write(useJson ? JSON.stringify(verdict, null, 2) + '\n' : renderVerdict(verdict, outPath));
   return 0;
 }

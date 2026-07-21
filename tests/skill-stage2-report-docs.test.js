@@ -16,12 +16,20 @@
 const fs = require('fs');
 const path = require('path');
 const { mustIndexOf } = require('./helpers/docs-extract');
-const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'second-opinion', 'SKILL.md'), 'utf-8');
+// Both docs are CRLF in the working tree; normalise before line-bounded matching
+// (repo idiom — see tests/skill-second-opinion-docs.test.js).
+const readDoc = p => fs.readFileSync(path.join(__dirname, '..', 'skills', 'second-opinion', p), 'utf-8')
+  .replace(/\r\n/g, '\n');
+const skill = readDoc('SKILL.md');
+// v4.1 §4.9: the manual Stage-2 bundle assembly (B28) moved to the fallback doc
+// when Stages 1-3 collapsed into `amicus council run`. B29 (report.md's single
+// definition + the renderer note) stays on SKILL.md — Stage 5 is still Claude's.
+const manual = readDoc('MANUAL-ORCHESTRATION.md');
 
-describe('B28 — Stage 2 hardening paragraph precedes the "two things" sentence', () => {
-  const stage2Start = mustIndexOf(skill, '### Stage 2', 'second-opinion SKILL.md "### Stage 2" heading');
-  const stage2End = mustIndexOf(skill, '### Stage 3', 'second-opinion SKILL.md "### Stage 3" heading');
-  const stage2 = skill.slice(stage2Start, stage2End);
+describe('B28 — Stage 2 hardening paragraph precedes the "two things" sentence (manual path)', () => {
+  const stage2Start = mustIndexOf(manual, '### Stage 2', 'MANUAL-ORCHESTRATION.md "### Stage 2" heading');
+  const stage2End = mustIndexOf(manual, '### Stage 3', 'MANUAL-ORCHESTRATION.md "### Stage 3" heading');
+  const stage2 = manual.slice(stage2Start, stage2End);
 
   it('the hardening paragraph appears before "two things on the bundle"', () => {
     const hardenIdx = mustIndexOf(stage2, 'Judge-briefing hardening (required)', 'Stage 2 "Judge-briefing hardening (required)" paragraph');

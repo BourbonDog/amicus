@@ -100,4 +100,86 @@ function parseChairVerdict(text) {
   return found;
 }
 
-module.exports = { parseJudgeOutput, parseChairVerdict, CHAIR_VERDICTS, JUDGE_VERDICTS };
+const DEBATE_ACTIONS = ['defend', 'amend', 'withdraw'];
+const REVOTE_VERDICTS = ['agree', 'dispute', 'neutral'];
+
+/**
+ * Parse a debate defense solo (spec §5.4). Every expected id ends up in byId:
+ * a present-and-valid entry keeps its action/argument/claim; anything absent or
+ * individually invalid becomes {action:'no-response'} (the spec-mandated
+ * "original stands" fallback). A block-level failure sets ok:false so the
+ * caller issues exactly ONE repair; after that, every id is 'no-response'.
+ * @param {string} text raw defense output (prose + trailing ```json block)
+ * @param {string[]} expectedIds run-global ids sent to this raiser
+ * @returns {{byId: Object, ok: boolean, errors: Array<{code, detail}>}}
+ */
+function parseDebateDefense(text, expectedIds) {
+  const allNoResponse = () => {
+    const byId = {};
+    for (const id of expectedIds) { byId[id] = { action: 'no-response' }; }
+    return byId;
+  };
+  const body = lastJsonBlock(text || '');
+  if (body === null) {
+    return { byId: allNoResponse(), ok: false, errors: [{ code: 'NO_FENCED_BLOCK', detail: 'no ```json block found' }] };
+  }
+  let parsed;
+  try { parsed = JSON.parse(body); }
+  catch (e) { return { byId: allNoResponse(), ok: false, errors: [{ code: 'NOT_PARSEABLE', detail: e.message }] }; }
+  if (!parsed || !Array.isArray(parsed.responses)) {
+    return { byId: allNoResponse(), ok: false, errors: [{ code: 'BAD_RESPONSES', detail: 'responses must be an array' }] };
+  }
+  const expected = new Set(expectedIds);
+  const byId = allNoResponse();
+  for (const r of parsed.responses) {
+    const id = r && r.id;
+    if (!expected.has(id)) { continue; }                 // unknown id ignored
+    if (r.action === 'defend' && typeof r.argument === 'string' && r.argument.trim()) {
+      byId[id] = { action: 'defend', argument: r.argument };
+    } else if (r.action === 'amend' && typeof r.claim === 'string' && r.claim.trim()) {
+      const entry = { action: 'amend', claim: r.claim };
+      if (typeof r.argument === 'string' && r.argument.trim()) { entry.argument = r.argument; }
+      byId[id] = entry;
+    } else if (r.action === 'withdraw') {
+      byId[id] = { action: 'withdraw' };
+    } // else leave as no-response
+  }
+  return { byId, ok: true, errors: [] };
+}
+
+/**
+ * Parse a re-vote leg (spec §5.4). byId holds ONLY present-and-valid ids; an
+ * absent or invalid entry is omitted so the judge's original verdict stands.
+ * Block-level failure sets ok:false (caller issues one repair, then originals
+ * stand for all bundled ids).
+ * @param {string} text raw re-vote output
+ * @param {string[]} expectedIds bundled run-global ids
+ * @returns {{byId: Object, ok: boolean, errors: Array<{code, detail}>}}
+ */
+function parseRevote(text, expectedIds) {
+  const body = lastJsonBlock(text || '');
+  if (body === null) {
+    return { byId: {}, ok: false, errors: [{ code: 'NO_FENCED_BLOCK', detail: 'no ```json block found' }] };
+  }
+  let parsed;
+  try { parsed = JSON.parse(body); }
+  catch (e) { return { byId: {}, ok: false, errors: [{ code: 'NOT_PARSEABLE', detail: e.message }] }; }
+  if (!parsed || !Array.isArray(parsed.revotes)) {
+    return { byId: {}, ok: false, errors: [{ code: 'BAD_REVOTES', detail: 'revotes must be an array' }] };
+  }
+  const expected = new Set(expectedIds);
+  const byId = {};
+  for (const r of parsed.revotes) {
+    const id = r && r.id;
+    if (!expected.has(id) || !REVOTE_VERDICTS.includes(r.verdict)) { continue; }
+    const entry = { verdict: r.verdict };
+    if (typeof r.reason === 'string' && r.reason.trim()) { entry.reason = r.reason; }
+    byId[id] = entry;
+  }
+  return { byId, ok: true, errors: [] };
+}
+
+module.exports = {
+  parseJudgeOutput, parseChairVerdict, CHAIR_VERDICTS, JUDGE_VERDICTS,
+  parseDebateDefense, parseRevote, DEBATE_ACTIONS, REVOTE_VERDICTS,
+};

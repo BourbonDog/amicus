@@ -19,6 +19,9 @@ const CHAIR_NO_TOOLS_PREAMBLE =
 
 const CHAIR_VERDICT_VALUES = ['Ship it', 'Fix these first', 'Fundamental rethink'];
 
+/** Shared date line (spec §4.3) — prepended to every model-facing briefing. */
+function dateLine(date) { return `Today's date is ${date}.`; }
+
 /** Stage-2 headless output contract (spec §5, embedded in the judge bundle). */
 const JUDGE_OUTPUT_CONTRACT = [
   'End your response with a trailing fenced ```json block — no text after it — in',
@@ -45,13 +48,14 @@ const JUDGE_OUTPUT_CONTRACT = [
  * @param {{reviews: Array<{label: string, text: string}>,
  *   findings: Array<{id: string, severity: string, claim: string}>}} args
  */
-function buildJudgeBundle({ reviews, findings }) {
+function buildJudgeBundle({ reviews, findings, date }) {
   const findingLines = findings.map(f => `${f.id} [${f.severity}] ${f.claim}`).join('\n');
   const reviewBlocks = reviews
     .map(r => `--- ${r.label} ---\n${r.text}`)
     .join('\n\n');
-  return [
-    JUDGE_NO_TOOLS_PREAMBLE,
+  const parts = [JUDGE_NO_TOOLS_PREAMBLE];
+  if (date) { parts.push(dateLine(date)); }
+  parts.push(
     'You are judging the anonymized peer reviews below. Do two things:',
     'Task A — Rank: order the reviews from most to least accurate and insightful.',
     'Task B — Adjudicate: for EVERY finding id listed below, state agree, dispute, or ' +
@@ -60,7 +64,8 @@ function buildJudgeBundle({ reviews, findings }) {
     '--- FINDINGS INDEX (run-global ids) ---',
     findingLines,
     reviewBlocks,
-  ].join('\n\n');
+  );
+  return parts.join('\n\n');
 }
 
 /** Bounded judge-repair re-prompt (solo; ≤ 2 per judge — spec §5). */
@@ -103,7 +108,7 @@ const VERDICT_SCALE_ADDENDUM = [
  *   adjudications: Array<{findingId: string, judge: string, verdict: string}>,
  *   tierCounts: object}} args
  */
-function buildChairPacket({ reviews, rankings, adjudications, tierCounts }) {
+function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }) {
   const reviewBlocks = reviews.map(r => `--- Review by ${r.model} ---\n${r.text}`).join('\n\n');
   const rankingLines = rankings
     .map(r => `${r.judge}: ${JSON.stringify(r.order)}`)
@@ -112,8 +117,9 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts }) {
     .map(a => `${a.findingId} — ${a.judge}: ${a.verdict}`)
     .join('\n');
   const tiers = JSON.stringify(tierCounts);
-  return [
-    CHAIR_NO_TOOLS_PREAMBLE,
+  const parts = [CHAIR_NO_TOOLS_PREAMBLE];
+  if (date) { parts.push(dateLine(date)); }
+  parts.push(
     'You are the council chair. Write the synthesized verdict across the reviews, ' +
     'rankings, and adjudications below. Weigh each reviewer\'s findings by their ' +
     'peer-validated standing (rank position and adjudication pattern), distinguish ' +
@@ -127,7 +133,8 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts }) {
     '--- PER-FINDING ADJUDICATIONS ---',
     adjLines,
     VERDICT_SCALE_ADDENDUM,
-  ].join('\n\n');
+  );
+  return parts.join('\n\n');
 }
 
 /** One-shot chair repair: the VERDICT line was missing (spec §5 chair contract). */
@@ -145,6 +152,6 @@ function buildChairRepairPrompt() {
 
 module.exports = {
   JUDGE_NO_TOOLS_PREAMBLE, CHAIR_NO_TOOLS_PREAMBLE, CHAIR_VERDICT_VALUES,
-  JUDGE_OUTPUT_CONTRACT, VERDICT_SCALE_ADDENDUM,
+  JUDGE_OUTPUT_CONTRACT, VERDICT_SCALE_ADDENDUM, dateLine,
   buildJudgeBundle, buildJudgeRepairPrompt, buildChairPacket, buildChairRepairPrompt,
 };

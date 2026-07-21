@@ -36,9 +36,11 @@ function slug(text) {
 /** Launch all Stage-1 legs (wave + critic/lens solos), collect run docs. */
 async function launchStage1(ctx) {
   const { o, launchers } = ctx;
+  // `noCostGate` rides EVERY launch object in this file (here, the findings
+  // repair, the judge wave, the judge repair) — see run-launch.js's fanout call.
   const common = {
     project: o.runDir, timeout: o.timeout, gateway: o.gateway,
-    noValidateModel: o.noValidateModel,
+    noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
   };
   const launches = [];
   // Record every sub-wave BEFORE it launches: `amicus abort` cascades over
@@ -118,7 +120,7 @@ async function runStage1(ctx) {
       const solo = await ctx.launchers.launchSolo({
         model: m.modelInput, prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors }),
         project: o.runDir, waveId, timeout: o.timeout,
-        gateway: o.gateway, noValidateModel: o.noValidateModel,
+        gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, reviews, deadLegs }; }
@@ -137,18 +139,27 @@ async function runStage1(ctx) {
 /**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
  * @param {object} ctx
- * @param {{reviews: Array, labels: {entries, labelMap}, globalFindings: Array}} args
+ * @param {{reviews: Array, labels: {entries, labelMap}, globalFindings: Array,
+ *   extraLabeled?: Array<{label: string, text: string}>}} args
+ *   `extraLabeled` (v4.1 §4.4) are labeled reviews sourced from a FILE rather than
+ *   a leg (the Claude review): they join the judged BUNDLE, never the judge ROSTER.
  * @returns {Promise<{aborted: number|null, judgeResults: Array}>}
  */
-async function runStage2(ctx, { reviews, labels, globalFindings }) {
+async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = [] }) {
   const { o } = ctx;
   const { rankingToOrder } = require('./anonymize');
   fs.mkdirSync(ctx.scratchDir, { recursive: true, mode: 0o700 });
 
-  const labeled = labels.entries.map((e, i) => ({ label: e.label, text: reviews[i].text }));
-  const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings });
+  // Zip off `reviews` (never off `labels.entries`, which may be one longer than
+  // reviews when a file-sourced review is present) and append the extras.
+  const labeled = reviews
+    .map((r, i) => ({ label: labels.entries[i].label, text: r.text }))
+    .concat(extraLabeled);
+  const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings, date: o.date });
   fs.writeFileSync(path.join(o.runDir, 'bundle-stage2.md'), bundle, { mode: 0o600 });
 
+  // ROSTER, not bundle: derived ONLY from legs that actually ran, so a file-sourced
+  // review is judged but never judges (v4.1 §4.4). Do not widen with extraLabeled.
   const judges = reviews.map(r => r.modelInput);
   const parseCtx = {
     labels: labels.entries.map(e => e.label),
@@ -158,6 +169,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings }) {
   const { wave, exitCode } = await ctx.launchers.launchWave({
     models: judges, prompt: bundle, project: ctx.scratchDir, waveId: `${o.runId}-s2`,
     timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
+    noCostGate: o.noCostGate,
   });
   ctx.addWave(wave);
   if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [] }; }
@@ -182,7 +194,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings }) {
       const solo = await ctx.launchers.launchSolo({
         model: judge, prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
-        gateway: o.gateway, noValidateModel: o.noValidateModel,
+        gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, judgeResults }; }
