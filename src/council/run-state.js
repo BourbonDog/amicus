@@ -20,8 +20,31 @@ const { writeFileAtomic } = require('../utils/atomic-write');
 const { SESSIONS_DIR } = require('../session-manager');
 
 const RUN_FILE = 'run.json';
+const SPAWN_PID_FILE = 'spawn.pid';
 
 function runPath(runDir) { return path.join(runDir, RUN_FILE); }
+function spawnPidPath(runDir) { return path.join(runDir, SPAWN_PID_FILE); }
+
+/**
+ * Record the engine child's pid in its own file rather than patching run.json.
+ * The spawning process (the MCP handler) and the engine child both write
+ * run.json, and `checkpoint` is a read-merge-write with no cross-process lock —
+ * so a pid patch from the parent can clobber, or be clobbered by, whatever the
+ * child wrote in the same window. A standalone single-write file has no read
+ * side, so there is no race to lose. Readers fall back to it whenever run.json
+ * carries no pid (see readSpawnPid).
+ */
+function writeSpawnPid(runDir, pid) {
+  writeFileAtomic(spawnPidPath(runDir), String(pid), { mode: 0o600 });
+}
+
+/** @returns {number|null} the recorded spawn pid, or null when absent/corrupt */
+function readSpawnPid(runDir) {
+  try {
+    const pid = Number.parseInt(fs.readFileSync(spawnPidPath(runDir), 'utf-8').trim(), 10);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch { return null; }
+}
 
 /** @returns {object|null} parsed run.json, or null when missing/corrupt */
 function readRun(runDir) {
@@ -133,5 +156,6 @@ function listPointers(project) {
 
 module.exports = {
   RUN_FILE, readRun, initRun, checkpoint, updateStage, appendStageWave,
+  writeSpawnPid, readSpawnPid,
   pointerPath, writePointer, readPointer, listPointers,
 };
