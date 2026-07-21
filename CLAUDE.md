@@ -385,7 +385,7 @@ evals/
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `checkpoint()`, `updateStage()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
-| `council/verdict.js` |  | `buildVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
+| `council/verdict.js` |  | `buildVerdict()`, `readOverallVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |

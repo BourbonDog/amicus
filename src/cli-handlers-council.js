@@ -8,7 +8,7 @@ const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 const { validateFindings, buildValidateDoc } = require('./council/findings');
-const { buildVerdict, writeVerdictAtomic } = require('./council/verdict');
+const { buildVerdict, readOverallVerdict, writeVerdictAtomic } = require('./council/verdict');
 const {
   runSave: runCouncilSave,
   runList: runCouncilList,
@@ -164,7 +164,14 @@ function runVerdict(args, useJson) {
   }
   const outPath = args.out || './verdict.json';
   let verdict;
-  try { verdict = buildVerdict(record, decisions); }
+  try {
+    // The Stage-5 replacement overwrites the engine's verdict.json, which is
+    // one of only two homes of the chair's synthesis (the other is
+    // chair-output.md); tally.json carries no copy. Recover it from the RUN
+    // folder — the tally's own directory, not `-o` — before rebuilding.
+    const overallVerdict = readOverallVerdict(path.dirname(path.resolve(tallyPath)), record.meta.runId);
+    verdict = buildVerdict(record, decisions, { overallVerdict });
+  }
   catch (e) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot build verdict: ${e.message}`,
       hint: 'either tally.json needs meta, findings[], streetCred[], runStats, tierCounts, or decisions.json must be a JSON array of {id, decision, …} objects' });

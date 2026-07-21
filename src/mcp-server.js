@@ -1144,7 +1144,13 @@ const handlers = {
   async amicus_verdict(input, project) {
     try {
       const { buildVerdict } = require('./council/verdict');
-      const verdict = buildVerdict(input.record, input.decisions || []);
+      // The chair's synthesis lives only in the engine's verdict.json /
+      // chair-output.md, and this tool's output replaces verdict.json — so it
+      // must be carried through or it is destroyed. Unlike the CLI there is no
+      // run-folder path to anchor on (`record` arrives inline), so it is an
+      // explicit input; omitted → null, never fabricated.
+      const verdict = buildVerdict(input.record, input.decisions || [],
+        { overallVerdict: input.overallVerdict });
       if (!input.render) {
         return textResult(fenceSidecarOutput(JSON.stringify(verdict)));
       }

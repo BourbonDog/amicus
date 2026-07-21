@@ -253,7 +253,14 @@ beyond `--critic`/`--lenses`, or deliberate mid-stage inspection — switch to
 
 ### Stage 4 — Tiered decisions (peer-validated)
 
-Read `<run-folder>/tally.json`. Every finding already carries the **peer-confidence tier** the
+Read **two** run-folder artifacts and join them on each finding's `id` (the run-global label,
+e.g. `A1`): `tally.json` for the tier, the `basis` counts, the `adjudications` and any `debate`
+decoration, and `tally-input.json` for the `claim` and `location` text. The claim lives **only**
+in `tally-input.json` — `tally.json` findings carry `id, raiser, severity, tier, basis,
+confidence, tierOverride, adjudications` and no claim — so every "show the claim" instruction
+below needs both sides of the join.
+
+Every finding already carries the **peer-confidence tier** the
 engine's tally computed (see *Key mechanics → §5.2 Scoring*, and COUNCIL-DESIGN.md for the full
 cascade): **Disputed** (strong peer pushback — `d ≥ 2` and `d > a`), **Confirmed** (≥ 2 peer
 agreements, agrees dominate), **Contested** (at least one live dispute), **Singleton** (at most one
@@ -322,18 +329,30 @@ Two artifacts are yours:
   (`src/council/verdict.js`). `<run-folder>/tally.json` is the record the engine's tally wrote;
   `<run-folder>/decisions.json` is the Stage-4 array. It parses both, calls `buildVerdict`, and
   writes the schema-stamped machine-readable record via the same atomic tmp+rename convention the
-  function always used. `--render` then refreshes `report.html` from the decided verdict — without
+  function always used. The chair's `overallVerdict` is **carried forward automatically** from the
+  run folder — the engine's `verdict.json` first, else the closing `VERDICT:` line of
+  `chair-output.md` — because those are its only two homes (`tally.json` and `run.json` carry no
+  copy) and this command overwrites the first of them. A chair that produced no verdict stays
+  `null`; nothing is ever invented.
+
+  `--render` then refreshes `report.html` from the decided verdict — without
   it you would hand the user a stale, pre-decision page. In Cowork this is **two `amicus_verdict`
   calls, not one** (the tool is pure/stateless and writes nothing unless `render: true` *and*
   `outDir` are both given): first call it with `record` (parsed `tally.json`) and `decisions`
-  (parsed `decisions.json`) and `render` omitted — it returns the decided verdict as fenced JSON;
+  (parsed `decisions.json`) and `overallVerdict` — read that last one from the engine's
+  `<run-folder>/verdict.json` before you overwrite it (`null` when the chair produced none); the
+  MCP tool receives `record` inline and has no run folder to recover it from, so unlike the CLI it
+  cannot carry it forward for you. With `render` omitted it returns the decided verdict as fenced JSON;
   write that JSON to `<run-folder>/verdict.json` yourself with the host's file tools, since the
-  tool does not persist it. Then call it again with the same `record`/`decisions` plus
+  tool does not persist it. Then call it again with the same `record`/`decisions`/`overallVerdict` plus
   `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on disk and
   returns the Markdown rendering for `report.md` below; it still does **not** write `verdict.json`.
 - `report.md` — Claude-authored: the chair's synthesis (read verbatim from
   `<run-folder>/chair-output.md`, including its closing `VERDICT:` line at the top of the report) +
-  the full Stage-4 decision log + a summary of what was applied (+ the "How Claude's review fared"
+  the full Stage-4 decision log (one row per finding: `id` + claim + decision — the claim text
+  comes from `tally-input.json`, joined on `id` exactly as in Stage 4, since `decisions.json`
+  and `tally.json` both carry only the id) + a summary of what was applied (+ the "How Claude's
+  review fared"
   readout when "Claude in the council" is on) + an **Optional elements** section whenever any
   element was ON: which elements ran; the "Withdrawn by raiser (debate mode)" list and re-vote
   verdict changes; and the standing disclosures — critic self-identification in cross-review

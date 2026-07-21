@@ -419,6 +419,11 @@ function getTools() {
         duplicateOf: z.string().nullable().optional(),
         tierOverride: z.object({ from: z.string(), to: z.string(), reason: z.string() }).nullable().optional(),
       })).optional().describe('Stage-4 per-finding decisions (default []).'),
+      overallVerdict: z.string().nullable().optional().describe(
+        "The chair's VERDICT line, read from the engine-written <runDir>/verdict.json " +
+        '(or the closing VERDICT: line of chair-output.md). Pass it through whenever you ' +
+        'overwrite verdict.json — it is the only copy, tally.json has none. Omit when the ' +
+        'chair was skipped; never author one yourself.'),
       render: z.boolean().optional().describe('Also return the markdown rendering of the decided verdict (and refresh report.html when outDir is given).'),
       outDir: z.string().optional().describe('Dir to write report.html into when render:true — resolved against the project dir and rejected if it escapes it. Omit to write nothing.'),
       project: z.string().optional().describe('Optional project directory path.'),
