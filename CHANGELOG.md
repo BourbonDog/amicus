@@ -31,7 +31,16 @@ All notable changes to Amicus are documented here. Format follows
   status` skipped entirely (its crash detection is guarded on `run.pid`) and that `amicus abort`
   could not fall back to killing, so the run was recoverable only by hand. The handler now
   captures the pid from the spawned child and checkpoints it immediately — the same value the
-  engine writes itself, recorded a beat earlier.
+  engine writes itself, recorded a beat earlier. The pid is written to its own
+  `spawn.pid` file rather than patched into `run.json`: the spawning process and the engine
+  child both write `run.json`, and `checkpoint` is a read-merge-write with no cross-process
+  lock, so a pid patch could clobber (or be clobbered by) the child's first checkpoint. Readers
+  prefer `run.json`'s own pid and fall back to `spawn.pid`.
+- **A malformed wave `metadata.json` no longer throws out of `amicus status` or `amicus abort`.**
+  `countWaveLegs` and `cascadeWave` both assumed the `legs` field was an array if it was present
+  at all, so a half-written or hand-edited record raised a `TypeError` past its caller. Both now
+  treat a non-array `legs` as no legs. `cascadeWave`'s wave-level abort mark is also guarded, so
+  a failure there can no longer discard the count of legs it had already marked.
 
 ## [4.0.0] - 2026-07-20
 

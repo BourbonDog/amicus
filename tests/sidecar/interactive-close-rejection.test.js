@@ -79,6 +79,11 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
   // on the whole bucket made this file pass in isolation but flake under
   // full-suite parallel load (it aborted the v4.0.0 push). Only a rejection
   // carrying our close()'s message can be the escape these tests pin.
+  //
+  // Narrowing loses nothing: Jest already fails a run on ANY unhandled
+  // rejection, so genuine leaks elsewhere in the teardown path are still
+  // caught project-wide — the bucket assertion here was a worse-attributed
+  // duplicate of that, not extra coverage.
   const ourRejections = () =>
     unhandledRejections.filter((r) => r?.message === CLOSE_REJECTION);
 
