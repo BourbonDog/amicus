@@ -15,4 +15,7 @@ describe('COUNCIL_FILES install list (spec §4.8)', () => {
   test('MODEL-NOTES.md stays if-missing (machine-local user data)', () => {
     expect(byFile['MODEL-NOTES.md']).toBe('if-missing');
   });
+  test('MANUAL-ORCHESTRATION.md is installed (overwrite)', () => {
+    expect(byFile['MANUAL-ORCHESTRATION.md']).toBe('overwrite');
+  });
 });

@@ -33,6 +33,7 @@ const COUNCIL_FILES = [
   { file: 'SKILL.md', mode: 'overwrite' },
   { file: 'COUNCIL-DESIGN.md', mode: 'overwrite' },
   { file: 'SEAT-BRIEFS.md', mode: 'overwrite' },
+  { file: 'MANUAL-ORCHESTRATION.md', mode: 'overwrite' },
   { file: 'MODEL-NOTES.md', mode: 'if-missing' },
 ];
 
