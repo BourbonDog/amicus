@@ -4,18 +4,17 @@
 /**
  * @module mcp-council-run
  * MCP surface for headless council runs (spec §8): the amicus_council_run
- * handler (15th tool, born-fenced) plus the council-awareness helpers that
- * amicus_status / amicus_list / amicus_abort call through the sessions-dir
- * pointer file. Lives outside mcp-server.js (grandfathered-oversized); the
- * spawn helper is INJECTED by mcp-server at call time to avoid a require
- * cycle.
+ * handler (15th tool, born-fenced). Lives outside mcp-server.js
+ * (grandfathered-oversized); the spawn helper is INJECTED by mcp-server at call
+ * time to avoid a require cycle. The council-awareness helpers that
+ * amicus_status / amicus_list / amicus_abort call now live in
+ * mcp-council-awareness.js and are re-exported from here.
  */
 
 const fs = require('fs');
 const path = require('path');
 const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
-const { RUNNING_VERSION } = require('./utils/version-info');
 const { isPathInside } = require('./project-root-allowlist');
 
 function textResult(text, isError) {
@@ -125,12 +124,20 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (typeof input.maxCost === 'number') { args.push('--max-cost', String(input.maxCost)); }
   if (input.gateway) { args.push('--gateway', input.gateway); }
 
-  try { helpers.spawnFn(args, runDir); } catch (err) {
+  let child;
+  try { child = helpers.spawnFn(args, runDir); } catch (err) {
     try {
       runState.checkpoint(runDir, { status: 'error', error: { code: 'INTERNAL', message: err.message }, completedAt: new Date().toISOString() });
     } catch { /* best-effort */ }
     return textResult(`Failed to start council run: ${err.message}`, true);
   }
+  // Record the child's pid NOW: the engine writes its own pid at startup, but a
+  // child that dies before that leaves a pid-less status:'running' run.json that
+  // crash detection skips and abort cannot signal. Written to its own file, not
+  // patched into run.json — the child owns run.json and a cross-process
+  // read-merge-write has no lock (see run-state.writeSpawnPid).
+  try { if (typeof child?.pid === 'number') { runState.writeSpawnPid(runDir, child.pid); } }
+  catch { /* best-effort */ }
 
   const body = JSON.stringify({
     schemaVersion: 2, type: 'council-run', runId, runDir, status: 'running',
@@ -142,126 +149,13 @@ async function handleCouncilRunTool(input, project, helpers) {
   return textResult(fenceSidecarOutput(body));
 }
 
-/** ---- council-awareness helpers (consumed by mcp-server status/list/abort) ---- */
-
-function elapsedOf(run) {
-  const end = run.completedAt || new Date().toISOString();
-  const ms = Math.max(0, new Date(end).getTime() - new Date(run.createdAt || end).getTime());
-  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
-}
-
-/** Status payload for a council runId, or null when the id is not a council run. */
-function buildCouncilStatusPayload(project, taskId) {
-  const ptr = runState.readPointer(project, taskId);
-  if (!ptr) { return null; }
-  const run = runState.readRun(ptr.runDir);
-  if (!run) { return null; }
-
-  // Crash detection: a running run.json whose engine pid is gone is 'error'.
-  if (run.status === 'running' && run.pid) {
-    try { process.kill(run.pid, 0); } catch (err) {
-      if (err.code !== 'EPERM') {
-        runState.checkpoint(ptr.runDir, {
-          status: 'error', completedAt: new Date().toISOString(),
-          error: { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' },
-        });
-        run.status = 'error';
-        run.error = { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' };
-      }
-    }
-  }
-
-  const stages = (run.stages || []).map(s => ({
-    name: s.name, status: s.status, waveId: s.waveId || null,
-  }));
-  const active = (run.stages || []).find(s => s.status === 'running') || null;
-  let legsTotal = null; let legsComplete = null;
-  if (active && active.waveId && active.project) {
-    try {
-      const { getSessionDir } = require('./session-manager');
-      const { TERMINAL_STATUSES } = require('./utils/result-schema');
-      const meta = JSON.parse(fs.readFileSync(
-        path.join(getSessionDir(active.project, active.waveId), 'metadata.json'), 'utf-8'));
-      const legs = meta.legs || [];
-      legsTotal = legs.length;
-      legsComplete = legs.filter((id) => {
-        try {
-          const m = JSON.parse(fs.readFileSync(
-            path.join(getSessionDir(active.project, id), 'metadata.json'), 'utf-8'));
-          return TERMINAL_STATUSES.includes(m.status);
-        } catch { return false; }
-      }).length;
-    } catch { /* stage wave not on disk yet */ }
-  }
-  const payload = {
-    taskId: run.runId, type: 'council-run', runId: run.runId, runDir: ptr.runDir,
-    status: run.status, currentStage: active ? active.name : null, stages,
-    legsTotal, legsComplete, elapsed: elapsedOf(run),
-    exitCode: run.exitCode !== undefined ? run.exitCode : null,
-    version: RUNNING_VERSION,
-  };
-  if (run.error) { payload.reason = `${run.error.code}: ${run.error.message}`; }
-  return payload;
-}
-
-/** amicus_list entries for every council pointer in the project. */
-function listCouncilRuns(project) {
-  const { sanitizePreview } = require('./sidecar/progress-fields');
-  const out = [];
-  for (const ptr of runState.listPointers(project)) {
-    const run = runState.readRun(ptr.runDir);
-    if (!run) { continue; }
-    let briefing = '';
-    try { briefing = fs.readFileSync(path.join(ptr.runDir, 'briefing.md'), 'utf-8'); }
-    catch { /* optional */ }
-    const active = (run.stages || []).find(s => s.status === 'running');
-    out.push({
-      id: run.runId, type: 'council-run', status: run.status, mode: 'headless',
-      model: null, agent: 'Plan', createdAt: run.createdAt,
-      briefing: sanitizePreview(briefing, 80),
-      stage: active ? active.name : null,
-    });
-  }
-  return out;
-}
-
-/**
- * Abort a council run via its pointer: checkpoint run.json aborted (abort-wins)
- * and cascade to the active stage's wave + legs so in-flight legs settle.
- * @returns {null|{notFound?: true}|{alreadyTerminal: true, status}|{aborted: true, cascaded: number}}
- */
-function abortCouncilRun(project, taskId) {
-  const ptr = runState.readPointer(project, taskId);
-  if (!ptr) { return null; }
-  const run = runState.readRun(ptr.runDir);
-  if (!run) { return null; }
-  if (run.status !== 'running') { return { alreadyTerminal: true, status: run.status }; }
-
-  const { markAborted } = require('./utils/session-abort');
-  const { getSessionDir } = require('./session-manager');
-  let cascaded = 0;
-  for (const s of run.stages || []) {
-    if (s.status !== 'running' || !s.waveId || !s.project) { continue; }
-    try {
-      const waveDir = getSessionDir(s.project, s.waveId);
-      let meta = {};
-      try { meta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8')); }
-      catch { /* wave record may not exist yet */ }
-      for (const legId of meta.legs || []) {
-        try { if (markAborted(getSessionDir(s.project, legId), 'council abort')) { cascaded++; } }
-        catch { /* skip leg */ }
-      }
-      markAborted(waveDir, 'council abort');
-    } catch { /* skip stage */ }
-  }
-  runState.checkpoint(ptr.runDir, { status: 'aborted', completedAt: new Date().toISOString() });
-  if (run.pid) {
-    try { require('./utils/abort-coordinator').waitThenKill(run.pid).catch(() => {}); }
-    catch { /* best-effort */ }
-  }
-  return { aborted: true, cascaded };
-}
+// The council-awareness helpers live in their own module; re-exported here so
+// mcp-server and cli-handlers-abort keep requiring one council MCP entry point.
+const awareness = require('./mcp-council-awareness');
 
 module.exports = {
-  handleCouncilRunTool, buildCouncilStatusPayload, listCouncilRuns, abortCouncilRun,
+  handleCouncilRunTool,
+  buildCouncilStatusPayload: awareness.buildCouncilStatusPayload,
+  listCouncilRuns: awareness.listCouncilRuns,
+  abortCouncilRun: awareness.abortCouncilRun,
 };

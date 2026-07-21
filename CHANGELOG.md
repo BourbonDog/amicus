@@ -5,6 +5,43 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`amicus abort` now cascades to every in-flight council leg, not just the primary wave of
+  each stage.** A stage can own several sub-waves — the chair's `ch1..ch4` retry/fallback/repair
+  chain, one solo per lens, a critic solo beside the seat wave, and the bounded Stage-1/Stage-2
+  repair re-prompts — but only a single `waveId` was recorded per stage (and the chair stage
+  recorded none at all), so the targeted cascade skipped those legs and left them to the
+  `waitThenKill` process-tree fallback. They were still killed, so this was never a leak or a
+  hang; what was lost were the per-leg `aborted` markers, an accurate `legsAborted` count, and a
+  faithful per-stage audit trail in `run.json`. Stage entries now carry a `waveIds` array
+  recording every sub-wave at launch time (documented in `schemas/council-run.schema.json`), and
+  the cascade targets the union of `waveId` + `waveIds`. In lens mode `stage1` previously
+  advertised only a phantom `-s1` wave that never launches, so *no* Stage-1 leg was reachable;
+  lens runs no longer record that `waveId` at all.
+- **`amicus status` now rolls up council legs across every sub-wave of the active stage.** It
+  counted only the stage's primary `waveId`, so a lens run — which has no seat wave — always
+  reported `legsTotal: null`, and a run with a critic omitted the critic's leg from the count
+  (e.g. `2` instead of `3` for two seats plus a critic). Note that `legsTotal` can now rise
+  mid-stage when a bounded repair re-prompt launches, which is a real additional model call.
+- **A council run spawned through `amicus_council_run` that died before its first checkpoint no
+  longer strands an unrecoverable record.** The MCP handler wrote `run.json` with
+  `status: "running"` and no `pid`, leaving the spawned CLI child to record its own pid at
+  startup; a child that died inside that window left a pid-less `running` run that `amicus
+  status` skipped entirely (its crash detection is guarded on `run.pid`) and that `amicus abort`
+  could not fall back to killing, so the run was recoverable only by hand. The handler now
+  captures the pid from the spawned child and checkpoints it immediately — the same value the
+  engine writes itself, recorded a beat earlier. The pid is written to its own
+  `spawn.pid` file rather than patched into `run.json`: the spawning process and the engine
+  child both write `run.json`, and `checkpoint` is a read-merge-write with no cross-process
+  lock, so a pid patch could clobber (or be clobbered by) the child's first checkpoint. Readers
+  prefer `run.json`'s own pid and fall back to `spawn.pid`.
+- **A malformed wave `metadata.json` no longer throws out of `amicus status` or `amicus abort`.**
+  `countWaveLegs` and `cascadeWave` both assumed the `legs` field was an array if it was present
+  at all, so a half-written or hand-edited record raised a `TypeError` past its caller. Both now
+  treat a non-array `legs` as no legs. `cascadeWave`'s wave-level abort mark is also guarded, so
+  a failure there can no longer discard the count of legs it had already marked.
+
 ## [4.0.0] - 2026-07-20
 
 The **headless council engine** release. `amicus council run` (CLI) and `amicus_council_run`

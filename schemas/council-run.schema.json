@@ -21,6 +21,7 @@
           "startedAt": { "type": ["string", "null"] },
           "completedAt": { "type": ["string", "null"] },
           "waveId": { "type": "string" },
+          "waveIds": { "type": "array", "items": { "type": "string" } },
           "taskIds": { "type": "array", "items": { "type": "string" } }
         }
       }

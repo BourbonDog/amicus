@@ -110,8 +110,14 @@ async function runCouncil(options, deps = {}) {
       briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }), { mode: 0o600 });
 
     // ---- Stage 1: independent reviews ----
-    runState.updateStage(o.runDir, 'stage1',
-      { status: 'running', startedAt: now(), waveId: `${o.runId}-s1`, project: o.runDir });
+    // Lens mode launches one solo per seat instead of a `-s1` seat wave, so it
+    // has no primary wave to name — run-stages records each real sub-wave into
+    // waveIds at launch. Advertising a `-s1` that never exists made both the
+    // abort cascade and the status leg rollup chase a phantom.
+    runState.updateStage(o.runDir, 'stage1', {
+      status: 'running', startedAt: now(), project: o.runDir,
+      ...(o.lenses ? {} : { waveId: `${o.runId}-s1` }),
+    });
     const s1 = await runStage1(ctx);
     runState.updateStage(o.runDir, 'stage1', {
       status: 'complete', completedAt: now(),
@@ -173,6 +179,7 @@ async function runCouncil(options, deps = {}) {
     });
     fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
     const attemptChair = async (model, waveId) => {
+      runState.appendStageWave(o.runDir, 'chair', waveId);
       const solo = await launchers.launchSolo({
         model, prompt: packet, project: o.runDir, waveId,
         timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
@@ -228,6 +235,7 @@ async function runCouncil(options, deps = {}) {
     // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
     let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
     if (chairText && !overallVerdict && !overBudget()) {
+      runState.appendStageWave(o.runDir, 'chair', `${o.runId}-ch4`);
       const repair = await launchers.launchSolo({
         model: actualChair, prompt: stage2.buildChairRepairPrompt(),
         project: o.runDir, waveId: `${o.runId}-ch4`,
