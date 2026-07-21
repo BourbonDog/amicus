@@ -25,6 +25,7 @@ const briefings = require('./briefings');
 const stage2 = require('./briefings-stage2');
 const { parseJudgeOutput } = require('./parse-stage2');
 const { materializeReviews, sanitizeName } = require('./run-launch');
+const runState = require('./run-state');
 
 function isAbortExit(code) { return code === 130 || code === 143; }
 
@@ -40,20 +41,30 @@ async function launchStage1(ctx) {
     noValidateModel: o.noValidateModel,
   };
   const launches = [];
+  // Record every sub-wave BEFORE it launches: `amicus abort` cascades over
+  // stages[].waveIds, so an id written after the launch leaves that leg
+  // reachable only by the pid kill (no per-leg abort marker).
+  const record = (waveId) => runState.appendStageWave(o.runDir, 'stage1', waveId);
   if (o.lenses) {
-    o.models.forEach((m, i) => launches.push(launchers.launchSolo({
-      ...common, model: m, waveId: `${o.runId}-l${i + 1}`,
-      prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
-    })));
+    o.models.forEach((m, i) => {
+      const waveId = `${o.runId}-l${i + 1}`;
+      record(waveId);
+      launches.push(launchers.launchSolo({
+        ...common, model: m, waveId,
+        prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
+      }));
+    });
   } else {
     const seats = o.models.filter(m => m !== o.critic);
     if (seats.length > 0) {
+      record(`${o.runId}-s1`);
       launches.push(launchers.launchWave({
         ...common, models: seats, waveId: `${o.runId}-s1`,
         prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
       }));
     }
     if (o.critic) {
+      record(`${o.runId}-c1`);
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`,
         prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
@@ -102,9 +113,11 @@ async function runStage1(ctx) {
     while (!res.ok && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
+      const waveId = `${o.runId}-p${repairSeq}`;
+      runState.appendStageWave(o.runDir, 'stage1', waveId);
       const solo = await ctx.launchers.launchSolo({
         model: m.modelInput, prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors }),
-        project: o.runDir, waveId: `${o.runId}-p${repairSeq}`, timeout: o.timeout,
+        project: o.runDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel,
       });
       ctx.addWave(solo.wave);
@@ -141,6 +154,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings }) {
     labels: labels.entries.map(e => e.label),
     findingIds: globalFindings.map(f => f.id),
   };
+  runState.appendStageWave(o.runDir, 'stage2', `${o.runId}-s2`);
   const { wave, exitCode } = await ctx.launchers.launchWave({
     models: judges, prompt: bundle, project: ctx.scratchDir, waveId: `${o.runId}-s2`,
     timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
@@ -163,9 +177,11 @@ async function runStage2(ctx, { reviews, labels, globalFindings }) {
     while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
+      const waveId = `${o.runId}-q${repairSeq}`;
+      runState.appendStageWave(o.runDir, 'stage2', waveId);
       const solo = await ctx.launchers.launchSolo({
         model: judge, prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors }),
-        project: ctx.scratchDir, waveId: `${o.runId}-q${repairSeq}`, timeout: o.timeout,
+        project: ctx.scratchDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel,
       });
       ctx.addWave(solo.wave);

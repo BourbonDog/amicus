@@ -78,6 +78,21 @@ function updateStage(runDir, name, patch) {
   return checkpoint(runDir, { stages });
 }
 
+/**
+ * Append a sub-wave id to one stage's `waveIds` (dedup, launch order preserved).
+ * A stage can have several sub-waves in flight at once (lens solos, a critic
+ * solo alongside the seat wave) or in sequence (the chair's ch1..ch4 chain), so
+ * the single `waveId` field cannot describe them. `amicus abort` cascades over
+ * this list to mark every in-flight leg instead of relying on the pid kill.
+ */
+function appendStageWave(runDir, name, waveId) {
+  const existing = readRun(runDir) || {};
+  const stage = (existing.stages || []).find(s => s && s.name === name) || {};
+  const waveIds = Array.isArray(stage.waveIds) ? stage.waveIds : [];
+  if (waveIds.includes(waveId)) { return existing; }
+  return updateStage(runDir, name, { waveIds: [...waveIds, waveId] });
+}
+
 function stripPrefix(runId) { return String(runId).replace(/^council-/, ''); }
 
 /** `<project>/.claude/amicus_sessions/council-<runId>.json` */
@@ -117,6 +132,6 @@ function listPointers(project) {
 }
 
 module.exports = {
-  RUN_FILE, readRun, initRun, checkpoint, updateStage,
+  RUN_FILE, readRun, initRun, checkpoint, updateStage, appendStageWave,
   pointerPath, writePointer, readPointer, listPointers,
 };

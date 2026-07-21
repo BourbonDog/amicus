@@ -225,9 +225,26 @@ function listCouncilRuns(project) {
   return out;
 }
 
+/** Mark one sub-wave and its legs aborted. @returns {number} legs newly marked */
+function cascadeWave(project, waveId) {
+  const { markAborted } = require('./utils/session-abort');
+  const { getSessionDir } = require('./session-manager');
+  const waveDir = getSessionDir(project, waveId);
+  let meta = {};
+  try { meta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8')); }
+  catch { /* wave record may not exist yet */ }
+  let n = 0;
+  for (const legId of meta.legs || []) {
+    try { if (markAborted(getSessionDir(project, legId), 'council abort')) { n++; } }
+    catch { /* skip leg */ }
+  }
+  markAborted(waveDir, 'council abort');
+  return n;
+}
+
 /**
  * Abort a council run via its pointer: checkpoint run.json aborted (abort-wins)
- * and cascade to the active stage's wave + legs so in-flight legs settle.
+ * and cascade to every in-flight sub-wave + its legs so they settle.
  * @returns {null|{notFound?: true}|{alreadyTerminal: true, status}|{aborted: true, cascaded: number}}
  */
 function abortCouncilRun(project, taskId) {
@@ -237,22 +254,17 @@ function abortCouncilRun(project, taskId) {
   if (!run) { return null; }
   if (run.status !== 'running') { return { alreadyTerminal: true, status: run.status }; }
 
-  const { markAborted } = require('./utils/session-abort');
-  const { getSessionDir } = require('./session-manager');
   let cascaded = 0;
   for (const s of run.stages || []) {
-    if (s.status !== 'running' || !s.waveId || !s.project) { continue; }
-    try {
-      const waveDir = getSessionDir(s.project, s.waveId);
-      let meta = {};
-      try { meta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8')); }
-      catch { /* wave record may not exist yet */ }
-      for (const legId of meta.legs || []) {
-        try { if (markAborted(getSessionDir(s.project, legId), 'council abort')) { cascaded++; } }
-        catch { /* skip leg */ }
-      }
-      markAborted(waveDir, 'council abort');
-    } catch { /* skip stage */ }
+    if (s.status !== 'running' || !s.project) { continue; }
+    // A stage can own several sub-waves — the chair's ch1..ch4 chain, lens
+    // solos, a critic solo beside the seat wave, bounded repairs. `waveId`
+    // names only the primary one, so target the union with `waveIds`.
+    const subWaves = new Set(
+      [s.waveId, ...(Array.isArray(s.waveIds) ? s.waveIds : [])].filter(Boolean));
+    for (const waveId of subWaves) {
+      try { cascaded += cascadeWave(s.project, waveId); } catch { /* skip sub-wave */ }
+    }
   }
   runState.checkpoint(ptr.runDir, { status: 'aborted', completedAt: new Date().toISOString() });
   if (run.pid) {

@@ -5,7 +5,19 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
-## [4.0.0] - 2026-07-20
+### Fixed
+
+- **`amicus abort` now cascades to every in-flight council leg, not just the primary wave of
+  each stage.** A stage can own several sub-waves — the chair's `ch1..ch4` retry/fallback/repair
+  chain, one solo per lens, a critic solo beside the seat wave, and the bounded Stage-1/Stage-2
+  repair re-prompts — but only a single `waveId` was recorded per stage (and the chair stage
+  recorded none at all), so the targeted cascade skipped those legs and left them to the
+  `waitThenKill` process-tree fallback. They were still killed, so this was never a leak or a
+  hang; what was lost were the per-leg `aborted` markers, an accurate `legsAborted` count, and a
+  faithful per-stage audit trail in `run.json`. Stage entries now carry a `waveIds` array
+  recording every sub-wave at launch time (documented in `schemas/council-run.schema.json`), and
+  the cascade targets the union of `waveId` + `waveIds`. In lens mode `stage1` previously
+  advertised only a phantom `-s1` wave that never launches, so *no* Stage-1 leg was reachable.
 
 The **headless council engine** release. `amicus council run` (CLI) and `amicus_council_run`
 (MCP) execute the full adjudicated pipeline — Stage-1 independent reviews → anonymized peer

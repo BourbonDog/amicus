@@ -173,6 +173,7 @@ async function runCouncil(options, deps = {}) {
     });
     fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
     const attemptChair = async (model, waveId) => {
+      runState.appendStageWave(o.runDir, 'chair', waveId);
       const solo = await launchers.launchSolo({
         model, prompt: packet, project: o.runDir, waveId,
         timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
@@ -228,6 +229,7 @@ async function runCouncil(options, deps = {}) {
     // ---- Chair VERDICT line (one repair re-prompt, spec §5) ----
     let overallVerdict = chairText ? parseChairVerdict(chairText) : null;
     if (chairText && !overallVerdict && !overBudget()) {
+      runState.appendStageWave(o.runDir, 'chair', `${o.runId}-ch4`);
       const repair = await launchers.launchSolo({
         model: actualChair, prompt: stage2.buildChairRepairPrompt(),
         project: o.runDir, waveId: `${o.runId}-ch4`,
