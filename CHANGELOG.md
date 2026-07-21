@@ -5,6 +5,12 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-07-20
+
+Follow-up fixes to the v4.0.0 council engine: `amicus abort` and `amicus status` now see every
+sub-wave a stage launched, a council run that dies before its first checkpoint is recoverable
+instead of stranded, and neither command can be thrown by a malformed wave record.
+
 ### Fixed
 
 - **`amicus abort` now cascades to every in-flight council leg, not just the primary wave of
