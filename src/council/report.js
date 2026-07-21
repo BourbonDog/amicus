@@ -28,9 +28,23 @@ function toModel(verdict, wave) {
     return {
       id: f.id, severity: f.severity, raiser: f.raiser, tier: f.tier,
       basis: f.basis || { a: 0, d: 0, n: 0 }, decision: f.decision || null,
-      applied: f.applied === true, byJudge,
+      applied: f.applied === true, byJudge, debate: f.debate || null,
     };
   });
+  // 'movements' is deliberately re-vote-only (defended/amended): a withdrawn or
+  // no-response finding is never bundled into the re-vote (run-debate.js's
+  // bundleFor()), so its tier — even if it happens to differ from previousTier —
+  // was never "moved after re-vote". Listing it there would read as "still live,
+  // just downgraded" when it was actually retracted; withdrawn findings get their
+  // own list below so a reader can tell the two apart.
+  const debate = {
+    present: findings.some(f => f.debate) === true,
+    withdrawn: verdict.findings.filter(f => f.debate && f.debate.action === 'withdrawn')
+      .map(f => ({ id: f.id, previousTier: f.debate.previousTier, tier: f.tier })),
+    movements: verdict.findings.filter(f => f.debate && f.debate.action !== 'withdrawn' && f.debate.action !== 'no-response'
+        && f.debate.previousTier && f.debate.previousTier !== f.tier)
+      .map(f => ({ id: f.id, action: f.debate.action, previousTier: f.debate.previousTier, tier: f.tier })),
+  };
   const runStats = verdict.runStats || [];
   const costRows = runStats.map(r => ({
     model: r.model, status: r.status, durationMs: r.durationMs,
@@ -43,7 +57,7 @@ function toModel(verdict, wave) {
       chair: verdict.chair, council: judges, claudeInCouncil: verdict.claudeInCouncil === true,
     },
     tierCounts: verdict.tierCounts || { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 },
-    judges, findings,
+    judges, findings, debate,
     streetCred: verdict.streetCred || [],
     cost: { rows: costRows, total },
   };
@@ -90,6 +104,23 @@ function renderMd(m) {
       out.push(`- **${f.id}** (${f.severity}, raiser ${f.raiser}) — a${f.basis.a}/d${f.basis.d}/n${f.basis.n}${dec}`);
     }
     out.push('');
+  }
+
+  if (m.debate.present) {
+    out.push('\n## Debate round\n');
+    if (m.debate.withdrawn.length) {
+      out.push('**Withdrawn by raiser:**');
+      for (const w of m.debate.withdrawn) {
+        const arrow = w.previousTier && w.previousTier !== w.tier ? `${w.previousTier} → ${w.tier}` : (w.previousTier || w.tier);
+        out.push(`- ${w.id}: ${arrow} (withdrawn — no longer live)`);
+      }
+      out.push('');
+    }
+    if (m.debate.movements.length) {
+      out.push('**Tier movements after re-vote:**');
+      for (const mv of m.debate.movements) { out.push(`- ${mv.id}: ${mv.previousTier} → ${mv.tier} (${mv.action})`); }
+      out.push('');
+    }
   }
 
   out.push('## Cost\n');
