@@ -77,7 +77,9 @@ describe('SKILL.md fast-path pins (spec §4)', () => {
     // produces crossreview-matrix.md or verdict.md. Those names may appear
     // ONCE as a retirement note (so a reader migrating off the ritual is not
     // left hunting for them) but must not be listed as fast-path artifacts.
-    const outputSection = SKILL.slice(SKILL.indexOf('## Output & naming'), SKILL.indexOf('## Files'));
+    const outputSection = SKILL.slice(
+      mustIndexOf(SKILL, '## Output & naming', 'SKILL.md "## Output & naming" heading'),
+      mustIndexOf(SKILL, '## Files', 'SKILL.md "## Files" heading'));
     expect(outputSection.length).toBeGreaterThan(0);
     expect(outputSection).not.toContain('crossreview-matrix.md');
     expect(outputSection).not.toContain('verdict.md');
