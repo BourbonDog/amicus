@@ -36,6 +36,10 @@ non-Claude chairman + per-model inspectable artifacts.
   is now engine-native — each review wave is ONE `amicus fanout --json` call returning structured
   run documents — but scoring, tallying, anonymization, and synthesis remain Claude's manual work.
   No backend, no parsing code beyond reading JSON fields. Deterministic arithmetic/formatting/schema helpers under `amicus council` (findings validation, tier tally, street-cred, ledger) are sanctioned; judgment, synthesis, anonymization, and de-anonymization remain Claude's inline work.
+  _(v4.1 annotation — superseded by the engine in the fast path: `amicus council run` now performs
+  the anonymization, scoring, tallying, and chair-dispatch steps above headlessly, with no Claude
+  runtime in the loop. This v3 note remains an accurate historical record of the design this repo
+  shipped from v3 through v4.0's manual path; see §13.)_
 
 ## 3. What changes vs. v1
 
@@ -156,6 +160,9 @@ The cross-review matrix shows both; the ledger and Stage-0 bench recommendations
 - Default: Claude **recommends a non-Claude chair** from the council each run (often the
   strongest reasoner / best reviewer-reliability) and the user confirms at launch.
 - The chair **may** also be a Stage-1 council member (it sees the anonymized bundle + scores).
+  _(v4.1 annotation: the engine fast path's `amicus council run` rejects this — the chair must
+  NOT be a bench seat, checked pre-flight, exit 1 before any spend. This flexibility survives only
+  in the manual path; see `MANUAL-ORCHESTRATION.md` and §13.)_
 - **Fallback order if the chair fails:** re-run → promote next-best council model →
   **Claude chairs only as last resort, with explicit disclosure** that the verdict is no longer
   fully independent.
@@ -291,3 +298,36 @@ The debate agent's parallel-panels + cross-panel synthesis maps to two full coun
 different benches or lens-sets plus a super-chair synthesis of where the panels agree,
 disagree, and what each missed. Deferred: cost doubles and the run-folder conventions need
 namespacing. Revisit if lens runs prove valuable.
+
+## 13. v4.1 — the engine fast path
+
+`amicus council run` (v4.0; extended in v4.1 with `--debate`, `--claude-review`, and `council
+verdict --render`) is the **headless realization of Stages 1–3 plus the Stage-5 deterministic
+artifacts** described above: the Stage-1 review wave, per-leg findings validation and bounded
+repair, anonymization and run-global finding-id rewriting, the identical judge bundle, the
+Stage-2 cross-review wave, the optional Stage-2.5 debate round (§12.3), the tally, the chair
+synthesis, and the deterministic `verdict.json` (undecided) + `report.html` — all as **one
+command with no Claude runtime** in the loop. `SKILL.md`'s engine fast path drives this directly.
+The hand-driven Stage 1 → 2 → 3 waves this document describes above remain available as
+`MANUAL-ORCHESTRATION.md` — the fallback for the engine being unavailable/misbehaving, a fully
+custom per-seat brief beyond `--critic`/`--lenses`, or deliberate mid-stage inspection.
+
+**Stage 4 stays human, always.** The engine is report-only: `amicus council run` never
+fabricates an accept/deny decision. Claude still drives Stage 4 (§4) and finalizes the verdict via
+`amicus council verdict --decisions <decisions.json> --render` (§4, Stage 5) — the fast path
+changes the *transport* for Stages 1–3 plus the Stage-5 artifacts, not the decision authority of
+Stage 4.
+
+**§12.4 (chair verdict scale) is standard-on in the fast path.** What was an opt-in menu item in
+the manual path is now baked into `amicus council run`'s chair packet unconditionally — every
+headless chair closes with the hard questions and a parseable `VERDICT:` line, surfaced as
+`overallVerdict` in `verdict.json`. There is no toggle for it on the engine path; it is always on.
+
+**§12.3 (debate mode) headless realization: `--debate` on `council run`.** The Stage-2.5 rebuttal
+round described in §12.3 is implemented headlessly in `src/council/run-debate.js`
+(orchestration) + `src/council/debate.js` (pure tally-input reassembly) +
+`src/council/briefings-debate.js` (rebuttal/re-vote prompt templates) — same mechanics, same
+exactly-one-round rule, same withdrawn-findings-auto-denied outcome (§12.3), now driven by the
+engine instead of Claude's hand-launched solos/waves. The round's summary lands in `run.json`'s
+`debate` object and each affected finding's `findings[].debate` decoration — see
+[docs/council.md](../../docs/council.md) for the field-by-field reference.

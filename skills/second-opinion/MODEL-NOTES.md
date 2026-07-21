@@ -8,6 +8,9 @@ _Last updated: 2026-07-14 (v2.2.0 fold-back: v3.1 optional council elements veri
 claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see changelog)._
 
 ## Global operating rules (all models)
+- **Fast path:** `council run` applies `--agent Plan` / `--no-context` / `--summary-length
+  verbose` and the no-tools preambles automatically; the flag rules below govern the manual path
+  and sidecar solos.
 - **Council runs are headless by design** (autonomous batch work): `fanout` is headless by
   definition; solo runs use `--no-ui`. Interactive GUI sessions are for the `sidecar` chat skill,
   not councils.

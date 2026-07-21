@@ -80,8 +80,12 @@ describe('B22 — Stage 5 verdict transport', () => {
 
 describe('B22 — commands/council.md mentions the new subs', () => {
   const cmd = read('commands/council.md');
-  it('mentions both amicus council validate and amicus council verdict', () => {
-    expect(cmd).toMatch(/amicus council validate/);
+  // v4.1 §4.9 re-anchor: the rewrite replaced the per-subcommand narrative
+  // (validate/tally as literal commands) with one `amicus council run` call, so
+  // the "new subs" this pin cares about are the ones the fast-path narrative
+  // actually keeps as literal command strings.
+  it('mentions both amicus council run and amicus council verdict', () => {
+    expect(cmd).toMatch(/amicus council run/);
     expect(cmd).toMatch(/amicus council verdict/);
   });
 });
@@ -93,28 +97,33 @@ describe('B42 — commands/council.md states the pipeline in true order', () => 
   const bodyIdx = mustIndexOf(cmd, '$ARGUMENTS', 'commands/council.md $ARGUMENTS marker');
   const body = cmd.slice(bodyIdx);
 
-  it('still mentions both amicus council validate and amicus council verdict (hard pin)', () => {
-    expect(cmd).toMatch(/amicus council validate/);
+  it('still mentions both amicus council run and amicus council verdict (hard pin)', () => {
+    expect(cmd).toMatch(/amicus council run/);
     expect(cmd).toMatch(/amicus council verdict/);
   });
 
-  it('validate is tied to the Stage-1/leg review findings, not to a post-wave step', () => {
-    const idx = mustIndexOf(body, 'amicus council validate', 'commands/council.md body validate mention');
-    const before = body.slice(Math.max(0, idx - 200), idx);
-    expect(before).toMatch(/review/i);
-  });
-
-  it('tally is mentioned after cross-review and before the chair/synthesis reference', () => {
+  it('the engine runs validate, cross-review, tally, and chair internally, named in true pipeline order', () => {
+    // v4.1 §4.9 re-anchor: `amicus council validate`/`amicus council tally` no
+    // longer appear as literal commands in the rewrite — the engine runs them
+    // internally, named as bare stage words in the "the engine runs ...
+    // internally" sentence. mustIndexOf keeps this loud if a future reword
+    // drops one of the words instead of silently matching -1.
+    const validateIdx = mustIndexOf(body, 'validate', 'commands/council.md body validate mention');
     const crossReviewIdx = mustIndexOf(body, 'cross-review', 'commands/council.md body cross-review mention');
-    const tallyIdx = mustIndexOf(body, 'amicus council tally', 'commands/council.md body tally mention');
+    const tallyIdx = mustIndexOf(body, 'tally', 'commands/council.md body tally mention');
     const chairIdx = mustIndexOf(body, 'chair', 'commands/council.md body chair mention');
+    expect(crossReviewIdx).toBeGreaterThan(validateIdx);
     expect(tallyIdx).toBeGreaterThan(crossReviewIdx);
-    expect(tallyIdx).toBeLessThan(chairIdx);
+    expect(chairIdx).toBeGreaterThan(tallyIdx);
   });
 
-  it('verdict is mentioned after the accept/deny decision pass', () => {
+  it('verdict is mentioned after the accept/deny decision pass, and the run call precedes accept/deny', () => {
+    // Re-anchored to the true v4.1 pipeline: the `amicus council run` mention
+    // → `accept/deny` → `amicus council verdict`.
+    const runIdx = mustIndexOf(body, 'amicus council run', 'commands/council.md body run mention');
     const decisionIdx = mustIndexOf(body, 'accept/deny', 'commands/council.md body accept/deny mention');
     const verdictIdx = mustIndexOf(body, 'amicus council verdict', 'commands/council.md body verdict mention');
+    expect(decisionIdx).toBeGreaterThan(runIdx);
     expect(verdictIdx).toBeGreaterThan(decisionIdx);
   });
 });

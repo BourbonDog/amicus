@@ -21,6 +21,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 
 - [The pipeline, end to end](#the-pipeline-end-to-end)
 - [`amicus council run`](#amicus-council-run)
+  - [Debate mode](#debate-mode)
 - [`amicus council validate`](#amicus-council-validate)
 - [`amicus council tally`](#amicus-council-tally)
 - [`amicus council verdict`](#amicus-council-verdict)
@@ -200,6 +201,49 @@ $ amicus council run --models gemini,glm --chair deepseek \
 Consumers gate on **tiers + the chair verdict line** (`overallVerdict`), per the engine's
 report-only Stage-4 policy. Headless runs pin `meta.claudeInCouncil: false`,
 `meta.runType: "headless"`, and the chair is excluded from the street-cred universe.
+
+### Debate mode
+
+`--debate` adds a **Stage-2.5 rebuttal round** between cross-review and the final tally
+(COUNCIL-DESIGN.md §12.3): **provisional tally → defense → re-vote → final tally**, exactly
+one round.
+
+1. **Provisional tally.** Immediately after Stage-2 cross-review, the engine tallies with
+   `--no-ledger` and writes `tally-provisional.json`. If nothing landed Contested or Disputed,
+   there is nothing to debate — the engine skips straight to the final tally
+   (`debate.outcome: "nothing-to-debate"`).
+2. **Defense.** Every Contested/Disputed finding goes back to its raiser as one concurrent solo
+   run — `rebuttal-<model>.md` per raiser — asking for exactly one of `DEFEND` / `AMEND` /
+   `WITHDRAW` per finding. A dead or unparseable defense leg means the original claim stands
+   undefended.
+3. **Re-vote.** Defended/amended findings go back to the judges who disputed them, as ONE
+   shared fanout wave — `revote-bundle.md` (the shared prompt, written to the run dir like
+   Stage 2's `bundle-stage2.md`) + `revote-<model>.md` per judge. A missing/unparseable re-vote
+   line leaves that judge's original verdict standing.
+4. **Final tally.** The engine reassembles the tally input with the defense/re-vote outcomes
+   folded in and re-tallies — this final, post-rebuttal tally is the one that appends to the
+   reliability ledger (unless `--no-ledger`/a lens run overrides that). Withdrawn findings stay
+   in `findings[]` and are auto-recorded `denied` at Stage 4 — never presented for a user
+   decision.
+
+**Exactly one round** — there is no second defense/re-vote cycle; whatever remains unsettled
+after the re-vote keeps its final tier.
+
+**Where it shows up:**
+- `run.json`'s `debate` object summarizes the round: `{enabled, outcome, contested, disputed,
+  defended, amended, withdrawn, noResponse, revoteJudges, revoteApplied, verdictChanges}`.
+  `outcome` is `"nothing-to-debate"`, `"ran"`, or `"skipped-cost-ceiling"` (the whole-run cost
+  ceiling was hit before a warranted re-vote).
+- Every debated finding in `tally.json`/`verdict.json` carries a `findings[].debate` object —
+  `{action: "defended"|"amended"|"withdrawn"|"no-response", previousTier}` — decorating the
+  finding with what happened in the round and the tier it held before the re-vote.
+- Extra run-dir artifacts, written only when a defense/re-vote actually ran:
+  `tally-provisional.json`, `revote-bundle.md`, `debate.json` (the round's structured record),
+  `rebuttal-<model>.md` × (raisers), `revote-<model>.md` × (disputing judges).
+- `--claude-review <file>` enters Claude's own review (from a file, no leg launched) as a judged
+  entry; per the reserved-seat rule, it is never asked to defend in the debate round — its
+  Contested/Disputed findings simply stand, the same "originals stand" outcome as a dead defense
+  leg.
 
 ---
 
@@ -396,6 +440,21 @@ unchanged.
 **Write path:** always atomic — a `<out>.tmp-<pid>` file is written first, then renamed over the
 target (`writeVerdictAtomic`), matching the repo's `wave.json` convention. Default output path is
 `./verdict.json`; override with `-o`/`--out`.
+
+**Re-rendering after Stage 4 (`--render`).** `council verdict`'s `--render` flag refreshes
+`report.html` next to the freshly-decided verdict in the same call — without it, `report.html`
+stays the engine's undecided pre-Stage-4 render, and a user opening it would see decisions that
+were never actually made. It calls the same renderer `amicus council report` uses
+(`buildReport(..., {format: 'html'})`) and writes the HTML into the output path's directory; a
+render failure after a successful verdict write reports the error but leaves `verdict.json` on
+disk (re-run `amicus council report <verdict.json> --html` manually to recover — the verdict
+itself is not lost). The MCP equivalent is `amicus_verdict`'s `render: true` + `outDir:
+<run-folder>`. Because that tool is pure/stateless and writes nothing unless both are given, this
+is a **second** call after the first: call once with `record`/`decisions` and no `render` to get
+the decided verdict back as JSON and write it to `<run-folder>/verdict.json` yourself, then call
+again with `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on
+disk and also returns the verdict's Markdown rendering (for `report.md`); it still does not write
+`verdict.json` itself.
 
 **Windows PowerShell 5.1 caveat** (also called out in SKILL.md): redirecting `council tally`'s
 `--json` output with a bare `>` writes UTF-16 under legacy PowerShell 5.1, which then makes
