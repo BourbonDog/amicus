@@ -5,6 +5,77 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-07-21
+
+The `second-opinion` skill stops hand-driving councils. Stages 1–3 and the Stage-5 artifacts
+collapse into a single `amicus council run`, leaving Claude only the stages that genuinely need
+judgement — intake, decisions, and lessons. The engine gains an optional rebuttal round so a
+finding's author can answer the reviewers who disputed it, and Claude can now enter its own review
+into the bundle without ever being launched as a model leg.
+
+### Added
+
+- **Skill fast path.** `skills/second-opinion/SKILL.md` now delegates Stages 1–3 (and the Stage-5
+  artifact materialization) to one `amicus council run` invocation; the human stages (0 intake,
+  4 decisions, 6 lessons) stay Claude-orchestrated. The manual mechanics are preserved verbatim in
+  the new `skills/second-opinion/MANUAL-ORCHESTRATION.md` as the documented fallback for when the
+  engine is unavailable or a case the fast path cannot express.
+- **Headless debate mode** — `amicus council run --debate` / `amicus_council_run {debate:true}`.
+  A Stage-2.5 rebuttal round runs between cross-review and the final tally: findings that came out
+  Contested or Disputed go back to the model that raised them, which defends, amends, or withdraws
+  each; the judges who disputed them then re-vote; a final tally folds the outcome in. Exactly one
+  round, structurally — there is no edge back into a debate stage. `run.json` gains an additive
+  `debate` summary, tally/verdict findings gain a `debate` decoration, and both report renderers
+  gain a "Debate round" section. The Council Review Action gains a `debate` input (default off),
+  and withdrawn findings are excluded from its PR annotations.
+- **`--claude-review <file>` / `claudeReviewFile`.** Enters Claude's own review as judged review
+  N+1 from a file. No model leg is ever launched for it and it may never chair — `claude` is a
+  reserved seat name that is rejected pre-flight in `--models`, `--chair` and `--critic` on such a
+  run.
+- **`--render` on `council verdict`, `render:true` on `amicus_verdict`.** Refreshes `report.html`
+  from the decided verdict. The MCP tool also returns the markdown rendering; it writes only when
+  an `outDir` inside the project is supplied, and its `readOnlyHint` is now correctly `false`.
+- **`--no-cost-gate` on `council run`.** Disables the per-leg price gate for the whole run —
+  repairs, chair chain and debate legs included — in one place instead of per invocation.
+
+### Fixed
+
+- **`postinstall` now installs `SEAT-BRIEFS.md`.** It shipped in the tarball but was never copied
+  into `~/.claude/skills/second-opinion/`, so the seat briefing reference has been missing from
+  every installation to date.
+- **`amicus council verdict` no longer discards the chair's verdict.** Writing the decided verdict
+  over the engine's one dropped `overallVerdict` to `null`, because the tally record it is built
+  from does not carry it. `runVerdict` now recovers it from the run folder — the engine's
+  `verdict.json` when present (guarded on `runId`, so a foreign file cannot inject another run's
+  verdict), otherwise by re-parsing `chair-output.md` with the engine's own chair parser. A run
+  whose chair was skipped still yields `null`; nothing is ever invented. `amicus_verdict` had the
+  same loss on the Cowork path and gains an explicit optional `overallVerdict` input, since the MCP
+  tool receives a record inline with no run folder to recover from.
+
+### Documentation
+
+- **The skill's Stage 4 and Stage 5 now name where finding claims actually live.** Both stages
+  instructed the reader to show each finding's claim while pointing only at `tally.json`, whose
+  findings carry tiers and adjudications but no `claim`. The claim and location live in
+  `tally-input.json`; both stages now state the join (on finding `id`) explicitly.
+
+### Changed
+
+- **`claude` can no longer be promoted as fallback chair on any run.** When a configured chair
+  dies, the engine promotes another model by reliability; `claude` is now excluded unconditionally.
+  This affects runs that never use `--claude-review`, because the reliability ledger has no way to
+  distinguish a file-sourced `claude` row from a real leg — and promoting it would select a chair
+  the engine cannot launch.
+- **`npm i -g amicus@4.1` rewrites the installed `SKILL.md`** to the fast path (existing
+  product-code overwrite policy). `MODEL-NOTES.md` remains machine-local and is never overwritten.
+  Rollback is a reinstall of 4.0.x.
+
+### Notes
+
+- All changes are additive: the council document family stays `schemaVersion: 2`, the MCP tool
+  count stays 15 (new inputs only), and a run using none of the new flags produces byte-identical
+  artifacts to 4.0.1. No migration is required.
+
 ## [4.0.1] - 2026-07-20
 
 Follow-up fixes to the v4.0.0 council engine: `amicus abort` and `amicus status` now see every
