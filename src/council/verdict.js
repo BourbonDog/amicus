@@ -29,7 +29,7 @@ function buildVerdict(record, decisions = [], opts = {}) {
     findings: record.findings.map(f => {
       const d = byId.get(f.id) || {};
       const tierOverride = d.tierOverride || f.tierOverride || null;
-      return {
+      const out = {
         id: f.id, raiser: f.raiser, severity: f.severity,
         tier: tierOverride ? tierOverride.to : f.tier,
         basis: f.basis, confidence: f.confidence, tierOverride,
@@ -38,6 +38,8 @@ function buildVerdict(record, decisions = [], opts = {}) {
         decision: d.decision || null,
         applied: d.applied === true,
       };
+      if (f.debate) { out.debate = f.debate; }   // v4.1: additive debate decoration carry-through (spec §5.6)
+      return out;
     }),
     streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly })),
     runStats: record.runStats,

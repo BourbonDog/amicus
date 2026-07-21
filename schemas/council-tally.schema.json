@@ -51,7 +51,16 @@
           },
           "confidence": { "enum": ["thin", "solid"] },
           "tierOverride": { "type": ["object", "null"] },
-          "adjudications": { "type": "array", "items": { "type": "object" } }
+          "adjudications": { "type": "array", "items": { "type": "object" } },
+          "debate": {
+            "type": "object",
+            "properties": {
+              "action": { "enum": ["defended", "amended", "withdrawn", "no-response"] },
+              "previousTier": { "type": ["string", "null"] }
+            },
+            "required": ["action"],
+            "additionalProperties": false
+          }
         }
       }
     },

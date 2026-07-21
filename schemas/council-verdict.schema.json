@@ -36,7 +36,16 @@
           "duplicateOf": { "type": ["string", "null"] },
           "adjudications": { "type": "array" },
           "decision": { "type": ["string", "null"] },
-          "applied": { "type": "boolean" }
+          "applied": { "type": "boolean" },
+          "debate": {
+            "type": "object",
+            "properties": {
+              "action": { "enum": ["defended", "amended", "withdrawn", "no-response"] },
+              "previousTier": { "type": ["string", "null"] }
+            },
+            "required": ["action"],
+            "additionalProperties": false
+          }
         }
       }
     },
