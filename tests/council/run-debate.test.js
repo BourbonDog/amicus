@@ -301,6 +301,120 @@ describe('runDebate — one bounded repair per defense solo', () => {
   });
 });
 
+// ---- re-vote repair branch (run-debate.js:138-152) — an ALIVE-but-unparseable judge leg is
+// the only door into this branch: a DEAD leg (mkLeg(model, '', 'error')) never reaches it.
+describe('runDebate — re-vote repair branch', () => {
+  describe('repair SUCCEEDS: an alive-but-unstructured judge leg is repaired once, and the repair is used', () => {
+    let tmp, result, launched, midRepairStage;
+    const repaired = revoteOut([{ id: 'A1', verdict: 'agree' }]);
+    beforeAll(async () => {
+      tmp = mkTmp('run-debate-revote-repair-');
+      const input = provisionalInput();
+      const provisionalRecord = tally(input);
+      launched = [];
+      const stageOf = (name) => ((runState.readRun(tmp) || {}).stages || []).find(s => s.name === name) || null;
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const script = {
+        solos: {
+          'r-d1': { wave: wave([leg('gemini', defended)]), leg: leg('gemini', defended) },
+          // The repair, launched solo to the SAME judge (waveId `${waveId}-${judge}r`).
+          'r-rv-gptr': { wave: wave([leg('gpt', repaired)]), leg: leg('gpt', repaired) },
+        },
+        // gpt's first attempt is ALIVE (status complete, non-empty summary) but carries no
+        // parseable json block — the only way into the repair branch. qwen parses cleanly.
+        waves: { 'r-rv': wave([leg('gpt', 'prose only, no json block'),
+                               leg('qwen', revoteOut([{ id: 'A1', verdict: 'dispute' }]))]) },
+      };
+      const base = fakeLaunchers(script, launched);
+      // Observe run.json from INSIDE the repair launch: proves the repair's waveId was
+      // registered (abort-cascade guard) BEFORE the leg went in flight.
+      const launchers = {
+        launchSolo: (opts) => {
+          if (opts.waveId === 'r-rv-gptr') { midRepairStage = stageOf('debate-revote'); }
+          return base.launchSolo(opts);
+        },
+        launchWave: (opts) => base.launchWave(opts),
+      };
+      result = await runDebate(ctxFor(tmp, launchers), { provisionalRecord, tallyInput: input });
+    });
+
+    test('the repair waveId is registered on debate-revote BEFORE the repair leg goes in flight', () => {
+      expect(midRepairStage.waveIds).toContain('r-rv-gptr');
+    });
+
+    test("the repaired leg's conformance is 'repaired', and the round is not degraded", () => {
+      const gptLeg = result.revoteLegs.find(l => l.model === 'gpt');
+      expect(gptLeg.conformance).toBe('repaired');
+      expect(result.degraded).toBe(false);
+    });
+
+    test('revote-gpt.md holds the POST-repair body, not the unstructured first attempt', () => {
+      const body = fs.readFileSync(path.join(tmp, 'revote-gpt.md'), 'utf-8');
+      expect(body).toBe(repaired);
+      expect(body).not.toContain('prose only, no json block');
+    });
+
+    test('the repaired verdict actually applies to the final tally (gpt now agrees)', () => {
+      const rec = tally(result.debatedInput);
+      const a1 = rec.findings.find(f => f.id === 'A1');
+      // gpt repaired → agree, qwen clean → dispute: a=1,d=1 → Contested.
+      expect(a1.basis).toEqual({ a: 1, d: 1, n: 0 });
+      expect(a1.tier).toBe('Contested');
+      const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+      expect(doc.revotes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ judge: 'gpt', id: 'A1', verdict: 'agree', applied: true }),
+      ]));
+    });
+  });
+
+  describe('repair is EXHAUSTED: the repair output is also unparseable', () => {
+    let tmp, result, launched;
+    beforeAll(async () => {
+      tmp = mkTmp('run-debate-revote-exhausted-');
+      const input = provisionalInput();
+      const provisionalRecord = tally(input);
+      launched = [];
+      const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+      const script = {
+        solos: {
+          'r-d1': { wave: wave([leg('gemini', defended)]), leg: leg('gemini', defended) },
+          // The repair ALSO fails to parse — exhausted, per spec §5.7 only ONE repair is spent.
+          'r-rv-gptr': { wave: wave([leg('gpt', 'still no json block')]), leg: leg('gpt', 'still no json block') },
+        },
+        waves: { 'r-rv': wave([leg('gpt', 'prose only, no json block'),
+                               leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]))]) },
+      };
+      const launchers = fakeLaunchers(script, launched);
+      result = await runDebate(ctxFor(tmp, launchers), { provisionalRecord, tallyInput: input });
+    });
+
+    test('exactly ONE repair is attempted for the exhausted judge, never two', () => {
+      const waveIds = launched.map(o => o.waveId);
+      expect(waveIds.filter(id => id === 'r-rv-gptr')).toHaveLength(1);
+      expect(waveIds.sort()).toEqual(['r-d1', 'r-rv', 'r-rv-gptr']);
+    });
+
+    test("the leg's conformance is 'unstructured', and the round degrades", () => {
+      const gptLeg = result.revoteLegs.find(l => l.model === 'gpt');
+      expect(gptLeg.conformance).toBe('unstructured');
+      expect(result.degraded).toBe(true);
+    });
+
+    test("the judge's ORIGINAL Stage-2 verdict stands — the exhausted re-vote is discarded, not applied empty", () => {
+      const rec = tally(result.debatedInput);
+      const a1 = rec.findings.find(f => f.id === 'A1');
+      // gpt's ORIGINAL dispute stands (exhausted re-vote discarded); qwen's clean agree applies.
+      expect(a1.basis).toEqual({ a: 1, d: 1, n: 0 });
+      expect(a1.tier).toBe('Contested');
+      const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+      expect(doc.revotes.some(r => r.judge === 'gpt')).toBe(false);
+      expect(doc.revotes).toEqual(expect.arrayContaining([
+        expect.objectContaining({ judge: 'qwen', id: 'A1', verdict: 'agree', applied: true }),
+      ]));
+    });
+  });
+});
+
 describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wave (spec §5.7)', () => {
   test('over budget after the defense wave skips the re-vote and reports skipped-cost-ceiling', async () => {
     const tmp = mkTmp('run-debate-cc-');
