@@ -24,6 +24,16 @@ All notable changes to Amicus are documented here. Format follows
   reported `legsTotal: null`, and a run with a critic omitted the critic's leg from the count
   (e.g. `2` instead of `3` for two seats plus a critic). Note that `legsTotal` can now rise
   mid-stage when a bounded repair re-prompt launches, which is a real additional model call.
+- **A council run spawned through `amicus_council_run` that died before its first checkpoint no
+  longer strands an unrecoverable record.** The MCP handler wrote `run.json` with
+  `status: "running"` and no `pid`, leaving the spawned CLI child to record its own pid at
+  startup; a child that died inside that window left a pid-less `running` run that `amicus
+  status` skipped entirely (its crash detection is guarded on `run.pid`) and that `amicus abort`
+  could not fall back to killing, so the run was recoverable only by hand. The handler now
+  captures the pid from the spawned child and checkpoints it immediately — the same value the
+  engine writes itself, recorded a beat earlier.
+
+## [4.0.0] - 2026-07-20
 
 The **headless council engine** release. `amicus council run` (CLI) and `amicus_council_run`
 (MCP) execute the full adjudicated pipeline — Stage-1 independent reviews → anonymized peer
