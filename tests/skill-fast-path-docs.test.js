@@ -2,6 +2,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { mustIndexOf } = require('./helpers/docs-extract');
 
 // The working-tree SKILL.md is CRLF; normalise before any ^/\n-anchored regex.
 // Repo idiom — see tests/skill-second-opinion-docs.test.js and tests/skill-sidecar-docs.test.js.
@@ -25,16 +26,16 @@ describe('SKILL.md fast-path pins (spec §4)', () => {
   test('--debate is documented in the debate element', () => {
     expect(SKILL).toContain('--debate');
   });
-  test('the double-ledger guard: SKILL.md never invokes council tally', () => {
-    expect(SKILL).not.toContain('amicus council tally');
+  test('the double-ledger guard: "council tally" appears exactly once in the whole file (the Stage-6 "never run" sentence) — prefix-agnostic, so a bare `council tally` slipped in anywhere (not just `amicus council tally`) fails this', () => {
+    const matches = SKILL.match(/council tally/g) || [];
+    expect(matches.length).toBe(1);
   });
   test('the double-ledger guard: the engine-run section never mentions council tally at all', () => {
     // Scoped restatement of the guard above: the fast-path launch section is
     // where a "just tally it" instruction would most plausibly creep back in,
     // and the engine's own tally-final stage already appended the ledger row.
-    const start = SKILL.indexOf('### The engine run');
-    const end = SKILL.indexOf('### Stage 4');
-    expect(start).toBeGreaterThan(-1);
+    const start = mustIndexOf(SKILL, '### The engine run', 'SKILL.md "### The engine run" heading');
+    const end = mustIndexOf(SKILL, '### Stage 4', 'SKILL.md "### Stage 4" heading');
     expect(end).toBeGreaterThan(start);
     expect(SKILL.slice(start, end)).not.toContain('council tally');
   });
@@ -83,8 +84,8 @@ describe('SKILL.md fast-path pins (spec §4)', () => {
     expect(outputSection).toContain('chair-output.md');
   });
   test('engine degradation is keyed on the exit code, not per-stage wave rules (§4.6)', () => {
-    const start = SKILL.indexOf('### The engine run');
-    const end = SKILL.indexOf('### Stage 4');
+    const start = mustIndexOf(SKILL, '### The engine run', 'SKILL.md "### The engine run" heading');
+    const end = mustIndexOf(SKILL, '### Stage 4', 'SKILL.md "### Stage 4" heading');
     const engineRun = SKILL.slice(start, end);
     expect(engineRun).toContain('run.json');
     expect(engineRun).toMatch(/exit code/i);

@@ -110,12 +110,21 @@ composes, which is what kills the false "future-dated" blocker class headless mo
 `--claude-review` run the engine rejects both outright. The engine needs at least **2 bench
 seats**; a 1-model run is the scale-down path below, not an engine run.
 
-**Free council (zero-cost).** If the user asks for a "free council" / "zero-cost council",
-read `councils.free` from `~/.config/amicus/config.json` and launch with `--council free`
-instead of `--models`. Free-tier handling:
-- Cost ≈ \$0 — skip the paid-run cost framing (the budget gate is a no-op at zero price).
+**Free council (zero-cost bench, paid chair).** If the user asks for a "free council" /
+"zero-cost council", read `councils.free` from `~/.config/amicus/config.json` and launch with
+`--council free` instead of `--models`. Free-tier handling:
+- Bench cost ≈ \$0 — skip the paid-run cost framing for the reviewer legs (the budget gate is a
+  no-op at zero price). **The chair is not free — do not pick a free model as chair.**
+  `--council free` resolves the bench live from the catalog (`suggestFreeCouncil`, capped at 3
+  seats, one `:free` model per vendor), so which vendors land in the bench isn't known until
+  launch; naming a free model as chair risks colliding with it and tripping the engine's
+  bench-seat guard (`chair '<m>' is a bench seat — the chair must not review`, pre-flight, exit 1
+  before any spend). Leave `--chair` unset — it defaults to `deepseek`, which resolves to the
+  **paid** `deepseek-v4-pro` route (a different model from any `deepseek:free` bench pick) — or
+  name another non-bench paid model the user prefers. Either way, **disclose the chair as a small
+  paid cost** even though the bench is \$0; state the estimate.
 - No reliability history: free models have no `amicus council stats` / `MODEL-NOTES` record,
-  so don't rank on street-cred. Pick the most capable free model as chair and state lower confidence.
+  so don't rank the bench on street-cred; state lower confidence for the reviewers.
 - Weak structured output: small free models are less reliable at the strict findings JSON; the
   engine's bounded repair loop absorbs this and marks the seat's `conformance` accordingly.
 - Throttled/truncated legs: a mid-stream 429 can yield a leg the engine records as degraded rather
@@ -314,8 +323,14 @@ Two artifacts are yours:
   `<run-folder>/decisions.json` is the Stage-4 array. It parses both, calls `buildVerdict`, and
   writes the schema-stamped machine-readable record via the same atomic tmp+rename convention the
   function always used. `--render` then refreshes `report.html` from the decided verdict — without
-  it you would hand the user a stale, pre-decision page. In Cowork, `amicus_verdict` with
-  `render: true` and `outDir` does the same and returns the Markdown rendering in the tool result.
+  it you would hand the user a stale, pre-decision page. In Cowork this is **two `amicus_verdict`
+  calls, not one** (the tool is pure/stateless and writes nothing unless `render: true` *and*
+  `outDir` are both given): first call it with `record` (parsed `tally.json`) and `decisions`
+  (parsed `decisions.json`) and `render` omitted — it returns the decided verdict as fenced JSON;
+  write that JSON to `<run-folder>/verdict.json` yourself with the host's file tools, since the
+  tool does not persist it. Then call it again with the same `record`/`decisions` plus
+  `render: true` and `outDir: <run-folder>` — this refreshes `<outDir>/report.html` on disk and
+  returns the Markdown rendering for `report.md` below; it still does **not** write `verdict.json`.
 - `report.md` — Claude-authored: the chair's synthesis (read verbatim from
   `<run-folder>/chair-output.md`, including its closing `VERDICT:` line at the top of the report) +
   the full Stage-4 decision log + a summary of what was applied (+ the "How Claude's review fared"
@@ -492,6 +507,7 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `review-<model>.md` ×N and `judge-<model>.md` ×N — the raw engine legs
   - `briefing-stage1.md`, `bundle-stage2.md`, `chair-packet.md` — the model-facing briefings the engine composed
   - `tally-input.json` and `tally.json` — the assembled input and the tiered record (plus `tally-provisional.json` and `debate.json` when `--debate` was on)
+  - `rebuttal-<model>.md` ×(raisers) and `revote-bundle.md` + `revote-<model>.md` ×(disputing judges) — the debate round's raw defense and re-vote leg outputs plus the shared re-vote prompt, only when `--debate` was on
   - `chair-output.md` — the chair's synthesis prose, verbatim from the chair model
   - `decisions.json` — the Stage-4 decision array Claude writes
   - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `amicus council verdict` at Stage 5 (replacing the engine's undecided version)
