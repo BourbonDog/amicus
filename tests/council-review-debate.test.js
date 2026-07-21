@@ -33,6 +33,24 @@ describe('Council Review Action v2 — debate input (spec §5.2 / OQ-6)', () => 
   test('sticky comment has a Withdrawn in debate collapsible', () => {
     expect(WF).toContain('Withdrawn in debate');
   });
+  test('excludes withdrawn findings from the sticky-comment tier collapsibles too (Finding 3)', () => {
+    // A finding withdrawn during debate has its tier frozen pre-debate
+    // (bundleFor excludes withdrawn findings from the re-vote) — so unlike
+    // the Confirmed-only check-run filter (which is defensive: a withdrawn
+    // finding can never reach Confirmed), this select is load-bearing here:
+    // a withdrawn Contested/Disputed finding WOULD otherwise render under
+    // its old tier, with no retraction marker, alongside its own dedicated
+    // "Withdrawn in debate" collapsible below. Scoped to the sticky-comment
+    // step and pinned inside the `for TIER in ...` loop specifically, so a
+    // loose "debate...withdrawn appear somewhere" match can't pass with the
+    // filter deleted (both words also appear in the Withdrawn collapsible's
+    // own jq block and in comments).
+    const step = WF.slice(WF.indexOf('Post sticky PR comment'));
+    const loop = step.slice(step.indexOf('for TIER in'), step.indexOf('done'));
+    const clause = 'select((.debate.action // "") != "withdrawn")';
+    expect(loop).toContain(clause);
+    expect(loop.indexOf('select(.tier == $tier)')).toBeLessThan(loop.indexOf(clause));
+  });
   test('the neutralize() sed invariant is unchanged (byte-identical guard)', () => {
     // v4.0 pins EXACTLY 10 sed rules across the two model-text shells, 5
     // distinct. A third neutralize() copy, a sixth rule, or a reworded rule

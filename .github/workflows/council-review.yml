@@ -232,10 +232,14 @@ jobs:
           fi
           # Confirmed findings, joined with claim/location from tally-input
           # (the tally record strips both; the assembled five-keys object in
-          # the run dir still carries the full validated findings). A finding
-          # withdrawn during debate was retracted by its own raiser — annotating
-          # a PR line for it would be actively misleading, so it is excluded
-          # here before ever reaching the annotations mapping below.
+          # the run dir still carries the full validated findings). Belt-and-
+          # suspenders: a finding withdrawn during debate can never actually
+          # reach tier Confirmed (bundleFor excludes withdrawn findings from
+          # the re-vote, so a withdrawn finding's tier stays frozen at
+          # whatever made it debatable in the first place — Contested or
+          # Disputed, never Confirmed) — this select is defensive forward-
+          # cover against a future tier-computation change, not load-bearing
+          # today.
           jq -c --slurpfile ti "$RUN_DIR/tally-input.json" '
             (($ti[0].findings // []) | map({key: .id, value: .}) | from_entries) as $src
             | [ .findings[] | select(.tier == "Confirmed")
@@ -333,10 +337,16 @@ jobs:
           fi
           # Per-tier finding lists are model text (claims joined back from
           # tally-input, same join as the check-run step) — neutralized.
+          # Withdrawn findings are excluded here too (same clause as the
+          # check-run step, but load-bearing here: a debated finding's tier
+          # stays frozen pre-debate, so withdrawn Contested/Disputed findings
+          # WOULD otherwise render in these lists) — see the comment below,
+          # they get their own "Withdrawn in debate" collapsible instead.
           for TIER in Confirmed Contested Disputed Singleton; do
             jq -r --arg tier "$TIER" --slurpfile ti "$RUN_DIR/tally-input.json" '
               (($ti[0].findings // []) | map({key: .id, value: .}) | from_entries) as $src
               | [ .findings[] | select(.tier == $tier)
+                  | select((.debate.action // "") != "withdrawn")
                   | "- **\(.id)** [\(.severity)] \((.claim // $src[.id].claim // "(no claim text recorded)")) _(raiser: \(.raiser) · a\(.basis.a)/d\(.basis.d)/n\(.basis.n) · \(.confidence))_" ]
               | if length == 0 then "_none_" else join("\n") end
             ' "$RUN_DIR/verdict.json" > "tier-${TIER}.md"

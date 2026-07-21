@@ -10,7 +10,7 @@
  * verbatim from leg docs, the run-dir artifact set (tally-input.json,
  * tally.json, verdict.json with overallVerdict, report.html, chair-output.md),
  * v4.1 §4.4 pre-flight validation of the file-sourced Claude review
- * (preflightClaudeReview — the reserved-seat/chair guards), its review-N+1
+ * (preflightClaudeReview — the reserved-seat/chair/critic guards), its review-N+1
  * labelling (labelClaudeReview), and its synthesized null-usage runStats row
  * (claudeRunStatsRow). Raiser self-votes are INCLUDED in adjudications —
  * exclusion is tally's job (tally.js:95); judged is tally's job (tally.js:110).
@@ -58,7 +58,7 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance }) {
  * error doc lands in a run dir that exists) and BEFORE any launch, so an invalid
  * file costs zero spend. The orchestrator authored the file, so there is no repair
  * loop — fix and relaunch is free.
- * @param {{claudeReviewFile: ?string, chair: ?string}} o run options
+ * @param {{claudeReviewFile: ?string, chair: ?string, critic: ?string, models: ?Array<string>}} o run options
  * @returns {{claudeReview: object|null, error: ?{code: string, message: string}}}
  */
 function preflightClaudeReview(o) {
@@ -67,6 +67,9 @@ function preflightClaudeReview(o) {
     error: { code: CLAUDE_REVIEW_ERROR, message: `council_claude_review_invalid: ${detail}` } });
   if (o.chair === CLAUDE_SEAT) {
     return bad('claude may not chair (it is judged, never votes or chairs)');
+  }
+  if (o.critic === CLAUDE_SEAT) {
+    return bad("'claude' is a reserved seat name and cannot be the critic");
   }
   if (Array.isArray(o.models) && o.models.includes(CLAUDE_SEAT)) {
     // 'claude' is a reserved seat name for the file-sourced review N+1 (it

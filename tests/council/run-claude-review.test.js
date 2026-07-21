@@ -139,6 +139,32 @@ describe('--chair claude → pre-flight error', () => {
   });
 });
 
+// Finding 1 (v4.1 final whole-branch review): preflightClaudeReview guarded
+// o.chair and o.models but NOT o.critic — a library caller (MCP/GitHub
+// Action/direct require('./council/run'), none of which route through the
+// CLI's option whitelist at cli-handlers-council-run.js:101) could pass
+// critic:'claude' straight through pre-flight, and run-stages.js:70 would
+// launch a REAL paid solo for the reserved seat — the exact invariant v4.1
+// promises never happens. Mirrors the sibling --chair claude test above.
+describe('--critic claude → pre-flight error (Finding 1)', () => {
+  test('exit 1, no launches, ledger never appended', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'critic-claude-'));
+    const reviewPath = writeReview(tmp, true);
+    let launches = 0;
+    const appendRunFn = jest.fn();
+    const { exitCode, run } = await runCouncil(
+      opts(tmp, { critic: 'claude', claudeReviewFile: reviewPath }),
+      { launchers: { launchWave: async () => { launches += 1; return { wave: { legs: [] } }; },
+        launchSolo: async () => { launches += 1; return { wave: { legs: [] }, leg: null }; } },
+        appendRunFn, statsFn: () => [], installSignalAbortFn: noSignals });
+    expect(exitCode).toBe(1);
+    expect(launches).toBe(0);
+    expect(run.error.code).toBe('COUNCIL_CLAUDE_REVIEW_INVALID');
+    expect(run.error.message).toContain('critic');
+    expect(appendRunFn).not.toHaveBeenCalled();
+  });
+});
+
 // Finding 3: unreachable via the CLI's option whitelist, but MCP / the GitHub
 // Action / a direct require('./council/run') all bypass that whitelist — the
 // engine itself must refuse the collision, exactly like the sibling

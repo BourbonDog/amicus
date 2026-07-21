@@ -34,7 +34,7 @@ amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+
 amicus council stats [--json]             # Reviewer reliability from the ledger
 amicus council report <verdict.json> [--md|--html]   # Render the council run report
 amicus council validate <file> [--json]   # Validate a Stage-1 findings block (exit 0/2/1)
-amicus council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]  # Build + write verdict.json
+amicus council verdict <tally.json> [--decisions <d.json>] [-o <out.json>] [--render]  # Build + write verdict.json
 amicus council run --prompt-file <b.md> --models a,b,c --chair <m> [--json]  # Headless engine: reviews, cross-review, tally, chair verdict
 amicus council save <name> --models a,b,c # Save a named council preset (>=2 resolvable members)
 amicus council list [--json]              # List saved councils + built-ins (free/budget/frontier)
@@ -174,6 +174,9 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--max-cost <$>` | **Whole-run** ceiling, checked before each paid stage launch. |
 | `--timeout <min>` | **Per-leg** timeout (fanout semantics); bound the aggregate with your CI job timeout. |
 | `--gateway <mode>` / `--no-validate-model` | Same routing/validation semantics as `start`/`fanout`. |
+| `--debate` | Adds a Stage-2.5 rebuttal round (provisional tally → defense → re-vote → final tally) between cross-review and the final tally. |
+| `--claude-review <file>` | Enters Claude's own review from a file as judged review N+1 — no leg is ever launched for it; `claude` is a reserved seat name and may not also appear in `--models`, `--chair`, or `--critic` (pre-flight error). |
+| `--no-cost-gate` | Disable the per-leg price gate for the whole run (repairs + chair). |
 
 **Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
 `overallVerdict: null` — or cost ceiling hit after the tally) · `1` quorum/pre-tally failure
