@@ -57,7 +57,7 @@ function getTools() {
     inputSchema: {
       model: safeModel.optional().describe(
         `Short alias (${aliasNames}) or full model ID ` +
-        '(bare provider/model is canonical and routes direct-first, e.g. anthropic/claude-opus-4.8; ' +
+        '(bare provider/model is canonical and routes direct-first, e.g. anthropic/claude-opus-4-8; ' +
         'openrouter/provider/model forces OpenRouter). ' +
         'If omitted, uses the configured default. Call amicus_guide to see all aliases.'
       ),
@@ -581,7 +581,7 @@ Include: Objective, Background, Files of interest, Success criteria, Constraints
 |-------|-------|
 ${aliasRows}
 
-Or use a full model ID. Bare \`provider/model\` (e.g. anthropic/claude-opus-4.8) is the canonical,
+Or use a full model ID. Bare \`provider/model\` (e.g. anthropic/claude-opus-4-8) is the canonical,
 policy-routed form — it routes direct-first (your direct provider key if configured, else
 OpenRouter). \`openrouter/provider/model\` is an explicit override that forces OpenRouter. The
 \`gateway\` param (or \`routing.prefer\` in config.json) controls this per call or globally.
