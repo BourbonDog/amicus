@@ -96,4 +96,23 @@ function materializeReviews(runDir, legs) {
   return out;
 }
 
-module.exports = { createLaunchers, materializeReviews, sanitizeName };
+/**
+ * Write per-leg debate artifacts: `<prefix>-<sanitizeName(model)>.md` for each
+ * leg with a non-empty summary. Mirrors materializeReviews.
+ * @param {string} runDir
+ * @param {Array<{model: string, summary: string}>} legs
+ * @param {string} prefix 'rebuttal' | 'revote'
+ * @returns {Array<{model: string, file: string}>}
+ */
+function materializeDebate(runDir, legs, prefix) {
+  const out = [];
+  for (const leg of legs) {
+    if (!leg || !leg.summary || !leg.summary.trim()) { continue; }
+    const file = path.join(runDir, `${prefix}-${sanitizeName(leg.model)}.md`);
+    fs.writeFileSync(file, leg.summary, { mode: 0o600 });
+    out.push({ model: leg.model, file });
+  }
+  return out;
+}
+
+module.exports = { createLaunchers, materializeReviews, materializeDebate, sanitizeName };

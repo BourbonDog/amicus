@@ -107,6 +107,7 @@ src/
 │   ├── report.js
 │   ├── run-assemble.js
 │   ├── run-chair.js
+│   ├── run-debate.js
 │   ├── run-launch.js
 │   ├── run-stages.js
 │   ├── run-state.js
@@ -378,7 +379,8 @@ evals/
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
-| `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `sanitizeName()` |
+| `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
+| `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `checkpoint()`, `updateStage()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
