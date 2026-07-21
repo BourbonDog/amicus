@@ -140,6 +140,7 @@ function isBooleanFlag(key) {
      'md',                   // council report: emit Markdown (default)
      'fix',                  // doctor: self-heal fixable checks in place (#56)
      'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
+     'render',               // council verdict: also refresh report.html next to the decided verdict
    ];
   return booleanFlags.includes(key);
 }
@@ -509,6 +510,7 @@ Subcommands for 'council':
     --decisions <d.json>       Optional. Stage-4 decisions array (default [])
     -o, --out <out.json>       Output path (default ./verdict.json)
     --json                     Print the full verdict document
+    --render                   Also refresh report.html next to the decided verdict
   run --prompt-file <briefing.md> (--models a,b,c | --council <name>)
       [--chair <model>] [--critic <model>] [--lenses s1,s2,...]
       [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]

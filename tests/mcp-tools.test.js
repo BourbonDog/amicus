@@ -502,8 +502,11 @@ describe('council MCP tool schemas', () => {
     for (const name of ['amicus_council_tally', 'amicus_council_stats', 'amicus_verdict']) {
       expect(t).toHaveProperty(name);
       expect(typeof t[name].description).toBe('string');
-      expect(t[name].annotations).toHaveProperty('readOnlyHint', true);
     }
+    expect(t.amicus_council_tally.annotations).toHaveProperty('readOnlyHint', true);
+    expect(t.amicus_council_stats.annotations).toHaveProperty('readOnlyHint', true);
+    // v4.1 §4.5c: amicus_verdict can now write report.html (render:true + outDir).
+    expect(t.amicus_verdict.annotations).toHaveProperty('readOnlyHint', false);
   });
   test('tally schema requires findings, adjudications, rankings, meta', () => {
     const tally = byName().amicus_council_tally;

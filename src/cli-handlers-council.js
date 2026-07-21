@@ -1,6 +1,7 @@
 // src/cli-handlers-council.js
 'use strict';
 const fs = require('fs');
+const path = require('path');
 const { tally } = require('./council/tally');
 const { deriveReliability, appendRun, buildStatsDoc } = require('./council/ledger');
 const { sumWaveUsage, formatCost } = require('./utils/pricing');
@@ -169,6 +170,16 @@ function runVerdict(args, useJson) {
       hint: 'either tally.json needs meta, findings[], streetCred[], runStats, tierCounts, or decisions.json must be a JSON array of {id, decision, …} objects' });
   }
   writeVerdictAtomic(outPath, verdict);
+  if (args.render) {
+    // v4.1 §4.5c: refresh report.html next to the decided verdict.
+    try {
+      const html = buildReport({ verdict }, { format: 'html' });
+      fs.writeFileSync(path.join(path.dirname(outPath), 'report.html'), html);
+    } catch (e) {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `verdict written but render failed: ${e.message}`,
+        hint: 'the verdict.json is valid; re-run `amicus council report <verdict.json> --html` manually' });
+    }
+  }
   process.stdout.write(useJson ? JSON.stringify(verdict, null, 2) + '\n' : renderVerdict(verdict, outPath));
   return 0;
 }

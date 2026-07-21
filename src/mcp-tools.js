@@ -406,11 +406,12 @@ function getTools() {
   },
   {
     name: 'amicus_verdict',
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
       "Merge a tally record with Claude's Stage-4 decisions into the verdict " +
       'object (final tiers after overrides, decisions, applied flags). Pure + ' +
-      'synchronous; returns the verdict — does NOT write it to disk.',
+      'synchronous; returns the verdict. Writes nothing unless render:true AND ' +
+      'outDir are given — then it also refreshes <outDir>/report.html.',
     inputSchema: {
       record: z.record(z.any()).describe('A tally() output record (from amicus_council_tally).'),
       decisions: z.array(z.object({
@@ -418,6 +419,8 @@ function getTools() {
         duplicateOf: z.string().nullable().optional(),
         tierOverride: z.object({ from: z.string(), to: z.string(), reason: z.string() }).nullable().optional(),
       })).optional().describe('Stage-4 per-finding decisions (default []).'),
+      render: z.boolean().optional().describe('Also return the markdown rendering of the decided verdict (and refresh report.html when outDir is given).'),
+      outDir: z.string().optional().describe('Dir to write report.html into when render:true — resolved against the project dir and rejected if it escapes it. Omit to write nothing.'),
       project: z.string().optional().describe('Optional project directory path.'),
     },
   },
