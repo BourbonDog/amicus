@@ -127,7 +127,9 @@ Key semantics:
   the verdict with `overallVerdict: null`.
 - SIGINT/SIGTERM abort the active wave/solo, finalize `run.json` as `aborted`, exit 130/143.
   `amicus abort <councilRunId>` (and the MCP tools via the sessions-dir pointer file
-  `council-<runId>.json`) work on council runs; `status`/`wait`/`list` resolve them the same way.
+  `council-<runId>.json`) work on council runs; `status`/`list` resolve them the same way.
+  There is no CLI `wait` — the MCP `amicus_wait` tool is the blocking primitive and resolves
+  council runs the same way.
 
 **Exit codes and degradation:**
 

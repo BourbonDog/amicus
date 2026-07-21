@@ -180,8 +180,9 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 
 **Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
 `overallVerdict: null` — or cost ceiling hit after the tally) · `1` quorum/pre-tally failure
-(error doc) · `130`/`143` signals. `amicus status|wait|abort <councilRunId>` work on council runs
-via the sessions-dir pointer file.
+(error doc) · `130`/`143` signals. `amicus status|abort <councilRunId>` work on council runs
+via the sessions-dir pointer file. There is no CLI `wait` — to block until a council run
+finishes, use the MCP `amicus_wait` tool instead.
 
 Field-by-field run-directory contents, the degradation table, and `verdict.json`'s
 `overallVerdict` are documented in **[docs/council.md](./council.md#amicus-council-run)**. This is
