@@ -78,7 +78,7 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      MODELS: ${{ inputs.models || 'deepseek,gemini,glm' }}
+      MODELS: ${{ inputs.models || 'gpt,qwen,minimax,grok' }}
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}
