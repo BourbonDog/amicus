@@ -5,6 +5,25 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-07-22
+
+### Fixed
+
+- **Claude model aliases no longer drift between the direct API and OpenRouter.** The two
+  gateways spell the same model differently — OpenRouter serves `anthropic/claude-opus-4.8`,
+  the direct Anthropic API serves `anthropic/claude-opus-4-8` — and three places converted
+  between the two by adding or removing the `openrouter/` prefix. That is only sound when the
+  rest of the id is identical, which for Claude it is not. Two user-visible consequences: a fresh
+  `amicus setup` wrote an `opus` alias that `amicus doctor` then reported as stale (the exact
+  warning 4.1.1 shipped to remove — and it fired even with an Anthropic-only catalog, not just
+  for OpenRouter users), and the pre-registered fallback catalog handed to a long-lived shared
+  server carried two ids OpenRouter does not serve while omitting the two it does. All three
+  sites now read each gateway's authored route instead of deriving one from the other, and an
+  alias you have overridden yourself is left alone rather than inheriting a curated route.
+  Affects `opus` and `haiku`; every other alias is spelled identically on both gateways or is
+  OpenRouter-only. Default routing is direct-first and was never affected — no run selected a
+  wrong model.
+
 ## [4.1.1] - 2026-07-21
 
 ### Fixed
