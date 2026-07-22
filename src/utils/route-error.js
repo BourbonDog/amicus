@@ -66,6 +66,9 @@ const REASON_TEXT = Object.freeze({
   invalid_descriptor: 'The model identifier could not be parsed.',
   direct_unavailable: "This model isn't available on the vendor's direct API; use OpenRouter or a different model.",
   openrouter_unavailable: "This model isn't on OpenRouter; use --gateway direct or a different model.",
+  no_openrouter_route: "Local providers can't be routed through OpenRouter.",
+  no_local_key: 'No bearer token is configured for this local provider.',
+  local_endpoint_unreachable: "The local endpoint didn't respond.",
   [SELECTION_REQUIRED_REASON]: 'Multiple models match your request; a specific one must be selected.',
 });
 
@@ -80,6 +83,9 @@ const FIX_HINTS = Object.freeze({
   invalid_descriptor: 'Use a vendor/model id or a configured alias.',
   direct_unavailable: 'Drop --gateway direct (use auto or --gateway openrouter), or pick a different model.',
   openrouter_unavailable: 'Use --gateway direct, or pick a different model.',
+  no_openrouter_route: 'Drop --gateway openrouter — local endpoints route direct.',
+  no_local_key: 'Add one with `amicus key <id> <token>`.',
+  local_endpoint_unreachable: 'Start the local server, or pass --no-validate-model to skip the reachability check.',
   [SELECTION_REQUIRED_REASON]: 'Pick one of the suggestions below, or narrow the model id.',
 });
 
@@ -139,7 +145,7 @@ function toCliMessage(result) {
     }
   }
 
-  const hint = FIX_HINTS[err.reason];
+  const hint = (result && result.hint) || FIX_HINTS[err.reason];
   if (hint) { lines.push(hint); }
 
   return lines.join('\n');
@@ -156,7 +162,8 @@ function toCliMessage(result) {
  */
 function toErrorDocFields(result) {
   const { ERROR_CODES } = require('./error-doc');
-  const KEY_REASONS = ['no_openrouter_key', 'no_direct_key', 'no_key_for_vendor'];
+  // v4.2: a missing local bearer is key-shaped, not model-shaped (D12).
+  const KEY_REASONS = ['no_openrouter_key', 'no_direct_key', 'no_key_for_vendor', 'no_local_key'];
   const err = toStructuredError(result);
   const sentence = REASON_TEXT[err.reason] || `Model routing error (${err.reason}).`;
   let message = err.requested ? `${sentence} (requested "${err.requested}")` : sentence;
@@ -166,7 +173,7 @@ function toErrorDocFields(result) {
   return {
     code: KEY_REASONS.includes(err.reason) ? ERROR_CODES.MISSING_KEY : ERROR_CODES.BAD_MODEL,
     message,
-    hint: FIX_HINTS[err.reason] || null,
+    hint: (result && result.hint) || FIX_HINTS[err.reason] || null,
   };
 }
 
