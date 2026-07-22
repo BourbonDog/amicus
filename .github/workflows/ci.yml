@@ -98,6 +98,11 @@ jobs:
     # has not yet been proven across the 3x2 matrix the unit job uses.
     name: integration (keyless — paid suites self-skip)
     runs-on: ubuntu-latest
+    # Process-spawn-heavy and runs on every push; without this, a hung spawn
+    # inherits GitHub's 6-hour default and burns a runner for six hours.
+    # Measured wall clock is ~10s, so 15 minutes is generous headroom, not a
+    # tight bound.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

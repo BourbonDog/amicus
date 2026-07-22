@@ -13,6 +13,33 @@ All notable changes to Amicus are documented here. Format follows
   unit suite. Six tests had been failing unnoticed behind a single dead model alias: three E2E suites
   passed `--model gemini-flash`, which is not a live alias (`tryResolveModel('gemini-flash')` returns
   `Unknown model alias`). They now pass `gemini`.
+- **`--claude-review` reports no longer grow a blank `claude` judge column, or a false self-vote `*`.**
+  `report.js`'s `toModel()` reused `verdict.council` (the street-cred universe, which legitimately
+  includes `claude` on a `--claude-review` run) as the adjudication-matrix judge roster too. Claude is
+  judged but never judges, so the matrix grew an extra column that always rendered blank, or a bare
+  `*` on a row Claude itself raised — asserting Claude voted for its own finding, the opposite of the
+  documented guarantee. `judges` is now filtered out of `council` independently (gated on the
+  `claudeInCouncil` flag plus the `claude` name, never on whether a model cast any adjudications, so a
+  genuinely dead/unstructured bench judge with zero votes still keeps its blank column).
+- **`debate-revote` now checkpoints `skipped`, not a false `complete`, when the re-vote wave never
+  launches** (nothing was defended/amended, or the cost ceiling skipped it). **This is a
+  consumer-visible `run.json` value change**: anything parsing `stages[].status` for this stage — the
+  Council Review Action's stage-ladder footer, `amicus status`, or a user script — now sees `skipped`
+  instead of `complete` on a run that hits this path. Neither the Action's footer nor `amicus
+  status`'s human/JSON renderers special-case `complete`, so both already print whatever value is
+  there correctly; a script that hard-coded an expectation of `complete` for this stage should treat
+  `skipped` as the equivalent no-op, the same way `run-chair.js`'s existing chair-skipped-over-budget
+  convention already works.
+- **`amicus council verdict --render` now writes `report.html` at `0o600`**, matching every sibling
+  writer (`run-assemble.js`, `mcp-server.js`'s `amicus_verdict` `render:true` path, `run-launch.js`).
+  It previously wrote with no explicit mode, which falls back to the process umask (typically `0o644`
+  on POSIX — group/world-readable) whenever the target directory had no pre-existing `report.html`,
+  i.e. exactly the fresh-`--out-dir` case, for a file that holds model output.
+- **Dropped the false `amicus wait` CLI claim.** `docs/usage.md` and `docs/council.md` both documented
+  `amicus status|wait|abort <councilRunId>` as working CLI commands. There is no CLI `wait` (verified
+  against `bin/amicus.js`'s command dispatch) — only `status` and `abort` genuinely resolve council
+  runs via the sessions-dir pointer file. Both docs now point readers at the MCP `amicus_wait` tool
+  instead.
 
 ### Added
 
@@ -34,25 +61,41 @@ All notable changes to Amicus are documented here. Format follows
   the pre-push hook runs the unit suite only, deliberately, so a local push never spends money. Both
   now describe the real rails, and `.husky/pre-push`'s stale "until the 'Fix integration tests' task
   lands" comment is replaced with the reason the hook stays unit-only.
-- **`amicus doctor` no longer warns about Amicus's own shipped defaults.** Every install reported
-  `⚠ Model aliases: 2 stale: opus, haiku` (and the scheduled Model Drift Check ran red) with no user
-  config involved. `toDefaultAliases()` built each alias's pinned id by string-stripping the
-  `openrouter/` prefix instead of routing through the module's own `directFormFor()`, so it emitted
-  OpenRouter's dot ids for Anthropic — `anthropic/claude-opus-4.8`, `anthropic/claude-haiku-4.5` —
-  which the direct API rejects, and invented a bare `anthropic/claude-fable-5` for a model OpenRouter
-  serves exclusively. Defaults now come from `toGatewayRoutes()`, so an alias resolves to its authored
-  direct form when one exists (`anthropic/claude-opus-4-8`,
-  `anthropic/claude-haiku-4-5-20251001`) and to its OpenRouter route when none does
-  (`openrouter/anthropic/claude-fable-5`). Council artifacts are unaffected — they record alias
-  strings, not resolved ids.
+- **`amicus doctor` no longer warns about Amicus's own shipped defaults — on a fresh install, and in
+  the keyless `model-drift.yml` CI check.** Both previously reported `⚠ Model aliases: 2 stale: opus,
+  haiku` (and the scheduled Model Drift Check ran red) with no user config involved.
+  `toDefaultAliases()` built each alias's pinned id by string-stripping the `openrouter/` prefix
+  instead of routing through the module's own `directFormFor()`, so it emitted OpenRouter's dot ids
+  for Anthropic — `anthropic/claude-opus-4.8`, `anthropic/claude-haiku-4.5` — which the direct API
+  rejects, and invented a bare `anthropic/claude-fable-5` for a model OpenRouter serves exclusively.
+  Defaults now come from `toGatewayRoutes()`, so an alias resolves to its authored direct form when
+  one exists (`anthropic/claude-opus-4-8`, `anthropic/claude-haiku-4-5-20251001`) and to its
+  OpenRouter route when none does (`openrouter/anthropic/claude-fable-5`). `fable`'s *recorded* form
+  changes, but this is **not a routing change** — OpenRouter was already the only gateway that serves
+  it, so a `fable` run resolves and routes identically before and after; only the id `doctor`/`amicus
+  models` display and compare against is different. Council artifacts are unaffected either way — they
+  record alias strings, not resolved ids.
+  - **This fix does not reach everyone who already ran `amicus setup`.** `createDefaultConfig()`
+    (`src/sidecar/setup.js`) persists the *entire* default alias map into `config.json` at setup time,
+    and `getEffectiveAliases()` lets that persisted user config win over the shipped defaults — so
+    anyone who ran `amicus setup` on Amicus ≤4.1.0 has the old, broken ids frozen on disk
+    (`source: user-config`), which `findStaleAliases()` never suppresses. Measured: such a user sees
+    **4 stale** aliases after upgrading to 4.1.1 — `opus`, `haiku`, `fable` (the pre-fix ids) plus
+    `gemini` (this release's own pin move, see Changed below) — not zero, and `amicus doctor` /
+    the Model Drift Check will keep warning for them. **There is no code fix for this in 4.1.1**; a
+    self-healing config migration is a 4.2 candidate. If `amicus doctor` still warns after upgrading,
+    re-run `amicus setup`, or fix individual aliases by hand, e.g.
+    `amicus setup --add-alias opus=anthropic/claude-opus-4-8`.
 - The offline Anthropic model floor now also lists `anthropic/claude-haiku-4-5-20251001`, the dated id
   Anthropic's own listing returns. Without it, keyless and OpenRouter-only users saw the shipped
   `haiku` default reported stale against the shipped floor.
 
 ### Changed
 
-- Curated `gemini` pin moves from Gemini 3.5 Flash to **Gemini 3.6 Flash** on both gateways, clearing
-  the pinned-fallback drift notice from `amicus models --check`.
+- **Curated `gemini` pin moves from Gemini 3.5 Flash to Gemini 3.6 Flash on both gateways.** This is a
+  **silent model change, not merely a drift-notice cleanup**: a user with no `gemini` alias override of
+  their own starts talking to a different underlying model the next time they use the `gemini` alias
+  after upgrading. It also clears the pinned-fallback drift notice from `amicus models --check`.
 
 ## [4.1.0] - 2026-07-21
 
