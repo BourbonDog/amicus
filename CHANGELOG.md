@@ -7,6 +7,33 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed
 
+- **The integration tier is tested again, and now something actually watches it.** All 14
+  `tests/**/*.integration.test.js` files were unreachable from every gate — `jest.config.js` excludes
+  them from `npm test`, no workflow ran `npm run test:integration`, and the pre-push hook ran only the
+  unit suite. Six tests had been failing unnoticed behind a single dead model alias: three E2E suites
+  passed `--model gemini-flash`, which is not a live alias (`tryResolveModel('gemini-flash')` returns
+  `Unknown model alias`). They now pass `gemini`.
+
+### Added
+
+- **Keyless integration job in CI.** `.github/workflows/ci.yml` gained an `integration` job that runs
+  `npm run test:integration` with no secrets on every push and PR, so the tier is permanently watched
+  for free (~51 assertions, ~10s). `npm run test:integration` now goes through
+  `scripts/run-integration-keyless.js`, which strips every provider credential and sandboxes
+  `HOME`/`USERPROFILE` before spawning jest — the money-spending suites self-skip and the script cannot
+  bill even on a machine with keys on disk. The scrub derives its key names from the engine's own
+  `PROVIDER_ENV_MAP`, so it covers providers and paid suites added later without maintenance.
+- **`npm run test:integration:live`** — the paid rail, split out so the CI job cannot silently start
+  billing if secrets are ever added to it. Run by the new `.github/workflows/integration-live.yml`
+  (`workflow_dispatch` only, carries `secrets.OPENROUTER_API_KEY`) and by the release checklist in
+  `docs/publishing.md`.
+
+### Fixed (docs)
+
+- `docs/testing.md` and `CLAUDE.md` both claimed a pre-push integration gate that has never existed;
+  the pre-push hook runs the unit suite only, deliberately, so a local push never spends money. Both
+  now describe the real rails, and `.husky/pre-push`'s stale "until the 'Fix integration tests' task
+  lands" comment is replaced with the reason the hook stays unit-only.
 - **`amicus doctor` no longer warns about Amicus's own shipped defaults.** Every install reported
   `⚠ Model aliases: 2 stale: opus, haiku` (and the scheduled Model Drift Check ran red) with no user
   config involved. `toDefaultAliases()` built each alias's pinned id by string-stripping the

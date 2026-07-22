@@ -34,12 +34,15 @@ Hooks fire in the clone **and** in linked worktrees (`core.hooksPath=.husky`).
 ## Tests
 
 ```bash
-npm test                  # unit suite (the green gate)
-npm run test:integration  # integration tier
+npm test                       # unit suite (the green gate)
+npm run test:integration       # integration tier, keyless — free, ~10s, paid suites skip
+npm run test:integration:live  # integration tier with real keys — SPENDS MONEY
 npm run lint
 ```
 
-E2E tests that talk to real models skip without `OPENROUTER_API_KEY`. The agentic eval system
+E2E tests that talk to real models skip without `OPENROUTER_API_KEY`. `test:integration` guarantees
+that by scrubbing credentials before jest starts, so it is safe to run anywhere; CI runs it keyless on
+every push. The paid tier runs only via the manually dispatched `integration-live.yml` workflow. The agentic eval system
 lives in `evals/` (see `evals/README.md`). Full testing guide: `docs/testing.md`.
 
 ## UI testing via Chrome DevTools Protocol

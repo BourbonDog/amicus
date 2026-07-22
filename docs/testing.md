@@ -30,8 +30,9 @@ npm test tests/context.test.js              # Single file (preferred during dev)
 npm test -- --coverage                      # Coverage report
 npm test -- -t "should extract"             # Run tests matching pattern
 
-npm run test:integration                    # Integration tests only (real processes, not LLM)
-npm run test:all                            # Unit + integration (pre-push gate)
+npm run test:integration                    # Integration tier, KEYLESS — credentials scrubbed, paid suites skip (free, ~10s)
+npm run test:integration:live               # Integration tier with real keys — SPENDS MONEY
+npm run test:all                            # Unit + integration with real keys — SPENDS MONEY (not a gate anywhere)
 npm run test:e2e:mcp                        # MCP E2E with real repomix (requires OPENROUTER_API_KEY)
 npm run lint                                # ESLint on src/
 
@@ -441,7 +442,29 @@ module.exports = {
 };
 ```
 
-`npm test` runs only `*.test.js` files that do NOT match `*.integration.test.js`. E2E and integration tests must be run explicitly via `npm run test:integration`, `npm run test:all`, or by naming the file directly.
+`npm test` runs only `*.test.js` files that do NOT match `*.integration.test.js`. E2E and integration tests must be run explicitly via `npm run test:integration` (keyless), `npm run test:integration:live` (paid), `npm run test:all`, or by naming the file directly.
+
+### Which gate runs which tier
+
+| Rail | Runs | Trigger | Cost |
+|------|------|---------|------|
+| `npm test` | unit suite only | every push (pre-push hook), `ci.yml` `test` job on the 3x2 OS/Node matrix | free |
+| `npm run test:integration` | integration tier, keyless | `ci.yml` `integration` job, every push + PR (ubuntu only) | free |
+| `npm run test:integration:live` | integration tier, real keys | `integration-live.yml`, `workflow_dispatch` only | **spends money** |
+
+The pre-push hook gates on **`npm test` only** — it does not run the integration tier. That is deliberate: `test:all` lets the paid suites see your real credentials, so wiring it into pre-push would bill you on every push. CI watches the tier instead.
+
+**How the keyless run stays free.** `npm run test:integration` goes through `scripts/run-integration-keyless.js`, which builds a scrubbed environment before spawning jest: it deletes every name in `PROVIDER_ENV_MAP` (plus legacy aliases), drops `AMICUS_ENV_DIR`/`AMICUS_CONFIG_DIR`, and repoints `HOME`/`USERPROFILE` at an empty sandbox directory.
+
+That last part is the one that matters, because the paid suites can find a credential through **three** doors, not one:
+
+1. the process env (`OPENROUTER_API_KEY` etc.);
+2. `~/.config/amicus/.env`, read directly by each suite's `HAS_API_KEY` check;
+3. `~/.local/share/opencode/auth.json`, reached by suites that call `loadCredentials()` at module scope (e.g. `fanout-e2e`).
+
+Doors 2 and 3 both resolve through `os.homedir()`, which is a libuv call against the **real** process environment. A jest `--setupFiles` shim cannot close them: jest hands each test environment a *copy* of `process.env`, so the shim clears the variables but `os.homedir()` still points at the real home. This was tried, and it failed in two directions at once — suites gated on door 2 saw `HAS_API_KEY` true with no env credentials, so they ran and failed (17 spurious failures), while `fanout-e2e` pulled a real key through door 3 and billed for a live wave. Scrubbing in the parent process before jest is spawned closes all three at once, because the workers — and the CLI/MCP subprocesses the tests themselves spawn — inherit the real, scrubbed environment.
+
+The scrub is derived from the engine's own `PROVIDER_ENV_MAP` rather than a hand-maintained list of paid test files, so a provider added later is covered automatically, and a paid suite added later self-skips automatically as long as it follows the existing key-gate pattern.
 
 **Timeouts:** E2E tests set per-test timeouts of 180 seconds (3 minutes) for real LLM calls. Unit tests use Jest's default 5-second timeout.
 

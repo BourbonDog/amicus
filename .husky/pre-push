@@ -3,9 +3,13 @@
 # Pre-push hook: blocking checks
 # 1. Unit test suite (npm test) -- BLOCKS the push on failure.
 #    Skipped if .test-passed already matches this commit (written by posttest).
-#    NOTE: gates on the unit suite, which is green. Integration tests
-#    (npm run test:all) are intentionally excluded until the "Fix integration
-#    tests" task lands; switch this to `npm run test:all` once they pass.
+#    DELIBERATELY the unit suite only, NOT `npm run test:all`. test:all lets the
+#    integration tier see your real credentials, so every push would spawn real
+#    LLM sessions and bill you -- a local gate must never cost money. The
+#    integration tier is watched instead by the keyless `integration` job in
+#    .github/workflows/ci.yml (free, runs on every push/PR); the paid tier is
+#    the manually dispatched .github/workflows/integration-live.yml. Run
+#    `npm run test:integration` yourself for the free tier -- it is ~10s.
 # 2. npm audit (warn only)
 
 # Git runs this file directly (core.hooksPath=.husky, set by
