@@ -295,3 +295,45 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 ## Phase 20 whole-phase review triage (2026-07-04)
 
 - **Model-resolution failures (`resolveModelFromArgs`/`validateFallbackModel`, `src/utils/start-helpers.js`) `console.error`+`exit(1)` and bypass the `--json` envelope** across the whole surface incl. `start` — route through `failJson(BAD_MODEL)` in a future pass. (Pre-existing class, deliberately not fixed in Phase 20.) [S]
+
+## v4.1.2 divergent-vendor sweep (2026-07-22)
+
+Provenance: a multi-agent shape-consumer sweep run immediately after 4.1.1 shipped, every finding
+re-verified by hand against the source before landing here.
+
+**The class.** `toCanonicalDefault()` strips an `openrouter/` prefix for any direct-capable vendor
+and performs **no divergence check of its own**, so every caller must guard. For
+`DIVERGENT_VENDORS` (currently just `anthropic`) the direct and gateway ids are different
+strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`, the direct API
+`anthropic/claude-opus-4-8`. Four of six call sites guarded; two did not.
+
+- [x] **M-5 · Medium · `config.js` derived the OpenRouter mirror by string-prepending** — **DONE (4.1.2).**
+  Deferred out of 4.1.1 toward 4.2 and recorded nowhere but a session transcript — which is exactly
+  why it is written down here now. `buildProviderModels()` built its mirror as
+  `\`openrouter/${alias}\``; once 4.1.1 made `toDefaultAliases()` return the DIRECT form, that
+  registered `openrouter/anthropic/claude-opus-4-8`, an id OpenRouter does not serve, and dropped
+  the real one. Now read from `toGatewayRoutes()`, guarded so a user override never inherits a
+  curated route. `opus`/`haiku` only. Fix: `59c8eb3`.
+
+- [x] **BL-412-1 · Medium · a fresh `amicus setup` seeded an alias its own `doctor` calls stale** — **DONE (4.1.2).**
+  `quick-picks.js:83` (`toLiveSeedAliases`) and `setup.js:389` (readline wizard) both ran
+  `toCanonicalDefault()` on a divergent vendor's OpenRouter route, storing
+  `anthropic/claude-opus-4.8` under the direct `anthropic` vendor. `alias-audit.js:82` suppresses
+  only `curated-route` sources, so the row is unsuppressable and `amicus doctor` reports
+  `1 stale: opus` — the very warning 4.1.1 shipped to remove. Reproduced against a **direct-only**
+  catalog as well, so it was never OpenRouter-specific: an Anthropic-only user was hit. Both sites
+  now route through one guarded helper, `toStorableRoute()`. `opus` only — `haiku`/`claude`/
+  `sonnet`/`fable` are CARDLESS and never overlaid.
+  **Not a 4.1.1 code regression:** `git diff v4.1.0 HEAD` is empty for both files. They agreed with
+  the shipped default before 4.1.1 and contradicted it after — survivors of an incomplete fix.
+
+- [ ] **Remove the footgun instead of policing it: fold the divergence check into `toCanonicalDefault()`** — [S]
+  Six call sites, two of which drifted, and the failure is silent — a plausible-looking id that
+  only surfaces as a `doctor` warning or a missing fallback route. Either take the vendor as a
+  parameter and guard internally, or rename it to something that states the precondition
+  (`stripGatewayPrefixWhenIdentical`). A lint rule or an "every call site is guarded" unit test is
+  the cheap interim.
+
+- [ ] **MODEL-NOTES fold-back still deferred** — now carried through 4.0.0, 4.0.1, 4.1.0, 4.1.1 and
+  4.1.2. The machine-local copy is staler than the shipped one in places, so a bulk port would
+  regress the repo; it needs a per-section diff, not a copy. [S]

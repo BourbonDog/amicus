@@ -1,8 +1,10 @@
 'use strict';
 
 jest.mock('../src/utils/quick-picks', () => ({
+  ...jest.requireActual('../src/utils/quick-picks'),
   resolveQuickPicks: jest.fn(() => ([
     { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
+      vendorPath: 'google',
       source: 'live', routes: { openrouter: 'openrouter/google/gemini-9.9-flash' } },
   ])),
   toLiveSeedAliases: jest.fn(() => ({ gemini: 'openrouter/google/gemini-9.9-flash' })),

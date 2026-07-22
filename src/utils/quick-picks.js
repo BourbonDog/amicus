@@ -10,7 +10,7 @@
 
 'use strict';
 
-const { getFamilies, toDefaultAliases, toCanonicalDefault } = require('./curated-models');
+const { getFamilies, toDefaultAliases, toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
 
 const MARKER_RE = /(-preview|-exp|-beta|-latest|:free)+$/;
 
@@ -45,7 +45,7 @@ function pickCurrent(catalog, nsPrefix, vendorPath, idPattern) {
 
 /**
  * @param {Array<{id:string}>} catalog
- * @returns {Array<{alias,label,blurb,source:'live'|'fallback',routes:Object<string,string>}>}
+ * @returns {Array<{alias,label,blurb,vendorPath,source:'live'|'fallback',routes:Object<string,string>}>}
  * `routes` may be empty if a family defines no fallback and the catalog has no match.
  */
 function resolveQuickPicks(catalog) {
@@ -60,30 +60,53 @@ function resolveQuickPicks(catalog) {
       if (direct) { routes[p] = direct; live = true; }
       else if (f.fallback[p]) { routes[p] = f.fallback[p]; }
     }
-    return { alias: f.alias, label: f.label, blurb: f.blurb, routes,
+    return { alias: f.alias, label: f.label, blurb: f.blurb, vendorPath: f.vendorPath, routes,
              source: live ? 'live' : 'fallback' };
   });
 }
 
 /**
+ * The single route value a wizard may STORE for a resolved quick pick.
+ *
+ * For a direct-capable vendor the OpenRouter pick is canonicalised to bare
+ * `vendor/model` so it stays direct-first via the gateway router — otherwise a
+ * fresh `amicus setup` with a live catalog would silently defeat the
+ * direct-first default `toDefaultAliases()` establishes.
+ *
+ * For a DIVERGENT vendor the direct id is never DERIVED from the OpenRouter
+ * one: they are different strings, not differently prefixed (OpenRouter serves
+ * `anthropic/claude-opus-4.8`, the direct API `anthropic/claude-opus-4-8`).
+ * Stripping the prefix there fabricates an id the direct API rejects, which
+ * `amicus doctor` then reports as a stale alias. The row's own direct route is
+ * used verbatim, falling back to the intact `openrouter/` form when the
+ * catalog offered no direct pick. Mirrors the guard already used at
+ * `provider-default-picker.js:82,143,220`.
+ * @param {{vendorPath?:string, routes?:Object<string,string>}} pick
+ * @returns {string|undefined}
+ */
+function toStorableRoute(pick) {
+  const routes = (pick && pick.routes) || {};
+  if (pick && DIVERGENT_VENDORS.has(pick.vendorPath)) {
+    return routes[pick.vendorPath] || routes.openrouter;
+  }
+  return toCanonicalDefault(routes.openrouter || Object.values(routes)[0]);
+}
+
+/**
  * Seed map for fresh configs: static defaults overlaid with live family
- * routes (cardless aliases stay pinned). The overlaid route is run through
- * `toCanonicalDefault` so a direct-capable vendor (e.g. google, openai)
- * lands as bare `vendor/model` (direct-first via the gateway router)
- * instead of the raw `openrouter/<vendor>/<rest>` pick — otherwise a fresh
- * `amicus setup` with a live catalog would silently defeat the direct-first
- * default `toDefaultAliases()` establishes. Gateway-only vendors are
- * returned unchanged by `toCanonicalDefault`.
+ * routes (cardless aliases stay pinned). See `toStorableRoute` for why the
+ * overlaid value is not a raw prefix strip.
  * @returns {Object<string,string>}
  */
 function toLiveSeedAliases(catalog) {
   const seeds = toDefaultAliases();
   for (const r of resolveQuickPicks(catalog || [])) {
     if (r.source === 'live' && r.routes.openrouter) {
-      seeds[r.alias] = toCanonicalDefault(r.routes.openrouter);
+      const stored = toStorableRoute(r);
+      if (stored) { seeds[r.alias] = stored; }
     }
   }
   return seeds;
 }
 
-module.exports = { compareIdsDesc, pickCurrent, resolveQuickPicks, toLiveSeedAliases };
+module.exports = { compareIdsDesc, pickCurrent, resolveQuickPicks, toLiveSeedAliases, toStorableRoute };
