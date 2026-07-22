@@ -113,7 +113,7 @@ function isLocalProvider(id) {
 async function resolveLocalRouteInputs(descriptor, { validateModel, providers } = {}) {
   const all = providers || getLocalProviders();
   const vendor = descriptor && descriptor.vendor;
-  const entry = vendor && all && all[vendor];
+  const entry = vendor && all && Object.prototype.hasOwnProperty.call(all, vendor) ? all[vendor] : undefined;
   if (!entry) { return {}; }
   let bearer;
   if (entry.apiKeyEnv) {

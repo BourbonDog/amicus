@@ -105,3 +105,33 @@ describe('resolveRouteForLaunch: local assembly', () => {
     expect(r.suggestions.every((s) => s.gateway === 'local')).toBe(true);
   });
 });
+
+// Review Finding 1 (post-Task-5 review, CRITICAL): resolveLocalRouteInputs read
+// `all[vendor]` with a bare bracket lookup. `all` (the local-provider map) is
+// `{}` -- a truthy empty object -- for any user with no local providers
+// configured, the common case. A bare lookup on a truthy `{}` walks the
+// prototype chain, so a vendor name colliding with an Object.prototype member
+// (e.g. 'constructor', which parseDescriptor lets through with zero vendor
+// validation) resolved the INHERITED value (truthy) and fabricated a fake
+// local-provider entry even though no such provider is configured. Worse: the
+// fabricated entry carries a genuine OWN key by the time it reaches
+// gateway-router.js's resolveRoute, which defeats that module's own
+// hasOwnProperty guards (Task 4, commit 19aade4) with corrupt input assembled
+// upstream. Fixed to match the same Object.prototype.hasOwnProperty.call idiom
+// used at gateway-router.js:134/138/151 and local-providers.js:103
+// (isLocalProvider). No mocking needed: `providers` is passed explicitly, so
+// getLocalProviders()/config.js is never consulted, and on the FIXED path the
+// function returns before touching api-key-store or local-probe.
+describe('resolveLocalRouteInputs: prototype-chain guard (Finding 1, review pass)', () => {
+  test('a vendor name colliding with Object.prototype does not fabricate a local-provider entry from an empty providers map', async () => {
+    const { resolveLocalRouteInputs } = require('../src/utils/local-providers');
+    const result = await resolveLocalRouteInputs(
+      { vendor: 'constructor', model: 'foo' },
+      { validateModel: true, providers: {} }
+    );
+    // Contract (local-providers.js:111): "`{}` for a non-local vendor" -- against
+    // an empty providers map, 'constructor' must be treated as non-local, full stop.
+    expect(result).toEqual({});
+    expect(Object.prototype.hasOwnProperty.call(result.localProviders || {}, 'constructor')).toBe(false);
+  });
+});

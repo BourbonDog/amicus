@@ -78,7 +78,7 @@ function buildSuggestions(descriptor, keys, catalogInfo, gatewayIds) {
  * @param {Object} result the `selection_required` RouteResult, mutated in place
  */
 function applySuggestions(result, { descriptor, keys, catalogInfo, gatewayIds, localProviders }) {
-  if (localProviders && descriptor && localProviders[descriptor.vendor]) { return; }
+  if (localProviders && descriptor && Object.prototype.hasOwnProperty.call(localProviders, descriptor.vendor)) { return; }
   result.suggestions = buildSuggestions(descriptor, keys, catalogInfo, gatewayIds);
 }
 
