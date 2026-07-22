@@ -12,9 +12,9 @@
  *   1. the process env, e.g. `process.env.OPENROUTER_API_KEY`;
  *   2. `~/.config/amicus/.env`, read directly by the suites' own HAS_API_KEY
  *      check via `os.homedir()`;
- *   3. `~/.local/share/opencode/auth.json`, reached by the suites that call
- *      `loadCredentials()` at module scope (e.g. fanout-e2e) -- and
- *      utils/auth-json.js resolves that path with `os.homedir()` too.
+ *   3. OpenCode's `auth.json`, reached by the suites that call
+ *      `loadCredentials()` at module scope (e.g. fanout-e2e) via
+ *      utils/auth-json.js's `resolveAuthJsonPath()`.
  *
  * A `--setupFiles` shim can delete the env vars, but it CANNOT move
  * `os.homedir()`: Jest gives each test environment a *copy* of `process.env`,
@@ -29,10 +29,25 @@
  * billed for a live 2-model wave. Both are exactly what this rail exists to
  * prevent.
  *
- * Scrubbing in the parent process before Jest is spawned fixes both sources at
+ * THIS IS NOT A SINGLE DOOR. `resolveAuthJsonPath()` does not resolve
+ * source 3 through `os.homedir()` alone -- it checks `env.XDG_DATA_HOME`
+ * FIRST, and falls back to `env.APPDATA` on win32, before ever falling back
+ * to the home-relative `.local/share` path. Repointing only `HOME`/
+ * `USERPROFILE` -- the fix this wrapper originally shipped with -- closes the
+ * home-relative fallback but leaves XDG_DATA_HOME and APPDATA wide open: a
+ * developer with either exported in their real environment (XDG_DATA_HOME is
+ * common on Nix/home-manager and several Linux distros; APPDATA is always set
+ * on Windows) escapes the sandbox entirely, through exactly the shape of gap
+ * that billed the live 2-model wave described above. A whole-branch review
+ * reproduced this end to end with a planted fake key: with XDG_DATA_HOME set,
+ * `resolveAuthJsonPath()` resolved OUTSIDE the sandbox and `loadCredentials()`
+ * picked the fake key straight up. Every credential-path root has to be
+ * repointed into the sandbox, not just the two `os.homedir()` env vars.
+ *
+ * Scrubbing in the parent process before Jest is spawned fixes every source at
  * once: the workers are child processes and inherit the real, scrubbed env, so
- * `os.homedir()` resolves to the sandbox for every worker and every CLI/MCP
- * subprocess the tests themselves spawn.
+ * `os.homedir()` *and* every XDG/APPDATA root resolve inside the sandbox for
+ * every worker and every CLI/MCP subprocess the tests themselves spawn.
  *
  * The scrub is GENERIC rather than a hand-maintained deny-list of test files:
  * key names come from the engine's own PROVIDER_ENV_MAP, so a provider added
@@ -75,6 +90,17 @@ function buildKeylessEnv(sourceEnv, sandboxHome) {
   //    and it makes a developer machine behave exactly like a fresh CI runner.
   env.HOME = sandboxHome;
   env.USERPROFILE = sandboxHome;
+
+  // 3b. Every OTHER credential-path root, sandboxed the same way -- not
+  //     deleted, since something on the machine may legitimately need these
+  //     set, just repointed so they resolve inside the sandbox instead of the
+  //     real ones. auth-json.js's resolveAuthJsonPath() checks XDG_DATA_HOME
+  //     before it ever falls back to $HOME/.local/share, and falls back to
+  //     %APPDATA% on win32 before that -- so os.homedir() sandboxing alone
+  //     does NOT contain them. See the module docstring above.
+  env.XDG_DATA_HOME = path.join(sandboxHome, '.local', 'share');
+  env.XDG_CONFIG_HOME = path.join(sandboxHome, '.config');
+  env.APPDATA = path.join(sandboxHome, 'AppData', 'Roaming');
 
   // 4. Opt-in escape hatches for the paid/network extras, so they cannot be
   //    switched on by ambient state either.
