@@ -70,6 +70,36 @@ describe('resolveRoute: local class', () => {
     expect(r.hint || '').toMatch(/ollama serve/i);
   });
 
+  // Task 4 brief point 7: "Assert the flavor-correct hint per flavor — a test that
+  // only checks 'some hint exists' is worthless." The brief's own fixture only covers
+  // ollama; these two extend coverage to the other two localHint('unreachable') arms
+  // so a swapped/deleted branch inside localHint is actually caught.
+  test('unreachable endpoint, lmstudio flavor → LM Studio-specific hint', () => {
+    const LMSTUDIO = { id: 'lmstudio', baseURL: 'http://127.0.0.1:1234/v1', flavor: 'lmstudio', keyPresent: false };
+    const r = resolveRoute(base({
+      descriptor: 'lmstudio/some-model',
+      localProviders: { lmstudio: LMSTUDIO },
+      localLive: { status: 'unreachable', models: [] },
+    }));
+    expect(r.kind).toBe('error');
+    expect(r.reason).toBe('local_endpoint_unreachable');
+    expect(r.hint).toBe('Start the LM Studio server (Developer → Start Server).');
+    expect(r.hint).not.toMatch(/ollama/i);
+  });
+
+  test('unreachable endpoint, vllm flavor → generic baseURL hint (not the ollama/lmstudio hint)', () => {
+    const VLLM = { id: 'vllm', baseURL: 'http://127.0.0.1:8000/v1', flavor: 'vllm', keyPresent: false };
+    const r = resolveRoute(base({
+      descriptor: 'vllm/some-model',
+      localProviders: { vllm: VLLM },
+      localLive: { status: 'unreachable', models: [] },
+    }));
+    expect(r.kind).toBe('error');
+    expect(r.reason).toBe('local_endpoint_unreachable');
+    expect(r.hint).toBe('Check the server at http://127.0.0.1:8000/v1.');
+    expect(r.hint).not.toMatch(/ollama|lm studio/i);
+  });
+
   test('probe ok but model absent + allowSelection → selection_required (capped at 6)', () => {
     const r = resolveRoute(base({
       descriptor: 'ollama/ghost', allowSelection: true,
