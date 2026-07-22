@@ -289,7 +289,16 @@ function buildProviderModels(resolvedRoutes = []) {
     const providerID = parts[0];
     const modelID = parts.slice(1).join('/');
 
-    if (!providers[providerID]) {
+    // providerID is an unvalidated vendor segment split off a user-supplied
+    // model string (alias or resolved route). A bare `!providers[providerID]`
+    // check walks the prototype chain, so a vendor literally named
+    // 'constructor' (a valid, non-reserved local-provider id — see
+    // local-providers.js's ID_RE/RESERVED_IDS) reads the inherited
+    // Object.prototype.constructor (truthy), skips the init below, and the
+    // next line throws on the resulting undefined. Same bug class already
+    // fixed in gateway-router.js (19aade4) and local-providers.js +
+    // route-suggestions.js (2cba73b).
+    if (!Object.prototype.hasOwnProperty.call(providers, providerID)) {
       providers[providerID] = { models: {} };
     }
     providers[providerID].models[modelID] = {};
@@ -322,6 +331,27 @@ function buildProviderModels(resolvedRoutes = []) {
 
   for (const resolved of resolvedRoutes) {
     addRoute(resolved);
+  }
+
+  // v4.2 §4.3: for every provider id that is a configured LOCAL provider AND was
+  // registered by the loops above, attach the OpenCode openai-compatible block.
+  // {env:VAR} interpolation keeps key material out of the config object.
+  const { getLocalProviders } = require('./local-providers');
+  const localAll = getLocalProviders();
+  for (const [id, block] of Object.entries(providers)) {
+    // Guarded the same way as the accumulator init above: `localAll` is a
+    // plain {} when no local providers are configured, so a bare
+    // `localAll[id]` for id === 'constructor' would read the inherited
+    // Object.prototype.constructor (truthy) and fabricate a fake local block
+    // for a vendor that isn't actually configured as local.
+    const entry = Object.prototype.hasOwnProperty.call(localAll, id) ? localAll[id] : undefined;
+    if (!entry) { continue; }
+    block.npm = '@ai-sdk/openai-compatible';
+    block.name = entry.name || id;
+    block.options = {
+      baseURL: entry.baseURL,
+      ...(entry.apiKeyEnv ? { apiKey: `{env:${entry.apiKeyEnv}}` } : {}),
+    };
   }
 
   return providers;
