@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-07-21
+
 ### Fixed
 
 - **The integration tier is tested again, and now something actually watches it.** All 14
