@@ -50,6 +50,26 @@ describe('resolveRoute: local class', () => {
     expect(r.reason).not.toBe('gateway_conflict');
   });
 
+  // Review Finding 1 (post-Task-4 review): steps 2 and 3 used to read
+  // rq.localProviders[vendor] with a bare bracket lookup, which walks the
+  // prototype chain. localProviders is normally {} for a user with no local
+  // providers configured (a truthy empty object), so a vendor name colliding
+  // with an Object.prototype member (e.g. 'constructor') resolved truthy and
+  // wrongly satisfied "this is a configured local vendor" — bypassing the
+  // pre-existing gateway_conflict contract for a request that never touched a
+  // real local provider. Step 3.5 already used the safe hasOwnProperty idiom;
+  // steps 2 and 3 now match it.
+  test('prototype-chain vendor name does not fake a local-provider match (D2 bypass guard)', () => {
+    const r = resolveRoute(base({
+      descriptor: 'openrouter/constructor/model',
+      gatewayMode: 'direct',
+      keys: { openrouter: true },
+      localProviders: {},
+    }));
+    expect(r.kind).toBe('error');
+    expect(r.reason).toBe('gateway_conflict');
+  });
+
   test('declared bearer but missing value → no_local_key', () => {
     const r = resolveRoute(base({
       localProviders: { ollama: { ...OLLAMA, apiKeyEnv: 'OLLAMA_API_KEY', keyPresent: false } },
@@ -114,6 +134,35 @@ describe('resolveRoute: local class', () => {
     expect(r.kind).toBe('error');
     expect(r.reason).toBe('model_not_found');
     expect(r.hint || '').toMatch(/ollama pull/i);
+  });
+
+  // Review Finding 2 (post-Task-4 review): localHint(..., 'model_not_found')'s
+  // non-ollama branch (gateway-router.js:28-29) had zero coverage — a sentinel
+  // replacement of either non-ollama string still passed the full suite. These
+  // two mirror the existing lmstudio/vllm local_endpoint_unreachable pair above,
+  // asserting the exact hint strings so a swapped/deleted branch is caught.
+  test('model not found, lmstudio flavor → "Load the model in LM Studio" hint', () => {
+    const LMSTUDIO = { id: 'lmstudio', baseURL: 'http://127.0.0.1:1234/v1', flavor: 'lmstudio', keyPresent: false };
+    const r = resolveRoute(base({
+      descriptor: 'lmstudio/ghost-model',
+      localProviders: { lmstudio: LMSTUDIO },
+      localLive: { status: 'ok', models: ['lmstudio/some-other-model'] },
+    }));
+    expect(r.kind).toBe('error');
+    expect(r.reason).toBe('model_not_found');
+    expect(r.hint).toBe('Load the model in LM Studio first.');
+  });
+
+  test('model not found, vllm flavor → "Load the model in the server" hint', () => {
+    const VLLM = { id: 'vllm', baseURL: 'http://127.0.0.1:8000/v1', flavor: 'vllm', keyPresent: false };
+    const r = resolveRoute(base({
+      descriptor: 'vllm/ghost-model',
+      localProviders: { vllm: VLLM },
+      localLive: { status: 'ok', models: ['vllm/some-other-model'] },
+    }));
+    expect(r.kind).toBe('error');
+    expect(r.reason).toBe('model_not_found');
+    expect(r.hint).toBe('Load the model in the server first.');
   });
 
   test('probe skipped (--no-validate-model) → resolved with unverified notice', () => {

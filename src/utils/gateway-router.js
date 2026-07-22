@@ -131,11 +131,11 @@ function resolveRoute(req) {
   const model = d.model;
 
   // 2. Explicit conflict: force-OR literal vs --gateway direct
-  if (d.isExplicitOpenRouter && rq.gatewayMode === 'direct' && !(rq.localProviders && rq.localProviders[vendor])) {
+  if (d.isExplicitOpenRouter && rq.gatewayMode === 'direct' && !(rq.localProviders && Object.prototype.hasOwnProperty.call(rq.localProviders, vendor))) {
     return routeError({ requested: d.raw, reason: 'gateway_conflict', preferredGateway: 'direct', suggestions: [] });
   }
   // 3. Explicit OR literal
-  if (d.isExplicitOpenRouter && !(rq.localProviders && rq.localProviders[vendor])) {
+  if (d.isExplicitOpenRouter && !(rq.localProviders && Object.prototype.hasOwnProperty.call(rq.localProviders, vendor))) {
     if (!rq.keys.openrouter) {
       return routeError({ requested: d.raw, reason: 'no_openrouter_key', preferredGateway: 'openrouter', suggestions: [] });
     }
