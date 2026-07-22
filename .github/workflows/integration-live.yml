@@ -1,0 +1,45 @@
+name: Integration (live)
+
+# The PAID rail of the integration tier. This is the ONLY workflow in the repo
+# that lets tests/**/*.integration.test.js reach a real provider, and it is
+# deliberately human-initiated.
+#
+# Split of responsibilities:
+#   - ci.yml `integration`  -> keyless, every push/PR, $0, gates merges.
+#   - this workflow         -> live keys, on demand, costs money, gates releases.
+#
+# workflow_dispatch ONLY, no `schedule:`, ON PURPOSE. These suites spawn real
+# CLI/MCP sessions against a real LLM, so every run bills the repo owner's
+# OpenRouter account. A nightly cron would spend money unattended and, because
+# real-LLM E2E is inherently flaky, would mostly train everyone to ignore a
+# recurring red badge. Run it when it earns its cost: before cutting a release
+# (see the release checklist in docs/publishing.md) and after touching the
+# spawn/session/MCP lifecycle. To adopt a nightly cadence later, add a
+# `schedule:` trigger here -- the job body needs no other change.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: test:integration:live (real LLM — spends money)
+    runs-on: ubuntu-latest
+    # Real-LLM legs are slow; cap the blast radius of a hung session rather
+    # than burning the default 6h budget.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm ci
+      # The suites self-gate on key presence: with this secret set they run for
+      # real, and if the secret is ever missing they SKIP rather than fail, so a
+      # misconfigured run is loud in the log but not a false red.
+      - name: Run the paid integration tier
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: npm run test:integration:live

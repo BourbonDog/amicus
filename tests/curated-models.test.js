@@ -31,27 +31,34 @@ describe('curated-models v2 (families)', () => {
     // Direct-capable vendors (Task 8.1a) resolve to the BARE canonical id so
     // the gateway router can route direct-first; gateway-only vendors keep
     // their openrouter/ prefix since OpenRouter is their only route.
-    expect(defaults.gemini).toBe('google/gemini-3.5-flash');
-    expect(defaults.opus).toBe('anthropic/claude-opus-4.8');
+    expect(defaults.gemini).toBe('google/gemini-3.6-flash');
+    expect(defaults.opus).toBe('anthropic/claude-opus-4-8');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
   });
 
-  test('toDefaultAliases: direct-capable vendors resolve bare, gateway-only vendors keep openrouter/ (Task 8.1a)', () => {
+  test('toDefaultAliases: direct-capable vendors resolve to their AUTHORED direct form, gateway-only vendors keep openrouter/', () => {
     const defaults = toDefaultAliases();
-    // Direct-capable (openai/anthropic/google/deepseek) — bare, policy-routed.
+    // Direct-capable (openai/google/deepseek) — bare, policy-routed. These
+    // vendors use identical ids on both gateways, so the bare form is derived.
     expect(defaults.gpt).toBe('openai/gpt-5.5');
     expect(defaults['gpt-pro']).toBe('openai/gpt-5.5-pro');
     expect(defaults.codex).toBe('openai/gpt-5.3-codex');
-    expect(defaults.claude).toBe('anthropic/claude-sonnet-5');
-    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
-    expect(defaults.haiku).toBe('anthropic/claude-haiku-4.5');
-    expect(defaults.opus).toBe('anthropic/claude-opus-4.8');
-    expect(defaults.fable).toBe('anthropic/claude-fable-5');
-    expect(defaults.gemini).toBe('google/gemini-3.5-flash');
+    expect(defaults.gemini).toBe('google/gemini-3.6-flash');
     expect(defaults['gemini-pro']).toBe('google/gemini-3.1-pro-preview');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
+    // Anthropic is a DIVERGENT vendor: its direct-API ids differ from
+    // OpenRouter's, so the pinned default is the authored `anthropic:` route
+    // verbatim (dash form) — never the openrouter route with the prefix
+    // stripped, which would emit ids the direct API rejects.
+    expect(defaults.claude).toBe('anthropic/claude-sonnet-5');
+    expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
+    expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
+    expect(defaults.opus).toBe('anthropic/claude-opus-4-8');
+    // fable is divergent AND has no authored `anthropic:` route (OpenRouter-only
+    // today), so it keeps its OpenRouter route rather than inventing a direct id.
+    expect(defaults.fable).toBe('openrouter/anthropic/claude-fable-5');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
     expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
@@ -70,7 +77,7 @@ describe('curated-models v2 (families)', () => {
     expect(routes).toContainEqual(
       { alias: 'deepseek', provider: 'deepseek', model: 'deepseek/deepseek-v4-pro' });
     expect(routes).toContainEqual(
-      { alias: 'gemini', provider: 'openrouter', model: 'openrouter/google/gemini-3.5-flash' });
+      { alias: 'gemini', provider: 'openrouter', model: 'openrouter/google/gemini-3.6-flash' });
   });
 
   test('family openrouter fallbacks match their own idPattern (self-consistency)', () => {

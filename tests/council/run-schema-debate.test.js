@@ -45,6 +45,24 @@ describe('council-run schema accepts the debate summary (spec §5.1)', () => {
   test('a bad debate.outcome enum is rejected', () => {
     expect(validate({ ...base, debate: { ...base.debate, outcome: 'maybe' } })).toBe(false);
   });
+  // 4.1.1 Fix C: run.js now checkpoints debate-revote 'skipped' (not a false
+  // 'complete') when the re-vote wave never launched. stages[].status is
+  // `{"type":"string"}` with no enum, so this is additive — pinned here so a
+  // future tightening of that field to a closed enum can't silently reject it.
+  test('a debate-revote stage with status "skipped" still validates (status is not a closed enum)', () => {
+    const stages = base.stages.map(s => (s.name === 'debate-revote' ? { name: 'debate-revote', status: 'skipped' } : s));
+    expect(validate({ ...base, stages })).toBe(true);
+  });
+  // M-2 (whole-branch review of 4.1.1): the test above only proved the ACCEPT
+  // direction, which `{"type":"string"}` with no enum trivially satisfies for
+  // ANY string ('banana' would pass identically) — it stayed green even with
+  // the Fix C revert reapplied, so it never actually pinned the validator to
+  // this field. This proves the REJECT direction: stages[].status is still
+  // typed `string`, so a non-string value must fail validation.
+  test('a non-string stages[].status is rejected (proves the validator is actually live on this field)', () => {
+    const stages = base.stages.map(s => (s.name === 'debate-revote' ? { name: 'debate-revote', status: 42 } : s));
+    expect(validate({ ...base, stages })).toBe(false);
+  });
 });
 
 describe('council-tally / council-verdict accept findings[].debate (spec §5.6)', () => {

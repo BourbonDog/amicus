@@ -79,8 +79,8 @@ Amicus uses the OpenCode SDK to communicate with LLM providers. You need to conf
 
 Read this before picking a model string — it decides both routing and which credentials get used:
 
-- **Bare `provider/model`** (e.g. `openai/gpt-5.5`, `anthropic/claude-opus-4.8`, `google/gemini-3.5-flash`) is the **canonical, policy-routed** form — use it by default. Amicus routes it **direct-first**: your direct provider key when one is configured, falling back to OpenRouter automatically when only `OPENROUTER_API_KEY` exists. You never pick the gateway by hand.
-- **`openrouter/provider/model`** (e.g. `openrouter/google/gemini-3.5-flash`) is an **explicit force-OpenRouter override** — it always routes through OpenRouter even when a direct key is present. Reach for it deliberately, or for gateway-only vendors with no direct integration at all (Qwen, Grok, Mistral, GLM, MiniMax, Kimi, Seed, …) — those *require* the `openrouter/` prefix.
+- **Bare `provider/model`** (e.g. `openai/gpt-5.5`, `anthropic/claude-opus-4-8`, `google/gemini-3.6-flash`) is the **canonical, policy-routed** form — use it by default. Amicus routes it **direct-first**: your direct provider key when one is configured, falling back to OpenRouter automatically when only `OPENROUTER_API_KEY` exists. You never pick the gateway by hand.
+- **`openrouter/provider/model`** (e.g. `openrouter/google/gemini-3.6-flash`) is an **explicit force-OpenRouter override** — it always routes through OpenRouter even when a direct key is present. Reach for it deliberately, or for gateway-only vendors with no direct integration at all (Qwen, Grok, Mistral, GLM, MiniMax, Kimi, Seed, …) — those *require* the `openrouter/` prefix.
 - Short aliases (`gemini`, `gpt`, `opus`, `claude`, `deepseek`, …) resolve to one of the two forms above via your config; `amicus setup` seeds direct-capable vendors to the bare canonical form automatically.
 - **Routing controls:** `routing.prefer` in `~/.config/amicus/config.json` sets the global default — `"direct"` (the default) or `"openrouter"` to always prefer OpenRouter. Per call, `--gateway auto|direct|openrouter` overrides it (`auto` = direct-first, same as the default).
 - **One-time migration notice:** if you hold both an OpenRouter key and a direct key for a vendor, the first launch that resolves to that vendor prints a one-time notice that routing moved to direct API (previously OpenRouter); set `routing.prefer: "openrouter"` (or pass `--gateway openrouter`) to restore the old all-OpenRouter behavior.
@@ -116,8 +116,8 @@ amicus start --model gemini --prompt "Say hello" --no-ui
 **With OpenRouter as your only key**, aliases and bare canonical ids both work — the router falls back to OpenRouter automatically since no direct key exists for the vendor:
 ```bash
 amicus start --model gemini --prompt "..."                              # alias
-amicus start --model google/gemini-3.5-flash --prompt "..."             # bare canonical, falls back to OpenRouter
-amicus start --model openrouter/google/gemini-3.5-flash --prompt "..."  # explicit override — same result here
+amicus start --model google/gemini-3.6-flash --prompt "..."             # bare canonical, falls back to OpenRouter
+amicus start --model openrouter/google/gemini-3.6-flash --prompt "..."  # explicit override — same result here
 ```
 
 ### Option B: Direct API Keys (Provider-Specific)
@@ -451,7 +451,7 @@ Use short aliases (run `amicus models` to see the live catalog, and `amicus mode
 - Omit `--model` entirely to use your configured default
 
 Full model strings also work: `--model provider/model-id` (bare canonical, direct-first — e.g.
-`--model anthropic/claude-opus-4.8`) or `--model openrouter/provider/model-id` (explicit
+`--model anthropic/claude-opus-4-8`) or `--model openrouter/provider/model-id` (explicit
 force-OpenRouter override).
 
 ### Verifying Model Names

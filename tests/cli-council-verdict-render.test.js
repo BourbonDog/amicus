@@ -35,3 +35,44 @@ test('council verdict without --render writes only verdict.json (v4.0 behavior)'
   await handleCouncil({ _: ['council', 'verdict', tallyPath], out: outPath });
   expect(fs.existsSync(path.join(dir, 'report.html'))).toBe(false);
 });
+
+// 4.1.1 Fix B: report.html held model output but was written with no mode,
+// so a fresh --out-dir landed it at the umask default (typically 0o644 on
+// POSIX) instead of matching every sibling writer's { mode: 0o600 }
+// (src/council/run-assemble.js, src/mcp-server.js, src/council/run-launch.js).
+// Assert the call args directly (works on any OS) rather than relying only
+// on statSync, since NTFS ignores Unix mode bits and would mask a regression
+// on a Windows dev box.
+test('council verdict --render writes report.html with { mode: 0o600 }', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-mode-'));
+  const tallyPath = path.join(dir, 'tally.json');
+  fs.writeFileSync(tallyPath, JSON.stringify(tallyDoc()));
+  const outPath = path.join(dir, 'verdict.json');
+  const reportPath = path.join(dir, 'report.html');
+
+  const realWriteFileSync = fs.writeFileSync.bind(fs);
+  const spy = jest.spyOn(fs, 'writeFileSync').mockImplementation((...args) => realWriteFileSync(...args));
+  try {
+    const code = await handleCouncil({ _: ['council', 'verdict', tallyPath], out: outPath, render: true });
+    expect(code).toBe(0);
+    const reportCall = spy.mock.calls.find(([p]) => p === reportPath);
+    expect(reportCall).toBeDefined();
+    expect(reportCall[2]).toEqual({ mode: 0o600 });
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+// POSIX-only real-permissions check: NTFS ignores Unix mode bits, so fs
+// reports 0o666 on Windows even though the source passed { mode: 0o600 }
+// (harmless no-op there) — see the identical pattern in api-key-store.test.js.
+const itPosix = process.platform === 'win32' ? it.skip : it;
+itPosix('council verdict --render leaves report.html at 0o600 on disk (POSIX only)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-mode-posix-'));
+  const tallyPath = path.join(dir, 'tally.json');
+  fs.writeFileSync(tallyPath, JSON.stringify(tallyDoc()));
+  const outPath = path.join(dir, 'verdict.json');
+  await handleCouncil({ _: ['council', 'verdict', tallyPath], out: outPath, render: true });
+  const stats = fs.statSync(path.join(dir, 'report.html'));
+  expect(stats.mode & 0o777).toBe(0o600);
+});

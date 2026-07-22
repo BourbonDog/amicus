@@ -181,7 +181,7 @@ function runVerdict(args, useJson) {
     // v4.1 §4.5c: refresh report.html next to the decided verdict.
     try {
       const html = buildReport({ verdict }, { format: 'html' });
-      fs.writeFileSync(path.join(path.dirname(outPath), 'report.html'), html);
+      fs.writeFileSync(path.join(path.dirname(outPath), 'report.html'), html, { mode: 0o600 });
     } catch (e) {
       return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `verdict written but render failed: ${e.message}`,
         hint: 'the verdict.json is valid; re-run `amicus council report <verdict.json> --html` manually' });

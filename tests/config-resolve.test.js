@@ -189,7 +189,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.6-flash');
     });
 
     it('returns the stored bare id unchanged when OPENAI_API_KEY is set but OPENROUTER_API_KEY is not', () => {
@@ -205,7 +205,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('opus');
-      expect(result).toBe('anthropic/claude-opus-4.8');
+      expect(result).toBe('anthropic/claude-opus-4-8');
     });
 
     it('returns the stored bare id unchanged when DEEPSEEK_API_KEY is set but OPENROUTER_API_KEY is not', () => {
@@ -222,13 +222,13 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.6-flash');
     });
 
     it('returns the stored bare id unchanged when neither key is set', () => {
       const config = loadModule();
       const result = config.resolveModel('gemini');
-      expect(result).toBe('google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.6-flash');
     });
 
     it('returns explicit model strings with slash unchanged regardless of env keys', () => {
@@ -252,7 +252,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel(undefined);
-      expect(result).toBe('google/gemini-3.5-flash');
+      expect(result).toBe('google/gemini-3.6-flash');
     });
 
     it('returns explicit default model strings unchanged regardless of env keys', () => {

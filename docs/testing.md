@@ -30,8 +30,9 @@ npm test tests/context.test.js              # Single file (preferred during dev)
 npm test -- --coverage                      # Coverage report
 npm test -- -t "should extract"             # Run tests matching pattern
 
-npm run test:integration                    # Integration tests only (real processes, not LLM)
-npm run test:all                            # Unit + integration (pre-push gate)
+npm run test:integration                    # Integration tier, KEYLESS — credentials scrubbed, paid suites skip (free, ~10s)
+npm run test:integration:live               # Integration tier with real keys — SPENDS MONEY
+npm run test:all                            # Unit + integration with real keys — SPENDS MONEY (not a gate anywhere)
 npm run test:e2e:mcp                        # MCP E2E with real repomix (requires OPENROUTER_API_KEY)
 npm run lint                                # ESLint on src/
 
@@ -147,7 +148,7 @@ Spawns the real `amicus` CLI binary with `start --no-ui` and verifies the full h
 Test process
   └─ spawn(node, [amicus.js, start, --no-ui, ...])
        └─ OpenCode server (auto port)
-            └─ Real LLM call (gemini-flash)
+            └─ Real LLM call (gemini)
        └─ Session files written to tmpDir
   └─ spawn(node, [amicus.js, list, ...])  // verify list
   └─ spawn(node, [amicus.js, read, ...])  // verify read
@@ -441,7 +442,29 @@ module.exports = {
 };
 ```
 
-`npm test` runs only `*.test.js` files that do NOT match `*.integration.test.js`. E2E and integration tests must be run explicitly via `npm run test:integration`, `npm run test:all`, or by naming the file directly.
+`npm test` runs only `*.test.js` files that do NOT match `*.integration.test.js`. E2E and integration tests must be run explicitly via `npm run test:integration` (keyless), `npm run test:integration:live` (paid), `npm run test:all`, or by naming the file directly.
+
+### Which gate runs which tier
+
+| Rail | Runs | Trigger | Cost |
+|------|------|---------|------|
+| `npm test` | unit suite only | every push (pre-push hook), `ci.yml` `test` job on the 3x2 OS/Node matrix | free |
+| `npm run test:integration` | integration tier, keyless | `ci.yml` `integration` job, every push + PR (ubuntu only) | free |
+| `npm run test:integration:live` | integration tier, real keys | `integration-live.yml`, `workflow_dispatch` only | **spends money** |
+
+The pre-push hook gates on **`npm test` only** — it does not run the integration tier. That is deliberate: `test:all` lets the paid suites see your real credentials, so wiring it into pre-push would bill you on every push. CI watches the tier instead.
+
+**How the keyless run stays free.** `npm run test:integration` goes through `scripts/run-integration-keyless.js`, which builds a scrubbed environment before spawning jest: it deletes every name in `PROVIDER_ENV_MAP` (plus legacy aliases), drops `AMICUS_ENV_DIR`/`AMICUS_CONFIG_DIR`, and sandboxes **every credential-path root** — `HOME`, `USERPROFILE`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `APPDATA` — by repointing each one inside an empty sandbox directory.
+
+That last part is the one that matters, because the paid suites can find a credential through **three** doors, not one:
+
+1. the process env (`OPENROUTER_API_KEY` etc.);
+2. `~/.config/amicus/.env`, read directly by each suite's `HAS_API_KEY` check via `os.homedir()`;
+3. OpenCode's `auth.json`, reached by suites that call `loadCredentials()` at module scope (e.g. `fanout-e2e`), via `utils/auth-json.js`'s `resolveAuthJsonPath()`.
+
+Door 2 resolves through `os.homedir()` alone, which is a libuv call against the **real** process environment — a jest `--setupFiles` shim cannot move it, since jest hands each test environment a *copy* of `process.env` while `os.homedir()` reads the real one. **Door 3 is not a single path either**: `resolveAuthJsonPath()` checks `XDG_DATA_HOME` FIRST, and falls back to `APPDATA` on win32, before it ever falls back to the `os.homedir()`-relative `~/.local/share/opencode/auth.json`. Repointing only `HOME`/`USERPROFILE` — the fix this wrapper originally shipped with — closes the home-relative fallback but leaves `XDG_DATA_HOME`/`APPDATA` open: anyone with either exported in their real environment (XDG_DATA_HOME is common on Nix/home-manager and several Linux distros; APPDATA is always set on Windows) escapes the sandbox entirely, regardless of `os.homedir()`, through exactly the shape of gap that billed the live 2-model wave described next. **This was tried and failed in production, not just in theory:** the `--setupFiles` shim version was tried first and produced two distinct wrong outcomes in a single run — suites gated on door 2 saw `HAS_API_KEY` true with no env credentials, so they ran and failed (17 spurious failures), while `fanout-e2e` pulled a real key through door 3 and billed for a live wave. A whole-branch review of the `HOME`/`USERPROFILE`-only wrapper fix later reproduced the same class of leak end to end with a planted fake credential: with `XDG_DATA_HOME` set, `resolveAuthJsonPath()` resolved OUTSIDE the sandbox and `loadCredentials()` picked the fake key straight up — confirming the gap without spending anything real. Scrubbing every root in the parent process before jest is spawned closes all three doors at once, because the workers — and the CLI/MCP subprocesses the tests themselves spawn — inherit the real, scrubbed environment.
+
+The scrub is derived from the engine's own `PROVIDER_ENV_MAP` rather than a hand-maintained list of paid test files, so a provider added later is covered automatically, and a paid suite added later self-skips automatically as long as it follows the existing key-gate pattern.
 
 **Timeouts:** E2E tests set per-test timeouts of 180 seconds (3 minutes) for real LLM calls. Unit tests use Jest's default 5-second timeout.
 

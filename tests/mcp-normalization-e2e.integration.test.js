@@ -236,7 +236,7 @@ describeE2E('MCP normalization live sidecar session', () => {
       const child = spawn(NODE, [
         SIDECAR_BIN, 'start',
         '--prompt', 'Say exactly: MCP_NORM_OK',
-        '--model', 'gemini-flash',
+        '--model', 'gemini',
         '--no-ui',
         '--timeout', '2',
         '--mcp-config', configPath,

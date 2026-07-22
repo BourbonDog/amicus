@@ -198,7 +198,11 @@ async function runCouncil(options, deps = {}) {
         // run-debate owns debate-revote's running/waveId/waveIds checkpoint — only it
         // knows whether the wave launched. Never advertise a `-rv` id here: a skipped
         // re-vote would leave the abort cascade chasing the v4.0 lens `-s1` phantom.
-        runState.updateStage(o.runDir, 'debate-revote', { status: 'complete', completedAt: now() });
+        // Mirror run-chair.js's 'skipped' convention (no startedAt) when nothing was
+        // defended/amended or the cost ceiling skipped it — 'complete' would report
+        // work that never happened.
+        runState.updateStage(o.runDir, 'debate-revote', dbg.revoteLaunched
+          ? { status: 'complete', completedAt: now() } : { status: 'skipped', completedAt: now() });
         ({ debatedInput, debateFindings, debateSummary } = dbg);
         debatedRecord = tally(debatedInput);
         // Defensive truthiness guard: `[]` is truthy in JS, so an empty outcomes

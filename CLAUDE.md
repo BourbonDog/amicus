@@ -44,9 +44,10 @@ amicus list                               # List sessions
 
 ### Testing
 ```bash
-npm test                           # Unit tests (excludes *.integration.test.js)
-npm run test:integration           # Integration tests only (real LLM, costs tokens)
-npm run test:all                   # Unit + integration (used by pre-push)
+npm test                           # Unit tests (excludes *.integration.test.js) -- the pre-push gate
+npm run test:integration           # Integration tier, KEYLESS: credentials scrubbed, paid suites skip (free, ~10s)
+npm run test:integration:live      # Integration tier with real keys -- SPENDS MONEY (release ritual only)
+npm run test:all                   # Unit + integration with real keys -- SPENDS MONEY (not a gate anywhere)
 npm test tests/context.test.js     # Single file (preferred during dev)
 npm test -- --coverage             # Coverage report
 ```
@@ -310,6 +311,7 @@ scripts/
 ├── integration-test.sh
 ├── mark-test-passed.js  # Writes the current git HEAD SHA to .test-passed for the pre-push SHA cache
 ├── postinstall.js  # Post-install script for amicus
+├── run-integration-keyless.js
 ├── setup-hooks.js  # Configure git to run the version-controlled hooks in .husky/.
 ├── test-tools.sh
 ├── validate-docs.js  # CLAUDE.md drift detection script.
@@ -515,7 +517,9 @@ Version-controlled in `.husky/` and executed directly by git via `core.hooksPath
 
 **pre-commit (<2s):** lint-staged -> check-secrets (block) -> check-file-sizes (block) -> generate-docs (auto-stage) -> validate-docs (warn)
 
-**pre-push:** `npm run test:all` (skipped if SHA-cached via `.test-passed`) -> `npm audit` (warn-only)
+**pre-push:** `npm test` — the unit suite only (skipped if SHA-cached via `.test-passed`) -> `npm audit` (warn-only). Deliberately NOT `test:all`: that would let the integration tier reach your real credentials and bill you on every push. The integration tier is watched by CI instead — see below.
+
+**Integration tier (`tests/**/*.integration.test.js`):** excluded from `npm test` by `jest.config.js`, so it needs its own rail. Free/keyless run on every push+PR via the `integration` job in `.github/workflows/ci.yml`; paid run on demand via `.github/workflows/integration-live.yml` (`workflow_dispatch`, carries `secrets.OPENROUTER_API_KEY`). `npm run test:integration` goes through `scripts/run-integration-keyless.js`, which strips every provider credential and sandboxes `$HOME`/`%USERPROFILE%` before spawning jest, so the money-spending suites self-skip and the script cannot bill even if a key is present.
 
 **SHA caching:** `posttest` writes HEAD SHA to `.test-passed`. Pre-push skips tests if SHA matches. Invalidated by any new commit. File is gitignored.
 

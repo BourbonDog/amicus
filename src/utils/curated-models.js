@@ -30,8 +30,8 @@ const FAMILIES = [
     vendorPath: 'google',
     idPattern: /^gemini-[\d.]+-flash(-preview|-exp|-latest)?$/,
     directProviders: ['google'],
-    fallback: { openrouter: 'openrouter/google/gemini-3.5-flash',
-                google: 'google/gemini-3.5-flash' } },
+    fallback: { openrouter: 'openrouter/google/gemini-3.6-flash',
+                google: 'google/gemini-3.6-flash' } },
   { alias: 'gemini-pro', label: 'Gemini Pro-class', blurb: 'advanced reasoning',
     vendorPath: 'google',
     idPattern: /^gemini-[\d.]+-pro(-preview|-exp|-latest)?$/,
@@ -120,24 +120,6 @@ function toCanonicalDefault(route) {
 }
 
 /**
- * @returns {Object<string,string>} alias → pinned route, direct-first for
- * direct-capable vendors (bare `vendor/model`), openrouter-prefixed for
- * gateway-only vendors. STATIC — runtime-safe.
- */
-function toDefaultAliases() {
-  const out = {};
-  for (const f of FAMILIES) {
-    const route = f.fallback.openrouter || Object.values(f.fallback)[0];
-    out[f.alias] = toCanonicalDefault(route);
-  }
-  for (const e of CARDLESS) {
-    const route = e.routes.openrouter || Object.values(e.routes)[0];
-    out[e.alias] = toCanonicalDefault(route);
-  }
-  return out;
-}
-
-/**
  * @returns {Array<{alias,provider,model}>} every pinned route, flattened (for the alias audit).
  */
 function listCuratedRoutes() {
@@ -210,6 +192,26 @@ function toGatewayRoutes() {
   const out = {};
   for (const f of FAMILIES) { out[f.alias] = gatewayRoutesFor(f.vendorPath, f.fallback); }
   for (const e of CARDLESS) { out[e.alias] = gatewayRoutesFor(vendorOf(e.routes.openrouter), e.routes); }
+  return out;
+}
+
+/**
+ * @returns {Object<string,string>} alias → the SINGLE pinned route used for
+ * display and `config.default`: the alias's authored direct form when one
+ * exists, else its OpenRouter route. STATIC — runtime-safe, never networks.
+ *
+ * Derived from `toGatewayRoutes()` on purpose, so the two builders can never
+ * disagree. It previously string-stripped `openrouter/` itself, which emitted
+ * OpenRouter's dot ids for divergent vendors (`anthropic/claude-opus-4.8` —
+ * the direct API only serves the dash form) and invented a bare direct id for
+ * OpenRouter-only models (`fable`). Both made `amicus doctor` and `amicus
+ * models --check` warn about the product's own shipped defaults.
+ */
+function toDefaultAliases() {
+  const out = {};
+  for (const [alias, routes] of Object.entries(toGatewayRoutes())) {
+    out[alias] = routes.direct || routes.openrouter;
+  }
   return out;
 }
 
