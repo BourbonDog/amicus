@@ -380,6 +380,52 @@ describe('Sidecar Config Module', () => {
       expect(result.deepseek.models['deepseek-v4-pro']).toBeDefined();
     });
 
+    // v4.1.2 regression guard. For DIVERGENT_VENDORS (anthropic) the direct id
+    // and the OpenRouter id are DIFFERENT STRINGS, not merely differently
+    // prefixed: `anthropic/claude-opus-4-8` (direct) vs
+    // `anthropic/claude-opus-4.8` (OpenRouter). v4.1.1 changed
+    // toDefaultAliases() to emit the DIRECT form, after which string-prepending
+    // `openrouter/` registered a bogus OpenRouter id that the catalog does not
+    // serve. The mirror must come from the alias's authored gateway route.
+    it('mirrors divergent-vendor aliases with the real OpenRouter id, not a prefixed direct id', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels();
+
+      // authoritative OpenRouter ids (dot form) are registered
+      expect(result.openrouter.models['anthropic/claude-opus-4.8']).toBeDefined();
+      expect(result.openrouter.models['anthropic/claude-haiku-4.5']).toBeDefined();
+
+      // the DIRECT dash forms must never appear under the openrouter provider
+      expect(result.openrouter.models['anthropic/claude-opus-4-8']).toBeUndefined();
+      expect(result.openrouter.models['anthropic/claude-haiku-4-5-20251001']).toBeUndefined();
+
+      // ...while the direct provider still carries exactly those dash forms
+      expect(result.anthropic.models['claude-opus-4-8']).toBeDefined();
+      expect(result.anthropic.models['claude-haiku-4-5-20251001']).toBeDefined();
+    });
+
+    // Non-divergent aliases must be byte-identical to the pre-v4.1.2 behaviour:
+    // there the direct and OpenRouter ids differ only by the prefix.
+    it('keeps the prefix-style mirror for non-divergent aliases', () => {
+      const config = loadModule();
+      const result = config.buildProviderModels();
+      expect(result.openrouter.models['google/gemini-3.6-flash']).toBeDefined();
+      expect(result.openrouter.models['openai/gpt-5.5']).toBeDefined();
+      expect(result.openrouter.models['deepseek/deepseek-v4-pro']).toBeDefined();
+    });
+
+    // A user override must not inherit the curated alias's OpenRouter id.
+    it('does not apply a curated OpenRouter id to a user-overridden alias', () => {
+      const data = { aliases: { opus: 'anthropic/claude-opus-4-1' } };
+      fs.writeFileSync(path.join(tempDir, 'config.json'), JSON.stringify(data));
+      const config = loadModule();
+      const result = config.buildProviderModels();
+
+      expect(result.anthropic.models['claude-opus-4-1']).toBeDefined();
+      // the shipped curated Opus route must NOT be registered for the override
+      expect(result.openrouter.models['anthropic/claude-opus-4.8']).toBeUndefined();
+    });
+
     it('should include user-configured aliases', () => {
       const data = {
         aliases: { 'my-model': 'openrouter/custom/my-special-model' },

@@ -12,8 +12,9 @@ const { autoRepairAlias } = require('./alias-resolver');
 const { isDirectProvider } = require('./provider-registry');
 
 /** Default model alias map — derived from the curated-models single source (F5) */
-const { toDefaultAliases } = require('./curated-models');
+const { toDefaultAliases, toGatewayRoutes } = require('./curated-models');
 const DEFAULT_ALIASES = toDefaultAliases();
+const CURATED_ROUTES = toGatewayRoutes();
 
 /** Built-in council benches (B23) — consulted only when a name is absent from user config. */
 const { resolveBuiltinCouncil } = require('./council-presets');
@@ -261,10 +262,19 @@ function tryResolveModel(modelArg) {
  * threading only that first session's resolved id is insufficient. So for
  * every alias that resolves to a BARE direct-capable-vendor id (post-#61
  * default aliases are bare, e.g. `openai/gpt-5.5`), this ALSO registers the
- * `openrouter/<vendor>/<model>` form — broadening the catalog to cover BOTH
- * routes the router might pick, regardless of which session created the
- * server. This does NOT change what the alias itself resolves to (still
- * bare, still direct-first) — it only widens what's pre-registered.
+ * alias's OpenRouter form — broadening the catalog to cover BOTH routes the
+ * router might pick, regardless of which session created the server. This
+ * does NOT change what the alias itself resolves to (still bare, still
+ * direct-first) — it only widens what's pre-registered.
+ *
+ * The mirror is read from the alias's authored gateway route, NOT built by
+ * prepending `openrouter/`. For DIVERGENT_VENDORS the two ids are different
+ * strings, not merely differently prefixed — OpenRouter serves
+ * `anthropic/claude-opus-4.8` while the direct API serves
+ * `anthropic/claude-opus-4-8`. v4.1.1 made `toDefaultAliases()` emit the
+ * direct form, at which point prepending produced an id OpenRouter does not
+ * serve (fixed in v4.1.2). Aliases the user has overridden fall back to the
+ * prefix form, since no authored gateway route describes them.
  * @param {string[]} [resolvedRoutes] executable model id(s) actually launched
  * @returns {object} e.g. { openrouter: { models: { "x-ai/grok-4.3": {}, ... } } } */
 function buildProviderModels(resolvedRoutes = []) {
@@ -285,13 +295,23 @@ function buildProviderModels(resolvedRoutes = []) {
     providers[providerID].models[modelID] = {};
   };
 
-  for (const fullModel of Object.values(aliases)) {
+  for (const [alias, fullModel] of Object.entries(aliases)) {
     addRoute(fullModel);
 
     // Broaden: a bare direct-capable-vendor route also gets an OpenRouter
-    // mirror registered (see catalog-broadening note above). Gateway-only
-    // aliases (already `openrouter/...`, e.g. grok/qwen/x-ai) are untouched —
-    // OpenRouter is their only possible route anyway, already covered above.
+    // mirror registered (see catalog-broadening note above). Prefer the
+    // alias's AUTHORED OpenRouter route — for divergent vendors it is a
+    // different id, not a prefixed one. Guarded on the alias still holding its
+    // shipped direct value so a user override never inherits a curated route.
+    const curated = CURATED_ROUTES[alias];
+    if (curated && curated.openrouter && curated.direct === fullModel) {
+      addRoute(curated.openrouter);
+      continue;
+    }
+
+    // Fallback for user-defined aliases. Gateway-only aliases (already
+    // `openrouter/...`, e.g. grok/qwen/x-ai) are untouched — OpenRouter is
+    // their only possible route anyway, already covered above.
     if (typeof fullModel === 'string' && !fullModel.startsWith('openrouter/')) {
       const vendor = fullModel.split('/')[0];
       if (isDirectProvider(vendor)) {
