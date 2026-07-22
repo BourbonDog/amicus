@@ -147,7 +147,7 @@ Spawns the real `amicus` CLI binary with `start --no-ui` and verifies the full h
 Test process
   └─ spawn(node, [amicus.js, start, --no-ui, ...])
        └─ OpenCode server (auto port)
-            └─ Real LLM call (gemini-flash)
+            └─ Real LLM call (gemini)
        └─ Session files written to tmpDir
   └─ spawn(node, [amicus.js, list, ...])  // verify list
   └─ spawn(node, [amicus.js, read, ...])  // verify read

@@ -169,7 +169,7 @@ describeE2E('MCP Headless E2E: real LLM via amicus_start', () => {
       name: 'amicus_start',
       arguments: {
         prompt: 'Reply with exactly this text and nothing else: SIDECAR_E2E_OK',
-        model: 'gemini-flash',
+        model: 'gemini',
         noUi: true,
         timeout: 2,
         project: tmpDir,

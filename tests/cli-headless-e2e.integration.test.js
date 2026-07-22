@@ -96,7 +96,7 @@ describeE2E('CLI Headless E2E: real LLM via sidecar start --no-ui', () => {
     const result = await runCli([
       'start',
       '--prompt', 'Reply with exactly this text and nothing else: CLI_E2E_OK',
-      '--model', 'gemini-flash',
+      '--model', 'gemini',
       '--no-ui',
       '--timeout', '2',
       '--cwd', tmpDir,
