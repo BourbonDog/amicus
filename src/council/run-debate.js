@@ -223,7 +223,11 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   // degradation branch (spec §5.7); skipping because there is simply nothing to re-vote is NOT.
   const wouldRevote = defendedOrAmended.length > 0 && judges.length > 0;
   const costCeiling = ctx.overBudget() && wouldRevote;
-  if (wouldRevote && !costCeiling) {
+  // run.js needs to know whether the wave actually launched so it can
+  // checkpoint debate-revote 'skipped' (not a false 'complete') when nothing
+  // was defended/amended, or the cost ceiling skipped it (spec §5.7).
+  const revoteLaunched = wouldRevote && !costCeiling;
+  if (revoteLaunched) {
     const rv = await runRevoteWave(ctx, judges, defendedOrAmended);
     if (rv.aborted) { return { aborted: rv.aborted, contested, disputed }; }
     revoteByJudge = rv.byJudge;
@@ -283,7 +287,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
 
   return { debatedInput, debateFindings, debateSummary, addendumOutcomes,
     defenseLegs: defenseResults.map(d => d.leg), revoteLegs, verdictChanges,
-    degraded, aborted: null };
+    degraded, aborted: null, revoteLaunched };
 }
 
 module.exports = { runDebate, nothingToDebate, disputingJudges, debateTargets };

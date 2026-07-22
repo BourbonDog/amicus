@@ -45,6 +45,14 @@ describe('council-run schema accepts the debate summary (spec §5.1)', () => {
   test('a bad debate.outcome enum is rejected', () => {
     expect(validate({ ...base, debate: { ...base.debate, outcome: 'maybe' } })).toBe(false);
   });
+  // 4.1.1 Fix C: run.js now checkpoints debate-revote 'skipped' (not a false
+  // 'complete') when the re-vote wave never launched. stages[].status is
+  // `{"type":"string"}` with no enum, so this is additive — pinned here so a
+  // future tightening of that field to a closed enum can't silently reject it.
+  test('a debate-revote stage with status "skipped" still validates (status is not a closed enum)', () => {
+    const stages = base.stages.map(s => (s.name === 'debate-revote' ? { name: 'debate-revote', status: 'skipped' } : s));
+    expect(validate({ ...base, stages })).toBe(true);
+  });
 });
 
 describe('council-tally / council-verdict accept findings[].debate (spec §5.6)', () => {

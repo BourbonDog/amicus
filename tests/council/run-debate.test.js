@@ -116,6 +116,13 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
     expect(result.aborted).toBeNull();
   });
 
+  // 4.1.1 Fix C: run.js needs to know whether the re-vote wave actually
+  // launched so it can checkpoint debate-revote 'skipped' (not a false
+  // 'complete') when it did not — this is the launched case.
+  test('revoteLaunched is true when the re-vote wave actually launches', () => {
+    expect(result.revoteLaunched).toBe(true);
+  });
+
   test('the debated tally flips A1 from Disputed toward Contested (gpt agreed)', () => {
     const rec = tally(result.debatedInput);
     const a1 = rec.findings.find(f => f.id === 'A1');
@@ -434,6 +441,9 @@ describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wa
     expect(result.degraded).toBe(true);
     expect(result.debateSummary.revoteJudges).toBe(0);
     expect(fs.existsSync(path.join(tmp, 'revote-bundle.md'))).toBe(false);
+    // 4.1.1 Fix C: the cost ceiling skipped the wave — run.js must not
+    // checkpoint debate-revote 'complete' for this (nothing launched).
+    expect(result.revoteLaunched).toBe(false);
   });
 
   test('nothing to re-vote (all withdrawn) is NOT a cost-ceiling degradation', async () => {
@@ -448,6 +458,10 @@ describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wa
 
     expect(result.debateSummary.outcome).toBe('ran');
     expect(result.degraded).toBe(false);
+    // 4.1.1 Fix C: nothing was defended/amended, so the wave never launched —
+    // 'ran' as the debate OUTCOME is correct, but the re-vote sub-stage did
+    // not, and run.js must not checkpoint it 'complete'.
+    expect(result.revoteLaunched).toBe(false);
   });
 });
 
@@ -720,6 +734,18 @@ describe('runCouncil --debate degradation → exit 2 (spec §5.7 / §6)', () => 
     expect(exitCode).toBe(2);
     expect(run.debate.outcome).toBe('skipped-cost-ceiling');
     expect(calls.every(c => c.waveId !== 'r-rv')).toBe(true);   // re-vote never launched
+
+    // 4.1.1 Fix C: the re-vote wave never launched, so the debate-revote
+    // stage must checkpoint 'skipped' (run-chair.js's convention for the
+    // analogous chair-skipped-over-budget case), not a false 'complete' —
+    // and, matching that convention, no startedAt/waveId for work that
+    // never happened. debate-defense DID launch and stays 'complete'.
+    const revoteStage = run.stages.find(s => s.name === 'debate-revote');
+    expect(revoteStage.status).toBe('skipped');
+    expect(revoteStage.startedAt).toBeUndefined();
+    expect(revoteStage.waveId).toBeUndefined();
+    const defenseStage = run.stages.find(s => s.name === 'debate-defense');
+    expect(defenseStage.status).toBe('complete');
   });
 
   test('abort mid-debate (defense wave signalled) → finalize aborted, NO tally-final, NO ledger', async () => {
