@@ -42,6 +42,13 @@ describe('local-providers', () => {
     expect(validateProviderEntry({ type: 'openai-compatible', baseURL: 'http://x/v1', pricing: { prompt: -1, completion: 0 } }).ok).toBe(false);
   });
 
+  test('validateProviderEntry: rejects a non-object entry (e.g. config typo { ollama: "oops" })', () => {
+    const { validateProviderEntry } = require('../src/utils/local-providers');
+    const r = validateProviderEntry('oops');
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('entry must be an object');
+  });
+
   test('getLocalProviders: normalizes valid entries, skips invalid ones (never throws), rejects reserved ids', () => {
     const warn = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     const map = withConfig({
@@ -51,10 +58,15 @@ describe('local-providers', () => {
       bad: { type: 'openai-compatible', baseURL: 'ftp://nope' },                  // bad scheme → skipped
       'BAD ID': { type: 'openai-compatible', baseURL: 'http://x/v1' }             // bad id → skipped
     }, (m) => m.getLocalProviders());
+    // Prove it's the right three entries that warned — not just that something did.
+    expect(warn).toHaveBeenCalledTimes(3);
+    const warnings = warn.mock.calls.map((call) => call[0]).join('\n');
+    expect(warnings).toContain("'openai'");
+    expect(warnings).toContain("'bad'");
+    expect(warnings).toContain("'BAD ID'");
     expect(Object.keys(map).sort()).toEqual(['lmstudio', 'ollama']);
     expect(map.ollama.id).toBe('ollama');
     expect(map.lmstudio.flavor).toBe('lmstudio');
-    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 

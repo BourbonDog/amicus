@@ -10,6 +10,7 @@
  * ./config; NEVER requires provider-registry (no cycle, no static-table edits).
  */
 
+// Mirrors PROVIDERS ids in provider-registry.js; duplicated (not imported) per the leaf-module rule — update both together.
 const RESERVED_IDS = Object.freeze(['openrouter', 'google', 'openai', 'anthropic', 'deepseek']);
 const VALID_FLAVORS = Object.freeze(['ollama', 'lmstudio', 'vllm', 'generic']);
 const ID_RE = /^[a-z][a-z0-9_-]{1,31}$/;
