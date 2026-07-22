@@ -69,6 +69,14 @@ function idsFromTags(id, body) {
  * @returns {Promise<{status:'ok'|'unreachable', models:string[]}>}
  */
 async function probeLocalProvider(entry, opts = {}) {
+  // Finding 1 (CRITICAL): entry.baseURL.replace(...) below ran before getJson was ever
+  // called and outside any try/catch — a missing/null/non-string baseURL (or a missing
+  // entry altogether) threw synchronously inside this async function, which rejected the
+  // returned promise instead of resolving the documented unreachable/[] shape. This is the
+  // same defect shape as the scheme bug already fixed in getJson, one field over: that fix
+  // guards the URL's *scheme*; this guards entry.baseURL's *shape*, before it ever reaches
+  // getJson. listLocalModels (below) inherits the fix by calling through this function.
+  if (!entry || typeof entry.baseURL !== 'string' || !entry.baseURL) { return { status: 'unreachable', models: [] }; }
   const timeoutMs = opts.timeoutMs || 2000;
   const bearer = opts.bearer;
   const primary = await getJson(`${entry.baseURL.replace(/\/$/, '')}/models`, { timeoutMs, bearer });
