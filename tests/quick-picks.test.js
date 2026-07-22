@@ -1,7 +1,7 @@
 // tests/quick-picks.test.js
 'use strict';
 
-const { compareIdsDesc, pickCurrent, resolveQuickPicks, toLiveSeedAliases } =
+const { compareIdsDesc, pickCurrent, resolveQuickPicks, toLiveSeedAliases, toStorableRoute } =
   require('../src/utils/quick-picks');
 
 const row = id => ({ id, name: id, contextLength: 1, pricing: { prompt: '0' } });
@@ -96,5 +96,74 @@ describe('toLiveSeedAliases', () => {
     const { toDefaultAliases } = require('../src/utils/curated-models');
     const seeds = toLiveSeedAliases([row('openrouter/google/gemini-9.9-flash')]);
     expect(seeds['gemini-pro']).toBe(toDefaultAliases()['gemini-pro']);
+  });
+});
+
+// v4.1.2. For a DIVERGENT vendor (anthropic) the direct id and the OpenRouter
+// id are different strings, not differently prefixed, so stripping
+// `openrouter/` fabricates an id the direct API rejects. A seeded config
+// carrying it makes `amicus doctor` report a stale alias — the very warning
+// the v4.1.1 alias work removed. Mirrors the guard at
+// provider-default-picker.js:82,143,220.
+describe('divergent-vendor routes are never derived by prefix-stripping', () => {
+  const { toDefaultAliases, DIVERGENT_VENDORS } = require('../src/utils/curated-models');
+
+  test('anthropic is the divergent vendor this guard exists for', () => {
+    expect(DIVERGENT_VENDORS.has('anthropic')).toBe(true);
+    expect(DIVERGENT_VENDORS.has('google')).toBe(false);
+  });
+
+  test.each([
+    ['openrouter + direct', ['openrouter/anthropic/claude-opus-4.8', 'anthropic/claude-opus-4-8']],
+    ['direct only', ['anthropic/claude-opus-4-8']],
+    ['openrouter only', ['openrouter/anthropic/claude-opus-4.8']],
+  ])('seeds opus as the direct dash id from a %s catalog', (_label, ids) => {
+    const seeds = toLiveSeedAliases(ids.map(row));
+    expect(seeds.opus).toBe(toDefaultAliases().opus);
+    expect(seeds.opus).toBe('anthropic/claude-opus-4-8');
+  });
+
+  test('a live anthropic catalog never makes the seed diverge from the shipped defaults', () => {
+    const seeds = toLiveSeedAliases([
+      row('openrouter/anthropic/claude-opus-4.8'),
+      row('anthropic/claude-opus-4-8'),
+    ]);
+    const defaults = toDefaultAliases();
+    const diverged = Object.keys(defaults).filter(k => seeds[k] !== defaults[k]);
+    expect(diverged).toEqual([]);
+  });
+
+  test('resolveQuickPicks exposes vendorPath so callers can apply the guard', () => {
+    const opus = resolveQuickPicks([]).find(p => p.alias === 'opus');
+    expect(opus.vendorPath).toBe('anthropic');
+  });
+
+  test('toStorableRoute keeps the direct form for a divergent vendor', () => {
+    expect(toStorableRoute({
+      vendorPath: 'anthropic',
+      routes: { openrouter: 'openrouter/anthropic/claude-opus-4.8',
+                anthropic: 'anthropic/claude-opus-4-8' },
+    })).toBe('anthropic/claude-opus-4-8');
+  });
+
+  test('toStorableRoute keeps an intact openrouter route when no direct pick exists', () => {
+    expect(toStorableRoute({
+      vendorPath: 'anthropic',
+      routes: { openrouter: 'openrouter/anthropic/claude-opus-4.8' },
+    })).toBe('openrouter/anthropic/claude-opus-4.8');
+  });
+
+  test('toStorableRoute still canonicalises non-divergent vendors (unchanged behaviour)', () => {
+    expect(toStorableRoute({
+      vendorPath: 'google',
+      routes: { openrouter: 'openrouter/google/gemini-9.9-flash' },
+    })).toBe('google/gemini-9.9-flash');
+  });
+
+  test('toStorableRoute leaves gateway-only vendors openrouter/-prefixed', () => {
+    expect(toStorableRoute({
+      vendorPath: 'qwen',
+      routes: { openrouter: 'openrouter/qwen/qwen4-max' },
+    })).toBe('openrouter/qwen/qwen4-max');
   });
 });

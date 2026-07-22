@@ -353,8 +353,7 @@ async function runReadlineSetup() {
       return;
     }
 
-    const { resolveQuickPicks, toLiveSeedAliases } = require('../utils/quick-picks');
-    const { toCanonicalDefault } = require('../utils/curated-models');
+    const { resolveQuickPicks, toLiveSeedAliases, toStorableRoute } = require('../utils/quick-picks');
     const picks = resolveQuickPicks(catalog);
 
     console.log('Choose your default model:');
@@ -386,7 +385,7 @@ async function runReadlineSetup() {
       // choice), but the alias's VALUE must stay the vendor phase's tier choice --
       // skip the curated-flagship upgrade so it isn't discarded.
       if (pick && !chosen.noUpgrade && !vendorAliasesWritten.has(chosen.alias)) {
-        cfg.aliases[chosen.alias] = toCanonicalDefault(pick.routes.openrouter || Object.values(pick.routes)[0]);
+        cfg.aliases[chosen.alias] = toStorableRoute(pick);
       } else if (cfg.aliases[chosen.alias] === undefined) {
         const fallback = getDefaultAliases()[chosen.alias];
         if (fallback !== undefined) { cfg.aliases[chosen.alias] = fallback; }
