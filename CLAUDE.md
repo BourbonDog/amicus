@@ -457,7 +457,7 @@ evals/
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
 | `utils/local-probe.js` |  | `probeLocalProvider()`, `listLocalModels()` |
-| `utils/local-providers.js` |  | `getLocalProviders()`, `isLocalProvider()`, `deriveKeyEnv()`, `validateProviderEntry()`, `PRESETS()` |
+| `utils/local-providers.js` |  | `getLocalProviders()`, `isLocalProvider()`, `deriveKeyEnv()`, `validateProviderEntry()`, `resolveLocalRouteInputs()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `hasAmicusRegistration()`, `readAmicusMcpConfig()` |
 | `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES()`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |

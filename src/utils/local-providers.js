@@ -103,7 +103,32 @@ function isLocalProvider(id) {
   return !!id && Object.prototype.hasOwnProperty.call(getLocalProviders(), id);
 }
 
+/**
+ * v4.2: assemble the router's local inputs for one descriptor.
+ * Lives here (not in route-launch.js) so route-launch stays under the 300-line gate.
+ * `providers` is a PARAMETER, not a bare same-module `getLocalProviders()` call, so
+ * callers/tests control the map (cf. B3: bare identifiers are unmockable via the exports object).
+ * @returns {Promise<{localProviders?: Object, localLive?: Object}>} — `{}` for a non-local vendor.
+ */
+async function resolveLocalRouteInputs(descriptor, { validateModel, providers } = {}) {
+  const all = providers || getLocalProviders();
+  const vendor = descriptor && descriptor.vendor;
+  const entry = vendor && all && all[vendor];
+  if (!entry) { return {}; }
+  let bearer;
+  if (entry.apiKeyEnv) {
+    const { readApiKeyValues } = require('./api-key-store');
+    bearer = process.env[entry.apiKeyEnv] ||
+      (readApiKeyValues && readApiKeyValues()[vendor]) || undefined;
+  }
+  const localProviders = { [vendor]: { ...entry, keyPresent: !!bearer } };
+  const localLive = validateModel === false
+    ? { status: 'skipped', models: [] }
+    : await require('./local-probe').probeLocalProvider(entry, { timeoutMs: 2000, bearer });
+  return { localProviders, localLive };
+}
+
 module.exports = {
-  getLocalProviders, isLocalProvider, deriveKeyEnv, validateProviderEntry,
+  getLocalProviders, isLocalProvider, deriveKeyEnv, validateProviderEntry, resolveLocalRouteInputs,
   PRESETS, RESERVED_IDS, VALID_FLAVORS, ID_RE,
 };

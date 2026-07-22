@@ -11,7 +11,7 @@
 const { readApiKeys } = require('./api-key-store');
 const { readAuthJsonKeys } = require('./auth-json');
 const { KNOWN_PROVIDERS } = require('./provider-registry');
-const { buildSuggestions } = require('./route-suggestions');
+const { buildSuggestions, applySuggestions } = require('./route-suggestions');
 
 /**
  * Per-provider key presence across BOTH sources: env/.env (readApiKeys) and
@@ -224,12 +224,17 @@ async function resolveRouteForLaunch({ model, gatewayMode, source, allowSelectio
     }
   }
   const descriptor = parseDescriptor(concrete, { aliases });
-  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel, keys, catalogInfo, gatewayIds });
+  // v4.2: local-provider inputs (assembled in local-providers.js — 300-line gate).
+  const { getLocalProviders, resolveLocalRouteInputs } = require('./local-providers');
+  const { localProviders, localLive } =
+    await resolveLocalRouteInputs(descriptor, { validateModel, providers: getLocalProviders() });
+  let result = resolveRoute({ descriptor, source, gatewayMode, allowSelection, validateModel,
+    keys, catalogInfo, gatewayIds, localProviders, localLive });
   if (result.kind === 'resolved') {
     result.provenance = { ...result.provenance, resolutionVersion: ROUTE_VERSION };
     result = maybeMigrationNotice({ result, descriptor, gatewayMode, keys });
   } else if (result.kind === 'selection_required') {
-    result.suggestions = buildSuggestions(descriptor, keys, catalogInfo, gatewayIds);
+    applySuggestions(result, { descriptor, keys, catalogInfo, gatewayIds, localProviders });
   }
   return result;
 }
