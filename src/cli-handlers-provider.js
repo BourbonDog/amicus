@@ -20,6 +20,9 @@ function realDeps() {
     // Bearer persistence: saveRawEnv writes an arbitrary env-var NAME to the 0600
     // .env (re-exported from api-key-store). Named per the Task 10 DI contract.
     saveApiKey: (env, val) => require('./utils/api-key-store').saveRawEnv(env, val),
+    // Bearer cleanup (post-Task-11-review flow-gap fix): removeRawEnv deletes an
+    // arbitrary env-var NAME line from the same .env. Named to mirror saveApiKey.
+    removeApiKey: (env) => require('./utils/api-key-store').removeRawEnv(env),
     probe: (e, o) => require('./utils/local-probe').probeLocalProvider(e, o),
     readCache: () => require('./utils/model-catalog').readCache(),
     runDefault: (id, o) => require('./utils/provider-default-prompt').runProviderDefaultFlow(id, o),
@@ -153,8 +156,35 @@ function doRemove(id, args, d) {
   if (config.default === id) { delete config.default; }
   if (config.aliases && Object.prototype.hasOwnProperty.call(config.aliases, id)) { delete config.aliases[id]; }
   d.saveConfig(config);
-  if (entry.apiKeyEnv) { d.warn(`Note: the bearer line ${entry.apiKeyEnv} in .env was left in place — remove it with \`amicus key ${id} --remove\`.`); }
-  if (args.json) { d.emitJson({ ok: true, removed: id }); } else { d.print(`Removed '${id}'.`); }
+
+  // Flow-gap fix (post-Task-11-review): the old hint ("remove it with `amicus key
+  // <id> --remove`") pointed at a command that fails the instant the config entry
+  // above is gone -- isLocalProvider/getLocalProviders derive local-id status from
+  // config.providers on every call. Remove the bearer ourselves instead, UNLESS a
+  // sibling id still shares this apiKeyEnv via --bearer-env, in which case deleting
+  // the line would break that sibling. Iterate remaining OWN keys only (trap #6).
+  let bearerRemoved = false;
+  let sharedWith = null;
+  if (entry.apiKeyEnv) {
+    sharedWith = Object.keys(providers).find((otherId) => {
+      const other = providers[otherId];
+      return other && other.apiKeyEnv === entry.apiKeyEnv;
+    }) || null;
+    if (!sharedWith) {
+      d.removeApiKey(entry.apiKeyEnv);
+      bearerRemoved = true;
+    }
+  }
+
+  if (args.json) {
+    d.emitJson({ ok: true, removed: id, bearerRemoved });
+  } else if (bearerRemoved) {
+    d.print(`Removed '${id}' and its bearer '${entry.apiKeyEnv}'.`);
+  } else if (sharedWith) {
+    d.print(`Removed '${id}'. Kept '${entry.apiKeyEnv}' in .env — still used by provider '${sharedWith}'.`);
+  } else {
+    d.print(`Removed '${id}'.`);
+  }
   return 0;
 }
 

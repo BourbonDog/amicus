@@ -261,6 +261,114 @@ describe('handleProvider', () => {
     expect(code).toBe(1);
   });
 
+  // Flow-gap fix (post Task-11 review): `provider remove` used to delete the config
+  // entry and then hint `amicus key <id> --remove` — a command that fails ("Unknown
+  // provider") because that command derives local-id status from config.providers,
+  // which is already gone by the time the hint prints. `provider remove` must clean
+  // the bearer itself.
+  test('remove deletes the .env bearer line itself (flow-gap fix)', async () => {
+    const dir = tmpHome();
+    const handleProvider = load();
+    await handleProvider({
+      _: ['provider', 'add', 'lab'],
+      url: 'http://127.0.0.1:8000/v1',
+      bearer: 'sk-secret',
+      json: true,
+    });
+    let env = fs.readFileSync(path.join(dir, '.config', 'amicus', '.env'), 'utf-8');
+    expect(env).toContain('LAB_API_KEY=sk-secret');
+
+    const rows = [];
+    const code = await handleProvider(
+      { _: ['provider', 'remove', 'lab'], json: true },
+      { emitJson: (o) => rows.push(o) }
+    );
+    expect(code).toBe(0);
+    expect(readConfig(dir).providers.lab).toBeUndefined();
+    env = fs.readFileSync(path.join(dir, '.config', 'amicus', '.env'), 'utf-8');
+    expect(env).not.toContain('LAB_API_KEY');
+    expect(rows[0]).toMatchObject({ ok: true, removed: 'lab', bearerRemoved: true });
+  });
+
+  // Sibling-sharing guard: two ids can point at the same apiKeyEnv via --bearer-env.
+  // Removing one must NOT delete a bearer a surviving sibling still needs.
+  test('remove KEEPS a .env bearer still referenced by a sibling provider', async () => {
+    const dir = tmpHome();
+    const handleProvider = load();
+    await handleProvider({
+      _: ['provider', 'add', 'lab1'],
+      url: 'http://127.0.0.1:8000/v1',
+      'bearer-env': 'SHARED_KEY',
+      bearer: 'sk-shared',
+      json: true,
+    });
+    await handleProvider({
+      _: ['provider', 'add', 'lab2'],
+      url: 'http://127.0.0.1:8001/v1',
+      'bearer-env': 'SHARED_KEY',
+      bearer: 'sk-shared',
+      json: true,
+    });
+
+    const prints = [];
+    const code = await handleProvider(
+      { _: ['provider', 'remove', 'lab1'] },
+      { print: (l) => prints.push(l) }
+    );
+    expect(code).toBe(0);
+    expect(readConfig(dir).providers.lab1).toBeUndefined();
+    expect(readConfig(dir).providers.lab2).toBeDefined(); // sibling untouched
+
+    const env = fs.readFileSync(path.join(dir, '.config', 'amicus', '.env'), 'utf-8');
+    expect(env).toContain('SHARED_KEY=sk-shared'); // NOT deleted -- lab2 still needs it
+    expect(prints.join('\n')).toMatch(/kept|still used/i);
+    expect(prints.join('\n')).toContain('lab2');
+  });
+
+  test('remove of a provider with no bearer never touches .env', async () => {
+    const dir = tmpHome();
+    const handleProvider = load();
+    await handleProvider({ _: ['provider', 'add', 'ollama'], preset: 'ollama', json: true });
+    expect(fs.existsSync(path.join(dir, '.config', 'amicus', '.env'))).toBe(false);
+
+    const rows = [];
+    const code = await handleProvider(
+      { _: ['provider', 'remove', 'ollama'], json: true },
+      { emitJson: (o) => rows.push(o) }
+    );
+    expect(code).toBe(0);
+    expect(readConfig(dir).providers.ollama).toBeUndefined();
+    expect(fs.existsSync(path.join(dir, '.config', 'amicus', '.env'))).toBe(false); // no spurious write
+    expect(rows[0]).toMatchObject({ ok: true, removed: 'ollama', bearerRemoved: false });
+  });
+
+  // Prototype-chain discipline (trap #6) extended to the new "does another entry
+  // share this apiKeyEnv" scan: a provider literally named 'constructor' must still
+  // remove cleanly, using its own real entry, never Object.prototype.constructor.
+  test("a provider named 'constructor' with a bearer removes cleanly (prototype-chain discipline)", async () => {
+    const dir = tmpHome();
+    const handleProvider = load();
+    await handleProvider({
+      _: ['provider', 'add', 'constructor'],
+      url: 'http://127.0.0.1:8000/v1',
+      bearer: 'sk-ctor',
+      json: true,
+    });
+    let env = fs.readFileSync(path.join(dir, '.config', 'amicus', '.env'), 'utf-8');
+    expect(env).toContain('CONSTRUCTOR_API_KEY=sk-ctor');
+
+    const rows = [];
+    const code = await handleProvider(
+      { _: ['provider', 'remove', 'constructor'], json: true },
+      { emitJson: (o) => rows.push(o) }
+    );
+    expect(code).toBe(0);
+    expect(Object.prototype.hasOwnProperty.call(readConfig(dir).providers, 'constructor')).toBe(false);
+    env = fs.readFileSync(path.join(dir, '.config', 'amicus', '.env'), 'utf-8');
+    expect(env).not.toContain('CONSTRUCTOR_API_KEY');
+    expect(rows[0]).toMatchObject({ ok: true, removed: 'constructor', bearerRemoved: true });
+  });
+
   // Prototype-chain safety (trap #6): a provider literally named 'constructor' is a
   // valid, non-reserved id and MUST round-trip through add/list/test/remove without
   // any bare map[id] lookup fabricating a phantom entry off Object.prototype.
