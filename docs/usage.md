@@ -418,6 +418,16 @@ amicus provider remove lmstudio
 
 `amicus setup`'s interactive wizard (readline and Electron) also offers to add a local server as one step of the normal setup flow — `amicus provider add` is the same feature from the command line.
 
+**Running local models.** Two things cloud models don't require:
+
+- **Load the model with enough context.** Amicus's agent prompt is ~26k tokens; a model loaded
+  with too small a context window will reject it. LM Studio's default (~16k) is not enough — load
+  with a larger context first, e.g. `lms load <model> --context-length 32768`, or set it in the
+  GUI before use. Ollama: set the model's context via a Modelfile (`num_ctx`).
+- **The first token is slow.** The model has to prefill that ~26k-token prompt before it can
+  respond — 30–90s to first token on a cold local model is normal, not a hang. Amicus's
+  per-request timeout for local providers is 5 minutes to give this room.
+
 ### `amicus init`
 
 ```bash

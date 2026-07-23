@@ -16,7 +16,7 @@ Amicus reads API keys from `~/.config/amicus/.env` and from `process.env`. Envir
 | `ANTHROPIC_API_KEY` | Direct Anthropic access. |
 | `DEEPSEEK_API_KEY` | Direct DeepSeek access. |
 
-**Running models locally?** None of the above are required — `amicus provider` configures Ollama, LM Studio, vLLM, or any other OpenAI-compatible endpoint as an additional provider at $0 marginal cost, no entry in this table needed. See [docs/usage.md § `amicus provider`](./usage.md#amicus-provider) and the `providers` key under [Config file format](#config-file-format) below.
+**Running models locally?** None of the above are required — `amicus provider` configures Ollama, LM Studio, vLLM, or any other OpenAI-compatible endpoint as an additional provider at $0 marginal cost, no entry in this table needed. See [docs/usage.md § `amicus provider`](./usage.md#amicus-provider) and the `providers` key under [Config file format](#config-file-format) below. Local models also need to be loaded with enough context to fit Amicus's ~26k-token agent prompt (~32k is a safe target) — see **Running local models** in the same `amicus provider` section for the exact commands.
 
 **Bare `provider/model` is the canonical, policy-routed form.** Amicus routes it **direct-first**:
 your direct provider key when one is configured, falling back to `OPENROUTER_API_KEY`
