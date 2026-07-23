@@ -10,6 +10,9 @@ describe('isOneShotCommand', () => {
   test('mcp is NOT one-shot (long-lived server)', () => {
     expect(isOneShotCommand('mcp')).toBe(false);
   });
+  test('provider is one-shot (M11: runs a 2s socket probe; must return to the shell)', () => {
+    expect(isOneShotCommand('provider')).toBe(true);
+  });
 });
 
 describe('armExitWatchdog', () => {

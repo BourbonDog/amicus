@@ -1013,6 +1013,36 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('provider command', () => {
+    test('parseArgs recognizes provider add <id> with sub + id positionals', () => {
+      const args = parseArgs(['provider', 'add', 'ollama', '--preset', 'ollama']);
+      expect(args._[0]).toBe('provider');
+      expect(args._[1]).toBe('add');
+      expect(args._[2]).toBe('ollama');
+      expect(args.preset).toBe('ollama');
+    });
+
+    test('--json is a boolean flag and does not swallow a following positional', () => {
+      const args = parseArgs(['provider', 'list', '--json']);
+      expect(args.json).toBe(true);
+      expect(args._).toEqual(['provider', 'list']);
+    });
+
+    test('provider appears in the top-level usage command list (C7)', () => {
+      const { getUsage } = require('../src/cli');
+      expect(getUsage()).toMatch(/^\s+provider\s+/m);
+    });
+
+    test("getUsage('provider') prints only the provider section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('provider');
+      expect(usage).toContain("Options for 'provider':");
+      expect(usage).toContain('--preset');
+      expect(usage).toContain('Usage: amicus'); // top-level header still present
+      expect(usage).not.toContain("Options for 'start':");
+    });
+  });
+
   describe('usage text includes new options', () => {
     test('--no-mcp appears in usage', () => {
       const { getUsage } = require('../src/cli');

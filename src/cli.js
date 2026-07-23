@@ -375,6 +375,7 @@ Commands:
     <provider> <apikey>      Validate and save a key
     <provider> --remove      Remove a saved key
     (no args)                List all configured providers
+  provider    Add/list/test/remove local OpenAI-compatible providers (--json)
   update      Update to latest version
   mcp         Start MCP server (stdio transport)
 `;
@@ -555,6 +556,14 @@ Usage for 'key':
   key <provider> <apikey>      Validate and save a key
   key <provider> --remove      Remove a saved key
   key                          List all configured providers
+`,
+  provider: `
+Options for 'provider':
+  provider add <id> --preset ollama|lmstudio|vllm   Add a local server from a preset
+  provider add <id> --url <baseURL> [--bearer-env VAR | --bearer <token>]
+                    [--pricing-in <$/tok> --pricing-out <$/tok>]
+  provider list | test <id> | remove <id>           Manage local providers (all support --json)
+  Local providers run at $0 through Ollama / LM Studio / vLLM / any OpenAI-compatible endpoint.
 `,
   mcp: `
 Usage for 'mcp':
