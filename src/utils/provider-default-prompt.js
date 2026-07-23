@@ -68,8 +68,10 @@ async function promptForChoice(ask, print, choices) {
  * match every OR-namespaced catalog row, "recommended" would be arbitrary,
  * and writing `aliases.openrouter = "<some vendor>/<model>"` would be
  * nonsensical. Per-provider defaults only make sense for DIRECT model
- * vendors (`provider-registry.isDirectProvider`) -- no choices are built, no
- * alias is written, and `config.default` is never seeded for a gateway.
+ * vendors (`provider-registry.isDirectProvider`) and local/OpenAI-compatible
+ * vendors (`local-providers.isLocalProvider`, v4.2 §4.5) -- for any other
+ * (gateway) provider, no choices are built, no alias is written, and
+ * `config.default` is never seeded.
  * @param {string} provider vendor name, e.g. 'anthropic'
  * @param {{interactive?: boolean, ask?: (prompt: string) => Promise<string>,
  *   catalog?: Array<object>, print?: (line: string) => void}} [options]
