@@ -10,6 +10,9 @@
 // handleAbort moved to src/cli-handlers-abort.js (B21-rest: --json branch
 // needed headroom this file didn't have). Re-exported below for compatibility.
 const { handleAbort } = require('./cli-handlers-abort');
+// handleKey's local-provider branch (v4.2 Task 11) lives in its own module for
+// the same reason — this file had no headroom left for the new bearer flow.
+const { handleLocalKey, formatLocalKeyList } = require('./cli-handlers-key-local');
 
 /**
  * Handle 'amicus setup' command
@@ -100,10 +103,15 @@ async function handleMcp() {
 /**
  * Handle 'amicus key' command
  * Lists, saves, or removes API keys for a provider without opening the Electron wizard.
+ * Local (openai-compatible) providers are config-defined (local-providers.js)
+ * rather than in PROVIDER_ENV_MAP, so they're handled by handleLocalKey — a
+ * bearer probe/store flow, not the VALIDATION_ENDPOINTS ping the 5 direct
+ * vendors use.
  */
 async function handleKey(args) {
-  const { readApiKeys, readApiKeyHints, saveApiKey, removeApiKey, PROVIDER_ENV_MAP } = require('./utils/api-key-store');
+  const { readApiKeys, readApiKeyHints, saveApiKey, removeApiKey, loadEnvEntries, PROVIDER_ENV_MAP } = require('./utils/api-key-store');
   const { validateApiKey } = require('./utils/api-key-validation');
+  const { getLocalProviders } = require('./utils/local-providers');
 
   const provider = args._[1];
   const keyArg = args._[2];
@@ -119,12 +127,32 @@ async function handleKey(args) {
       const status = configured[p] ? `✓  ${hints[p]}` : '✗  not set';
       console.log(`  ${p.padEnd(12)} ${status}`);
     }
+    const localProviders = getLocalProviders();
+    if (Object.keys(localProviders).length > 0) {
+      for (const line of formatLocalKeyList(localProviders, loadEnvEntries())) { console.log(line); }
+    }
     console.log('');
     return;
   }
 
-  // Validate provider
-  if (!PROVIDER_ENV_MAP[provider]) {
+  // Local providers (Ollama/LM Studio/vLLM/any OpenAI-compatible endpoint) are
+  // config-defined, not in PROVIDER_ENV_MAP — branch BEFORE the direct-vendor
+  // check below. hasOwnProperty guard (recurring v4.2 bug class): a provider
+  // literally named 'constructor' is a valid, non-reserved id (ID_RE/
+  // RESERVED_IDS in local-providers.js) and must resolve to its real entry,
+  // not the inherited Object.prototype.constructor.
+  const localProviders = getLocalProviders();
+  if (Object.prototype.hasOwnProperty.call(localProviders, provider)) {
+    return handleLocalKey(localProviders[provider], provider, args);
+  }
+
+  // Validate provider. hasOwnProperty guard (same prototype-chain bug class the
+  // local-provider branch above guards against): a bare PROVIDER_ENV_MAP[provider]
+  // for provider === 'constructor' reads the inherited Object.prototype.constructor
+  // (the Object function — truthy), which would wrongly treat an UNCONFIGURED
+  // 'constructor' as a known direct vendor and crash later in validateApiKey
+  // instead of reporting Unknown provider (caught by this task's own test suite).
+  if (!Object.prototype.hasOwnProperty.call(PROVIDER_ENV_MAP, provider)) {
     console.error(`Error: Unknown provider "${provider}". Known providers: ${Object.keys(PROVIDER_ENV_MAP).join(', ')}`);
     process.exit(1);
   }

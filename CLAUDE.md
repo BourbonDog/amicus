@@ -247,6 +247,7 @@ src/
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
+├── cli-handlers-key-local.js  # amicus key <localId> — bearer lifecycle for a config-defined local /
 ├── cli-handlers-provider.js  # `amicus provider add|list|test|remove` (v4.2 §4.6): configure local /
 ├── cli-handlers-resume-continue.js  # CLI Resume/Continue Handlers (B21-rest extraction)
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
@@ -349,6 +350,7 @@ evals/
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
+| `cli-handlers-key-local.js` | amicus key <localId> — bearer lifecycle for a config-defined local / | `handleLocalKey()`, `formatLocalKeyList()`, `maskKey()` |
 | `cli-handlers-provider.js` | `amicus provider add|list|test|remove` (v4.2 §4.6): configure local / | `handleProvider()` |
 | `cli-handlers-resume-continue.js` | CLI Resume/Continue Handlers (B21-rest extraction) | `handleResume()`, `handleContinue()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
