@@ -1043,6 +1043,34 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('init command', () => {
+    test('parseArgs recognizes init as a command', () => {
+      const args = parseArgs(['init']);
+      expect(args._[0]).toBe('init');
+    });
+
+    test('--claude and --desktop are boolean flags and do not swallow a following positional', () => {
+      const args = parseArgs(['init', '--claude']);
+      expect(args.claude).toBe(true);
+      expect(args._).toEqual(['init']);
+    });
+
+    test('init appears in the top-level usage command list', () => {
+      const { getUsage } = require('../src/cli');
+      expect(getUsage()).toMatch(/^\s+init\s+/m);
+    });
+
+    test("getUsage('init') prints only the init section", () => {
+      const { getUsage } = require('../src/cli');
+      const usage = getUsage('init');
+      expect(usage).toContain("Options for 'init':");
+      expect(usage).toContain('--claude');
+      expect(usage).toContain('--desktop');
+      expect(usage).toContain('Usage: amicus'); // top-level header still present
+      expect(usage).not.toContain("Options for 'start':");
+    });
+  });
+
   describe('usage text includes new options', () => {
     test('--no-mcp appears in usage', () => {
       const { getUsage } = require('../src/cli');

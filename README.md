@@ -99,6 +99,8 @@ For the **npm** and **install-script** paths, a postinstall auto-configures ever
 - Registers the **MCP server** in Claude Code and in Claude Desktop / Cowork, so the Amicus tools appear natively.
 - Installs **both skills** into `~/.claude/skills/` — `second-opinion` (the council) and `sidecar` (the chat skill).
 
+> **Skipped the postinstall?** `--ignore-scripts` npm installs never run it, and the plugin channel skips it by design (Claude Code registers the plugin's MCP server and skills itself). Either way, run `amicus init` (plugin channel: `npx -y amicus@latest init`) any time to (re)register on demand — e.g. to also wire up Claude Desktop, which the plugin path doesn't touch. See [`amicus init`](./docs/usage.md#amicus-init).
+
 **Configure:**
 
 ```bash
@@ -167,6 +169,7 @@ Everything you need before your first run, and what's optional.
 **Model API keys** — at least one is required
 
 - **OpenRouter** covers the most models with one key, or use a **direct Google / OpenAI / Anthropic / DeepSeek** key. Add one with `amicus setup` or `amicus key <provider> <key>`; keys live in `~/.config/amicus/.env`. The supported env vars are `OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` (the legacy `GEMINI_API_KEY` is still accepted), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `DEEPSEEK_API_KEY`.
+- **Or skip cloud keys entirely and run local, at $0.** Point Amicus at an OpenAI-compatible server already running on your machine — LM Studio, Ollama, or vLLM — and there's no API key, no per-token bill: `amicus provider add lmstudio --preset lmstudio` (LM Studio), `--preset ollama` (Ollama), or `--preset vllm` (vLLM). See [`amicus provider`](./docs/usage.md#amicus-provider).
 - ⚠️ **OpenRouter keys need purchased credits.** A brand-new, zero-credit key *passes* setup's live validation but then fails at runtime with a **402** on the first real call. Buy a small amount of credit before you run a council.
 
 **Electron — optional (GUI only)**
@@ -300,12 +303,14 @@ amicus update
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
 | `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
+| `amicus provider` | Add/list/test/remove local, OpenAI-compatible providers (LM Studio, Ollama, vLLM) — configured with `--preset` or `--url`, at **$0** marginal cost (`--json` on every subcommand). |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
 | `amicus council run` | The headless council engine: Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Add `--debate` for a Stage-2.5 rebuttal round (raisers defend/amend/withdraw, disputing judges re-vote) and `--claude-review <file>` to enter Claude's own review as judged review N+1. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |
 | `amicus mcp` | Start the MCP server (stdio transport). |
+| `amicus init` | Re-run skill install + MCP registration on demand — `--claude`/`--desktop` to scope it, `--json` for per-step status. For plugin-channel / `--ignore-scripts` installs (which skip the npm postinstall), a failed postinstall, or repairing deleted `~/.claude` state. |
 
 The `am` alias is interchangeable with `amicus` everywhere.
 

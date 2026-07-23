@@ -16,6 +16,8 @@ Amicus reads API keys from `~/.config/amicus/.env` and from `process.env`. Envir
 | `ANTHROPIC_API_KEY` | Direct Anthropic access. |
 | `DEEPSEEK_API_KEY` | Direct DeepSeek access. |
 
+**Running models locally?** None of the above are required — `amicus provider` configures Ollama, LM Studio, vLLM, or any other OpenAI-compatible endpoint as an additional provider at $0 marginal cost, no entry in this table needed. See [docs/usage.md § `amicus provider`](./usage.md#amicus-provider) and the `providers` key under [Config file format](#config-file-format) below.
+
 **Bare `provider/model` is the canonical, policy-routed form.** Amicus routes it **direct-first**:
 your direct provider key when one is configured, falling back to `OPENROUTER_API_KEY`
 automatically when it isn't. `openrouter/provider/model` is an **explicit override** that always
@@ -195,7 +197,7 @@ Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/confi
 
 | File | Written by | Contains |
 |---|---|---|
-| `config.json` | `amicus setup` / `saveConfig()` (`src/utils/config.js`) | Top-level keys: `default` (your default model alias), `aliases` (your alias → `provider/model` map), `councils` (saved council presets, e.g. `councils.free`), `routing` (`prefer`: `"direct"` \| `"openrouter"`; `migration_notified`: per-vendor flags for the one-time direct-migration notice — see [Routing](#routing)). `0600` permissions. |
+| `config.json` | `amicus setup` / `saveConfig()` (`src/utils/config.js`) | Top-level keys: `default` (your default model alias), `aliases` (your alias → `provider/model` map), `councils` (saved council presets, e.g. `councils.free`), `providers` (user-defined local / OpenAI-compatible providers added via `amicus provider add`, or by hand — id → `{type, baseURL, flavor, name?, apiKeyEnv?, pricing}`; see [`amicus provider`](./usage.md#amicus-provider)), `routing` (`prefer`: `"direct"` \| `"openrouter"`; `migration_notified`: per-vendor flags for the one-time direct-migration notice — see [Routing](#routing)). `0600` permissions. |
 | `.env` | `amicus setup` / `amicus key` | API keys (`OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`). `0600` permissions. |
 | `model-catalog.json` | `refreshCatalog()` (`src/utils/model-catalog.js`) | The cached provider model list, schema-versioned, with a **24-hour TTL**. Also carries refresh-outcome fields — `lastRefreshAttempt` and `lastRefreshError` — stamped on a *failed* refresh without touching the last-good `models`/`fetchedAt` (a bad fetch never clobbers a good cache). Human-readable JSON; safe to delete, it rebuilds on next use. |
 | `sessions-index.json` | `session-index.js` (`recordSession`, written at session start) | A **global** map of `taskId → project path`, consulted only when a per-project session lookup misses (e.g. an MCP server whose cwd differs from where the session was created). Navigation aid only, never authoritative — a corrupt index degrades to "no entry," never a crash. |
@@ -294,9 +296,26 @@ level includes everything above it.
   "routing": {
     "prefer": "direct",
     "migration_notified": { "openai": true }
+  },
+
+  // User-defined local / OpenAI-compatible providers (v4.2) — written by
+  // `amicus provider add`, or hand-edited. id -> normalized entry; `pricing`
+  // defaults to {prompt: 0, completion: 0} (the $0 tier) when omitted.
+  "providers": {
+    "lmstudio": { "type": "openai-compatible", "baseURL": "http://127.0.0.1:1234/v1", "flavor": "lmstudio" },
+    "ollama": { "type": "openai-compatible", "baseURL": "http://127.0.0.1:11434/v1", "flavor": "ollama" },
+    "vllm-lab": {
+      "type": "openai-compatible",
+      "baseURL": "http://127.0.0.1:8000/v1",
+      "flavor": "vllm",
+      "apiKeyEnv": "VLLM_LAB_API_KEY",
+      "pricing": { "prompt": 0.0000005, "completion": 0.0000015 }
+    }
   }
 }
 ```
+
+A provider id may not shadow one of the five built-in vendors — `openrouter`, `google`, `openai`, `anthropic`, `deepseek` are rejected. `apiKeyEnv` names an env var — the token itself is never written to `config.json`, only to `.env` (`0600`), by `amicus provider add --bearer` or `amicus key <id> <token>`.
 
 An alias whose value is missing, `null`, or not a string is stripped on the next `saveConfig()`
 call, with a notice printed to stderr — `config.json` never accumulates dead aliases silently.

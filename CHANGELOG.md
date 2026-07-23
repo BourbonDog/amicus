@@ -5,6 +5,22 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Local / OpenAI-compatible providers, at $0.** `amicus provider add <id> --preset
+  ollama|lmstudio|vllm` (or `--url <baseURL>` for any other OpenAI-compatible endpoint)
+  configures Ollama, LM Studio, vLLM, or a self-hosted server as a first-class model source —
+  `provider list|test|remove` manage them (all support `--json`). Local models price at a real,
+  explicit `$0` tier (not "unpriced"), so the budget gate, `amicus spend`, and the default-model
+  picker all treat them as free. `amicus key <localId> <token>` manages a local provider's bearer
+  (stored in the `0600` `.env`, never in `config.json`); `amicus doctor` gains a
+  `local-providers` reachability check (warn, never error); the setup wizard (readline and
+  Electron) offers to add one.
+- **`amicus init [--claude] [--desktop] [--json]`** re-runs the same skill-install + MCP
+  registration that `npm install`'s postinstall runs, on demand — for plugin-channel /
+  `--ignore-scripts` installs (which skip the postinstall), a failed postinstall, or repairing
+  deleted `~/.claude` state.
+
 ## [4.1.2] - 2026-07-22
 
 ### Fixed

@@ -62,11 +62,15 @@ describe('B50 — "Where things live" section (docs/configuration.md)', () => {
       expect(s).toContain('sessions-index.json');
     });
 
-    it('documents config.json\'s three real top-level keys', () => {
+    it('documents config.json\'s real top-level keys', () => {
       const s = section();
       expect(s).toMatch(/`default`/);
       expect(s).toMatch(/`aliases`/);
       expect(s).toMatch(/`councils`/);
+      // v4.2 §4.1: user-defined local/OpenAI-compatible providers.
+      expect(s).toMatch(/`providers`/);
+      // #61 added routing.prefer/migration_notified; the pin never picked it up.
+      expect(s).toMatch(/`routing`/);
     });
 
     it('documents the TTL cache + refresh-outcome fields on model-catalog.json', () => {
