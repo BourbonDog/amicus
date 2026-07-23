@@ -28,26 +28,47 @@ describe('buildProviderModels: local providers', () => {
     return require('../src/utils/config');
   }
 
-  test('emits npm + options.baseURL + models for a keyless local alias', () => {
+  test('emits npm + options.baseURL + a non-empty apiKey placeholder + a 300000ms timeout for a keyless local alias', () => {
     const config = load(
       { ollama: { id: 'ollama', baseURL: 'http://127.0.0.1:11434/v1', flavor: 'ollama', name: 'ollama' } },
       { ollama: 'ollama/llama3.3' });
     const providers = config.buildProviderModels(['ollama/llama3.3']);
     expect(providers.ollama.npm).toBe('@ai-sdk/openai-compatible');
     expect(providers.ollama.options.baseURL).toBe('http://127.0.0.1:11434/v1');
-    expect(providers.ollama.options.apiKey).toBeUndefined();
+    // The @ai-sdk/openai-compatible adapter wants a non-empty apiKey string
+    // even for servers that don't require auth (Ollama/LM Studio/llama.cpp
+    // ignore it) -- no apiKeyEnv configured means the literal placeholder.
+    expect(providers.ollama.options.apiKey).toBe('not-needed');
+    // opencode's default request timeout is too short for cold local
+    // prefill of a large agent prompt -- see LOCAL_REQUEST_TIMEOUT_MS.
+    expect(providers.ollama.options.timeout).toBe(300000);
     expect(providers.ollama.models['llama3.3']).toEqual({});
     // No openrouter mirror for a local alias.
     expect(providers.openrouter).toBeUndefined();
   });
 
-  test('emits {env:VAR} apiKey when apiKeyEnv is set (never the value)', () => {
+  test('emits {env:VAR} apiKey and a 300000ms timeout when apiKeyEnv is set (never the key value)', () => {
     const config = load(
       { lab: { id: 'lab', baseURL: 'https://10.0.0.5:8000/v1', flavor: 'vllm', name: 'Lab', apiKeyEnv: 'LAB_API_KEY' } },
       { lab: 'lab/mymodel' });
     const providers = config.buildProviderModels(['lab/mymodel']);
     expect(providers.lab.options.apiKey).toBe('{env:LAB_API_KEY}');
+    expect(providers.lab.options.timeout).toBe(300000);
     expect(JSON.stringify(providers.lab)).not.toContain('secret');
+  });
+
+  // The placeholder-apiKey / timeout injection happens in the v4.2 §4.3
+  // enrichment loop, which only touches provider ids matched in
+  // getLocalProviders(). A cloud/direct provider block (built solely by the
+  // alias/resolvedRoutes loops earlier in buildProviderModels) must come out
+  // exactly as before -- no options object at all, let alone an injected
+  // timeout or a fabricated apiKey.
+  test('does not inject a timeout or placeholder apiKey into a cloud/direct provider block', () => {
+    const config = load({}, { gpt: 'openai/gpt-5.5' });
+    const providers = config.buildProviderModels(['openai/gpt-5.5']);
+    expect(providers.openai.models['gpt-5.5']).toEqual({});
+    expect(providers.openai.options).toBeUndefined();
+    expect(providers.openai.npm).toBeUndefined();
   });
 
   // Finding (Task 6, while implementing the brief's Step 3 enrichment loop):

@@ -240,6 +240,17 @@ function tryResolveModel(modelArg) {
   }
 }
 
+/**
+ * Request timeout (ms) for local (@ai-sdk/openai-compatible) provider blocks.
+ * opencode's default HTTP request timeout is too short for cold local
+ * inference: prefilling a large agent prompt (~26k tokens) on a cold local
+ * model can exceed it, killing the request during prefill before any stream
+ * data arrives -- opencode never creates the assistant message, and the
+ * caller polls out its own much longer timeout waiting for a response that
+ * will never come. 300000ms (5 minutes) covers cold-start prefill headroom.
+ */
+const LOCAL_REQUEST_TIMEOUT_MS = 300000;
+
 /** Build OpenCode provider.models config from sidecar aliases, plus the
  * actually-resolved launch route(s). The alias-derived entries let the UI
  * model picker show every configured model (single source of truth for the
@@ -350,7 +361,11 @@ function buildProviderModels(resolvedRoutes = []) {
     block.name = entry.name || id;
     block.options = {
       baseURL: entry.baseURL,
-      ...(entry.apiKeyEnv ? { apiKey: `{env:${entry.apiKeyEnv}}` } : {}),
+      // @ai-sdk/openai-compatible wants a non-empty apiKey string even for
+      // servers that don't require auth (Ollama/LM Studio/llama.cpp ignore
+      // it) -- an omitted apiKey is not the same as an accepted empty one.
+      apiKey: entry.apiKeyEnv ? `{env:${entry.apiKeyEnv}}` : 'not-needed',
+      timeout: LOCAL_REQUEST_TIMEOUT_MS,
     };
   }
 

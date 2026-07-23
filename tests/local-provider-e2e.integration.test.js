@@ -164,7 +164,13 @@ describeE2E('local provider e2e (hermetic stub, Task 7)', () => {
     const providers = buildProviderModels(['stub/test-model']);
     expect(providers.stub.npm).toBe('@ai-sdk/openai-compatible');
     expect(providers.stub.options.baseURL).toBe(stub.url);
-    expect(providers.stub.options.apiKey).toBeUndefined(); // no apiKeyEnv configured for this entry
+    // No apiKeyEnv configured for this entry -- the openai-compatible adapter
+    // still wants a non-empty apiKey string, so the no-bearer placeholder is
+    // emitted instead of leaving the field empty (never undefined).
+    expect(providers.stub.options.apiKey).toBe('not-needed');
+    // opencode's default request timeout is too short for cold local
+    // prefill of a large agent prompt -- see LOCAL_REQUEST_TIMEOUT_MS.
+    expect(providers.stub.options.timeout).toBe(300000);
   });
 
   // M1/M7: drives fanout-validate.js's validateFanoutModels -- the ONLY
