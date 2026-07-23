@@ -145,6 +145,20 @@ async function launchWizard() {
 }
 
 /**
+ * Local / self-hosted provider add step for the readline wizard (v4.2 §4.6,
+ * Task 12). Thin re-export -- RULING D14 keeps the real implementation out of
+ * this file (516 lines, grandfathered on check-file-sizes.js's exclude list).
+ * Owning module: ./setup-local.
+ * @param {(question: string) => Promise<string>} ask
+ * @param {(line: string) => void} print
+ * @param {object} [deps]
+ * @returns {Promise<void>}
+ */
+function addLocalProviderInteractive(ask, print, deps) {
+  return require('./setup-local').addLocalProviderInteractive(ask, print, deps);
+}
+
+/**
  * Standalone API key setup — launches the Electron window directly
  * Used by `sidecar setup --api-keys`
  * @returns {Promise<boolean>} true if keys were configured
@@ -328,6 +342,17 @@ async function runReadlineSetup() {
       console.log('Set OPENROUTER_API_KEY to get started, or run: amicus setup');
       console.log(`Not sure what's wrong? ${runDoctor}`);
     }
+    // Local / self-hosted providers (v4.2 §4.6) already configured (e.g. via a
+    // prior `amicus provider add`) are listed alongside detected keys. Guarded:
+    // getLocalProviders() is documented never-fatal, but a listing step must
+    // not be able to block setup even if that contract is ever violated.
+    try {
+      const { getLocalProviders } = require('../utils/local-providers');
+      const localIds = Object.keys(getLocalProviders());
+      if (localIds.length > 0) {
+        console.log(`Local providers configured: ${localIds.join(', ')}`);
+      }
+    } catch (_err) { /* best-effort: never block setup over this listing */ }
     console.log('');
 
     // #38 — non-blocking zero-credit / free-tier OpenRouter warning. Never
@@ -345,6 +370,23 @@ async function runReadlineSetup() {
     // `vendorAliasesWritten` is consulted by the standard model step below so
     // it never clobbers a vendor alias this phase just wrote (Fix 2).
     const vendorAliasesWritten = await runProviderDefaultPickers(rl, foundKeys, catalog);
+
+    // Task 12 (v4.2 §4.6): offer to add a local / self-hosted server. Pinned
+    // insertion point -- after the per-provider pickers, before the mode
+    // prompt, so all provider configuration stays grouped ahead of the
+    // standard/free-council branch. Guarded (house best-effort rule, mirrors
+    // provisionElectron/maybeMigrationNotice): addLocalProviderInteractive
+    // already swallows its own errors, but this optional step must not be
+    // able to abort the wizard even if that inner guard is ever weakened.
+    try {
+      const wantLocal = await askQuestion(rl,
+        'Add a local / self-hosted server (Ollama, LM Studio, vLLM)? (y/N): ');
+      if (wantLocal.toLowerCase() === 'y' || wantLocal.toLowerCase() === 'yes') {
+        await addLocalProviderInteractive((q) => askQuestion(rl, q), console.log, {});
+      }
+    } catch (err) {
+      logger.debug('Local-provider wizard step skipped', { error: err.message });
+    }
 
     const mode = await askQuestion(rl,
       'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
@@ -503,6 +545,7 @@ function seedFreeCouncil(pickIds) {
 
 module.exports = {
   addAlias,
+  addLocalProviderInteractive,
   createDefaultConfig,
   deriveFreeAlias,
   detectApiKeys,

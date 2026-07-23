@@ -24,9 +24,22 @@ jest.mock('../../src/sidecar/setup-window', () => ({
 }));
 
 // Mock model-catalog to prevent real HTTPS fetches to openrouter.ai during seedCatalog()
+// readCache is included (Task 12): handleProvider's doAdd (routed through here by
+// the new local-provider wizard branch) calls it BEFORE saveConfig, for the
+// shadow-namespace warning -- a mock missing that export throws
+// "readCache is not a function", which addLocalProviderInteractive's own
+// guarded try/catch swallows, silently skipping the config write.
 jest.mock('../../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(async () => []),
-  refreshCatalog: jest.fn(async () => [])
+  refreshCatalog: jest.fn(async () => []),
+  readCache: jest.fn(() => null),
+}));
+
+// Mock local-probe to prevent real network calls when the Task 12 local-provider
+// wizard branch below routes through the real handleProvider.
+jest.mock('../../src/utils/local-probe', () => ({
+  probeLocalProvider: jest.fn(async () => ({ status: 'ok', models: ['ollama/llama3.3'] })),
+  listLocalModels: jest.fn(async () => []),
 }));
 
 describe('Setup Wizard', () => {
@@ -463,6 +476,64 @@ describe('Setup Wizard', () => {
       // choice (deepseek-v3), NOT get overwritten with the curated flagship
       // (deepseek-v4-pro) the standard step would otherwise upgrade it to.
       expect(saved.aliases.deepseek).toBe('deepseek/deepseek-v3');
+    });
+  });
+
+  describe('runReadlineSetup — local / self-hosted provider offer (Task 12, v4.2 §4.6)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('answering "y" adds the local provider via the real handleProvider path (D7)', async () => {
+      const readline = require('readline');
+      const answers = ['y', 'ollama', 'ollama', '1', '1']; // wantLocal, id, preset, mode, pick
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((_prompt, callback) => callback(answers.shift() ?? ''));
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      // Written by the real handleProvider/local-providers validation path, not
+      // hand-rolled here -- proves the wizard is a second consumer of D7, not a
+      // duplicate implementation.
+      expect(saved.providers.ollama.baseURL).toBe('http://127.0.0.1:11434/v1');
+      expect(saved.providers.ollama.flavor).toBe('ollama');
+    });
+
+    it('declining (any non-"y" answer) adds no local provider and does not disturb the rest of the wizard', async () => {
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((_prompt, callback) => callback('1'));
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+      jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(saved.providers).toBeUndefined();
+      expect(saved.default).toBe('gemini'); // rest of the wizard still ran normally
+    });
+
+    it('lists an already-configured local provider alongside detected keys', async () => {
+      fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({
+        providers: { ollama: { type: 'openai-compatible', baseURL: 'http://127.0.0.1:11434/v1', flavor: 'ollama' } },
+      }));
+
+      const readline = require('readline');
+      const mockInterface = { question: jest.fn(), close: jest.fn() };
+      mockInterface.question.mockImplementation((_prompt, callback) => callback('1')); // decline local, pick 1 everywhere else
+      jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+      const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const { runReadlineSetup } = require('../../src/sidecar/setup');
+      await runReadlineSetup();
+
+      const printed = logSpy.mock.calls.map(c => c.join(' ')).join('\n');
+      expect(printed).toMatch(/Local providers configured:.*ollama/);
     });
   });
 

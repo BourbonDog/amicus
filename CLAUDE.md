@@ -156,6 +156,7 @@ src/
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
 │   ├── session-finalize.js
 │   ├── session-utils.js  # Sidecar Session Utilities - Shared functionality for session management
+│   ├── setup-local.js  # The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12).
 │   ├── setup-window.js  # Setup Window Launcher
 │   ├── setup.js  # Sidecar Setup Wizard
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
@@ -423,8 +424,9 @@ evals/
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
+| `sidecar/setup-local.js` | The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12). | `addLocalProviderInteractive()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
-| `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()`, `runFreeCouncilBranch()` |
+| `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `addLocalProviderInteractive()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
