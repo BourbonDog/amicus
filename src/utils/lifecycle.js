@@ -12,7 +12,8 @@
 // when done (F3 #15). Deliberately EXCLUDED: `mcp` (long-lived server), and
 // `setup`/`update` (no OpenCode server to leak, and `setup` can be a long-lived
 // interactive Electron flow that must never be force-exited).
-const ONE_SHOT_COMMANDS = new Set(['start', 'continue', 'resume', 'list', 'status', 'read', 'abort', 'fanout', 'models', 'key', 'council', 'doctor', 'spend', 'provider' /* provider: runs a 2s socket probe (M11) — arm the watchdog so a stray handle can't hang the shell */]);
+const ONE_SHOT_COMMANDS = new Set(['start', 'continue', 'resume', 'list', 'status', 'read', 'abort', 'fanout', 'models', 'key', 'council', 'doctor', 'spend', 'provider', /* provider: runs a 2s socket probe (M11) — arm the watchdog so a stray handle can't hang the shell */
+  'init' /* init (Task 15): runs the full doctor-check suite (network probes, OpenCode binary scan) via summarizeDoctor's runDoctorChecks() call — same lingering-handle risk 'doctor' already guards against */]);
 
 /** @param {string} command @returns {boolean} */
 function isOneShotCommand(command) {

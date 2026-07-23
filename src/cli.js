@@ -141,6 +141,8 @@ function isBooleanFlag(key) {
      'fix',                  // doctor: self-heal fixable checks in place (#56)
      'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
      'render',               // council verdict: also refresh report.html next to the decided verdict
+     'claude',               // init: register for Claude Code only (Task 15)
+     'desktop',              // init: register for Claude Desktop only (Task 15)
    ];
   return booleanFlags.includes(key);
 }
@@ -378,6 +380,7 @@ Commands:
   provider    Add/list/test/remove local OpenAI-compatible providers (--json)
   update      Update to latest version
   mcp         Start MCP server (stdio transport)
+  init        Re-run skill install + MCP registration on demand [--claude] [--desktop] [--json]
 `;
 
 // Per-command option blocks, keyed by the invoked subcommand. Insertion order
@@ -568,6 +571,15 @@ Options for 'provider':
   mcp: `
 Usage for 'mcp':
   mcp                          Start the MCP server (stdio transport)
+`,
+  init: `
+Options for 'init':
+  --claude                     Register for Claude Code only (skip Claude Desktop)
+  --desktop                    Register for Claude Desktop only (skip Claude Code)
+  --json                       Emit per-step status as JSON
+  Runs skill install + MCP registration on demand (for plugin-channel /
+  --ignore-scripts installs, a failed postinstall, or repairing deleted
+  ~/.claude state). No flags registers both Claude Code and Claude Desktop.
 `
 };
 

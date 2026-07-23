@@ -51,6 +51,12 @@ module.exports = {
         'src/sidecar/fanout.js', 'src/sidecar/read.js', 'src/sidecar/session-utils.js',
         'src/sidecar/start.js', 'src/sidecar/resume.js', 'src/sidecar/continue.js',
         'src/cli-handlers.js', 'src/cli-handlers-abort.js', 'src/utils/start-helpers.js',
+        // Task 15: registration status messages (skill install, MCP
+        // registration) the user sees during `npm install -g amicus` /
+        // `amicus init` — same "user-facing output, not logging" rationale as
+        // the files above. Moved verbatim from scripts/postinstall.js (which
+        // is exempted wholesale via the tests/scripts override below).
+        'src/utils/claude-register.js',
       ],
       rules: {
         'no-console': 'off'
