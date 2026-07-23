@@ -17,6 +17,7 @@
 
 const { buildProviderDefaultChoices, applyProviderDefault } = require('./provider-default-picker');
 const { isDirectProvider } = require('./provider-registry');
+const { isLocalProvider } = require('./local-providers');
 
 /** Format a $/M-input price for display; `null`/`undefined` -> 'n/a'. @param {number|null|undefined} pricePerMInput */
 function formatPrice(pricePerMInput) {
@@ -82,7 +83,6 @@ async function runProviderDefaultFlow(provider, options = {}) {
   const catalog = Array.isArray(options.catalog) ? options.catalog : [];
   const print = typeof options.print === 'function' ? options.print : () => {};
 
-  const { isLocalProvider } = require('./local-providers');
   if (!isDirectProvider(provider) && !isLocalProvider(provider)) {
     return {
       chosenId: null,
