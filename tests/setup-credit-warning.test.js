@@ -30,6 +30,20 @@ jest.mock('../src/utils/api-key-store', () => ({
 jest.mock('../src/utils/api-key-validation', () => ({
   checkOpenRouterCredit: jest.fn(),
 }));
+// Hermeticity guard (whole-branch review Fix A2, mirrors tests/sidecar/setup.test.js's
+// Task 14 / M14-class guard): both tests below drive runReadlineSetup to a
+// completed save, which reaches the C8 doctor finale (printDoctorFinale in
+// src/sidecar/setup.js). printDoctorFinale defaults to the REAL
+// runDoctorChecks() whenever called with no deps -- and every production call
+// site calls it that way -- so without this mock these tests would run the
+// real doctor: a real `npm root -g` subprocess (scanEngineInstalls), real
+// process.env.PATH mutation (hasOpencodeBinary), real config-dir reads, and
+// (if the mocked config here ever grows a `providers` key) a real 127.0.0.1
+// probe via the local-providers check. Stubbing the module directly makes
+// this file hermetic by construction instead of by coincidence.
+jest.mock('../src/cli-handlers-doctor', () => ({
+  runDoctorChecks: jest.fn().mockResolvedValue([]),
+}));
 
 function mockReadline(answer) {
   jest.doMock('readline', () => ({

@@ -2,8 +2,51 @@
 
 const { runDoctorChecks, handleDoctor } = require('../src/cli-handlers-doctor');
 
+// Hermeticity guard (whole-branch review Fix A1): this file used to call
+// runDoctorChecks with only { getLocalProviders, probeLocalProvider }
+// injected. runDoctorChecks always computes the FULL check list -- not just
+// 'local-providers' -- so every OTHER dep fell through to realDeps() and ran
+// for real: a real authenticated HTTPS call to OpenRouter via
+// checkOpenRouterCredit (reads the real ~/.config/amicus/.env), a real `npm
+// root -g` subprocess via scanEngineInstalls, real PATH mutation via
+// hasOpencodeBinary, etc. baseDeps below is the same full-deps shape as
+// tests/cli-handlers-doctor.test.js's `allGood` fixture (see that file's M14
+// comment for the original writeup of this exact hazard), minus
+// getLocalProviders/probeLocalProvider -- each test in this file still
+// supplies its own pair of those two to exercise the specific
+// reachable/unreachable/none scenarios this file exists to test.
+const baseDeps = {
+  nodeVersion: 'v20.0.0',
+  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
+  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
+  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
+  getCwd: () => 'C:\\Users\\me\\code\\amicus',
+  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
+  getConfigDir: () => '/cfg',
+  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
+  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
+  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
+  findStaleAliases: () => [],
+  hasOpencodeBinary: () => true,
+  getElectronPath: () => '/path/to/electron',
+  hasAmicusRegistration: () => true,
+  discoverCoworkMcps: () => ({ amicus: {} }),
+  inspectLegacyMcpEntries: () => [
+    { target: 'Claude Code', status: 'absent' },
+    { target: 'Claude Desktop', status: 'absent' },
+  ],
+  migrateLegacyMcpEntries: () => [],
+  skillInstalled: () => true,
+  listSessionIndexTmpFiles: () => [],
+  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  repairEngine: async () => ({ repaired: false }),
+};
+
 async function localCheck(deps) {
-  const checks = await runDoctorChecks(deps);
+  // Full baseline UNDER the per-test local-providers overrides -- deps always
+  // wins for getLocalProviders/probeLocalProvider, baseDeps covers everything
+  // else so runDoctorChecks(...) never sees a gap that realDeps() could fill.
+  const checks = await runDoctorChecks({ ...baseDeps, ...deps });
   return checks.find((c) => c.id === 'local-providers');
 }
 
@@ -19,6 +62,36 @@ function capture(fn) {
 }
 
 describe('doctor: local-providers check', () => {
+  // Fix A1 leak-closed proof: with baseDeps fully populated, nothing in this
+  // file should ever reach the real child_process/https primitives realDeps()
+  // would otherwise wire up (scanEngineInstalls' `npm root -g` and
+  // checkOpenRouterCredit's OpenRouter HTTPS call, respectively). Spied for
+  // the whole file and asserted after every test -- if a future edit here
+  // ever drops a baseDeps key, this fails loudly instead of silently
+  // re-opening the live-network hole.
+  let execFileSyncSpy;
+  let httpsGetSpy;
+  let httpsRequestSpy;
+
+  beforeAll(() => {
+    execFileSyncSpy = jest.spyOn(require('child_process'), 'execFileSync');
+    const https = require('https');
+    httpsGetSpy = jest.spyOn(https, 'get');
+    httpsRequestSpy = jest.spyOn(https, 'request');
+  });
+
+  afterEach(() => {
+    expect(execFileSyncSpy).not.toHaveBeenCalled();
+    expect(httpsGetSpy).not.toHaveBeenCalled();
+    expect(httpsRequestSpy).not.toHaveBeenCalled();
+  });
+
+  afterAll(() => {
+    execFileSyncSpy.mockRestore();
+    httpsGetSpy.mockRestore();
+    httpsRequestSpy.mockRestore();
+  });
+
   test('none configured → ok "none configured"', async () => {
     const probe = jest.fn();
     const c = await localCheck({ getLocalProviders: () => ({}), probeLocalProvider: probe });
