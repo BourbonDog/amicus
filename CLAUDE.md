@@ -281,6 +281,7 @@ electron/
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
 ├── ipc-guard.js  # IPC Guard Helpers
+├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
@@ -294,6 +295,8 @@ electron/
 ├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
+├── setup-ui-local-script.js  # Setup UI — Local server widget runtime script (Task 13, v4.2 §4.6).
+├── setup-ui-local.js  # Setup UI — "Local server" step-1 add-on widget (Task 13, v4.2 §4.6).
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
 ├── setup-ui-provider-default.js  # Setup UI — Per-provider default model picker (Part 2, Task 8).
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles (clay/gold token-driven)
