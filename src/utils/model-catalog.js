@@ -95,8 +95,12 @@ async function refreshCatalog() {
   // The anthropic rows are a hardcoded zero-network floor: a result containing
   // ONLY them means every network provider failed. Treat that as a failed
   // refresh — never clobber a previously-good cache with the floor (the
-  // "stale cache stands" contract).
-  const networkRows = (models || []).filter(m => m && typeof m.id === 'string' && !m.id.startsWith('anthropic/'));
+  // "stale cache stands" contract). v4.2 §4.4: local rows (local:true) are
+  // ALSO excluded here — a localhost-only refresh (offline except loopback)
+  // must not be counted as a successful network refresh, or it would clobber
+  // a previously-good OpenRouter cache with a local-only catalog.
+  const networkRows = (models || []).filter(m =>
+    m && typeof m.id === 'string' && !m.id.startsWith('anthropic/') && m.local !== true);
   if (networkRows.length === 0) {
     const reason = (models || []).length > 0
       ? 'floor-only: all providers returned no network rows'

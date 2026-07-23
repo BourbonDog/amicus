@@ -413,11 +413,18 @@ function resolveCouncilMembers(name, catalog = []) {
   }
   const aliases = getEffectiveAliases();
   const known = new Set((Array.isArray(catalog) ? catalog : []).map(m => m && m.id).filter(Boolean));
+  const { isLocalProvider } = require('./local-providers');
   const models = [];
   const dropped = [];
   for (const member of members) {
     const id = member.includes('/') ? member : aliases[member];
     if (!id) { dropped.push(member); continue; }                 // alias no longer resolves
+    const vendor = typeof id === 'string' ? id.split('/')[0] : '';
+    // v4.2 §4.4: a local server may simply have been off at the last catalog
+    // refresh — that is "unknown", not "delisted". Never drop a local-vendor
+    // member on catalog absence; the leg itself fails pre-flight with the
+    // actionable local_endpoint_unreachable error if the server is truly down.
+    if (isLocalProvider(vendor)) { models.push(member); continue; }
     if (known.size > 0 && !known.has(id)) { dropped.push(member); continue; } // delisted model
     models.push(member);
   }
