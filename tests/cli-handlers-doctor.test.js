@@ -36,6 +36,12 @@ const allGood = {
   scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
   // engine self-heal (--fix): deterministic no-op unless a test overrides it.
   repairEngine: async () => ({ repaired: false }),
+  // M14: deterministic fixture — without this the local-providers check would
+  // fall through to the real config dir (and, worse, fire a REAL probe against
+  // it) on whatever machine runs this "pure" doctor suite. probeLocalProvider
+  // must never be called with the empty map above.
+  getLocalProviders: () => ({}),
+  probeLocalProvider: jest.fn(),
 };
 
 const byId = (checks) => Object.fromEntries(checks.map(c => [c.id, c]));
@@ -45,6 +51,19 @@ describe('runDoctorChecks', () => {
     const checks = await runDoctorChecks(allGood);
     for (const c of checks) { expect(c.status).toBe('ok'); }
     expect(byId(checks).keys.status).toBe('ok');
+  });
+
+  test('M14: local-providers check is injected via allGood — never falls through to the real probe', async () => {
+    const checks = await runDoctorChecks(allGood);
+    const c = byId(checks)['local-providers'];
+    expect(c.status).toBe('ok');
+    expect(c.message).toMatch(/none configured/i);
+    // Proof of no real I/O: the stubbed probe is a jest.fn() that was never
+    // called, because allGood.getLocalProviders() deterministically returns
+    // {} — if runDoctorChecks ever fell through to realDeps() for either key,
+    // this would either throw (real probe against real config) or this
+    // assertion would need a real network round trip to satisfy.
+    expect(allGood.probeLocalProvider).not.toHaveBeenCalled();
   });
 
   test('zero provider keys → keys is an error with the amicus key hint', async () => {

@@ -308,6 +308,25 @@ async function runProviderDefaultPickers(rl, foundKeys, catalog) {
 }
 
 /**
+ * C8 (v4.2 §4.7) -- print the compact doctor summary at the wizard's finale.
+ * Shared by runReadlineSetup and the Electron-success path of
+ * runInteractiveSetup. Best-effort / guarded: a doctor bug (or a check that
+ * throws) must never abort setup or change its outcome -- setup has already
+ * done its job by the time this runs, so a failure here is swallowed.
+ */
+async function printDoctorFinale() {
+  try {
+    const { runDoctorChecks } = require('../cli-handlers-doctor');
+    const { summarizeDoctor } = require('../utils/doctor-summary');
+    const checks = await runDoctorChecks();
+    console.log('');
+    console.log(summarizeDoctor(checks));
+  } catch (err) {
+    logger.debug('Doctor finale skipped', { error: err.message });
+  }
+}
+
+/**
  * Run the readline-based setup wizard (headless fallback)
  *
  * Guides the user through:
@@ -316,6 +335,7 @@ async function runProviderDefaultPickers(rl, foundKeys, catalog) {
  * 3. Mode selection (standard or free council)
  * 4. Default model selection from live quick-picks (read-modify-write, no clobber)
  * 5. Config file save
+ * 6. C8: a compact `amicus doctor` summary, best-effort
  */
 async function runReadlineSetup() {
   const rl = readline.createInterface({
@@ -442,6 +462,9 @@ async function runReadlineSetup() {
     console.log(`Default model set to: ${cfg.default}`);
     console.log(`Config saved (${Object.keys(cfg.aliases).length} aliases).`);
     console.log(`Config path: ${path.join(getConfigDir(), 'config.json')}`);
+
+    // C8: compact doctor summary, best-effort (see printDoctorFinale).
+    await printDoctorFinale();
   } finally {
     rl.close();
   }
@@ -480,6 +503,13 @@ async function runInteractiveSetup() {
       if (keyLabel) { console.log(keyLabel); }
       if (modelLabel) { console.log(modelLabel); }
       console.log(`Config: ${configPath}`);
+
+      // C8: compact doctor summary, best-effort (see printDoctorFinale).
+      // runReadlineSetup prints its own further down -- only the Electron
+      // success path needs it added here explicitly; the fallback below
+      // delegates to runReadlineSetup and inherits its finale, so adding it
+      // here too would double-print.
+      await printDoctorFinale();
       return;
     }
   } catch (err) {
