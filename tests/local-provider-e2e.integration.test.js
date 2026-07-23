@@ -47,13 +47,16 @@
  * change any assertion below.
  *
  * Pricing note: fanout-validate.js's leg.pricing comes from pricing.js's
- * lookupPricing(), still a pure model-catalog-cache lookup at this HEAD --
- * confirmed by reading pricing.js, which has no local-provider awareness.
- * The local-aware $0 fallback ("lookupPricing local fallback; resolveLegCost
- * explicit-zero branch") is Task 9 and has not landed. A stub model is never
- * in the catalog cache, so the correct CURRENT assertion is `pricing: null`
- * (unpriced) -- the brief's illustrative `{prompt:0, completion:0}` was
- * itself commented "(Task 9)"; update this assertion when Task 9 lands.
+ * lookupPricing(), which as of Task 9 (v4.2 §4.5) carries local-provider
+ * awareness: a local vendor with no catalog row falls back to the provider's
+ * configured `pricing` (default `{prompt:0, completion:0}`) instead of null.
+ * The stub provider here is seeded via seedConfig() with no `pricing` field,
+ * so local-providers.js's validateProviderEntry() defaults it to zeros, and
+ * a stub model (never in the empty catalog cache) resolves through that
+ * fallback. The correct assertion is therefore `{prompt:0, completion:0}`
+ * (a real $0-priced tier), not `pricing: null` -- verified by running this
+ * suite against Task 9's change and observing the previous `toBeNull()`
+ * assertion fail with `Received: {"completion": 0, "prompt": 0}`.
  *
  * Skip-guard: this suite needs no external credential (fully offline via the
  * stub), so there's no "is the real resource here" condition the way
@@ -177,9 +180,10 @@ describeE2E('local provider e2e (hermetic stub, Task 7)', () => {
     expect(legs.every((l) => l.ok === true)).toBe(true);
     expect(legs.every((l) => l.gateway === 'local')).toBe(true);
     expect(legs.every((l) => l.model === 'stub/test-model')).toBe(true);
-    // See header "Pricing note": Task 9's local $0 fallback hasn't landed --
-    // an unpriced (null) leg is the correct, current, real behavior.
-    expect(legs[0].pricing).toBeNull();
+    // See header "Pricing note": Task 9's local $0 fallback has landed --
+    // a local vendor with no catalog row resolves to its provider-configured
+    // (default-zero) pricing, a real $0-priced tier, not unpriced/null.
+    expect(legs[0].pricing).toEqual({ prompt: 0, completion: 0 });
   });
 
   test('unreachable server: local_endpoint_unreachable with the generic-flavor hint', async () => {

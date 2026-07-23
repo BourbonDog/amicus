@@ -80,11 +80,12 @@ async function runProviderDefaultFlow(provider, options = {}) {
   const catalog = Array.isArray(options.catalog) ? options.catalog : [];
   const print = typeof options.print === 'function' ? options.print : () => {};
 
-  if (!isDirectProvider(provider)) {
+  const { isLocalProvider } = require('./local-providers');
+  if (!isDirectProvider(provider) && !isLocalProvider(provider)) {
     return {
       chosenId: null,
       setAsDefault: false,
-      summaryLine: 'Per-provider defaults apply to direct provider keys (openai/anthropic/google/deepseek) -- ' +
+      summaryLine: 'Per-provider defaults apply to direct provider keys and local providers -- ' +
         'models routed via OpenRouter use your overall default.',
     };
   }

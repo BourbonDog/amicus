@@ -231,4 +231,4 @@ function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true } =
   return { alias: vendor, setAsDefault };
 }
 
-module.exports = { buildProviderDefaultChoices, applyProviderDefault };
+module.exports = { buildProviderDefaultChoices, applyProviderDefault, pricePerMInputFrom };
