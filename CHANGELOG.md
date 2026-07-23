@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-07-23
+
 ### Added
 
 - **Local / OpenAI-compatible providers, at $0.** `amicus provider add <id> --preset
