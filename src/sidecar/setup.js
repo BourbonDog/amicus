@@ -205,6 +205,11 @@ async function seedCatalog(print) {
  *   (`runReadlineSetup` already fetches one for the per-provider phase) --
  *   reused as-is to avoid a second `getCatalog()` round trip. Falls back to
  *   fetching its own when omitted (e.g. direct unit-test callers).
+ * @returns {Promise<boolean>} true when the branch actually seeded a council
+ *   (a completed setup -- the caller then prints the C8 doctor finale, Finding
+ *   2 post-review); false when it aborted early (no OPENROUTER_API_KEY, or
+ *   fewer than 2 models picked) -- parity with the invalid-choice branch,
+ *   which also configured nothing and so also gets no finale.
  */
 async function runFreeCouncilBranch(rl, catalogArg) {
   const keys = detectApiKeys();
@@ -212,7 +217,7 @@ async function runFreeCouncilBranch(rl, catalogArg) {
     console.log('');
     console.log('A free council needs OPENROUTER_API_KEY (free models route only through OpenRouter).');
     console.log('Set OPENROUTER_API_KEY and re-run: amicus setup. No changes made.');
-    return;
+    return false;
   }
   const { listFreeModels, suggestFreeCouncil, PINNED_FREE_MODELS } = require('../utils/free-models');
   let catalog = [];
@@ -246,7 +251,7 @@ async function runFreeCouncilBranch(rl, catalogArg) {
   }
   if (pickIds.length < 2) {
     console.log('A council needs at least 2 models. No changes made.');
-    return;
+    return false;
   }
   const { council } = seedFreeCouncil(pickIds);
   await seedCatalog();
@@ -257,6 +262,7 @@ async function runFreeCouncilBranch(rl, catalogArg) {
   console.log('');
   console.log('Heads up (free tier): rate-limited & quality-variable; some models 404');
   console.log('unless you enable data-sharing at openrouter.ai/settings/privacy.');
+  return true;
 }
 
 /**
@@ -313,10 +319,20 @@ async function runProviderDefaultPickers(rl, foundKeys, catalog) {
  * runInteractiveSetup. Best-effort / guarded: a doctor bug (or a check that
  * throws) must never abort setup or change its outcome -- setup has already
  * done its job by the time this runs, so a failure here is swallowed.
+ *
+ * Injectable (post-review hardening, M14-class fix): `deps.runDoctorChecks`
+ * lets tests replace the real doctor directly instead of relying on jest's
+ * module-mock resolution coincidentally intercepting this function's own
+ * lazy require (see tests/sidecar/setup.test.js's `cli-handlers-doctor`
+ * mock, added for exactly this reason). Every production call site
+ * (runReadlineSetup / runInteractiveSetup) calls this with no args, so the
+ * default -- the real, network-probing runDoctorChecks -- is always what
+ * actually ships.
+ * @param {{runDoctorChecks?: () => Promise<Array<object>>}} [deps]
  */
-async function printDoctorFinale() {
+async function printDoctorFinale(deps = {}) {
   try {
-    const { runDoctorChecks } = require('../cli-handlers-doctor');
+    const runDoctorChecks = deps.runDoctorChecks || require('../cli-handlers-doctor').runDoctorChecks;
     const { summarizeDoctor } = require('../utils/doctor-summary');
     const checks = await runDoctorChecks();
     console.log('');
@@ -411,7 +427,14 @@ async function runReadlineSetup() {
     const mode = await askQuestion(rl,
       'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
     if (mode === '2') {
-      await runFreeCouncilBranch(rl, catalog);
+      const completed = await runFreeCouncilBranch(rl, catalog);
+      if (completed) {
+        // C8 (Finding 2, post-review): parity with the standard path below --
+        // a completed free-council setup gets the doctor finale too. An
+        // aborted attempt (no key / <2 picks) configured nothing, so -- like
+        // the invalid-choice branch just below -- it gets none.
+        await printDoctorFinale();
+      }
       return;
     }
 

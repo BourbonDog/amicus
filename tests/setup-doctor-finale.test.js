@@ -42,6 +42,17 @@ jest.mock('../src/utils/local-probe', () => ({
   listLocalModels: jest.fn(async () => []),
 }));
 
+// Prevent a real HTTPS credit-check call to openrouter.ai: the Finding-2
+// tests below set OPENROUTER_API_KEY to reach the free-council branch, which
+// makes runReadlineSetup's warnOnLowOpenRouterCredit() call the real
+// checkOpenRouterCredit unless this is stubbed. None of the pre-existing
+// tests above set an OpenRouter key, so this mock is a no-op for them.
+jest.mock('../src/utils/api-key-validation', () => ({
+  checkOpenRouterCredit: jest.fn().mockResolvedValue({
+    warning: null, isFreeTier: false, limitRemaining: null, limit: null, usage: null,
+  }),
+}));
+
 describe('C8: the wizard finale emits the compact doctor summary', () => {
   let tmpDir;
   let envDir;
@@ -149,5 +160,49 @@ describe('C8: the wizard finale emits the compact doctor summary', () => {
     }));
     jest.spyOn(console, 'log').mockImplementation(() => {});
     await expect(setup.runInteractiveSetup()).resolves.toBeUndefined();
+  });
+
+  /** Declines the local-provider offer, picks free-council mode ('2'), then
+   * accepts the ★ default picks (Enter). Keyed on prompt substrings (robust
+   * to question ordering/count) rather than an answer queue -- same pattern
+   * tests/sidecar/setup.test.js's Task 7 tests already use. */
+  function stubReadlineFreeCouncil() {
+    const readline = require('readline');
+    const mockInterface = { question: jest.fn(), close: jest.fn() };
+    mockInterface.question.mockImplementation((prompt, callback) => {
+      if (prompt.includes('Add a local')) { callback('n'); return; }
+      if (prompt.includes('Setup mode')) { callback('2'); return; }
+      if (prompt.includes('Pick members')) { callback(''); return; }
+      callback('1');
+    });
+    jest.spyOn(readline, 'createInterface').mockReturnValue(mockInterface);
+  }
+
+  test('Finding 2 (post-review): a COMPLETED free-council setup also prints the finale (parity with standard mode)', async () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-test-key';
+    stubReadlineFreeCouncil();
+    const setup = load(healthyWithOneWarn);
+    const lines = [];
+    const spy = jest.spyOn(console, 'log').mockImplementation((...a) => { lines.push(a.join(' ')); });
+    await setup.runReadlineSetup();
+    spy.mockRestore();
+    const out = lines.join('\n');
+    expect(out).toMatch(/Free council saved: councils\.free/); // the branch actually completed
+    expect(out).toMatch(/run `amicus doctor`/); // ...and got the C8 finale too
+  });
+
+  test('Finding 2: an ABORTED free-council attempt (no OPENROUTER_API_KEY) gets no finale, same as the invalid-choice branch', async () => {
+    // beforeEach already deletes OPENROUTER_API_KEY -- the free council branch
+    // cannot proceed and configures nothing.
+    stubReadlineFreeCouncil();
+    const setup = load(healthyWithOneWarn);
+    const lines = [];
+    const spy = jest.spyOn(console, 'log').mockImplementation((...a) => { lines.push(a.join(' ')); });
+    await setup.runReadlineSetup();
+    spy.mockRestore();
+    const out = lines.join('\n');
+    expect(out).toMatch(/No changes made/); // the branch aborted, nothing configured
+    expect(out).not.toMatch(/run `amicus doctor`/); // ...so no finale (parity with invalid-choice)
+    expect(out).not.toMatch(/doctor: all/);
   });
 });

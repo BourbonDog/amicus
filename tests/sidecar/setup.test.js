@@ -42,6 +42,23 @@ jest.mock('../../src/utils/local-probe', () => ({
   listLocalModels: jest.fn(async () => []),
 }));
 
+// Hermeticity guard (post-review hardening, M14-class fix): two tests below
+// configure a local provider and run the wizard to completion, which reaches
+// the C8 doctor finale (printDoctorFinale in src/sidecar/setup.js). That
+// finale's real runDoctorChecks() would fire a REAL, ~2s-bounded network
+// probe per configured local provider. It happens to be silent today only
+// because the local-probe mock above shares a resolved module path with
+// cli-handlers-doctor's own require('./utils/local-probe') -- coincidental
+// (that mock exists for the Task 12 add-flow above, not for the doctor).
+// Stubbing the doctor directly here makes this file hermetic BY DESIGN: it
+// no longer depends on the local-probe mock above ever continuing to shadow
+// the doctor's probe, so a future edit to that mock can't silently
+// reintroduce real per-test network calls to whatever local providers are
+// configured on the machine running the tests.
+jest.mock('../../src/cli-handlers-doctor', () => ({
+  runDoctorChecks: jest.fn().mockResolvedValue([]),
+}));
+
 describe('Setup Wizard', () => {
   let tmpDir;
   let envDir;
