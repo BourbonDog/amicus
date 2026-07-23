@@ -117,9 +117,16 @@ async function resolveLocalRouteInputs(descriptor, { validateModel, providers } 
   if (!entry) { return {}; }
   let bearer;
   if (entry.apiKeyEnv) {
-    const { readApiKeyValues } = require('./api-key-store');
-    bearer = process.env[entry.apiKeyEnv] ||
-      (readApiKeyValues && readApiKeyValues()[vendor]) || undefined;
+    // Sole source: env-loader.js's loadCredentials() already projects every
+    // configured apiKeyEnv from the .env into process.env at CLI bootstrap.
+    // (B1, whole-branch review: do NOT add a readApiKeyValues()[vendor]
+    // fallback here. That map is keyed only by the 5 static PROVIDER_ENV_MAP
+    // vendor ids, so for a real local id the lookup is always an own-property
+    // miss -- and for a local id colliding with an Object.prototype member
+    // (e.g. 'constructor') it walks the prototype chain to a truthy inherited
+    // value, fabricating a bearer and defeating gateway-router.js's
+    // no_local_key check. Never use a bare `map[vendor]`-shaped lookup here.)
+    bearer = process.env[entry.apiKeyEnv] || undefined;
   }
   const localProviders = { [vendor]: { ...entry, keyPresent: !!bearer } };
   const localLive = validateModel === false

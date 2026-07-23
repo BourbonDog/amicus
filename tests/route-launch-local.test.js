@@ -26,7 +26,10 @@ describe('resolveRouteForLaunch: local assembly', () => {
     jest.doMock('../src/utils/config', () => ({ getEffectiveAliases: () => ({}) }));
     jest.doMock('../src/utils/api-key-store', () => ({
       readApiKeys: () => ({ openrouter: false, google: false, openai: false, anthropic: false, deepseek: false }),
-      readApiKeyValues: () => ({}),   // resolveLocalRouteInputs lazy-requires this for the bearer fallback
+      // B1: resolveLocalRouteInputs no longer reads readApiKeyValues() (dropped
+      // dead/unsafe fallback) — kept here only so any other transitive require of
+      // this mocked module still finds a shape-compatible stub.
+      readApiKeyValues: () => ({}),
     }));
     jest.doMock('../src/utils/auth-json', () => ({ readAuthJsonKeys: () => ({}) }));
     jest.doMock('../src/utils/model-catalog', () => ({ getCatalogInfo: async () => ({ models: [], lastRefreshError: null }) }));
@@ -76,6 +79,25 @@ describe('resolveRouteForLaunch: local assembly', () => {
       probe, // env intentionally NOT seeded with LAB2_API_KEY -> keyPresent must resolve false
     });
     const r = await resolve({ model: 'lab2/m', gatewayMode: 'auto', source: 'test', validateModel: true });
+    expect(r.kind).toBe('error');
+    expect(r.reason).toBe('no_local_key');
+  });
+
+  // B1 (whole-branch review, CRITICAL): the OLD resolveLocalRouteInputs fell back to
+  // `readApiKeyValues()[vendor]` when process.env[apiKeyEnv] was unset. readApiKeyValues()
+  // returns a plain `{}`-shaped object keyed only by the 5 static PROVIDER_ENV_MAP vendor
+  // ids -- never a local id -- so for a local vendor named 'constructor' the bracket lookup
+  // walked the prototype chain to Object.prototype.constructor (the Object function,
+  // truthy), fabricating a bearer and flipping keyPresent to true even though no token was
+  // ever configured. Same template as the "declared bearer absent" test above, instantiated
+  // with id 'constructor' and NO env seeded for its apiKeyEnv.
+  test('a local id named "constructor" with an unset apiKeyEnv resolves keyPresent false / no_local_key, not a fabricated bearer', async () => {
+    const probe = jest.fn().mockResolvedValue({ status: 'ok', models: ['constructor/m'] });
+    const resolve = load({
+      providers: { constructor: { id: 'constructor', baseURL: 'https://10.0.0.7:8000/v1', flavor: 'vllm', apiKeyEnv: 'CTOR_API_KEY' } },
+      probe, // env intentionally NOT seeded with CTOR_API_KEY -> keyPresent must resolve false
+    });
+    const r = await resolve({ model: 'constructor/m', gatewayMode: 'auto', source: 'test', validateModel: true });
     expect(r.kind).toBe('error');
     expect(r.reason).toBe('no_local_key');
   });

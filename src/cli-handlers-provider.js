@@ -205,4 +205,8 @@ async function handleProvider(args, deps = {}) {
   return 1;
 }
 
-module.exports = { handleProvider };
+// isLoopbackUrl/isPlaintextRemote are also reused by cli-handlers-key-local.js's
+// handleLocalKey (B2, whole-branch review) so the `amicus key <localId> <token>`
+// surface warns about cleartext bearer transmission with the SAME exact-hostname
+// check `provider add` uses here, instead of growing a second, divergent check.
+module.exports = { handleProvider, isLoopbackUrl, isPlaintextRemote };

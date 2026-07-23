@@ -67,6 +67,28 @@ async function handleLocalKey(entry, provider, args) {
 
   if (args.remove) {
     removeRawEnv(envVar);
+    // B3 (whole-branch review): clear the apiKeyEnv stamp too, not just the .env
+    // line, so --remove is symmetric with `amicus key <token>` (which stamps
+    // apiKeyEnv onto config.providers[id] the first time a bearer is added — see
+    // below). Leaving apiKeyEnv on config after the .env line is gone bricks the
+    // provider: gateway-router.js's resolveLocal treats
+    // `entry.apiKeyEnv && !entry.keyPresent` as a hard no_local_key error, so a
+    // provider that started keyless would never again resolve without the user
+    // re-adding a key or removing/re-adding the whole provider — "remove
+    // doesn't undo add". config.providers[id] has no field recording WHY
+    // apiKeyEnv is set (auto-stamped by `key <token>` vs. required via
+    // `provider add --bearer-env`), so this can't be done selectively; clearing
+    // it unconditionally is the safest, most predictable behavior — --remove
+    // fully reverts the provider to the no-auth state it was in before `amicus
+    // key <token>`. A user who wants the provider to require auth again can
+    // reconfigure it (`provider add --bearer-env` or another `amicus key <token>`).
+    const { loadConfig, saveConfig } = require('./utils/config');
+    const config = loadConfig() || {};
+    if (config.providers && Object.prototype.hasOwnProperty.call(config.providers, provider) &&
+        config.providers[provider].apiKeyEnv) {
+      delete config.providers[provider].apiKeyEnv;
+      saveConfig(config);
+    }
     if (args.json) { process.stdout.write(`${JSON.stringify({ ok: true, removed: provider })}\n`); }
     else { process.stdout.write(`Removed bearer for '${provider}'.\n`); }
     return;
@@ -76,6 +98,18 @@ async function handleLocalKey(entry, provider, args) {
   if (!token) {
     process.stderr.write(`This local provider needs a bearer token: amicus key ${provider} <token>\n`);
     return;
+  }
+
+  // B2 (whole-branch review, security consistency): a bearer headed to a plain
+  // http:// non-loopback host travels in cleartext. `provider add` (doAdd) and
+  // the Electron save handler (ipc-setup-local.js) both warn about this; this
+  // surface never did. Reuse their exact-hostname check (not a new
+  // substring-based one) so 127.0.0.1.evil.com still correctly warns. Warn
+  // BEFORE the probe below, which is itself the first thing to send the token
+  // over the wire.
+  const { isPlaintextRemote } = require('./cli-handlers-provider');
+  if (isPlaintextRemote(entry.baseURL)) {
+    process.stderr.write('Warning: sending a bearer token over plain http:// to a non-loopback host transmits it in cleartext.\n');
   }
 
   const { probeLocalProvider } = require('./utils/local-probe');
