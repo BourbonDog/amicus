@@ -8,6 +8,19 @@ const https = require('https');
 
 jest.mock('https');
 
+// Task 8 fix-pass: fetchAllModels() (v4.2 §4.4) also reads the machine's real
+// local-provider config via getLocalProviders() -> config.loadConfig(). Sandbox
+// it to an empty map so this suite's assertions never depend on whatever a
+// contributor's dev machine happens to have under `providers` -- a dev box with
+// even one reachable local provider silently adds a row to every fetchAllModels()
+// result below (reproduced: "should handle all providers failing gracefully"
+// expects ANTHROPIC_MODELS.length and gets +1). local-probe is never invoked
+// once getLocalProviders() reports no entries, so it needs no mock here.
+jest.mock('../src/utils/local-providers', () => ({
+  ...jest.requireActual('../src/utils/local-providers'),
+  getLocalProviders: () => ({})
+}));
+
 const {
   fetchModelsFromProvider,
   fetchAllModels,
