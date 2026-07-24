@@ -65,7 +65,9 @@ function debateTargets(provisionalRecord, tallyInput) {
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
   return { project: ctx.scratchDir, waveId, timeout: ctx.o.timeout, gateway: ctx.o.gateway,
-    noValidateModel: ctx.o.noValidateModel, noCostGate: ctx.o.noCostGate };
+    noValidateModel: ctx.o.noValidateModel, noCostGate: ctx.o.noCostGate,
+    // v4.3 Task 3 (spec §7.2): attribution ids for every defense/re-vote leg.
+    councilRunId: ctx.o.runId, councilName: ctx.o.councilName };
 }
 
 async function runDefenseSolo(ctx, raiser, findings, idx) {

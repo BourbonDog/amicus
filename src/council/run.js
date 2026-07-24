@@ -37,13 +37,16 @@ const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 
 /**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project, runId,
- *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?}
+ *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?,
+ *   councilName?} councilName (v4.3 Task 3, spec §7.1/§7.2) is the preset name when
+ *   launched via `--council <preset>`, else null — threaded down through ctx.o into
+ *   every launchWave/launchSolo call so council leg ledger rows can be attributed.
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?}
  * @returns {Promise<{exitCode: number, run: object}>}
  */
 async function runCouncil(options, deps = {}) {
   const o = { critic: null, lenses: null, maxCost: null, debate: false, claudeReviewFile: null,
-    noCostGate: false, ...options };
+    noCostGate: false, councilName: null, ...options };
   const launchers = deps.launchers || createLaunchers();
   const appendRunFn = deps.appendRunFn || require('./ledger').appendRun;
   const statsFn = deps.statsFn || require('./ledger').deriveReliability;

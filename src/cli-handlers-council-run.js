@@ -20,7 +20,12 @@ function parseList(value) {
   return String(value).split(',').map(s => s.trim()).filter(Boolean);
 }
 
-/** Resolve bench models from --models XOR --council (mirrors handleFanout). */
+/**
+ * Resolve bench models from --models XOR --council (mirrors handleFanout).
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed --council
+ * name when that branch was taken, else null — threaded into runCouncil's
+ * `councilName` option so council ledger rows can be attributed to a preset.
+ */
 function resolveBench(args, useJson) {
   const hasModels = typeof args.models === 'string' && args.models.trim();
   const hasCouncil = args.council !== undefined && args.council !== false;
@@ -40,16 +45,17 @@ function resolveBench(args, useJson) {
     const { resolveCouncilMembers } = require('./utils/config');
     const { readCache } = require('./utils/model-catalog');
     const catalog = (readCache() || {}).models || [];
-    const expanded = resolveCouncilMembers(args.council.trim(), catalog);
+    const presetName = args.council.trim();
+    const expanded = resolveCouncilMembers(presetName, catalog);
     if (expanded.error) {
       return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: ${expanded.error}` }) };
     }
     if (expanded.dropped && expanded.dropped.length && !useJson) {
       process.stderr.write(`Notice: dropped unavailable council member(s): ${expanded.dropped.join(', ')}\n`);
     }
-    return { bench: expanded.models };
+    return { bench: expanded.models, presetName };
   }
-  return { bench: parseList(args.models) };
+  return { bench: parseList(args.models), presetName: null };
 }
 
 function renderRunHuman(run) {
@@ -85,6 +91,15 @@ async function handleCouncilRun(args) {
   const benchRes = resolveBench(args, useJson);
   if (benchRes.fail !== undefined) { return benchRes.fail; }
   const bench = benchRes.bench;
+  // v4.3 Task 3 (spec §7.1): the preset name, when this run came from a real
+  // --council <preset>. `--council-name` is an internal, undocumented passthrough
+  // set by mcp-council-run.js — the MCP handler always expands a preset to
+  // `--models` before spawning (so `--council`/`--models` stay mutually exclusive
+  // on this CLI surface), which would otherwise strand the preset name with no
+  // way to reach this process. Never fabricated: --models with neither flag
+  // stays null, matching spec §7.1 ("preset name … else null").
+  const councilName = benchRes.presetName
+    || (typeof args['council-name'] === 'string' && args['council-name'].trim() ? args['council-name'].trim() : null);
   if (bench.length < 2) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: 'Error: a council needs at least 2 seats (fanout semantics)' });
@@ -148,6 +163,7 @@ async function handleCouncilRun(args) {
     gateway: resolveGatewayMode(args.gateway),
     noValidateModel: !!args['no-validate-model'],
     date: new Date().toISOString().slice(0, 10),
+    councilName,
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and
     // 'claude may not chair' guards live there on purpose so MCP, the GitHub

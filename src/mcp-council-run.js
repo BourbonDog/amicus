@@ -23,7 +23,14 @@ function textResult(text, isError) {
   return result;
 }
 
-/** Resolve the bench: models XOR council preset (amicus_fanout parity). */
+/**
+ * Resolve the bench: models XOR council preset (amicus_fanout parity).
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed council
+ * preset name when that branch was taken, else null — this handler always
+ * spawns the CLI child with an already-expanded `--models` list (never
+ * `--council`), so the preset name would otherwise be lost; the caller
+ * forwards it via the internal `--council-name` passthrough instead.
+ */
 function resolveBenchInput(input) {
   const inputModels = Array.isArray(input.models) ? input.models : [];
   const hasModels = inputModels.length > 0;
@@ -34,11 +41,12 @@ function resolveBenchInput(input) {
     const { resolveCouncilMembers } = require('./utils/config');
     const { readCache } = require('./utils/model-catalog');
     const catalog = (readCache() || {}).models || [];
-    const expanded = resolveCouncilMembers(input.council.trim(), catalog);
+    const presetName = input.council.trim();
+    const expanded = resolveCouncilMembers(presetName, catalog);
     if (expanded.error) { return { error: expanded.error }; }
-    return { bench: expanded.models };
+    return { bench: expanded.models, presetName };
   }
-  return { bench: inputModels };
+  return { bench: inputModels, presetName: null };
 }
 
 /**
@@ -62,6 +70,7 @@ async function handleCouncilRunTool(input, project, helpers) {
   const benchRes = resolveBenchInput(input);
   if (benchRes.error) { return textResult(benchRes.error, true); }
   const bench = benchRes.bench;
+  const presetName = benchRes.presetName;
   if (bench.length < 2) { return textResult('A council needs at least 2 seats.', true); }
   const chair = (typeof input.chair === 'string' && input.chair.trim()) ? input.chair.trim() : CHAIR_DEFAULT;
   if (bench.includes(chair)) {
@@ -123,6 +132,10 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (input.timeoutMinutes) { args.push('--timeout', String(input.timeoutMinutes)); }
   if (typeof input.maxCost === 'number') { args.push('--max-cost', String(input.maxCost)); }
   if (input.gateway) { args.push('--gateway', input.gateway); }
+  // v4.3 Task 3 (spec §7.1): the bench above is already expanded, so `--council`
+  // itself is never spawned (it would collide with `--models`) — this internal,
+  // undocumented flag carries the preset NAME through for attribution only.
+  if (presetName) { args.push('--council-name', presetName); }
   // v4.1 §4.5b/§4.5d. claudeReviewFile is resolved against `project` for the same
   // reason outDir is — an MCP client may send a relative path, and the child's cwd
   // is the run dir. Validation of the file itself stays in the spawned engine's

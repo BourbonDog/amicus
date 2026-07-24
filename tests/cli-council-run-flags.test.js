@@ -89,3 +89,36 @@ describe('council run forwards the three v4.1 flags into runCouncil options', ()
     expect(opts.claudeReviewFile).toBeNull();
   });
 });
+
+// v4.3 Task 3 (spec §7.1): councilName threading — the preset name reaches
+// runCouncil() when launched via --council <preset>, and stays null (never
+// fabricated) when launched via --models.
+describe('council run threads councilName (v4.3 Task 3, spec §7.1)', () => {
+  test('--council <preset> threads the preset name into runCouncil options', async () => {
+    // budget's bench includes the 'deepseek' alias (the default chair) — pick
+    // an explicit chair outside it so this doesn't trip the bench/chair guard.
+    const args = argsBase({ council: 'budget', chair: 'opus' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBe('budget');
+  });
+
+  test('--models with no preset leaves councilName null', async () => {
+    const code = await handleCouncilRun(argsBase());
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBeNull();
+  });
+
+  // The internal --council-name passthrough (mcp-council-run.js spawns the
+  // CLI child with an already-expanded --models list, never --council) is
+  // the ONLY way the preset name reaches this process in that path.
+  test('the internal --council-name passthrough also threads the preset name (MCP spawn path)', async () => {
+    const code = await handleCouncilRun(argsBase({ 'council-name': 'nightly-council' }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBe('nightly-council');
+  });
+});

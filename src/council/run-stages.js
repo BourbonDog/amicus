@@ -41,6 +41,9 @@ async function launchStage1(ctx) {
   const common = {
     project: o.runDir, timeout: o.timeout, gateway: o.gateway,
     noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
+    // v4.3 Task 3 (spec §7.2): attribution ids, forwarded verbatim to runFanout
+    // via run-launch.js so every Stage-1 leg's ledger row carries them.
+    councilRunId: o.runId, councilName: o.councilName,
   };
   const launches = [];
   // Record every sub-wave BEFORE it launches: `amicus abort` cascades over
@@ -121,6 +124,7 @@ async function runStage1(ctx) {
         model: m.modelInput, prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors }),
         project: o.runDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
+        councilRunId: o.runId, councilName: o.councilName,
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, reviews, deadLegs }; }
@@ -170,6 +174,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     models: judges, prompt: bundle, project: ctx.scratchDir, waveId: `${o.runId}-s2`,
     timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
     noCostGate: o.noCostGate,
+    councilRunId: o.runId, councilName: o.councilName,
   });
   ctx.addWave(wave);
   if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [] }; }
@@ -195,6 +200,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         model: judge, prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
+        councilRunId: o.runId, councilName: o.councilName,
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, judgeResults }; }

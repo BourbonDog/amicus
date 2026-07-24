@@ -68,6 +68,9 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
       // below are the launches a re-armed price gate would refuse LAST, after
       // the whole bench has already been paid for.
       noCostGate: o.noCostGate,
+      // v4.3 Task 3 (spec §7.2 named defect): without this, chair spend is
+      // ledgered with councilRunId:null and is unattributable.
+      councilRunId: o.runId, councilName: o.councilName,
     });
     addWave(solo.wave);
     const ok = solo.leg && solo.leg.status === 'complete'
@@ -126,6 +129,7 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
       project: o.runDir, waveId: `${o.runId}-ch4`,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
       noCostGate: o.noCostGate,
+      councilRunId: o.runId, councilName: o.councilName,
     });
     addWave(repair.wave);
     if (isAbortExit(repair.exitCode) || isSignalled()) { return bail(repair.exitCode || isSignalled()); }

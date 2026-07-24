@@ -26,7 +26,10 @@ function createLaunchers(deps = {}) {
 
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
-   *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string}} opts
+   *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string,
+   *   councilRunId?: string, councilName?: string}} opts councilRunId/councilName
+   *   (v4.3 Task 3, spec §7.2) are additive attribution ids forwarded verbatim
+   *   into the runFanout call so it can stamp them onto every leg.
    * @returns {Promise<{wave: object|null, exitCode: number}>}
    */
   async function launchWave(opts) {
@@ -43,6 +46,8 @@ function createLaunchers(deps = {}) {
       includeContext: false,
       gatewayMode: opts.gateway,
       noValidateModel: opts.noValidateModel,
+      councilRunId: opts.councilRunId,
+      councilName: opts.councilName,
       // v4.1 §4.5d: `--no-cost-gate` is a WHOLE-RUN opt-out (an intentional
       // o3-class council), so it has to ride every council launch — otherwise
       // fanout's per-$/Mtok gate refuses the first repair or the chair

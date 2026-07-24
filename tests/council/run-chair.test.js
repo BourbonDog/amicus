@@ -33,6 +33,35 @@ describe('pickFallbackChair (highest peers-only street-cred = LOWEST mean rank)'
   });
 });
 
+// v4.3 Task 3 (spec §7.2 named defect): "council chair spend is invisible"
+// without this — a chair solo's launch options must carry councilRunId/
+// councilName end-to-end (run.js's o.runId/o.councilName -> run-chair.js's
+// attemptChair -> launchers.launchSolo), threaded through the REAL runCouncil
+// driver rather than a hand-built ctx.
+describe('chair solo attribution (spec §7.2)', () => {
+  test('the chair launch carries councilRunId + the requested councilName', async () => {
+    const script = happyScript();
+    const launchers = scriptedLaunchers(script);
+    const { exitCode } = await runCouncil(baseOptions(tmp, { councilName: 'nightly-council' }), {
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    const ch1 = launchers.calls.find(c => c.waveId === 'abc123-ch1');
+    expect(ch1).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council' });
+  });
+
+  test('--models with no preset leaves councilName null on the chair launch (spec §7.1: never fabricated)', async () => {
+    const script = happyScript();
+    const launchers = scriptedLaunchers(script);
+    await runCouncil(baseOptions(tmp), { // no councilName override -> defaults null
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    const ch1 = launchers.calls.find(c => c.waveId === 'abc123-ch1');
+    expect(ch1.councilRunId).toBe('abc123');
+    expect(ch1.councilName).toBeNull();
+  });
+});
+
 describe('chair retry + fallback promotion', () => {
   test('transient failure: retry same chair once succeeds → exit 0', async () => {
     const script = happyScript();
@@ -88,6 +117,20 @@ describe('chair retry + fallback promotion', () => {
 });
 
 describe('chair VERDICT-line repair (one re-prompt)', () => {
+  // v4.3 Task 3 (spec §7.2): the ch4 VERDICT-repair launch is a SEPARATE call
+  // site from the ch1/ch2/ch3 chain (attemptChair) — its own attribution wiring.
+  test('the VERDICT-repair (-ch4) launch also carries council attribution', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Great synthesis, no verdict line.', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'VERDICT: Fundamental rethink')]);
+    const launchers = scriptedLaunchers(script);
+    await runCouncil(baseOptions(tmp, { councilName: 'nightly-council' }), {
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    const ch4 = launchers.calls.find(c => c.waveId === 'abc123-ch4');
+    expect(ch4).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council' });
+  });
+
   test('missing VERDICT → repair -ch4 supplies it → exit 0', async () => {
     const script = happyScript();
     script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Great synthesis, no verdict line.', 'complete', 0.03)]);

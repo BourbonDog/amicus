@@ -57,7 +57,7 @@ function writeWaveMetadata(waveDir, patch) {
  *   contextTurns?, contextSince?, contextMaxTokens?, mcp?, mcpConfig?, noMcp?,
  *   excludeMcp?, noValidateModel?, gatewayMode? (#61 Task 7.3: --gateway merged
  *   with routing.prefer, applied per leg), json?, client?, quiet? (suppress
- *   stdout — tests)
+ *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -111,6 +111,11 @@ async function runFanout(options) {
   });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
+  // v4.3 §7.2: stamp council attribution onto every leg (fanout-leg.js's
+  // existing appendSpend reads it); no-op for every non-council caller.
+  if (options.councilRunId || options.councilName) {
+    legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
+  }
   const okLegs = legs.filter(l => l.ok);
   // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
   // stderr to land on (fanout is one process resolving many legs, not one
