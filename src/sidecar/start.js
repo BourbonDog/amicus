@@ -257,7 +257,19 @@ async function startSidecar(options) {
     // this run's own success must never hinge on ledger bookkeeping either way.
     try {
       const { appendSpend } = require('../utils/spend-ledger');
-      appendSpend({ taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage });
+      const { statusFromResult } = require('../utils/result-schema');
+      appendSpend({
+        taskId, model, mode: effectiveHeadless ? 'headless' : 'interactive', usage: runUsage,
+        op: 'start', status: statusFromResult(result), project: effectiveProject,
+        // ⚠️ DE-ROT: `metadata` is NOT in scope at startSidecar's finalize site — the objects
+        // there are `meta` (createSessionMetadata result) and `m`; `metadata` is a local only
+        // inside createSessionMetadata. Reading `metadata.gateway` throws a ReferenceError the
+        // best-effort catch swallows → EVERY start-mode spend row silently dropped + start-json.test.js
+        // goes red. Use an in-scope value (spec-complete for direct/openrouter):
+        gateway: String(model).startsWith('openrouter/') ? 'openrouter' : 'direct',
+        // (To also attribute v4.2 'local': thread the resolved route gateway — dropped today at
+        // cli-handlers-run.js:47 — into createSessionMetadata and read `meta.gateway`, as continue.js:111 does.)
+      });
     } catch { /* best-effort */ }
   }
 

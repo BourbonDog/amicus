@@ -46,9 +46,20 @@ const SPEND_LEDGER_FILE = 'spend-ledger.jsonl';
  * @param {string} opts.model resolved model id (or alias, if that's all the caller has)
  * @param {'headless'|'interactive'|'leg'} opts.mode
  * @param {{tokens:object, cost:{amount:number|null,currency:string,source:string}}|null} opts.usage
+ * @param {string} [opts.op] 'leg' or 'start'
+ * @param {string} [opts.status] terminal status
+ * @param {string} [opts.councilRunId] council run id (additive attribution)
+ * @param {string} [opts.councilName] council name (additive attribution)
+ * @param {string} [opts.project] project directory (additive attribution)
+ * @param {string} [opts.gateway] resolved gateway ('direct'|'openrouter'|'local', additive attribution)
+ * @param {number} [opts.attempt] fallback attempt count (omitted if absent)
+ * @param {string} [opts.substitutedFor] substituted model (omitted if absent)
+ * @param {string} [opts.retryOfWaveId] wave id being retried (omitted if absent)
  * @param {{dir?:string}} [ctx] test seam — dir overrides getConfigDir()
  */
-function appendSpend({ taskId, waveId, model, mode, usage }, ctx = {}) {
+function appendSpend({ taskId, waveId, model, mode, usage,
+  op, status, councilRunId, councilName, project, gateway,
+  attempt, substitutedFor, retryOfWaveId }, ctx = {}) {
   if (!usage) { return; }
   try {
     const dir = ctx.dir || getConfigDir();
@@ -62,7 +73,19 @@ function appendSpend({ taskId, waveId, model, mode, usage }, ctx = {}) {
       mode: mode || null,
       tokens: usage.tokens || null,
       cost: usage.cost || null,
+      // v4.3 additive attribution (spec 7.1). Nullable dimensions default to
+      // null (so a row is always groupable); linkage fields are OMITTED unless
+      // present (they only exist on fallback/retry rows).
+      op: op || null,
+      status: status || null,
+      councilRunId: councilRunId || null,
+      councilName: councilName || null,
+      project: project || null,
+      gateway: gateway || null,
     };
+    if (attempt !== undefined) { row.attempt = attempt; }
+    if (substitutedFor !== undefined) { row.substitutedFor = substitutedFor; }
+    if (retryOfWaveId !== undefined) { row.retryOfWaveId = retryOfWaveId; }
     fs.appendFileSync(path.join(dir, SPEND_LEDGER_FILE), JSON.stringify(row) + '\n');
   } catch (e) {
     logger.debug('spend-ledger append failed (best-effort, run unaffected)', { taskId, error: e.message });

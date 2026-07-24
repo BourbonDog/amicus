@@ -124,7 +124,19 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   if (usage) {
     try {
       const { appendSpend } = require('../utils/spend-ledger');
-      appendSpend({ taskId: legId, waveId, model: leg.model, mode: 'leg', usage });
+      // ⚠️ DE-ROT: resolved legs carry the router's gateway on `leg.gateway` (set by
+      // validateFanoutModels, fanout-validate.js:65) — `leg.routeResult` exists ONLY on FAILED
+      // legs that never reach runLeg, so the old read always fell through to the string heuristic
+      // and mislabeled v4.2 local legs as 'direct'. Prefer the real resolved gateway ('local' included).
+      const gateway = leg.gateway ||
+        (leg.model && String(leg.model).startsWith('openrouter/') ? 'openrouter' : 'direct');
+      appendSpend({
+        taskId: legId, waveId, model: leg.model, mode: 'leg', usage,
+        op: 'leg', status, gateway,
+        councilRunId: leg.councilRunId, councilName: leg.councilName,
+        project, attempt: leg.attempt, substitutedFor: leg.substitutedFor,
+        retryOfWaveId: leg.retryOfWaveId,
+      });
     } catch { /* best-effort */ }
   }
   // If setup threw before the session dir existed, there is nothing on disk to
