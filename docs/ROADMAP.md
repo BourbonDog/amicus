@@ -77,6 +77,8 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 - **F7** — Parallel council panels + super-chair (opt-in `--panels N` high-assurance; niche).
 - **E7** — Prompt dedup cache (exact-dup, opt-in, excludes council/fanout) — minor cost optimization.
 - **E6** — Cost-per-quality metric (withdrawn in debate; revisit if street-cred stabilizes).
+- **`amicus key --local` picker** *(S)* — a default local-provider picker so `amicus key` sets/clears a bearer without naming the provider id: auto-select (and announce) when exactly one local provider is configured, a numbered prompt when several, and a hard error under `--json`/non-interactive rather than guessing a secret's destination. Register `--local` as a boolean flag. Deferred out of v4.2.1 as feature material (a new CLI surface, not a patch fix).
+- **Headless no-output fast-fail backstop** *(M)* — fail a headless run fast (env-tunable `AMICUS_NO_OUTPUT_BACKSTOP_MS`, ~120s default) when a misconfigured local model produces zero output, reasoning, and tool-calls, instead of polling to the request/overall timeout. Disarms permanently on the first token/reasoning/tool_use, so a legit slow cold-prefill local model (30–90s is normal) is never affected. Deferred out of v4.2.1 as new runtime behavior.
 
 ## What changed vs. the council's flat top-10
 - Split the flat list into a **benefit-themed 4.x point-release line** (v4.0 → v4.2 → v4.5 → v4.6 → v4.7).
