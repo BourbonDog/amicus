@@ -130,7 +130,8 @@ src/
 │   └── tokens.js
 ├── observe/
 │   ├── events.js
-│   └── live-doc.js
+│   ├── live-doc.js
+│   └── watch-render.js
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
@@ -261,6 +262,7 @@ src/
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
 ├── cli-handlers-spend.js
 ├── cli-handlers-status.js  # `amicus status <task_id>` — one-shot human/JSON status for a session or wave.
+├── cli-handlers-watch.js
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
@@ -370,6 +372,7 @@ evals/
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
 | `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()`, `filterRows()` |
 | `cli-handlers-status.js` | `amicus status <task_id>` — one-shot human/JSON status for a session or wave. | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()`, `formatCouncilHuman()` |
+| `cli-handlers-watch.js` |  | `handleWatch()`, `resolveWatchTarget()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `DEFAULTS()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
@@ -415,6 +418,7 @@ evals/
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()`, `emitWaveStarted()` |
 | `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL()` |
+| `observe/watch-render.js` |  | `runWatchLoop()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |

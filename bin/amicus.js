@@ -127,6 +127,11 @@ async function main() {
         exitCode = await handleSpend(args);
         break;
       }
+      case 'watch': {
+        const { handleWatch } = require('../src/cli-handlers-watch');
+        exitCode = await handleWatch(args);
+        break;
+      }
       case 'provider': {
         const { handleProvider } = require('../src/cli-handlers-provider');
         exitCode = await handleProvider(args);

@@ -145,6 +145,8 @@ function isBooleanFlag(key) {
      'desktop',              // init: register for Claude Desktop only (Task 15)
      'failed',               // spend: only non-complete (wasted) rows (v4.3 Task 4, spec §7.3)
      'rows',                 // spend: include matching raw rows, capped at 1000 (v4.3 Task 4)
+     'plain',                // watch: milestone log lines instead of the refresh table (v4.3 Task 11)
+     'ui',                   // watch: open the Council Workspace window; v4.4 seam (v4.3 Task 11)
    ];
   return booleanFlags.includes(key);
 }
@@ -371,6 +373,7 @@ Commands:
   council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]   Build + write verdict.json
   doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
   spend [--since 7d] [--json]           Cross-run cost rollup from the spend ledger
+  watch <id> [--json] [--plain] [--interval <sec>]   Live-render a run from any terminal
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
@@ -557,6 +560,15 @@ Options for 'spend':
   --json                        Machine-readable output (versioned spend doc)
   Reads ~/.config/amicus/spend-ledger.jsonl (one row per completed run/leg).
   Shows remaining OpenRouter credit when a key is configured.
+`,
+  watch: `
+Options for 'watch':
+  <id>                          A fan-out wave id, council run id, or session id
+  --project <path>              Project the run was launched in (default cwd)
+  --interval <sec>              Refresh interval (default 2, floor 0.5)
+  --plain                       Milestone log lines instead of the refresh table
+  --json                        NDJSON: tailed events + composed doc on change + final doc
+  --ui                          Open the Council Workspace window (v4.4; interactive-only)
 `,
   setup: `
 Options for 'setup':
