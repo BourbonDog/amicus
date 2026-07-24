@@ -145,6 +145,20 @@ async function launchWizard() {
 }
 
 /**
+ * Local / self-hosted provider add step for the readline wizard (v4.2 §4.6,
+ * Task 12). Thin re-export -- RULING D14 keeps the real implementation out of
+ * this file (516 lines, grandfathered on check-file-sizes.js's exclude list).
+ * Owning module: ./setup-local.
+ * @param {(question: string) => Promise<string>} ask
+ * @param {(line: string) => void} print
+ * @param {object} [deps]
+ * @returns {Promise<void>}
+ */
+function addLocalProviderInteractive(ask, print, deps) {
+  return require('./setup-local').addLocalProviderInteractive(ask, print, deps);
+}
+
+/**
  * Standalone API key setup — launches the Electron window directly
  * Used by `sidecar setup --api-keys`
  * @returns {Promise<boolean>} true if keys were configured
@@ -191,6 +205,11 @@ async function seedCatalog(print) {
  *   (`runReadlineSetup` already fetches one for the per-provider phase) --
  *   reused as-is to avoid a second `getCatalog()` round trip. Falls back to
  *   fetching its own when omitted (e.g. direct unit-test callers).
+ * @returns {Promise<boolean>} true when the branch actually seeded a council
+ *   (a completed setup -- the caller then prints the C8 doctor finale, Finding
+ *   2 post-review); false when it aborted early (no OPENROUTER_API_KEY, or
+ *   fewer than 2 models picked) -- parity with the invalid-choice branch,
+ *   which also configured nothing and so also gets no finale.
  */
 async function runFreeCouncilBranch(rl, catalogArg) {
   const keys = detectApiKeys();
@@ -198,7 +217,7 @@ async function runFreeCouncilBranch(rl, catalogArg) {
     console.log('');
     console.log('A free council needs OPENROUTER_API_KEY (free models route only through OpenRouter).');
     console.log('Set OPENROUTER_API_KEY and re-run: amicus setup. No changes made.');
-    return;
+    return false;
   }
   const { listFreeModels, suggestFreeCouncil, PINNED_FREE_MODELS } = require('../utils/free-models');
   let catalog = [];
@@ -232,7 +251,7 @@ async function runFreeCouncilBranch(rl, catalogArg) {
   }
   if (pickIds.length < 2) {
     console.log('A council needs at least 2 models. No changes made.');
-    return;
+    return false;
   }
   const { council } = seedFreeCouncil(pickIds);
   await seedCatalog();
@@ -243,6 +262,7 @@ async function runFreeCouncilBranch(rl, catalogArg) {
   console.log('');
   console.log('Heads up (free tier): rate-limited & quality-variable; some models 404');
   console.log('unless you enable data-sharing at openrouter.ai/settings/privacy.');
+  return true;
 }
 
 /**
@@ -294,6 +314,35 @@ async function runProviderDefaultPickers(rl, foundKeys, catalog) {
 }
 
 /**
+ * C8 (v4.2 §4.7) -- print the compact doctor summary at the wizard's finale.
+ * Shared by runReadlineSetup and the Electron-success path of
+ * runInteractiveSetup. Best-effort / guarded: a doctor bug (or a check that
+ * throws) must never abort setup or change its outcome -- setup has already
+ * done its job by the time this runs, so a failure here is swallowed.
+ *
+ * Injectable (post-review hardening, M14-class fix): `deps.runDoctorChecks`
+ * lets tests replace the real doctor directly instead of relying on jest's
+ * module-mock resolution coincidentally intercepting this function's own
+ * lazy require (see tests/sidecar/setup.test.js's `cli-handlers-doctor`
+ * mock, added for exactly this reason). Every production call site
+ * (runReadlineSetup / runInteractiveSetup) calls this with no args, so the
+ * default -- the real, network-probing runDoctorChecks -- is always what
+ * actually ships.
+ * @param {{runDoctorChecks?: () => Promise<Array<object>>}} [deps]
+ */
+async function printDoctorFinale(deps = {}) {
+  try {
+    const runDoctorChecks = deps.runDoctorChecks || require('../cli-handlers-doctor').runDoctorChecks;
+    const { summarizeDoctor } = require('../utils/doctor-summary');
+    const checks = await runDoctorChecks();
+    console.log('');
+    console.log(summarizeDoctor(checks));
+  } catch (err) {
+    logger.debug('Doctor finale skipped', { error: err.message });
+  }
+}
+
+/**
  * Run the readline-based setup wizard (headless fallback)
  *
  * Guides the user through:
@@ -302,6 +351,7 @@ async function runProviderDefaultPickers(rl, foundKeys, catalog) {
  * 3. Mode selection (standard or free council)
  * 4. Default model selection from live quick-picks (read-modify-write, no clobber)
  * 5. Config file save
+ * 6. C8: a compact `amicus doctor` summary, best-effort
  */
 async function runReadlineSetup() {
   const rl = readline.createInterface({
@@ -328,6 +378,17 @@ async function runReadlineSetup() {
       console.log('Set OPENROUTER_API_KEY to get started, or run: amicus setup');
       console.log(`Not sure what's wrong? ${runDoctor}`);
     }
+    // Local / self-hosted providers (v4.2 §4.6) already configured (e.g. via a
+    // prior `amicus provider add`) are listed alongside detected keys. Guarded:
+    // getLocalProviders() is documented never-fatal, but a listing step must
+    // not be able to block setup even if that contract is ever violated.
+    try {
+      const { getLocalProviders } = require('../utils/local-providers');
+      const localIds = Object.keys(getLocalProviders());
+      if (localIds.length > 0) {
+        console.log(`Local providers configured: ${localIds.join(', ')}`);
+      }
+    } catch (_err) { /* best-effort: never block setup over this listing */ }
     console.log('');
 
     // #38 — non-blocking zero-credit / free-tier OpenRouter warning. Never
@@ -346,10 +407,34 @@ async function runReadlineSetup() {
     // it never clobbers a vendor alias this phase just wrote (Fix 2).
     const vendorAliasesWritten = await runProviderDefaultPickers(rl, foundKeys, catalog);
 
+    // Task 12 (v4.2 §4.6): offer to add a local / self-hosted server. Pinned
+    // insertion point -- after the per-provider pickers, before the mode
+    // prompt, so all provider configuration stays grouped ahead of the
+    // standard/free-council branch. Guarded (house best-effort rule, mirrors
+    // provisionElectron/maybeMigrationNotice): addLocalProviderInteractive
+    // already swallows its own errors, but this optional step must not be
+    // able to abort the wizard even if that inner guard is ever weakened.
+    try {
+      const wantLocal = await askQuestion(rl,
+        'Add a local / self-hosted server (Ollama, LM Studio, vLLM)? (y/N): ');
+      if (wantLocal.toLowerCase() === 'y' || wantLocal.toLowerCase() === 'yes') {
+        await addLocalProviderInteractive((q) => askQuestion(rl, q), console.log, {});
+      }
+    } catch (err) {
+      logger.debug('Local-provider wizard step skipped', { error: err.message });
+    }
+
     const mode = await askQuestion(rl,
       'Setup mode — 1) Standard (pick a default model)  2) Free OpenRouter council: ');
     if (mode === '2') {
-      await runFreeCouncilBranch(rl, catalog);
+      const completed = await runFreeCouncilBranch(rl, catalog);
+      if (completed) {
+        // C8 (Finding 2, post-review): parity with the standard path below --
+        // a completed free-council setup gets the doctor finale too. An
+        // aborted attempt (no key / <2 picks) configured nothing, so -- like
+        // the invalid-choice branch just below -- it gets none.
+        await printDoctorFinale();
+      }
       return;
     }
 
@@ -400,6 +485,9 @@ async function runReadlineSetup() {
     console.log(`Default model set to: ${cfg.default}`);
     console.log(`Config saved (${Object.keys(cfg.aliases).length} aliases).`);
     console.log(`Config path: ${path.join(getConfigDir(), 'config.json')}`);
+
+    // C8: compact doctor summary, best-effort (see printDoctorFinale).
+    await printDoctorFinale();
   } finally {
     rl.close();
   }
@@ -438,6 +526,13 @@ async function runInteractiveSetup() {
       if (keyLabel) { console.log(keyLabel); }
       if (modelLabel) { console.log(modelLabel); }
       console.log(`Config: ${configPath}`);
+
+      // C8: compact doctor summary, best-effort (see printDoctorFinale).
+      // runReadlineSetup prints its own further down -- only the Electron
+      // success path needs it added here explicitly; the fallback below
+      // delegates to runReadlineSetup and inherits its finale, so adding it
+      // here too would double-print.
+      await printDoctorFinale();
       return;
     }
   } catch (err) {
@@ -503,6 +598,7 @@ function seedFreeCouncil(pickIds) {
 
 module.exports = {
   addAlias,
+  addLocalProviderInteractive,
   createDefaultConfig,
   deriveFreeAlias,
   detectApiKeys,

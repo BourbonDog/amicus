@@ -7,6 +7,9 @@ const mcpChecks = require('./utils/doctor-mcp-checks');
 // engine-mcp check body — verifies the engine in the npx-cache copies the MCP
 // actually launches (bug report #1). Split out to keep this file under the gate.
 const engineCheck = require('./utils/doctor-engine-check');
+// local-providers check body (v4.2 §4.7 C8) — split out to keep this file
+// under the gate (mirrors the engineCheck/mcpChecks split above).
+const localProvidersCheck = require('./utils/doctor-local-providers-check');
 
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
@@ -58,6 +61,10 @@ function realDeps() {
     hasAmicusRegistration: () => require('./utils/mcp-discovery').hasAmicusRegistration(),
     inspectLegacyMcpEntries: () => require('./utils/legacy-mcp-migration').inspectAllLegacySidecarEntries(),
     migrateLegacyMcpEntries: () => require('./utils/legacy-mcp-migration').migrateLegacySidecar(),
+    // local-providers check (v4.2 §4.7 C8): both injectable so tests never
+    // fire a real network probe when a depsOverride omits them (M14).
+    getLocalProviders: () => require('./utils/local-providers').getLocalProviders(),
+    probeLocalProvider: (e, o) => require('./utils/local-probe').probeLocalProvider(e, o),
     skillInstalled: () => {
       const dir = path.join(os.homedir(), '.claude', 'skills');
       return fs.existsSync(path.join(dir, 'sidecar', 'SKILL.md'))
@@ -219,6 +226,11 @@ async function runDoctorChecks(depsOverride = {}) {
     const remaining = (typeof res.limitRemaining === 'number') ? ` ($${res.limitRemaining} remaining)` : '';
     return { id: 'openrouter-credit', name: 'OpenRouter credit', status: 'ok', message: `credit ok${remaining}`, hint: null };
   }));
+
+  // v4.2 §4.7 C8: configured local / OpenAI-compatible providers (Ollama, LM
+  // Studio, vLLM, generic) — reachability only; warn, never error (a napping
+  // `ollama serve` is not a doctor failure).
+  checks.push(await guardAsync('local-providers', 'Local providers', () => localProvidersCheck.evaluateLocalProviders(d)));
 
   // #43: project-root sanity — warns when cwd looks like an app/install dir or lacks project markers.
   checks.push(guard('project-root', 'Project root', () => {

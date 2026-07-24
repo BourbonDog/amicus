@@ -30,6 +30,8 @@ amicus update                             # Update to latest version
 amicus doctor [--json] [--fix]            # Diagnose setup; --fix self-heals (e.g. Electron)
 amicus spend [--since 7d] [--json]        # Cross-run cost rollup from the spend ledger
 amicus key <provider> <key>               # Validate + save one API key (also: --remove / bare list)
+amicus provider add|list|test|remove      # Local / OpenAI-compatible servers ($0): Ollama, LM Studio, vLLM
+amicus init [--claude] [--desktop]        # Register skills + MCP on demand (postinstall re-run)
 amicus council tally <input.json> --json  # Deterministic tiers + street-cred (+ ledger append)
 amicus council stats [--json]             # Reviewer reliability from the ledger
 amicus council report <verdict.json> [--md|--html]   # Render the council run report
@@ -289,13 +291,159 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.1.2",
+  "version": "4.2.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
 ```
 
 A running session additionally reports `messages`, `lastActivity`/`latest`, and (if stalled) a `STALLED` line with recovery guidance in `--json`. A wave ID (`amicus status <waveId>` / `--wave <waveId>`) instead reports `legsComplete`/`legsTotal` and a per-leg breakdown.
+
+---
+
+## Keys, Health & Spend
+
+Five commands for day-to-day account and cost hygiene: manage keys (cloud or local), check your setup, run local models at $0, and see what you've spent.
+
+### `amicus key`
+
+```bash
+amicus key                        # List every configured provider (cloud + local)
+amicus key openrouter <key>       # Validate + save a cloud vendor key
+amicus key openrouter --remove    # Remove a saved cloud vendor key
+amicus key my-ollama <token>      # Save/validate a bearer for a LOCAL provider
+amicus key my-ollama --remove     # Remove a local provider's bearer
+```
+
+Bare `amicus key` lists both kinds of provider:
+
+- **Cloud vendors** (`openrouter`, `google`, `openai`, `anthropic`, `deepseek`) — `✓` with a masked key hint, or `✗ not set`.
+- **Local providers** (anything added with `amicus provider add`, below) — `no key required` when the entry has no `apiKeyEnv`, else `✓` with a masked hint or `✗ not set`.
+
+`amicus key <provider> <key>` behaves differently depending on which kind `<provider>` is:
+
+| Provider kind | What happens |
+|---|---|
+| Cloud vendor (one of the 5 above) | `<key>` is validated live against the vendor's API, then saved to `~/.config/amicus/.env` (`0600`). A failed validation aborts the save. |
+| Local provider (an id in `config.providers`) | `<key>` is a **bearer token**, not a vendor API key. Amicus probes the endpoint *with* the bearer attached (2s timeout) and saves it to `.env` either way — the probe result only changes the confirmation message, it never blocks the save. If the entry had no `apiKeyEnv` yet, one is derived and stamped onto `config.providers.<id>` so the router picks it up. |
+
+After a successful **cloud**-vendor save (not a local-provider bearer save), Amicus offers the cost-aware default picker — a short list of that vendor's models, recommended one flagged, that becomes `aliases.<provider>` and optionally `config.default`. Non-interactively (`--json`, `--quiet`, or no TTY) it silently takes the recommended pick and prints a one-line summary instead of prompting.
+
+`--remove` deletes a saved key/bearer; every subcommand supports `--json`.
+
+### `amicus doctor`
+
+```bash
+amicus doctor              # Human-readable checklist
+amicus doctor --json       # Machine-readable (versioned doc)
+amicus doctor --fix        # Self-heal what can be self-healed, then re-report
+```
+
+Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a targeted fix hint for anything not `ok`:
+
+| Check | What it verifies | Can fail as |
+|---|---|---|
+| `node` | Node.js ≥ 18 | error |
+| `config-dir` | The resolved config directory | *(always ok)* |
+| `keys` | At least one cloud-vendor key configured | error |
+| `default-model` | Your default model alias resolves | error |
+| `catalog` | Model-catalog cache present and within the 24h TTL | warn |
+| `aliases` | Your configured aliases still resolve against the catalog | warn |
+| `opencode-bin` | The OpenCode engine binary is on `PATH` | error |
+| `engine-mcp` | The engine copy `npx -y amicus@latest mcp` would actually launch (catches a broken npx-cache copy a healthy local install would hide) | warn (error only if there's exactly one npx-cache copy and it's broken) |
+| `electron` | Electron (the interactive GUI) is installed | warn — headless still works |
+| `skills` | Both skills exist under `~/.claude/skills/` | warn |
+| `mcp` | Amicus is registered as an MCP server in Claude Code | warn |
+| `mcp-legacy` | No duplicate legacy `sidecar` MCP entry survives alongside `amicus` | warn |
+| `sessions-index-tmp` | No orphaned `sessions-index.json.*.tmp` files | warn |
+| `openrouter-credit` | Remaining OpenRouter credit (skipped — reports `ok` — when no OpenRouter key is set) | warn |
+| `local-providers` **(v4.2)** | Every provider in `config.providers` is reachable | warn |
+| `project-root` | Your cwd looks like a real project, not an app/install dir | warn |
+
+**`local-providers`** probes every configured local provider (2s timeout each) the same way `amicus provider test` does, and reports per-id reachability in one line, e.g. `ollama: 3 models @ http://127.0.0.1:11434/v1; my-vllm: unreachable @ http://127.0.0.1:8000/v1`. No providers configured at all is a plain `ok` ("none configured") — this check can never fail your doctor run outright, only warn: a napping `ollama serve` isn't treated as broken setup.
+
+`--fix` self-heals four of the checks above in place: reprovisions Electron, copies the OpenCode engine into a broken npx-cache install, removes a duplicate legacy MCP entry, and sweeps orphaned session-index tmp files (only ones older than 60s). It does **not** start a local server for you — `local-providers` stays a warning until you start the server yourself.
+
+Exit code is `1` if anything is `error`, else `0` (same rule drives `--json`'s `ok` field).
+
+### `amicus spend`
+
+```bash
+amicus spend                 # All-time rollup, human-readable
+amicus spend --since 7d      # Restrict to the last 7 days
+amicus spend --json          # Machine-readable (versioned doc)
+```
+
+Reads `~/.config/amicus/spend-ledger.jsonl` (one row per completed run/leg) and prints a most-expensive-model-first table: runs, input/output tokens, cost, and a **source mix** `r<N>/e<N>/u<N>` — how many of that model's runs were `reported` (billed cost from the provider), `estimated` (tokens × cached catalog pricing), or `unknown` (neither available). A trailing total line sums everything, plus your remaining OpenRouter credit when a key is configured.
+
+**Cost markers** — the shared convention behind every dollar figure Amicus prints, not just `spend`'s table: a bare `$1.23` (no `~`) is a provider-reported cost; `~$1.23` is estimated from tokens × cached pricing; `?`/`—` mark a cost Amicus has no data for at all. `amicus spend`'s own total/per-model figures never show `?`/`—` themselves — an unpriced run still counts as `$0` toward the rollup — but it's visible via the `u` (unknown) count in that row's source mix.
+
+**Local provider runs are a real, explicit `$0` tier.** `amicus provider`'s default pricing is `{prompt: 0, completion: 0}`, so a local run always resolves to an *estimated* (not unknown) cost — it renders as `~$0.0000`, counted in `e`, sitting right alongside your paid runs in the same rollup.
+
+### `amicus provider`
+
+Configure a local, self-hosted, OpenAI-compatible server — LM Studio, Ollama, vLLM, or anything else that speaks the `/v1/models` + chat-completions shape — as a first-class model source. Local providers cost **$0** marginal: no cloud key, no per-token bill.
+
+```bash
+amicus provider add lmstudio --preset lmstudio               # LM Studio, default port
+amicus provider add ollama --preset ollama                   # Ollama, default port
+amicus provider add vllm --preset vllm                       # vLLM, default port
+amicus provider add my-remote --url http://127.0.0.1:9000/v1 --bearer <token>
+amicus provider list
+amicus provider test lmstudio
+amicus provider remove lmstudio
+```
+
+| Option | Description |
+|---|---|
+| `provider add <id> --preset ollama\|lmstudio\|vllm` | Add from a built-in preset. |
+| `provider add <id> --url <baseURL>` | Add a custom endpoint instead of (or overriding) a preset. |
+| `--bearer-env <VAR>` | Point at an env var that already holds the bearer (never written by this command). |
+| `--bearer <token>` | Save `<token>` immediately, under a derived env-var name (e.g. `vllm-lab` → `VLLM_LAB_API_KEY`). Mutually exclusive with `--bearer-env`. |
+| `--pricing-in <$/tok> --pricing-out <$/tok>` | Override the default `$0`/`$0` pricing (e.g. a metered self-host you actually pay for). |
+| `provider list` | List configured providers: id, base URL, flavor, whether a bearer is set. |
+| `provider test <id>` | Re-probe one provider; exit `0` if reachable, `1` if not. |
+| `provider remove <id>` | Delete the config entry and its bearer (kept if another provider shares the same `--bearer-env`). |
+| `--json` | Every subcommand supports it. |
+
+**Presets** (always `127.0.0.1`, never `localhost` — some resolvers try `::1` first, which most local servers don't bind):
+
+| Preset | Default base URL |
+|---|---|
+| `lmstudio` | `http://127.0.0.1:1234/v1` |
+| `ollama` | `http://127.0.0.1:11434/v1` |
+| `vllm` | `http://127.0.0.1:8000/v1` |
+
+**`add` never fails just because the server is offline.** It validates and saves the config entry (and the bearer, if given) first, then does a best-effort 2s reachability probe: reachable prints the model count and offers the cost-aware default picker (see `amicus key` above); unreachable just warns and points you at `amicus provider test <id>` — the entry is saved either way, so starting the server later and re-testing is enough to pick it up. A provider id may not be `openrouter`, `google`, `openai`, `anthropic`, or `deepseek` (reserved for the built-in vendors), and must match `^[a-z][a-z0-9_-]{1,31}$`. If you also pass a plain `http://` `--url` to a non-loopback host with a bearer, `add` warns that the token would cross the network in cleartext.
+
+`amicus setup`'s interactive wizard (readline and Electron) also offers to add a local server as one step of the normal setup flow — `amicus provider add` is the same feature from the command line.
+
+**Running local models.** Two things cloud models don't require:
+
+- **Load the model with enough context.** Amicus's agent prompt is ~26k tokens; a model loaded
+  with too small a context window will reject it. LM Studio's default (~16k) is not enough — load
+  with a larger context first, e.g. `lms load <model> --context-length 32768`, or set it in the
+  GUI before use. Ollama: set the model's context via a Modelfile (`num_ctx`).
+- **The first token is slow.** The model has to prefill that ~26k-token prompt before it can
+  respond — 30–90s to first token on a cold local model is normal, not a hang. Amicus's
+  per-request timeout for local providers is 5 minutes to give this room.
+
+### `amicus init`
+
+```bash
+amicus init                    # Register both Claude Code and Claude Desktop
+amicus init --claude           # Claude Code only
+amicus init --desktop          # Claude Desktop only
+amicus init --json             # Per-step status as JSON
+```
+
+Re-runs the **same registration core** `npm install`'s postinstall runs: install both skills (`sidecar`, `second-opinion`) into `~/.claude/skills/`, register the `amicus` MCP server in Claude Code and/or Claude Desktop, and clean up any leftover legacy `sidecar` MCP entry. Useful when:
+
+- A **plugin-channel install** (or any `--ignore-scripts` npm install) never ran the postinstall in the first place.
+- The postinstall failed partway through.
+- You deleted `~/.claude` state and want it rebuilt without reinstalling.
+
+It never touches API keys, your default model, or Electron/engine provisioning — that's `amicus setup` and `amicus doctor --fix`. Each step (`skills`, `claudeCode`, `claudeDesktop`, `legacyMigration`) reports its own status independently — a broken Claude Desktop registration doesn't stop the Claude Code one from completing — and the command ends with a compact doctor summary. Exit code is `1` if any step genuinely failed, `0` otherwise.
 
 ---
 

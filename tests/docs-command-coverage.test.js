@@ -10,7 +10,7 @@ describe('docs command & MCP-tool coverage (B11)', () => {
   const trouble = read('docs/troubleshooting.md');
   const toolNames = [...read('src/mcp-tools.js').matchAll(/name: '(amicus_\w+)'/g)].map(m => m[1]);
 
-  it.each(['amicus doctor', 'amicus key', 'amicus council'])('README Commands table documents %s', c => {
+  it.each(['amicus doctor', 'amicus key', 'amicus council', 'amicus provider', 'amicus init'])('README Commands table documents %s', c => {
     // Task 17.3 restructure: the per-command `### ` subsections that used to
     // follow `## Commands` (start options, fanout, other commands) moved to
     // docs/usage.md (the canonical CLI reference); the table is now bounded
@@ -26,6 +26,8 @@ describe('docs command & MCP-tool coverage (B11)', () => {
     for (const t of toolNames) { expect(usage).toContain(t); }
     expect(usage).toMatch(/amicus doctor/);
     expect(usage).toMatch(/amicus council report/);
+    expect(usage).toMatch(/amicus provider/);
+    expect(usage).toMatch(/amicus init/);
   });
   it('troubleshooting leads with doctor and drops the false active-servers claim', () => {
     expect(trouble.indexOf('amicus doctor')).toBeGreaterThan(-1);

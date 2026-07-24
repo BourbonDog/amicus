@@ -10,14 +10,21 @@
  * uncached live fetch.)
  */
 
-const { ipcMain } = require('electron');
 const { logger } = require('../src/utils/logger');
+const { registerLocalProviderHandlers } = require('./ipc-setup-local');
 
 /**
  * Register all setup-related IPC handlers
  * @param {function} getMainWindow - Returns the current main BrowserWindow
+ * @param {object} [injected] - DI overrides
+ * @param {object} [injected.ipcMain] - Electron ipcMain (or a test double exposing
+ *   .handle). Defaults to the real `require('electron').ipcMain` — production call
+ *   sites (electron/main.js) pass none. Task 13 / C9: this parameter shadows what
+ *   used to be a module-level `const { ipcMain } = require('electron');`, which is
+ *   removed rather than left dead now that every ipcMain.handle(...) call below
+ *   resolves through this local binding instead.
  */
-function registerSetupHandlers(getMainWindow) {
+function registerSetupHandlers(getMainWindow, { ipcMain = require('electron').ipcMain } = {}) {
   ipcMain.handle('sidecar:validate-key', async (_event, provider, key) => {
     try {
       const { validateApiKey } = require('../src/utils/api-key-store');
@@ -237,6 +244,11 @@ function registerSetupHandlers(getMainWindow) {
       }));
     } catch (_err) { return []; }
   });
+
+  // Task 13 (v4.2 §4.6): Electron wizard "Local server" card — probe + save.
+  // Extracted to ipc-setup-local.js to keep this file under the size gate (see its
+  // header comment); registered on the SAME (possibly injected) ipcMain as above.
+  registerLocalProviderHandlers(ipcMain);
 }
 
 module.exports = { registerSetupHandlers };

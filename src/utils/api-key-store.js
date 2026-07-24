@@ -6,6 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const { validateApiKey, validateOpenRouterKey, VALIDATION_ENDPOINTS } = require('./api-key-validation');
 const { PROVIDER_ENV_MAP } = require('./provider-registry');
+// v4.2 (B2/D3): the .env line-merge logic lives once in env-raw-store.js. saveApiKey/
+// removeApiKey below reuse it via upsertEnvLine/deleteEnvLine; saveRawEnv/removeRawEnv
+// (arbitrary-name local-provider bearer writes) are re-exported so every documented
+// `require('./api-key-store').saveRawEnv` call site keeps working. No load-time cycle:
+// env-raw-store requires THIS module only lazily, inside its functions.
+const { saveRawEnv, removeRawEnv, upsertEnvLine, deleteEnvLine } = require('./env-raw-store');
 
 /** Legacy key names that have been renamed (old -> new) */
 const LEGACY_KEY_NAMES = {
@@ -143,47 +149,10 @@ function saveApiKey(provider, key) {
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
-
-  const envPath = getEnvPath();
-  const envDir = path.dirname(envPath);
-  fs.mkdirSync(envDir, { recursive: true });
-
-  // Read existing .env content, preserving comments and other lines
-  let lines = [];
-  try {
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      lines = content.split('\n');
-    }
-  } catch (_err) {
-    // Start fresh
-  }
-
-  // Find and replace the line for this env var, or append
-  let found = false;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith(envVar + '=')) {
-      lines[i] = `${envVar}=${key}`;
-      found = true;
-      break;
-    }
-  }
-  if (!found) {
-    // Remove trailing empty lines before appending
-    while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
-      lines.pop();
-    }
-    lines.push(`${envVar}=${key}`);
-  }
-
-  // Write with trailing newline
-  const output = lines.join('\n') + '\n';
-  fs.writeFileSync(envPath, output, { mode: 0o600 });
-
+  // Shared merge helper (preserves comments/other lines, dedups, 0600, trailing NL).
+  upsertEnvLine(getEnvPath(), envVar, key);
   // Also set process.env so the key is immediately available
   process.env[envVar] = key;
-
   return { success: true };
 }
 
@@ -194,29 +163,8 @@ function removeApiKey(provider) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
 
-  const envPath = getEnvPath();
-  try {
-    if (!fs.existsSync(envPath)) {
-      const { checkAuthJson } = require('./auth-json');
-      delete process.env[envVar];
-      return { success: true, alsoInAuthJson: checkAuthJson(provider) };
-    }
-    const content = fs.readFileSync(envPath, 'utf-8');
-    const lines = content.split('\n').filter(line => {
-      return !line.trim().startsWith(envVar + '=');
-    });
-
-    // Remove trailing empty lines
-    while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
-      lines.pop();
-    }
-
-    const output = lines.length > 0 ? lines.join('\n') + '\n' : '';
-    fs.writeFileSync(envPath, output, { mode: 0o600 });
-  } catch (_err) {
-    // Ignore
-  }
-
+  // Shared merge helper (no-op when the file is absent; preserves other lines, 0600).
+  deleteEnvLine(getEnvPath(), envVar);
   delete process.env[envVar];
 
   // Check if key also exists in auth.json (caller decides whether to clean)
@@ -232,6 +180,8 @@ module.exports = {
   readApiKeyValues,
   saveApiKey,
   removeApiKey,
+  saveRawEnv,
+  removeRawEnv,
   validateApiKey,
   validateOpenRouterKey,
   PROVIDER_ENV_MAP,

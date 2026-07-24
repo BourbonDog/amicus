@@ -5,6 +5,31 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-07-23
+
+### Added
+
+- **Local / OpenAI-compatible providers, at $0.** `amicus provider add <id> --preset
+  ollama|lmstudio|vllm` (or `--url <baseURL>` for any other OpenAI-compatible endpoint)
+  configures Ollama, LM Studio, vLLM, or a self-hosted server as a first-class model source —
+  `provider list|test|remove` manage them (all support `--json`). Local models price at a real,
+  explicit `$0` tier (not "unpriced"), so the budget gate, `amicus spend`, and the default-model
+  picker all treat them as free. `amicus key <localId> <token>` manages a local provider's bearer
+  (stored in the `0600` `.env`, never in `config.json`); `amicus doctor` gains a
+  `local-providers` reachability check (warn, never error); the setup wizard (readline and
+  Electron) offers to add one.
+- **Local inference completes instead of hanging forever.** Local (`@ai-sdk/openai-compatible`)
+  provider blocks now carry a 5-minute engine request `timeout` and a non-empty `apiKey`
+  (`{env:VAR}` for a configured bearer, the literal `not-needed` otherwise), so `amicus
+  start`/`fanout`/`council` against Ollama/LM Studio/vLLM now complete. Local models need enough
+  context loaded to fit the ~26k-token agent prompt (**~32k** is a safe target — LM Studio's
+  ~16k default is not) and are slower than cloud to first token (30–90s prefill on a cold model
+  is normal) — see [`amicus provider`](docs/usage.md#amicus-provider).
+- **`amicus init [--claude] [--desktop] [--json]`** re-runs the same skill-install + MCP
+  registration that `npm install`'s postinstall runs, on demand — for plugin-channel /
+  `--ignore-scripts` installs (which skip the postinstall), a failed postinstall, or repairing
+  deleted `~/.claude` state.
+
 ## [4.1.2] - 2026-07-22
 
 ### Fixed

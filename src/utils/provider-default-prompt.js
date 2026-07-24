@@ -17,6 +17,7 @@
 
 const { buildProviderDefaultChoices, applyProviderDefault } = require('./provider-default-picker');
 const { isDirectProvider } = require('./provider-registry');
+const { isLocalProvider } = require('./local-providers');
 
 /** Format a $/M-input price for display; `null`/`undefined` -> 'n/a'. @param {number|null|undefined} pricePerMInput */
 function formatPrice(pricePerMInput) {
@@ -68,8 +69,10 @@ async function promptForChoice(ask, print, choices) {
  * match every OR-namespaced catalog row, "recommended" would be arbitrary,
  * and writing `aliases.openrouter = "<some vendor>/<model>"` would be
  * nonsensical. Per-provider defaults only make sense for DIRECT model
- * vendors (`provider-registry.isDirectProvider`) -- no choices are built, no
- * alias is written, and `config.default` is never seeded for a gateway.
+ * vendors (`provider-registry.isDirectProvider`) and local/OpenAI-compatible
+ * vendors (`local-providers.isLocalProvider`, v4.2 §4.5) -- for any other
+ * (gateway) provider, no choices are built, no alias is written, and
+ * `config.default` is never seeded.
  * @param {string} provider vendor name, e.g. 'anthropic'
  * @param {{interactive?: boolean, ask?: (prompt: string) => Promise<string>,
  *   catalog?: Array<object>, print?: (line: string) => void}} [options]
@@ -80,11 +83,11 @@ async function runProviderDefaultFlow(provider, options = {}) {
   const catalog = Array.isArray(options.catalog) ? options.catalog : [];
   const print = typeof options.print === 'function' ? options.print : () => {};
 
-  if (!isDirectProvider(provider)) {
+  if (!isDirectProvider(provider) && !isLocalProvider(provider)) {
     return {
       chosenId: null,
       setAsDefault: false,
-      summaryLine: 'Per-provider defaults apply to direct provider keys (openai/anthropic/google/deepseek) -- ' +
+      summaryLine: 'Per-provider defaults apply to direct provider keys and local providers -- ' +
         'models routed via OpenRouter use your overall default.',
     };
   }

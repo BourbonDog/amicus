@@ -18,6 +18,7 @@ const { resolveTier } = require('./model-tiers');
 const { getCostTier, loadConfig, saveConfig } = require('./config');
 const { pairAcrossGateways } = require('./gateway-route-catalog');
 const { toCanonicalDefault, DIVERGENT_VENDORS } = require('./curated-models');
+const { isLocalProvider } = require('./local-providers');
 
 /**
  * @param {{pricing?: {prompt?: string|number|null}|null}|null|undefined} orRow
@@ -97,6 +98,9 @@ function buildRows(catalog, vendor) {
   const catalogInfo = { models: catalog };
   const directPrefix = `${vendor}/`;
   const orPrefix = `openrouter/${vendor}/`;
+  // Hoisted: `vendor` is fixed for the whole call, so this is decided once
+  // rather than re-reading config.providers on every row.
+  const isLocal = isLocalProvider(vendor);
 
   const rows = [];
   const seenIds = new Set();
@@ -112,11 +116,22 @@ function buildRows(catalog, vendor) {
     const orRow = paired.openrouter ? byId.get(paired.openrouter) : null;
     const sourceRow = isDirect ? row : ((paired.direct && byId.get(paired.direct)) || orRow || row);
 
+    // A local vendor (v4.2 §4.5) has no OpenRouter twin BY CONSTRUCTION --
+    // OpenRouter cannot proxy a localhost model -- so `orRow` is always null
+    // here and `pricePerMInputFrom(orRow)` would always be null too, no
+    // matter that the local catalog row carries its own real
+    // `pricing: {prompt:0, completion:0}`. Price local rows from their OWN
+    // pricing (`sourceRow`, which for a local/direct row IS the catalog row
+    // itself) instead. Gated on `isLocal`, NOT on "no OpenRouter twin", so a
+    // direct (non-local) row with no twin still renders `pricePerMInput:
+    // null` (tests/provider-default-picker.test.js:59, pinned).
+    const localPrice = isLocal ? pricePerMInputFrom(sourceRow) : null;
+
     rows.push({
       id: chosenId,
       name: sourceRow.name,
       contextLength: (sourceRow.contextLength === undefined ? null : sourceRow.contextLength),
-      pricePerMInput: pricePerMInputFrom(orRow),
+      pricePerMInput: localPrice !== null ? localPrice : pricePerMInputFrom(orRow),
       isPreselected: false,
     });
   }
@@ -231,4 +246,4 @@ function applyProviderDefault(vendor, chosenId, { seedDefaultIfAbsent = true } =
   return { alias: vendor, setAsDefault };
 }
 
-module.exports = { buildProviderDefaultChoices, applyProviderDefault };
+module.exports = { buildProviderDefaultChoices, applyProviderDefault, pricePerMInputFrom };

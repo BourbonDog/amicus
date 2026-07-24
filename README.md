@@ -8,6 +8,8 @@
 
 Hand Claude a plan, a design, a diff, an architecture decision, a manuscript — anything — and say *council review this*: Amicus routes it through several models from different families, has them anonymously cross-review each other, and a non-Claude chair synthesizes a verdict you turn into accept/deny edits. Or skip the ceremony and **fork** a single conversation to Gemini, GPT, DeepSeek, or any other model — it works in parallel with full context, and you **fold** the result back when you're ready. Claude orchestrates throughout; you stay in your editor.
 
+**The same council — more ways to run it:** take it **headless in CI** with no Claude runtime, sharpen it with a **debate round**, or run it on **free local models** (Ollama, LM Studio, vLLM) at **$0** — private and offline.
+
 [![npm version](https://img.shields.io/npm/v/amicus?color=D97757&labelColor=1A1C29)](https://www.npmjs.com/package/amicus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?labelColor=1A1C29)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen?labelColor=1A1C29)](https://nodejs.org)
@@ -22,6 +24,7 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 ## Table of Contents
 
 - [What is Amicus](#what-is-amicus)
+- [Ways to run the council](#ways-to-run-the-council)
 - [Quick start](#quick-start)
 - [Requirements & Dependencies](#requirements--dependencies)
 - [The Council](#the-council)
@@ -52,6 +55,17 @@ One install delivers four things that work together:
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
 ![What one install delivers: council skill, chat skill, CLI + MCP, live catalog](./docs/what-is-amicus.png)
+
+---
+
+## Ways to run the council
+
+The council is the hero — start with the everyday way, and reach for the more powerful ways when you need them:
+
+- **Just ask, in Claude Code.** Hand Claude a plan, diff, design, or manuscript and say *"council review this."* The `second-opinion` skill runs the whole ritual in your session — several models review independently → anonymized cross-review → a non-Claude chair verdict → tiered accept/deny edits — with no setup beyond your API keys. This is how most people use it. → [The Council](#the-council)
+- **Headless, in CI, with no Claude runtime.** `amicus council run --prompt-file plan.md --council free` runs that same pipeline in one command — reviews → cross-review → tally → chair verdict — writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council](./docs/council.md#amicus-council-run)
+- **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
+- **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
 
 ---
 
@@ -98,6 +112,8 @@ For the **npm** and **install-script** paths, a postinstall auto-configures ever
 
 - Registers the **MCP server** in Claude Code and in Claude Desktop / Cowork, so the Amicus tools appear natively.
 - Installs **both skills** into `~/.claude/skills/` — `second-opinion` (the council) and `sidecar` (the chat skill).
+
+> **Skipped the postinstall?** `--ignore-scripts` npm installs never run it, and the plugin channel skips it by design (Claude Code registers the plugin's MCP server and skills itself). Either way, run `amicus init` (plugin channel: `npx -y amicus@latest init`) any time to (re)register on demand — e.g. to also wire up Claude Desktop, which the plugin path doesn't touch. See [`amicus init`](./docs/usage.md#amicus-init).
 
 **Configure:**
 
@@ -167,6 +183,7 @@ Everything you need before your first run, and what's optional.
 **Model API keys** — at least one is required
 
 - **OpenRouter** covers the most models with one key, or use a **direct Google / OpenAI / Anthropic / DeepSeek** key. Add one with `amicus setup` or `amicus key <provider> <key>`; keys live in `~/.config/amicus/.env`. The supported env vars are `OPENROUTER_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` (the legacy `GEMINI_API_KEY` is still accepted), `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `DEEPSEEK_API_KEY`.
+- **Or skip cloud keys entirely and run local, at $0.** Point Amicus at an OpenAI-compatible server already running on your machine — LM Studio, Ollama, or vLLM — and there's no API key, no per-token bill: `amicus provider add lmstudio --preset lmstudio` (LM Studio), `--preset ollama` (Ollama), or `--preset vllm` (vLLM). See [`amicus provider`](./docs/usage.md#amicus-provider).
 - ⚠️ **OpenRouter keys need purchased credits.** A brand-new, zero-credit key *passes* setup's live validation but then fails at runtime with a **402** on the first real call. Buy a small amount of credit before you run a council.
 
 **Electron — optional (GUI only)**
@@ -300,12 +317,14 @@ amicus update
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
 | `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
+| `amicus provider` | Add/list/test/remove local, OpenAI-compatible providers (LM Studio, Ollama, vLLM) — configured with `--preset` or `--url`, at **$0** marginal cost (`--json` on every subcommand). |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
 | `amicus council run` | The headless council engine: Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Add `--debate` for a Stage-2.5 rebuttal round (raisers defend/amend/withdraw, disputing judges re-vote) and `--claude-review <file>` to enter Claude's own review as judged review N+1. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |
 | `amicus mcp` | Start the MCP server (stdio transport). |
+| `amicus init` | Re-run skill install + MCP registration on demand — `--claude`/`--desktop` to scope it, `--json` for per-step status. For plugin-channel / `--ignore-scripts` installs (which skip the npm postinstall), a failed postinstall, or repairing deleted `~/.claude` state. |
 
 The `am` alias is interchangeable with `amicus` everywhere.
 
@@ -329,7 +348,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.1.2",
+  "version": "4.2.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }

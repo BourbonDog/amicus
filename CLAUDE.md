@@ -156,6 +156,7 @@ src/
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
 │   ├── session-finalize.js
 │   ├── session-utils.js  # Sidecar Session Utilities - Shared functionality for session management
+│   ├── setup-local.js  # The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12).
 │   ├── setup-window.js  # Setup Window Launcher
 │   ├── setup.js  # Sidecar Setup Wizard
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
@@ -172,18 +173,22 @@ src/
 │   ├── api-key-validation.js  # API Key Validation — test API keys against provider endpoints.
 │   ├── atomic-write.js  # Atomic file write helper.
 │   ├── auth-json.js  # Auth JSON Reader
+│   ├── claude-register.js  # Registration core for amicus: skill install (chat skill + LLM Council),
 │   ├── cli-preflight.js  # Tiny shared preflight guards used by more than one CLI run handler
 │   ├── client-detect.js  # Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this
 │   ├── config.js  # Amicus Config Module
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
+│   ├── doctor-local-providers-check.js  # The `local-providers` doctor check (v4.2 §4.7 C8), split out of
 │   ├── doctor-mcp-checks.js  # B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and
+│   ├── doctor-summary.js  # Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the
 │   ├── engine-ensure.js  # ensureEngine() — runtime engine self-heal at server start (report #2).
 │   ├── engine-install-scan.js  # Discover + probe every amicus install that could serve the MCP (running,
 │   ├── engine-lock.js  # Stale-aware single-flight lock for the engine self-heal (report #2).
 │   ├── engine-repair.js  # Engine self-heal primitive (report #2): make the opencode engine present ON
 │   ├── env-loader.js  # Credential Loader
+│   ├── env-raw-store.js  # Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6).
 │   ├── error-doc.js
 │   ├── fold-marker.js  # Fold marker construction/parsing helpers — shared by prompt-builder.js
 │   ├── format-duration.js
@@ -195,6 +200,8 @@ src/
 │   ├── input-validators.js
 │   ├── legacy-mcp-migration.js
 │   ├── lifecycle.js
+│   ├── local-probe.js
+│   ├── local-providers.js
 │   ├── logger.js  # Structured Logger Module
 │   ├── mcp-discovery.js  # MCP Discovery - Discovers MCP servers from parent LLM configuration
 │   ├── mcp-self-identity.js
@@ -224,6 +231,7 @@ src/
 │   ├── result-schema.js
 │   ├── route-error.js  # Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a
 │   ├── route-launch.js  # Route-launch views (#61 gateway routing integration, Task 4.2).
+│   ├── route-suggestions.js
 │   ├── server-setup.js  # Server Setup Utilities
 │   ├── session-abort.js  # Session abort utilities: signal handler installation and terminal metadata writes.
 │   ├── session-index-tmp-sweep.js
@@ -243,6 +251,9 @@ src/
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
+├── cli-handlers-init.js  # `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the
+├── cli-handlers-key-local.js  # amicus key <localId> — bearer lifecycle for a config-defined local /
+├── cli-handlers-provider.js  # `amicus provider add|list|test|remove` (v4.2 §4.6): configure local /
 ├── cli-handlers-resume-continue.js  # CLI Resume/Continue Handlers (B21-rest extraction)
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
 ├── cli-handlers-spend.js
@@ -274,6 +285,7 @@ electron/
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
 ├── ipc-guard.js  # IPC Guard Helpers
+├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
@@ -287,6 +299,8 @@ electron/
 ├── setup-ui-council.js  # Setup UI — Free OpenRouter council picker (mounted on the Models step).
 ├── setup-ui-keys-script.js  # Setup UI - Step 1 Key Management Script
 ├── setup-ui-keys.js  # Setup UI - Step 1: API Keys
+├── setup-ui-local-script.js  # Setup UI — Local server widget runtime script (Task 13, v4.2 §4.6).
+├── setup-ui-local.js  # Setup UI — "Local server" step-1 add-on widget (Task 13, v4.2 §4.6).
 ├── setup-ui-model.js  # Setup UI - Step 2: Default Model Selection
 ├── setup-ui-provider-default.js  # Setup UI — Per-provider default model picker (Part 2, Task 8).
 ├── setup-ui-styles.js  # Setup UI - Shared CSS Styles (clay/gold token-driven)
@@ -344,6 +358,9 @@ evals/
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
+| `cli-handlers-init.js` | `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the | `handleInit()` |
+| `cli-handlers-key-local.js` | amicus key <localId> — bearer lifecycle for a config-defined local / | `handleLocalKey()`, `formatLocalKeyList()`, `maskKey()` |
+| `cli-handlers-provider.js` | `amicus provider add|list|test|remove` (v4.2 §4.6): configure local / | `handleProvider()`, `isLoopbackUrl()`, `isPlaintextRemote()` |
 | `cli-handlers-resume-continue.js` | CLI Resume/Continue Handlers (B21-rest extraction) | `handleResume()`, `handleContinue()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
 | `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()` |
@@ -415,8 +432,9 @@ evals/
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |
+| `sidecar/setup-local.js` | The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12). | `addLocalProviderInteractive()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
-| `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()`, `runFreeCouncilBranch()` |
+| `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `addLocalProviderInteractive()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
@@ -430,18 +448,22 @@ evals/
 | `utils/api-key-validation.js` | API Key Validation — test API keys against provider endpoints. | `validateApiKey()`, `validateOpenRouterKey()`, `checkOpenRouterCredit()`, `OPENROUTER_NO_CREDIT_WARNING()`, `OPENROUTER_FREE_TIER_WARNING()` |
 | `utils/atomic-write.js` | Atomic file write helper. | `writeFileAtomic()` |
 | `utils/auth-json.js` | Auth JSON Reader | `readAuthJsonKeys()`, `importFromAuthJson()`, `checkAuthJson()`, `removeFromAuthJson()`, `AUTH_JSON_PATH()` |
+| `utils/claude-register.js` | Registration core for amicus: skill install (chat skill + LLM Council), | `MCP_CONFIG()`, `addMcpToConfigFile()`, `installSkill()`, `installCouncilSkill()`, `readPrevClaudeCodeAmicusEntry()` |
 | `utils/cli-preflight.js` | Tiny shared preflight guards used by more than one CLI run handler | `requireNoUiForJson()`, `requireValidTaskId()` |
 | `utils/client-detect.js` | Detects which caller (Claude Code vs. Cowork/Claude Desktop) spawned this | `detectClient()`, `matchClientName()` |
 | `utils/config.js` | Amicus Config Module | `getConfigDir()`, `getConfigPath()`, `loadConfig()`, `saveConfig()`, `getDefaultAliases()` |
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `toCanonicalDefault()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |
+| `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |
+| `utils/doctor-summary.js` | Compact doctor summary (v4.2 §4.7 C8). All-ok -> one line; otherwise the | `summarizeDoctor()` |
 | `utils/engine-ensure.js` | ensureEngine() — runtime engine self-heal at server start (report #2). | `ensureEngine()`, `_resetEnsureEngine()` |
 | `utils/engine-install-scan.js` | Discover + probe every amicus install that could serve the MCP (running, | `listAmicusInstalls()`, `scanEngineInstalls()`, `classifyLaunch()` |
 | `utils/engine-lock.js` | Stale-aware single-flight lock for the engine self-heal (report #2). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `utils/engine-repair.js` | Engine self-heal primitive (report #2): make the opencode engine present ON | `repairEngine()`, `findDonor()`, `engineSourceRoot()`, `copyEnginePackages()`, `runningPkgDir()` |
 | `utils/env-loader.js` | Credential Loader | `loadCredentials()` |
+| `utils/env-raw-store.js` | Arbitrary-env-var writes to the amicus .env (local-provider bearers, v4.2 §4.6). | `saveRawEnv()`, `removeRawEnv()`, `upsertEnvLine()`, `deleteEnvLine()` |
 | `utils/error-doc.js` |  | `ERROR_CODES()`, `buildErrorDoc()`, `failJson()` |
 | `utils/fold-marker.js` | Fold marker construction/parsing helpers — shared by prompt-builder.js | `FOLD_MARKER_PREFIX()`, `generateFoldNonce()`, `buildFoldMarker()`, `trailingFoldMarkerRegex()`, `extractNonceFromText()` |
 | `utils/format-duration.js` |  | `formatDuration()` |
@@ -453,6 +475,8 @@ evals/
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
 | `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
+| `utils/local-probe.js` |  | `probeLocalProvider()`, `listLocalModels()` |
+| `utils/local-providers.js` |  | `getLocalProviders()`, `isLocalProvider()`, `deriveKeyEnv()`, `validateProviderEntry()`, `resolveLocalRouteInputs()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |
 | `utils/mcp-discovery.js` | MCP Discovery - Discovers MCP servers from parent LLM configuration | `discoverParentMcps()`, `discoverClaudeCodeMcps()`, `discoverCoworkMcps()`, `hasAmicusRegistration()`, `readAmicusMcpConfig()` |
 | `utils/mcp-self-identity.js` |  | `SELF_MCP_NAMES()`, `isAmicusMcpConfig()`, `stripSelfMcpEntries()`, `normalizeToken()` |
@@ -471,7 +495,7 @@ evals/
 | `utils/project-path.js` | Canonical project-path helper. | `canonicalProjectPath()` |
 | `utils/project-root-sanity.js` |  | `assessProjectRoot()`, `looksLikeInstallDir()`, `INSTALL_PATTERNS()` |
 | `utils/prompt-source.js` |  | `resolvePromptSource()` |
-| `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()` |
+| `utils/provider-default-picker.js` | Provider-default picker core (Part 2, Task 4). | `buildProviderDefaultChoices()`, `applyProviderDefault()`, `pricePerMInputFrom()` |
 | `utils/provider-default-prompt.js` | Provider-default prompt flow (Part 2, Task 6/7 shared helper). | `runProviderDefaultFlow()`, `formatPrice()`, `formatRow()` |
 | `utils/provider-registry.js` | Provider-capability registry — the single source of truth for provider | `PROVIDERS()`, `getProvider()`, `isDirectProvider()`, `listDirectProviders()`, `PROVIDER_ENV_MAP()` |
 | `utils/quick-picks.js` | Quick-pick resolution (wizard Step 2) — resolves each curated family to | `compareIdsDesc()`, `pickCurrent()`, `resolveQuickPicks()`, `toLiveSeedAliases()`, `toStorableRoute()` |
@@ -482,6 +506,7 @@ evals/
 | `utils/result-schema.js` |  | `SCHEMA_VERSION()`, `TERMINAL_STATUSES()`, `durationBetween()`, `statusFromResult()`, `buildRunResult()` |
 | `utils/route-error.js` | Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a | `toStructuredError()`, `toCliMessage()`, `toErrorDocFields()`, `REASON_TEXT()`, `ROUTE_ERROR_REASONS()` |
 | `utils/route-launch.js` | Route-launch views (#61 gateway routing integration, Task 4.2). | `buildLaunchKeys()`, `getRouteCatalogInfo()`, `resolveRouteForLaunch()`, `buildSuggestions()`, `ROUTE_VERSION()` |
+| `utils/route-suggestions.js` |  | `buildSuggestions()`, `applySuggestions()` |
 | `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
 | `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |

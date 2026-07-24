@@ -7,6 +7,8 @@ const { buildKeysScript } = require('./setup-ui-keys-script');
 const { buildAliasScript } = require('./setup-ui-alias-script');
 const { buildCouncilSectionHTML, buildCouncilScript } = require('./setup-ui-council');
 const { buildProviderDefaultSectionHTML, buildProviderDefaultScript } = require('./setup-ui-provider-default');
+const { buildLocalSectionHTML } = require('./setup-ui-local');
+const { buildLocalScript } = require('./setup-ui-local-script');
 const { getDefaultAliases } = require('../src/utils/config');
 const { getBrandName } = require('./toolbar');
 const { resolveQuickPicks } = require('../src/utils/quick-picks');
@@ -41,7 +43,7 @@ function buildSetupHTML(options = {}) {
   <div class="header"><svg width="18" height="18" viewBox="0 0 32 32" fill="none"><path d="M4 8H19"/><path d="M4 11H14L19 8"/><path d="M4 14H13L19 8"/><path d="M4 17H12L19 8"/><path d="M4 20H11L19 8"/><path d="M4 23H10L19 8"/><path class="brand-main" d="M19 8H28"/></svg><span class="header-title">${brandName} Setup</span></div>
   <div class="progress-bar"><div class="progress-step active" id="step-1"><span class="progress-dot">1</span><span>API Keys</span></div><div class="progress-connector"></div><div class="progress-step" id="step-2"><span class="progress-dot">2</span><span>Models</span></div><div class="progress-connector"></div><div class="progress-step" id="step-3"><span class="progress-dot">3</span><span>Routing</span></div><div class="progress-connector"></div><div class="progress-step" id="step-4"><span class="progress-dot">4</span><span>Review</span></div></div>
   <div class="content">
-    <div class="wizard-step visible" id="wizard-step-1"><div id="import-notice"></div>${keysHtml}${buildProviderDefaultSectionHTML()}</div>
+    <div class="wizard-step visible" id="wizard-step-1"><div id="import-notice"></div>${keysHtml}${buildProviderDefaultSectionHTML()}${buildLocalSectionHTML()}</div>
     <div class="wizard-step" id="wizard-step-2">${modelHtml}${buildCouncilSectionHTML()}</div>
     <div class="wizard-step" id="wizard-step-3">${aliasHtml}</div>
     <div class="wizard-step" id="wizard-step-4">
@@ -65,6 +67,7 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   const aliasJs = buildAliasScript();
   const councilJs = buildCouncilScript();
   const providerDefaultJs = buildProviderDefaultScript();
+  const localJs = buildLocalScript();
   return `<script>
   window.onerror = function(msg, src, line, col, err) { console.error('WIZARD ERROR:', msg, 'at', src, line, col, err); };
   window.onunhandledrejection = function(e) { console.error('WIZARD UNHANDLED REJECTION:', e.reason); };
@@ -578,6 +581,8 @@ function buildWizardScript(providersJson, modelChoicesJson, providerNamesJson, d
   ${councilJs}
 
   ${providerDefaultJs}
+
+  ${localJs}
 </script>`;
 }
 

@@ -373,3 +373,70 @@ describe('api-key-store', () => {
   });
 
 });
+
+// v4.2 §4.6 (B2/D3): arbitrary-env-var bearer writes live in env-raw-store.js and
+// are re-exported from api-key-store.js. Requiring them FROM api-key-store here
+// deliberately pins that re-export (a documented call site for Task 11).
+describe('saveRawEnv / removeRawEnv (local-provider bearers)', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rawenv-'));
+    process.env.AMICUS_ENV_DIR = dir;
+    delete process.env.LAB_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+  afterEach(() => {
+    delete process.env.AMICUS_ENV_DIR;
+    delete process.env.LAB_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    fs.rmSync(dir, { recursive: true, force: true });
+    jest.resetModules();
+  });
+
+  test('saveRawEnv writes the line, sets process.env, round-trips through loadEnvEntries, and is 0600', () => {
+    const { saveRawEnv, loadEnvEntries } = require('../src/utils/api-key-store');
+    expect(saveRawEnv('LAB_API_KEY', 'sk-secret').success).toBe(true);
+    const envPath = path.join(dir, '.env');
+    expect(fs.readFileSync(envPath, 'utf-8')).toContain('LAB_API_KEY=sk-secret');
+    // 0600 preserved (POSIX bits; on Windows the owner-read/write bits still hold).
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(envPath).mode & 0o777).toBe(0o600);
+    }
+    expect(process.env.LAB_API_KEY).toBe('sk-secret');
+    expect(loadEnvEntries().get('LAB_API_KEY')).toBe('sk-secret');
+  });
+
+  test('saveRawEnv rejects a malformed env-var name WITHOUT throwing (return-value contract for callers)', () => {
+    const { saveRawEnv } = require('../src/utils/api-key-store');
+    const res = saveRawEnv('lab-api-key', 'sk-secret'); // lowercase + dash => invalid
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/env var name/i);
+    // Nothing written, nothing leaked into the process env.
+    expect(fs.existsSync(path.join(dir, '.env'))).toBe(false);
+    expect(process.env['lab-api-key']).toBeUndefined();
+  });
+
+  test('saveRawEnv dedups (replaces, never appends a second line) and preserves other lines/comments', () => {
+    const { saveRawEnv } = require('../src/utils/api-key-store');
+    const envPath = path.join(dir, '.env');
+    fs.writeFileSync(envPath, '# comment\nOPENAI_API_KEY=sk-keep\nLAB_API_KEY=old\n', { mode: 0o600 });
+    saveRawEnv('LAB_API_KEY', 'new');
+    const content = fs.readFileSync(envPath, 'utf-8');
+    expect(content.match(/LAB_API_KEY=/g)).toHaveLength(1); // deduped, not appended
+    expect(content).toContain('LAB_API_KEY=new');
+    expect(content).toContain('OPENAI_API_KEY=sk-keep'); // untouched
+    expect(content).toContain('# comment');              // comment preserved
+  });
+
+  test('removeRawEnv deletes only the target line and clears process.env', () => {
+    const { saveRawEnv, removeRawEnv } = require('../src/utils/api-key-store');
+    const envPath = path.join(dir, '.env');
+    saveRawEnv('OPENAI_API_KEY', 'sk-keep');
+    saveRawEnv('LAB_API_KEY', 'sk-secret');
+    expect(removeRawEnv('LAB_API_KEY').success).toBe(true);
+    const content = fs.readFileSync(envPath, 'utf-8');
+    expect(content).not.toContain('LAB_API_KEY');
+    expect(content).toContain('OPENAI_API_KEY=sk-keep');
+    expect(process.env.LAB_API_KEY).toBeUndefined();
+  });
+});

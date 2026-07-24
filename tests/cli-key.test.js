@@ -5,6 +5,7 @@ jest.mock('../src/utils/api-key-store', () => ({
   readApiKeyHints: jest.fn(),
   saveApiKey: jest.fn(),
   removeApiKey: jest.fn(),
+  loadEnvEntries: jest.fn(() => new Map()),
   PROVIDER_ENV_MAP: {
     openrouter: 'OPENROUTER_API_KEY',
     google: 'GOOGLE_GENERATIVE_AI_API_KEY',
@@ -15,6 +16,18 @@ jest.mock('../src/utils/api-key-store', () => ({
 }));
 jest.mock('../src/utils/api-key-validation', () => ({
   validateApiKey: jest.fn(),
+}));
+// M14: handleKey (post-Task-11) unconditionally calls getLocalProviders() at
+// the top, before the direct-vendor PROVIDER_ENV_MAP check. Without this mock
+// every test below would hit the REAL local-providers.js -> config.js ->
+// loadConfig() against whichever ambient HOME/AMICUS_CONFIG_DIR this Jest
+// worker happens to have -- non-deterministic, and on a machine that already
+// has config.providers set up, "prints error and exits for unknown provider"
+// below could flip. This suite covers the DIRECT-vendor paths only.
+jest.mock('../src/utils/local-providers', () => ({
+  isLocalProvider: () => false,
+  getLocalProviders: () => ({}),
+  deriveKeyEnv: (id) => `${id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`,
 }));
 jest.mock('../src/utils/model-catalog', () => ({
   getCatalog: jest.fn(),

@@ -427,7 +427,21 @@ function __rawWizardCSS() {
     border-radius: var(--r-6);
   }
   .provider-default-row:hover { background: var(--surface-hover); }
-  .provider-default-row input[type="radio"] { accent-color: var(--accent); flex-shrink: 0; }`;
+  .provider-default-row input[type="radio"] { accent-color: var(--accent); flex-shrink: 0; }
+
+  /* Local server card (Step 1, Task 13) -- grep -ri chip electron/ had zero hits before this */
+  .local-section { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .local-divider { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+  .local-subtitle { color: var(--text-faint); font-size: 11px; margin-bottom: 8px; }
+  .local-chips { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .local-chip {
+    padding: 4px 10px; font-size: 11px; font-weight: 500;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-4);
+    color: var(--text-muted); cursor: pointer;
+    transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+  }
+  .local-chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .local-chip.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }`;
 }
 
 function buildWizardCSS() {

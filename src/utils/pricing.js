@@ -39,14 +39,27 @@ function sumPerMessageUsage(map) {
 function lookupPricing(modelId) {
   if (!modelId) { return null; }
   let cache;
-  try { cache = require('./model-catalog').readCache(); } catch { return null; }
-  if (!cache || !Array.isArray(cache.models)) { return null; }
-  const row = cache.models.find(m => m && m.id === modelId);
-  if (!row || !row.pricing) { return null; }
-  const prompt = Number(row.pricing.prompt);
-  const completion = Number(row.pricing.completion);
-  if (!Number.isFinite(prompt) || !Number.isFinite(completion) || prompt < 0 || completion < 0) { return null; }
-  return { prompt, completion };
+  try { cache = require('./model-catalog').readCache(); } catch { cache = null; }
+  const rows = (cache && Array.isArray(cache.models)) ? cache.models : [];
+  const row = rows.find(m => m && m.id === modelId);
+  if (row && row.pricing) {
+    const prompt = Number(row.pricing.prompt);
+    const completion = Number(row.pricing.completion);
+    if (Number.isFinite(prompt) && Number.isFinite(completion) && prompt >= 0 && completion >= 0) {
+      return { prompt, completion };
+    }
+  }
+  // v4.2 §4.5: local vendor with no catalog row → the provider's configured pricing (default zeros).
+  try {
+    const vendor = modelId.split('/')[0];
+    const { isLocalProvider, getLocalProviders } = require('./local-providers');
+    if (isLocalProvider(vendor)) {
+      const entry = getLocalProviders()[vendor];
+      const p = (entry && entry.pricing) || { prompt: 0, completion: 0 };
+      return { prompt: Number(p.prompt) || 0, completion: Number(p.completion) || 0 };
+    }
+  } catch { /* fall through */ }
+  return null;
 }
 
 /** @returns {{amount:number|null, currency:'USD', source:'reported'|'estimated'|'unknown'}} */
@@ -56,7 +69,8 @@ function resolveLegCost({ reportedCost, tokens, pricing }) {
   }
   if (pricing && tokens) {
     const est = (tokens.input || 0) * pricing.prompt + (tokens.output || 0) * pricing.completion;
-    if (est > 0) { return { amount: est, currency: 'USD', source: 'estimated' }; }
+    // v4.2 §4.5: a genuine $0 estimate is a REAL priced tier (not unknown/null).
+    if (est >= 0) { return { amount: est, currency: 'USD', source: 'estimated' }; }
   }
   return { amount: null, currency: 'USD', source: 'unknown' };
 }

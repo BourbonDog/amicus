@@ -23,7 +23,9 @@ contextBridge.exposeInMainWorld('sidecarSetup', {
       'sidecar:get-catalog',
       'sidecar:refresh-catalog',
       'sidecar:fetch-free-models',
-      'sidecar:set-provider-default'
+      'sidecar:set-provider-default',
+      'setup:probe-local',
+      'setup:save-local-provider'
     ];
     if (!allowedChannels.includes(channel)) {
       throw new Error(`IPC channel not allowed: ${channel}`);

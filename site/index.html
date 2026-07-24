@@ -467,7 +467,7 @@ h2.v .w-anim{opacity:1;transform:none}
       <svg width="18" height="18" viewBox="0 0 24 24" fill="#0081FB"><path d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.358-2.602zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.454-.687.964-1.226 1.533-1.533a2.264 2.264 0 0 1 1.088-.285z"/></svg>
       <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366F1"><path d="M16.778 1.844v1.919q-.569-.026-1.138-.032-.708-.008-1.415.037c-1.93.126-4.023.728-6.149 2.237-2.911 2.066-2.731 1.95-4.14 2.75-.396.223-1.342.574-2.185.798-.841.225-1.753.333-1.751.333v4.229s.768.108 1.61.333c.842.224 1.789.575 2.185.799 1.41.798 1.228.683 4.14 2.75 2.126 1.509 4.22 2.11 6.148 2.236.88.058 1.716.041 2.555.005v1.918l7.222-4.168-7.222-4.17v2.176c-.86.038-1.611.065-2.278.021-1.364-.09-2.417-.357-3.979-1.465-2.244-1.593-2.866-2.027-3.68-2.508.889-.518 1.449-.906 3.822-2.59 1.56-1.109 2.614-1.377 3.978-1.466.667-.044 1.418-.017 2.278.02v2.176L24 6.014Z"/></svg>
     </div>
-    <p style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--t3);margin-top:.3rem;padding-right:1rem">Any model via OpenRouter</p>
+    <p style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--t3);margin-top:.3rem;padding-right:1rem">Any model — via OpenRouter, or local at $0</p>
   </div>
 </div>
 </div>
@@ -479,13 +479,15 @@ h2.v .w-anim{opacity:1;transform:none}
   <div class="w">
     <div class="tag rv">The Council</div>
     <h2 class="rv">Any Models. Any Chair.<br><span>One Round Table.</span></h2>
-    <p class="lead rv">Two convenings, back to back: different lineup, different chair, different material, different verdict. The ritual — independent review, blind cross-review, chair synthesis — never changes.</p>
+    <p class="lead rv">Each convening: different lineup, different chair, different material, different verdict. The ritual — independent review, blind cross-review, chair synthesis — never changes.</p>
     <div class="swarm-wrap">
       <div class="rv">
         <div class="council-svg">
 <svg viewBox="0 0 520 352" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>Amicus LLM Council: two convenings — different lineup, chair, material, and verdict; same ritual of independent review, anonymous cross-review, and chair synthesis</title>
+  <title>Amicus LLM Council: three convenings — the third seats a local model (Qwen2.5-Coder on-device via Ollama) alongside cloud peers; same ritual of independent review, anonymous cross-review, and chair synthesis</title>
 
+  <!-- Corner tag -->
+  <text x="8" y="14" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#555" letter-spacing="1">COUNCIL MODE</text>
 
   <!-- ===== Round table (draws on at load) ===== -->
   <path d="M128 158a132 54 0 1 0 264 0a132 54 0 1 0-264 0" stroke="#2f2f35" stroke-width="1.4" fill="#17171a" fill-opacity="0" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
@@ -499,104 +501,104 @@ h2.v .w-anim{opacity:1;transform:none}
   <!-- ===== Lap A / Phase 1: review spokes ===== -->
   <g stroke-width="1.2">
     <path d="M260 216L260 186" stroke="#10a37f" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.05;.11;.17;.18;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.15;.1675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.0333;.0733;.1133;.12;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.1;.1117;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M128 178L231 159" stroke="#4285F4" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.05;.11;.17;.18;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.15;.1675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.0333;.0733;.1133;.12;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.1;.1117;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M183 106L233 136" stroke="#0081FB" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.05;.11;.17;.18;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.15;.1675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.0333;.0733;.1133;.12;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.1;.1117;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M337 106L287 136" stroke="#9a9aa2" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.05;.11;.17;.18;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.15;.1675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.0333;.0733;.1133;.12;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.1;.1117;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M392 178L289 159" stroke="#d97757" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.05;.11;.17;.18;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.15;.1675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.0333;.0733;.1133;.12;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.1;.1117;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
   </g>
 
   <!-- ===== Lap A / Phase 2: anonymous cross-review pentagram ===== -->
   <g stroke="#6a6a70" stroke-width="1">
     <path d="M249 219L177 112" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.17;.195;.32;.33;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.3075;.3225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.1133;.13;.2133;.22;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.205;.215;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M185 102L393 175" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.194;.219;.32;.33;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.3075;.3225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.1293;.146;.2133;.22;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.205;.215;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M392 182L128 182" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.218;.243;.32;.33;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.3075;.3225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.1453;.162;.2133;.22;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.205;.215;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M127 175L335 102" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.242;.267;.32;.33;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.3075;.3225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.1613;.178;.2133;.22;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.205;.215;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M343 112L271 219" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.266;.291;.32;.33;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.3075;.3225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.1773;.194;.2133;.22;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.205;.215;.99;1" dur="36s" repeatCount="indefinite"/>
     </path>
   </g>
 
   <!-- ===== Lap B / Phase 1: review spokes ===== -->
   <g stroke-width="1.2">
     <path d="M260 216L260 186" stroke="#4285F4" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.55;.61;.67;.68;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.65;.6675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.3667;.4067;.4467;.4533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.4333;.445;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M260 100L260 118" stroke="#4D6BFE" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.55;.61;.67;.68;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.65;.6675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.3667;.4067;.4467;.4533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.4333;.445;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M120 157L228 153" stroke="#FA520F" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.55;.61;.67;.68;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.65;.6675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.3667;.4067;.4467;.4533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.4333;.445;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M400 157L292 153" stroke="#615CED" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.55;.61;.67;.68;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.65;.6675;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.3667;.4067;.4467;.4533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.4333;.445;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
   </g>
 
   <!-- ===== Lap B / Phase 2: anonymous cross-review weave ===== -->
   <g stroke="#6a6a70" stroke-width="1">
     <path d="M242 89L118 149" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.67;.695;.82;.83;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.8075;.8225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.4467;.4633;.5467;.5533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85;.85" keyTimes="0;.5383;.5483;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M402 167L278 227" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.694;.719;.82;.83;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.8075;.8225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.4627;.4793;.5467;.5533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85;.85" keyTimes="0;.5383;.5483;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M120 158L400 158" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.718;.743;.82;.83;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.8075;.8225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.4787;.4953;.5467;.5533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85;.85" keyTimes="0;.5383;.5483;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M278 89L402 149" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.742;.767;.82;.83;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.8075;.8225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.4947;.5113;.5467;.5533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85;.85" keyTimes="0;.5383;.5483;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
     <path d="M118 167L242 227" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.766;.791;.82;.83;1" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values=".85;.85;0;0;.85" keyTimes="0;.8075;.8225;.99;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100" keyTimes="0;.5107;.5273;.5467;.5533;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;0;0;.85;.85" keyTimes="0;.5383;.5483;.66;.6667;1" dur="36s" repeatCount="indefinite"/>
     </path>
   </g>
 
   <!-- ===== Material under review (shared pulse + per-lap card) ===== -->
   <circle cx="260" cy="152" r="36" fill="#d97757" opacity="0">
-    <animate attributeName="opacity" values="0;0;.08;.02;.08;0;0;0;.08;.02;.08;0;0" keyTimes="0;.06;.08;.10;.12;.15;.5;.56;.58;.60;.62;.65;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;.08;.02;.08;0;0;.08;.02;.08;0;0;.08;.02;.08;0;0" keyTimes="0;.04;.0533;.0667;.08;.1;.3733;.3866;.4;.4133;.4333;.7067;.72;.7334;.7467;.7667;1" dur="36s" repeatCount="indefinite"/>
   </circle>
   <!-- Lap A material: a document -->
   <g opacity="0">
     <animate attributeName="opacity" from="0" to="1" dur="0.5s" begin="1.15s" fill="freeze"/>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.48;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.32;.3367;.99;1" dur="36s" repeatCount="indefinite"/>
       <rect x="238" y="124" width="44" height="56" rx="4" fill="#161618" stroke="#3a3a40" stroke-width="1"/>
       <rect x="246" y="136" width="28" height="2.5" rx="1" fill="#2c2c30"/>
       <rect x="246" y="144" width="22" height="2.5" rx="1" fill="#2c2c30"/>
@@ -607,7 +609,7 @@ h2.v .w-anim{opacity:1;transform:none}
   </g>
   <!-- Lap B material: a design mockup -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.485;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.3233;.3367;.6567;.6667;1" dur="36s" repeatCount="indefinite"/>
     <rect x="238" y="124" width="44" height="56" rx="4" fill="#161618" stroke="#3a3a40" stroke-width="1"/>
     <rect x="246" y="131" width="20" height="2.5" rx="1" fill="#2c2c30"/>
     <rect x="245" y="138" width="30" height="22" rx="2" fill="none" stroke="#2c2c30" stroke-width="1"/>
@@ -619,42 +621,42 @@ h2.v .w-anim{opacity:1;transform:none}
 
   <!-- ===== Chair glow (shared position, flares once per lap) ===== -->
   <circle cx="260" cy="236" r="22" fill="none" stroke="#e8b24a" stroke-width="1.5" opacity="0">
-    <animate attributeName="opacity" values="0;0;.95;.45;.85;.45;0;0;0;.95;.45;.85;.45;0;0" keyTimes="0;.375;.385;.41;.435;.46;.48;.5;.875;.885;.91;.935;.96;.98;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;.95;.45;.85;.45;0;0;.95;.45;.85;.45;0;0;.95;.45;.85;.45;0;0" keyTimes="0;.25;.2567;.2733;.29;.3067;.32;.5833;.59;.6066;.6233;.64;.6533;.9167;.9234;.94;.9567;.9734;.9867;1" dur="36s" repeatCount="indefinite"/>
   </circle>
 
   <!-- ===== Lap A / Phase 3: gold pulses converge on the chair ===== -->
   <g>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.3375;.3425;.3775;.3825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M127 189L241 229" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.34;.38;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.225;.2283;.2517;.255;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M127 189L241 229" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.2267;.2533;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.3375;.3425;.3775;.3825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M177 112L249 219" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.34;.38;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.225;.2283;.2517;.255;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M177 112L249 219" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.2267;.2533;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.3375;.3425;.3775;.3825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M343 112L271 219" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.34;.38;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.225;.2283;.2517;.255;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M343 112L271 219" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.2267;.2533;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.3375;.3425;.3775;.3825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M393 189L279 229" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.34;.38;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.225;.2283;.2517;.255;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M393 189L279 229" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.2267;.2533;1" dur="36s" repeatCount="indefinite"/>
     </circle>
   </g>
 
   <!-- ===== Lap B / Phase 3: gold pulses curve around the table to the chair ===== -->
   <g>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.8375;.8425;.8775;.8825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M260 100C170 120 150 200 242 224" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.84;.88;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0;0" keyTimes="0;.5583;.5617;.585;.5883;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M260 100C170 120 150 200 242 224" calcMode="linear" keyPoints="0;0;1;1;1" keyTimes="0;.56;.5867;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.8375;.8425;.8775;.8825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M118 167C150 210 190 228 240 232" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.84;.88;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0;0" keyTimes="0;.5583;.5617;.585;.5883;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M118 167C150 210 190 228 240 232" calcMode="linear" keyPoints="0;0;1;1;1" keyTimes="0;.56;.5867;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <circle r="2.5" fill="#e8b24a" opacity="0">
-      <animate attributeName="opacity" values="0;0;.95;.95;0;0" keyTimes="0;.8375;.8425;.8775;.8825;1" dur="24s" repeatCount="indefinite"/>
-      <animateMotion path="M402 167C370 210 330 228 280 232" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;.84;.88;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;.95;.95;0;0;0" keyTimes="0;.5583;.5617;.585;.5883;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M402 167C370 210 330 228 280 232" calcMode="linear" keyPoints="0;0;1;1;1" keyTimes="0;.56;.5867;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
   </g>
 
@@ -663,16 +665,16 @@ h2.v .w-anim{opacity:1;transform:none}
   <g opacity="0">
     <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="0.9s" fill="freeze"/>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.48;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.32;.3367;.99;1" dur="36s" repeatCount="indefinite"/>
       <circle cx="108" cy="182" r="16" fill="#141417" stroke="#4285F4" stroke-width="1.3">
-        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.11;.12;.13;.14;.15;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.0733;.08;.0867;.0933;.1;1" dur="36s" repeatCount="indefinite"/>
       </circle>
       <path transform="translate(101,175) scale(.583)" fill="#8E75B2" d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>
       <text x="108" y="209" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#4285F4">
-        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
-        Gemini</text>
+        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
+        Gemini 3 Pro</text>
       <text x="108" y="209" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         anon-1</text>
     </g>
   </g>
@@ -681,16 +683,16 @@ h2.v .w-anim{opacity:1;transform:none}
   <g opacity="0">
     <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="1.02s" fill="freeze"/>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.48;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.32;.3367;.99;1" dur="36s" repeatCount="indefinite"/>
       <circle cx="166" cy="95" r="16" fill="#141417" stroke="#0081FB" stroke-width="1.3">
-        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.11;.12;.13;.14;.15;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.0733;.08;.0867;.0933;.1;1" dur="36s" repeatCount="indefinite"/>
       </circle>
       <path transform="translate(159,88) scale(.583)" fill="#0081FB" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.358-2.602zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.454-.687.964-1.226 1.533-1.533a2.264 2.264 0 0 1 1.088-.285z"/>
       <text x="166" y="69" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#0081FB">
-        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
-        Llama</text>
+        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
+        Llama 4</text>
       <text x="166" y="69" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         anon-2</text>
     </g>
   </g>
@@ -699,16 +701,16 @@ h2.v .w-anim{opacity:1;transform:none}
   <g opacity="0">
     <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="1.14s" fill="freeze"/>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.48;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.32;.3367;.99;1" dur="36s" repeatCount="indefinite"/>
       <circle cx="354" cy="95" r="16" fill="#141417" stroke="#9a9aa2" stroke-width="1.3">
-        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.11;.12;.13;.14;.15;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.0733;.08;.0867;.0933;.1;1" dur="36s" repeatCount="indefinite"/>
       </circle>
       <path transform="translate(347,88) scale(.583)" fill="#e8e8e6" d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"/>
       <text x="354" y="69" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#c5c5c3">
-        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
-        Grok</text>
+        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
+        Grok 4</text>
       <text x="354" y="69" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         anon-4</text>
     </g>
   </g>
@@ -717,37 +719,37 @@ h2.v .w-anim{opacity:1;transform:none}
   <g opacity="0">
     <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="1.26s" fill="freeze"/>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.48;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.32;.3367;.99;1" dur="36s" repeatCount="indefinite"/>
       <circle cx="412" cy="182" r="16" fill="#141417" stroke="#d97757" stroke-width="1.3">
-        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.11;.12;.13;.14;.15;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.0733;.08;.0867;.0933;.1;1" dur="36s" repeatCount="indefinite"/>
       </circle>
       <path transform="translate(405,175) scale(.583)" fill="#D97757" d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/>
       <text x="412" y="209" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#d97757">
-        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         Claude Opus</text>
       <text x="412" y="209" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         anon-5</text>
     </g>
   </g>
 
-  <!-- Lap A chair: GPT (bottom center) -->
+  <!-- Lap A chair: GPT-5 (bottom center) -->
   <g opacity="0">
     <animate attributeName="opacity" from="0" to="1" dur="0.45s" begin="1.38s" fill="freeze"/>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.48;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;.32;.3367;.99;1" dur="36s" repeatCount="indefinite"/>
       <circle cx="260" cy="236" r="16" fill="#141417" stroke="#10a37f" stroke-width="1.3">
-        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.11;.12;.13;.14;.15;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.0733;.08;.0867;.0933;.1;1" dur="36s" repeatCount="indefinite"/>
       </circle>
       <path transform="translate(253,229) scale(.583)" fill="#f5f5f3" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
       <text x="233" y="240" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#10a37f">
-        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
-        GPT</text>
+        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
+        GPT-5</text>
       <text x="233" y="240" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         anon-3</text>
       <g>
-        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1675;.1775;.3125;.3225;1" dur="24s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.1117;.1183;.2083;.215;1" dur="36s" repeatCount="indefinite"/>
         <rect x="282" y="229" width="38" height="13" rx="6.5" fill="#e8b24a" fill-opacity=".12" stroke="#e8b24a" stroke-width=".75" stroke-opacity=".6"/>
         <text x="301" y="238.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#e8b24a" letter-spacing=".5">CHAIR</text>
       </g>
@@ -757,64 +759,207 @@ h2.v .w-anim{opacity:1;transform:none}
   <!-- ===== Lap B seats ===== -->
   <!-- DeepSeek (top) -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.485;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.3233;.3367;.6567;.6667;1" dur="36s" repeatCount="indefinite"/>
     <circle cx="260" cy="80" r="16" fill="#141417" stroke="#4D6BFE" stroke-width="1.3">
-      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.61;.62;.63;.64;.65;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1;1" keyTimes="0;.4067;.4133;.42;.4267;.4333;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <path transform="translate(253,73) scale(.583)" fill="#4D6BFE" d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/>
     <text x="260" y="54" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#4D6BFE">
-      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
-      DeepSeek</text>
+      <animate attributeName="opacity" values="1;1;0;0;1;1;1" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
+      DeepSeek R1</text>
     <text x="260" y="54" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0;0" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
       anon-1</text>
   </g>
 
   <!-- Mistral (left) -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.485;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.3233;.3367;.6567;.6667;1" dur="36s" repeatCount="indefinite"/>
     <circle cx="100" cy="158" r="16" fill="#141417" stroke="#FA520F" stroke-width="1.3">
-      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.61;.62;.63;.64;.65;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1;1" keyTimes="0;.4067;.4133;.42;.4267;.4333;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <path transform="translate(93,151) scale(.583)" fill="#FA520F" d="M17.143 3.429v3.428h-3.429v3.429h-3.428V6.857H6.857V3.43H3.43v13.714H0v3.428h10.286v-3.428H6.857v-3.429h3.429v3.429h3.429v-3.429h3.428v3.429h-3.428v3.428H24v-3.428h-3.43V3.429z"/>
     <text x="100" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#FA520F">
-      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1;1;1" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
       Mistral Large</text>
     <text x="100" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0;0" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
       anon-2</text>
   </g>
 
   <!-- Qwen (right) -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.485;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.3233;.3367;.6567;.6667;1" dur="36s" repeatCount="indefinite"/>
     <circle cx="420" cy="158" r="16" fill="#141417" stroke="#615CED" stroke-width="1.3">
-      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.61;.62;.63;.64;.65;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1;1" keyTimes="0;.4067;.4133;.42;.4267;.4333;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <path transform="translate(413,151) scale(.583)" fill="#615CED" d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/>
     <text x="420" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#615CED">
-      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
-      Qwen</text>
+      <animate attributeName="opacity" values="1;1;0;0;1;1;1" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
+      Qwen 3</text>
     <text x="420" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0;0" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
       anon-3</text>
   </g>
 
   <!-- Lap B chair: Gemini (bottom center) -->
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;.485;.505;.985;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.3233;.3367;.6567;.6667;1" dur="36s" repeatCount="indefinite"/>
     <circle cx="260" cy="236" r="16" fill="#141417" stroke="#4285F4" stroke-width="1.3">
-      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1" keyTimes="0;.61;.62;.63;.64;.65;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-opacity" values="1;1;.45;1;.45;1;1;1" keyTimes="0;.4067;.4133;.42;.4267;.4333;.6667;1" dur="36s" repeatCount="indefinite"/>
     </circle>
     <path transform="translate(253,229) scale(.583)" fill="#8E75B2" d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>
     <text x="233" y="240" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#4285F4">
-      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
-      Gemini</text>
+      <animate attributeName="opacity" values="1;1;0;0;1;1;1" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
+      Gemini 3 Pro</text>
     <text x="233" y="240" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
-      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0;0" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
       anon-4</text>
     <g>
-      <animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.6675;.6775;.8125;.8225;1" dur="24s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0;0;1;1;1" keyTimes="0;.445;.4517;.5417;.5483;.6667;1" dur="36s" repeatCount="indefinite"/>
+      <rect x="282" y="229" width="38" height="13" rx="6.5" fill="#e8b24a" fill-opacity=".12" stroke="#e8b24a" stroke-width=".75" stroke-opacity=".6"/>
+      <text x="301" y="238.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#e8b24a" letter-spacing=".5">CHAIR</text>
+    </g>
+  </g>
+
+  <!-- ===== Lap C / Phase 1: review spokes (local + cloud) ===== -->
+  <g stroke-width="1.2">
+    <path d="M260 216L260 186" stroke="#10a37f" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;100;0;0;100;100" keyTimes="0;.3333;.7;.74;.78;.7867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;1;0;0;1" keyTimes="0;.3333;.7667;.7783;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M260 100L260 118" stroke="#d97757" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;100;0;0;100;100" keyTimes="0;.3333;.7;.74;.78;.7867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;1;0;0;1" keyTimes="0;.3333;.7667;.7783;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M120 157L228 153" stroke="#3fb950" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;100;0;0;100;100" keyTimes="0;.3333;.7;.74;.78;.7867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;1;0;0;1" keyTimes="0;.3333;.7667;.7783;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M400 157L292 153" stroke="#4285F4" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;100;0;0;100;100" keyTimes="0;.3333;.7;.74;.78;.7867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;1;0;0;1" keyTimes="0;.3333;.7667;.7783;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- ===== Lap C / Phase 2: anonymous cross-review weave ===== -->
+  <g stroke="#6a6a70" stroke-width="1">
+    <path d="M242 89L118 149" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.3333;.78;.7967;.88;.8867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;.85;0;0;.85" keyTimes="0;.3333;.8717;.8817;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M402 167L278 227" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.3333;.796;.8127;.88;.8867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;.85;0;0;.85" keyTimes="0;.3333;.8717;.8817;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M120 158L400 158" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.3333;.812;.8287;.88;.8867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;.85;0;0;.85" keyTimes="0;.3333;.8717;.8817;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M278 89L402 149" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.3333;.828;.8447;.88;.8867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;.85;0;0;.85" keyTimes="0;.3333;.8717;.8817;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+    <path d="M118 167L242 227" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
+      <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100" keyTimes="0;.3333;.844;.8607;.88;.8867;1" dur="36s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".85;.85;.85;0;0;.85" keyTimes="0;.3333;.8717;.8817;.9933;1" dur="36s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- ===== Lap C material: a code diff ===== -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;0" keyTimes="0;.3333;.6567;.67;.99;1" dur="36s" repeatCount="indefinite"/>
+    <rect x="238" y="124" width="44" height="56" rx="4" fill="#161618" stroke="#3a3a40" stroke-width="1"/>
+    <rect x="244" y="131" width="8" height="2.5" rx="1" fill="#3fb950" opacity=".6"/>
+    <rect x="254" y="131" width="18" height="2.5" rx="1" fill="#2c2c30"/>
+    <rect x="246" y="139" width="22" height="2.5" rx="1" fill="#2c2c30"/>
+    <rect x="246" y="147" width="16" height="2.5" rx="1" fill="#2c2c30"/>
+    <rect x="244" y="155" width="8" height="2.5" rx="1" fill="#d97757" opacity=".55"/>
+    <rect x="254" y="155" width="14" height="2.5" rx="1" fill="#2c2c30"/>
+    <rect x="244" y="163" width="8" height="2.5" rx="1" fill="#3fb950" opacity=".6"/>
+    <rect x="254" y="163" width="20" height="2.5" rx="1" fill="#2c2c30"/>
+    <rect x="246" y="171" width="18" height="2.5" rx="1" fill="#2c2c30"/>
+  </g>
+
+  <!-- ===== Lap C / Phase 3: gold pulses curve to the chair ===== -->
+  <g>
+    <circle r="2.5" fill="#e8b24a" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;.95;.95;0;0" keyTimes="0;.3333;.8917;.895;.9183;.9217;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M260 100C170 120 150 200 242 224" calcMode="linear" keyPoints="0;0;0;1;1" keyTimes="0;.3333;.8933;.92;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="2.5" fill="#e8b24a" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;.95;.95;0;0" keyTimes="0;.3333;.8917;.895;.9183;.9217;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M118 167C150 210 190 228 240 232" calcMode="linear" keyPoints="0;0;0;1;1" keyTimes="0;.3333;.8933;.92;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="2.5" fill="#e8b24a" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;.95;.95;0;0" keyTimes="0;.3333;.8917;.895;.9183;.9217;1" dur="36s" repeatCount="indefinite"/>
+      <animateMotion path="M402 167C370 210 330 228 280 232" calcMode="linear" keyPoints="0;0;0;1;1" keyTimes="0;.3333;.8933;.92;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- ===== Lap C seats ===== -->
+  <!-- Claude Opus (top) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;0" keyTimes="0;.3333;.6567;.67;.99;1" dur="36s" repeatCount="indefinite"/>
+    <circle cx="260" cy="80" r="16" fill="#141417" stroke="#d97757" stroke-width="1.3">
+      <animate attributeName="stroke-opacity" values="1;1;1;.45;1;.45;1;1" keyTimes="0;.3333;.74;.7467;.7533;.76;.7667;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+    <path transform="translate(253,73) scale(0.583)" fill="#D97757" d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z"/>
+    <text x="260" y="54" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#d97757">
+      <animate attributeName="opacity" values="1;1;1;0;0;1;1" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      Claude Opus</text>
+    <text x="260" y="54" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      anon-1</text>
+  </g>
+  <!-- Qwen2.5-Coder 7B — LOCAL (left) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;0" keyTimes="0;.3333;.6567;.67;.99;1" dur="36s" repeatCount="indefinite"/>
+    <circle cx="100" cy="158" r="16" fill="#141417" stroke="#3fb950" stroke-width="1.3">
+      <animate attributeName="stroke-opacity" values="1;1;1;.45;1;.45;1;1" keyTimes="0;.3333;.74;.7467;.7533;.76;.7667;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+    <path transform="translate(93,151) scale(0.583)" fill="#3fb950" d="M23.919 14.545 20.817 9.17l1.47-2.544a.56.56 0 0 0 0-.566l-1.633-2.83a.57.57 0 0 0-.49-.283h-6.207L12.487.402a.57.57 0 0 0-.49-.284H8.732a.56.56 0 0 0-.49.284L5.139 5.775h-2.94a.56.56 0 0 0-.49.284L.077 8.887a.56.56 0 0 0 0 .567L3.18 14.83l-1.47 2.545a.56.56 0 0 0 0 .566l1.634 2.83a.57.57 0 0 0 .49.283h6.205l1.47 2.545a.57.57 0 0 0 .49.284h3.266a.57.57 0 0 0 .49-.284l3.104-5.375h2.94a.57.57 0 0 0 .49-.283l1.634-2.828a.55.55 0 0 0-.004-.568M8.733.686l1.634 2.828-1.634 2.828H21.8L20.164 9.17H7.425L5.63 6.06Zm1.306 19.801-6.205-.002 1.634-2.83h3.265L2.201 6.344h3.267q3.182 5.517 6.367 11.032zm10.124-5.66L18.53 12l-6.532 11.315-1.634-2.83c2.129-3.673 4.25-7.351 6.373-11.028h3.592l3.102 5.374z"/>
+    <text x="100" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#3fb950">
+      <animate attributeName="opacity" values="1;1;1;0;0;1;1" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      Qwen2.5-Coder 7B</text>
+    <text x="100" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      anon-2</text>
+    <g>
+      <animate attributeName="opacity" values="1;1;1;0;0;1;1" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      <rect x="82" y="188" width="36" height="10" rx="5" fill="#3fb950" fill-opacity=".12" stroke="#3fb950" stroke-width=".75" stroke-opacity=".6"/>
+      <text x="100" y="195.4" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#3fb950" letter-spacing=".5">LOCAL</text>
+    </g>
+  </g>
+  <!-- Gemini 3 Pro (right) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;0" keyTimes="0;.3333;.6567;.67;.99;1" dur="36s" repeatCount="indefinite"/>
+    <circle cx="420" cy="158" r="16" fill="#141417" stroke="#4285F4" stroke-width="1.3">
+      <animate attributeName="stroke-opacity" values="1;1;1;.45;1;.45;1;1" keyTimes="0;.3333;.74;.7467;.7533;.76;.7667;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+    <path transform="translate(413,151) scale(0.583)" fill="#8E75B2" d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/>
+    <text x="420" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#4285F4">
+      <animate attributeName="opacity" values="1;1;1;0;0;1;1" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      Gemini 3 Pro</text>
+    <text x="420" y="185" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      anon-3</text>
+  </g>
+  <!-- Lap C chair: GPT-5 (bottom center) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;0" keyTimes="0;.3333;.6567;.67;.99;1" dur="36s" repeatCount="indefinite"/>
+    <circle cx="260" cy="236" r="16" fill="#141417" stroke="#10a37f" stroke-width="1.3">
+      <animate attributeName="stroke-opacity" values="1;1;1;.45;1;.45;1;1" keyTimes="0;.3333;.74;.7467;.7533;.76;.7667;1" dur="36s" repeatCount="indefinite"/>
+    </circle>
+    <path transform="translate(253,229) scale(0.583)" fill="#f5f5f3" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/>
+    <text x="233" y="240" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#10a37f">
+      <animate attributeName="opacity" values="1;1;1;0;0;1;1" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      GPT-5</text>
+    <text x="233" y="240" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="7" fill="#666" opacity="0">
+      <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
+      anon-4</text>
+    <g>
+      <animate attributeName="opacity" values="1;1;1;0;0;1;1" keyTimes="0;.3333;.7783;.785;.875;.8817;1" dur="36s" repeatCount="indefinite"/>
       <rect x="282" y="229" width="38" height="13" rx="6.5" fill="#e8b24a" fill-opacity=".12" stroke="#e8b24a" stroke-width=".75" stroke-opacity=".6"/>
       <text x="301" y="238.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#e8b24a" letter-spacing=".5">CHAIR</text>
     </g>
@@ -822,32 +967,38 @@ h2.v .w-anim{opacity:1;transform:none}
 
   <!-- ===== Verdict (connector shared; box per lap) ===== -->
   <path d="M260 258L260 276" stroke="#e8b24a" stroke-width="1.2" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100">
-    <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;100;0;0;100;100" keyTimes="0;.385;.405;.485;.49;.5;.885;.905;.985;.99;1" dur="24s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values=".95;.95;0;0;.95;.95;0;0;.95" keyTimes="0;.4725;.485;.495;.5;.9725;.985;.995;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="stroke-dashoffset" values="100;100;0;0;100;100;0;0;100;100;0;0;100;100" keyTimes="0;.2567;.27;.3233;.3267;.59;.6033;.6566;.66;.9234;.9367;.99;.9934;1" dur="36s" repeatCount="indefinite"/>
   </path>
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.395;.415;.47;.4875;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.2633;.2767;.3133;.325;1" dur="36s" repeatCount="indefinite"/>
     <rect x="150" y="278" width="220" height="40" rx="7" fill="#e8b24a" fill-opacity=".05" stroke="#e8b24a" stroke-width="1" stroke-dasharray="4 3"/>
     <text x="260" y="295" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" font-weight="600" fill="#e8b24a">VERDICT — 3–0: race condition confirmed</text>
     <text x="260" y="309" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#8a8a90">synthesized by the chair · folds back into Claude</text>
   </g>
   <g opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;.895;.915;.97;.9875;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0;0" keyTimes="0;.5967;.61;.6467;.6583;.6667;1" dur="36s" repeatCount="indefinite"/>
     <rect x="150" y="278" width="220" height="40" rx="7" fill="#e8b24a" fill-opacity=".05" stroke="#e8b24a" stroke-width="1" stroke-dasharray="4 3"/>
     <text x="260" y="295" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" font-weight="600" fill="#e8b24a">VERDICT — 2–1: contested — simplify the flow</text>
     <text x="260" y="309" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#8a8a90">dissent preserved · folds back into Claude</text>
   </g>
 
-  <!-- ===== Phase captions (same ritual, both laps) ===== -->
+    <g opacity="0">
+    <animate attributeName="opacity" values="0;0;0;1;1;0;0" keyTimes="0;.6667;.93;.9433;.98;.9917;1" dur="36s" repeatCount="indefinite"/>
+    <rect x="150" y="278" width="220" height="40" rx="7" fill="#e8b24a" fill-opacity=".05" stroke="#e8b24a" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="260" y="295" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" font-weight="600" fill="#e8b24a">VERDICT — 3–0: ship · local + cloud agree</text>
+    <text x="260" y="309" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#8a8a90">on-device seat included · folds back into Claude</text>
+  </g>
+  <!-- ===== Phase captions (same ritual, all three laps) ===== -->
   <text x="260" y="341" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0;0;1;1;0;0" keyTimes="0;.0275;.045;.15;.17;.5;.5275;.545;.65;.67;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0;1;1;0;0;1;1;0;0" keyTimes="0;.0183;.03;.1;.1133;.3516;.3633;.4333;.4466;.685;.6967;.7667;.78;1" dur="36s" repeatCount="indefinite"/>
     <tspan fill="#d97757" font-weight="600">01</tspan><tspan fill="#8a8a90"> · independent review</tspan></text>
   <text x="260" y="341" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0;0;1;1;0;0" keyTimes="0;.17;.1875;.305;.325;.5;.67;.6875;.805;.825;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0;1;1;0;0;1;1;0;0" keyTimes="0;.1133;.125;.2033;.2167;.4466;.4583;.5366;.55;.78;.7917;.87;.8834;1" dur="36s" repeatCount="indefinite"/>
     <tspan fill="#d97757" font-weight="600">02</tspan><tspan fill="#8a8a90"> · anonymous cross-review &amp; ranking</tspan></text>
   <text x="260" y="341" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" opacity="0">
-    <animate attributeName="opacity" values="0;0;1;1;0;0;0;1;1;0;0" keyTimes="0;.33;.3475;.465;.485;.5;.83;.8475;.965;.985;1" dur="24s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0;1;1;0;0;1;1;0;0;1;1;0;0" keyTimes="0;.22;.2317;.31;.3233;.5533;.565;.6433;.6566;.8867;.8984;.9767;.99;1" dur="36s" repeatCount="indefinite"/>
     <tspan fill="#d97757" font-weight="600">03</tspan><tspan fill="#8a8a90"> · the chair synthesizes the verdict</tspan></text>
+
 </svg>
         </div>
       </div>
@@ -1403,6 +1554,31 @@ h2.v .w-anim{opacity:1;transform:none}
           <p>Deep in a session and losing perspective? Bring in a fresh model. It sees everything you've built, without the tunnel vision.</p>
         </div>
       </div>
+      <div class="vig-card vig-card-wide rv r5">
+        <svg viewBox="0 0 800 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="800" height="180" fill="#0a0a0a"/>
+          <rect x="30" y="50" width="172" height="80" rx="8" fill="#111113" stroke="#222225"/>
+          <text x="116" y="80" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" fill="#a1a1a0">CI job · push / PR</text>
+          <text x="116" y="99" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#555">no Claude runtime</text>
+          <path d="M202 90 L252 90" stroke="#d97757" stroke-width="1.4" stroke-dasharray="4,3"/><polygon points="250,86 258,90 250,94" fill="#d97757"/>
+          <rect x="258" y="34" width="230" height="112" rx="8" fill="#111113" stroke="#e8b24a" stroke-width="1.2"/>
+          <text x="373" y="55" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="8" font-weight="600" fill="#e8b24a">amicus council run</text>
+          <text x="373" y="76" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">reviews → cross-review</text>
+          <text x="373" y="90" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">→ tally → chair verdict</text>
+          <text x="373" y="114" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">one command · exits non-zero on fail</text>
+          <path d="M488 90 L538 90" stroke="#d97757" stroke-width="1.4" stroke-dasharray="4,3"/><polygon points="536,86 544,90 536,94" fill="#d97757"/>
+          <rect x="544" y="34" width="226" height="112" rx="8" fill="#111113" stroke="#222225"/>
+          <text x="657" y="52" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7.5" fill="#a1a1a0">Artifacts</text>
+          <rect x="562" y="62" width="190" height="22" rx="4" fill="#161618"/><text x="574" y="77" font-family="IBM Plex Mono,monospace" font-size="7" fill="#e8b24a">verdict.json</text>
+          <rect x="562" y="90" width="190" height="22" rx="4" fill="#161618"/><text x="574" y="105" font-family="IBM Plex Mono,monospace" font-size="7" fill="#7aafff">report.html</text>
+          <circle cx="574" cy="127" r="5" fill="#4ade80" opacity=".15"/><path d="M571 127 L573 129 L577 125" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="584" y="130" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#4ade80">check passed</text>
+        </svg>
+        <div class="vig-body">
+          <h3>Headless in CI</h3>
+          <p>Run the whole council with no Claude session — <code>amicus council run</code> does independent reviews → anonymous cross-review → tally → a non-Claude chair verdict in one command, writing <code>verdict.json</code> and <code>report.html</code>. It drops into any CI job and exits non-zero when the verdict fails your gate.</p>
+        </div>
+      </div>
       <!-- MCP Discovery - full width -->
       <div class="vig-card vig-card-wide rv r5">
         <svg viewBox="0 0 800 180" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1535,7 +1711,7 @@ h2.v .w-anim{opacity:1;transform:none}
   <div class="w">
     <div class="tag rv">Compatible Models</div>
     <h2 class="rv">Any Model.<br><span>Your Keys.</span></h2>
-    <p class="lead rv">Use your existing API keys directly, or connect everything through OpenRouter with a single key.</p>
+    <p class="lead rv">Use your existing API keys directly, connect everything through OpenRouter with a single key, or run models locally with no key at all.</p>
     <div class="prov-grid">
       <div class="prov-card rv" style="transition-delay:0s">
         <svg viewBox="0 0 24 24" fill="#8E75B2"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></svg>
@@ -1583,6 +1759,10 @@ h2.v .w-anim{opacity:1;transform:none}
       <div class="api-opt">
         <h4 style="color:var(--accent)">OpenRouter (Recommended)</h4>
         <p>One key, every model. Automatic fallback, unified billing. Run <code style="font-size:.75rem;color:var(--accent)">amicus setup</code> to configure.</p>
+      </div>
+      <div class="api-opt">
+        <h4 style="color:var(--green)">Local Models</h4>
+        <p>Run models on your own machine via LM Studio, Ollama, or vLLM — no key, no per-token bill, private and offline. Run <code style="font-size:.75rem;color:var(--accent)">amicus provider add</code> to connect.</p>
       </div>
     </div>
   </div>

@@ -117,9 +117,19 @@ async function main() {
         exitCode = await handleDoctor(args);
         break;
       }
+      case 'init': {
+        const { handleInit } = require('../src/cli-handlers-init');
+        exitCode = await handleInit(args);
+        break;
+      }
       case 'spend': {
         const { handleSpend } = require('../src/cli-handlers-spend');
         exitCode = await handleSpend(args);
+        break;
+      }
+      case 'provider': {
+        const { handleProvider } = require('../src/cli-handlers-provider');
+        exitCode = await handleProvider(args);
         break;
       }
       case 'setup':

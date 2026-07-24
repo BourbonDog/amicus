@@ -192,7 +192,17 @@ function providersToFetch(keys) {
 async function fetchAllModels(keys) {
   const providers = providersToFetch(keys);
   const results = await Promise.all(providers.map(p => fetchModelsFromProvider(p, keys[p] || '')));
-  return results.flat();
+  const rows = results.flat();
+  // v4.2 §4.4: append local-provider rows via the scheme-aware probe (5s, [] on failure).
+  try {
+    const { getLocalProviders } = require('./local-providers');
+    const { listLocalModels } = require('./local-probe');
+    const localEntries = Object.values(getLocalProviders());
+    const localResults = await Promise.all(localEntries.map((e) =>
+      listLocalModels(e, { timeoutMs: 5000, bearer: e.apiKeyEnv ? process.env[e.apiKeyEnv] : undefined })));
+    for (const r of localResults) { rows.push(...r); }
+  } catch (_err) { /* local rows are best-effort — never break the cloud catalog */ }
+  return rows;
 }
 
 /**

@@ -240,6 +240,17 @@ function tryResolveModel(modelArg) {
   }
 }
 
+/**
+ * Request timeout (ms) for local (@ai-sdk/openai-compatible) provider blocks.
+ * opencode's default HTTP request timeout is too short for cold local
+ * inference: prefilling a large agent prompt (~26k tokens) on a cold local
+ * model can exceed it, killing the request during prefill before any stream
+ * data arrives -- opencode never creates the assistant message, and the
+ * caller polls out its own much longer timeout waiting for a response that
+ * will never come. 300000ms (5 minutes) covers cold-start prefill headroom.
+ */
+const LOCAL_REQUEST_TIMEOUT_MS = 300000;
+
 /** Build OpenCode provider.models config from sidecar aliases, plus the
  * actually-resolved launch route(s). The alias-derived entries let the UI
  * model picker show every configured model (single source of truth for the
@@ -289,7 +300,16 @@ function buildProviderModels(resolvedRoutes = []) {
     const providerID = parts[0];
     const modelID = parts.slice(1).join('/');
 
-    if (!providers[providerID]) {
+    // providerID is an unvalidated vendor segment split off a user-supplied
+    // model string (alias or resolved route). A bare `!providers[providerID]`
+    // check walks the prototype chain, so a vendor literally named
+    // 'constructor' (a valid, non-reserved local-provider id — see
+    // local-providers.js's ID_RE/RESERVED_IDS) reads the inherited
+    // Object.prototype.constructor (truthy), skips the init below, and the
+    // next line throws on the resulting undefined. Same bug class already
+    // fixed in gateway-router.js (19aade4) and local-providers.js +
+    // route-suggestions.js (2cba73b).
+    if (!Object.prototype.hasOwnProperty.call(providers, providerID)) {
       providers[providerID] = { models: {} };
     }
     providers[providerID].models[modelID] = {};
@@ -322,6 +342,31 @@ function buildProviderModels(resolvedRoutes = []) {
 
   for (const resolved of resolvedRoutes) {
     addRoute(resolved);
+  }
+
+  // v4.2 §4.3: for every provider id that is a configured LOCAL provider AND was
+  // registered by the loops above, attach the OpenCode openai-compatible block.
+  // {env:VAR} interpolation keeps key material out of the config object.
+  const { getLocalProviders } = require('./local-providers');
+  const localAll = getLocalProviders();
+  for (const [id, block] of Object.entries(providers)) {
+    // Guarded the same way as the accumulator init above: `localAll` is a
+    // plain {} when no local providers are configured, so a bare
+    // `localAll[id]` for id === 'constructor' would read the inherited
+    // Object.prototype.constructor (truthy) and fabricate a fake local block
+    // for a vendor that isn't actually configured as local.
+    const entry = Object.prototype.hasOwnProperty.call(localAll, id) ? localAll[id] : undefined;
+    if (!entry) { continue; }
+    block.npm = '@ai-sdk/openai-compatible';
+    block.name = entry.name || id;
+    block.options = {
+      baseURL: entry.baseURL,
+      // @ai-sdk/openai-compatible wants a non-empty apiKey string even for
+      // servers that don't require auth (Ollama/LM Studio/llama.cpp ignore
+      // it) -- an omitted apiKey is not the same as an accepted empty one.
+      apiKey: entry.apiKeyEnv ? `{env:${entry.apiKeyEnv}}` : 'not-needed',
+      timeout: LOCAL_REQUEST_TIMEOUT_MS,
+    };
   }
 
   return providers;
@@ -383,11 +428,18 @@ function resolveCouncilMembers(name, catalog = []) {
   }
   const aliases = getEffectiveAliases();
   const known = new Set((Array.isArray(catalog) ? catalog : []).map(m => m && m.id).filter(Boolean));
+  const { isLocalProvider } = require('./local-providers');
   const models = [];
   const dropped = [];
   for (const member of members) {
     const id = member.includes('/') ? member : aliases[member];
     if (!id) { dropped.push(member); continue; }                 // alias no longer resolves
+    const vendor = typeof id === 'string' ? id.split('/')[0] : '';
+    // v4.2 §4.4: a local server may simply have been off at the last catalog
+    // refresh — that is "unknown", not "delisted". Never drop a local-vendor
+    // member on catalog absence; the leg itself fails pre-flight with the
+    // actionable local_endpoint_unreachable error if the server is truly down.
+    if (isLocalProvider(vendor)) { models.push(member); continue; }
     if (known.size > 0 && !known.has(id)) { dropped.push(member); continue; } // delisted model
     models.push(member);
   }

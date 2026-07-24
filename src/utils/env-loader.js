@@ -48,6 +48,19 @@ function loadCredentials() {
       logger.info(`Loaded ${envVar} from auth.json`);
     }
   }
+
+  // v4.2: project each configured local-provider apiKeyEnv from amicus .env into
+  // process.env (same never-overwrite rule) so the engine's {env:VAR} finds it.
+  try {
+    const { getLocalProviders } = require('./local-providers');
+    const fileEntries = loadEnvEntries();
+    for (const entry of Object.values(getLocalProviders())) {
+      if (entry.apiKeyEnv && !process.env[entry.apiKeyEnv]) {
+        const v = fileEntries.get(entry.apiKeyEnv);
+        if (v && v.length > 0) { process.env[entry.apiKeyEnv] = v; logger.info(`Loaded ${entry.apiKeyEnv} from amicus .env`); }
+      }
+    }
+  } catch (_err) { /* best-effort: a bad providers block must never break credential load */ }
 }
 
 module.exports = { loadCredentials };
