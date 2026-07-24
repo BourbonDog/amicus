@@ -9,10 +9,18 @@
 // orchestrator-test model string below is already a fully-qualified
 // `vendor/model` or `openrouter/vendor/model` literal), matching the old
 // tryResolveModel passthrough for a slash-bearing input byte for byte.
+// Gateway is a three-value axis: 'openrouter' | 'local' | 'direct'. The
+// `ollama/` prefix is a test-only convention (mirrors gateway-router.js's
+// real local-provider executableId shape, `<vendor>/<model>`) letting a
+// designated model resolve to 'local' so tests can cover the v4.2
+// local-provider attribution path without touching any real model string
+// used elsewhere in this file.
 const mockResolveRouteForLaunch = jest.fn(async ({ model }) => ({
   kind: 'resolved',
   executableId: model,
-  gateway: model.startsWith('openrouter/') ? 'openrouter' : 'direct',
+  gateway: model.startsWith('openrouter/') ? 'openrouter'
+    : model.startsWith('ollama/') ? 'local'
+      : 'direct',
   provenance: {},
 }));
 jest.mock('../../src/utils/route-launch', () => ({
@@ -622,6 +630,25 @@ describe('runFanout orchestrator', () => {
       const rows = readSpendRows(ledgerDir);
       expect(rows).toHaveLength(1);
       expect(rows[0].taskId).toBe('ledgerwave2-2');
+    });
+
+    // fanout-leg.js:131-132 prefers the resolved leg.gateway (set by
+    // validateFanoutModels from the router's RouteResult) over the old
+    // string-prefix heuristic, which mislabeled v4.2 local-provider legs
+    // (Ollama/LM Studio/vLLM) as 'direct'. Exercise the real
+    // runFanout -> runLeg -> appendSpend path with a leg whose resolved
+    // route reports gateway:'local' to guard against that regression.
+    it('a leg whose resolved route reports gateway:local is attributed gateway:local on its ledger row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({
+        ...baseOpts(), models: 'openrouter/a/b,ollama/llama3', waveId: 'ledgerwave3',
+      });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      const localRow = rows.find(r => r.model === 'ollama/llama3');
+      const openrouterRow = rows.find(r => r.model === 'openrouter/a/b');
+      expect(localRow).toMatchObject({ gateway: 'local' });
+      expect(openrouterRow).toMatchObject({ gateway: 'openrouter' });
     });
   });
 });

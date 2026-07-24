@@ -38,15 +38,18 @@ describe('appendSpend additive attribution fields (spec 7.1)', () => {
     expect('retryOfWaveId' in row).toBe(false);
     expect(row.councilRunId).toBeNull();
     expect(row.gateway).toBeNull();
+    expect(row.project).toBeNull();
+    expect(row.status).toBeNull();
   });
 
   test('fallback substitution fields ride when present', () => {
     const dir = tmp();
     appendSpend({ taskId: 't3', waveId: 'w1', model: 'haiku', mode: 'leg', usage,
-      op: 'leg', status: 'complete', attempt: 1, substitutedFor: 'opus' }, { dir });
+      op: 'leg', status: 'complete', attempt: 1, substitutedFor: 'opus', retryOfWaveId: 'w0' }, { dir });
     const [row] = readSpendRows(dir);
     expect(row.attempt).toBe(1);
     expect(row.substitutedFor).toBe('opus');
+    expect(row.retryOfWaveId).toBe('w0');
   });
 
   test('a null usage still no-ops (unchanged guarantee)', () => {

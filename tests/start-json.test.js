@@ -139,6 +139,11 @@ describe('spend ledger append on start finalize (B24)', () => {
       taskId: 'spend0001', waveId: null, model: 'openrouter/a/b', mode: 'headless',
       tokens: { input: 200, output: 80 },
       cost: { amount: 0.02, currency: 'USD', source: 'reported' },
+      // Guards start.js's effectiveProject wiring (cwd || project): `cwd` is what
+      // MCP/Cowork always pass, and it must win over the bare `project` default.
+      // Asserting equality to the tmpdir passed as `cwd` above (not `project`,
+      // which was never set) fails this test if start.js reverts to bare `project`.
+      project: project,
     });
   });
 
