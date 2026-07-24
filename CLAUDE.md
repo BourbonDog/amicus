@@ -128,6 +128,8 @@ src/
 │   │   └── Outfit-800.ttf
 │   ├── tokens.css
 │   └── tokens.js
+├── observe/
+│   └── events.js
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
@@ -410,6 +412,7 @@ evals/
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `readOverallVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
+| `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
