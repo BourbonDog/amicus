@@ -43,6 +43,35 @@ describe('spend schema still validates the enriched spend doc', () => {
       filters: { failed: true }, groupBy: 'wave', groups: groupRows(rows, 'wave'), wasted: computeWasted(rows) });
     expect(validate(doc)).toBe(true);
   });
+
+  // Finding 2 regression guard: the assertion above only ever validates an
+  // EMPTY spend doc (rows=[] => groups=[] and wasted.byStatus={}), so the
+  // schema's item-level shape (groups[].key/amount/runs, a populated
+  // wasted.byStatus) was never actually exercised. Seed real ledger rows via
+  // appendSpend (same pattern as tests/cli-handlers-spend-query.test.js) and
+  // build the doc through the real aggregateSpend/groupRows/computeWasted/
+  // buildSpendDoc path so a future shape change that violates the schema
+  // gets caught here.
+  test('a doc built from real seeded rows has populated groups/wasted and validates', () => {
+    const { appendSpend, readSpendRows } = require('../src/utils/spend-ledger');
+    const { buildSpendDoc, groupRows, computeWasted, aggregateSpend } = require('../src/cli-handlers-spend');
+    const dir = tmp();
+    const usage = (amount) => ({ tokens: { input: 10, output: 5 }, cost: { amount, currency: 'USD', source: 'reported' } });
+    appendSpend({ taskId: 'live-a', waveId: 'w1', model: 'gpt', mode: 'leg', usage: usage(0.10), op: 'leg', status: 'complete', project: '/p1', gateway: 'direct' }, { dir });
+    appendSpend({ taskId: 'live-b', waveId: 'w1', model: 'gpt', mode: 'leg', usage: usage(0.05), op: 'leg', status: 'error', project: '/p1', gateway: 'direct' }, { dir });
+    appendSpend({ taskId: 'live-c', waveId: 'w2', model: 'qwen', mode: 'leg', usage: usage(0.20), op: 'leg', status: 'timeout', project: '/p2', gateway: 'openrouter' }, { dir });
+
+    const rows = readSpendRows(dir);
+    const { total, byModel } = aggregateSpend(rows);
+    const groups = groupRows(rows, 'wave');
+    const wasted = computeWasted(rows);
+    const doc = buildSpendDoc({ total, byModel, windowDays: null, credit: null,
+      filters: {}, groupBy: 'wave', groups, wasted });
+
+    expect(doc.groups.length).toBeGreaterThan(0);
+    expect(Object.keys(doc.wasted.byStatus).length).toBeGreaterThan(0);
+    expect(validate(doc)).toBe(true);
+  });
 });
 
 /** Write one session's metadata.json (mirrors tests/mcp-status-enrichment.test.js). */

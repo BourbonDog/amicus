@@ -13,7 +13,9 @@ Schemas leave `additionalProperties` open for exactly this reason — a doc with
 |---|---|---|
 | result | 2 | `run`, `wave`, `abort`, `error`, `spend`, `model-catalog`, `alias-audit`, `doctor` |
 | council | 2 (v4.0 bumped 1→2) | `council-tally`, `council-verdict`, `council-stats`, `council-validate`, `council-run` |
-| observability | 1 | `event`, `progress`, `wave-live`, `run-live`, `council-run-live` (v4.3, spec §4.2/§4.3 — the events stream, progress snapshot, and composed live docs) |
+| observability | 1 | `event`, `progress` (v4.3, spec §4.2 — the events stream and the progress snapshot) |
+
+`wave-live` and `run-live` are not a new family: they're the existing **result family (v2)** `wave`/`run` docs, composed at read time with an additive `view:'live'` marker — `amicus_status` stamps `schemaVersion: 2` (`stampEnvelope`) exactly as the durable `wave.json`/per-leg `run` docs do. `council-run-live` is the composed council live status payload (`buildCouncilStatusPayload`) — a point-in-time `amicus_status` snapshot like the other live/ack payloads in [Documented exclusions](#documented-exclusions), not a versioned result doc — and carries **no `schemaVersion` key at all**.
 
 ## Files
 
