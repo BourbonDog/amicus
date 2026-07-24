@@ -31,7 +31,7 @@
  */
 
 const { readSpendRows } = require('./utils/spend-ledger');
-const { aggregateSpend, buildSpendDoc } = require('./cli-handlers-spend');
+const { aggregateSpend, buildSpendDoc, parseSinceDays } = require('./cli-handlers-spend');
 const { filterRows, groupRows, computeWasted, GROUP_DIMS, ROWS_CAP } = require('./spend-query');
 const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
 
@@ -43,11 +43,13 @@ function errorResult(message, hint) {
 
 /**
  * Pure core: build the spend-doc MCP result for a given input + test seam.
- * @param {{wave?:string, council?:string, filterProject?:string, model?:string,
- *   op?:string, failed?:boolean, groupBy?:string, rows?:boolean}} [input]
- * @param {{dir?:string, cwd?:string}} [ctx] test/DI seam — dir overrides the
- *   ledger's config dir (readSpendRows); cwd is the resolved project dir used
- *   to expand a literal '.' filterProject (CLI --project . parity).
+ * @param {{since?:string, wave?:string, council?:string, filterProject?:string,
+ *   model?:string, op?:string, failed?:boolean, groupBy?:string, rows?:boolean}} [input]
+ * @param {{dir?:string, cwd?:string, now?:()=>number}} [ctx] test/DI seam — dir
+ *   overrides the ledger's config dir (readSpendRows); cwd is the resolved
+ *   project dir used to expand a literal '.' filterProject (CLI --project .
+ *   parity); now overrides the clock used for `since` windowing (CLI --since
+ *   test parity).
  * @returns {{content:[{type:'text', text:string}], isError?:true}}
  */
 function buildSpendResult(input = {}, ctx = {}) {
@@ -59,6 +61,17 @@ function buildSpendResult(input = {}, ctx = {}) {
     );
   }
 
+  let windowDays = null;
+  if (input.since !== undefined) {
+    windowDays = parseSinceDays(input.since);
+    if (windowDays === null) {
+      return errorResult(
+        `invalid since '${input.since}'`,
+        "since must be an integer followed by 'd' (e.g. '7d')"
+      );
+    }
+  }
+
   const rows = readSpendRows(ctx.dir);
   const filters = {
     wave: input.wave,
@@ -68,18 +81,19 @@ function buildSpendResult(input = {}, ctx = {}) {
     failed: !!input.failed,
     project: input.filterProject === '.' ? (ctx.cwd || process.cwd()) : input.filterProject,
   };
-  const filtered = filterRows(rows, filters);
+  const now = windowDays !== null ? (ctx.now ? ctx.now() : Date.now()) : undefined;
+  const filtered = filterRows(rows, { ...filters, since: windowDays, now });
   const { total, byModel } = aggregateSpend(filtered);
   const groups = groupRows(filtered, groupBy);
   const wasted = computeWasted(filtered);
 
   const doc = buildSpendDoc({
-    // No windowDays/credit filter over MCP: `--since` has no MCP mirror (spec
-    // 7.3 lists the CLI flags this tool mirrors and `since` isn't one of
-    // them), and the OpenRouter credit footer is a best-effort network probe
-    // the CLI path accepts blocking on — deliberately skipped here so a
-    // read-only local-file query never waits on the network.
-    total, byModel, windowDays: null, credit: null,
+    // credit stays null over MCP: the OpenRouter credit footer is a
+    // best-effort network probe the CLI path accepts blocking on —
+    // deliberately skipped here so a read-only local-file query never waits
+    // on the network. `since`/windowDays, by contrast, is a pure local
+    // filter (filterRows) with no network involved, so it IS threaded here.
+    total, byModel, windowDays, credit: null,
     filters, groupBy, groups, wasted,
     rows: input.rows ? filtered.slice(0, ROWS_CAP) : undefined,
     rowsTruncated: input.rows ? filtered.length > ROWS_CAP : undefined,
@@ -96,15 +110,16 @@ function buildSpendResult(input = {}, ctx = {}) {
  * calls `handlers[name](input, project, server)`); this tool has no
  * `project` input of its own (see module docblock), so it only uses it to
  * expand a literal '.' `filterProject`. The 3rd positional slot is `server`
- * in production (read only for `.dir`, which it never has — a no-op) and a
- * `{dir}` test seam in tests, mirroring handleSpend's depsOverride shape.
+ * in production (read only for `.dir`/`.now`, which it never has — a no-op)
+ * and a `{dir, now}` test seam in tests, mirroring handleSpend's
+ * depsOverride shape.
  * @param {object} [input]
  * @param {string} [project]
- * @param {{dir?:string}} [testOverride]
+ * @param {{dir?:string, now?:()=>number}} [testOverride]
  * @returns {Promise<{content:Array, isError?:true}>}
  */
 async function amicus_spend(input, project, testOverride = {}) {
-  return buildSpendResult(input || {}, { cwd: project, dir: testOverride.dir });
+  return buildSpendResult(input || {}, { cwd: project, dir: testOverride.dir, now: testOverride.now });
 }
 
 module.exports = { amicus_spend, buildSpendResult };

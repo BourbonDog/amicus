@@ -497,10 +497,13 @@ function getTools() {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
       'Read-only cross-run cost rollup from the spend ledger (mirrors the CLI ' +
-      '`amicus spend` query flags). Filter by wave/council/project/model/op, keep ' +
+      '`amicus spend` query flags). Filter by since/wave/council/project/model/op, keep ' +
       'only failed (wasted) rows, and group by a dimension. Returns a versioned ' +
       'spend doc (ids/numbers/paths only, never model-generated text) — never fenced.',
     inputSchema: {
+      since: z.string().optional().describe(
+        "Only rows from the last N days, as an integer followed by 'd' (e.g. '7d')."
+      ),
       wave: z.string().optional().describe('Only rows from this fan-out wave id.'),
       council: z.string().optional().describe('Only rows from this council run id or preset name.'),
       filterProject: z.string().optional().describe(
