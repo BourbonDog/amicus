@@ -19,6 +19,10 @@ const { formatCost } = require('../utils/pricing');
 // modules drifting, which would make this loop spin forever on a run
 // live-doc already considers finished (or exit early on one still running).
 const { TERMINAL } = require('./live-doc');
+// Single source of truth for the wave status -> exit code mapping (same
+// drift risk as TERMINAL above) — mapExitCode's non-passthrough branch
+// delegates here instead of hand-rolling the complete/partial/else mapping.
+const { waveExitCode } = require('../utils/result-schema');
 
 const DASH = '—';
 const legCost = (leg) => (leg.usage && leg.usage.cost ? formatCost(leg.usage.cost) : DASH);
@@ -31,7 +35,7 @@ const STAGE_MARK = { complete: '✓', running: '▶', pending: '·' };
 function renderTable(doc, width = 100) {
   const cost = doc.usage && doc.usage.cost ? formatCost(doc.usage.cost) : DASH;
   const head = `${doc.taskId || doc.runId}  ${doc.status}  ${doc.elapsed || ''}  ` +
-    (doc.legsTotal !== undefined ? `legs ${doc.legsComplete}/${doc.legsTotal}  ` : '') +
+    (typeof doc.legsTotal === 'number' ? `legs ${doc.legsComplete}/${doc.legsTotal}  ` : '') +
     `cost ${cost}`;
   const lines = [head];
   if (Array.isArray(doc.stages)) { // council stage checklist
@@ -66,7 +70,7 @@ function renderPlainLines(events, doc) {
   });
   if (doc) {
     const cost = doc.usage && doc.usage.cost ? formatCost(doc.usage.cost) : DASH;
-    lines.push(`… ${doc.status} ${doc.legsTotal !== undefined ? `${doc.legsComplete}/${doc.legsTotal} legs ` : ''}cost ${cost}`);
+    lines.push(`… ${doc.status} ${typeof doc.legsTotal === 'number' ? `${doc.legsComplete}/${doc.legsTotal} legs ` : ''}cost ${cost}`);
   }
   return lines;
 }
@@ -75,9 +79,7 @@ function renderPlainLines(events, doc) {
 function mapExitCode(doc) {
   if (doc && typeof doc.exitCode === 'number') { return doc.exitCode; }
   if (!doc) { return 1; }
-  if (doc.status === 'complete') { return 0; }
-  if (doc.status === 'partial') { return 2; }
-  return 1;
+  return waveExitCode(doc.status);
 }
 
 /** Stable-stringify diff: emit the composed doc only when it changed. */
@@ -103,6 +105,7 @@ async function runWatchLoop(target, args, project, deps = {}) {
     : path.join(getSessionDir(project, target.id), EVENTS_FILE);
   const tail = createEventTail(eventsFile);
   let prevJson = null;
+  let prevRollup = null;
   let lastLineCount = 0;
 
   for (;;) {
@@ -110,18 +113,32 @@ async function runWatchLoop(target, args, project, deps = {}) {
     let doc;
     try { doc = JSON.parse(res.content[0].text); } catch { doc = null; }
     const events = tail.poll();
+    const isTerminal = doc && TERMINAL.has(doc.status);
     if (args.json) {
       for (const e of events) { process.stdout.write(JSON.stringify(e) + '\n'); }
       if (doc) { const c = emitJsonChange(doc, prevJson); if (c.emit) { process.stdout.write(c.text + '\n'); prevJson = c.text; } }
     } else if (isTTY && !args.plain) {
       if (lastLineCount) { process.stdout.write(`\x1b[${lastLineCount}A\x1b[0J`); }
-      const block = renderTable(doc || { status: 'unknown', legs: [] });
+      const block = renderTable(doc || { status: 'unknown', legs: [] }, process.stdout.columns || 100);
       process.stdout.write(block + '\n');
       lastLineCount = block.split('\n').length;
     } else {
-      for (const line of renderPlainLines(events, doc)) { process.stdout.write(line + '\n'); }
+      // Milestone event lines: the tail only yields new events, so these are
+      // always fresh — print every tick, unthrottled.
+      for (const line of renderPlainLines(events, null)) { process.stdout.write(line + '\n'); }
+      // Rollup line: change-only (mirrors the --json path above), so a
+      // multi-minute --plain watch doesn't spam an identical line every
+      // interval. Always printed on the terminal tick so the final state
+      // is never silently swallowed.
+      if (doc) {
+        const rollup = renderPlainLines([], doc)[0];
+        if (rollup !== prevRollup || isTerminal) {
+          process.stdout.write(rollup + '\n');
+          prevRollup = rollup;
+        }
+      }
     }
-    if (doc && TERMINAL.has(doc.status)) {
+    if (isTerminal) {
       if (args.json) { process.stdout.write(JSON.stringify(doc) + '\n'); }
       return mapExitCode(doc);
     }

@@ -53,6 +53,22 @@ describe('renderTable', () => {
     expect(table).toContain('▶ stage2');
     expect(table).toContain('· chair');
   });
+  // Finding 1: buildCouncilStatusPayload (src/mcp-council-awareness.js) inits
+  // legsTotal/legsComplete to `null` and legitimately keeps them null through
+  // any stage with no active sub-wave (e.g. a lens stage1). A `!== undefined`
+  // guard lets `null` through and renders the literal string "legs null/null".
+  test('council doc with legsTotal/legsComplete null (no active sub-wave yet): header omits the legs segment, no literal "null"', () => {
+    const council = {
+      taskId: 'c1', type: 'council-run', runId: 'c1', status: 'running',
+      currentStage: 'stage1',
+      stages: [{ name: 'stage1', status: 'running', waveId: null }],
+      legsTotal: null, legsComplete: null, elapsed: '0m 5s',
+    };
+    const table = renderTable(council);
+    expect(table).not.toContain('null');
+    expect(table).toContain('c1');
+    expect(table).toContain('running');
+  });
 });
 
 describe('renderPlainLines', () => {
@@ -68,6 +84,17 @@ describe('renderPlainLines', () => {
     const lines = renderPlainLines([], WAVE);
     expect(lines.join('\n')).toContain('running');
     expect(lines.join('\n')).toContain('1/2');
+  });
+  // Finding 1 (rollup half): same null-vs-undefined guard bug as renderTable's
+  // header — a council doc mid-stage1 (no active sub-wave) has legsTotal:null.
+  test('rollup: legsTotal/legsComplete null omits the legs segment, no literal "null"', () => {
+    const council = {
+      taskId: 'c1', runId: 'c1', type: 'council-run', status: 'running',
+      legsTotal: null, legsComplete: null, elapsed: '0m 5s',
+    };
+    const lines = renderPlainLines([], council);
+    expect(lines.join('\n')).not.toContain('null');
+    expect(lines.join('\n')).toContain('running');
   });
 });
 
@@ -216,5 +243,37 @@ describe('runWatchLoop', () => {
     expect(nonEmpty.length).toBe(3);
     expect(JSON.parse(nonEmpty[0])).toMatchObject({ status: 'running' });
     expect(JSON.parse(nonEmpty[nonEmpty.length - 1])).toMatchObject({ status: 'complete' });
+  });
+
+  // Finding 3: watch-render.js unconditionally called renderPlainLines(events, doc)
+  // every poll tick, so a multi-minute --plain watch printed an identical rollup
+  // line every interval. Mirror the --json change-only suppression: only print
+  // the rollup when it changed from the last PRINTED rollup, but always print it
+  // on the terminal tick so the final state is never silently swallowed.
+  test('--plain rollup throttling: suppresses an unchanged rollup, prints on change and always at terminal', async () => {
+    const runningV1 = { taskId: 'w1', type: 'wave', status: 'running', legsComplete: 0, legsTotal: 1, elapsed: '0m 1s', legs: [] };
+    const terminalDoc = { taskId: 'w1', type: 'wave', status: 'complete', legsComplete: 1, legsTotal: 1, elapsed: '0m 3s', legs: [] };
+    // tick1: running; tick2: IDENTICAL running (proves suppression); tick3: terminal.
+    const docs = [runningV1, runningV1, terminalDoc];
+    let call = 0;
+    const statusFn = jest.fn(async () => {
+      const doc = docs[call];
+      call += 1;
+      return { content: [{ type: 'text', text: JSON.stringify(doc) }] };
+    });
+    const { result: code, writes } = await captureStdout(() => runWatchLoop(
+      { kind: 'wave', id: 'w1' }, {}, os.tmpdir(),
+      { statusFn, sleep: async () => {}, isTTY: false }
+    ));
+    expect(code).toBe(0);
+    expect(statusFn).toHaveBeenCalledTimes(3);
+    // No milestone events in this test (empty tail), so every non-empty write
+    // is a rollup line. A naive "print every tick" implementation writes 3
+    // rollup lines (one per tick); the throttled version suppresses the
+    // byte-identical tick2 rollup, yielding exactly 2: tick1, tick3(terminal).
+    const rollupLines = writes.filter((w) => w.trim().startsWith('…'));
+    expect(rollupLines.length).toBe(2);
+    expect(rollupLines[0]).toContain('running');
+    expect(rollupLines[1]).toContain('complete');
   });
 });
