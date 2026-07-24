@@ -104,5 +104,11 @@ describe('council debate-revote events — run-debate.js owns the START (Task 7)
     const defenseTerminal = events.find(e => e.event === 'stage-terminal' && e.stage === 'debate-defense');
     expect(defenseStarted).toBeDefined();
     expect(defenseTerminal).toMatchObject({ status: 'complete' });
+
+    // tally-provisional stage pair (run.js:196-197, emitted only when debate=true).
+    const tallyProvStarted = events.find(e => e.event === 'stage-started' && e.stage === 'tally-provisional');
+    const tallyProvTerminal = events.find(e => e.event === 'stage-terminal' && e.stage === 'tally-provisional');
+    expect(tallyProvStarted).toMatchObject({ id: 'r', stage: 'tally-provisional' });
+    expect(tallyProvTerminal).toMatchObject({ id: 'r', stage: 'tally-provisional', status: 'complete' });
   });
 });
