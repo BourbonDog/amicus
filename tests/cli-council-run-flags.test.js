@@ -121,4 +121,33 @@ describe('council run threads councilName (v4.3 Task 3, spec §7.1)', () => {
     const opts = runCouncil.mock.calls[0][0];
     expect(opts.councilName).toBe('nightly-council');
   });
+
+  // Task 4 review fix: the passthrough is user-supplied/unbounded/unvalidated
+  // (unlike a real --council <preset>, catalog-validated upstream) and lands
+  // verbatim in the spend ledger's councilName column — exactly the dimension
+  // --group-by council reads. Trim, drop control/non-printable chars, cap 64.
+  test('the --council-name passthrough is sanitized (control chars stripped, capped at 64 chars)', async () => {
+    const base = 'nightly-council';
+    // Control chars (including \x00/\x1F/\x7F and internal whitespace like \t,
+    // all in \x00-\x1F) are stripped; leading/trailing whitespace is trimmed
+    // AFTER stripping; length is capped at 64.
+    const dirty = `  ${base}\x00\x1F\x7F${'x'.repeat(100)}  `;
+    const code = await handleCouncilRun(argsBase({ 'council-name': dirty }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    const expected = (base + 'x'.repeat(100)).slice(0, 64);
+    expect(opts.councilName).toBe(expected);
+    expect(opts.councilName.length).toBe(64);
+    expect(opts.councilName).not.toMatch(/[\x00-\x1F\x7F]/);
+  });
+
+  // A real preset must still outrank the passthrough (precedence unchanged).
+  test('a catalog --council preset still outranks a dirty --council-name passthrough', async () => {
+    const args = argsBase({ council: 'budget', chair: 'opus', 'council-name': 'ignored\x00junk' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBe('budget');
+  });
 });

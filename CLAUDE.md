@@ -277,7 +277,8 @@ src/
 ├── project-root-allowlist.js  # The MCP `project` / cwd input becomes the session-store parent AND the spawned
 ├── prompt-builder.js  # System Prompt Builder
 ├── session-manager.js  # Session Manager Module
-└── session.js  # Session Resolver
+├── session.js  # Session Resolver
+└── spend-query.js
 electron/
 ├── assets/
 │   ├── icon.png
@@ -363,7 +364,7 @@ evals/
 | `cli-handlers-provider.js` | `amicus provider add|list|test|remove` (v4.2 §4.6): configure local / | `handleProvider()`, `isLoopbackUrl()`, `isPlaintextRemote()` |
 | `cli-handlers-resume-continue.js` | CLI Resume/Continue Handlers (B21-rest extraction) | `handleResume()`, `handleContinue()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
-| `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()` |
+| `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()`, `filterRows()` |
 | `cli-handlers-status.js` | `amicus status <task_id>` — one-shot human/JSON status for a session or wave. | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()`, `formatCouncilHuman()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `DEFAULTS()` |
@@ -385,6 +386,7 @@ evals/
 | `prompt-builder.js` | System Prompt Builder | `buildSystemPrompt()`, `buildPrompts()`, `buildEnvironmentSection()`, `getSummaryTemplate()`, `SUMMARY_TEMPLATE()` |
 | `session-manager.js` | Session Manager Module | `createSession()`, `updateSession()`, `getSession()`, `saveConversation()`, `saveSummary()` |
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
+| `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |

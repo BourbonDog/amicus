@@ -21,6 +21,24 @@ function parseList(value) {
 }
 
 /**
+ * Sanitize the internal `--council-name` passthrough before it can reach the
+ * spend ledger's `councilName` column (v4.3 Task 4 review fix, spec §7.3:
+ * spend docs hold only ids/numbers/paths "by construction"). That value is
+ * user-supplied (via mcp-council-run.js, ultimately an MCP caller's `input`),
+ * unbounded, and unvalidated — unlike a real `--council <preset>`, which is
+ * catalog-validated upstream. Strips control/non-printable characters, trims,
+ * and caps length so a hostile/malformed passthrough can't land raw in a
+ * `--group-by council` rollup. Precedence is untouched by this: it's applied
+ * only to the passthrough branch, never to the catalog-validated preset name.
+ * @param {string} name @returns {string|null} sanitized name, or null if empty after cleanup
+ */
+function sanitizeCouncilName(name) {
+  // eslint-disable-next-line no-control-regex -- deliberately stripping C0/DEL control chars
+  const cleaned = String(name).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 64);
+  return cleaned || null;
+}
+
+/**
  * Resolve bench models from --models XOR --council (mirrors handleFanout).
  * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed --council
  * name when that branch was taken, else null — threaded into runCouncil's
@@ -97,9 +115,13 @@ async function handleCouncilRun(args) {
   // `--models` before spawning (so `--council`/`--models` stay mutually exclusive
   // on this CLI surface), which would otherwise strand the preset name with no
   // way to reach this process. Never fabricated: --models with neither flag
-  // stays null, matching spec §7.1 ("preset name … else null").
+  // stays null, matching spec §7.1 ("preset name … else null"). The
+  // passthrough branch is sanitized (see sanitizeCouncilName docblock) — the
+  // preset-name branch is catalog-validated upstream and never touched here,
+  // so precedence (a real --council preset always outranks the passthrough)
+  // is unchanged.
   const councilName = benchRes.presetName
-    || (typeof args['council-name'] === 'string' && args['council-name'].trim() ? args['council-name'].trim() : null);
+    || (typeof args['council-name'] === 'string' ? sanitizeCouncilName(args['council-name']) : null);
   if (bench.length < 2) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: 'Error: a council needs at least 2 seats (fanout semantics)' });

@@ -143,6 +143,8 @@ function isBooleanFlag(key) {
      'render',               // council verdict: also refresh report.html next to the decided verdict
      'claude',               // init: register for Claude Code only (Task 15)
      'desktop',              // init: register for Claude Desktop only (Task 15)
+     'failed',               // spend: only non-complete (wasted) rows (v4.3 Task 4, spec §7.3)
+     'rows',                 // spend: include matching raw rows, capped at 1000 (v4.3 Task 4)
    ];
   return booleanFlags.includes(key);
 }
@@ -544,6 +546,14 @@ Options for 'doctor':
   spend: `
 Options for 'spend':
   --since <Nd>                  Restrict to the last N days (e.g. --since 7d)
+  --wave <id>                   Only rows from this fan-out wave
+  --council <runId|name>        Only rows from this council run (id or preset name)
+  --project <path|.>            Only rows from this project ('.' = cwd)
+  --model <id-or-prefix>        Only rows whose model starts with this
+  --op <start|continue|resume|leg>   Only rows with this operation
+  --failed                      Only non-complete (wasted) rows
+  --group-by <model|wave|council|project|op|day>   Rollup dimension (default model)
+  --rows                        Include matching raw rows (capped at 1000)
   --json                        Machine-readable output (versioned spend doc)
   Reads ~/.config/amicus/spend-ledger.jsonl (one row per completed run/leg).
   Shows remaining OpenRouter credit when a key is configured.
