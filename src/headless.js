@@ -448,7 +448,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
         const mr = mirrorMessages(messages, mirror);
         mr.appendLines.forEach(line => logMessage(conversationPath, line));
-        mr.progressUpdates.forEach(p => writeProgress(sessionDir, p.stage, p.extra));
+        // Surface A (spec §4.1): stamp raw usage on each 'receiving' flush from the
+        // PERSISTENT mirror.usageByMsg Map (accumulated across polls) — NOT
+        // mr.usageByMsg, which doesn't exist on mirrorMessages()'s per-poll delta.
+        // Cost resolution happens at read time (Task 9); the writer stays cheap.
+        const { sumPerMessageUsage } = require('./utils/pricing');
+        mr.progressUpdates.forEach(p => writeProgress(
+          sessionDir, p.stage,
+          p.stage === 'receiving' ? { ...p.extra, usage: sumPerMessageUsage(mirror.usageByMsg) } : p.extra,
+        ));
         const currentAssistantMsgId = mr.currentAssistantMsgId;
         const assistantFinished = mr.assistantFinished;
         if (mr.sessionError) {
