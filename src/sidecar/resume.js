@@ -248,14 +248,15 @@ async function resumeSidecar(options) {
     } else {
       finalizeSession(sessionDir, summary, project, updatedMetadata, { quietStdout: json, status: terminal.status });
     }
-    // v4.3: attribute resume spend (C9/E4). Reload metadata (finalizeSession
-    // updated it), write usage + a ledger row before the --json doc is built.
+    // v4.3: attribute resume spend (C9/E4). Reload metadata, write usage + append
+    // a ledger row (status: statusFromResult, matching start.js — not terminal.status).
     {
       const { finalizeSpendForReopen } = require('./continue');
+      const { statusFromResult } = require('../utils/result-schema');
       const reloaded = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
       const { usage } = finalizeSpendForReopen({
         taskId, model: metadata.model, mode: headless ? 'headless' : 'interactive',
-        op: 'resume', result, status: terminal.status, project, metadata: reloaded,
+        op: 'resume', result, status: statusFromResult(result), project, metadata: reloaded,
       });
       if (usage) { writeFileAtomic(metaPath, JSON.stringify(reloaded, null, 2), { mode: 0o600 }); }
     }

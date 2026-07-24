@@ -46,7 +46,7 @@ const SPEND_LEDGER_FILE = 'spend-ledger.jsonl';
  * @param {string} opts.model resolved model id (or alias, if that's all the caller has)
  * @param {'headless'|'interactive'|'leg'} opts.mode
  * @param {{tokens:object, cost:{amount:number|null,currency:string,source:string}}|null} opts.usage
- * @param {string} [opts.op] 'leg' or 'start'
+ * @param {string} [opts.op] 'leg' | 'start' | 'continue' | 'resume'
  * @param {string} [opts.status] terminal status
  * @param {string} [opts.councilRunId] council run id (additive attribution)
  * @param {string} [opts.councilName] council name (additive attribution)
