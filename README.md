@@ -60,9 +60,10 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ## Ways to run the council
 
-The council is the hero — and there are more and more powerful ways to run it:
+The council is the hero — start with the everyday way, and reach for the more powerful ways when you need them:
 
-- **Headless, in CI, with no Claude runtime.** `amicus council run` executes the whole pipeline — Stage-1 reviews → anonymized cross-review → deterministic tally → a non-Claude chair verdict — in one command, writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council](./docs/council.md#amicus-council-run)
+- **Just ask, in Claude Code.** Hand Claude a plan, diff, design, or manuscript and say *"council review this."* The `second-opinion` skill runs the whole ritual in your session — several models review independently → anonymized cross-review → a non-Claude chair verdict → tiered accept/deny edits — with no setup beyond your API keys. This is how most people use it. → [The Council](#the-council)
+- **Headless, in CI, with no Claude runtime.** `amicus council run --prompt-file plan.md --council free` runs that same pipeline in one command — reviews → cross-review → tally → chair verdict — writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council](./docs/council.md#amicus-council-run)
 - **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
 - **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
 
