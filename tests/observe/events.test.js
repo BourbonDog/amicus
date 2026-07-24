@@ -54,6 +54,38 @@ describe('createEventTail poll protocol', () => {
     expect(out[0].event).toBe('run-terminal');
   });
 
+  test('returns multiple complete lines appended before a single poll, in order', () => {
+    const dir = tmp();
+    const file = path.join(dir, EVENTS_FILE);
+    const tail = createEventTail(file);
+
+    // Three legs start/finish between poll ticks — no poll() between appends.
+    appendEvent(dir, { event: 'leg-started', id: 'w1', legId: 'w1-1' });
+    appendEvent(dir, { event: 'leg-started', id: 'w1', legId: 'w1-2' });
+    appendEvent(dir, { event: 'leg-finished', id: 'w1', legId: 'w1-1' });
+
+    const out = tail.poll();
+    expect(out.map((e) => e.event)).toEqual(['leg-started', 'leg-started', 'leg-finished']);
+    expect(out.map((e) => e.legId)).toEqual(['w1-1', 'w1-2', 'w1-1']);
+
+    // Carry must be empty — no phantom trailing event on the next poll.
+    expect(tail.poll()).toEqual([]);
+  });
+
+  test('skips a corrupt line sandwiched between two valid lines, in one poll', () => {
+    const dir = tmp();
+    const file = path.join(dir, EVENTS_FILE);
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ schemaVersion: 1, type: 'event', event: 'leg-started', id: 'w1', legId: 'w1-1' }) + '\n' +
+      'not json\n' +
+      JSON.stringify({ schemaVersion: 1, type: 'event', event: 'leg-finished', id: 'w1', legId: 'w1-1' }) + '\n',
+    );
+    const tail = createEventTail(file);
+    const out = tail.poll();
+    expect(out.map((e) => e.event)).toEqual(['leg-started', 'leg-finished']);
+  });
+
   test('no growth since last poll returns []', () => {
     const dir = tmp();
     appendEvent(dir, { event: 'wave-terminal', id: 'w1', status: 'complete', exitCode: 0 });

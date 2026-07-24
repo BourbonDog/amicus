@@ -21,6 +21,8 @@ const EVENTS_SCHEMA_VERSION = 1;
 
 /**
  * Append one enveloped event line. Best-effort; swallows all failure.
+ * Reserved envelope keys — do not reuse these as payload field names, the
+ * stamped value always wins (spread order): schemaVersion, type, event, ts, id.
  * @param {string} dir wave/council-run dir
  * @param {{event:string, id:string}} payload event name + owning id + fields
  */
