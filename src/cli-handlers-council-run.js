@@ -195,6 +195,11 @@ async function handleCouncilRun(args) {
     debate: !!args.debate,
     claudeReviewFile: args['claude-review'] ? path.resolve(args['claude-review']) : null,
     noCostGate: !!args['no-cost-gate'],
+    // v4.3 Task 13: --follow's json-vs-human mode mirrors the same --json this
+    // handler already resolved for the final run doc, so `--json --follow`
+    // NDJSON on stderr and the `--json` final doc on stdout agree.
+    follow: !!args.follow,
+    json: useJson,
   });
 
   if (useJson) {

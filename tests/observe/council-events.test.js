@@ -81,6 +81,59 @@ describe('council run events (spec 4.2) — Task 7', () => {
   });
 });
 
+// Task 13 (spec §5.2): --follow's stderr mirror threaded end-to-end through
+// run.js's own emits AND run-chair.js's (the chair stage lives entirely in
+// run-chair.js, per the B3 guard above) — proves the threading reaches both
+// files, not just run.js. events.jsonl on disk stays identical either way.
+describe('council run --follow (Task 13)', () => {
+  test('json mode: run-started/stage-*/chair-*/run-terminal stream as NDJSON to stderr, in order, without altering events.jsonl', async () => {
+    const t = tmp();
+    const opts = baseOptions(t, { follow: true, json: true });
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    let result;
+    let rawLines;
+    try {
+      result = await runCouncil(opts, {
+        launchers: scriptedLaunchers(happyScript()),
+        appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
+      });
+      // Snapshot the captured lines BEFORE mockRestore — it also clears .mock.calls.
+      rawLines = stderrSpy.mock.calls.map(c => c[0]);
+    } finally {
+      stderrSpy.mockRestore();
+    }
+    expect(result.exitCode).toBe(0);
+
+    const diskEvents = createEventTail(path.join(opts.runDir, EVENTS_FILE)).poll();
+    const streamed = rawLines.map(s => JSON.parse(s));
+    // Every NDJSON line ends with a newline, and the streamed sequence matches
+    // the durable events.jsonl record event-for-event (follow is a live
+    // mirror, not a second source of truth).
+    expect(rawLines.every(s => s.endsWith('\n'))).toBe(true);
+    expect(streamed.map(e => e.event)).toEqual(diskEvents.map(e => e.event));
+    expect(streamed.some(e => e.event === 'stage-started' && e.stage === 'chair')).toBe(true);
+    expect(streamed.some(e => e.event === 'stage-terminal' && e.stage === 'chair' && e.status === 'complete')).toBe(true);
+    expect(streamed[0].event).toBe('run-started');
+    expect(streamed[streamed.length - 1].event).toBe('run-terminal');
+  });
+
+  test('--follow off (default): runCouncil never writes to stderr for its own event emission', async () => {
+    const t = tmp();
+    const opts = baseOptions(t);
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const result = await runCouncil(opts, {
+        launchers: scriptedLaunchers(happyScript()),
+        appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
+      });
+      expect(result.exitCode).toBe(0);
+      expect(stderrSpy).not.toHaveBeenCalled();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+});
+
 describe('council debate-revote events — run-debate.js owns the START (Task 7)', () => {
   function e2eOpts(dir, extra) {
     return { briefing: 'Review X', models: ['gemini', 'gpt', 'qwen'], chair: 'deepseek',

@@ -64,7 +64,7 @@ function buildRoutingFailureLeg({ leg, legId, waveId, quiet }) {
  * Run one leg end-to-end: session record → runHeadless (shared server) →
  * leg finalize. Never throws — always resolves to a run document.
  */
-async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce, directory }) {
+async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce, directory, follow }) {
   const { IdleWatchdog } = require('../utils/idle-watchdog');
   const { markAborted } = require('../utils/session-abort');
   const { runHeadless } = require('../headless');
@@ -92,7 +92,7 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
       model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
     });
     waveDir = getSessionDir(project, waveId);
-    emitLegStarted(waveDir, waveId, legId, leg.model, leg.modelInput);
+    emitLegStarted(waveDir, waveId, legId, leg.model, leg.modelInput, follow);
     writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
     saveInitialContext(legDir, systemPrompt, userMessage);
 
@@ -176,7 +176,7 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
         model: leg.model, status: finalMeta.status,
         durationMs: durationBetween(finalMeta.createdAt, finalMeta.completedAt),
         usage: usage || null,
-      });
+      }, follow);
     } catch { /* best-effort: a missing duration/emit never fails the leg */ }
   }
   const effectiveResult = finalMeta.status === 'aborted'

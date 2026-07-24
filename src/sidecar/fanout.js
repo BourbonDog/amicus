@@ -74,6 +74,9 @@ async function runFanout(options) {
 
   const project = options.project || process.cwd();
   const createdAt = new Date().toISOString();
+  // v4.3 Task 13: live stderr mirror of this wave's own events, in-process
+  // (no tail). Off by default; every emit* call below threads it through.
+  const follow = options.follow ? require('../observe/follow').createFollowPrinter({ json: options.json }) : null;
   const emit = (doc) => {
     if (options.quiet) { return; }
     if (options.json) {
@@ -152,7 +155,7 @@ async function runFanout(options) {
     promptMeta: options.promptMeta || null,
     pid: process.pid, project, createdAt,
   });
-  emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds);
+  emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds, follow);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
   // shared server, so starting one (and immediately tearing it down) is pure
@@ -171,7 +174,7 @@ async function runFanout(options) {
     writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
     writeWaveMetadata(waveDir, { status: wave.status, completedAt });
     const routingExitCode = waveExitCode(wave.status);
-    emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode: routingExitCode });
+    emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode: routingExitCode }, follow);
     emit(wave);
     return { wave, exitCode: routingExitCode };
   }
@@ -239,7 +242,7 @@ async function runFanout(options) {
   // it resolves immediately to an error run document (buildRoutingFailureLeg)
   // in its own slot, so it fails only itself, never the sibling legs or the
   // whole wave (#61 Task 7.3).
-  const heartbeat = options.quiet
+  const heartbeat = (options.quiet || options.follow)
     ? { stop() {} }
     : createWaveHeartbeat(
         legs.map((leg, i) => ({ label: leg.modelInput || leg.model, dir: legDirs[i] })),
@@ -254,7 +257,7 @@ async function runFanout(options) {
           leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
           timeoutMs, agent: options.agent, client, server,
           summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
-          foldNonce, directory: options.directory,
+          foldNonce, directory: options.directory, follow,
         })
       : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
     )));
@@ -276,7 +279,7 @@ async function runFanout(options) {
   const exitCode = signalled
     ? (signalled === 'SIGINT' ? 130 : 143)
     : waveExitCode(wave.status);
-  emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode });
+  emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode }, follow);
   emit(wave);
   return { wave, exitCode };
 }

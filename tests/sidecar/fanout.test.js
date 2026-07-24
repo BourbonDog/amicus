@@ -479,6 +479,50 @@ describe('runFanout orchestrator', () => {
     expect(fsReal.existsSync(legEventsPath)).toBe(false);
   });
 
+  // Task 13 (spec §5.2): --follow prints the SAME events Task 7 already emits
+  // to disk (proven above) — via the REAL runFanout/runLeg wiring, not the
+  // printer in isolation (that's tests/observe/follow.test.js) — and never
+  // touches stdout, so --json's contract is untouched.
+  it('--follow: streams the wave\'s own events as NDJSON to stderr in emission order, and stdout stays the normal single wave document (spec §5.2)', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafefeed', quiet: false, follow: true });
+
+      // Every stderr write that parses as JSON is one NDJSON event line, in
+      // the same order Task 7 already writes to events.jsonl (see the
+      // 'emits wave-started/leg-started/leg-terminal/wave-terminal' test
+      // above) — proving the dual-sink threading actually fires end-to-end.
+      const ndjsonLines = stderrSpy.mock.calls.map(c => c[0]).filter((s) => {
+        try { JSON.parse(s); return true; } catch { return false; } // drops fanout-leg's plain-text [fanout] notice lines
+      });
+      expect(ndjsonLines.map(s => JSON.parse(s).event)).toEqual([
+        'wave-started', 'leg-started', 'leg-started', 'leg-terminal', 'leg-terminal', 'wave-terminal',
+      ]);
+      expect(ndjsonLines.every(s => s.endsWith('\n'))).toBe(true);
+
+      // stdout carries EXACTLY one parseable JSON document — the normal wave
+      // doc contract (same as the --follow-off assertion below), untouched.
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const doc = JSON.parse(logSpy.mock.calls[0][0]);
+      expect(doc).toEqual(wave);
+      expect(doc.type).toBe('wave');
+    } finally {
+      stderrSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it('--follow off (default): the wave\'s own event emission never writes to stderr', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runFanout({ ...baseOpts(), waveId: 'cafebabe' });
+      expect(stderrSpy).not.toHaveBeenCalled();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
   it('json mode (non-quiet): stdout carries EXACTLY one parseable JSON document', async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {

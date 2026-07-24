@@ -147,6 +147,7 @@ function isBooleanFlag(key) {
      'rows',                 // spend: include matching raw rows, capped at 1000 (v4.3 Task 4)
      'plain',                // watch: milestone log lines instead of the refresh table (v4.3 Task 11)
      'ui',                   // watch: open the Council Workspace window; v4.4 seam (v4.3 Task 11)
+     'follow',               // fanout / council run: stream this run's own events to stderr (v4.3 Task 13)
    ];
   return booleanFlags.includes(key);
 }
@@ -440,6 +441,7 @@ Options for 'fanout':
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
   --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
+  --follow                      Stream this run's events to stderr as they happen (--json -> NDJSON)
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -524,7 +526,7 @@ Subcommands for 'council':
       [--chair <model>] [--critic <model>] [--lenses s1,s2,...]
       [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]
       [--gateway auto|direct|openrouter] [--no-validate-model]
-      [--debate] [--claude-review <file>] [--no-cost-gate]
+      [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -532,6 +534,8 @@ Subcommands for 'council':
                                 --claude-review <file> enters Claude's own review as
                                 a judged entry; --no-cost-gate disables the per-leg
                                 price gate for the whole run (repairs + chair).
+                                --follow streams run events to stderr as they
+                                happen (--json -> NDJSON).
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

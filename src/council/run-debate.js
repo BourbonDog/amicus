@@ -124,7 +124,7 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
   // nothing was defended/amended, or the cost ceiling hit).
   runState.updateStage(ctx.o.runDir, 'debate-revote',
     { status: 'running', startedAt: new Date().toISOString(), project: ctx.scratchDir, waveId });
-  emitStageStarted(ctx.o.runDir, ctx.o.runId, 'debate-revote', waveId);
+  emitStageStarted(ctx.o.runDir, ctx.o.runId, 'debate-revote', waveId, ctx.o.follow);
   runState.appendStageWave(ctx.o.runDir, 'debate-revote', waveId);
   const res = await ctx.launchers.launchWave({ ...legOpts(ctx, waveId), models: judges, prompt: bundle });
   ctx.addWave(res.wave);

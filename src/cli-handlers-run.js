@@ -211,6 +211,7 @@ async function handleFanout(args) {
     maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost,
     noCostGate: !!args['no-cost-gate'],
     maxCostPerMtok: cfg.maxCostPerMtok,
+    follow: !!args.follow,
   });
   return exitCode;
 }
