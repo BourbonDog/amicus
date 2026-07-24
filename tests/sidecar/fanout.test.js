@@ -453,6 +453,32 @@ describe('runFanout orchestrator', () => {
     expect(fsReal.readFileSync(pathReal.join(waveDir, 'briefing.md'), 'utf-8')).toBe('do the thing');
   });
 
+  // Task 7 (spec §4.2 Surface B): proves the REAL runFanout/runLeg call sites
+  // (not just the emit helpers in isolation, covered by
+  // tests/observe/fanout-events.test.js) actually write events.jsonl into the
+  // WAVE dir — leg emits land there too, never in the leg's own session dir.
+  it('emits wave-started/leg-started/leg-terminal/wave-terminal into the wave dir events.jsonl', async () => {
+    const { createEventTail, EVENTS_FILE } = require('../../src/observe/events');
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafeaaaa' });
+    const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', 'cafeaaaa');
+    const events = createEventTail(pathReal.join(waveDir, EVENTS_FILE)).poll();
+    expect(events.map(e => e.event)).toEqual([
+      'wave-started', 'leg-started', 'leg-started', 'leg-terminal', 'leg-terminal', 'wave-terminal',
+    ]);
+    const started = events.find(e => e.event === 'wave-started');
+    expect(started).toMatchObject({ id: 'cafeaaaa', legIds: ['cafeaaaa-1', 'cafeaaaa-2'] });
+    const legTerminals = events.filter(e => e.event === 'leg-terminal');
+    expect(legTerminals.map(e => e.legId).sort()).toEqual(['cafeaaaa-1', 'cafeaaaa-2']);
+    expect(legTerminals.every(e => e.status === 'complete')).toBe(true);
+    const terminal = events.find(e => e.event === 'wave-terminal');
+    expect(terminal).toMatchObject({ id: 'cafeaaaa', status: wave.status, exitCode: 0 });
+    expect(terminal.counts).toMatchObject({ total: 2, complete: 2 });
+    // No leg-level events.jsonl in the leg's OWN session dir — Task 7 emits
+    // leg-started/leg-terminal into the owning WAVE dir only.
+    const legEventsPath = pathReal.join(project, '.claude', 'amicus_sessions', 'cafeaaaa-1', EVENTS_FILE);
+    expect(fsReal.existsSync(legEventsPath)).toBe(false);
+  });
+
   it('json mode (non-quiet): stdout carries EXACTLY one parseable JSON document', async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {

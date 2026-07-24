@@ -78,4 +78,56 @@ function createEventTail(file) {
   };
 }
 
-module.exports = { appendEvent, createEventTail, EVENTS_FILE, EVENTS_SCHEMA_VERSION };
+// ---- Milestone emit helpers (Task 7, spec 4.2 vocabulary) ----
+// Centralized here (not in fanout.js / run.js / run-chair.js / run-debate.js)
+// per the v4.3 Task 7 structural decision: those four files sit close to the
+// 300-line hard gate, so every call site below is a ONE-LINE wrapper over
+// appendEvent — which already never throws — so every helper inherits that
+// never-fails guarantee for free. Keep this module dependency-free (fs + path
+// + logger only); do not import result-schema or anything heavier here.
+
+/** Wave lifecycle start: models resolved (post-routing) + derived leg ids. */
+function emitWaveStarted(waveDir, waveId, models, legIds) {
+  appendEvent(waveDir, { event: 'wave-started', id: waveId, models, legIds });
+}
+
+/** Wave lifecycle end: fires AFTER wave.json is written (ordering guarantee). */
+function emitWaveTerminal(waveDir, waveId, { status, counts, usage, exitCode }) {
+  appendEvent(waveDir, { event: 'wave-terminal', id: waveId, status, counts, usage, exitCode });
+}
+
+/** Leg lifecycle start, into the OWNING wave's events.jsonl (not the leg dir). */
+function emitLegStarted(waveDir, waveId, legId, model, modelInput) {
+  appendEvent(waveDir, { event: 'leg-started', id: waveId, legId, model, modelInput });
+}
+
+/** Leg lifecycle end: fires AFTER the leg metadata patch + ledger append. */
+function emitLegTerminal(waveDir, waveId, legId, { model, status, durationMs, usage }) {
+  appendEvent(waveDir, { event: 'leg-terminal', id: waveId, legId, model, status, durationMs, usage });
+}
+
+/** Council run lifecycle start. */
+function emitRunStarted(runDir, runId, { bench, chair }) {
+  appendEvent(runDir, { event: 'run-started', id: runId, bench, chair });
+}
+
+/** Entering a council stage (stage1, stage2, chair, debate-defense, debate-revote, tally, verdict, ...). */
+function emitStageStarted(runDir, runId, stage, waveId) {
+  appendEvent(runDir, { event: 'stage-started', id: runId, stage, waveId });
+}
+
+/** Leaving a council stage (status: complete/error/skipped/aborted). */
+function emitStageTerminal(runDir, runId, stage, status, waveId) {
+  appendEvent(runDir, { event: 'stage-terminal', id: runId, stage, status, waveId });
+}
+
+/** Council run lifecycle end: fires AFTER the terminal run.json checkpoint. */
+function emitRunTerminal(runDir, runId, status, exitCode) {
+  appendEvent(runDir, { event: 'run-terminal', id: runId, status, exitCode });
+}
+
+module.exports = {
+  appendEvent, createEventTail, EVENTS_FILE, EVENTS_SCHEMA_VERSION,
+  emitWaveStarted, emitWaveTerminal, emitLegStarted, emitLegTerminal,
+  emitRunStarted, emitStageStarted, emitStageTerminal, emitRunTerminal,
+};

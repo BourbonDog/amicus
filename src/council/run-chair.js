@@ -19,6 +19,7 @@ const stage2 = require('./briefings-stage2');
 const { parseChairVerdict } = require('./parse-stage2');
 const runState = require('./run-state');
 const { isAbortExit } = require('./run-stages');
+const { emitStageStarted, emitStageTerminal } = require('../observe/events');
 
 /**
  * Chair fallback promotion (spec §4): the highest peers-only street-cred
@@ -86,8 +87,10 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
     // Never abort in-flight legs for cost — this only stops NEW launches.
     degraded.value = true;
     runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
+    emitStageTerminal(o.runDir, o.runId, 'chair', 'skipped', null);
   } else {
     runState.updateStage(o.runDir, 'chair', { status: 'running', startedAt: now(), project: o.runDir });
+    emitStageStarted(o.runDir, o.runId, 'chair', null);
     // Fallback chain (spec §4): retry same chair once → promote best
     // non-bench model from the ledger → give up (no Claude fallback headless).
     let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
@@ -108,8 +111,9 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
       }
     }
     chairLeg = attempt.leg;
-    runState.updateStage(o.runDir, 'chair',
-      { status: chairLeg ? 'complete' : 'error', completedAt: now() });
+    const chairStatus = chairLeg ? 'complete' : 'error';
+    runState.updateStage(o.runDir, 'chair', { status: chairStatus, completedAt: now() });
+    emitStageTerminal(o.runDir, o.runId, 'chair', chairStatus, null);
     // The chair chain may have promoted a fallback (or given up) — checkpoint
     // the ACTUAL chair into run.json now so status/`--json`/the human summary
     // never report the originally-requested chair after a promotion. Mirrors

@@ -18,6 +18,7 @@ const { materializeDebate } = require('./run-launch');
 const { tally } = require('./tally');
 const { isAbortExit } = require('./run-stages');
 const runState = require('./run-state');
+const { emitStageStarted } = require('../observe/events');
 
 /** Spec §5.7 fallback: a dead/unparseable defense means every bundled id's original stands. */
 function allNoResponse(ids) {
@@ -123,6 +124,7 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
   // nothing was defended/amended, or the cost ceiling hit).
   runState.updateStage(ctx.o.runDir, 'debate-revote',
     { status: 'running', startedAt: new Date().toISOString(), project: ctx.scratchDir, waveId });
+  emitStageStarted(ctx.o.runDir, ctx.o.runId, 'debate-revote', waveId);
   runState.appendStageWave(ctx.o.runDir, 'debate-revote', waveId);
   const res = await ctx.launchers.launchWave({ ...legOpts(ctx, waveId), models: judges, prompt: bundle });
   ctx.addWave(res.wave);

@@ -70,6 +70,7 @@ async function runFanout(options) {
   const { generateFoldNonce } = require('../utils/fold-marker');
   const { installSignalAbort, markAborted } = require('../utils/session-abort');
   const { getSessionDir } = require('../session-manager');
+  const { emitWaveStarted, emitWaveTerminal } = require('../observe/events');
 
   const project = options.project || process.cwd();
   const createdAt = new Date().toISOString();
@@ -151,6 +152,7 @@ async function runFanout(options) {
     promptMeta: options.promptMeta || null,
     pid: process.pid, project, createdAt,
   });
+  emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
   // shared server, so starting one (and immediately tearing it down) is pure
@@ -168,8 +170,10 @@ async function runFanout(options) {
     const wavePath = path.join(waveDir, 'wave.json');
     writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
     writeWaveMetadata(waveDir, { status: wave.status, completedAt });
+    const routingExitCode = waveExitCode(wave.status);
+    emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode: routingExitCode });
     emit(wave);
-    return { wave, exitCode: waveExitCode(wave.status) };
+    return { wave, exitCode: routingExitCode };
   }
 
   // 3. Context + prompts built ONCE (model-independent)
@@ -269,10 +273,11 @@ async function runFanout(options) {
   const wavePath = path.join(waveDir, 'wave.json');
   writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
   writeWaveMetadata(waveDir, { status: wave.status, completedAt });
-  emit(wave);
   const exitCode = signalled
     ? (signalled === 'SIGINT' ? 130 : 143)
     : waveExitCode(wave.status);
+  emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode });
+  emit(wave);
   return { wave, exitCode };
 }
 

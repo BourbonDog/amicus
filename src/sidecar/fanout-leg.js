@@ -71,6 +71,8 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   const { SessionPaths, saveInitialContext } = require('./session-utils');
   const { buildRunResult } = require('../utils/result-schema');
   const { createSessionMetadata } = require('./start');
+  const { emitLegStarted, emitLegTerminal } = require('../observe/events');
+  const { getSessionDir } = require('../session-manager');
 
   // Setup + run under ONE try so ANY throw (session record creation, initial
   // context write, watchdog arm, or the poll loop itself) becomes an error run
@@ -80,10 +82,17 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   let legDir = null;
   let watchdog = null;
   let result;
+  // Captured inside the try below so a getSessionDir throw (invalid taskId)
+  // still becomes an error run document like every other setup failure; used
+  // again AFTER the try/finally closes to emit leg-terminal (M4: that emit is
+  // unguarded by the try, so it must never depend on something that could throw).
+  let waveDir = null;
   try {
     legDir = createSessionMetadata(legId, project, {
       model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
     });
+    waveDir = getSessionDir(project, waveId);
+    emitLegStarted(waveDir, waveId, legId, leg.model, leg.modelInput);
     writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
     saveInitialContext(legDir, systemPrompt, userMessage);
 
@@ -153,6 +162,22 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
       fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
     }
     finalMeta = writeLegPatch(legDir, legPatch);
+  }
+  // ⚠️ DE-ROT (M4): this sits AFTER runLeg's try/finally has closed — it is
+  // unguarded, so a throw here would reject the leg promise and sink the whole
+  // wave. Own try/catch; durationBetween lives in result-schema, NOT
+  // format-duration (which exports only formatDuration — the wrong path would
+  // TypeError on `undefined(...)`). A missing createdAt/completedAt yields
+  // null from durationBetween, never a throw.
+  if (waveDir) {
+    try {
+      const { durationBetween } = require('../utils/result-schema');
+      emitLegTerminal(waveDir, waveId, legId, {
+        model: leg.model, status: finalMeta.status,
+        durationMs: durationBetween(finalMeta.createdAt, finalMeta.completedAt),
+        usage: usage || null,
+      });
+    } catch { /* best-effort: a missing duration/emit never fails the leg */ }
   }
   const effectiveResult = finalMeta.status === 'aborted'
     ? { ...result, aborted: true }
