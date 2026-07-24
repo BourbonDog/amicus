@@ -8,6 +8,8 @@
 
 Hand Claude a plan, a design, a diff, an architecture decision, a manuscript — anything — and say *council review this*: Amicus routes it through several models from different families, has them anonymously cross-review each other, and a non-Claude chair synthesizes a verdict you turn into accept/deny edits. Or skip the ceremony and **fork** a single conversation to Gemini, GPT, DeepSeek, or any other model — it works in parallel with full context, and you **fold** the result back when you're ready. Claude orchestrates throughout; you stay in your editor.
 
+**The same council — more ways to run it:** take it **headless in CI** with no Claude runtime, sharpen it with a **debate round**, or run it on **free local models** (Ollama, LM Studio, vLLM) at **$0** — private and offline.
+
 [![npm version](https://img.shields.io/npm/v/amicus?color=D97757&labelColor=1A1C29)](https://www.npmjs.com/package/amicus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?labelColor=1A1C29)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen?labelColor=1A1C29)](https://nodejs.org)
@@ -22,6 +24,7 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 ## Table of Contents
 
 - [What is Amicus](#what-is-amicus)
+- [Ways to run the council](#ways-to-run-the-council)
 - [Quick start](#quick-start)
 - [Requirements & Dependencies](#requirements--dependencies)
 - [The Council](#the-council)
@@ -52,6 +55,16 @@ One install delivers four things that work together:
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
 ![What one install delivers: council skill, chat skill, CLI + MCP, live catalog](./docs/what-is-amicus.png)
+
+---
+
+## Ways to run the council
+
+The council is the hero — and there are more and more powerful ways to run it:
+
+- **Headless, in CI, with no Claude runtime.** `amicus council run` executes the whole pipeline — Stage-1 reviews → anonymized cross-review → deterministic tally → a non-Claude chair verdict — in one command, writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council](./docs/council.md#amicus-council-run)
+- **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
+- **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
 
 ---
 
