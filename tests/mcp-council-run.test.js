@@ -174,7 +174,9 @@ describe('tool registration', () => {
   test('amicus_council_run is the 15th default tool', () => {
     const tools = getTools();
     expect(tools.map(t => t.name)).toContain('amicus_council_run');
-    expect(tools).toHaveLength(15);
+    // amicus_spend (v4.3 Task 5) is now the 16th; this test's name refers to
+    // amicus_council_run's own ordinal, which is unchanged.
+    expect(tools).toHaveLength(16);
   });
 
   test('mcp-server wires the handler and injects spawn helpers (source check)', () => {

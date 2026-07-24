@@ -10,6 +10,18 @@
  * rows/rollup-out and independently testable.
  */
 
+/**
+ * Valid `--group-by`/`groupBy` dimensions — the SINGLE source of truth shared
+ * by the CLI's validity check (cli-handlers-spend.js), the MCP `amicus_spend`
+ * tool's `groupBy` Zod enum (mcp-tools.js), and rowKey()'s switch below. Do
+ * NOT hand-copy this array elsewhere: a 7th dimension added here must reach
+ * both surfaces automatically, not just the one someone remembered to edit.
+ */
+const GROUP_DIMS = ['model', 'wave', 'council', 'project', 'op', 'day'];
+
+/** Cap on rows returned when a caller opts into raw rows (CLI --rows / MCP rows:true). */
+const ROWS_CAP = 1000;
+
 function emptyTokens() {
   return { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
 }
@@ -89,4 +101,4 @@ function computeWasted(rows) {
   return out;
 }
 
-module.exports = { filterRows, groupRows, computeWasted, emptyTokens, addTokens };
+module.exports = { filterRows, groupRows, computeWasted, emptyTokens, addTokens, GROUP_DIMS, ROWS_CAP };

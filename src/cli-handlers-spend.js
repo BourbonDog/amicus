@@ -19,12 +19,15 @@
  * sibling ./spend-query.js instead of here: adding them inline pushed this
  * file to 306 lines, over the 300-line size gate. They're re-exported below
  * so existing/brief-specified imports of them from THIS module still resolve.
+ * GROUP_DIMS/ROWS_CAP (Task 5) live there too, as the single source shared
+ * with the MCP `amicus_spend` tool (src/mcp-tools.js, src/mcp-spend.js) —
+ * re-exported below for the same reason.
  */
 
 const { readSpendRows } = require('./utils/spend-ledger');
 const { formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
-const { filterRows, groupRows, computeWasted, emptyTokens, addTokens } = require('./spend-query');
+const { filterRows, groupRows, computeWasted, emptyTokens, addTokens, GROUP_DIMS, ROWS_CAP } = require('./spend-query');
 
 const CREDIT_CHECK_TIMEOUT_MS = 5000;
 
@@ -165,9 +168,6 @@ function dominantSource(mix) {
   return populated[0];
 }
 
-const GROUP_DIMS = ['model', 'wave', 'council', 'project', 'op', 'day'];
-const ROWS_CAP = 1000;
-
 /**
  * `amicus spend [--since 7d] [--wave <id>] [--council <runId|name>] [--project <path|.>]
  *   [--model <id-or-prefix>] [--op <op>] [--failed] [--group-by <dim>] [--rows] [--json]`
@@ -229,5 +229,5 @@ async function handleSpend(args, depsOverride = {}) {
 
 module.exports = {
   handleSpend, aggregateSpend, buildSpendDoc, parseSinceDays,
-  filterRows, groupRows, computeWasted,
+  filterRows, groupRows, computeWasted, GROUP_DIMS, ROWS_CAP,
 };

@@ -64,9 +64,9 @@ test('omitted inputs add no flags (v4.0 argv byte-unchanged)', async () => {
   expect(args).not.toContain('--claude-review');
 });
 
-test('the three inputs are declared on the amicus_council_run schema; tool count stays 15', () => {
+test('the three inputs are declared on the amicus_council_run schema; tool count is 16', () => {
   const tools = getTools();
-  expect(tools).toHaveLength(15);
+  expect(tools).toHaveLength(16);
   const tool = tools.find(t => t.name === 'amicus_council_run');
   expect(Object.keys(tool.inputSchema)).toEqual(
     expect.arrayContaining(['debate', 'claudeReviewFile', 'noCostGate']));

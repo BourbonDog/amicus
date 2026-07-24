@@ -454,9 +454,11 @@ It never touches API keys, your default model, or Electron/engine provisioning �
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`, `amicus_council_run`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`, `amicus_council_run`, `amicus_spend`
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
+
+`amicus_spend` is the read-only exception to that pattern: it's synchronous, takes the same filters as the [`amicus spend`](#amicus-spend) CLI command (`wave`, `council`, `filterProject`, `model`, `op`, `failed`, `groupBy`, `rows`), and returns the same versioned spend doc — unfenced, since spend docs are ids/numbers/paths only, never model-generated text. `filterProject` (not `project`) names the ledger row filter, since `project` is reserved on every MCP tool for the working-directory selector and the spend ledger is global, not per-project.
 
 Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `timed-out`, `idle-timeout`
 

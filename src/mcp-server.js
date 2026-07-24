@@ -1196,6 +1196,13 @@ const handlers = {
     return textResult('Setup wizard launched. The Electron window should appear on your desktop.');
   },
   async amicus_guide() { return textResult(getGuideText()); },
+
+  // Read-only; deliberately NOT fenced (spec 7.3 — spend docs are ids/numbers/
+  // paths by construction, never model-generated prose). `project` here is the
+  // dispatch-resolved cwd, used only to expand a literal '.' filterProject —
+  // see src/mcp-spend.js's module docblock for why the row filter isn't named
+  // `project` itself.
+  amicus_spend: (input, project) => require('./mcp-spend').amicus_spend(input, project),
 };
 
 /** Start the MCP server on stdio transport */

@@ -382,7 +382,7 @@ Full details, the API-key/prefix table, and the migration notice are in **[docs/
 
 ## MCP integration
 
-The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes fifteen tools:
+The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes sixteen tools:
 
 | Tool | What it does |
 |------|--------------|
@@ -401,6 +401,7 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_council_stats` | Reviewer-reliability stats from past council runs. |
 | `amicus_verdict` | Build the final council verdict from a tally + decisions; writes `<outDir>/report.html` when `render:true` and `outDir` are given. |
 | `amicus_council_run` | Run the full headless council engine (Stage-1 reviews → anonymized cross-review → tally → chair verdict); returns `{ runId, runDir }`, async. |
+| `amicus_spend` | Read-only cross-run cost rollup from the spend ledger (mirrors the CLI `amicus spend` flags). |
 
 The async pattern is **start → status → read** — `amicus_start`/`amicus_fanout` return immediately, then you poll `amicus_status` and call `amicus_read`; `amicus_wait` collapses that poll loop into one blocking call.
 
