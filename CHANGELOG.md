@@ -5,6 +5,29 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.2.1] - 2026-07-23
+
+### Security
+
+- **`.env` key writes strip CR/LF and re-assert `0600`.** A provider key or local-provider
+  bearer that carries a stray newline — a trailing `\r\n` from a paste, or an embedded one — is
+  now sanitized before it is persisted, so it can no longer split `~/.config/amicus/.env` into a
+  broken line or silently truncate the stored token; the sanitized value is also what lands in
+  the process environment. Every rewrite of the secrets file additionally re-asserts `0600`
+  permissions, re-tightening an existing `.env` whose mode had drifted (created under a loose
+  umask, or hand-edited). POSIX; a no-op on Windows/NTFS, where key-file ACL hardening remains a
+  separate tracked item.
+
+### Fixed
+
+- Test-suite hardening: a global hermetic baseline pins the config and keys directories to a
+  per-worker scratch dir so no unit test can read or write the real `~/.config/amicus`. Scoped to
+  the unit run; the integration rails continue to manage their own credentials. This closes the
+  config/keys-dir door only — the OpenCode `auth.json` door is handled separately by the keyless
+  integration rail.
+- Removed a redundant `.env` re-read in the credential loader, and cleaned up test scratch
+  directories that were leaking across runs.
+
 ## [4.2.0] - 2026-07-23
 
 ### Added
