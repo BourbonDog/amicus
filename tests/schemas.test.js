@@ -185,14 +185,20 @@ describe('published council-family schemas validate real builder output (v4.0 §
 });
 
 describe('schema publishing (v4.0 §7)', () => {
-  test('exactly the 13 published schema files exist', () => {
+  test('exactly the 18 published schema files exist', () => {
     const files = fs.readdirSync(SCHEMAS_DIR).filter((f) => f.endsWith('.schema.json')).sort();
+    // Lexicographic sort: '-' (0x2D) < '.' (0x2E), so every "-live" variant
+    // sorts BEFORE its base name (council-run-live < council-run, etc.) —
+    // verified against readdirSync(...).sort() output, not hand-guessed.
     expect(files).toEqual([
       'abort.schema.json', 'alias-audit.schema.json',
-      'council-run.schema.json', 'council-stats.schema.json', 'council-tally.schema.json',
+      'council-run-live.schema.json', 'council-run.schema.json',
+      'council-stats.schema.json', 'council-tally.schema.json',
       'council-validate.schema.json', 'council-verdict.schema.json',
-      'doctor.schema.json', 'error.schema.json', 'model-catalog.schema.json',
-      'run.schema.json', 'spend.schema.json', 'wave.schema.json',
+      'doctor.schema.json', 'error.schema.json', 'event.schema.json',
+      'model-catalog.schema.json', 'progress.schema.json',
+      'run-live.schema.json', 'run.schema.json', 'spend.schema.json',
+      'wave-live.schema.json', 'wave.schema.json',
     ]);
   });
 

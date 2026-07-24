@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BourbonDog/amicus/schemas/wave-live.schema.json",
+  "title": "Amicus composed live wave doc (amicus_status, view:'live')",
+  "type": "object",
+  "required": ["taskId", "type", "status", "legs"],
+  "properties": {
+    "type": { "const": "wave" },
+    "view": { "const": "live" },
+    "status": { "type": "string" },
+    "legs": { "type": "array", "items": { "type": "object", "properties": { "usage": { "type": "object" } } } },
+    "usage": { "type": "object" }
+  },
+  "additionalProperties": true
+}

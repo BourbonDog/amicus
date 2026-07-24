@@ -11,6 +11,31 @@
     "windowDays": { "type": ["number", "null"] },
     "total": { "type": "object" },
     "byModel": { "type": "array", "items": { "type": "object" } },
-    "credit": { "type": ["object", "null"] }
+    "credit": { "type": ["object", "null"] },
+    "filters": { "type": "object" },
+    "groupBy": { "enum": ["model", "wave", "council", "project", "op", "day"] },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "amount", "runs"],
+        "properties": {
+          "key": { "type": "string" },
+          "amount": { "type": "number" },
+          "runs": { "type": "number" }
+        }
+      }
+    },
+    "wasted": {
+      "type": "object",
+      "required": ["amount", "runs", "byStatus"],
+      "properties": {
+        "amount": { "type": "number" },
+        "runs": { "type": "number" },
+        "byStatus": { "type": "object" }
+      }
+    },
+    "rows": { "type": "array" },
+    "rowsTruncated": { "type": "boolean" }
   }
 }

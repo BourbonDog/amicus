@@ -13,6 +13,7 @@ Schemas leave `additionalProperties` open for exactly this reason — a doc with
 |---|---|---|
 | result | 2 | `run`, `wave`, `abort`, `error`, `spend`, `model-catalog`, `alias-audit`, `doctor` |
 | council | 2 (v4.0 bumped 1→2) | `council-tally`, `council-verdict`, `council-stats`, `council-validate`, `council-run` |
+| observability | 1 | `event`, `progress`, `wave-live`, `run-live`, `council-run-live` (v4.3, spec §4.2/§4.3 — the events stream, progress snapshot, and composed live docs) |
 
 ## Files
 
@@ -31,6 +32,11 @@ Schemas leave `additionalProperties` open for exactly this reason — a doc with
 | [`council-stats.schema.json`](../schemas/council-stats.schema.json) | `council stats --json`; `amicus_council_stats` |
 | [`council-validate.schema.json`](../schemas/council-validate.schema.json) | `council validate --json` |
 | [`council-run.schema.json`](../schemas/council-run.schema.json) | the headless engine's `run.json` manifest (`amicus council run` — lands after the trust-foundation phase; the schema is published ahead as the contract) |
+| [`event.schema.json`](../schemas/event.schema.json) | `events.jsonl` lines — milestone events appended by fan-out waves and council runs (wave/leg/run/stage lifecycle) |
+| [`progress.schema.json`](../schemas/progress.schema.json) | `progress.json` — a leg/solo session's lifecycle stage + raw per-leg usage snapshot |
+| [`wave-live.schema.json`](../schemas/wave-live.schema.json) | `amicus_status` on a running wave — the composed doc, `view:'live'` + per-leg read-time usage |
+| [`run-live.schema.json`](../schemas/run-live.schema.json) | `amicus_status` on a running single session — the composed doc, `view:'live'` + read-time usage |
+| [`council-run-live.schema.json`](../schemas/council-run-live.schema.json) | `amicus_status` on a running council run (`buildCouncilStatusPayload`) — the composed doc, `view:'live'` + read-time usage |
 
 ## Breaking change at v4.0 — `council stats --json`
 

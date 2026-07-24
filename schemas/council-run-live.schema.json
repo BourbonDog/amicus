@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BourbonDog/amicus/schemas/council-run-live.schema.json",
+  "title": "Amicus composed live council-run doc (amicus_status/buildCouncilStatusPayload, view:'live')",
+  "type": "object",
+  "required": ["taskId", "type", "runId", "runDir", "status", "currentStage", "stages", "legsTotal", "legsComplete", "elapsed", "exitCode", "version"],
+  "properties": {
+    "type": { "const": "council-run" },
+    "view": { "const": "live" },
+    "runId": { "type": "string" },
+    "runDir": { "type": "string" },
+    "status": { "type": "string" },
+    "currentStage": { "type": ["string", "null"] },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "waveId": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "legsTotal": { "type": ["number", "null"] },
+    "legsComplete": { "type": ["number", "null"] },
+    "elapsed": { "type": "string" },
+    "exitCode": { "type": ["number", "null"] },
+    "usage": { "type": "object" }
+  },
+  "additionalProperties": true
+}
