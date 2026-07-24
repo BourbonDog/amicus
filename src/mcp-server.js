@@ -587,6 +587,7 @@ const handlers = {
     }
 
     if (metadata.type === 'wave') {
+      const { enrichLegUsage, markLive, rollupWaveUsage } = require('./observe/live-doc');
       const legs = (metadata.legs || []).map((legId) => {
         const m = readMetadata(legId, cwd);
         const leg = { taskId: legId, model: (m && m.model) || null, status: (m && m.status) || 'unknown' };
@@ -599,6 +600,11 @@ const handlers = {
           leg.phase = deriveStage(leg.status, p.stage);         // coarse: starting|generating|folding|terminal
           leg.latestPreview = p.latestPreview;
           leg.lastActivityAt = p.lastActivityAt;
+          // N3: enrichLegUsage returns the bare leg (no `usage` key) when
+          // progress carries no usage yet (e.g. solo interactive legs, Task 8)
+          // — merge only when present so we never put an undefined key on doc.
+          const enriched = enrichLegUsage(leg, p.usage);
+          if (enriched.usage) { leg.usage = enriched.usage; }
         } catch { /* no progress yet — leave base fields only */ }
         return leg;
       });
@@ -649,6 +655,11 @@ const handlers = {
       if (metadata.status === 'crashed' || metadata.status === 'error') {
         response.reason = metadata.reason || 'Unknown error';
       }
+      // Surface C (spec 4.3): additive read-time usage rollup + live marker.
+      // sumWaveUsage tolerates legs with no usage (A8: cost-by-seat from
+      // progress.json only, never a ledger) — safe even when no leg priced.
+      response.usage = rollupWaveUsage(legs);
+      markLive(response);
       const content = [{ type: 'text', text: JSON.stringify(response) }];
       appendVersionWarning(content);
       if (metadata.status === 'running') {
@@ -692,6 +703,17 @@ const handlers = {
       response.messageCount = progress.messages;                       // stable agent-facing alias
       response.phase = deriveStage(metadata.status, progress.stage);   // coarse lifecycle
 
+      // Surface C (spec 4.3): read-time cost resolution over the RAW usage the
+      // Object.assign above just copied from progress.json (Task 8). N3: most
+      // interactive/GUI runs write no progress.usage at all — enrichLegUsage
+      // returns no `usage` key in that case, so NEVER assign it unconditionally
+      // (that would leave the doc holding the unresolved raw {tokens,costReported}
+      // shape, or an undefined key when progress.usage was absent).
+      const { enrichLegUsage } = require('./observe/live-doc');
+      const enr = enrichLegUsage({ model: metadata.model }, progress.usage);
+      if (enr.usage) { response.usage = enr.usage; }
+      else { delete response.usage; }
+
       // Stall detection: flag when no activity for 2+ minutes
       const STALL_THRESHOLD_MS = 120000;
       if (metadata.headless && progress.lastActivityMs !== null && progress.lastActivityMs > STALL_THRESHOLD_MS) {
@@ -711,6 +733,7 @@ const handlers = {
     if (metadata.status === 'crashed' || metadata.status === 'error') {
       response.reason = metadata.reason || 'Unknown error';
     }
+    require('./observe/live-doc').markLive(response);
     const content = [{ type: 'text', text: JSON.stringify(response) }];
     appendVersionWarning(content);
     if (metadata.status === 'running' && metadata.headless) {

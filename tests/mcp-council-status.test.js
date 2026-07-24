@@ -136,6 +136,43 @@ describe('amicus_status on council runIds (pointer resolution)', () => {
   });
 });
 
+describe('amicus_status on council runIds: Surface C (Task 9 — view:live + read-time leg usage)', () => {
+  test('a running council run carries view:live; a terminal one does not', async () => {
+    seedRun('running');
+    const running = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
+    expect(running.view).toBe('live');
+
+    jest.resetModules();
+    handlers = require('../src/mcp-server').handlers;
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-cstatus-'));
+    seedRun('complete');
+    const terminal = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
+    expect('view' in terminal).toBe(false);
+  });
+
+  test('active-stage seat legs with seeded progress.usage roll up into payload.usage (A8: progress.json only)', async () => {
+    const { writeProgress } = require('../src/sidecar/progress');
+    const runDir = seedRun('running');
+    const scratch = path.join(runDir, '_scratch');
+    seedWaveLegs(scratch, 'abc123-s2', ['running', 'running']);
+    // Seed usage on ONE of the two seat legs; the other has no progress.json —
+    // it must contribute nothing (N3), not throw and not zero out the rollup.
+    const legDir = path.join(scratch, '.claude', 'amicus_sessions', 'abc123-s2-1');
+    writeProgress(legDir, 'receiving', {
+      usage: { tokens: { input: 40, output: 10, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.03 },
+    });
+    const body = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
+    expect(body.usage.cost.amount).toBeCloseTo(0.03, 5);
+    expect(body.usage.tokens.input).toBe(40);
+  });
+
+  test('no sub-wave has flushed usage yet -> no usage key on the payload (N3, not a zeroed rollup)', async () => {
+    seedRun('running');
+    const body = parse(await handlers.amicus_status({ taskId: 'abc123' }, tmp));
+    expect('usage' in body).toBe(false);
+  });
+});
+
 describe('amicus_wait on council runIds', () => {
   test('resolves when run.json flips terminal on disk', async () => {
     const runDir = seedRun('running');
