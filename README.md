@@ -15,7 +15,7 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen?labelColor=1A1C29)](https://nodejs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?labelColor=1A1C29)](./CONTRIBUTING.md)
 
-> **Supported clients:** Claude Code CLI and Claude Cowork are fully tested and supported. Claude Code web and Claude Desktop are experimental.
+> **Supported clients:** Claude Code CLI, Claude Desktop, and Claude Cowork are fully tested and supported. Claude Code web is experimental.
 
 </div>
 
