@@ -32,14 +32,20 @@ function resolveWatchTarget(id, project) {
   const ptr = readPointer(project, clean);
   if (ptr) { return { kind: 'council', id: clean, runDir: ptr.runDir }; }
 
-  const { getSessionDir } = require('./session-manager');
-  const metaPath = path.join(getSessionDir(project, clean), 'metadata.json');
-  if (fs.existsSync(metaPath)) {
-    try {
+  // getSessionDir THROWS on a path-traversal id ('..' / separators) — this
+  // resolver is exported and docblocked "pure over disk", so it must be
+  // total for arbitrary input, not just for ids that already passed
+  // validateTaskId in the wired CLI path (handleWatch, below). A throw here
+  // (traversal or otherwise) falls through to 'unknown' like any other
+  // unreadable id, rather than propagating out of a "pure" resolver.
+  try {
+    const { getSessionDir } = require('./session-manager');
+    const metaPath = path.join(getSessionDir(project, clean), 'metadata.json');
+    if (fs.existsSync(metaPath)) {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
       return { kind: meta.type === 'wave' ? 'wave' : 'solo', id: clean };
-    } catch { /* fall through to unknown */ }
-  }
+    }
+  } catch { /* fall through to unknown */ }
   return { kind: 'unknown', id: clean };
 }
 

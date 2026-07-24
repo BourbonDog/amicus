@@ -49,6 +49,17 @@ describe('resolveWatchTarget (spec 5.1 id resolution)', () => {
     fs.writeFileSync(path.join(ptrDir, 'council-c1.json'), JSON.stringify({ runId: 'c1', runDir }));
     expect(resolveWatchTarget('council-c1', proj)).toMatchObject({ kind: 'council', id: 'c1', runDir });
   });
+
+  // Task 12 improvement 2: getSessionDir (session-manager.js) THROWS 'Invalid
+  // task ID: path traversal detected' for an id containing '..' or path
+  // separators. resolveWatchTarget is exported and docblocked "pure over
+  // disk" — it must be total for arbitrary input (not just ids that already
+  // passed validateTaskId in the wired handleWatch path), so a traversal id
+  // must resolve to 'unknown' rather than throwing out of this function.
+  test('a path-traversal id resolves to kind unknown instead of throwing', () => {
+    expect(() => resolveWatchTarget('../evil', project())).not.toThrow();
+    expect(resolveWatchTarget('../evil', project())).toMatchObject({ kind: 'unknown' });
+  });
 });
 
 // Repo convention (mirrors tests/cli-handlers-status.test.js): CLI output

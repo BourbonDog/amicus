@@ -418,7 +418,7 @@ evals/
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()`, `emitWaveStarted()` |
 | `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL()` |
-| `observe/watch-render.js` |  | `runWatchLoop()` |
+| `observe/watch-render.js` |  | `renderTable()`, `renderPlainLines()`, `mapExitCode()`, `emitJsonChange()`, `runWatchLoop()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
