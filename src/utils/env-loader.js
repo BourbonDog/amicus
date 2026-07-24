@@ -53,7 +53,6 @@ function loadCredentials() {
   // process.env (same never-overwrite rule) so the engine's {env:VAR} finds it.
   try {
     const { getLocalProviders } = require('./local-providers');
-    const fileEntries = loadEnvEntries();
     for (const entry of Object.values(getLocalProviders())) {
       if (entry.apiKeyEnv && !process.env[entry.apiKeyEnv]) {
         const v = fileEntries.get(entry.apiKeyEnv);

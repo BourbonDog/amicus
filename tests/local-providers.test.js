@@ -4,18 +4,34 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
-// Point config at a temp dir so loadConfig() reads our fixture.
+// Point config at a temp dir so loadConfig() reads our fixture. This helper injects
+// config via the HOME fallback, so it must opt out of the global AMICUS_CONFIG_DIR/
+// ENV_DIR pin (tests/setup/hermetic-config-dir.js) or getConfigDir() would resolve to
+// the empty scratch dir and never see the fixture. HOME still points at a temp dir, so
+// the read stays hermetic.
 function withConfig(providers, fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-'));
-  const prev = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+  const prev = {
+    HOME: process.env.HOME,
+    USERPROFILE: process.env.USERPROFILE,
+    AMICUS_CONFIG_DIR: process.env.AMICUS_CONFIG_DIR,
+    AMICUS_ENV_DIR: process.env.AMICUS_ENV_DIR,
+  };
   process.env.HOME = dir;
   process.env.USERPROFILE = dir;
+  delete process.env.AMICUS_CONFIG_DIR;
+  delete process.env.AMICUS_ENV_DIR;
   const cfgDir = path.join(dir, '.config', 'amicus');
   fs.mkdirSync(cfgDir, { recursive: true });
   fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ default: 'x', providers }));
   jest.resetModules();
   try { return fn(require('../src/utils/local-providers')); }
-  finally { process.env.HOME = prev.HOME; process.env.USERPROFILE = prev.USERPROFILE; }
+  finally {
+    for (const [k, v] of Object.entries(prev)) {
+      if (v === undefined) { delete process.env[k]; } else { process.env[k] = v; }
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 describe('local-providers', () => {

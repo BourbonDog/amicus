@@ -6,15 +6,18 @@ const path = require('path');
 
 describe('buildProviderModels: local providers', () => {
   const origConfigDir = process.env.AMICUS_CONFIG_DIR;
+  let dir;
   afterEach(() => {
     jest.resetModules();
     if (origConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
     else { process.env.AMICUS_CONFIG_DIR = origConfigDir; }
+    if (dir) { fs.rmSync(dir, { recursive: true, force: true }); dir = undefined; }
   });
 
   function load(providers, aliases) {
     jest.resetModules();
-    process.env.AMICUS_CONFIG_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'bpm-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpm-'));
+    process.env.AMICUS_CONFIG_DIR = dir;
     jest.doMock('../src/utils/local-providers', () => ({
       getLocalProviders: () => providers,
       isLocalProvider: (id) => Object.prototype.hasOwnProperty.call(providers, id),

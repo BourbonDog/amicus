@@ -300,6 +300,23 @@ describe('api-key-store', () => {
       expect(mode).toBe(0o600);
     });
 
+    it('strips CR/LF from a token before persisting (static-vendor path)', () => {
+      saveApiKey('openrouter', 'sk-or-clean\r\n');
+      const envPath = path.join(tmpDir, '.env');
+      const content = fs.readFileSync(envPath, 'utf-8');
+      // Cleaned token, single line, no spurious blank line, no trailing CR.
+      expect(content).toBe('OPENROUTER_API_KEY=sk-or-clean\n');
+      expect(process.env.OPENROUTER_API_KEY).toBe('sk-or-clean');
+    });
+
+    itPosix('re-asserts 0o600 when rewriting an EXISTING loose-perm .env (POSIX only)', () => {
+      const envPath = path.join(tmpDir, '.env');
+      fs.writeFileSync(envPath, 'OPENAI_API_KEY=sk-existing\n', { mode: 0o644 });
+      fs.chmodSync(envPath, 0o644); // force loose perms regardless of umask
+      saveApiKey('openrouter', 'sk-or-tighten');
+      expect(fs.statSync(envPath).mode & 0o777).toBe(0o600);
+    });
+
     it('should set process.env after saving', () => {
       saveApiKey('openrouter', 'sk-or-env-set');
       expect(process.env.OPENROUTER_API_KEY).toBe('sk-or-env-set');
@@ -438,5 +455,34 @@ describe('saveRawEnv / removeRawEnv (local-provider bearers)', () => {
     expect(content).not.toContain('LAB_API_KEY');
     expect(content).toContain('OPENAI_API_KEY=sk-keep');
     expect(process.env.LAB_API_KEY).toBeUndefined();
+  });
+
+  test('saveRawEnv strips a trailing CR/LF and writes one clean line (file + process.env)', () => {
+    const { saveRawEnv, loadEnvEntries } = require('../src/utils/api-key-store');
+    const envPath = path.join(dir, '.env');
+    saveRawEnv('LAB_API_KEY', 'sk-secret\r\n');
+    expect(fs.readFileSync(envPath, 'utf-8')).toBe('LAB_API_KEY=sk-secret\n');
+    expect(process.env.LAB_API_KEY).toBe('sk-secret');
+    expect(loadEnvEntries().get('LAB_API_KEY')).toBe('sk-secret');
+  });
+
+  test('saveRawEnv strips an interior newline (no truncation into a spurious line)', () => {
+    const { saveRawEnv, loadEnvEntries } = require('../src/utils/api-key-store');
+    saveRawEnv('LAB_API_KEY', 'sk-\r\nsecret');
+    expect(loadEnvEntries().get('LAB_API_KEY')).toBe('sk-secret');
+    expect(process.env.LAB_API_KEY).toBe('sk-secret');
+  });
+
+  test('saveRawEnv/removeRawEnv re-assert 0o600 on an existing loose .env (POSIX only)', () => {
+    if (process.platform === 'win32') { return; }
+    const { saveRawEnv, removeRawEnv } = require('../src/utils/api-key-store');
+    const envPath = path.join(dir, '.env');
+    fs.writeFileSync(envPath, 'OPENAI_API_KEY=sk-keep\n', { mode: 0o644 });
+    fs.chmodSync(envPath, 0o644);
+    saveRawEnv('LAB_API_KEY', 'sk-secret');
+    expect(fs.statSync(envPath).mode & 0o777).toBe(0o600);
+    fs.chmodSync(envPath, 0o644);
+    removeRawEnv('LAB_API_KEY');
+    expect(fs.statSync(envPath).mode & 0o777).toBe(0o600);
   });
 });

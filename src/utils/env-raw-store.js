@@ -23,6 +23,10 @@ const ENV_VAR_RE = /^[A-Z][A-Z0-9_]*$/;
  * @param {string} value
  */
 function upsertEnvLine(envPath, envVar, value) {
+  // Strip CR/LF: a newline in the value corrupts the line-based .env (splits it,
+  // or bakes a trailing CR into the persisted/served token). Bearer/API-key schemes
+  // never contain newlines, so stripping cannot damage a legitimate token.
+  const clean = String(value).replace(/[\r\n]/g, '');
   fs.mkdirSync(path.dirname(envPath), { recursive: true });
 
   let lines = [];
@@ -37,7 +41,7 @@ function upsertEnvLine(envPath, envVar, value) {
   let found = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trim().startsWith(envVar + '=')) {
-      lines[i] = `${envVar}=${value}`;
+      lines[i] = `${envVar}=${clean}`;
       found = true;
       break;
     }
@@ -46,10 +50,14 @@ function upsertEnvLine(envPath, envVar, value) {
     while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
       lines.pop();
     }
-    lines.push(`${envVar}=${value}`);
+    lines.push(`${envVar}=${clean}`);
   }
 
   fs.writeFileSync(envPath, lines.join('\n') + '\n', { mode: 0o600 });
+  // writeFileSync's mode only applies on CREATE; re-assert 0600 so an existing
+  // secrets file whose perms drifted is re-tightened. Best-effort (no-op on Windows).
+  try { fs.chmodSync(envPath, 0o600); } catch (_err) { /* perms best-effort */ }
+  return clean;
 }
 
 /**
@@ -68,6 +76,7 @@ function deleteEnvLine(envPath, envVar) {
         lines.pop();
       }
       fs.writeFileSync(envPath, lines.length > 0 ? lines.join('\n') + '\n' : '', { mode: 0o600 });
+      try { fs.chmodSync(envPath, 0o600); } catch (_err) { /* perms best-effort */ }
     }
   } catch (_err) {
     // Best-effort
@@ -89,8 +98,8 @@ function saveRawEnv(envVar, value) {
     return { success: false, error: `Invalid env var name: ${envVar}` };
   }
   const { getEnvPath } = require('./api-key-store'); // lazy: avoids a load-time cycle
-  upsertEnvLine(getEnvPath(), envVar, value);
-  process.env[envVar] = value;
+  const clean = upsertEnvLine(getEnvPath(), envVar, value);
+  process.env[envVar] = clean; // mirror the sanitized on-disk value
   return { success: true };
 }
 

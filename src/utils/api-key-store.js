@@ -60,6 +60,8 @@ function migrateEnvFileKey(envPath, oldName, newName) {
     const updated = content.replace(re, `${newName}=`);
     if (updated !== content) {
       fs.writeFileSync(envPath, updated, { mode: 0o600 });
+      // Re-assert 0600 on the existing secrets file (writeFileSync mode is create-only).
+      try { fs.chmodSync(envPath, 0o600); } catch (_err) { /* perms best-effort */ }
     }
   } catch (_err) {
     // Best effort
@@ -149,10 +151,11 @@ function saveApiKey(provider, key) {
   if (!envVar) {
     return { success: false, error: `Unknown provider: ${provider}` };
   }
-  // Shared merge helper (preserves comments/other lines, dedups, 0600, trailing NL).
-  upsertEnvLine(getEnvPath(), envVar, key);
-  // Also set process.env so the key is immediately available
-  process.env[envVar] = key;
+  // Shared merge helper (preserves comments/other lines, dedups, 0600, trailing NL;
+  // strips CR/LF and returns the cleaned value).
+  const clean = upsertEnvLine(getEnvPath(), envVar, key);
+  // Also set process.env so the key is immediately available (sanitized to match disk)
+  process.env[envVar] = clean;
   return { success: true };
 }
 
