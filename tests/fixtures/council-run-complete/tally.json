@@ -8,7 +8,7 @@
     { "id": "B1", "raiser": "gpt", "severity": "minor", "tier": "Disputed", "basis": { "a": 0, "d": 2, "n": 0 }, "confidence": "solid", "tierOverride": null,
       "adjudications": [ { "judge": "gemini", "verdict": "dispute" }, { "judge": "qwen", "verdict": "dispute" } ] },
     { "id": "C1", "raiser": "qwen", "severity": "blocker", "tier": "Contested", "basis": { "a": 1, "d": 1, "n": 0 }, "confidence": "solid",
-      "tierOverride": { "from": "Contested", "to": "Confirmed", "reason": "chair judgment" },
+      "tierOverride": null,
       "adjudications": [ { "judge": "gemini", "verdict": "agree" }, { "judge": "gpt", "verdict": "dispute" } ] },
     { "id": "C2", "raiser": "qwen", "severity": "nit", "tier": "Singleton", "basis": { "a": 0, "d": 0, "n": 2 }, "confidence": "thin", "tierOverride": null,
       "adjudications": [ { "judge": "gemini", "verdict": "neutral" }, { "judge": "gpt", "verdict": "neutral" } ] }
