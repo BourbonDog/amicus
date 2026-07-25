@@ -419,7 +419,7 @@ evals/
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()` |
-| `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()` |
+| `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `checkpoint()`, `updateStage()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |

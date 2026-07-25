@@ -36,7 +36,9 @@
         "required": ["taskId", "model", "status"],
         "properties": {
           "taskId": { "type": "string" },
-          "model": { "type": ["string", "null"] },
+          "model": { "type": ["string", "null"], "description": "Resolved executable id (metadata.model)." },
+          "modelInput": { "type": ["string", "null"], "description": "Council alias (run.json bench/chair/critic/lenses are keyed on this, not `model`); null when the leg's metadata.json has not been patched with it yet (F36)." },
+          "role": { "type": ["string", "null"], "description": "'seat' | 'critic' | 'lens:<slug>' | 'chair', derived via roleFor keyed on modelInput (chair via the owning stage's name instead, F34); null when modelInput is unknown." },
           "status": { "type": "string" },
           "messages": { "type": "number" },
           "stage": { "type": "string" },

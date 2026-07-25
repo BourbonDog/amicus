@@ -159,7 +159,11 @@ function buildCouncilStatusPayload(project, taskId) {
   };
   if (usageLegs.length) { payload.usage = rollupWaveUsage(usageLegs); }
   if (allLegIds.length) {
-    const built = buildLegRows(active.project, allLegIds);
+    // F34/F36: bench/critic/lenses are the alias-valued fields legRole needs
+    // (roleFor's rule); stageName lets it treat the chair stage as its own
+    // case rather than matching on alias (see council-legs.js's legRole doc).
+    const runCtx = { bench: run.bench, critic: run.critic, lenses: run.lenses, stageName: active.name };
+    const built = buildLegRows(active.project, allLegIds, runCtx);
     payload.legs = built.rows;
     if (built.stalled) { payload.stalled = true; payload.stalledForSeconds = built.stalledForSeconds; }
   }

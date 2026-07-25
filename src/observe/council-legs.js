@@ -13,32 +13,74 @@
  * on `enriched.usage` in buildCouncilStatusPayload), a live seats panel needs
  * just-started legs — the ones with no usage yet — just as much as priced
  * ones. Field names mirror the wave branch (src/mcp-server.js:592-608) so
- * live-normalize.js (Task 14) has one vocabulary to map, not two. `role` is
- * deliberately NOT emitted here: it is a council-only concept (roleFor in
- * src/council/run-stages.js, folded into tally.json post-run) that F34
- * assigns to the front-end normalize layer to derive from run.json's
- * bench/chair/critic/lenses — this module stays a plain leg-status reader.
+ * live-normalize.js (Task 14) has one vocabulary to map, not two.
+ *
+ * `modelInput` + `role` (F36/F34 correction): a live leg's `model` is the
+ * RESOLVED executable id (metadata.model), never the council ALIAS that
+ * run.json's bench/chair/critic/lenses and roleFor's rule are keyed on — so
+ * deriving role from `model` is a silent no-op (Role column permanently
+ * em-dash) and blind mode's labelOf(alias) lookup never matches (real model
+ * id leaks). The alias IS on disk per-leg, though: every council leg goes
+ * through src/sidecar/fanout-leg.js's runSingleAttempt, which calls
+ * `writeLegPatch(legDir, { parentWave, modelInput })` synchronously,
+ * immediately after leg creation (fanout-leg.js:101) — well before any
+ * status poll could reasonably observe it missing. So this module reads
+ * `modelInput` straight off the leg's own metadata.json, no run.json join
+ * needed for the alias itself.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { readProgress, isStalled } = require('../sidecar/progress');
 const { enrichLegUsage } = require('./live-doc');
+const { roleFor } = require('../council/run-stages');
+
+/**
+ * A leg's council role. The chair stage is the one case alias identity
+ * cannot resolve: run-chair.js's fallback chain (ch1/ch2 = run.chair's own
+ * alias, ch3 = a DIFFERENT ledger-promoted alias, ch4 = whichever succeeded)
+ * means a chair leg's modelInput does not reliably equal run.json's `chair`
+ * field while the chain is still in flight (that field is only checkpointed
+ * once the WHOLE chain resolves, src/council/run-chair.js:122) — so alias
+ * matching would miss ch3/ch4 mid-run. The stage that owns the leg is the
+ * authoritative signal instead (plan's F34 correction: "derive role from the
+ * stage that owns the leg"). Every other stage (stage1/stage2/debate-*)
+ * reuses roleFor (src/council/run-stages.js) keyed on modelInput — a
+ * model's seat/critic/lens identity is stable whether it's reviewing
+ * (stage1) or judging (stage2), and a repair/debate leg relaunches the SAME
+ * alias as its origin leg, so the identity carries through unchanged.
+ * @returns {string|null} null when modelInput is unknown (truthful — never a guess)
+ */
+function legRole({ bench, critic, lenses, stageName, modelInput }) {
+  if (!modelInput) { return null; }
+  if (stageName === 'chair') { return 'chair'; }
+  return roleFor({ models: bench, critic, lenses }, modelInput);
+}
 
 /**
  * One composed row for a leg, plus the ms-since-activity behind its `stalled`
  * flag (or null when not stalled/not yet measurable) so the caller can roll
  * several legs' staleness into one run-level summary without re-parsing
  * `lastActivityAt` back into a timestamp.
+ * @param {string} project
+ * @param {string} legId
+ * @param {{bench: string[], critic: string|null, lenses: string[]|null, stageName: string}} runCtx
  * @returns {{row: object, stalledMs: number|null}}
  */
-function buildLegRow(project, legId) {
+function buildLegRow(project, legId, runCtx) {
   const { getSessionDir } = require('../session-manager');
   const legDir = getSessionDir(project, legId);
   let meta = {};
   try { meta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8')); }
   catch { /* leg metadata not written yet — just-started leg */ }
-  const row = { taskId: legId, model: meta.model || null, status: meta.status || 'unknown' };
+  // Truthful null, never metadata.model as a fallback: showing the resolved
+  // id where the alias was expected is exactly the F36 bug (blind mode would
+  // leak the real model id instead of degrading to an em-dash).
+  const modelInput = meta.modelInput || null;
+  const row = {
+    taskId: legId, model: meta.model || null, status: meta.status || 'unknown',
+    modelInput, role: legRole({ ...runCtx, modelInput }),
+  };
   let stalledMs = null;
   try {
     const p = readProgress(legDir);
@@ -65,13 +107,16 @@ function buildLegRow(project, legId) {
  * rather than making the caller inspect every row.
  * @param {string} project
  * @param {string[]} legIds
+ * @param {{bench: string[], critic: string|null, lenses: string[]|null, stageName: string}} runCtx
+ *   run.json's alias-valued fields (bench/critic/lenses) + the active stage's
+ *   name, threaded through to legRole — this module never reads run.json itself.
  * @returns {{rows: object[], stalled?: true, stalledForSeconds?: number}}
  */
-function buildLegRows(project, legIds) {
+function buildLegRows(project, legIds, runCtx) {
   const rows = [];
   let worstMs = null;
   for (const legId of legIds) {
-    const { row, stalledMs } = buildLegRow(project, legId);
+    const { row, stalledMs } = buildLegRow(project, legId, runCtx);
     rows.push(row);
     if (stalledMs !== null && (worstMs === null || stalledMs > worstMs)) { worstMs = stalledMs; }
   }

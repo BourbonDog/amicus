@@ -157,7 +157,11 @@ describe('council-run-live schema validates real buildCouncilStatusPayload outpu
     }));
     const legDir = path.join(runDir, '.claude', 'amicus_sessions', 'schema-run-s2-1');
     fs.mkdirSync(legDir, { recursive: true });
-    fs.writeFileSync(path.join(legDir, 'metadata.json'), JSON.stringify({ taskId: 'schema-run-s2-1', status: 'running' }));
+    // modelInput (the alias) is deliberately unlike `model` (the resolved id)
+    // — DE-ROT F34/F36: role/blind-name must resolve off modelInput, not model.
+    fs.writeFileSync(path.join(legDir, 'metadata.json'), JSON.stringify({
+      taskId: 'schema-run-s2-1', status: 'running', model: 'google/gemini-2.5', modelInput: 'gemini',
+    }));
     writeProgress(legDir, 'receiving', {
       usage: { tokens: { input: 40, output: 10, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.03 },
     });
@@ -174,6 +178,13 @@ describe('council-run-live schema validates real buildCouncilStatusPayload outpu
     expect(doc.legs).toHaveLength(2);
     expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-1').usage).toBeDefined();
     expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-2').usage).toBeUndefined();
+    // DE-ROT F34/F36: modelInput carries the alias, and role resolves off it
+    // (not the resolved `model` id) even during stage2 (judging) — a model's
+    // seat/critic/lens identity is stable across stages.
+    expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-1').modelInput).toBe('gemini');
+    expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-1').role).toBe('seat');
+    expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-2').modelInput).toBeNull();
+    expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-2').role).toBeNull();
     expect(validate(doc)).toBe(true);
   });
 });
