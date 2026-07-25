@@ -307,6 +307,7 @@ electron/
 ├── opencode-theme.js
 ├── preload-content.js  # Content Preload - OpenCode WebContentsView (minimal, no privileged bridge)
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
+├── preload-workspace.js  # Council Workspace Preload — minimal typed IPC bridge (v4.4 §4.2/§4.5).
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
