@@ -442,6 +442,14 @@ Options for 'fanout':
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
   --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
   --follow                      Stream this run's events to stderr as they happen (--json -> NDJSON)
+  --on-complete <cmd>           Run a shell command once, at terminal state, after
+                                wave.json is durable. The command is user-authored
+                                on THIS command line (CLI-only — never sourced from
+                                config/briefings/model output); payload rides via
+                                env only (AMICUS_TASK_ID/TYPE/STATUS/EXIT_CODE/
+                                RESULT_FILE/EVENTS_FILE/COST/PROJECT), never model
+                                text. Child stdout/stderr go to amicus stderr.
+                                Never changes the wave's exit code, docs, or events.
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -527,6 +535,7 @@ Subcommands for 'council':
       [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]
       [--gateway auto|direct|openrouter] [--no-validate-model]
       [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
+      [--on-complete <cmd>]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -536,6 +545,15 @@ Subcommands for 'council':
                                 price gate for the whole run (repairs + chair).
                                 --follow streams run events to stderr as they
                                 happen (--json -> NDJSON).
+                                --on-complete <cmd> runs a shell command once, at
+                                terminal state, after run.json is durable. The
+                                command is user-authored on THIS command line
+                                (CLI-only — never sourced from config/briefings/
+                                model output); payload rides via env only
+                                (AMICUS_TASK_ID/TYPE/STATUS/EXIT_CODE/RESULT_FILE/
+                                EVENTS_FILE/COST/PROJECT), never model text. Child
+                                stdout/stderr go to amicus stderr. Never changes
+                                the run's exit code, docs, or events.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output

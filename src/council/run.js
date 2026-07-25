@@ -33,6 +33,7 @@ const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { sumWaveUsage } = require('../utils/pricing');
 const { emitRunStarted, emitRunTerminal, emitStageStarted, emitStageTerminal } = require('../observe/events');
+const { fireCouncilOnComplete } = require('../observe/on-complete');
 
 const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 
@@ -87,7 +88,7 @@ async function runCouncil(options, deps = {}) {
   });
 
   const degraded = { value: false };
-  const finalize = (exitCode, error) => {
+  const finalize = async (exitCode, error) => {
     uninstall();
     const code = signalled || exitCode;
     const status = (code === 130 || code === 143) ? 'aborted'
@@ -98,6 +99,7 @@ async function runCouncil(options, deps = {}) {
       completedAt: now(),
     });
     emitRunTerminal(o.runDir, o.runId, status, code, o.follow);
+    await fireCouncilOnComplete(o.onComplete, run, { runId: o.runId, runDir: o.runDir, exitCode: code, project: o.project }, o.onCompleteDeps);
     return { exitCode: code, run };
   };
 

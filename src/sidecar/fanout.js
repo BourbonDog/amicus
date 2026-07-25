@@ -175,6 +175,7 @@ async function runFanout(options) {
     writeWaveMetadata(waveDir, { status: wave.status, completedAt });
     const routingExitCode = waveExitCode(wave.status);
     emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode: routingExitCode }, follow);
+    await require('../observe/on-complete').fireWaveOnComplete(options.onComplete, wave, { waveId, waveDir, wavePath, exitCode: routingExitCode, project }, options.onCompleteDeps);
     emit(wave);
     return { wave, exitCode: routingExitCode };
   }
@@ -280,6 +281,7 @@ async function runFanout(options) {
     ? (signalled === 'SIGINT' ? 130 : 143)
     : waveExitCode(wave.status);
   emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode }, follow);
+  await require('../observe/on-complete').fireWaveOnComplete(options.onComplete, wave, { waveId, waveDir, wavePath, exitCode, project }, options.onCompleteDeps);
   emit(wave);
   return { wave, exitCode };
 }

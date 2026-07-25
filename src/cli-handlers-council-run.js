@@ -200,6 +200,7 @@ async function handleCouncilRun(args) {
     // NDJSON on stderr and the `--json` final doc on stdout agree.
     follow: !!args.follow,
     json: useJson,
+    onComplete: args['on-complete'],
   });
 
   if (useJson) {

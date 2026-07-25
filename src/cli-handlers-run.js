@@ -212,6 +212,7 @@ async function handleFanout(args) {
     noCostGate: !!args['no-cost-gate'],
     maxCostPerMtok: cfg.maxCostPerMtok,
     follow: !!args.follow,
+    onComplete: args['on-complete'],
   });
   return exitCode;
 }
