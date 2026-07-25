@@ -147,6 +147,7 @@ src/
 │   ├── electron-install.js  # Electron self-heal primitive (#53, #59).
 │   ├── electron-lock.js  # Stale-aware single-flight lock for the electron self-heal (#53).
 │   ├── electron-quarantine.js  # AV / antivirus quarantine detection for the electron self-heal (#53).
+│   ├── fallback-chains.js
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
 │   ├── fanout-validate.js
@@ -437,6 +438,7 @@ evals/
 | `sidecar/electron-install.js` | Electron self-heal primitive (#53, #59). | `resolveElectronBinary()`, `isElectronUsable()`, `cachedZip()`, `repairElectron()`, `platformExe()` |
 | `sidecar/electron-lock.js` | Stale-aware single-flight lock for the electron self-heal (#53). | `acquireRepairLock()`, `isStaleLock()`, `lockPathFor()`, `STALE_MS()` |
 | `sidecar/electron-quarantine.js` | AV / antivirus quarantine detection for the electron self-heal (#53). | `avHint()`, `quarantineReason()`, `verifyExtractOutcome()` |
+| `sidecar/fallback-chains.js` |  | `resolveFallbackConfig()`, `deriveChain()`, `vendorOf()`, `DEFAULT_MAX_SUBSTITUTIONS()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()`, `buildRoutingFailureLeg()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
@@ -507,7 +509,7 @@ evals/
 | `utils/model-descriptor.js` | Model-descriptor grammar + RouteResult factories (#61). | `GATEWAY_MODES()`, `parseDescriptor()`, `resolved()`, `selectionRequired()`, `routeError()` |
 | `utils/model-fetcher.js` | Model Fetcher | `fetchModelsFromProvider()`, `fetchAllModels()`, `providersToFetch()`, `groupModelsByFamily()`, `ANTHROPIC_MODELS()` |
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
-| `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `resolveTier()` |
+| `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
