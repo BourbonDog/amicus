@@ -154,8 +154,11 @@ async function runWait(input, project, deps) {
         // spawn a detached CLI child and return 'running' immediately, so
         // there is no in-process finalize to notify from). consumeMcpNotify
         // gives once-semantics; a notify() throw is swallowed and never
-        // changes the wait result below.
-        if (deps.notify && consumeMcpNotify(taskId)) {
+        // changes the wait result below. Consume FIRST (unconditionally on a
+        // requested run) so the registry entry always drains — even if this
+        // runWait caller supplied no notify capability, the entry must not
+        // leak; the send is then gated on deps.notify.
+        if (consumeMcpNotify(taskId) && deps.notify) {
           try {
             const evt = {
               event: snapshot.type === 'council-run' ? 'run-terminal' : 'wave-terminal',
