@@ -40,12 +40,11 @@ const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 /**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project, runId,
  *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?,
- *   councilName?, fallback?, catalog?} councilName (v4.3 Task 3, spec §7.1/§7.2) is
- *   the preset name when launched via `--council <preset>`, else null — threaded
- *   down through ctx.o into every launchWave/launchSolo call so council leg
- *   ledger rows can be attributed. fallback/catalog (v4.3 Task 18, spec §6.2):
- *   ctx.o carries both, but only run-stages.js's Stage-1/Stage-2 launches read
- *   them — the chair and debate legs never substitute via chains.
+ *   councilName?, fallback?, catalog?} councilName (v4.3 Task 3) = preset name when
+ *   launched via `--council <preset>`, else null — threaded via ctx.o into every
+ *   launchWave/launchSolo for leg ledger attribution. fallback/catalog (v4.3 Task 18
+ *   §6.2): ctx.o carries both, but only run-stages.js's stage launches read them —
+ *   the chair/debate legs never substitute via chains.
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?}
  * @returns {Promise<{exitCode: number, run: object}>}
  */

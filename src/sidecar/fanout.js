@@ -113,9 +113,7 @@ async function runFanout(options) {
   const validated = await validateFanoutModels(options.models, {
     noValidateModel: options.noValidateModel,
     gatewayMode: options.gatewayMode,
-    // v4.3 Task 18 (spec §6.2): additive — undefined/disabled callers see no
-    // change (validateFanoutModels only computes serverModels when enabled).
-    fallback: options.fallback,
+    fallback: options.fallback, // v4.3 Task 18 §6.2: serverModels union only when enabled
     catalog: options.catalog,
   });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
@@ -264,9 +262,7 @@ async function runFanout(options) {
           timeoutMs, agent: options.agent, client, server,
           summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
           foldNonce, directory: options.directory, follow,
-          // v4.3 Task 18 (spec §6.2): additive — runLeg is a byte-identical
-          // single-attempt path when fallback is absent/disabled.
-          fallback: options.fallback, catalog: options.catalog,
+          fallback: options.fallback, catalog: options.catalog, // v4.3 Task 18 §6.2 (off/absent = single-attempt)
         })
       : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
     )));
