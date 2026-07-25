@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "type": "council-run",
+  "runId": "bbbb2222",
+  "status": "partial",
+  "exitCode": 2,
+  "error": null,
+  "createdAt": "2026-07-17T15:00:00.000Z",
+  "completedAt": "2026-07-17T15:08:00.000Z",
+  "bench": ["gemini", "gpt", "qwen"],
+  "chair": "deepseek",
+  "critic": null,
+  "lenses": null,
+  "labelMap": { "Review A": "gemini", "Review B": "gpt", "Review C": "qwen" },
+  "options": { "timeout": 10, "maxCost": 1, "gateway": "auto", "outDir": "__RUNDIR__" },
+  "usage": { "cost": { "amount": 0.31, "currency": "USD", "source": "mixed", "reportedLegs": 4, "estimatedLegs": 3, "unpricedLegs": 2 } },
+  "stages": [
+    { "name": "stage1", "status": "complete", "startedAt": "2026-07-17T15:00:01.000Z", "completedAt": "2026-07-17T15:03:00.000Z", "waveId": "bbbb2222-s1", "waveIds": ["bbbb2222-s1", "bbbb2222-p1"], "taskIds": ["bbbb0001", "bbbb0002", "bbbb0003"], "project": "__RUNDIR__" },
+    { "name": "stage2", "status": "complete", "startedAt": "2026-07-17T15:03:05.000Z", "completedAt": "2026-07-17T15:05:30.000Z", "waveId": "bbbb2222-s2", "waveIds": ["bbbb2222-s2"], "project": "__RUNDIR__/_scratch" },
+    { "name": "chair", "status": "error", "startedAt": "2026-07-17T15:05:32.000Z", "completedAt": "2026-07-17T15:07:50.000Z", "waveIds": ["bbbb2222-ch1", "bbbb2222-ch2", "bbbb2222-ch3"], "project": "__RUNDIR__" },
+    { "name": "tally", "status": "complete", "startedAt": "2026-07-17T15:07:51.000Z", "completedAt": "2026-07-17T15:07:52.000Z" },
+    { "name": "verdict", "status": "complete", "startedAt": "2026-07-17T15:07:55.000Z", "completedAt": "2026-07-17T15:08:00.000Z" }
+  ]
+}

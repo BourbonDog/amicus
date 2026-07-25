@@ -1,0 +1,1 @@
+{ "schemaVersion": 1, "type": "progress", "stage": "receiving", "stageLabel": "Generating response...", "messagesReceived": 3, "updatedAt": "2026-07-19T10:01:00.000Z", "usage": { "tokens": { "input": 3000, "output": 400, "reasoning": 0, "cacheRead": 0, "cacheWrite": 0 }, "costReported": 0 } }

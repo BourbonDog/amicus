@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "type": "council-run",
+  "runId": "cccc3333",
+  "status": "running",
+  "createdAt": "2026-07-19T10:00:00.000Z",
+  "bench": ["gemini", "gpt", "qwen"],
+  "chair": "deepseek",
+  "critic": null,
+  "lenses": null,
+  "labelMap": { "Review A": "gemini", "Review B": "gpt", "Review C": "qwen" },
+  "options": { "timeout": 10, "maxCost": 2, "gateway": "auto", "outDir": "__RUNDIR__" },
+  "usage": null,
+  "stages": [
+    { "name": "stage1", "status": "running", "startedAt": "2026-07-19T10:00:01.000Z", "waveId": "cccc3333-s1", "waveIds": ["cccc3333-s1"], "project": "__RUNDIR__" }
+  ]
+}
