@@ -49,7 +49,18 @@ function buildFoldText(o) {
   const run = o.run || {};
   const verdict = ok(o.verdict);
   const tally = ok(o.tally);
-  const overall = verdict && verdict.overallVerdict ? verdict.overallVerdict : null;
+  // Review follow-up #2: verdict.json is NOT re-validated here (the
+  // amicus_verdict MCP path types overallVerdict as a bare z.string().nullable()
+  // — mcp-tools.js:428), so a multi-line or marker-bearing value must never
+  // reach the head verbatim: an embedded '\n' would shift every line below
+  // VERDICT: (a raw string containing '\n' becomes several elements once the
+  // head array is '\n'-joined), and an embedded marker could spoof the fold.
+  // Safe on the shipped engine path (parseChairVerdict returns a canonical
+  // CHAIR_VERDICTS phrase) — this is defense-in-depth, not a fix for a real
+  // producer.
+  const overall = verdict && verdict.overallVerdict
+    ? stripFoldMarkers(String(verdict.overallVerdict)).replace(/[\r\n]+/g, ' ').trim()
+    : null;
   const tierCounts = (verdict && verdict.tierCounts) || (tally && tally.tierCounts) || null;
   const cost = run.usage && run.usage.cost ? run.usage.cost : null;
 
@@ -70,9 +81,13 @@ function buildFoldText(o) {
   }
   head.push(`Cost: ${formatCost(cost)}${cost && cost.source ? ` (${cost.source})` : ''}`);
 
-  const body = o.chairText && String(o.chairText).trim()
-    ? stripFoldMarkers(String(o.chairText)).trim()
-    : (tierCounts ? '(no chair output — tally summary above)' : '(pre-tally: stage summary above)');
+  // Review follow-up #1: strip FIRST, then test emptiness on the STRIPPED
+  // result — not the raw one. A chair body consisting solely of a marker
+  // line (plus whitespace) is non-empty raw but strips to '', and must fall
+  // back to the tally-summary label rather than embedding a blank body.
+  const stripped = o.chairText ? stripFoldMarkers(String(o.chairText)).trim() : '';
+  const body = stripped
+    || (tierCounts ? '(no chair output — tally summary above)' : '(pre-tally: stage summary above)');
 
   return `${head.join('\n')}\n${body}`;
 }
