@@ -153,7 +153,7 @@ describe('council-run-live schema validates real buildCouncilStatusPayload outpu
     const waveDir = path.join(runDir, '.claude', 'amicus_sessions', 'schema-run-s2');
     fs.mkdirSync(waveDir, { recursive: true });
     fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
-      taskId: 'schema-run-s2', type: 'wave', status: 'running', legs: ['schema-run-s2-1'],
+      taskId: 'schema-run-s2', type: 'wave', status: 'running', legs: ['schema-run-s2-1', 'schema-run-s2-2'],
     }));
     const legDir = path.join(runDir, '.claude', 'amicus_sessions', 'schema-run-s2-1');
     fs.mkdirSync(legDir, { recursive: true });
@@ -161,10 +161,19 @@ describe('council-run-live schema validates real buildCouncilStatusPayload outpu
     writeProgress(legDir, 'receiving', {
       usage: { tokens: { input: 40, output: 10, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.03 },
     });
+    // DE-ROT Task 0.5 (F01): a second leg with no progress.json yet — the
+    // just-started case a live seats panel most needs — must still get a row
+    // that validates (no `usage` key at all, not an undefined one).
+    const legDir2 = path.join(runDir, '.claude', 'amicus_sessions', 'schema-run-s2-2');
+    fs.mkdirSync(legDir2, { recursive: true });
+    fs.writeFileSync(path.join(legDir2, 'metadata.json'), JSON.stringify({ taskId: 'schema-run-s2-2', status: 'running' }));
 
     const { buildCouncilStatusPayload } = require('../src/mcp-council-awareness');
     const doc = buildCouncilStatusPayload(projectDir, 'schema-run');
     expect(doc.view).toBe('live');
+    expect(doc.legs).toHaveLength(2);
+    expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-1').usage).toBeDefined();
+    expect(doc.legs.find((l) => l.taskId === 'schema-run-s2-2').usage).toBeUndefined();
     expect(validate(doc)).toBe(true);
   });
 });

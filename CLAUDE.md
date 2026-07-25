@@ -129,6 +129,7 @@ src/
 │   ├── tokens.css
 │   └── tokens.js
 ├── observe/
+│   ├── council-legs.js
 │   ├── events.js
 │   ├── follow.js
 │   ├── live-doc.js
@@ -424,6 +425,7 @@ evals/
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `readOverallVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
+| `observe/council-legs.js` |  | `buildLegRows()` |
 | `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()`, `emitWaveStarted()` |
 | `observe/follow.js` |  | `createFollowPrinter()` |
 | `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL()` |

@@ -27,7 +27,28 @@
     "legsComplete": { "type": ["number", "null"] },
     "elapsed": { "type": "string" },
     "exitCode": { "type": ["number", "null"] },
-    "usage": { "type": "object" }
+    "usage": { "type": "object" },
+    "legs": {
+      "description": "One row per active-stage leg id (DE-ROT Task 0.5 / F01), present unconditionally — a just-started leg with no usage flushed yet still gets a row.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["taskId", "model", "status"],
+        "properties": {
+          "taskId": { "type": "string" },
+          "model": { "type": ["string", "null"] },
+          "status": { "type": "string" },
+          "messages": { "type": "number" },
+          "stage": { "type": "string" },
+          "latestPreview": { "type": ["string", "null"] },
+          "lastActivityAt": { "type": ["string", "null"] },
+          "stalled": { "type": "boolean" },
+          "usage": { "type": "object" }
+        }
+      }
+    },
+    "stalled": { "type": "boolean" },
+    "stalledForSeconds": { "type": "number" }
   },
   "additionalProperties": true
 }

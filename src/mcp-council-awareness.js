@@ -17,6 +17,7 @@ const path = require('path');
 const runState = require('./council/run-state');
 const { RUNNING_VERSION } = require('./utils/version-info');
 const { enrichLegUsage, markLive, rollupWaveUsage } = require('./observe/live-doc');
+const { buildLegRows } = require('./observe/council-legs');
 
 /**
  * Every wave a stage launched: the primary `waveId` plus the recorded
@@ -132,14 +133,19 @@ function buildCouncilStatusPayload(project, taskId) {
   // least one sub-wave record exists on disk.
   // Cost-by-seat rides the same loop, read-time from progress.json only (A8) —
   // usageLegs stays empty (no `usage` on the payload) until a leg has actually
-  // flushed usage; a leg with none yet contributes nothing (N3).
+  // flushed usage; a leg with none yet contributes nothing (N3). allLegIds
+  // collects every leg id seen regardless of usage — the row builder below
+  // needs just-started legs too (DE-ROT F01: the naive `payload.legs =
+  // usageLegs` would silently drop them).
   const usageLegs = [];
+  const allLegIds = [];
   for (const waveId of active && active.project ? subWaveIds(active) : []) {
     const c = countWaveLegs(active.project, waveId);
     if (!c) { continue; }
     legsTotal = (legsTotal || 0) + c.total;
     legsComplete = (legsComplete || 0) + c.complete;
     for (const legId of waveLegIds(active.project, waveId)) {
+      allLegIds.push(legId);
       const enriched = legUsage(active.project, legId);
       if (enriched.usage) { usageLegs.push(enriched); }
     }
@@ -152,6 +158,11 @@ function buildCouncilStatusPayload(project, taskId) {
     version: RUNNING_VERSION,
   };
   if (usageLegs.length) { payload.usage = rollupWaveUsage(usageLegs); }
+  if (allLegIds.length) {
+    const built = buildLegRows(active.project, allLegIds);
+    payload.legs = built.rows;
+    if (built.stalled) { payload.stalled = true; payload.stalledForSeconds = built.stalledForSeconds; }
+  }
   if (run.error) { payload.reason = `${run.error.code}: ${run.error.message}`; }
   return markLive(payload);
 }
