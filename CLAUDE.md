@@ -151,6 +151,7 @@ src/
 │   ├── fanout-leg-fallback.js
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
+│   ├── fanout-retry.js
 │   ├── fanout-validate.js
 │   ├── fanout.js
 │   ├── interactive-abort.js
@@ -443,6 +444,7 @@ evals/
 | `sidecar/fanout-leg-fallback.js` |  | `runLegWithFallback()`, `recordAttemptSpend()`, `sumAttemptUsage()` |
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()`, `buildRoutingFailureLeg()`, `runSingleAttempt()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
+| `sidecar/fanout-retry.js` |  | `ELIGIBLE_RETRY()`, `parseInitialContext()`, `buildRetryPlan()`, `retryFailedWave()` |
 | `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
 | `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `readAbortedMarker()`, `DEFAULT_INTERVAL_MS()` |

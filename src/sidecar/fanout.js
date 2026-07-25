@@ -58,7 +58,8 @@ function writeWaveMetadata(waveDir, patch) {
  *   excludeMcp?, noValidateModel?, gatewayMode? (#61 Task 7.3: --gateway merged
  *   with routing.prefer, applied per leg), json?, client?, quiet? (suppress
  *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs),
- *   fallback? / catalog? (v4.3 Task 18 §6.2: opt-in substitution; off/absent unchanged)
+ *   fallback? / catalog? (v4.3 Task 18 §6.2: opt-in substitution; off/absent unchanged),
+ *   retryContexts? / retryOfWaveId? (v4.3 Task 19: --retry-failed relaunch seam; absent -> byte-identical)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -125,10 +126,8 @@ async function runFanout(options) {
   }
   const okLegs = legs.filter(l => l.ok);
   // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
-  // stderr to land on (fanout is one process resolving many legs, not one
-  // launch) — surface it on the wave doc instead, deduped in case two legs
-  // for the same vendor happen to both migrate (only the first ever fires
-  // since markMigrationNotified is one-shot per vendor, but dedupe defensively).
+  // stderr to land on — surface it on the wave doc instead, deduped in case
+  // two legs for the same vendor happen to both migrate.
   const notices = [...new Set(legs.map(l => l.notice).filter(Boolean))];
 
   // 1b. Budget gate (pre-creation; refuse before spending). Only legs that
@@ -161,12 +160,9 @@ async function runFanout(options) {
   emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds, follow);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
-  // shared server, so starting one (and immediately tearing it down) is pure
-  // waste. Short-circuit straight to the same routing-failure wave the
-  // normal path would eventually produce — same per-leg docs
-  // (buildRoutingFailureLeg), same aggregation (buildWaveResult /
-  // waveStatusFromLegs via the default status param), same exit-code mapping
-  // (waveExitCode) — just without the server round-trip.
+  // shared server, so starting one (and tearing it down) is pure waste.
+  // Short-circuit to the same routing-failure wave the normal path would
+  // eventually produce — same per-leg docs, aggregation, and exit mapping.
   if (okLegs.length === 0) {
     const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
     const completedAt = new Date().toISOString();
@@ -241,11 +237,9 @@ async function runFanout(options) {
     },
   });
 
-  // 6. Launch all ROUTABLE legs concurrently (runLeg never rejects). A leg
-  // that failed to route (leg.ok === false) never touches the shared server —
-  // it resolves immediately to an error run document (buildRoutingFailureLeg)
-  // in its own slot, so it fails only itself, never the sibling legs or the
-  // whole wave (#61 Task 7.3).
+  // 6. Launch all ROUTABLE legs concurrently (runLeg never rejects). A leg that
+  // failed to route (leg.ok === false) resolves to an error run doc in its own
+  // slot (buildRoutingFailureLeg), failing only itself, never the wave (#61).
   const heartbeat = (options.quiet || options.follow)
     ? { stop() {} }
     : createWaveHeartbeat(
@@ -256,16 +250,23 @@ async function runFanout(options) {
   const reasoning = options.thinking ? { effort: options.thinking } : undefined;
   let legDocs;
   try {
-    legDocs = await Promise.all(legs.map((leg, i) => (leg.ok
-      ? runLeg({
-          leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
-          timeoutMs, agent: options.agent, client, server,
-          summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
-          foldNonce, directory: options.directory, follow,
-          fallback: options.fallback, catalog: options.catalog, // v4.3 Task 18 §6.2 (off/absent = single-attempt)
-        })
-      : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
-    )));
+    // retryContexts/retryOfWaveId (v4.3 Task 19): absent on a normal wave, so
+    // every leg below falls back to the wave-wide prompt — byte-identical.
+    legDocs = await Promise.all(legs.map((leg, i) => {
+      if (!leg.ok) { return Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet })); }
+      const rc = options.retryContexts && options.retryContexts[i];
+      const saved = rc && rc.hadSavedContext;
+      return runLeg({
+        leg: options.retryOfWaveId ? { ...leg, retryOfWaveId: options.retryOfWaveId } : leg,
+        legId: legIds[i], waveId, project,
+        systemPrompt: saved ? rc.systemPrompt : systemPrompt,
+        userMessage: saved ? rc.userMessage : userMessage,
+        timeoutMs, agent: options.agent, client, server,
+        summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
+        foldNonce, directory: options.directory, follow,
+        fallback: options.fallback, catalog: options.catalog,
+      });
+    }));
   } finally {
     heartbeat.stop();
     uninstallSignals();

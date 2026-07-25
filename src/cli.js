@@ -438,6 +438,11 @@ Options for 'fanout':
                                ~32KB Windows argument cap). Mutually exclusive
                                with --prompt. Also works with 'start'.
   --wave-id <id>               Explicit wave ID (leg IDs become <id>-1..N)
+  --retry-failed <waveId>       Relaunch ONLY that wave's failed/timed-out/crashed/
+                                aborted legs as a NEW linked wave, using each leg's
+                                own saved context (byte-identical retry). Skips
+                                --prompt/--models; --models filters which failed
+                                legs to retry. wave.json is never modified.
   --json                       Emit the wave result as stable JSON on stdout
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run

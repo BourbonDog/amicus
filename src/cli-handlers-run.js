@@ -116,6 +116,21 @@ async function handleStart(args) {
 async function handleFanout(args) {
   const useJson = !!args.json;
 
+  // --retry-failed <waveId> (v4.3 Task 19, spec 6.1): a completely different
+  // path from the --prompt/--models launch below (no briefing, no required
+  // --models — the original wave's failed legs supply their own saved
+  // context) — dispatch BEFORE any of that validation runs. --models here is
+  // optional and, when present, filters which failed legs get retried.
+  if (args['retry-failed']) {
+    const { retryFailedWave } = require('./sidecar/fanout-retry');
+    const { parseModelsList } = require('./sidecar/fanout-validate');
+    const { exitCode, errorDoc } = await retryFailedWave(String(args['retry-failed']), args.cwd || process.cwd(), {
+      models: parseModelsList(args.models), json: useJson,
+    });
+    if (errorDoc && useJson) { process.stdout.write(JSON.stringify(errorDoc) + '\n'); }
+    return exitCode;
+  }
+
   // FIX 4 (#61 whole-branch review, cheap parity): handleStart validates
   // --gateway via validateStartArgs (cli.js) — fanout never did, so a typo'd
   // value silently fell through to resolveGatewayMode's pass-through instead
