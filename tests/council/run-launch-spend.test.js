@@ -68,8 +68,11 @@ describe('council leg spend attribution (spec §7.2)', () => {
   test('launchSolo forwards councilRunId/councilName into the runFanout options', async () => {
     let seen = null;
     const launchers = createLaunchers({ fanoutFn: async (opts) => { seen = opts; return { status: 'complete', legs: [] }; } });
+    // Use a real writable temp dir, not a bogus '/p': launchWave mkdirSyncs
+    // opts.project, and '/p' is an unwritable filesystem-root path on Linux
+    // (EACCES) while Windows resolves it drive-relative — a real dir works on both.
     await launchers.launchSolo({
-      role: 'chair', model: 'deepseek', councilRunId: 'c1', councilName: 'default', project: '/p',
+      role: 'chair', model: 'deepseek', councilRunId: 'c1', councilName: 'default', project: tmp(),
       systemPrompt: 's', userMessage: 'u', prompt: 'p',
     });
     expect(seen).toMatchObject({ councilRunId: 'c1', councilName: 'default' });
