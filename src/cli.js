@@ -148,6 +148,7 @@ function isBooleanFlag(key) {
      'plain',                // watch: milestone log lines instead of the refresh table (v4.3 Task 11)
      'ui',                   // watch: open the Council Workspace window; v4.4 seam (v4.3 Task 11)
      'follow',               // fanout / council run: stream this run's own events to stderr (v4.3 Task 13)
+     'fallback',             // fanout / council run: opt-in cheaper-model substitution (v4.3 Task 18, spec 6.2); --no-fallback negates via the generic no-* catch-all below
    ];
   return booleanFlags.includes(key);
 }
@@ -440,6 +441,9 @@ Options for 'fanout':
   --json                       Emit the wave result as stable JSON on stdout
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
+  --fallback / --no-fallback   Opt-in cheaper-model substitution on a classified
+                               rate-limit/overload leg failure (spec 6.2). Overrides
+                               config fallbacks.enabled when passed; default: config, else off.
   --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
   --follow                      Stream this run's events to stderr as they happen (--json -> NDJSON)
   --on-complete <cmd>           Run a shell command once, at terminal state, after
@@ -535,7 +539,7 @@ Subcommands for 'council':
       [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]
       [--gateway auto|direct|openrouter] [--no-validate-model]
       [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
-      [--on-complete <cmd>]
+      [--fallback] [--no-fallback] [--on-complete <cmd>]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -543,6 +547,10 @@ Subcommands for 'council':
                                 --claude-review <file> enters Claude's own review as
                                 a judged entry; --no-cost-gate disables the per-leg
                                 price gate for the whole run (repairs + chair).
+                                --fallback/--no-fallback opts stage legs (Stage-1 +
+                                Stage-2) into cheaper-model substitution on a
+                                classified rate-limit/overload failure (spec 6.2);
+                                the chair never substitutes via chains.
                                 --follow streams run events to stderr as they
                                 happen (--json -> NDJSON).
                                 --on-complete <cmd> runs a shell command once, at

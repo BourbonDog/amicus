@@ -57,7 +57,8 @@ function writeWaveMetadata(waveDir, patch) {
  *   contextTurns?, contextSince?, contextMaxTokens?, mcp?, mcpConfig?, noMcp?,
  *   excludeMcp?, noValidateModel?, gatewayMode? (#61 Task 7.3: --gateway merged
  *   with routing.prefer, applied per leg), json?, client?, quiet? (suppress
- *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs)
+ *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs),
+ *   fallback? / catalog? (v4.3 Task 18 §6.2: opt-in substitution; off/absent unchanged)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -112,6 +113,10 @@ async function runFanout(options) {
   const validated = await validateFanoutModels(options.models, {
     noValidateModel: options.noValidateModel,
     gatewayMode: options.gatewayMode,
+    // v4.3 Task 18 (spec §6.2): additive — undefined/disabled callers see no
+    // change (validateFanoutModels only computes serverModels when enabled).
+    fallback: options.fallback,
+    catalog: options.catalog,
   });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
@@ -208,7 +213,7 @@ async function runFanout(options) {
   });
   let client, server;
   try {
-    ({ client, server } = await startOpenCodeServer(mcpServers, { models: okLegs.map(l => l.model) }));
+    ({ client, server } = await startOpenCodeServer(mcpServers, { models: validated.serverModels || okLegs.map(l => l.model) }));
   } catch (err) {
     writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
     return errorWave(waveId, `Failed to start server: ${err.message}`);
@@ -259,6 +264,9 @@ async function runFanout(options) {
           timeoutMs, agent: options.agent, client, server,
           summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
           foldNonce, directory: options.directory, follow,
+          // v4.3 Task 18 (spec §6.2): additive — runLeg is a byte-identical
+          // single-attempt path when fallback is absent/disabled.
+          fallback: options.fallback, catalog: options.catalog,
         })
       : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
     )));

@@ -200,6 +200,35 @@ describe('fanout validation helpers', () => {
       process.env.AMICUS_FANOUT_MAX_LEGS = '0';
       expect((await validateFanoutModels(eleven)).error).toMatch(/cap of 10/);
     });
+
+    // v4.3 Task 18 (spec §6.2 sole-input invariant)
+    it('fallback enabled: serverModels is the union of primaries + resolved chain candidates (unresolvable ones dropped)', async () => {
+      // .mockImplementationOnce (not .mockImplementation) — the latter would
+      // permanently replace this shared mock's default for every later test
+      // in the file, not just this one.
+      const resolved = (model) => ({ kind: 'resolved', executableId: model,
+        gateway: model.startsWith('openrouter/') ? 'openrouter' : 'direct', provenance: {} });
+      mockResolveRouteForLaunch
+        .mockImplementationOnce(async ({ model }) => resolved(model))  // primary a/b
+        .mockImplementationOnce(async ({ model }) => resolved(model))  // primary c/d
+        .mockImplementationOnce(async ({ model }) => resolved(model))  // chain candidate a/cheap
+        .mockImplementationOnce(async () => ({                        // chain candidate a/bad-candidate
+          kind: 'error', type: 'model_route_error', field: 'model', requested: 'a/bad-candidate',
+          reason: 'model_not_found', preferredGateway: 'direct', suggestions: [],
+        }));
+      const r = await validateFanoutModels('a/b,c/d', {
+        fallback: { enabled: true, maxSubstitutions: 2, chains: { 'a/b': ['a/cheap', 'a/bad-candidate'] } },
+        catalog: [],
+      });
+      expect(r.legs.map(l => l.model)).toEqual(['a/b', 'c/d']);
+      expect(r.serverModels).toEqual(expect.arrayContaining(['a/b', 'c/d', 'a/cheap']));
+      expect(r.serverModels).not.toContain('a/bad-candidate');
+    });
+
+    it('fallback disabled/absent: serverModels is undefined (caller falls back to okLegs.map)', async () => {
+      const r = await validateFanoutModels('a/b,c/d');
+      expect(r.serverModels).toBeUndefined();
+    });
   });
 });
 

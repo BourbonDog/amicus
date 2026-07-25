@@ -176,8 +176,11 @@ async function handleCouncilRun(args) {
     ? path.resolve(project, String(args['out-dir']))
     : path.resolve(project, `council-${runId}`);
 
-  const { resolveGatewayMode } = require('./utils/config');
+  const { resolveGatewayMode, loadConfig } = require('./utils/config');
+  const { resolveFallbackConfig } = require('./sidecar/fallback-chains');
+  const { readCache } = require('./utils/model-catalog');
   const { runCouncil } = require('./council/run');
+  const cfg = loadConfig() || {};
   const { exitCode, run } = await runCouncil({
     briefing: promptRes.prompt, models: bench, chair, critic, lenses,
     project, runId, runDir,
@@ -201,6 +204,15 @@ async function handleCouncilRun(args) {
     follow: !!args.follow,
     json: useJson,
     onComplete: args['on-complete'],
+    // v4.3 Task 18 (spec §6.2): opt-in cheaper-model substitution for STAGE
+    // legs only (run-stages.js threads it through; the chair is excluded —
+    // see run-chair.js). --fallback forces on, --no-fallback forces off;
+    // unset defers to config `fallbacks.enabled`.
+    fallback: resolveFallbackConfig({
+      flagFallback: args.fallback === true ? true : (args['no-fallback'] ? false : undefined),
+      config: cfg,
+    }),
+    catalog: (readCache() || {}).models || [],
   });
 
   if (useJson) {

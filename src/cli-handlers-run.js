@@ -178,6 +178,8 @@ async function handleFanout(args) {
   // Direct require — the src/index.js public re-export is added later (Task 13)
   const { runFanout } = require('./sidecar/fanout');
   const { loadConfig, resolveGatewayMode } = require('./utils/config');
+  const { resolveFallbackConfig } = require('./sidecar/fallback-chains');
+  const { readCache } = require('./utils/model-catalog');
   const cfg = loadConfig() || {};
   const { exitCode } = await runFanout({
     models: args.models,
@@ -213,6 +215,13 @@ async function handleFanout(args) {
     maxCostPerMtok: cfg.maxCostPerMtok,
     follow: !!args.follow,
     onComplete: args['on-complete'],
+    // v4.3 Task 18 (spec §6.2): opt-in cheaper-model substitution. --fallback
+    // forces on, --no-fallback forces off; unset defers to config `fallbacks.enabled`.
+    fallback: resolveFallbackConfig({
+      flagFallback: args.fallback === true ? true : (args['no-fallback'] ? false : undefined),
+      config: cfg,
+    }),
+    catalog: (readCache() || {}).models || [],
   });
   return exitCode;
 }
