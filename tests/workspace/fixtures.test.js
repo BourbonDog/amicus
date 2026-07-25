@@ -70,4 +70,63 @@ describe('council workspace fixtures', () => {
       }
     }
   });
+
+  // Cross-document consistency checks — genuine relationships between two
+  // documents, not restatements of a literal. These catch a one-line edit to
+  // any fixture value that later tasks (2/3/5/6) hard-code but this suite
+  // otherwise never guards.
+  test('labelMap values are drawn from bench, in every run', () => {
+    for (const dir of [COMPLETE, DEGRADED, LIVE]) {
+      const run = readJson(dir, 'run.json');
+      for (const model of Object.values(run.labelMap)) {
+        expect(run.bench).toContain(model);
+      }
+    }
+  });
+
+  test('runStats models are drawn from bench or the chair, in tally and verdict', () => {
+    for (const dir of [COMPLETE, DEGRADED]) {
+      const run = readJson(dir, 'run.json');
+      const allowed = new Set([...run.bench, run.chair]);
+      for (const doc of [readJson(dir, 'tally.json'), readJson(dir, 'verdict.json')]) {
+        for (const row of doc.runStats) {
+          expect(allowed.has(row.model)).toBe(true);
+        }
+      }
+    }
+  });
+
+  test('tierCounts sum to the finding count, in tally and verdict, for every terminal run', () => {
+    for (const dir of [COMPLETE, DEGRADED]) {
+      for (const name of ['tally.json', 'verdict.json']) {
+        const doc = readJson(dir, name);
+        const sum = Object.values(doc.tierCounts).reduce((a, b) => a + b, 0);
+        expect(sum).toBe(doc.findings.length);
+      }
+    }
+  });
+
+  test('degraded run: no runStats row is the chair (the chair leg never survived)', () => {
+    const tally = readJson(DEGRADED, 'tally.json');
+    const verdict = readJson(DEGRADED, 'verdict.json');
+    expect(tally.runStats.some((r) => r.wasChair)).toBe(false);
+    expect(verdict.runStats.some((r) => r.wasChair)).toBe(false);
+  });
+
+  test('verdict.runStats mirrors tally.runStats exactly, in every terminal run', () => {
+    for (const dir of [COMPLETE, DEGRADED]) {
+      const tally = readJson(dir, 'tally.json');
+      const verdict = readJson(dir, 'verdict.json');
+      expect(verdict.runStats).toEqual(tally.runStats);
+    }
+  });
+
+  test('verdict.streetCred mirrors tally.streetCred with perJudgeRank stripped', () => {
+    for (const dir of [COMPLETE, DEGRADED]) {
+      const tally = readJson(dir, 'tally.json');
+      const verdict = readJson(dir, 'verdict.json');
+      const stripped = tally.streetCred.map(({ perJudgeRank, ...rest }) => rest);
+      expect(verdict.streetCred).toEqual(stripped);
+    }
+  });
 });
