@@ -79,6 +79,10 @@ const WINDOW_POSITION = process.env.AMICUS_WINDOW_POSITION || 'right';
 // marker. That's safe here because the GUI fold write is exit-code driven, not
 // marker-detected, so an un-advertised fallback nonce can't be exploited.
 const FOLD_NONCE = process.env.AMICUS_FOLD_NONCE;
+// v4.4 Council Workspace mode (AMICUS_MODE=council-workspace). Set by
+// src/sidecar/workspace-window.js; PROJECT defaults to cwd for direct launches.
+const PROJECT = process.env.AMICUS_PROJECT || process.cwd();
+const RUN_ID = process.env.AMICUS_RUN_ID || '';
 
 const OPENCODE_URL = `http://localhost:${OPENCODE_PORT}`;
 
@@ -511,6 +515,27 @@ function createSettingsChildWindow() {
 }
 
 // ============================================================================
+// Council Workspace (v4.4) — third mode; window body lives in workspace-shell.js
+// ============================================================================
+
+function createCouncilWorkspace() {
+  const { createWorkspaceWindow } = require('./workspace-shell');
+  const { registerWorkspaceHandlers, createFoldGate } = require('./ipc-workspace');
+  const { generateFoldNonce } = require('../src/utils/fold-marker');
+  const gate = createFoldGate();
+  registerWorkspaceHandlers(() => mainWindow, {
+    project: PROJECT,
+    nonce: FOLD_NONCE || generateFoldNonce(),
+    gate,
+  });
+  mainWindow = createWorkspaceWindow({ runId: RUN_ID, gate, headless: !!process.env.AMICUS_HEADLESS_TEST });
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    app.quit();
+  });
+}
+
+// ============================================================================
 // App Lifecycle
 // ============================================================================
 
@@ -523,6 +548,8 @@ app.whenReady().then(() => {
 
   if (MODE === 'setup') {
     createSetupWindow().catch((err) => { logger.error('createSetupWindow failed', err); });
+  } else if (MODE === 'council-workspace') {
+    createCouncilWorkspace();
   } else {
     createAmicusWindow();
   }

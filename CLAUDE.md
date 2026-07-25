@@ -324,7 +324,8 @@ electron/
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API
 ├── toolbar.js  # Amicus Toolbar HTML Builder
-└── window-position.js  # Window Position Calculator
+├── window-position.js  # Window Position Calculator
+└── workspace-shell.js  # Council Workspace window (v4.4 §4.1/§4.2) — the third Electron mode's
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # Benchmark Thinking Levels
