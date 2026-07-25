@@ -39,6 +39,11 @@ describe('getRunDetail', () => {
     // ⚠️ PRE-FLIGHT (P1): was 'Stage 1 · reviews' — see the STAGE_LABELS note in Step 4.
     expect(d.derived.stageRail[0].label).toBe('Stage 1 — independent review');
     expect(d.derived.matrix.rows).toHaveLength(4);
+    // F07 pin: the 3-arg buildMatrixModel wiring must actually be live — tally.json's C1 is
+    // 'Contested' (pre-override), verdict.json's C1 is 'Confirmed' (post-override). A regression
+    // that dropped the third argument (or passed null) would leave this row 'Contested' instead,
+    // and rows.toHaveLength(4) alone would not catch it.
+    expect(d.derived.matrix.rows.find((r) => r.id === 'C1').tier).toBe('Confirmed');
     expect(d.derived.cost.rows).toHaveLength(4);
     expect(d.derived.cost.totalDisplay).toBe('$0.4321');
     expect(d.derived.cost.maxCost).toBe(2);
@@ -93,6 +98,30 @@ describe('getRunDetail', () => {
     const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-detail-empty-'));
     const project2 = seedProject({ aaaa1111: emptyDir });
     expect(getRunDetail(project2, 'aaaa1111').error).toBe('run.json missing');
+  });
+
+  test('malformed run.json itself yields derived:null (top-level parseError, not an {error} shape)', () => {
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-detail-run3-'));
+    fs.writeFileSync(path.join(runDir, 'run.json'), '{broken');
+    const project = seedProject({ aaaa1111: runDir });
+    const d = getRunDetail(project, 'aaaa1111');
+    expect(d.run.parseError).toBeTruthy();
+    expect(d.derived).toBeNull();
+    expect(d.artifacts['report.html'].present).toBe(false);
+  });
+
+  test('degradedReason exit-1 path: run.error.code/message drives the reason string', () => {
+    // The other half of F04: `run.error` is only ever non-null on the exit-1 path, where the
+    // engine writes a structured {code, message}. No fixture carries this shape, so it is
+    // exercised here directly through getRunDetail (degradedReason itself is not exported —
+    // widening the public surface just to test it isn't worth another pin).
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-detail-run4-'));
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-degraded', 'run.json'), 'utf-8'));
+    run.error = { code: 'COST_EXCEEDED', message: 'ceiling hit' };
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    const project = seedProject({ aaaa1111: runDir });
+    const d = getRunDetail(project, 'aaaa1111');
+    expect(d.derived.verdictPanel.reason).toBe('COST_EXCEEDED: ceiling hit');
   });
 
   test('TERMINAL_STATUSES mirrors the shipped composed-doc terminal set', () => {

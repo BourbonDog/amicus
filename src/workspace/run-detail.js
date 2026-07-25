@@ -53,7 +53,7 @@ function readDoc(runDir, name) {
 
 function stageRail(run) {
   const stages = Array.isArray(run.stages) ? run.stages : [];
-  return stages.map((s) => ({
+  return stages.filter((s) => s && typeof s === 'object').map((s) => ({
     name: s.name,
     label: STAGE_LABELS[s.name] || String(s.name),
     status: s.status || 'pending',
@@ -111,7 +111,7 @@ function verdictPanel(run, verdict) {
     tierCounts: verdict.tierCounts || null,
     streetCred: Array.isArray(verdict.streetCred) ? verdict.streetCred : [],
     decisions: (Array.isArray(verdict.findings) ? verdict.findings : [])
-      .filter((f) => f.decision)
+      .filter((f) => f && f.decision)
       .map((f) => ({ id: f.id, decision: f.decision, applied: f.applied === true })),
     reason,
   };
