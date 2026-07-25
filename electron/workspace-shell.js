@@ -59,7 +59,13 @@ function createWorkspaceWindow({ runId, gate, headless }) {
     },
   });
 
-  win.loadFile(path.join(__dirname, 'workspace-ui', 'index.html'), { query: { runId: runId || '' } });
+  // ⚠️ CODE REVIEW: loadFile() rejects on load failure (and, until Task 11 lands
+  // workspace-ui/index.html, on EVERY launch). The failsafe above already surfaces
+  // and logs the failure, so swallow the rejection itself rather than leaving an
+  // unhandled rejection in the main process (precedent: main.js's own
+  // .loadURL(...).catch(() => {})).
+  win.loadFile(path.join(__dirname, 'workspace-ui', 'index.html'), { query: { runId: runId || '' } })
+    .catch(() => {});
 
   win.once('ready-to-show', () => {
     failsafe.cancel(); // disarm on the success path

@@ -80,6 +80,17 @@ function registerWorkspaceHandlers(getWindow, ctx) {
   const ipc = ctx.ipc || require('electron').ipcMain;
   const gate = ctx.gate || createFoldGate();
   const fromWorkspace = (event) => isPrivilegedSender(event, getWindow);
+  // ⚠️ CODE REVIEW (task-9 post-approval): settle()'s pendingClose signal used to be
+  // read only on the success path below, so a close blocked while a fold was writing
+  // silently dropped on the two failure paths (settle({ok:false}) at the detail-error
+  // early return and in the outer catch) — the window stayed open with no further
+  // close handler poised to retry until the user clicked X again. All three settle()
+  // call sites must honor a pending close identically.
+  const closeIfPending = (shouldClose) => {
+    if (!shouldClose) { return; }
+    const win = getWindow();
+    if (win && !win.isDestroyed()) { win.close(); }
+  };
 
   ipc.handle('workspace:list-runs', (event) => {
     if (!fromWorkspace(event)) { return []; }
@@ -131,7 +142,7 @@ function registerWorkspaceHandlers(getWindow, ctx) {
     try {
       const detail = deps.getRunDetail(project, String(runId));
       if (detail.error || !detail.run || detail.run.parseError) {
-        gate.settle({ ok: false });
+        closeIfPending(gate.settle({ ok: false }));
         return { ok: false, error: detail.error || 'run.json unavailable' };
       }
       const chairRead = deps.readRunArtifact(project, String(runId), 'chair-output.md');
@@ -148,14 +159,10 @@ function registerWorkspaceHandlers(getWindow, ctx) {
       });
       await deps.stdoutWrite(text + '\n');
       logger.info('Workspace fold completed', { runId: String(runId) });
-      const shouldClose = gate.settle({ ok: true });
-      if (shouldClose) {
-        const win = getWindow();
-        if (win && !win.isDestroyed()) { win.close(); }
-      }
+      closeIfPending(gate.settle({ ok: true }));
       return { ok: true };
     } catch (err) {
-      gate.settle({ ok: false });
+      closeIfPending(gate.settle({ ok: false }));
       logger.error('Workspace fold failed', { error: err.message });
       return { ok: false, error: err.message };
     }

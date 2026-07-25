@@ -144,6 +144,17 @@ describe('createWorkspaceWindow (behavioral)', () => {
     expect(event.preventDefault).toHaveBeenCalledTimes(1);
   });
 
+  // Parity with the window-open test below, which exercises two URL schemes.
+  // An allowlist inverted to only deny http(s) (letting file:// through) would
+  // still pass the https-only assertion above; a file:// target closes that gap.
+  test('will-navigate handler denies regardless of URL scheme, including file://', () => {
+    createWorkspaceWindow({ runId: 'r1', gate: makeGate(), headless: true });
+    const handlers = win.webContents.handlers['will-navigate'];
+    const event = { preventDefault: jest.fn() };
+    handlers[0](event, 'file:///etc/passwd');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
   test('window-open handler denies unconditionally for any url — removing/weakening it would fail this', () => {
     createWorkspaceWindow({ runId: 'r1', gate: makeGate(), headless: true });
     expect(win.webContents.setWindowOpenHandler).toHaveBeenCalledTimes(1);
@@ -196,5 +207,52 @@ describe('createWorkspaceWindow (behavioral)', () => {
     createWorkspaceWindow({ runId: 'r1', gate: makeGate(), headless: false });
     win._readyHandlers.forEach((fn) => fn());
     expect(win.shown).toBe(true);
+  });
+
+  // H9: this window renders untrusted model prose. page-title-updated is what
+  // stops that prose from spoofing the window chrome (e.g. a chair response
+  // ending in text engineered to look like a native title-bar change). Before
+  // this test, deleting the guard broke no test — mirror the will-navigate
+  // proof so removing it fails here.
+  test('page-title-updated handler actually calls preventDefault — untrusted model prose cannot spoof the title bar', () => {
+    createWorkspaceWindow({ runId: 'r1', gate: makeGate(), headless: true });
+    const handlers = win.webContents.handlers['page-title-updated'];
+    expect(handlers && handlers.length).toBe(1);
+    const event = { preventDefault: jest.fn() };
+    handlers[0](event, 'Amicus — Verified by Anthropic');
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  // Code review follow-up: loadFile() returns a promise that REJECTS on load
+  // failure. electron/workspace-ui/index.html does not exist until Task 11,
+  // so today this rejects on every single launch — an unhandled rejection in
+  // the main process. The failsafe (did-fail-load / timeout) already surfaces
+  // this to the user and logs it, so the rejection itself must be swallowed,
+  // not left dangling (precedent: main.js's own .loadURL(...).catch(() => {})).
+  test('a rejecting loadFile() does not produce an unhandled promise rejection', async () => {
+    class RejectingBrowserWindow extends FakeBrowserWindow {
+      loadFile(...args) {
+        this.loadFileArgs = args;
+        return Promise.reject(new Error('ENOENT: workspace-ui/index.html not found'));
+      }
+    }
+    jest.dontMock('electron');
+    jest.resetModules();
+    jest.doMock('electron', () => ({ BrowserWindow: RejectingBrowserWindow }), { virtual: true });
+    ({ createWorkspaceWindow } = require('../../electron/workspace-shell'));
+
+    const onUnhandledRejection = jest.fn();
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      createWorkspaceWindow({ runId: 'r1', gate: makeGate(), headless: true });
+      // Flush the microtask queue so a dangling (uncaught) rejection would
+      // have surfaced by now.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(onUnhandledRejection).not.toHaveBeenCalled();
+    } finally {
+      process.removeListener('unhandledRejection', onUnhandledRejection);
+    }
   });
 });

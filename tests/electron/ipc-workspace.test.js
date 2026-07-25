@@ -341,6 +341,59 @@ describe('workspace:fold — code-review follow-ups', () => {
     const first = await firstPromise;
     expect(first).toEqual({ ok: true });
   });
+
+  // Code review follow-up (task-9, post-approval): settle()'s pendingClose
+  // signal was only read on the SUCCESS call site (:151). Task 9 wired
+  // workspace-shell.js's close handler to call gate.noteBlockedClose() while
+  // gate.isWriting() — which means a close blocked during a fold that then
+  // FAILS is silently dropped: the window stays open and un-closable-again
+  // until the user clicks X a second time. The two failure call sites
+  // (the detail-error early return, and the outer catch) must close the
+  // window too when settle() reports a close was pending, exactly like the
+  // success path does.
+  test('a close blocked during a fold that then FAILS (stdout write rejects) still closes once settle() reports the pending close', async () => {
+    let rejectWrite;
+    const writeGate = new Promise((_resolve, reject) => { rejectWrite = reject; });
+    const { ipc, goodEvent, win, gate } = setup({ stdoutWrite: jest.fn(() => writeGate) });
+
+    const foldPromise = ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+    // Fold is now in flight (gate.begin() already flipped writing=true — see
+    // Fix #4's comment above on synchronous-until-first-await handler
+    // behavior). Simulate a close attempt landing in that window, exactly as
+    // workspace-shell.js's close handler does.
+    gate.noteBlockedClose();
+
+    rejectWrite(new Error('EPIPE: write after end'));
+    const res = await foldPromise;
+
+    expect(res.ok).toBe(false);
+    expect(gate.hasCompleted()).toBe(false);
+    expect(win.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('a close blocked during a fold that then FAILS (unreadable run) still closes once settle() reports the pending close', async () => {
+    const { ipc, goodEvent, win, gate } = setup({
+      getRunDetail: jest.fn(() => ({ runId: 'x', error: 'run.json missing' })),
+    });
+
+    // gate.begin() runs synchronously before the run-detail check, so a close
+    // blocked at this exact instant is a real (if narrow) race in production;
+    // calling noteBlockedClose() directly reproduces it deterministically.
+    gate.noteBlockedClose();
+    const res = await ipc.invoke('workspace:fold', goodEvent, 'x');
+
+    expect(res.ok).toBe(false);
+    expect(win.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('no pending close: a failed fold does NOT close the window (no regression on the ordinary failure path)', async () => {
+    const { ipc, goodEvent, win } = setup({
+      getRunDetail: jest.fn(() => ({ runId: 'x', error: 'run.json missing' })),
+    });
+    const res = await ipc.invoke('workspace:fold', goodEvent, 'x');
+    expect(res.ok).toBe(false);
+    expect(win.close).not.toHaveBeenCalled();
+  });
 });
 
 describe('createFoldGate', () => {
