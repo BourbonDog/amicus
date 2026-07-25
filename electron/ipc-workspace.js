@@ -27,7 +27,13 @@ function defaultDeps() {
     buildFoldText: (...a) => require('../src/workspace/fold-format').buildFoldText(...a),
     normalizeLive: (...a) => require('../src/workspace/live-normalize').normalizeLive(...a),
     handlers: () => require('../src/mcp-server').handlers,
-    stdoutWrite: (text) => new Promise((resolve) => process.stdout.write(text, () => resolve())),
+    // Node passes an Error to this callback when the chunk fails to flush
+    // (e.g. a dead parent pipe / closed stdout) — reject on it rather than
+    // resolving unconditionally, or a failed write reports {ok:true} to the
+    // renderer and permanently latches gate.hasCompleted() (code review fix).
+    stdoutWrite: (text) => new Promise((resolve, reject) => {
+      process.stdout.write(text, (err) => (err ? reject(err) : resolve()));
+    }),
     openExternal: (url) => require('electron').shell.openExternal(url),
     existsSync: (p) => require('fs').existsSync(p),
   };
@@ -129,6 +135,13 @@ function registerWorkspaceHandlers(getWindow, ctx) {
         return { ok: false, error: detail.error || 'run.json unavailable' };
       }
       const chairRead = deps.readRunArtifact(project, String(runId), 'chair-output.md');
+      // Distinguish a security fence firing (e.g. the realpath-escape check)
+      // from a benign absence (not written yet) — both fall through to the
+      // same safe fallback body below, but only one of them is worth an
+      // operator's attention (code review fix).
+      if (chairRead && chairRead.error) {
+        logger.warn('Workspace fold: chair-output.md unavailable', { runId: String(runId), reason: chairRead.error });
+      }
       const chairText = chairRead && chairRead.text ? chairRead.text : null;
       const text = deps.buildFoldText({
         nonce, project, run: detail.run, tally: detail.tally, verdict: detail.verdict, chairText,

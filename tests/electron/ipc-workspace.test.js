@@ -5,6 +5,16 @@
 jest.mock('electron', () => ({ ipcMain: { handle: jest.fn() }, shell: { openExternal: jest.fn() } }), { virtual: true });
 
 const { registerWorkspaceHandlers, createFoldGate } = require('../../electron/ipc-workspace');
+// Captured HERE, at file-load time, before any jest.resetModules() call runs
+// (those only fire inside later describe blocks' beforeEach/afterEach hooks).
+// ipc-workspace.js's own `require('../src/utils/logger')` resolved to this same
+// cached module instance in the very same require() statement above, so this
+// `logger` reference is guaranteed to be the SAME object ipc-workspace.js logs
+// through internally — spying on it here observes those calls. A `require(...)`
+// done later, inside a test body (after the malformed-runId describe block's
+// resetModules() calls have cleared the module registry), would resolve to a
+// freshly-evaluated, DIFFERENT `logger` object and silently observe nothing.
+const { logger } = require('../../src/utils/logger');
 
 function fakeIpc() {
   const handlers = new Map();
@@ -164,6 +174,17 @@ describe('registerWorkspaceHandlers — extra security-gate coverage', () => {
   // the actual filesystem fence rejects a traversal runId. Uses the same
   // `require('../src/mcp-server').handlers` + temp-project pattern already
   // established in tests/mcp-council-abort.test.js.
+  //
+  // Code-review correction: an earlier version of this block asserted only
+  // `res.error`/`res.ok` truthiness/falsiness against an EMPTY temp project.
+  // In an empty project *any* runId errors (there is nothing on disk to find),
+  // so those assertions could not distinguish "the fence rejected this" from
+  // "there's nothing here" — deleting RUN_ID_RE from run-scan.js would still
+  // leave every one of those tests green (the error message just changes from
+  // 'invalid runId' to 'pointer missing, unreadable, or invalid'). Pinning the
+  // exact message each fence produces makes the assertion mechanism-specific:
+  // it goes red if either fence (the RUN_ID_RE charset check in readPointer,
+  // or safeSessionDir's resolved-path containment check) is removed.
   describe('malformed runId rejected on every channel, with REAL deps (no fakes)', () => {
     const os = require('os');
     const fs = require('fs');
@@ -195,38 +216,130 @@ describe('registerWorkspaceHandlers — extra security-gate coverage', () => {
     test('get-run: readPointer\'s RUN_ID_RE rejects it before any fs access', async () => {
       const { ipc, goodEvent } = realSetup();
       const res = await ipc.invoke('workspace:get-run', goodEvent, MALICIOUS_RUN_ID);
-      expect(res.error).toBeTruthy();
+      expect(res.error).toMatch(/invalid runId/);
     });
 
     test('read-artifact: readPointer rejects it before the artifact allowlist / realpath fences run', async () => {
       const { ipc, goodEvent } = realSetup();
       const res = await ipc.invoke('workspace:read-artifact', goodEvent, MALICIOUS_RUN_ID, 'chair-output.md');
-      expect(res.error).toBeTruthy();
+      expect(res.error).toMatch(/invalid runId/);
     });
 
     test('open-report: readPointer rejects it before report.html is ever stat-ed', async () => {
       const { ipc, goodEvent } = realSetup();
       const res = await ipc.invoke('workspace:open-report', goodEvent, MALICIOUS_RUN_ID);
       expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/invalid runId/);
     });
 
     test('fold: getRunDetail\'s readPointer rejects it before any chair-output.md read or stdout write', async () => {
       const { ipc, goodEvent } = realSetup();
       const res = await ipc.invoke('workspace:fold', goodEvent, MALICIOUS_RUN_ID);
       expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/invalid runId/);
     });
 
     test('get-live: safeSessionDir\'s containment check rejects it (amicus_status throws, handler catches)', async () => {
       const { ipc, goodEvent } = realSetup();
       const res = await ipc.invoke('workspace:get-live', goodEvent, MALICIOUS_RUN_ID);
       expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/path traversal detected/);
     });
 
     test('abort-run: safeSessionDir\'s containment check rejects it (amicus_abort throws, handler catches)', async () => {
       const { ipc, goodEvent } = realSetup();
       const res = await ipc.invoke('workspace:abort-run', goodEvent, MALICIOUS_RUN_ID);
       expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/path traversal detected/);
     });
+  });
+});
+
+describe('workspace:fold — code-review follow-ups', () => {
+  // Fix #2: the default stdoutWrite dep must not swallow a write error. Node's
+  // process.stdout.write(chunk, cb) invokes cb(err) — err is undefined on success
+  // and an Error when the chunk fails to flush (e.g. a dead parent pipe / closed
+  // stdout). The original defaultDeps() ignored that argument entirely:
+  // `(text) => new Promise((resolve) => process.stdout.write(text, () => resolve()))`
+  // resolved unconditionally, so a failed write still reported {ok:true} to the
+  // renderer and permanently latched gate.hasCompleted() — an unrecoverable fold
+  // for the life of the window, exactly the failure mode electron/fold.js:37-40
+  // documents `completed` as guarding against.
+  //
+  // This exercises the REAL default stdoutWrite (not a fake) by omitting it from
+  // the injected deps — `{ ...defaultDeps(), ...ctx.deps }` then falls through to
+  // the production implementation — while faking only the run-detail/artifact/
+  // fold-text deps so the test needs no real project directory on disk.
+  test('a failed stdout write (dead pipe) reports fold failure, not success, and does not latch completion', async () => {
+    const ipc = fakeIpc();
+    const { win, goodEvent } = fakeWindowPair();
+    const gate = createFoldGate();
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation((_chunk, cb) => {
+      cb(new Error('EPIPE: write after end'));
+      return true;
+    });
+    try {
+      const deps = {
+        getRunDetail: jest.fn(() => ({
+          runId: 'aaaa1111',
+          run: { runId: 'aaaa1111', chair: 'deepseek', status: 'complete', stages: [] },
+          tally: null, verdict: null,
+        })),
+        readRunArtifact: jest.fn(() => ({ text: 'chair prose' })),
+        buildFoldText: jest.fn(() => 'FOLD-TEXT'),
+        // stdoutWrite intentionally OMITTED so the real defaultDeps() wrapper runs.
+      };
+      registerWorkspaceHandlers(() => win, { project: 'C:\\proj', nonce: 'cafef00dcafef00d', ipc, gate, deps });
+      const res = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+      expect(res).toEqual({ ok: false, error: 'EPIPE: write after end' });
+      expect(gate.hasCompleted()).toBe(false);
+      expect(gate.begin()).toBe(true); // retry must still be possible after a failed write
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  // Fix #3: readRunArtifact's realpath-escape fence firing (a symlinked
+  // chair-output.md pointing outside the run dir) must be distinguishable, in
+  // the logs, from the benign "not written yet" case — both previously fell
+  // through to the same silent "(no chair output — tally summary above)" body
+  // with no signal an operator could act on.
+  test('fold logs a warning when chair-output.md is unreadable for ANY reason, including the realpath-escape fence', async () => {
+    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    try {
+      const { ipc, goodEvent } = setup({
+        readRunArtifact: jest.fn(() => ({ error: 'artifact escapes run directory' })),
+      });
+      const res = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+      expect(res.ok).toBe(true); // the safe fallback body still succeeds
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('chair-output.md'),
+        expect.objectContaining({ reason: 'artifact escapes run directory' }),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  // Fix #4: prove 'fold-in-flight' is actually observed under real concurrency
+  // at the HANDLER level (createFoldGate's own unit tests already cover the
+  // gate object in isolation; this proves ipc-workspace.js actually wires a
+  // second concurrent invoke through to that branch).
+  test('a second workspace:fold call while the first is still writing gets fold-in-flight, then the first completes normally', async () => {
+    let releaseWrite;
+    const writeGate = new Promise((resolve) => { releaseWrite = resolve; });
+    const { ipc, goodEvent } = setup({ stdoutWrite: jest.fn(() => writeGate) });
+
+    // The handler is async but runs synchronously up to its first `await`
+    // (deps.stdoutWrite(...)) before yielding — so by the time this call
+    // returns, gate.begin() has already flipped to "writing".
+    const firstPromise = ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+    const second = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+    expect(second).toEqual({ ok: false, error: 'fold-in-flight' });
+
+    releaseWrite();
+    const first = await firstPromise;
+    expect(first).toEqual({ ok: true });
   });
 });
 
