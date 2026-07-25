@@ -302,6 +302,7 @@ electron/
 ├── ipc-guard.js  # IPC Guard Helpers
 ├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
+├── ipc-workspace.js  # Council Workspace IPC (v4.4 §4.5) — all seven workspace: channels.
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
 ├── opencode-theme.js
