@@ -18,6 +18,7 @@ const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
 const { runWait, registerInProcessRun, settleInProcessRun } = require('./mcp-wait');
+const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 const { detectClient } = require('./utils/client-detect');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
 const { sliceForRead } = require('./utils/read-slice');
@@ -587,6 +588,7 @@ const handlers = {
     }
 
     if (metadata.type === 'wave') {
+      const { enrichLegUsage, markLive, rollupWaveUsage } = require('./observe/live-doc');
       const legs = (metadata.legs || []).map((legId) => {
         const m = readMetadata(legId, cwd);
         const leg = { taskId: legId, model: (m && m.model) || null, status: (m && m.status) || 'unknown' };
@@ -599,6 +601,11 @@ const handlers = {
           leg.phase = deriveStage(leg.status, p.stage);         // coarse: starting|generating|folding|terminal
           leg.latestPreview = p.latestPreview;
           leg.lastActivityAt = p.lastActivityAt;
+          // N3: enrichLegUsage returns the bare leg (no `usage` key) when
+          // progress carries no usage yet (e.g. solo interactive legs, Task 8)
+          // — merge only when present so we never put an undefined key on doc.
+          const enriched = enrichLegUsage(leg, p.usage);
+          if (enriched.usage) { leg.usage = enriched.usage; }
         } catch { /* no progress yet — leave base fields only */ }
         return leg;
       });
@@ -649,6 +656,11 @@ const handlers = {
       if (metadata.status === 'crashed' || metadata.status === 'error') {
         response.reason = metadata.reason || 'Unknown error';
       }
+      // Surface C (spec 4.3): additive read-time usage rollup + live marker.
+      // sumWaveUsage tolerates legs with no usage (A8: cost-by-seat from
+      // progress.json only, never a ledger) — safe even when no leg priced.
+      response.usage = rollupWaveUsage(legs);
+      markLive(response);
       const content = [{ type: 'text', text: JSON.stringify(response) }];
       appendVersionWarning(content);
       if (metadata.status === 'running') {
@@ -692,6 +704,17 @@ const handlers = {
       response.messageCount = progress.messages;                       // stable agent-facing alias
       response.phase = deriveStage(metadata.status, progress.stage);   // coarse lifecycle
 
+      // Surface C (spec 4.3): read-time cost resolution over the RAW usage the
+      // Object.assign above just copied from progress.json (Task 8). N3: most
+      // interactive/GUI runs write no progress.usage at all — enrichLegUsage
+      // returns no `usage` key in that case, so NEVER assign it unconditionally
+      // (that would leave the doc holding the unresolved raw {tokens,costReported}
+      // shape, or an undefined key when progress.usage was absent).
+      const { enrichLegUsage } = require('./observe/live-doc');
+      const enr = enrichLegUsage({ model: metadata.model }, progress.usage);
+      if (enr.usage) { response.usage = enr.usage; }
+      else { delete response.usage; }
+
       // Stall detection: flag when no activity for 2+ minutes
       const STALL_THRESHOLD_MS = 120000;
       if (metadata.headless && progress.lastActivityMs !== null && progress.lastActivityMs > STALL_THRESHOLD_MS) {
@@ -711,6 +734,7 @@ const handlers = {
     if (metadata.status === 'crashed' || metadata.status === 'error') {
       response.reason = metadata.reason || 'Unknown error';
     }
+    require('./observe/live-doc').markLive(response);
     const content = [{ type: 'text', text: JSON.stringify(response) }];
     appendVersionWarning(content);
     if (metadata.status === 'running' && metadata.headless) {
@@ -719,11 +743,20 @@ const handlers = {
     return { content };
   },
 
-  async amicus_wait(input, project) {
+  async amicus_wait(input, project, mcpServer) {
     // statusFn injection avoids a circular require and inherits amicus_status's
     // crash detection + wave leg rollup on every poll tick.
     return runWait(input, project, {
       statusFn: (i, p) => handlers.amicus_status(i, p),
+      // Task 15 (spec §5.3): best-effort mcp-notify delivery. mcpServer here
+      // is the McpServer instance the dispatch loop passes as the 3rd arg
+      // (server.js:register); mcpServer.server is the underlying low-level
+      // SDK Server that exposes sendLoggingMessage. A throw or an unsupported
+      // transport degrades silently — advisory only, never affects the wait.
+      notify: (payload) => {
+        try { if (mcpServer && mcpServer.server) { mcpServer.server.sendLoggingMessage(payload); } }
+        catch { /* best-effort; a send failure is a debug log only */ }
+      },
     });
   },
 
@@ -1026,6 +1059,12 @@ const handlers = {
 
   async amicus_fanout(input, project, mcpServer) {
     const cwd = project || getProjectDir(input.project);
+    // Task 15 (spec §5.3): validate onComplete FIRST, before any wave dir /
+    // metadata is written — exec strings are rejected over MCP (the Zod enum
+    // on the tool def already rejects them at the call boundary; this is
+    // defense-in-depth for any caller that bypasses schema validation).
+    const oc = validateOnComplete(input.onComplete);
+    if (!oc.ok) { return textResult(oc.error, true); }
     const { generateTaskId } = require('./sidecar/start');
     const { deriveLegIds, DEFAULT_MAX_LEGS } = require('./sidecar/fanout');
 
@@ -1110,6 +1149,10 @@ const handlers = {
       } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }
+    // Task 15 (spec §5.3): the run is now known-launched under waveId — mark
+    // it for a best-effort terminal notify. runWait's poll loop (mcp-wait.js)
+    // is the only code that later sees this wave reach terminal state.
+    if (oc.mode === 'mcp-notify') { requestMcpNotify(waveId); }
 
     const body = JSON.stringify(stampEnvelope('wave', {
       waveId, taskIds: legIds, status: 'running', mode: 'headless',
@@ -1196,6 +1239,13 @@ const handlers = {
     return textResult('Setup wizard launched. The Electron window should appear on your desktop.');
   },
   async amicus_guide() { return textResult(getGuideText()); },
+
+  // Read-only; deliberately NOT fenced (spec 7.3 — spend docs are ids/numbers/
+  // paths by construction, never model-generated prose). `project` here is the
+  // dispatch-resolved cwd, used only to expand a literal '.' filterProject —
+  // see src/mcp-spend.js's module docblock for why the row filter isn't named
+  // `project` itself.
+  amicus_spend: (input, project) => require('./mcp-spend').amicus_spend(input, project),
 };
 
 /** Start the MCP server on stdio transport */

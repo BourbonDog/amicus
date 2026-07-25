@@ -14,11 +14,20 @@
  * not a forked/independent counter) rather than adding to a full file. If
  * result-schema.js is ever split/slimmed, buildSpendDoc is the one to fold
  * back in alongside buildCatalogDoc/buildDoctorDoc.
+ *
+ * filterRows/groupRows/computeWasted (spec §7.3/§6.3 query layer) live in the
+ * sibling ./spend-query.js instead of here: adding them inline pushed this
+ * file to 306 lines, over the 300-line size gate. They're re-exported below
+ * so existing/brief-specified imports of them from THIS module still resolve.
+ * GROUP_DIMS/ROWS_CAP (Task 5) live there too, as the single source shared
+ * with the MCP `amicus_spend` tool (src/mcp-tools.js, src/mcp-spend.js) —
+ * re-exported below for the same reason.
  */
 
 const { readSpendRows } = require('./utils/spend-ledger');
 const { formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
+const { filterRows, groupRows, computeWasted, emptyTokens, addTokens, GROUP_DIMS, ROWS_CAP } = require('./spend-query');
 
 const CREDIT_CHECK_TIMEOUT_MS = 5000;
 
@@ -27,15 +36,6 @@ function parseSinceDays(since) {
   if (typeof since !== 'string') { return null; }
   const m = since.trim().match(/^(\d+)d$/i);
   return m ? parseInt(m[1], 10) : null;
-}
-
-function emptyTokens() {
-  return { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
-}
-
-function addTokens(into, tokens) {
-  if (!tokens) { return; }
-  for (const k of Object.keys(into)) { into[k] += tokens[k] || 0; }
 }
 
 /**
@@ -75,11 +75,16 @@ function aggregateSpend(rows) {
  * Build the `--json` spend document. schemaVersion reuses result-schema's
  * SCHEMA_VERSION (not a forked counter) — see module docblock for why this
  * builder lives here instead of alongside buildCatalogDoc/buildDoctorDoc.
- * @param {{total:object, byModel:Array, windowDays:number|null, credit:object|null}} opts
+ * New fields (filters/groupBy/groups/wasted/rows/rowsTruncated, spec §7.3)
+ * are all additive and only appear when the caller passes them — byte-compat
+ * for callers/tests that only ever passed {total, byModel, windowDays, credit}.
+ * @param {{total:object, byModel:Array, windowDays:number|null, credit:object|null,
+ *   filters?:object, groupBy?:string, groups?:Array, wasted?:object,
+ *   rows?:Array, rowsTruncated?:boolean}} opts
  */
-function buildSpendDoc({ total, byModel, windowDays, credit }) {
+function buildSpendDoc({ total, byModel, windowDays, credit, filters, groupBy, groups, wasted, rows, rowsTruncated }) {
   const { SCHEMA_VERSION } = require('./utils/result-schema');
-  return {
+  const doc = {
     schemaVersion: SCHEMA_VERSION,
     type: 'spend',
     windowDays: windowDays !== undefined ? windowDays : null,
@@ -87,6 +92,12 @@ function buildSpendDoc({ total, byModel, windowDays, credit }) {
     byModel,
     credit: credit || null,
   };
+  if (filters !== undefined) { doc.filters = filters; }
+  if (groupBy !== undefined) { doc.groupBy = groupBy; }
+  if (groups !== undefined) { doc.groups = groups; }
+  if (wasted !== undefined) { doc.wasted = wasted; }
+  if (rows !== undefined) { doc.rows = rows; doc.rowsTruncated = !!rowsTruncated; }
+  return doc;
 }
 
 /** Real deps; tests override via the second handleSpend arg. */
@@ -128,7 +139,7 @@ async function fetchCreditFooter(deps) {
   return res || null;
 }
 
-function renderHuman({ total, byModel, windowDays, credit }) {
+function renderHuman({ total, byModel, windowDays, credit, wasted }) {
   if (total.runs === 0) { return 'No spend recorded yet.\n'; }
   let out = windowDays ? `amicus spend (last ${windowDays}d)\n\n` : 'amicus spend (all time)\n\n';
   out += 'model                                            runs  tokens(in/out)      cost      sources\n';
@@ -140,6 +151,9 @@ function renderHuman({ total, byModel, windowDays, credit }) {
       `${formatCost({ amount: m.amount, source: dominantSource(m.sourceMix) }).padStart(9)}  ${mix}\n`;
   }
   out += `\nTotal: ${formatCost({ amount: total.amount, source: dominantSource(total.sourceMix) })} across ${total.runs} run(s)\n`;
+  if (wasted && wasted.runs > 0) {
+    out += `Wasted (failed runs): ${formatCost({ amount: wasted.amount, source: 'mixed' })} across ${wasted.runs} rows — see amicus spend --failed\n`;
+  }
   if (credit && typeof credit.limitRemaining === 'number') {
     out += `OpenRouter credit remaining: $${credit.limitRemaining}\n`;
   }
@@ -155,8 +169,11 @@ function dominantSource(mix) {
 }
 
 /**
- * `amicus spend [--since 7d] [--json]`
- * @param {{_:string[], json?:boolean, since?:string}} args
+ * `amicus spend [--since 7d] [--wave <id>] [--council <runId|name>] [--project <path|.>]
+ *   [--model <id-or-prefix>] [--op <op>] [--failed] [--group-by <dim>] [--rows] [--json]`
+ * @param {{_:string[], json?:boolean, since?:string, wave?:string, council?:string,
+ *   project?:string|boolean, model?:string, op?:string, failed?:boolean,
+ *   'group-by'?:string, rows?:boolean}} args
  * @param {object} [depsOverride] test seam
  * @returns {Promise<number>} exit code
  */
@@ -173,26 +190,44 @@ async function handleSpend(args, depsOverride = {}) {
     }
   }
 
-  let rows = readSpendRows(deps.dir);
-  if (windowDays !== null) {
-    const cutoff = deps.now() - windowDays * 86400000;
-    rows = rows.filter(r => {
-      const t = Date.parse(r.ts);
-      return Number.isFinite(t) && t >= cutoff;
-    });
+  const groupBy = args['group-by'] || 'model';
+  if (!GROUP_DIMS.includes(groupBy)) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `invalid --group-by '${groupBy}'`,
+      hint: `--group-by one of: ${GROUP_DIMS.join('|')}` });
   }
 
-  const { total, byModel } = aggregateSpend(rows);
-  // Nothing recorded (or nothing in the --since window): skip the network
+  const rows = readSpendRows(deps.dir);
+  const filters = {
+    wave: args.wave, council: args.council, model: args.model,
+    op: args.op, failed: !!args.failed,
+    project: args.project === '.' || args.project === true ? process.cwd() : args.project,
+  };
+  const filtered = filterRows(rows, { ...filters, since: windowDays, now: windowDays !== null ? deps.now() : undefined });
+
+  const { total, byModel } = aggregateSpend(filtered);
+  const groups = groupRows(filtered, groupBy);
+  const wasted = computeWasted(filtered);
+  let rowsOut, rowsTruncated;
+  if (args.rows) {
+    rowsTruncated = filtered.length > ROWS_CAP;
+    rowsOut = filtered.slice(0, ROWS_CAP);
+  }
+
+  // Nothing recorded (or nothing survives the filters): skip the network
   // credit probe entirely — there's no rollup to attach it to either way.
   const credit = total.runs === 0 ? null : await fetchCreditFooter(deps).catch(() => null);
 
   if (useJson) {
-    process.stdout.write(JSON.stringify(buildSpendDoc({ total, byModel, windowDays, credit }), null, 2) + '\n');
+    const doc = buildSpendDoc({ total, byModel, windowDays, credit,
+      filters, groupBy, groups, wasted, rows: rowsOut, rowsTruncated });
+    process.stdout.write(JSON.stringify(doc, null, 2) + '\n');
     return 0;
   }
-  process.stdout.write(renderHuman({ total, byModel, windowDays, credit }));
+  process.stdout.write(renderHuman({ total, byModel, windowDays, credit, wasted }));
   return 0;
 }
 
-module.exports = { handleSpend, aggregateSpend, buildSpendDoc, parseSinceDays };
+module.exports = {
+  handleSpend, aggregateSpend, buildSpendDoc, parseSinceDays,
+  filterRows, groupRows, computeWasted, GROUP_DIMS, ROWS_CAP,
+};

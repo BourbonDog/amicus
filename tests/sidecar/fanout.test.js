@@ -9,10 +9,18 @@
 // orchestrator-test model string below is already a fully-qualified
 // `vendor/model` or `openrouter/vendor/model` literal), matching the old
 // tryResolveModel passthrough for a slash-bearing input byte for byte.
+// Gateway is a three-value axis: 'openrouter' | 'local' | 'direct'. The
+// `ollama/` prefix is a test-only convention (mirrors gateway-router.js's
+// real local-provider executableId shape, `<vendor>/<model>`) letting a
+// designated model resolve to 'local' so tests can cover the v4.2
+// local-provider attribution path without touching any real model string
+// used elsewhere in this file.
 const mockResolveRouteForLaunch = jest.fn(async ({ model }) => ({
   kind: 'resolved',
   executableId: model,
-  gateway: model.startsWith('openrouter/') ? 'openrouter' : 'direct',
+  gateway: model.startsWith('openrouter/') ? 'openrouter'
+    : model.startsWith('ollama/') ? 'local'
+      : 'direct',
   provenance: {},
 }));
 jest.mock('../../src/utils/route-launch', () => ({
@@ -191,6 +199,35 @@ describe('fanout validation helpers', () => {
       expect((await validateFanoutModels(eleven)).error).toMatch(/cap of 10/);
       process.env.AMICUS_FANOUT_MAX_LEGS = '0';
       expect((await validateFanoutModels(eleven)).error).toMatch(/cap of 10/);
+    });
+
+    // v4.3 Task 18 (spec §6.2 sole-input invariant)
+    it('fallback enabled: serverModels is the union of primaries + resolved chain candidates (unresolvable ones dropped)', async () => {
+      // .mockImplementationOnce (not .mockImplementation) — the latter would
+      // permanently replace this shared mock's default for every later test
+      // in the file, not just this one.
+      const resolved = (model) => ({ kind: 'resolved', executableId: model,
+        gateway: model.startsWith('openrouter/') ? 'openrouter' : 'direct', provenance: {} });
+      mockResolveRouteForLaunch
+        .mockImplementationOnce(async ({ model }) => resolved(model))  // primary a/b
+        .mockImplementationOnce(async ({ model }) => resolved(model))  // primary c/d
+        .mockImplementationOnce(async ({ model }) => resolved(model))  // chain candidate a/cheap
+        .mockImplementationOnce(async () => ({                        // chain candidate a/bad-candidate
+          kind: 'error', type: 'model_route_error', field: 'model', requested: 'a/bad-candidate',
+          reason: 'model_not_found', preferredGateway: 'direct', suggestions: [],
+        }));
+      const r = await validateFanoutModels('a/b,c/d', {
+        fallback: { enabled: true, maxSubstitutions: 2, chains: { 'a/b': ['a/cheap', 'a/bad-candidate'] } },
+        catalog: [],
+      });
+      expect(r.legs.map(l => l.model)).toEqual(['a/b', 'c/d']);
+      expect(r.serverModels).toEqual(expect.arrayContaining(['a/b', 'c/d', 'a/cheap']));
+      expect(r.serverModels).not.toContain('a/bad-candidate');
+    });
+
+    it('fallback disabled/absent: serverModels is undefined (caller falls back to okLegs.map)', async () => {
+      const r = await validateFanoutModels('a/b,c/d');
+      expect(r.serverModels).toBeUndefined();
     });
   });
 });
@@ -445,6 +482,76 @@ describe('runFanout orchestrator', () => {
     expect(fsReal.readFileSync(pathReal.join(waveDir, 'briefing.md'), 'utf-8')).toBe('do the thing');
   });
 
+  // Task 7 (spec §4.2 Surface B): proves the REAL runFanout/runLeg call sites
+  // (not just the emit helpers in isolation, covered by
+  // tests/observe/fanout-events.test.js) actually write events.jsonl into the
+  // WAVE dir — leg emits land there too, never in the leg's own session dir.
+  it('emits wave-started/leg-started/leg-terminal/wave-terminal into the wave dir events.jsonl', async () => {
+    const { createEventTail, EVENTS_FILE } = require('../../src/observe/events');
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafeaaaa' });
+    const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', 'cafeaaaa');
+    const events = createEventTail(pathReal.join(waveDir, EVENTS_FILE)).poll();
+    expect(events.map(e => e.event)).toEqual([
+      'wave-started', 'leg-started', 'leg-started', 'leg-terminal', 'leg-terminal', 'wave-terminal',
+    ]);
+    const started = events.find(e => e.event === 'wave-started');
+    expect(started).toMatchObject({ id: 'cafeaaaa', legIds: ['cafeaaaa-1', 'cafeaaaa-2'] });
+    const legTerminals = events.filter(e => e.event === 'leg-terminal');
+    expect(legTerminals.map(e => e.legId).sort()).toEqual(['cafeaaaa-1', 'cafeaaaa-2']);
+    expect(legTerminals.every(e => e.status === 'complete')).toBe(true);
+    const terminal = events.find(e => e.event === 'wave-terminal');
+    expect(terminal).toMatchObject({ id: 'cafeaaaa', status: wave.status, exitCode: 0 });
+    expect(terminal.counts).toMatchObject({ total: 2, complete: 2 });
+    // No leg-level events.jsonl in the leg's OWN session dir — Task 7 emits
+    // leg-started/leg-terminal into the owning WAVE dir only.
+    const legEventsPath = pathReal.join(project, '.claude', 'amicus_sessions', 'cafeaaaa-1', EVENTS_FILE);
+    expect(fsReal.existsSync(legEventsPath)).toBe(false);
+  });
+
+  // Task 13 (spec §5.2): --follow prints the SAME events Task 7 already emits
+  // to disk (proven above) — via the REAL runFanout/runLeg wiring, not the
+  // printer in isolation (that's tests/observe/follow.test.js) — and never
+  // touches stdout, so --json's contract is untouched.
+  it('--follow: streams the wave\'s own events as NDJSON to stderr in emission order, and stdout stays the normal single wave document (spec §5.2)', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafefeed', quiet: false, follow: true });
+
+      // Every stderr write that parses as JSON is one NDJSON event line, in
+      // the same order Task 7 already writes to events.jsonl (see the
+      // 'emits wave-started/leg-started/leg-terminal/wave-terminal' test
+      // above) — proving the dual-sink threading actually fires end-to-end.
+      const ndjsonLines = stderrSpy.mock.calls.map(c => c[0]).filter((s) => {
+        try { JSON.parse(s); return true; } catch { return false; } // drops fanout-leg's plain-text [fanout] notice lines
+      });
+      expect(ndjsonLines.map(s => JSON.parse(s).event)).toEqual([
+        'wave-started', 'leg-started', 'leg-started', 'leg-terminal', 'leg-terminal', 'wave-terminal',
+      ]);
+      expect(ndjsonLines.every(s => s.endsWith('\n'))).toBe(true);
+
+      // stdout carries EXACTLY one parseable JSON document — the normal wave
+      // doc contract (same as the --follow-off assertion below), untouched.
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const doc = JSON.parse(logSpy.mock.calls[0][0]);
+      expect(doc).toEqual(wave);
+      expect(doc.type).toBe('wave');
+    } finally {
+      stderrSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  it('--follow off (default): the wave\'s own event emission never writes to stderr', async () => {
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runFanout({ ...baseOpts(), waveId: 'cafebabe' });
+      expect(stderrSpy).not.toHaveBeenCalled();
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
+
   it('json mode (non-quiet): stdout carries EXACTLY one parseable JSON document', async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {
@@ -453,6 +560,44 @@ describe('runFanout orchestrator', () => {
       const doc = JSON.parse(logSpy.mock.calls[0][0]); // whole-output parse must succeed
       expect(doc.type).toBe('wave');
       expect(doc.schemaVersion).toBe(2);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  // v4.3 Task 19 Fix Wave 1 (Finding 3): a retry launch (options.retryOfWaveId
+  // set by fanout-retry.js) must NOT print its own wave doc to stdout —
+  // fanout-retry.js owns that print (after enriching retryOf/effective onto
+  // it). This must be additive-only: the --on-complete hook and wave.json
+  // still fire/write exactly as a normal wave (only the console.log is gated).
+  it('retry launch (options.retryOfWaveId set) suppresses runFanout\'s own stdout doc-print, but --on-complete and wave.json are untouched', async () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const spawnCalls = [];
+    const fakeSpawn = (cmd, opts) => {
+      spawnCalls.push({ cmd, opts });
+      const listeners = {};
+      const child = {
+        stdout: { on: () => {} }, stderr: { on: () => {} },
+        on: (ev, cb) => { listeners[ev] = cb; },
+        kill: () => {},
+      };
+      setImmediate(() => listeners.close && listeners.close(0));
+      return child;
+    };
+    try {
+      const { wave } = await runFanout({
+        ...baseOpts(), quiet: false, retryOfWaveId: 'w1',
+        onComplete: 'echo retry-done',
+        onCompleteDeps: { spawn: fakeSpawn, logger: { warn: () => {}, debug: () => {} } },
+      });
+      // the doc-print is suppressed for a retry launch...
+      expect(logSpy).not.toHaveBeenCalled();
+      // ...but the --on-complete hook still fires (never gated by retryOfWaveId)...
+      expect(spawnCalls).toHaveLength(1);
+      expect(spawnCalls[0].cmd).toBe('echo retry-done');
+      // ...and wave.json is still written (only the stdout print is suppressed).
+      const wavePath = pathReal.join(project, '.claude', 'amicus_sessions', wave.waveId, 'wave.json');
+      expect(fsReal.existsSync(wavePath)).toBe(true);
     } finally {
       logSpy.mockRestore();
     }
@@ -622,6 +767,25 @@ describe('runFanout orchestrator', () => {
       const rows = readSpendRows(ledgerDir);
       expect(rows).toHaveLength(1);
       expect(rows[0].taskId).toBe('ledgerwave2-2');
+    });
+
+    // fanout-leg.js:131-132 prefers the resolved leg.gateway (set by
+    // validateFanoutModels from the router's RouteResult) over the old
+    // string-prefix heuristic, which mislabeled v4.2 local-provider legs
+    // (Ollama/LM Studio/vLLM) as 'direct'. Exercise the real
+    // runFanout -> runLeg -> appendSpend path with a leg whose resolved
+    // route reports gateway:'local' to guard against that regression.
+    it('a leg whose resolved route reports gateway:local is attributed gateway:local on its ledger row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({
+        ...baseOpts(), models: 'openrouter/a/b,ollama/llama3', waveId: 'ledgerwave3',
+      });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      const localRow = rows.find(r => r.model === 'ollama/llama3');
+      const openrouterRow = rows.find(r => r.model === 'openrouter/a/b');
+      expect(localRow).toMatchObject({ gateway: 'local' });
+      expect(openrouterRow).toMatchObject({ gateway: 'openrouter' });
     });
   });
 });

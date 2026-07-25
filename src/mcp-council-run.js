@@ -16,6 +16,7 @@ const path = require('path');
 const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
 const { isPathInside } = require('./project-root-allowlist');
+const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 
 function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
@@ -23,7 +24,14 @@ function textResult(text, isError) {
   return result;
 }
 
-/** Resolve the bench: models XOR council preset (amicus_fanout parity). */
+/**
+ * Resolve the bench: models XOR council preset (amicus_fanout parity).
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed council
+ * preset name when that branch was taken, else null — this handler always
+ * spawns the CLI child with an already-expanded `--models` list (never
+ * `--council`), so the preset name would otherwise be lost; the caller
+ * forwards it via the internal `--council-name` passthrough instead.
+ */
 function resolveBenchInput(input) {
   const inputModels = Array.isArray(input.models) ? input.models : [];
   const hasModels = inputModels.length > 0;
@@ -34,11 +42,12 @@ function resolveBenchInput(input) {
     const { resolveCouncilMembers } = require('./utils/config');
     const { readCache } = require('./utils/model-catalog');
     const catalog = (readCache() || {}).models || [];
-    const expanded = resolveCouncilMembers(input.council.trim(), catalog);
+    const presetName = input.council.trim();
+    const expanded = resolveCouncilMembers(presetName, catalog);
     if (expanded.error) { return { error: expanded.error }; }
-    return { bench: expanded.models };
+    return { bench: expanded.models, presetName };
   }
-  return { bench: inputModels };
+  return { bench: inputModels, presetName: null };
 }
 
 /**
@@ -49,6 +58,12 @@ function resolveBenchInput(input) {
  * @param {{spawnFn: Function, clientName: string}} helpers injected by mcp-server
  */
 async function handleCouncilRunTool(input, project, helpers) {
+  // Task 15 (spec §5.3): validate onComplete FIRST, before any run dir is
+  // prepared — exec strings are rejected over MCP (the Zod enum on the tool
+  // def already rejects them at the call boundary; this is defense-in-depth
+  // for any caller that bypasses schema validation).
+  const oc = validateOnComplete(input.onComplete);
+  if (!oc.ok) { return textResult(oc.error, true); }
   const CHAIR_DEFAULT = 'deepseek';
   if (typeof input.briefingFile !== 'string' || !input.briefingFile.trim()) {
     return textResult("amicus_council_run requires 'briefingFile' (a path to the briefing).", true);
@@ -62,6 +77,7 @@ async function handleCouncilRunTool(input, project, helpers) {
   const benchRes = resolveBenchInput(input);
   if (benchRes.error) { return textResult(benchRes.error, true); }
   const bench = benchRes.bench;
+  const presetName = benchRes.presetName;
   if (bench.length < 2) { return textResult('A council needs at least 2 seats.', true); }
   const chair = (typeof input.chair === 'string' && input.chair.trim()) ? input.chair.trim() : CHAIR_DEFAULT;
   if (bench.includes(chair)) {
@@ -123,6 +139,10 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (input.timeoutMinutes) { args.push('--timeout', String(input.timeoutMinutes)); }
   if (typeof input.maxCost === 'number') { args.push('--max-cost', String(input.maxCost)); }
   if (input.gateway) { args.push('--gateway', input.gateway); }
+  // v4.3 Task 3 (spec §7.1): the bench above is already expanded, so `--council`
+  // itself is never spawned (it would collide with `--models`) — this internal,
+  // undocumented flag carries the preset NAME through for attribution only.
+  if (presetName) { args.push('--council-name', presetName); }
   // v4.1 §4.5b/§4.5d. claudeReviewFile is resolved against `project` for the same
   // reason outDir is — an MCP client may send a relative path, and the child's cwd
   // is the run dir. Validation of the file itself stays in the spawned engine's
@@ -145,6 +165,10 @@ async function handleCouncilRunTool(input, project, helpers) {
   // read-merge-write has no lock (see run-state.writeSpawnPid).
   try { if (typeof child?.pid === 'number') { runState.writeSpawnPid(runDir, child.pid); } }
   catch { /* best-effort */ }
+  // Task 15 (spec §5.3): the run is now known-launched under runId — mark it
+  // for a best-effort terminal notify. runWait's poll loop (mcp-wait.js) is
+  // the only code that later sees this council run reach terminal state.
+  if (oc.mode === 'mcp-notify') { requestMcpNotify(runId); }
 
   const body = JSON.stringify({
     schemaVersion: 2, type: 'council-run', runId, runDir, status: 'running',

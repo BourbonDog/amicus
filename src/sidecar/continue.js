@@ -117,6 +117,26 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
 }
 
 /**
+ * Resolve a reopened session's usage, write it onto metadata, and append one
+ * attributed ledger row. Mirrors start.js's finalize (the only sites that
+ * dropped usage - BACKLOG.md:280). Best-effort ledger append; never throws.
+ * @returns {{usage: object|null}}
+ */
+function finalizeSpendForReopen({ taskId, model, mode, op, result, status, project, metadata }, ctx = {}) {
+  const { resolveUsage } = require('../utils/pricing');
+  const usage = result && result.usage ? resolveUsage({ model, usageTotals: result.usage }) : null;
+  if (usage) {
+    metadata.usage = usage; // buildRunResult surfaces metadata.usage into the --json doc for free
+    try {
+      const { appendSpend } = require('../utils/spend-ledger');
+      const gateway = metadata.gateway || (String(model).startsWith('openrouter/') ? 'openrouter' : 'direct');
+      appendSpend({ taskId, model, mode, usage, op, status, project, gateway }, ctx);
+    } catch { /* best-effort */ }
+  }
+  return { usage };
+}
+
+/**
  * Continue from a previous sidecar session - Spec Reference: §4.4, §8.5
  * @returns {Promise<number>} process exit code
  */
@@ -246,6 +266,17 @@ async function continueSidecar(options) {
   } else {
     finalizeSession(sessionDir, summary, project, meta, { quietStdout: json, status: terminal.status });
   }
+  // v4.3: attribute continue spend (C9/E4). Reload meta, write usage + append a
+  // ledger row (status: statusFromResult, matching start.js — not terminal.status).
+  {
+    const { statusFromResult } = require('../utils/result-schema');
+    const reloaded = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    const { usage } = finalizeSpendForReopen({
+      taskId: newTaskId, model, mode: headless ? 'headless' : 'interactive',
+      op: 'continue', result, status: statusFromResult(result), project, metadata: reloaded,
+    });
+    if (usage) { writeFileAtomic(metaPath, JSON.stringify(reloaded, null, 2), { mode: 0o600 }); }
+  }
 
   if (json) {
     const { buildRunResult } = require('../utils/result-schema');
@@ -261,5 +292,6 @@ module.exports = {
   loadPreviousSession,
   buildContinuationContext,
   createContinueSessionMetadata,
+  finalizeSpendForReopen,
   continueSidecar
 };

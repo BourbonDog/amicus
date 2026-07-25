@@ -28,7 +28,10 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
   const added = [];
   return {
     o: { briefing: 'material', models, chair: 'deepseek', critic, lenses,
-      runId: 'abc123', runDir, timeout: 10, gateway: 'auto', noValidateModel: false, date: '2026-07-19' },
+      runId: 'abc123', runDir, timeout: 10, gateway: 'auto', noValidateModel: false, date: '2026-07-19',
+      // v4.3 Task 3 (spec §7.2): non-null so every launch-site assertion below
+      // can prove the id actually reached the launcher, not just a falsy default.
+      councilName: 'nightly-council' },
     launchers: {
       launchWave: async (opts) => onWave(opts),
       launchSolo: async (opts) => {
@@ -55,6 +58,9 @@ describe('runStage1', () => {
     expect(waves).toHaveLength(1);
     expect(waves[0].waveId).toBe('abc123-s1');
     expect(waves[0].project).toBe(ctx.o.runDir);
+    // v4.3 Task 3 (spec §7.2): the seat wave carries council attribution.
+    expect(waves[0].councilRunId).toBe('abc123');
+    expect(waves[0].councilName).toBe('nightly-council');
     expect(reviews.map(r => r.model)).toEqual(['gemini', 'gpt', 'qwen']);
     expect(reviews.every(r => r.conformance === 'clean' && r.findings.length === 1)).toBe(true);
     expect(deadLegs).toHaveLength(0);
@@ -99,6 +105,9 @@ describe('runStage1', () => {
     expect(solos).toHaveLength(1);
     expect(solos[0].model).toBe('gpt');
     expect(solos[0].waveId).toBe('abc123-p1');
+    // v4.3 Task 3 (spec §7.2): the findings-repair solo carries council attribution too.
+    expect(solos[0].councilRunId).toBe('abc123');
+    expect(solos[0].councilName).toBe('nightly-council');
     expect(reviews.find(r => r.model === 'gpt').conformance).toBe('repaired');
   });
 
@@ -191,6 +200,9 @@ describe('runStage2', () => {
     expect(aborted).toBeNull();
     expect(waves[0].waveId).toBe('abc123-s2');
     expect(waves[0].project).toBe(ctx.scratchDir);           // judge isolation (spec §6)
+    // v4.3 Task 3 (spec §7.2): the judge wave carries council attribution.
+    expect(waves[0].councilRunId).toBe('abc123');
+    expect(waves[0].councilName).toBe('nightly-council');
     expect(waves[0].prompt.split('\n')[0]).toContain('Do NOT use any tools');
     expect(fs.existsSync(path.join(ctx.o.runDir, 'bundle-stage2.md'))).toBe(true);
     expect(fs.existsSync(path.join(ctx.o.runDir, 'judge-gemini.md'))).toBe(true);
@@ -216,6 +228,9 @@ describe('runStage2', () => {
     const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(solos[0].waveId).toBe('abc123-q1');
     expect(solos[0].project).toBe(ctx.scratchDir);
+    // v4.3 Task 3 (spec §7.2): the judge-repair solo carries council attribution too.
+    expect(solos[0].councilRunId).toBe('abc123');
+    expect(solos[0].councilName).toBe('nightly-council');
     const g = judgeResults.find(j => j.judge === 'gemini');
     expect(g.ok).toBe(true);
     expect(g.conformance).toBe('repaired');

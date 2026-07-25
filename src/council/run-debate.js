@@ -18,6 +18,7 @@ const { materializeDebate } = require('./run-launch');
 const { tally } = require('./tally');
 const { isAbortExit } = require('./run-stages');
 const runState = require('./run-state');
+const { emitStageStarted } = require('../observe/events');
 
 /** Spec §5.7 fallback: a dead/unparseable defense means every bundled id's original stands. */
 function allNoResponse(ids) {
@@ -65,7 +66,9 @@ function debateTargets(provisionalRecord, tallyInput) {
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
   return { project: ctx.scratchDir, waveId, timeout: ctx.o.timeout, gateway: ctx.o.gateway,
-    noValidateModel: ctx.o.noValidateModel, noCostGate: ctx.o.noCostGate };
+    noValidateModel: ctx.o.noValidateModel, noCostGate: ctx.o.noCostGate,
+    // v4.3 Task 3 (spec §7.2): attribution ids for every defense/re-vote leg.
+    councilRunId: ctx.o.runId, councilName: ctx.o.councilName };
 }
 
 async function runDefenseSolo(ctx, raiser, findings, idx) {
@@ -121,6 +124,7 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
   // nothing was defended/amended, or the cost ceiling hit).
   runState.updateStage(ctx.o.runDir, 'debate-revote',
     { status: 'running', startedAt: new Date().toISOString(), project: ctx.scratchDir, waveId });
+  emitStageStarted(ctx.o.runDir, ctx.o.runId, 'debate-revote', waveId, ctx.o.follow);
   runState.appendStageWave(ctx.o.runDir, 'debate-revote', waveId);
   const res = await ctx.launchers.launchWave({ ...legOpts(ctx, waveId), models: judges, prompt: bundle });
   ctx.addWave(res.wave);

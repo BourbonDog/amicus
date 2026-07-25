@@ -143,6 +143,12 @@ function isBooleanFlag(key) {
      'render',               // council verdict: also refresh report.html next to the decided verdict
      'claude',               // init: register for Claude Code only (Task 15)
      'desktop',              // init: register for Claude Desktop only (Task 15)
+     'failed',               // spend: only non-complete (wasted) rows (v4.3 Task 4, spec §7.3)
+     'rows',                 // spend: include matching raw rows, capped at 1000 (v4.3 Task 4)
+     'plain',                // watch: milestone log lines instead of the refresh table (v4.3 Task 11)
+     'ui',                   // watch: open the Council Workspace window; v4.4 seam (v4.3 Task 11)
+     'follow',               // fanout / council run: stream this run's own events to stderr (v4.3 Task 13)
+     'fallback',             // fanout / council run: opt-in cheaper-model substitution (v4.3 Task 18, spec 6.2); --no-fallback negates via the generic no-* catch-all below
    ];
   return booleanFlags.includes(key);
 }
@@ -369,6 +375,7 @@ Commands:
   council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]   Build + write verdict.json
   doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
   spend [--since 7d] [--json]           Cross-run cost rollup from the spend ledger
+  watch <id> [--json] [--plain] [--interval <sec>]   Live-render a run from any terminal
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window
@@ -431,10 +438,27 @@ Options for 'fanout':
                                ~32KB Windows argument cap). Mutually exclusive
                                with --prompt. Also works with 'start'.
   --wave-id <id>               Explicit wave ID (leg IDs become <id>-1..N)
+  --retry-failed <waveId>       Relaunch ONLY that wave's failed/timed-out/crashed/
+                                aborted legs as a NEW linked wave, using each leg's
+                                own saved context (byte-identical retry). Skips
+                                --prompt/--models; --models filters which failed
+                                legs to retry. wave.json is never modified.
   --json                       Emit the wave result as stable JSON on stdout
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
+  --fallback / --no-fallback   Opt-in cheaper-model substitution on a classified
+                               rate-limit/overload leg failure (spec 6.2). Overrides
+                               config fallbacks.enabled when passed; default: config, else off.
   --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
+  --follow                      Stream this run's events to stderr as they happen (--json -> NDJSON)
+  --on-complete <cmd>           Run a shell command once, at terminal state, after
+                                wave.json is durable. The command is user-authored
+                                on THIS command line (CLI-only — never sourced from
+                                config/briefings/model output); payload rides via
+                                env only (AMICUS_TASK_ID/TYPE/STATUS/EXIT_CODE/
+                                RESULT_FILE/EVENTS_FILE/COST/PROJECT), never model
+                                text. Child stdout/stderr go to amicus stderr.
+                                Never changes the wave's exit code, docs, or events.
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -519,7 +543,8 @@ Subcommands for 'council':
       [--chair <model>] [--critic <model>] [--lenses s1,s2,...]
       [--out-dir <dir>] [--json] [--max-cost <usd>] [--timeout <min>]
       [--gateway auto|direct|openrouter] [--no-validate-model]
-      [--debate] [--claude-review <file>] [--no-cost-gate]
+      [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
+      [--fallback] [--no-fallback] [--on-complete <cmd>]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -527,6 +552,21 @@ Subcommands for 'council':
                                 --claude-review <file> enters Claude's own review as
                                 a judged entry; --no-cost-gate disables the per-leg
                                 price gate for the whole run (repairs + chair).
+                                --fallback/--no-fallback opts stage legs (Stage-1 +
+                                Stage-2) into cheaper-model substitution on a
+                                classified rate-limit/overload failure (spec 6.2);
+                                the chair never substitutes via chains.
+                                --follow streams run events to stderr as they
+                                happen (--json -> NDJSON).
+                                --on-complete <cmd> runs a shell command once, at
+                                terminal state, after run.json is durable. The
+                                command is user-authored on THIS command line
+                                (CLI-only — never sourced from config/briefings/
+                                model output); payload rides via env only
+                                (AMICUS_TASK_ID/TYPE/STATUS/EXIT_CODE/RESULT_FILE/
+                                EVENTS_FILE/COST/PROJECT), never model text. Child
+                                stdout/stderr go to amicus stderr. Never changes
+                                the run's exit code, docs, or events.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output
@@ -544,9 +584,26 @@ Options for 'doctor':
   spend: `
 Options for 'spend':
   --since <Nd>                  Restrict to the last N days (e.g. --since 7d)
+  --wave <id>                   Only rows from this fan-out wave
+  --council <runId|name>        Only rows from this council run (id or preset name)
+  --project <path|.>            Only rows from this project ('.' = cwd)
+  --model <id-or-prefix>        Only rows whose model starts with this
+  --op <start|continue|resume|leg>   Only rows with this operation
+  --failed                      Only non-complete (wasted) rows
+  --group-by <model|wave|council|project|op|day>   Rollup dimension (default model)
+  --rows                        Include matching raw rows (capped at 1000)
   --json                        Machine-readable output (versioned spend doc)
   Reads ~/.config/amicus/spend-ledger.jsonl (one row per completed run/leg).
   Shows remaining OpenRouter credit when a key is configured.
+`,
+  watch: `
+Options for 'watch':
+  <id>                          A fan-out wave id, council run id, or session id
+  --project <path>              Project the run was launched in (default cwd)
+  --interval <sec>              Refresh interval (default 2, floor 0.5)
+  --plain                       Milestone log lines instead of the refresh table
+  --json                        NDJSON: tailed events + composed doc on change + final doc
+  --ui                          Open the Council Workspace window (v4.4; interactive-only)
 `,
   setup: `
 Options for 'setup':

@@ -57,7 +57,9 @@ function writeWaveMetadata(waveDir, patch) {
  *   contextTurns?, contextSince?, contextMaxTokens?, mcp?, mcpConfig?, noMcp?,
  *   excludeMcp?, noValidateModel?, gatewayMode? (#61 Task 7.3: --gateway merged
  *   with routing.prefer, applied per leg), json?, client?, quiet? (suppress
- *   stdout — tests)
+ *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs),
+ *   fallback? / catalog? (v4.3 Task 18 §6.2: opt-in substitution; off/absent unchanged),
+ *   retryContexts? / retryOfWaveId? (v4.3 Task 19: --retry-failed relaunch seam; absent -> byte-identical)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -70,11 +72,15 @@ async function runFanout(options) {
   const { generateFoldNonce } = require('../utils/fold-marker');
   const { installSignalAbort, markAborted } = require('../utils/session-abort');
   const { getSessionDir } = require('../session-manager');
+  const { emitWaveStarted, emitWaveTerminal } = require('../observe/events');
 
   const project = options.project || process.cwd();
   const createdAt = new Date().toISOString();
+  // v4.3 Task 13: live stderr mirror of this wave's own events, in-process
+  // (no tail). Off by default; every emit* call below threads it through.
+  const follow = options.follow ? require('../observe/follow').createFollowPrinter({ json: options.json }) : null;
   const emit = (doc) => {
-    if (options.quiet) { return; }
+    if (options.quiet || options.retryOfWaveId) { return; } // v4.3 T19 FW1#3: retry launches print via fanout-retry.js instead
     if (options.json) {
       console.log(JSON.stringify(doc, null, 2));
     } else {
@@ -108,15 +114,20 @@ async function runFanout(options) {
   const validated = await validateFanoutModels(options.models, {
     noValidateModel: options.noValidateModel,
     gatewayMode: options.gatewayMode,
+    fallback: options.fallback, // v4.3 Task 18 §6.2: serverModels union only when enabled
+    catalog: options.catalog,
   });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
+  // v4.3 §7.2: stamp council attribution onto every leg (fanout-leg.js's
+  // existing appendSpend reads it); no-op for every non-council caller.
+  if (options.councilRunId || options.councilName) {
+    legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
+  }
   const okLegs = legs.filter(l => l.ok);
   // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
-  // stderr to land on (fanout is one process resolving many legs, not one
-  // launch) — surface it on the wave doc instead, deduped in case two legs
-  // for the same vendor happen to both migrate (only the first ever fires
-  // since markMigrationNotified is one-shot per vendor, but dedupe defensively).
+  // stderr to land on — surface it on the wave doc instead, deduped in case
+  // two legs for the same vendor happen to both migrate.
   const notices = [...new Set(legs.map(l => l.notice).filter(Boolean))];
 
   // 1b. Budget gate (pre-creation; refuse before spending). Only legs that
@@ -146,14 +157,12 @@ async function runFanout(options) {
     promptMeta: options.promptMeta || null,
     pid: process.pid, project, createdAt,
   });
+  emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds, follow);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
-  // shared server, so starting one (and immediately tearing it down) is pure
-  // waste. Short-circuit straight to the same routing-failure wave the
-  // normal path would eventually produce — same per-leg docs
-  // (buildRoutingFailureLeg), same aggregation (buildWaveResult /
-  // waveStatusFromLegs via the default status param), same exit-code mapping
-  // (waveExitCode) — just without the server round-trip.
+  // shared server, so starting one (and tearing it down) is pure waste.
+  // Short-circuit to the same routing-failure wave the normal path would
+  // eventually produce — same per-leg docs, aggregation, and exit mapping.
   if (okLegs.length === 0) {
     const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
     const completedAt = new Date().toISOString();
@@ -163,8 +172,11 @@ async function runFanout(options) {
     const wavePath = path.join(waveDir, 'wave.json');
     writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
     writeWaveMetadata(waveDir, { status: wave.status, completedAt });
+    const routingExitCode = waveExitCode(wave.status);
+    emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode: routingExitCode }, follow);
+    await require('../observe/on-complete').fireWaveOnComplete(options.onComplete, wave, { waveId, waveDir, wavePath, exitCode: routingExitCode, project }, options.onCompleteDeps);
     emit(wave);
-    return { wave, exitCode: waveExitCode(wave.status) };
+    return { wave, exitCode: routingExitCode };
   }
 
   // 3. Context + prompts built ONCE (model-independent)
@@ -195,7 +207,7 @@ async function runFanout(options) {
   });
   let client, server;
   try {
-    ({ client, server } = await startOpenCodeServer(mcpServers, { models: okLegs.map(l => l.model) }));
+    ({ client, server } = await startOpenCodeServer(mcpServers, { models: validated.serverModels || okLegs.map(l => l.model) }));
   } catch (err) {
     writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
     return errorWave(waveId, `Failed to start server: ${err.message}`);
@@ -225,12 +237,10 @@ async function runFanout(options) {
     },
   });
 
-  // 6. Launch all ROUTABLE legs concurrently (runLeg never rejects). A leg
-  // that failed to route (leg.ok === false) never touches the shared server —
-  // it resolves immediately to an error run document (buildRoutingFailureLeg)
-  // in its own slot, so it fails only itself, never the sibling legs or the
-  // whole wave (#61 Task 7.3).
-  const heartbeat = options.quiet
+  // 6. Launch all ROUTABLE legs concurrently (runLeg never rejects). A leg that
+  // failed to route (leg.ok === false) resolves to an error run doc in its own
+  // slot (buildRoutingFailureLeg), failing only itself, never the wave (#61).
+  const heartbeat = (options.quiet || options.follow)
     ? { stop() {} }
     : createWaveHeartbeat(
         legs.map((leg, i) => ({ label: leg.modelInput || leg.model, dir: legDirs[i] })),
@@ -240,15 +250,23 @@ async function runFanout(options) {
   const reasoning = options.thinking ? { effort: options.thinking } : undefined;
   let legDocs;
   try {
-    legDocs = await Promise.all(legs.map((leg, i) => (leg.ok
-      ? runLeg({
-          leg, legId: legIds[i], waveId, project, systemPrompt, userMessage,
-          timeoutMs, agent: options.agent, client, server,
-          summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
-          foldNonce, directory: options.directory,
-        })
-      : Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }))
-    )));
+    // retryContexts/retryOfWaveId (v4.3 Task 19): absent on a normal wave, so
+    // every leg below falls back to the wave-wide prompt — byte-identical.
+    legDocs = await Promise.all(legs.map((leg, i) => {
+      if (!leg.ok) { return Promise.resolve(buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet })); }
+      const rc = options.retryContexts && options.retryContexts[i];
+      const saved = rc && rc.hadSavedContext;
+      return runLeg({
+        leg: options.retryOfWaveId ? { ...leg, retryOfWaveId: options.retryOfWaveId } : leg,
+        legId: legIds[i], waveId, project,
+        systemPrompt: saved ? rc.systemPrompt : systemPrompt,
+        userMessage: saved ? rc.userMessage : userMessage,
+        timeoutMs, agent: options.agent, client, server,
+        summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
+        foldNonce, directory: options.directory, follow,
+        fallback: options.fallback, catalog: options.catalog,
+      });
+    }));
   } finally {
     heartbeat.stop();
     uninstallSignals();
@@ -264,10 +282,12 @@ async function runFanout(options) {
   const wavePath = path.join(waveDir, 'wave.json');
   writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
   writeWaveMetadata(waveDir, { status: wave.status, completedAt });
-  emit(wave);
   const exitCode = signalled
     ? (signalled === 'SIGINT' ? 130 : 143)
     : waveExitCode(wave.status);
+  emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode }, follow);
+  await require('../observe/on-complete').fireWaveOnComplete(options.onComplete, wave, { waveId, waveDir, wavePath, exitCode, project }, options.onCompleteDeps);
+  emit(wave);
   return { wave, exitCode };
 }
 

@@ -4,7 +4,10 @@
 /**
  * @module fanout-leg
  * Per-leg helpers extracted from fanout.js to keep both files ≤300 lines.
- * Exports: legStatusFromResult, writeLegPatch, runLeg
+ * Exports: legStatusFromResult, writeLegPatch, runLeg, runSingleAttempt,
+ * buildRoutingFailureLeg (+ runLegWithFallback/recordAttemptSpend/
+ * sumAttemptUsage, re-exported from ./fanout-leg-fallback — split out to keep
+ * THIS file under the size gate; see that module for the substitution loop).
  */
 
 const fs = require('fs');
@@ -61,29 +64,40 @@ function buildRoutingFailureLeg({ leg, legId, waveId, quiet }) {
 }
 
 /**
- * Run one leg end-to-end: session record → runHeadless (shared server) →
- * leg finalize. Never throws — always resolves to a run document.
+ * Run ONE leg attempt end-to-end: session record -> runHeadless (shared
+ * server) -> leg finalize. Faithful extraction of the pre-fallback `runLeg`
+ * body — same setup, same never-throws try/finally, same leg-started/
+ * leg-terminal emits (with `follow` + the M4 own-try/catch), same `directory`
+ * threading into runHeadless. Never throws — always resolves to a run
+ * document. Does NOT append spend (the caller owns that: `runLeg` appends
+ * once; `runLegWithFallback` appends per attempt via recordAttemptSpend).
+ * Adds `.reason` (alias of buildRunResult's `.error`) and `.legId` so the
+ * fallback loop reads a stable shape without re-deriving them.
  */
-async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce, directory }) {
+async function runSingleAttempt({ leg, legId, waveId, project, directory, follow, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce }) {
   const { IdleWatchdog } = require('../utils/idle-watchdog');
   const { markAborted } = require('../utils/session-abort');
   const { runHeadless } = require('../headless');
   const { SessionPaths, saveInitialContext } = require('./session-utils');
-  const { buildRunResult } = require('../utils/result-schema');
+  const { buildRunResult, durationBetween } = require('../utils/result-schema');
   const { createSessionMetadata } = require('./start');
+  const { emitLegStarted, emitLegTerminal } = require('../observe/events');
+  const { getSessionDir } = require('../session-manager');
 
-  // Setup + run under ONE try so ANY throw (session record creation, initial
-  // context write, watchdog arm, or the poll loop itself) becomes an error run
-  // document — the wave still aggregates and writes wave.json. This function
-  // must NEVER throw / reject for a leg error (fanout.js relies on this in its
-  // Promise.all so one leg cannot sink the whole wave).
   let legDir = null;
   let watchdog = null;
   let result;
+  // Captured inside the try below so a getSessionDir throw (invalid taskId)
+  // still becomes an error run document like every other setup failure; used
+  // again AFTER the try/finally closes to emit leg-terminal (M4: that emit is
+  // unguarded by the try, so it must never depend on something that could throw).
+  let waveDir = null;
   try {
     legDir = createSessionMetadata(legId, project, {
       model: leg.model, prompt: userMessage, noUi: true, agent: agent || 'build',
     });
+    waveDir = getSessionDir(project, waveId);
+    emitLegStarted(waveDir, waveId, legId, leg.model, leg.modelInput, follow);
     writeLegPatch(legDir, { parentWave: waveId, modelInput: leg.modelInput });
     saveInitialContext(legDir, systemPrompt, userMessage);
 
@@ -119,14 +133,6 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   const summary = result.summary || null;
   const { resolveUsage } = require('../utils/pricing');
   const usage = result && result.usage ? resolveUsage({ model: leg.model, usageTotals: result.usage }) : null;
-  // B24: cross-run spend ledger — one row per leg (mirrors start.js's single-run
-  // append). Best-effort; never let ledger bookkeeping affect the leg's own result.
-  if (usage) {
-    try {
-      const { appendSpend } = require('../utils/spend-ledger');
-      appendSpend({ taskId: legId, waveId, model: leg.model, mode: 'leg', usage });
-    } catch { /* best-effort */ }
-  }
   // If setup threw before the session dir existed, there is nothing on disk to
   // finalize — still resolve to an error run document so the wave aggregates.
   const legPatch = {
@@ -137,21 +143,47 @@ async function runLeg({ leg, legId, waveId, project, systemPrompt, userMessage, 
   };
   let finalMeta = legPatch;
   if (legDir) {
-    if (summary) {
-      fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 });
-    }
+    if (summary) { fs.writeFileSync(SessionPaths.summaryFile(legDir), summary, { mode: 0o600 }); }
     finalMeta = writeLegPatch(legDir, legPatch);
   }
-  const effectiveResult = finalMeta.status === 'aborted'
-    ? { ...result, aborted: true }
-    : result;
+  if (waveDir) {
+    try {
+      emitLegTerminal(waveDir, waveId, legId, {
+        model: leg.model, status: finalMeta.status,
+        durationMs: durationBetween(finalMeta.createdAt, finalMeta.completedAt),
+        usage: usage || null,
+      }, follow);
+    } catch { /* best-effort: a missing duration/emit never fails the leg */ }
+  }
+  const effectiveResult = finalMeta.status === 'aborted' ? { ...result, aborted: true } : result;
   if (!quiet) {
     process.stderr.write(`[fanout] leg ${legId} (${leg.modelInput}): ${finalMeta.status}\n`);
   }
-  return buildRunResult({
+  const doc = buildRunResult({
     taskId: legId, metadata: finalMeta, result: effectiveResult, summary,
     modelInput: leg.modelInput, sessionDir: legDir, waveId, usage,
   });
+  doc.reason = doc.error || null; // classifier alias (buildRunResult stores it as .error)
+  doc.legId = legId;
+  return doc;
 }
 
-module.exports = { legStatusFromResult, writeLegPatch, runLeg, buildRoutingFailureLeg };
+/**
+ * Run one leg end-to-end. Thin wrapper: fallback OFF (the default) is a
+ * single `runSingleAttempt` + exactly one spend row (`attempt:0`, byte-
+ * identical to the pre-fallback appendSpend row); fallback ON delegates to
+ * `runLegWithFallback` (./fanout-leg-fallback). Never throws.
+ */
+async function runLeg(args) {
+  const { leg, legId, waveId, project, fallback } = args;
+  const { runLegWithFallback, recordAttemptSpend } = require('./fanout-leg-fallback');
+  if (fallback && fallback.enabled) { return runLegWithFallback(args); }
+  const doc = await runSingleAttempt(args);
+  recordAttemptSpend({ doc, leg, currentModel: leg.model, legId, waveId, project, attempt: 0, originalModel: leg.model }, {});
+  return doc;
+}
+
+module.exports = {
+  legStatusFromResult, writeLegPatch, runLeg, buildRoutingFailureLeg, runSingleAttempt,
+  ...require('./fanout-leg-fallback'),
+};

@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const runState = require('./council/run-state');
 const { RUNNING_VERSION } = require('./utils/version-info');
+const { enrichLegUsage, markLive, rollupWaveUsage } = require('./observe/live-doc');
 
 /**
  * Every wave a stage launched: the primary `waveId` plus the recorded
@@ -58,6 +59,41 @@ function countWaveLegs(project, waveId) {
   return { total: legs.length, complete };
 }
 
+/**
+ * Leg ids recorded on a sub-wave's metadata.json, or [] when the wave record
+ * is absent/malformed. A small sibling to countWaveLegs — kept separate so
+ * that helper's {total, complete} contract (other callers depend on it) isn't
+ * overloaded into returning ids too.
+ * @returns {string[]}
+ */
+function waveLegIds(project, waveId) {
+  const { getSessionDir } = require('./session-manager');
+  let legs;
+  try {
+    legs = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, waveId), 'metadata.json'), 'utf-8')).legs;
+  } catch { return []; }
+  return Array.isArray(legs) ? legs : [];
+}
+
+/**
+ * Read-time cost-by-seat for one leg (A8: progress.json only, never a ledger).
+ * Tolerates a leg with no progress.usage yet — contributes nothing (N3).
+ */
+function legUsage(project, legId) {
+  const { getSessionDir } = require('./session-manager');
+  const { readProgress } = require('./sidecar/progress');
+  let model = null;
+  try {
+    model = JSON.parse(fs.readFileSync(
+      path.join(getSessionDir(project, legId), 'metadata.json'), 'utf-8')).model || null;
+  } catch { /* leg metadata not written yet */ }
+  let progressUsage;
+  try { progressUsage = readProgress(getSessionDir(project, legId)).usage; }
+  catch { /* no progress.json yet */ }
+  return enrichLegUsage({ model }, progressUsage);
+}
+
 function elapsedOf(run) {
   const end = run.completedAt || new Date().toISOString();
   const ms = Math.max(0, new Date(end).getTime() - new Date(run.createdAt || end).getTime());
@@ -94,11 +130,19 @@ function buildCouncilStatusPayload(project, taskId) {
   // Sum across every sub-wave the active stage launched: a lens stage1 has no
   // seat wave at all, and a critic solo runs beside one. Stays null until at
   // least one sub-wave record exists on disk.
+  // Cost-by-seat rides the same loop, read-time from progress.json only (A8) —
+  // usageLegs stays empty (no `usage` on the payload) until a leg has actually
+  // flushed usage; a leg with none yet contributes nothing (N3).
+  const usageLegs = [];
   for (const waveId of active && active.project ? subWaveIds(active) : []) {
     const c = countWaveLegs(active.project, waveId);
     if (!c) { continue; }
     legsTotal = (legsTotal || 0) + c.total;
     legsComplete = (legsComplete || 0) + c.complete;
+    for (const legId of waveLegIds(active.project, waveId)) {
+      const enriched = legUsage(active.project, legId);
+      if (enriched.usage) { usageLegs.push(enriched); }
+    }
   }
   const payload = {
     taskId: run.runId, type: 'council-run', runId: run.runId, runDir: ptr.runDir,
@@ -107,8 +151,9 @@ function buildCouncilStatusPayload(project, taskId) {
     exitCode: run.exitCode !== undefined ? run.exitCode : null,
     version: RUNNING_VERSION,
   };
+  if (usageLegs.length) { payload.usage = rollupWaveUsage(usageLegs); }
   if (run.error) { payload.reason = `${run.error.code}: ${run.error.message}`; }
-  return payload;
+  return markLive(payload);
 }
 
 /** amicus_list entries for every council pointer in the project. */

@@ -113,6 +113,8 @@ function isStalled(lastActivityMs) {
 function writeProgress(sessionDir, stage, extra = {}) {
   const progressPath = path.join(sessionDir, 'progress.json');
   const data = {
+    schemaVersion: 1,
+    type: 'progress',
     stage,
     stageLabel: STAGE_LABELS[stage] || stage,
     updatedAt: new Date().toISOString(),
@@ -223,6 +225,9 @@ function readProgress(sessionDir) {
   };
   if (stage !== undefined) {
     result.stage = stage;
+  }
+  if (progress && progress.usage) {
+    result.usage = progress.usage;
   }
   return result;
 }

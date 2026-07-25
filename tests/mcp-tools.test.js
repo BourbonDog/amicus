@@ -40,9 +40,10 @@ describe('MCP Tool Definitions', () => {
     expect(names).toContain('amicus_fanout');
   });
 
-  // spec §8: amicus_council_run is the 15th tool (Task 16).
-  test('has exactly 15 tools', () => {
-    expect(TOOLS).toHaveLength(15);
+  // spec §8: amicus_council_run is the 15th tool (Task 16); amicus_spend is
+  // the 16th (v4.3 Task 5, spec §7.3).
+  test('has exactly 16 tools', () => {
+    expect(TOOLS).toHaveLength(16);
   });
 
   test('tool names are unique', () => {

@@ -89,3 +89,65 @@ describe('council run forwards the three v4.1 flags into runCouncil options', ()
     expect(opts.claudeReviewFile).toBeNull();
   });
 });
+
+// v4.3 Task 3 (spec §7.1): councilName threading — the preset name reaches
+// runCouncil() when launched via --council <preset>, and stays null (never
+// fabricated) when launched via --models.
+describe('council run threads councilName (v4.3 Task 3, spec §7.1)', () => {
+  test('--council <preset> threads the preset name into runCouncil options', async () => {
+    // budget's bench includes the 'deepseek' alias (the default chair) — pick
+    // an explicit chair outside it so this doesn't trip the bench/chair guard.
+    const args = argsBase({ council: 'budget', chair: 'opus' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBe('budget');
+  });
+
+  test('--models with no preset leaves councilName null', async () => {
+    const code = await handleCouncilRun(argsBase());
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBeNull();
+  });
+
+  // The internal --council-name passthrough (mcp-council-run.js spawns the
+  // CLI child with an already-expanded --models list, never --council) is
+  // the ONLY way the preset name reaches this process in that path.
+  test('the internal --council-name passthrough also threads the preset name (MCP spawn path)', async () => {
+    const code = await handleCouncilRun(argsBase({ 'council-name': 'nightly-council' }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBe('nightly-council');
+  });
+
+  // Task 4 review fix: the passthrough is user-supplied/unbounded/unvalidated
+  // (unlike a real --council <preset>, catalog-validated upstream) and lands
+  // verbatim in the spend ledger's councilName column — exactly the dimension
+  // --group-by council reads. Trim, drop control/non-printable chars, cap 64.
+  test('the --council-name passthrough is sanitized (control chars stripped, capped at 64 chars)', async () => {
+    const base = 'nightly-council';
+    // Control chars (including \x00/\x1F/\x7F and internal whitespace like \t,
+    // all in \x00-\x1F) are stripped; leading/trailing whitespace is trimmed
+    // AFTER stripping; length is capped at 64.
+    const dirty = `  ${base}\x00\x1F\x7F${'x'.repeat(100)}  `;
+    const code = await handleCouncilRun(argsBase({ 'council-name': dirty }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    const expected = (base + 'x'.repeat(100)).slice(0, 64);
+    expect(opts.councilName).toBe(expected);
+    expect(opts.councilName.length).toBe(64);
+    expect(opts.councilName).not.toMatch(/[\x00-\x1F\x7F]/);
+  });
+
+  // A real preset must still outrank the passthrough (precedence unchanged).
+  test('a catalog --council preset still outranks a dirty --council-name passthrough', async () => {
+    const args = argsBase({ council: 'budget', chair: 'opus', 'council-name': 'ignored\x00junk' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.councilName).toBe('budget');
+  });
+});

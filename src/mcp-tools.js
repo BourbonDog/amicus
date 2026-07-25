@@ -11,6 +11,7 @@ const { z } = require('zod');
 const { formatAliasNames } = require('./utils/config');
 const { READ_CAP_BYTES } = require('./utils/read-slice');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
+const { GROUP_DIMS, ROWS_CAP } = require('./spend-query');
 
 /** Zod pattern for safe task IDs (alphanumeric, hyphens, underscores only) */
 const safeTaskId = z.string().regex(
@@ -360,6 +361,11 @@ function getTools() {
         'Claude Code session UUID for exact context matching. ' +
         'Prevents ambiguity when multiple sessions are active in the same project.'
       ),
+      onComplete: z.enum(['mcp-notify']).optional().describe(
+        'Advisory: send an MCP info notification carrying the terminal event doc when the run ' +
+        'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
+        'commands are NOT accepted over MCP.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -486,9 +492,42 @@ function getTools() {
         'Disable the per-leg price gate for the WHOLE run (repairs and chair included). ' +
         'Use for an intentional o3-class council. Independent of maxCost, which still caps the total.'
       ),
+      onComplete: z.enum(['mcp-notify']).optional().describe(
+        'Advisory: send an MCP info notification carrying the terminal event doc when the run ' +
+        'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
+        'commands are NOT accepted over MCP.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
+    },
+  },
+  {
+    name: 'amicus_spend',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      'Read-only cross-run cost rollup from the spend ledger (mirrors the CLI ' +
+      '`amicus spend` query flags). Filter by since/wave/council/project/model/op, keep ' +
+      'only failed (wasted) rows, and group by a dimension. Returns a versioned ' +
+      'spend doc (ids/numbers/paths only, never model-generated text) — never fenced.',
+    inputSchema: {
+      since: z.string().optional().describe(
+        "Only rows from the last N days, as an integer followed by 'd' (e.g. '7d')."
+      ),
+      wave: z.string().optional().describe('Only rows from this fan-out wave id.'),
+      council: z.string().optional().describe('Only rows from this council run id or preset name.'),
+      filterProject: z.string().optional().describe(
+        'Only rows whose recorded project dir matches this absolute path (a ledger-row ' +
+        'filter, NOT this tool\'s working-directory selector — the ledger is global, not ' +
+        'per-project). Pass \'.\' to mean the current project dir.'
+      ),
+      model: z.string().optional().describe('Only rows whose model id starts with this.'),
+      op: z.enum(['start', 'continue', 'resume', 'leg']).optional().describe('Only rows for this operation.'),
+      failed: z.boolean().optional().describe('Only non-complete (wasted) rows.'),
+      groupBy: z.enum(GROUP_DIMS).optional().describe(
+        `Group the rollup by this dimension (default 'model'). One of: ${GROUP_DIMS.join(', ')}.`
+      ),
+      rows: z.boolean().optional().describe(`Include matching raw rows in the result, capped at ${ROWS_CAP}.`),
     },
   },
   {

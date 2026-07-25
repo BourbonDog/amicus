@@ -100,3 +100,68 @@ describe('amicus_status enrichment (F6)', () => {
     expect(row.briefing.endsWith('…')).toBe(true);
   });
 });
+
+describe('Surface C: composed live doc (Task 9 — view:live + read-time leg usage)', () => {
+  let tmpDir; let handlers;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'status-livedoc-'));
+    handlers = require('../src/mcp-server').handlers;
+  });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); jest.resetModules(); });
+
+  test('a running wave status doc carries view:live; a terminal wave does not', async () => {
+    createSession(tmpDir, 'wv-live', { type: 'wave', status: 'running', legs: [], pid: process.pid });
+    const running = parse(await handlers.amicus_status({ taskId: 'wv-live' }, tmpDir));
+    expect(running.view).toBe('live');
+
+    createSession(tmpDir, 'wv-done', { type: 'wave', status: 'complete', legs: [] });
+    const terminal = parse(await handlers.amicus_status({ taskId: 'wv-done' }, tmpDir));
+    expect('view' in terminal).toBe(false);
+  });
+
+  test('a running single-session status doc carries view:live; a terminal one does not', async () => {
+    createSession(tmpDir, 'run-live', { status: 'running', pid: process.pid });
+    const running = parse(await handlers.amicus_status({ taskId: 'run-live' }, tmpDir));
+    expect(running.view).toBe('live');
+
+    createSession(tmpDir, 'run-done', { status: 'complete' });
+    const terminal = parse(await handlers.amicus_status({ taskId: 'run-done' }, tmpDir));
+    expect('view' in terminal).toBe(false);
+  });
+
+  test('a wave leg with seeded progress.usage surfaces leg.usage.cost; a leg without it surfaces no usage key (N3)', async () => {
+    const { writeProgress } = require('../src/sidecar/progress');
+    createSession(tmpDir, 'wv-usage', {
+      type: 'wave', status: 'running', legs: ['wv-usage-1', 'wv-usage-2'], pid: process.pid,
+    });
+    const legPriced = createSession(tmpDir, 'wv-usage-1', { status: 'running', model: 'openrouter/x/y' });
+    writeProgress(legPriced, 'receiving', {
+      usage: { tokens: { input: 100, output: 50, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.05 },
+    });
+    createSession(tmpDir, 'wv-usage-2', { status: 'running', model: 'openrouter/a/b' }); // no progress.json at all
+
+    const body = parse(await handlers.amicus_status({ taskId: 'wv-usage' }, tmpDir));
+    const priced = body.legs.find(l => l.taskId === 'wv-usage-1');
+    const unpriced = body.legs.find(l => l.taskId === 'wv-usage-2');
+    expect(priced.usage.cost.amount).toBe(0.05);
+    expect(priced.usage.cost.source).toBe('reported');
+    expect('usage' in unpriced).toBe(false);
+    // Wave-level rollup is additive and must never read a ledger — it's built
+    // purely from the per-leg progress.json usage snapshots above (A8).
+    expect(body.usage.cost.amount).toBeCloseTo(0.05, 5);
+  });
+
+  test('a single-session leg with seeded progress.usage surfaces response.usage.cost; without it, no usage key (N3)', async () => {
+    const { writeProgress } = require('../src/sidecar/progress');
+    const sessDir = createSession(tmpDir, 'run-usage', { status: 'running', model: 'openrouter/x/y', pid: process.pid });
+    writeProgress(sessDir, 'receiving', {
+      usage: { tokens: { input: 10, output: 5, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.01 },
+    });
+    const priced = parse(await handlers.amicus_status({ taskId: 'run-usage' }, tmpDir));
+    expect(priced.usage.cost.amount).toBe(0.01);
+
+    createSession(tmpDir, 'run-nousage', { status: 'running', model: 'openrouter/a/b', pid: process.pid }); // no progress.json
+    const unpriced = parse(await handlers.amicus_status({ taskId: 'run-nousage' }, tmpDir));
+    expect('usage' in unpriced).toBe(false);
+  });
+});

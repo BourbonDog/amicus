@@ -64,10 +64,35 @@ test('omitted inputs add no flags (v4.0 argv byte-unchanged)', async () => {
   expect(args).not.toContain('--claude-review');
 });
 
-test('the three inputs are declared on the amicus_council_run schema; tool count stays 15', () => {
+test('the three inputs are declared on the amicus_council_run schema; tool count is 16', () => {
   const tools = getTools();
-  expect(tools).toHaveLength(15);
+  expect(tools).toHaveLength(16);
   const tool = tools.find(t => t.name === 'amicus_council_run');
   expect(Object.keys(tool.inputSchema)).toEqual(
     expect.arrayContaining(['debate', 'claudeReviewFile', 'noCostGate']));
+});
+
+// v4.3 Task 3 (spec §7.1): a `council` preset input reaches the spawned CLI
+// child as the internal `--council-name` passthrough — resolveBenchInput
+// already expands the preset into `--models` (bench.join(',')), so without
+// this the preset NAME would never reach the child process at all.
+describe('council preset name reaches the spawned argv (v4.3 Task 3, spec §7.1)', () => {
+  test("input.council 'budget' spawns --council-name budget alongside the expanded --models", async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      { briefingFile, council: 'budget', chair: 'opus' }, tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    expect(calls).toHaveLength(1);
+    const args = calls[0].args;
+    expect(args[args.indexOf('--council-name') + 1]).toBe('budget');
+    expect(args).not.toContain('--council'); // bench is already expanded — never both
+    expect(args[args.indexOf('--models') + 1]).not.toBe(''); // expanded to real members
+  });
+
+  test('input.models (no preset) never adds --council-name', async () => {
+    const calls = [];
+    await handleCouncilRunTool(input(), tmp, helpers(calls));
+    const args = calls[0].args;
+    expect(args).not.toContain('--council-name');
+  });
 });

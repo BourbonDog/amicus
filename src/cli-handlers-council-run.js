@@ -20,7 +20,30 @@ function parseList(value) {
   return String(value).split(',').map(s => s.trim()).filter(Boolean);
 }
 
-/** Resolve bench models from --models XOR --council (mirrors handleFanout). */
+/**
+ * Sanitize the internal `--council-name` passthrough before it can reach the
+ * spend ledger's `councilName` column (v4.3 Task 4 review fix, spec §7.3:
+ * spend docs hold only ids/numbers/paths "by construction"). That value is
+ * user-supplied (via mcp-council-run.js, ultimately an MCP caller's `input`),
+ * unbounded, and unvalidated — unlike a real `--council <preset>`, which is
+ * catalog-validated upstream. Strips control/non-printable characters, trims,
+ * and caps length so a hostile/malformed passthrough can't land raw in a
+ * `--group-by council` rollup. Precedence is untouched by this: it's applied
+ * only to the passthrough branch, never to the catalog-validated preset name.
+ * @param {string} name @returns {string|null} sanitized name, or null if empty after cleanup
+ */
+function sanitizeCouncilName(name) {
+  // eslint-disable-next-line no-control-regex -- deliberately stripping C0/DEL control chars
+  const cleaned = String(name).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 64);
+  return cleaned || null;
+}
+
+/**
+ * Resolve bench models from --models XOR --council (mirrors handleFanout).
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed --council
+ * name when that branch was taken, else null — threaded into runCouncil's
+ * `councilName` option so council ledger rows can be attributed to a preset.
+ */
 function resolveBench(args, useJson) {
   const hasModels = typeof args.models === 'string' && args.models.trim();
   const hasCouncil = args.council !== undefined && args.council !== false;
@@ -40,16 +63,17 @@ function resolveBench(args, useJson) {
     const { resolveCouncilMembers } = require('./utils/config');
     const { readCache } = require('./utils/model-catalog');
     const catalog = (readCache() || {}).models || [];
-    const expanded = resolveCouncilMembers(args.council.trim(), catalog);
+    const presetName = args.council.trim();
+    const expanded = resolveCouncilMembers(presetName, catalog);
     if (expanded.error) {
       return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: ${expanded.error}` }) };
     }
     if (expanded.dropped && expanded.dropped.length && !useJson) {
       process.stderr.write(`Notice: dropped unavailable council member(s): ${expanded.dropped.join(', ')}\n`);
     }
-    return { bench: expanded.models };
+    return { bench: expanded.models, presetName };
   }
-  return { bench: parseList(args.models) };
+  return { bench: parseList(args.models), presetName: null };
 }
 
 function renderRunHuman(run) {
@@ -85,6 +109,19 @@ async function handleCouncilRun(args) {
   const benchRes = resolveBench(args, useJson);
   if (benchRes.fail !== undefined) { return benchRes.fail; }
   const bench = benchRes.bench;
+  // v4.3 Task 3 (spec §7.1): the preset name, when this run came from a real
+  // --council <preset>. `--council-name` is an internal, undocumented passthrough
+  // set by mcp-council-run.js — the MCP handler always expands a preset to
+  // `--models` before spawning (so `--council`/`--models` stay mutually exclusive
+  // on this CLI surface), which would otherwise strand the preset name with no
+  // way to reach this process. Never fabricated: --models with neither flag
+  // stays null, matching spec §7.1 ("preset name … else null"). The
+  // passthrough branch is sanitized (see sanitizeCouncilName docblock) — the
+  // preset-name branch is catalog-validated upstream and never touched here,
+  // so precedence (a real --council preset always outranks the passthrough)
+  // is unchanged.
+  const councilName = benchRes.presetName
+    || (typeof args['council-name'] === 'string' ? sanitizeCouncilName(args['council-name']) : null);
   if (bench.length < 2) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: 'Error: a council needs at least 2 seats (fanout semantics)' });
@@ -139,8 +176,11 @@ async function handleCouncilRun(args) {
     ? path.resolve(project, String(args['out-dir']))
     : path.resolve(project, `council-${runId}`);
 
-  const { resolveGatewayMode } = require('./utils/config');
+  const { resolveGatewayMode, loadConfig } = require('./utils/config');
+  const { resolveFallbackConfig } = require('./sidecar/fallback-chains');
+  const { readCache } = require('./utils/model-catalog');
   const { runCouncil } = require('./council/run');
+  const cfg = loadConfig() || {};
   const { exitCode, run } = await runCouncil({
     briefing: promptRes.prompt, models: bench, chair, critic, lenses,
     project, runId, runDir,
@@ -148,6 +188,7 @@ async function handleCouncilRun(args) {
     gateway: resolveGatewayMode(args.gateway),
     noValidateModel: !!args['no-validate-model'],
     date: new Date().toISOString().slice(0, 10),
+    councilName,
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and
     // 'claude may not chair' guards live there on purpose so MCP, the GitHub
@@ -157,6 +198,21 @@ async function handleCouncilRun(args) {
     debate: !!args.debate,
     claudeReviewFile: args['claude-review'] ? path.resolve(args['claude-review']) : null,
     noCostGate: !!args['no-cost-gate'],
+    // v4.3 Task 13: --follow's json-vs-human mode mirrors the same --json this
+    // handler already resolved for the final run doc, so `--json --follow`
+    // NDJSON on stderr and the `--json` final doc on stdout agree.
+    follow: !!args.follow,
+    json: useJson,
+    onComplete: args['on-complete'],
+    // v4.3 Task 18 (spec §6.2): opt-in cheaper-model substitution for STAGE
+    // legs only (run-stages.js threads it through; the chair is excluded —
+    // see run-chair.js). --fallback forces on, --no-fallback forces off;
+    // unset defers to config `fallbacks.enabled`.
+    fallback: resolveFallbackConfig({
+      flagFallback: args.fallback === true ? true : (args['no-fallback'] ? false : undefined),
+      config: cfg,
+    }),
+    catalog: (readCache() || {}).models || [],
   });
 
   if (useJson) {

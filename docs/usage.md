@@ -14,6 +14,7 @@ amicus resume <task_id> [--no-ui --json]
 amicus continue <task_id> --prompt "Next step..." [--no-ui --json]
 amicus read <task_id> [--conversation|--metadata|--json]
 amicus status <task_id> [--json]          # One-shot status for a session or wave
+amicus watch <task_id> [--plain|--json] [--interval <sec>]  # Live-render a run from any terminal
 amicus abort <task_id> [--json]
 amicus abort --all [--json]
 
@@ -28,7 +29,7 @@ amicus models --check                     # Audit aliases against catalog
 amicus mcp                                # Start MCP server (stdio transport)
 amicus update                             # Update to latest version
 amicus doctor [--json] [--fix]            # Diagnose setup; --fix self-heals (e.g. Electron)
-amicus spend [--since 7d] [--json]        # Cross-run cost rollup from the spend ledger
+amicus spend [--since 7d] [--wave <id>] [--group-by <dim>] [--rows] [--json]  # Cost rollup + attribution query
 amicus key <provider> <key>               # Validate + save one API key (also: --remove / bare list)
 amicus provider add|list|test|remove      # Local / OpenAI-compatible servers ($0): Ollama, LM Studio, vLLM
 amicus init [--claude] [--desktop]        # Register skills + MCP on demand (postinstall re-run)
@@ -291,7 +292,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.2.1",
+  "version": "4.3.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
@@ -380,6 +381,25 @@ Reads `~/.config/amicus/spend-ledger.jsonl` (one row per completed run/leg) and 
 
 **Local provider runs are a real, explicit `$0` tier.** `amicus provider`'s default pricing is `{prompt: 0, completion: 0}`, so a local run always resolves to an *estimated* (not unknown) cost — it renders as `~$0.0000`, counted in `e`, sitting right alongside your paid runs in the same rollup.
 
+**Query & attribution flags (v4.3).** `continue`/`resume`/council rows are now recorded in the ledger too, not just `start`/`fanout` legs, and every row carries attribution — `op`, `status`, `waveId`, `councilRunId`/`councilName`, `project`, `gateway`, plus fallback/retry linkage when applicable. Slice and filter with:
+
+| Flag | Filters to |
+|---|---|
+| `--wave <id>` | rows from one fan-out wave |
+| `--council <runId\|name>` | rows from one council run — matches either the run id or a saved council name |
+| `--project <path\|.>` | rows recorded against one project (`.` expands to cwd) |
+| `--model <id-or-prefix>` | rows whose model id starts with the given string |
+| `--op <op>` | rows for one operation (`start`, `leg`, `continue`, `resume`, …) |
+| `--failed` | rows with an explicit non-`complete` status (see the caveat below) |
+| `--group-by <dim>` | bucket totals by `model` (default) \| `wave` \| `council` \| `project` \| `op` \| `day` |
+| `--rows` | also emit the raw filtered rows (capped at 1000; `--json` sets `rowsTruncated: true` past the cap) |
+
+All filters compose, e.g. `amicus spend --project . --group-by model --since 7d`.
+
+**`--failed` and the `--json` `wasted` block both exclude rows with no recorded status at all.** A ledger row written before v4.3 (or any row that never reached a terminal-status write) isn't counted as "wasted money" — it's just unattributed, and counting it would fabricate a failure that was never actually recorded, so it's dropped rather than bucketed either way.
+
+The read-only `amicus_spend` MCP tool (see [MCP Server](#mcp-server)) mirrors every one of these flags for MCP-only hosts.
+
 ### `amicus provider`
 
 Configure a local, self-hosted, OpenAI-compatible server — LM Studio, Ollama, vLLM, or anything else that speaks the `/v1/models` + chat-completions shape — as a first-class model source. Local providers cost **$0** marginal: no cloud key, no per-token bill.
@@ -447,6 +467,124 @@ It never touches API keys, your default model, or Electron/engine provisioning �
 
 ---
 
+## Observability (v4.3)
+
+Every fan-out wave, council run, and session already writes durable JSON to disk
+(`metadata.json`/`progress.json`/`wave.json`/council `run.json` — all additively
+extended, never a breaking rename). v4.3 adds two more file-based surfaces on top
+of that — no push, no IPC, no `fs.watch` anywhere, just polling, so behavior is
+identical on Windows/macOS/Linux and over a network mount:
+
+- an append-only **`events.jsonl`** milestone stream, one per wave dir / council-run
+  dir (`wave-started`, `leg-started`, `leg-fallback`, `leg-terminal`,
+  `wave-terminal`, and the council equivalents `run-started`/`stage-started`/
+  `stage-terminal`/`run-terminal`);
+- the composed **live doc** — the same `amicus_status` rollup, stamped
+  `view:'live'` with per-leg read-time `usage`, while the run is still going.
+
+### Watch a run live from any terminal
+
+```bash
+amicus watch <waveId|councilRunId|sessionId>     # in-place refresh table on a TTY
+amicus watch <id> --plain                        # milestone log lines (pipes/CI)
+amicus watch <id> --json                         # NDJSON events + composed doc on change
+amicus watch <id> --interval 0.5                 # faster refresh (floor 0.5s; default 2s)
+amicus watch <id> --project <path>                # id lives in a different project
+```
+
+`watch` reads only the data layer above — no attach, works from any process, on a
+live or already-finished run — and resolves `<id>` with the same canonical
+resolution the rest of the CLI uses (council pointer file first, else session
+metadata: `type:'wave'` → wave, else solo). Exit code maps the run's terminal
+state: `complete`→`0`, `partial`→`2`, else `1` — so `amicus watch <id> &&
+next-step` works as a poor-man's wait. `--ui` registers the flag for the v4.4
+Council Workspace GUI (rejects `--json`); the GUI itself doesn't ship in v4.3, so
+`--ui` alone just falls through to the same render loop.
+
+### Stream a launching run (`--follow`)
+
+```bash
+amicus fanout --models a,b,c --prompt-file p.md --follow
+amicus council run --models a,b,c --prompt-file p.md --follow
+amicus fanout ... --json --follow 2>progress.ndjson   # machine-consumable events
+```
+
+Milestone events stream to **stderr** as they happen; stdout's existing
+`--json`/human contracts are byte-identical to a non-`--follow` run. On `fanout`,
+`--follow` streams every leg's own start/fallback/terminal events alongside the
+wave's own. **On `council run`, `--follow` streams the run's own lifecycle
+(`run-started`, each stage's `stage-started`/`stage-terminal`, `run-terminal`) but
+not the per-leg events inside a stage's internal fan-out sub-wave** — Stage-1's
+review wave and Stage-2's judge wave launch through the same fan-out transport
+internally, but the council engine doesn't thread `--follow` down into those
+calls, so you see stage boundaries during a council run, not individual leg
+starts/finishes within a stage.
+
+### Run a command / notify when a run finishes (`--on-complete`)
+
+```bash
+amicus fanout ... --on-complete "notify-send 'council done'"   # CLI: exec
+```
+
+The command is user-authored on this invocation's own command line — the same
+trust level as typing it into your shell; Amicus never sources hook commands from
+config, briefings, or model output. The payload rides via **environment only**,
+and it's ids/paths — never model-generated text — exactly these 8 variables:
+
+| Variable | Value |
+|---|---|
+| `AMICUS_TASK_ID` | the wave / council-run id |
+| `AMICUS_TYPE` | `wave` or `council-run` |
+| `AMICUS_STATUS` | the run's terminal status |
+| `AMICUS_EXIT_CODE` | the run's exit code |
+| `AMICUS_RESULT_FILE` | path to the durable `wave.json`/`run.json` |
+| `AMICUS_EVENTS_FILE` | path to that run's `events.jsonl` |
+| `AMICUS_COST` | formatted total cost |
+| `AMICUS_PROJECT` | the project directory |
+
+A hook that wants model text reads the result file itself. The hook can never
+change the run's own exit code, docs, or events — a non-zero exit or a timeout
+(60s default, `AMICUS_HOOK_TIMEOUT_MS`) is logged as a warning only, never
+propagated. **Over MCP, only `onComplete: "mcp-notify"` is accepted** — a
+best-effort advisory notification through the MCP connection; `exec` is not
+exposed to MCP callers at all. `amicus_wait` remains the reliable way to block
+until a run finishes over MCP.
+
+### Never waste a run
+
+```bash
+amicus fanout --retry-failed <waveId>               # relaunch only the dead legs
+amicus fanout --retry-failed <waveId> --models qwen  # only retry that model's leg(s)
+amicus fanout ... --fallback                         # opt-in cheaper-model substitution
+amicus fanout ... --no-fallback                      # force it off even if config enables it
+```
+
+`--retry-failed <waveId>` relaunches only that wave's terminal, non-complete legs
+(`error`/`timeout`/`crashed`/`aborted`/`idle-timeout`) as a **new, linked wave**,
+replaying each failed leg's own saved initial context for a byte-identical retry.
+The original `wave.json` is never touched — linkage lives in `metadata.json`
+(`retryOf` on the new wave, `retriedBy` on the original). It refuses while the
+original wave is still running; `--models` filters which failed legs get retried.
+
+`--fallback` substitutes the next-cheaper model in the chain, but **only when a
+leg fails on a capacity signal — rate-limit or overload — never on timeout or auth
+failure** (a slow model isn't a capacity problem, and `--retry-failed` already
+covers it; auth/validation failures never substitute). Off by default;
+`--fallback`/`--no-fallback` override the config's `fallbacks.enabled` for one
+run. Substitution is per-leg, capped (2 attempts by default), and never silent: a
+`leg-fallback` event lands in `events.jsonl`, the leg's doc gains an `attempts[]`
+array, and the final doc gains a `fallback: {from, reason, attempts}` block.
+
+### See where every dollar went
+
+`amicus spend` grew a full query and attribution surface in v4.3 — `--wave`,
+`--council`, `--project`, `--model`, `--op`, `--failed`, `--group-by <dim>`,
+`--rows` — see [`amicus spend`](#amicus-spend) above for the full flag table and
+the wasted-view caveat. The read-only `amicus_spend` MCP tool mirrors the same
+flags for MCP-only hosts.
+
+---
+
 ## MCP Server
 
 ```bash
@@ -454,9 +592,11 @@ It never touches API keys, your default model, or Electron/engine provisioning �
 claude mcp add-json amicus '{"command":"npx","args":["-y","amicus@latest","mcp"]}' --scope user
 ```
 
-MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`, `amicus_council_run`
+MCP tools: `amicus_start`, `amicus_status`, `amicus_wait`, `amicus_read`, `amicus_list`, `amicus_resume`, `amicus_continue`, `amicus_abort`, `amicus_setup`, `amicus_guide`, `amicus_fanout`, `amicus_council_tally`, `amicus_council_stats`, `amicus_verdict`, `amicus_council_run`, `amicus_spend`
 
 The async pattern is **start → status → read**: `amicus_start` (or `amicus_fanout`) returns immediately, you poll `amicus_status`, then call `amicus_read` once the status is terminal.
+
+`amicus_spend` is the read-only exception to that pattern: it's synchronous, takes the same filters as the [`amicus spend`](#amicus-spend) CLI command (`since`, `wave`, `council`, `filterProject`, `model`, `op`, `failed`, `groupBy`, `rows`), and returns the same versioned spend doc — unfenced, since spend docs are ids/numbers/paths only, never model-generated text. `since` takes the same `<N>d` format as the CLI's `--since` (e.g. `'7d'`). `filterProject` (not `project`) names the ledger row filter, since `project` is reserved on every MCP tool for the working-directory selector and the spend ledger is global, not per-project. Unlike the CLI, this tool never fetches the OpenRouter credit footer (`credit` is always `null`) — that's the one network-bound piece of `amicus spend`, deliberately excluded so a read-only MCP query never waits on the network.
 
 Session statuses: `running`, `complete`, `aborted`, `crashed`, `error`, `timed-out`, `idle-timeout`
 

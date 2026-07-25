@@ -45,12 +45,13 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 
 ## What is Amicus
 
-One install delivers four things that work together:
+One install delivers five things that work together:
 
 - **The `second-opinion` LLM Council skill.** Structured multi-model review: independent reviews → anonymized peer cross-review → a non-Claude chair verdict → tiered accept/deny decisions. This is the hero.
 - **The `sidecar` chat skill.** Ad-hoc fork/work/fold — spin up one other model in a real window (or headless), work alongside it, fold the summary back.
 - **The `amicus` CLI (with an `am` alias) and an MCP server.** The engine underneath both skills: launches sessions, shares context, runs parallel waves, and exposes the same surface to Claude as MCP tools.
 - **A self-updating model catalog.** Aliases and validation resolve against a live catalog fetched from provider APIs (cached locally), so model names stay current without a hard-coded table.
+- **Observability.** `amicus watch <id>` renders any live or finished run (fan-out or council) from any terminal; `--follow` streams milestones as they happen; `--on-complete` fires a hook when a run lands; `--retry-failed` plus opt-in cheaper-model fallbacks recover dead legs without relaunching the whole wave; `amicus spend` answers "what did this cost, and where" with per-run attribution.
 
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
@@ -313,9 +314,10 @@ amicus update
 | `amicus continue` | Start a new session building on a previous one. |
 | `amicus read` | Output a session's summary / conversation / metadata. |
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
+| `amicus watch <id>` | Live-render a fan-out wave, council run, or session from any terminal until it finishes — in-place table on a TTY, `--plain` milestone lines, or `--json` NDJSON; exit code maps the terminal state. |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
-| `amicus spend` | Cross-run cost rollup from the spend ledger — total + per-model spend, tokens, and source mix, most-expensive first (`--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
+| `amicus spend` | Cross-run cost rollup from the spend ledger, with per-run attribution — total + per-model spend, tokens, and source mix, most-expensive first (`--wave`/`--council`/`--project`/`--model`/`--op`/`--failed` filter it, `--group-by` buckets it, `--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
 | `amicus provider` | Add/list/test/remove local, OpenAI-compatible providers (LM Studio, Ollama, vLLM) — configured with `--preset` or `--url`, at **$0** marginal cost (`--json` on every subcommand). |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
@@ -348,7 +350,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.2.1",
+  "version": "4.3.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
@@ -382,7 +384,7 @@ Full details, the API-key/prefix table, and the migration notice are in **[docs/
 
 ## MCP integration
 
-The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes fifteen tools:
+The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes sixteen tools:
 
 | Tool | What it does |
 |------|--------------|
@@ -401,6 +403,7 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_council_stats` | Reviewer-reliability stats from past council runs. |
 | `amicus_verdict` | Build the final council verdict from a tally + decisions; writes `<outDir>/report.html` when `render:true` and `outDir` are given. |
 | `amicus_council_run` | Run the full headless council engine (Stage-1 reviews → anonymized cross-review → tally → chair verdict); returns `{ runId, runDir }`, async. |
+| `amicus_spend` | Read-only cross-run cost rollup from the spend ledger (mirrors the CLI `amicus spend` flags). |
 
 The async pattern is **start → status → read** — `amicus_start`/`amicus_fanout` return immediately, then you poll `amicus_status` and call `amicus_read`; `amicus_wait` collapses that poll loop into one blocking call.
 

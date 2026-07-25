@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BourbonDog/amicus/schemas/event.schema.json",
+  "title": "Amicus observability event (events.jsonl line)",
+  "type": "object",
+  "required": ["schemaVersion", "type", "event", "ts", "id"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "type": { "const": "event" },
+    "event": { "enum": ["wave-started", "leg-started", "leg-fallback", "leg-terminal", "wave-terminal", "retry-started", "run-started", "stage-started", "stage-terminal", "run-terminal"] },
+    "ts": { "type": "string", "format": "date-time" },
+    "id": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -117,4 +117,4 @@ function resolveTier(vendor, tier, catalog) {
   return null;
 }
 
-module.exports = { TIERS, resolveTier };
+module.exports = { TIERS, TIER_ORDER, resolveTier };

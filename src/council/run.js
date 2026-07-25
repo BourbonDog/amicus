@@ -32,18 +32,26 @@ const { buildDebateAddendum } = require('./briefings-debate');
 const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { sumWaveUsage } = require('../utils/pricing');
+const { emitRunStarted, emitRunTerminal, emitStageStarted, emitStageTerminal } = require('../observe/events');
+const { fireCouncilOnComplete } = require('../observe/on-complete');
 
 const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 
 /**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project, runId,
- *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?}
+ *   runDir, timeout?, maxCost?, gateway?, noValidateModel?, date, debate?, noCostGate?,
+ *   councilName?, fallback?, catalog?} councilName (v4.3 Task 3) = preset name when
+ *   launched via `--council <preset>`, else null — threaded via ctx.o into every
+ *   launchWave/launchSolo for leg ledger attribution. fallback/catalog (v4.3 Task 18
+ *   §6.2): ctx.o carries both, but only run-stages.js's stage launches read them —
+ *   the chair/debate legs never substitute via chains.
  * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?}
  * @returns {Promise<{exitCode: number, run: object}>}
  */
 async function runCouncil(options, deps = {}) {
   const o = { critic: null, lenses: null, maxCost: null, debate: false, claudeReviewFile: null,
-    noCostGate: false, ...options };
+    noCostGate: false, councilName: null, ...options };
+  o.follow = o.follow ? require('../observe/follow').createFollowPrinter({ json: o.json }) : null; // Task 13: stderr mirror
   const launchers = deps.launchers || createLaunchers();
   const appendRunFn = deps.appendRunFn || require('./ledger').appendRun;
   const statsFn = deps.statsFn || require('./ledger').deriveReliability;
@@ -71,6 +79,7 @@ async function runCouncil(options, deps = {}) {
     usage: null, pid: process.pid, createdAt: now(),
   });
   runState.writePointer(o.project, o.runId, o.runDir);
+  emitRunStarted(o.runDir, o.runId, { bench: o.models, chair: o.chair }, o.follow);
 
   let signalled = null;
   const uninstall = installSignals({
@@ -81,7 +90,7 @@ async function runCouncil(options, deps = {}) {
   });
 
   const degraded = { value: false };
-  const finalize = (exitCode, error) => {
+  const finalize = async (exitCode, error) => {
     uninstall();
     const code = signalled || exitCode;
     const status = (code === 130 || code === 143) ? 'aborted'
@@ -91,6 +100,8 @@ async function runCouncil(options, deps = {}) {
       usage: { cost: sumWaveUsage(allLegs).cost },
       completedAt: now(),
     });
+    emitRunTerminal(o.runDir, o.runId, status, code, o.follow);
+    await fireCouncilOnComplete(o.onComplete, run, { runId: o.runId, runDir: o.runDir, exitCode: code, project: o.project }, o.onCompleteDeps);
     return { exitCode: code, run };
   };
 
@@ -116,11 +127,13 @@ async function runCouncil(options, deps = {}) {
       status: 'running', startedAt: now(), project: o.runDir,
       ...(o.lenses ? {} : { waveId: `${o.runId}-s1` }),
     });
+    emitStageStarted(o.runDir, o.runId, 'stage1', o.lenses ? null : `${o.runId}-s1`, o.follow);
     const s1 = await runStage1(ctx);
     runState.updateStage(o.runDir, 'stage1', {
       status: 'complete', completedAt: now(),
       taskIds: s1.reviews.map(r => (r.leg && r.leg.taskId)).filter(Boolean),
     });
+    emitStageTerminal(o.runDir, o.runId, 'stage1', 'complete', o.lenses ? null : `${o.runId}-s1`, o.follow);
     if (signalled || s1.aborted) { return finalize(s1.aborted || signalled); }
     if (s1.deadLegs.length > 0) { degraded.value = true; } // bench shrank → never a "full run"
     if (s1.reviews.length < 2) {
@@ -151,9 +164,11 @@ async function runCouncil(options, deps = {}) {
       .concat(claudeReview ? asm.labelClaudeReview(claudeReview, labels) : []);
     runState.updateStage(o.runDir, 'stage2',
       { status: 'running', startedAt: now(), waveId: `${o.runId}-s2`, project: ctx.scratchDir });
+    emitStageStarted(o.runDir, o.runId, 'stage2', `${o.runId}-s2`, o.follow);
     const s2 = await runStage2(ctx, { reviews: s1.reviews, labels, globalFindings,
       extraLabeled: claudeReview ? [{ label: claudeReview.label, text: claudeReview.text }] : [] });
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
+    emitStageTerminal(o.runDir, o.runId, 'stage2', 'complete', `${o.runId}-s2`, o.follow);
     if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
     if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
 
@@ -183,9 +198,12 @@ async function runCouncil(options, deps = {}) {
       // checkpoint — no ledger append, written before any debate leg launches.
       fs.writeFileSync(path.join(o.runDir, 'tally-provisional.json'), JSON.stringify(provisional, null, 2), { mode: 0o600 });
       runState.updateStage(o.runDir, 'tally-provisional', { status: 'complete', startedAt: now(), completedAt: now() });
+      emitStageStarted(o.runDir, o.runId, 'tally-provisional', null, o.follow);
+      emitStageTerminal(o.runDir, o.runId, 'tally-provisional', 'complete', null, o.follow);
       const worthDebating = !runDebateMod.nothingToDebate(provisional);
       if (worthDebating && !overBudget()) {
         runState.updateStage(o.runDir, 'debate-defense', { status: 'running', startedAt: now(), project: ctx.scratchDir });
+        emitStageStarted(o.runDir, o.runId, 'debate-defense', null, o.follow);
         const dbg = await runDebateMod.runDebate(ctx, { provisionalRecord: provisional, tallyInput: provisionalInput });
         // A signal mid-debate aborts finalization: no tally-final, no ledger (spec §5.7). Close
         // the summary FIRST — the writer contract requires a valid `outcome` whenever the key exists.
@@ -195,6 +213,7 @@ async function runCouncil(options, deps = {}) {
           return finalize(dbg.aborted);
         }
         runState.updateStage(o.runDir, 'debate-defense', { status: 'complete', completedAt: now() });
+        emitStageTerminal(o.runDir, o.runId, 'debate-defense', 'complete', null, o.follow);
         // run-debate owns debate-revote's running/waveId/waveIds checkpoint — only it
         // knows whether the wave launched. Never advertise a `-rv` id here: a skipped
         // re-vote would leave the abort cascade chasing the v4.0 lens `-s1` phantom.
@@ -203,6 +222,10 @@ async function runCouncil(options, deps = {}) {
         // work that never happened.
         runState.updateStage(o.runDir, 'debate-revote', dbg.revoteLaunched
           ? { status: 'complete', completedAt: now() } : { status: 'skipped', completedAt: now() });
+        // debate-revote-TERMINAL only — run-debate.js owns the START (spec §4.2 /
+        // v4.3 Task 7 B3 note): only it knows the `-rv` waveId when launched.
+        emitStageTerminal(o.runDir, o.runId, 'debate-revote',
+          dbg.revoteLaunched ? 'complete' : 'skipped', dbg.revoteLaunched ? `${o.runId}-rv` : null, o.follow);
         ({ debatedInput, debateFindings, debateSummary } = dbg);
         debatedRecord = tally(debatedInput);
         // Defensive truthiness guard: `[]` is truthy in JS, so an empty outcomes
@@ -258,9 +281,14 @@ async function runCouncil(options, deps = {}) {
       catch (e) { process.stderr.write(`Notice: council ledger append failed: ${e.message}\n`); }
     }
     asm.writeTallyFiles({ runDir: o.runDir, tallyInput: finalInput, record });
-    runState.updateStage(o.runDir, o.debate ? 'tally-final' : 'tally', { status: 'complete', completedAt: now() });
+    const tallyStage = o.debate ? 'tally-final' : 'tally';
+    runState.updateStage(o.runDir, tallyStage, { status: 'complete', completedAt: now() });
+    emitStageStarted(o.runDir, o.runId, tallyStage, null, o.follow);
+    emitStageTerminal(o.runDir, o.runId, tallyStage, 'complete', null, o.follow);
     asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText });
     runState.updateStage(o.runDir, 'verdict', { status: 'complete', completedAt: now() });
+    emitStageStarted(o.runDir, o.runId, 'verdict', null, o.follow);
+    emitStageTerminal(o.runDir, o.runId, 'verdict', 'complete', null, o.follow);
 
     return finalize(degraded.value ? 2 : 0);
   } catch (err) {

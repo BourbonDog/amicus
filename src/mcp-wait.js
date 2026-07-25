@@ -19,6 +19,7 @@
 'use strict';
 
 const { versionWarning } = require('./utils/version-info');
+const { consumeMcpNotify, buildNotifyPayload } = require('./mcp-notify');
 
 const DEFAULT_WAIT_MS = Number(process.env.AMICUS_WAIT_DEFAULT_MS) || 50000;
 const MAX_WAIT_MS = Number(process.env.AMICUS_WAIT_MAX_MS) || 110000;
@@ -98,8 +99,12 @@ function buildWaitResult(snapshot, timedOut, waitedMs) {
  * Wait for a session/wave to reach a terminal state, or time out.
  * @param {{taskId?:string, waveId?:string, timeoutMs?:number, project?:string}} input
  * @param {string} project resolved project dir
- * @param {{statusFn:Function, sleep?:Function, now?:Function, pollIntervalMs?:number}} deps
+ * @param {{statusFn:Function, sleep?:Function, now?:Function, pollIntervalMs?:number, notify?:Function}} deps
  *   statusFn(input, project) must be the amicus_status handler (or compatible).
+ *   notify(payload), if given, is called at most once per run — only when the
+ *   run requested it via requestMcpNotify (Task 15, spec §5.3) — right before
+ *   returning a terminal result. Best-effort: a notify() throw is swallowed
+ *   and never affects the wait result.
  * @returns {Promise<object>} MCP tool result
  */
 async function runWait(input, project, deps) {
@@ -143,7 +148,28 @@ async function runWait(input, project, deps) {
 
     if (snapshot) {
       lastSnapshot = snapshot;
-      if (isTerminalSnapshot(snapshot)) { return buildWaitResult(snapshot, false, now() - started); }
+      if (isTerminalSnapshot(snapshot)) {
+        // Task 15 (spec §5.3): best-effort mcp-notify delivery. This is the
+        // ONE place that sees a fanout/council-run reach terminal state (they
+        // spawn a detached CLI child and return 'running' immediately, so
+        // there is no in-process finalize to notify from). consumeMcpNotify
+        // gives once-semantics; a notify() throw is swallowed and never
+        // changes the wait result below. Consume FIRST (unconditionally on a
+        // requested run) so the registry entry always drains — even if this
+        // runWait caller supplied no notify capability, the entry must not
+        // leak; the send is then gated on deps.notify.
+        if (consumeMcpNotify(taskId) && deps.notify) {
+          try {
+            const evt = {
+              event: snapshot.type === 'council-run' ? 'run-terminal' : 'wave-terminal',
+              id: taskId, status: snapshot.status,
+              exitCode: (snapshot.exitCode === undefined || snapshot.exitCode === null) ? undefined : snapshot.exitCode,
+            };
+            deps.notify(buildNotifyPayload(evt));
+          } catch { /* advisory; never affects the wait result */ }
+        }
+        return buildWaitResult(snapshot, false, now() - started);
+      }
     }
 
     const remaining = deadline - now();

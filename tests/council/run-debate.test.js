@@ -43,7 +43,10 @@ const revoteOut = (rv) => `Re-voting.\n\`\`\`json\n${JSON.stringify({ revotes: r
 
 function ctxFor(tmp, launchers) {
   return {
-    o: { runId: 'r', runDir: tmp, timeout: 10, gateway: 'auto', date: '2026-07-19', maxCost: null, noCostGate: false },
+    // v4.3 Task 3 (spec §7.2): non-null councilName so legOpts()'s attribution
+    // fields can be asserted below, not just checked against a falsy default.
+    o: { runId: 'r', runDir: tmp, timeout: 10, gateway: 'auto', date: '2026-07-19', maxCost: null,
+      noCostGate: false, councilName: 'nightly-council' },
     launchers, addWave: () => {}, overBudget: () => false, scratchDir: path.join(tmp, '_scratch'),
   };
 }
@@ -150,6 +153,15 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
   test('the defense brief carries the REAL peer split, not an empty one', () => {
     const d1 = launched.find(o => o.waveId === 'r-d1');
     expect(d1.prompt).toContain('Peer verdicts (anonymized): 2 dispute, 0 agree, 0 neutral.');
+  });
+
+  // v4.3 Task 3 (spec §7.2): legOpts() stamps council attribution onto every
+  // debate leg — defense solo AND re-vote wave (the two shapes it builds).
+  test('every debate leg (defense solo and re-vote wave) carries council attribution', () => {
+    const d1 = launched.find(o => o.waveId === 'r-d1');
+    const rv = launched.find(o => o.waveId === 'r-rv');
+    expect(d1).toMatchObject({ councilRunId: 'r', councilName: 'nightly-council' });
+    expect(rv).toMatchObject({ councilRunId: 'r', councilName: 'nightly-council' });
   });
 
   // ---- carry-forward gap 3a: previousTier stamping ----

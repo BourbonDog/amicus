@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BourbonDog/amicus/schemas/progress.schema.json",
+  "title": "Amicus leg/solo progress snapshot (progress.json)",
+  "type": "object",
+  "required": ["schemaVersion", "type", "stage", "updatedAt"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "type": { "const": "progress" },
+    "stage": { "type": "string" },
+    "stageLabel": { "type": "string" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "messagesReceived": { "type": "number" },
+    "latestTool": { "type": "string" },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "tokens": { "type": "object" },
+        "costReported": { "type": "number" }
+      }
+    }
+  },
+  "additionalProperties": true
+}
