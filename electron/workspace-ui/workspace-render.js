@@ -16,6 +16,10 @@
           Object.keys(attrs[k]).forEach(function (d) { node.dataset[d] = attrs[k][d]; });
         } else if (k.indexOf('on') === 0 && typeof attrs[k] === 'function') {
           node.addEventListener(k.slice(2), attrs[k]);
+        } else if (k.indexOf('on') === 0) {
+          // A non-function on* value must never fall through to setAttribute below — that
+          // would write a live inline event-handler attribute (a DOM-injection sink) from data.
+          /* skip */
         } else if (attrs[k] === false || attrs[k] === null || attrs[k] === undefined) {
           /* skip */
         } else { node.setAttribute(k, String(attrs[k])); }
@@ -116,17 +120,30 @@
   function renderStageRail(container, stageRail) {
     container.textContent = '';
     (stageRail || []).forEach(function (s) {
-      var mark = s.status === 'complete' ? '✓ ' : (s.status === 'running' ? '▶ ' : '· ');
+      // Default once and reuse everywhere below — the aria-label used to interpolate the raw
+      // `s.status` while className defaulted it, so an entry with no status read "…: undefined".
+      var status = s.status || 'pending';
+      var mark = status === 'complete' ? '✓ ' : (status === 'running' ? '▶ ' : '· ');
       container.appendChild(el('span', {
-        className: 'stage ' + (s.status || 'pending'),
+        className: 'stage ' + status,
         title: (s.startedAt || '') + (s.completedAt ? ' → ' + s.completedAt : ''),
-        'aria-label': s.label + ': ' + s.status,
+        'aria-label': s.label + ': ' + status,
       }, [mark + s.label]));
     });
   }
 
   /** Keyed seat rows: update in place per seat id/model; remove leavers. */
   function renderSeats(tbody, seats, blindOn, labelOf) {
+    // Build a key -> row map from the existing children ONCE per call, instead of a CSS
+    // attribute-selector lookup per seat. `tr[data-key="..."]` requires escaping the key for
+    // CSS string-literal syntax; escaping only the query side (as the brief's original code
+    // did) while the stored `dataset.key` stays raw means a key containing `"` or `\` can
+    // never match its own row — the lookup misses every tick and the row is re-appended
+    // forever. A plain object lookup sidesteps the escaping problem entirely.
+    var existing = {};
+    Array.prototype.slice.call(tbody.children).forEach(function (row) {
+      existing[row.dataset.key] = row;
+    });
     var seen = {};
     seats.forEach(function (seat) {
       // ⚠️ DE-ROT (F37): `seat.id` is now always set by seatsFromRunStats (`model:role`), so
@@ -134,7 +151,7 @@
       // fallback covers live seats, whose taskId-derived id is already unique.
       var key = String(seat.id || seat.model);
       seen[key] = true;
-      var row = tbody.querySelector('tr[data-key="' + key.replace(/"/g, '') + '"]');
+      var row = existing[key];
       // ⚠️ DE-ROT (F35): seat.lastActivity is the ISO `leg.lastActivityAt`; format it HERE.
       // seatCells lives in live-model.js, which loads first and has no access to relTime.
       var view = Object.assign({}, seat, {
@@ -171,8 +188,10 @@
       return el('th', { className: i >= 3 ? 'num' : '' }, [h]);
     }));
     var rows = (cost.rows || []).map(function (r) {
-      var label = labelOf ? labelOf(r.model) : null;
-      var name = blindOn && label ? label : r.model;
+      // Single definition of the blind-mode flip (`display()`, above) — this used to
+      // hand-duplicate seatCells' ternary, which meant seatCells' blind-mode test never
+      // protected this second surface.
+      var name = display({ model: r.model, label: labelOf ? labelOf(r.model) : null }, blindOn);
       var dur = r.durationMs === null ? '—' : Math.round(r.durationMs / 1000) + 's';
       return el('tr', {}, [
         el('td', {}, [name]),

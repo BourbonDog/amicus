@@ -44,7 +44,7 @@ describe('workspace-ui static page posture', () => {
     }
   });
 
-  test('no innerHTML anywhere in workspace-ui scripts (H9 hard rule)', () => {
+  test('no innerHTML/outerHTML/insertAdjacentHTML anywhere in workspace-ui scripts (H9 hard rule)', () => {
     for (const f of fs.readdirSync(UI).filter((n) => n.endsWith('.js'))) {
       const src = fs.readFileSync(path.join(UI, f), 'utf-8');
       // ⚠️ DE-ROT (F32b): the original assert was a raw `src.includes('innerHTML')`, which is a
@@ -53,7 +53,14 @@ describe('workspace-ui static page posture', () => {
       const code = src
         .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
         .replace(/(^|[^:])\/\/.*$/gm, '$1'); // line comments (`://` in a URL is not a comment)
-      expect({ file: f, has: /\.innerHTML\s*(=|\[)/.test(code) }).toEqual({ file: f, has: false });
+      // Widened per Task 12 review: the original regex only caught `.innerHTML =`/`.innerHTML[`.
+      // md-lite.test.js's own DOM harness traps all three DOM-injection sinks (innerHTML,
+      // outerHTML, insertAdjacentHTML) as evidence this one was too narrow — `.outerHTML = x`
+      // and `.insertAdjacentHTML(...)` both slipped through untouched.
+      const bannedAssignment = /\.(innerHTML|outerHTML)\s*(=|\[)/;
+      const bannedCall = /\.insertAdjacentHTML\s*\(/;
+      const has = bannedAssignment.test(code) || bannedCall.test(code);
+      expect({ file: f, has }).toEqual({ file: f, has: false });
     }
   });
 
