@@ -361,6 +361,11 @@ function getTools() {
         'Claude Code session UUID for exact context matching. ' +
         'Prevents ambiguity when multiple sessions are active in the same project.'
       ),
+      onComplete: z.enum(['mcp-notify']).optional().describe(
+        'Advisory: send an MCP info notification carrying the terminal event doc when the run ' +
+        'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
+        'commands are NOT accepted over MCP.'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -486,6 +491,11 @@ function getTools() {
       noCostGate: z.boolean().optional().describe(
         'Disable the per-leg price gate for the WHOLE run (repairs and chair included). ' +
         'Use for an intentional o3-class council. Independent of maxCost, which still caps the total.'
+      ),
+      onComplete: z.enum(['mcp-notify']).optional().describe(
+        'Advisory: send an MCP info notification carrying the terminal event doc when the run ' +
+        'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
+        'commands are NOT accepted over MCP.'
       ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'

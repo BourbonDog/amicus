@@ -76,6 +76,9 @@ describe('amicus_council_run handler', () => {
     ['critic outside bench', { critic: 'mistral' }, /must be one of the bench/],
     ['critic + lenses', { critic: 'gpt', lenses: ['a', 'b', 'c'] }, /mutually exclusive/],
     ['lens count mismatch', { lenses: ['a'] }, /one lens per seat/],
+    // Task 15 (spec §5.3): exec is deliberately NOT exposed over MCP — the
+    // ONLY onComplete value accepted is 'mcp-notify'.
+    ['onComplete exec string', { onComplete: 'rm -rf /' }, /mcp-notify/i],
   ])('validation: %s → isError, no spawn', async (_n, extra, msgRe) => {
     const calls = [];
     const res = await handleCouncilRunTool(input(extra), tmp, helpers(calls));
@@ -167,6 +170,28 @@ describe('amicus_council_run handler', () => {
     expect(res.content[0].text).toMatch(/outDir must resolve to a path inside the project directory/);
     expect(calls).toHaveLength(0);
     expect(fs.existsSync(path.resolve(tmp, '..', 'escaped-council'))).toBe(false);
+  });
+
+  // Task 15 (spec §5.3) delivery seam: on successful launch with
+  // onComplete: 'mcp-notify', the run is marked in the shared in-process
+  // registry so runWait's terminal branch (mcp-wait.js) can later consume it
+  // and send the notification. Omitted onComplete never marks anything.
+  describe('onComplete: mcp-notify marks the run for the delivery seam', () => {
+    const { consumeMcpNotify } = require('../src/mcp-notify');
+
+    test("'mcp-notify' → run succeeds AND is marked (consumeMcpNotify returns true once)", async () => {
+      const res = await handleCouncilRunTool(input({ onComplete: 'mcp-notify' }), tmp, helpers());
+      expect(res.isError).toBeUndefined();
+      const body = parseFenced(res);
+      expect(consumeMcpNotify(body.runId)).toBe(true);
+      expect(consumeMcpNotify(body.runId)).toBe(false); // once-semantics
+    });
+
+    test('omitted onComplete → run succeeds but is NOT marked', async () => {
+      const res = await handleCouncilRunTool(input(), tmp, helpers());
+      const body = parseFenced(res);
+      expect(consumeMcpNotify(body.runId)).toBe(false);
+    });
   });
 });
 

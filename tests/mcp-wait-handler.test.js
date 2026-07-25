@@ -99,4 +99,57 @@ describe('amicus_wait handler', () => {
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('not found');
   });
+
+  // Task 15 (spec §5.3) end-to-end delivery wiring: the dispatch loop
+  // (mcp-server.js's startMcpServer) calls handlers[tool.name](input, project,
+  // server) — amicus_wait's 3rd param IS that McpServer instance. This proves
+  // the full chain: requestMcpNotify at launch → handlers.amicus_wait receives
+  // mcpServer → runWait's terminal branch calls mcpServer.server.sendLoggingMessage.
+  describe('mcp-notify end-to-end: amicus_wait wires mcpServer.server.sendLoggingMessage', () => {
+    test('a run marked via requestMcpNotify triggers sendLoggingMessage once, with a buildNotifyPayload-shaped arg', async () => {
+      const { requestMcpNotify } = require('../src/mcp-notify');
+      createSession(tmpDir, 'w-notify-done', { status: 'complete', completedAt: new Date().toISOString() });
+      requestMcpNotify('w-notify-done');
+      const sendLoggingMessage = jest.fn();
+      const fakeMcpServer = { server: { sendLoggingMessage } };
+
+      const res = await handlers.amicus_wait({ taskId: 'w-notify-done' }, tmpDir, fakeMcpServer);
+      const body = parse(res);
+      expect(body.status).toBe('complete');
+      expect(sendLoggingMessage).toHaveBeenCalledTimes(1);
+      const payload = sendLoggingMessage.mock.calls[0][0];
+      expect(payload.level).toBe('info');
+      expect(payload.logger).toBe('amicus');
+      expect(payload.data.id).toBe('w-notify-done');
+      expect(payload.data.status).toBe('complete');
+    });
+
+    test('a run NOT marked via requestMcpNotify never calls sendLoggingMessage', async () => {
+      createSession(tmpDir, 'w-notify-unmarked', { status: 'complete', completedAt: new Date().toISOString() });
+      const sendLoggingMessage = jest.fn();
+      const fakeMcpServer = { server: { sendLoggingMessage } };
+
+      await handlers.amicus_wait({ taskId: 'w-notify-unmarked' }, tmpDir, fakeMcpServer);
+      expect(sendLoggingMessage).not.toHaveBeenCalled();
+    });
+
+    test('a sendLoggingMessage throw (unsupported transport) never fails the wait', async () => {
+      const { requestMcpNotify } = require('../src/mcp-notify');
+      createSession(tmpDir, 'w-notify-throws', { status: 'complete', completedAt: new Date().toISOString() });
+      requestMcpNotify('w-notify-throws');
+      const fakeMcpServer = { server: { sendLoggingMessage: () => { throw new Error('no transport'); } } };
+
+      const res = await handlers.amicus_wait({ taskId: 'w-notify-throws' }, tmpDir, fakeMcpServer);
+      const body = parse(res);
+      expect(body.status).toBe('complete');
+      expect(body.timedOut).toBe(false);
+    });
+
+    test('no mcpServer passed (e.g. direct handler call) never throws — notify is just skipped', async () => {
+      createSession(tmpDir, 'w-notify-nomcp', { status: 'complete', completedAt: new Date().toISOString() });
+      const res = await handlers.amicus_wait({ taskId: 'w-notify-nomcp' }, tmpDir);
+      const body = parse(res);
+      expect(body.status).toBe('complete');
+    });
+  });
 });

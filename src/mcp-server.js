@@ -18,6 +18,7 @@ const { recordSession } = require('./utils/session-index');
 const { fileURLToPath } = require('url');
 const { RUNNING_VERSION, versionWarning } = require('./utils/version-info');
 const { runWait, registerInProcessRun, settleInProcessRun } = require('./mcp-wait');
+const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 const { detectClient } = require('./utils/client-detect');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
 const { sliceForRead } = require('./utils/read-slice');
@@ -742,11 +743,20 @@ const handlers = {
     return { content };
   },
 
-  async amicus_wait(input, project) {
+  async amicus_wait(input, project, mcpServer) {
     // statusFn injection avoids a circular require and inherits amicus_status's
     // crash detection + wave leg rollup on every poll tick.
     return runWait(input, project, {
       statusFn: (i, p) => handlers.amicus_status(i, p),
+      // Task 15 (spec §5.3): best-effort mcp-notify delivery. mcpServer here
+      // is the McpServer instance the dispatch loop passes as the 3rd arg
+      // (server.js:register); mcpServer.server is the underlying low-level
+      // SDK Server that exposes sendLoggingMessage. A throw or an unsupported
+      // transport degrades silently — advisory only, never affects the wait.
+      notify: (payload) => {
+        try { if (mcpServer && mcpServer.server) { mcpServer.server.sendLoggingMessage(payload); } }
+        catch { /* best-effort; a send failure is a debug log only */ }
+      },
     });
   },
 
@@ -1049,6 +1059,12 @@ const handlers = {
 
   async amicus_fanout(input, project, mcpServer) {
     const cwd = project || getProjectDir(input.project);
+    // Task 15 (spec §5.3): validate onComplete FIRST, before any wave dir /
+    // metadata is written — exec strings are rejected over MCP (the Zod enum
+    // on the tool def already rejects them at the call boundary; this is
+    // defense-in-depth for any caller that bypasses schema validation).
+    const oc = validateOnComplete(input.onComplete);
+    if (!oc.ok) { return textResult(oc.error, true); }
     const { generateTaskId } = require('./sidecar/start');
     const { deriveLegIds, DEFAULT_MAX_LEGS } = require('./sidecar/fanout');
 
@@ -1133,6 +1149,10 @@ const handlers = {
       } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
     }
+    // Task 15 (spec §5.3): the run is now known-launched under waveId — mark
+    // it for a best-effort terminal notify. runWait's poll loop (mcp-wait.js)
+    // is the only code that later sees this wave reach terminal state.
+    if (oc.mode === 'mcp-notify') { requestMcpNotify(waveId); }
 
     const body = JSON.stringify(stampEnvelope('wave', {
       waveId, taskIds: legIds, status: 'running', mode: 'headless',

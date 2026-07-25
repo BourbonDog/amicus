@@ -6,6 +6,7 @@ const {
   runWait, registerInProcessRun, settleInProcessRun, hasInProcessRun,
   clampTimeout, isTerminalSnapshot, DEFAULT_WAIT_MS, MAX_WAIT_MS,
 } = require('../src/mcp-wait');
+const { requestMcpNotify, buildNotifyPayload } = require('../src/mcp-notify');
 
 /** Wrap a payload the way amicus_status does. */
 const statusResult = (payload) => ({ content: [{ type: 'text', text: JSON.stringify(payload) }] });
@@ -191,6 +192,67 @@ describe('runWait', () => {
       expect(res.isError).toBe(true);
       expect(res.content[0].text).toContain('not found');
       expect(statusFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // Task 15 delivery guard (spec §5.3): the terminal branch is the ONE place
+  // that sees a fanout/council-run reach terminal state (mcp-server.js's
+  // amicus_fanout/amicus_council_run spawn a detached CLI child and return
+  // 'running' immediately — there's no in-process finalize to notify from).
+  // Best-effort: consumeMcpNotify gives once-semantics, and a run that never
+  // called requestMcpNotify must never trigger a notify.
+  describe('mcp-notify delivery at the terminal branch', () => {
+    test('requestMcpNotify + terminal snapshot → notify called once with a buildNotifyPayload-shaped arg', async () => {
+      requestMcpNotify('notify-w1');
+      const statusFn = jest.fn().mockResolvedValue(statusResult({
+        taskId: 'notify-w1', type: 'wave', status: 'complete',
+      }));
+      const notify = jest.fn();
+      const res = await runWait({ taskId: 'notify-w1' }, '/proj', { statusFn, sleep: fastSleep, notify });
+      const body = JSON.parse(res.content[0].text);
+      expect(body.status).toBe('complete');
+      expect(notify).toHaveBeenCalledTimes(1);
+      const payload = notify.mock.calls[0][0];
+      expect(payload).toEqual(buildNotifyPayload(payload.data));
+      expect(payload.level).toBe('info');
+      expect(payload.logger).toBe('amicus');
+      expect(payload.data.status).toBe('complete');
+      expect(payload.data.id).toBe('notify-w1');
+    });
+
+    test('no requestMcpNotify call → notify is NOT called on terminal', async () => {
+      const statusFn = jest.fn().mockResolvedValue(statusResult({
+        taskId: 'notify-never-requested', type: 'wave', status: 'complete',
+      }));
+      const notify = jest.fn();
+      const res = await runWait({ taskId: 'notify-never-requested' }, '/proj', { statusFn, sleep: fastSleep, notify });
+      const body = JSON.parse(res.content[0].text);
+      expect(body.status).toBe('complete');
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    test('a second wait on the same already-terminal run does not notify again (once-semantics)', async () => {
+      requestMcpNotify('notify-w2');
+      const statusFn = jest.fn().mockResolvedValue(statusResult({
+        taskId: 'notify-w2', type: 'wave', status: 'complete',
+      }));
+      const notify = jest.fn();
+      await runWait({ taskId: 'notify-w2' }, '/proj', { statusFn, sleep: fastSleep, notify });
+      await runWait({ taskId: 'notify-w2' }, '/proj', { statusFn, sleep: fastSleep, notify });
+      expect(notify).toHaveBeenCalledTimes(1);
+    });
+
+    test('a notify() throw is swallowed and never changes the wait result', async () => {
+      requestMcpNotify('notify-w3');
+      const statusFn = jest.fn().mockResolvedValue(statusResult({
+        taskId: 'notify-w3', type: 'wave', status: 'complete',
+      }));
+      const notify = jest.fn(() => { throw new Error('sendLoggingMessage boom'); });
+      const res = await runWait({ taskId: 'notify-w3' }, '/proj', { statusFn, sleep: fastSleep, notify });
+      const body = JSON.parse(res.content[0].text);
+      expect(body.status).toBe('complete');
+      expect(body.timedOut).toBe(false);
+      expect(notify).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -16,6 +16,7 @@ const path = require('path');
 const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
 const { isPathInside } = require('./project-root-allowlist');
+const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
 
 function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
@@ -57,6 +58,12 @@ function resolveBenchInput(input) {
  * @param {{spawnFn: Function, clientName: string}} helpers injected by mcp-server
  */
 async function handleCouncilRunTool(input, project, helpers) {
+  // Task 15 (spec §5.3): validate onComplete FIRST, before any run dir is
+  // prepared — exec strings are rejected over MCP (the Zod enum on the tool
+  // def already rejects them at the call boundary; this is defense-in-depth
+  // for any caller that bypasses schema validation).
+  const oc = validateOnComplete(input.onComplete);
+  if (!oc.ok) { return textResult(oc.error, true); }
   const CHAIR_DEFAULT = 'deepseek';
   if (typeof input.briefingFile !== 'string' || !input.briefingFile.trim()) {
     return textResult("amicus_council_run requires 'briefingFile' (a path to the briefing).", true);
@@ -158,6 +165,10 @@ async function handleCouncilRunTool(input, project, helpers) {
   // read-merge-write has no lock (see run-state.writeSpawnPid).
   try { if (typeof child?.pid === 'number') { runState.writeSpawnPid(runDir, child.pid); } }
   catch { /* best-effort */ }
+  // Task 15 (spec §5.3): the run is now known-launched under runId — mark it
+  // for a best-effort terminal notify. runWait's poll loop (mcp-wait.js) is
+  // the only code that later sees this council run reach terminal state.
+  if (oc.mode === 'mcp-notify') { requestMcpNotify(runId); }
 
   const body = JSON.stringify({
     schemaVersion: 2, type: 'council-run', runId, runDir, status: 'running',

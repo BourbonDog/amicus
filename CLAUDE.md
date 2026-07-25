@@ -277,6 +277,7 @@ src/
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-council-awareness.js
 ├── mcp-council-run.js
+├── mcp-notify.js  # Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'`
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
 ├── mcp-spend.js
 ├── mcp-tools.js  # MCP Tool Definitions for Amicus
@@ -387,6 +388,7 @@ evals/
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
+| `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
 | `mcp-spend.js` |  | `amicus_spend()`, `buildSpendResult()` |
 | `mcp-tools.js` | MCP Tool Definitions for Amicus | `getTools()`, `getGuideText()`, `safeTaskId()`, `safeModel()` |
