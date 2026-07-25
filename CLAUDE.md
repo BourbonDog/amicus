@@ -298,7 +298,9 @@ electron/
 │   ├── icon.png
 │   └── icon.svg
 ├── workspace-ui/
-│   └── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
+│   ├── index.html
+│   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
+│   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
 ├── ipc-guard.js  # IPC Guard Helpers
