@@ -5,6 +5,19 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Observability data layer.** Three file surfaces every consumer polls, no push/IPC/`fs.watch` anywhere: the existing durable snapshots (`metadata.json`/`progress.json`/`wave.json`/council `run.json`, all additively extended), a new append-only `events.jsonl` milestone stream per wave dir / council-run dir, and the composed live doc (the `amicus_status` rollup, stamped `view:'live'` with per-leg read-time `usage`).
+- **`amicus watch <id>`** — live-render any fan-out wave, council run, or session from any terminal, reading only the data layer above (no attach): an in-place refresh table on a TTY, milestone lines (`--plain` / non-TTY), or NDJSON (`--json`). `--interval` controls the poll rate (default 2s, floor 0.5s); exit code maps the run's terminal state (`complete`→0, `partial`→2, else 1). `--ui` registers the flag for the v4.4 Council Workspace GUI (rejects `--json`) — the GUI itself is not shipped in this release.
+- **`--follow` on `fanout` and `council run`** — stream a run's own milestone events to stderr as they happen; stdout's `--json`/human contracts stay byte-identical. On `council run`, `--follow` covers the run's own lifecycle and each stage's boundaries, not the per-leg events inside a stage's internal fan-out sub-wave.
+- **`--on-complete` hook.** CLI: runs a user-authored shell command once a wave/council run reaches a terminal state, with the payload carried via 8 environment variables (`AMICUS_TASK_ID`, `AMICUS_TYPE`, `AMICUS_STATUS`, `AMICUS_EXIT_CODE`, `AMICUS_RESULT_FILE`, `AMICUS_EVENTS_FILE`, `AMICUS_COST`, `AMICUS_PROJECT`) — ids/paths only, never model-generated text; exit-isolated from the run (a non-zero exit or a 60s timeout is a warning only). MCP: only `onComplete: "mcp-notify"` is accepted, a best-effort advisory notification — `exec` is never exposed over MCP.
+- **Failed-leg resilience.** `fanout --retry-failed <waveId>` relaunches only a wave's terminal, non-complete legs as a new linked wave (byte-identical retry from each leg's saved context; `--models` filters which legs retry; the original `wave.json` is never touched). `--fallback` / `--no-fallback` opt into per-leg cheaper-model substitution, off by default, triggered only by a classified rate-limit/overload failure (never timeout or auth) and always recorded loudly (a `leg-fallback` event, an `attempts[]` array, a `fallback` block on the final doc).
+- **Spend visibility & attribution.** `continue`/`resume`/council rows are now recorded in the spend ledger, not just `start`/`fanout` legs, and every row carries attribution (`op`/`status`/`waveId`/`councilRunId`/`councilName`/`project`/`gateway`, plus fallback/retry linkage). `amicus spend` grows a full query surface — `--wave`/`--council`/`--project`/`--model`/`--op`/`--failed`/`--group-by <model|wave|council|project|op|day>`/`--rows` — plus a `wasted` rollup (both `--failed` and `wasted` deliberately exclude rows with no recorded status at all, so a pre-v4.3 ledger row is never counted as a failure that was never actually recorded). A new read-only `amicus_spend` MCP tool (16th tool) mirrors the same flags for MCP-only hosts.
+
+### Notes
+
+- All additive: no schema-breaking changes to v4.0 artifacts. `SPEND_LEDGER_SCHEMA_VERSION` stays `1`; both JSONL ledgers (`spend-ledger.jsonl`, `council-ledger.jsonl`) remain internal, non-envelope files, not published docs. A wave dir / council-run dir now also contains `events.jsonl`.
+
 ## [4.2.1] - 2026-07-23
 
 ### Security
