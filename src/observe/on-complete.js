@@ -74,15 +74,20 @@ function runOnComplete(cmd, info, deps = {}) {
  */
 async function fireWaveOnComplete(cmd, wave, { waveId, waveDir, wavePath, exitCode, project }, deps) {
   if (!cmd || typeof cmd !== 'string') { return; }
-  const path = require('path');
-  const { formatCost } = require('../utils/pricing');
-  const { EVENTS_FILE } = require('./events');
-  await runOnComplete(cmd, {
-    taskId: waveId, type: 'wave', status: wave.status, exitCode,
-    resultFile: wavePath, eventsFile: path.join(waveDir, EVENTS_FILE),
-    cost: wave.usage && wave.usage.cost ? formatCost(wave.usage.cost) : '',
-    project,
-  }, deps);
+  try {
+    const path = require('path');
+    const { formatCost } = require('../utils/pricing');
+    const { EVENTS_FILE } = require('./events');
+    await runOnComplete(cmd, {
+      taskId: waveId, type: 'wave', status: wave.status, exitCode,
+      resultFile: wavePath, eventsFile: path.join(waveDir, EVENTS_FILE),
+      cost: wave.usage && wave.usage.cost ? formatCost(wave.usage.cost) : '',
+      project,
+    }, deps);
+  } catch (e) {
+    const logger = (deps && deps.logger) || require('../utils/logger').logger;
+    logger.warn('on-complete hook assembly failed (run unaffected)', { error: e.message });
+  }
 }
 
 /**
@@ -91,15 +96,20 @@ async function fireWaveOnComplete(cmd, wave, { waveId, waveDir, wavePath, exitCo
  */
 async function fireCouncilOnComplete(cmd, run, { runId, runDir, exitCode, project }, deps) {
   if (!cmd || typeof cmd !== 'string') { return; }
-  const path = require('path');
-  const { formatCost } = require('../utils/pricing');
-  const { EVENTS_FILE } = require('./events');
-  await runOnComplete(cmd, {
-    taskId: runId, type: 'council-run', status: run.status, exitCode,
-    resultFile: path.join(runDir, 'run.json'), eventsFile: path.join(runDir, EVENTS_FILE),
-    cost: run.usage && run.usage.cost ? formatCost(run.usage.cost) : '',
-    project,
-  }, deps);
+  try {
+    const path = require('path');
+    const { formatCost } = require('../utils/pricing');
+    const { EVENTS_FILE } = require('./events');
+    await runOnComplete(cmd, {
+      taskId: runId, type: 'council-run', status: run.status, exitCode,
+      resultFile: path.join(runDir, 'run.json'), eventsFile: path.join(runDir, EVENTS_FILE),
+      cost: run.usage && run.usage.cost ? formatCost(run.usage.cost) : '',
+      project,
+    }, deps);
+  } catch (e) {
+    const logger = (deps && deps.logger) || require('../utils/logger').logger;
+    logger.warn('on-complete hook assembly failed (run unaffected)', { error: e.message });
+  }
 }
 
 module.exports = {

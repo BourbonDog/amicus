@@ -100,6 +100,41 @@ describe('runOnComplete', () => {
       { spawn: fakeSpawn, logger: { warn: (m) => warns.push(m), debug: () => {} } })).resolves.toBeUndefined();
     expect(warns.length).toBe(1);
   });
+
+  // STDOUT-PURITY guard: --json consumers pipe amicus stdout through a JSON
+  // parser. The hook's child process output must land on stderr ONLY —
+  // process.stdout.write must never be invoked by the hook path.
+  test('STDOUT-PURITY: child stdout and stderr both land on process.stderr, never process.stdout', async () => {
+    const fakeSpawn = () => {
+      const l = {};
+      const child = {
+        stdout: { on: (ev, cb) => { if (ev === 'data') { l.stdoutData = cb; } } },
+        stderr: { on: (ev, cb) => { if (ev === 'data') { l.stderrData = cb; } } },
+        on: (ev, cb) => { l[ev] = cb; },
+        kill: () => {},
+      };
+      setImmediate(() => {
+        l.stdoutData && l.stdoutData(Buffer.from('from stdout\n'));
+        l.stderrData && l.stderrData(Buffer.from('from stderr\n'));
+        l.close && l.close(0);
+      });
+      return child;
+    };
+    const stdoutWrites = [];
+    const stderrWrites = [];
+    const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation((chunk) => { stdoutWrites.push(chunk); return true; });
+    const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk) => { stderrWrites.push(chunk); return true; });
+    try {
+      await runOnComplete('do-thing', { taskId: 'w1', type: 'wave', status: 'complete', exitCode: 0, project: '/p' },
+        { spawn: fakeSpawn, logger: { warn: () => {}, debug: () => {} } });
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+    expect(stdoutWrites.length).toBe(0);
+    expect(stderrWrites.map(String).join('')).toContain('from stdout');
+    expect(stderrWrites.map(String).join('')).toContain('from stderr');
+  });
 });
 
 describe('fireWaveOnComplete / fireCouncilOnComplete (ordering/fire guard, via fake spawn)', () => {
@@ -156,5 +191,58 @@ describe('fireWaveOnComplete / fireCouncilOnComplete (ordering/fire guard, via f
     expect(calls[0].opts.env.AMICUS_RESULT_FILE).toBe(path.join('/r/r1', 'run.json'));
     expect(calls[0].opts.env.AMICUS_EVENTS_FILE).toBe(path.join('/r/r1', 'events.jsonl'));
     expect(calls[0].opts.env.AMICUS_COST).toBe('~$1.50');
+  });
+
+  // TOTALITY guard: the fire helpers do payload-assembly work (formatCost,
+  // path.join) BEFORE calling runOnComplete's never-throw boundary. A bug in
+  // that assembly step must not be able to fail the run either — the helper
+  // itself must swallow it. A non-numeric cost.amount makes formatCost's
+  // internal `.toFixed()` throw a TypeError; that's the forcing function here.
+  test('TOTALITY: fireWaveOnComplete resolves (never rejects) and warns when payload assembly throws', async () => {
+    const fakeSpawn = jest.fn(() => {
+      throw new Error('spawn should never be reached — assembly must throw first');
+    });
+    const warns = [];
+    const deps = { spawn: fakeSpawn, logger: { warn: (m, ctx) => warns.push({ m, ctx }), debug: () => {} } };
+
+    await expect(fireWaveOnComplete('notify-me',
+      { status: 'complete', usage: { cost: { amount: 'not-a-number', source: 'reported' } } },
+      { waveId: 'w1', waveDir: '/r/w1', wavePath: '/r/w1/wave.json', exitCode: 0, project: '/p' }, deps))
+      .resolves.toBeUndefined();
+
+    expect(fakeSpawn).not.toHaveBeenCalled();
+    expect(warns.length).toBe(1);
+    expect(warns[0].m).toMatch(/on-complete hook assembly failed/);
+    expect(warns[0].ctx.error).toMatch(/toFixed/);
+  });
+
+  test('TOTALITY: fireCouncilOnComplete resolves (never rejects) and warns when payload assembly throws', async () => {
+    const fakeSpawn = jest.fn(() => {
+      throw new Error('spawn should never be reached — assembly must throw first');
+    });
+    const warns = [];
+    const deps = { spawn: fakeSpawn, logger: { warn: (m, ctx) => warns.push({ m, ctx }), debug: () => {} } };
+
+    await expect(fireCouncilOnComplete('notify-me',
+      { status: 'complete', usage: { cost: { amount: 'not-a-number', source: 'estimated' } } },
+      { runId: 'r1', runDir: '/r/r1', exitCode: 0, project: '/p' }, deps))
+      .resolves.toBeUndefined();
+
+    expect(fakeSpawn).not.toHaveBeenCalled();
+    expect(warns.length).toBe(1);
+    expect(warns[0].m).toMatch(/on-complete hook assembly failed/);
+    expect(warns[0].ctx.error).toMatch(/toFixed/);
+  });
+
+  // No-op path stays a clean early return: a falsy/non-string cmd must never
+  // enter the try block (no spawn, no warn) — the guard is unconditional.
+  test('TOTALITY: falsy cmd never enters the try (no warn even with a poisoned wave)', async () => {
+    const warns = [];
+    const deps = { spawn: () => { throw new Error('unreachable'); }, logger: { warn: (m) => warns.push(m), debug: () => {} } };
+    await expect(fireWaveOnComplete(null,
+      { status: 'complete', usage: { cost: { amount: 'not-a-number' } } },
+      { waveId: 'w1', waveDir: '/r/w1', wavePath: '/r/w1/wave.json', exitCode: 0, project: '/p' }, deps))
+      .resolves.toBeUndefined();
+    expect(warns.length).toBe(0);
   });
 });
