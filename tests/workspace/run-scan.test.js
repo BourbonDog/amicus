@@ -87,4 +87,26 @@ describe('readPointer', () => {
     expect(readPointer(project, 'council-aaaa1111').runDir).toBe(path.join(FX, 'council-run-complete'));
     expect(readPointer(project, '99999999').error).toBeTruthy();
   });
+
+  // Security regression (Task 4 review finding #1): a caller-supplied runId reaches
+  // runState.readPointer's `council-${runId}.json` path.join with no separator/traversal
+  // filtering. A runId like '../../../secret' collapses the literal 'council-..' segment
+  // against the following '..' and can resolve anywhere on disk. Proven two ways: the
+  // returned row is an error (never a runDir), and the filesystem is never even touched —
+  // if fs.readFileSync were called at all here, the traversal path.join would have already
+  // been built and reachable.
+  test('rejects a runId containing path-traversal segments before any filesystem read', () => {
+    const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
+    const spy = jest.spyOn(fs, 'readFileSync');
+    try {
+      for (const evil of ['../../../../Users/sendt/.ssh/id', '..\\..\\secrets', 'council-../../../etc/passwd']) {
+        const res = readPointer(project, evil);
+        expect(res.error).toBeTruthy();
+        expect(res.runDir).toBeUndefined();
+      }
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

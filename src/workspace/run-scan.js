@@ -23,6 +23,14 @@ const { SESSIONS_DIR } = require('../session-manager');
 // walker's pattern (src/council/run-state.js:148) so ids that are not 8 hex still list.
 const POINTER_RE = /^council-([a-zA-Z0-9_-]{1,64})\.json$/;
 
+// Same character class as POINTER_RE's capture group / run-state.js:148's enumeration
+// pattern. readPointer() below is a DIRECT lookup keyed on caller-supplied runId (unlike
+// the POINTER_RE walk above, which only ever sees filenames readdirSync already returned)
+// — without this check a runId containing '/', '..', or backslashes reaches
+// runState.readPointer's `council-${runId}.json` path.join unfiltered and can collapse
+// out of the sessions dir entirely (Task 4 review finding: traversal via unvalidated runId).
+const RUN_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 function sessionsDir(project) {
   return path.join(project, '.claude', SESSIONS_DIR);
 }
@@ -53,6 +61,7 @@ function startedAtOf(run, pointerPath) {
  */
 function readPointer(project, runId) {
   const id = String(runId).replace(/^council-/, '');
+  if (!RUN_ID_RE.test(id)) { return { runId: id, error: 'invalid runId' }; }
   const ptr = runState.readPointer(project, id);
   if (!ptr) { return { runId: id, error: 'pointer missing, unreadable, or invalid' }; }
   return { runId: id, runDir: ptr.runDir };
