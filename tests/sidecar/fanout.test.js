@@ -565,6 +565,44 @@ describe('runFanout orchestrator', () => {
     }
   });
 
+  // v4.3 Task 19 Fix Wave 1 (Finding 3): a retry launch (options.retryOfWaveId
+  // set by fanout-retry.js) must NOT print its own wave doc to stdout —
+  // fanout-retry.js owns that print (after enriching retryOf/effective onto
+  // it). This must be additive-only: the --on-complete hook and wave.json
+  // still fire/write exactly as a normal wave (only the console.log is gated).
+  it('retry launch (options.retryOfWaveId set) suppresses runFanout\'s own stdout doc-print, but --on-complete and wave.json are untouched', async () => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const spawnCalls = [];
+    const fakeSpawn = (cmd, opts) => {
+      spawnCalls.push({ cmd, opts });
+      const listeners = {};
+      const child = {
+        stdout: { on: () => {} }, stderr: { on: () => {} },
+        on: (ev, cb) => { listeners[ev] = cb; },
+        kill: () => {},
+      };
+      setImmediate(() => listeners.close && listeners.close(0));
+      return child;
+    };
+    try {
+      const { wave } = await runFanout({
+        ...baseOpts(), quiet: false, retryOfWaveId: 'w1',
+        onComplete: 'echo retry-done',
+        onCompleteDeps: { spawn: fakeSpawn, logger: { warn: () => {}, debug: () => {} } },
+      });
+      // the doc-print is suppressed for a retry launch...
+      expect(logSpy).not.toHaveBeenCalled();
+      // ...but the --on-complete hook still fires (never gated by retryOfWaveId)...
+      expect(spawnCalls).toHaveLength(1);
+      expect(spawnCalls[0].cmd).toBe('echo retry-done');
+      // ...and wave.json is still written (only the stdout print is suppressed).
+      const wavePath = pathReal.join(project, '.claude', 'amicus_sessions', wave.waveId, 'wave.json');
+      expect(fsReal.existsSync(wavePath)).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it('server start failure → error wave, exit 1, no legs launched', async () => {
     mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
     const { wave, exitCode } = await runFanout(baseOpts());

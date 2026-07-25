@@ -80,7 +80,7 @@ async function runFanout(options) {
   // (no tail). Off by default; every emit* call below threads it through.
   const follow = options.follow ? require('../observe/follow').createFollowPrinter({ json: options.json }) : null;
   const emit = (doc) => {
-    if (options.quiet) { return; }
+    if (options.quiet || options.retryOfWaveId) { return; } // v4.3 T19 FW1#3: retry launches print via fanout-retry.js instead
     if (options.json) {
       console.log(JSON.stringify(doc, null, 2));
     } else {

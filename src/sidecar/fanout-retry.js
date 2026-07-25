@@ -86,6 +86,13 @@ function buildRetryPlan(origWaveId, project, { models } = {}) {
  *   - a `retry-started` event lands in the new wave dir
  *   - the doc gains an `effective` block (per original failed slot: the
  *     retry leg's latest status + usage)
+ * Linkage is gated on `runFanout` actually producing a wave: a pre-flight
+ * failure inside runFanout (wave:null, e.g. budget gate) must leave the
+ * original wave's metadata untouched — no false retriedBy record for a
+ * retry that never launched. runFanout suppresses its OWN stdout doc-print
+ * for a retry launch (its `options.retryOfWaveId` gate — see fanout.js),
+ * so this function owns printing the enriched doc (retryOf + effective),
+ * exactly once, respecting the caller's --json/--quiet.
  * @param {object} [opts.runFanout] - injected for tests (defaults to runFanout)
  * @returns {Promise<{wave: object|null, exitCode: number, errorDoc?: object}>}
  */
@@ -95,6 +102,7 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
   const { getSessionDir } = require('../session-manager');
   const { appendEvent } = require('../observe/events');
   const { writeFileAtomic } = require('../utils/atomic-write');
+  const { buildWaveResult } = require('../utils/result-schema');
   const runFanoutImpl = opts.runFanout || runFanout;
 
   const plan = buildRetryPlan(origWaveId, project, { models: opts.models });
@@ -107,7 +115,19 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
     return { wave: null, errorDoc: buildErrorDoc({ code: 'BAD_ARGS', message: plan.error }), exitCode: 1 };
   }
   if (plan.eligible.length === 0) {
-    if (!opts.quiet) { process.stdout.write(`No failed legs to retry in ${origWaveId} — nothing to do.\n`); }
+    if (!opts.quiet) {
+      if (opts.json) {
+        // valid-JSON no-op doc (Finding 5) — reuses the wave schema so a
+        // --json caller's stdout stays machine-parseable either way.
+        const noopDoc = {
+          ...buildWaveResult({ waveId: origWaveId, legs: [], status: 'complete' }),
+          retryOf: origWaveId, effective: [], note: 'no failed legs',
+        };
+        process.stdout.write(JSON.stringify(noopDoc, null, 2) + '\n');
+      } else {
+        process.stdout.write(`No failed legs to retry in ${origWaveId} — nothing to do.\n`);
+      }
+    }
     return { wave: null, exitCode: 0 };
   }
 
@@ -124,15 +144,22 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
   // Launch the new wave. `retryContexts`/`retryOfWaveId` are additive options;
   // runFanout uses each slot's saved system/user verbatim when present (Step 4b)
   // and threads retryOfWaveId onto each leg so Task 1's append tags the rows.
+  // `models` MUST be the comma-separated STRING runFanout's own validator
+  // expects (parseModelsList/validateFanoutModels) — an array silently fails
+  // every leg pre-flight (BAD_ARGS), matching run-launch.js:41's precedent.
   // Strip our own injection key so it is never forwarded.
-  const fanoutOpts = { ...opts, models, prompt: briefing, project, waveId: newWaveId, retryContexts, retryOfWaveId: origWaveId };
+  const fanoutOpts = { ...opts, models: models.join(','), prompt: briefing, project, waveId: newWaveId, retryContexts, retryOfWaveId: origWaveId };
   delete fanoutOpts.runFanout;
   const { wave, exitCode } = await runFanoutImpl(fanoutOpts);
+
+  // No wave produced (pre-flight failure inside runFanout) — nothing
+  // launched, so no linkage may be recorded on the original wave.
+  if (!wave) { return { wave: null, exitCode }; }
 
   // --- additive linkage (best-effort; a missing dir never throws) ---
   const newWaveDir = getSessionDir(project, newWaveId);
   writeWaveMetadata(newWaveDir, { retryOf: origWaveId });
-  if (wave) { wave.retryOf = origWaveId; }
+  wave.retryOf = origWaveId;
 
   const newLegIds = deriveLegIds(newWaveId, plan.eligible.length);
   newLegIds.forEach((newLegId, i) => {
@@ -155,13 +182,25 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
   appendEvent(newWaveDir, { event: 'retry-started', id: newWaveId, retryOf: origWaveId, legIds: newLegIds });
 
   // effective block: original failed slot -> the retry leg's latest status/usage
-  const legs = (wave && Array.isArray(wave.legs)) ? wave.legs : [];
+  const legs = Array.isArray(wave.legs) ? wave.legs : [];
   const effective = plan.eligible.map((e, i) => ({
     origLegId: e.legId, model: e.model,
     status: legs[i] ? legs[i].status : 'unknown',
     usage: legs[i] ? (legs[i].usage || null) : null,
   }));
-  if (wave) { wave.effective = effective; }
+  wave.effective = effective;
+
+  // runFanout suppressed its own stdout print for this retry launch (its
+  // options.retryOfWaveId gate) — print the enriched doc (retryOf +
+  // effective now attached) ONCE, respecting --json/--quiet (Finding 3).
+  if (!opts.quiet) {
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(wave, null, 2) + '\n');
+    } else {
+      const { formatWaveHuman } = require('./fanout-output');
+      process.stdout.write(formatWaveHuman(wave) + '\n');
+    }
+  }
 
   return { wave, exitCode };
 }

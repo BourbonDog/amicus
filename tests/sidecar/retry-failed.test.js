@@ -62,6 +62,7 @@ describe('buildRetryPlan (spec 6.1, resolved Q4)', () => {
 const { retryFailedWave } = require('../../src/sidecar/fanout-retry'); // DE-ROT (B1): moved to fanout-retry
 const { deriveLegIds } = require('../../src/sidecar/fanout');
 const { createEventTail, EVENTS_FILE } = require('../../src/observe/events');
+const { saveInitialContext } = require('../../src/sidecar/session-utils');
 
 describe('retryFailedWave (spec 6.1 — new linked wave + additive linkage)', () => {
   test('retries only failed legs; writes retryOf/retriedBy/retry-started/effective', async () => {
@@ -70,25 +71,29 @@ describe('retryFailedWave (spec 6.1 — new linked wave + additive linkage)', ()
     writeLeg(proj, 'w1-1', { taskId: 'w1-1', model: 'gpt', status: 'complete' }, 'c1');
     writeLeg(proj, 'w1-2', { taskId: 'w1-2', model: 'qwen', status: 'error' }, 'c2');
 
-    // fake runFanout: simulates the new wave + leg dirs on disk, returns a doc
+    // fake runFanout: simulates the new wave + leg dirs on disk, returns a doc.
+    // Real runFanout requires `models` as a comma-separated STRING (its own
+    // parseModelsList/validateFanoutModels contract) — the fake mirrors that
+    // real contract rather than the old (buggy) array shape.
     let launched = null;
     const fakeRunFanout = async (o) => {
       launched = o;
       const wDir = getSessionDir(proj, o.waveId);
       fs.mkdirSync(wDir, { recursive: true });
-      const legIds = deriveLegIds(o.waveId, o.models.length);
+      const modelList = o.models.split(',');
+      const legIds = deriveLegIds(o.waveId, modelList.length);
       fs.writeFileSync(path.join(wDir, 'metadata.json'),
         JSON.stringify({ taskId: o.waveId, type: 'wave', status: 'complete', legs: legIds }));
       legIds.forEach((legId, i) => {
         const lDir = getSessionDir(proj, legId);
         fs.mkdirSync(lDir, { recursive: true });
         fs.writeFileSync(path.join(lDir, 'metadata.json'),
-          JSON.stringify({ taskId: legId, model: o.models[i], status: 'complete' }));
+          JSON.stringify({ taskId: legId, model: modelList[i], status: 'complete' }));
       });
       return {
         wave: {
           type: 'wave', waveId: o.waveId, status: 'complete',
-          legs: legIds.map((legId, i) => ({ taskId: legId, model: o.models[i], status: 'complete',
+          legs: legIds.map((legId, i) => ({ taskId: legId, model: modelList[i], status: 'complete',
             usage: { tokens: { input: 10, output: 4 }, cost: { amount: 0.001, source: 'reported' } } })),
         },
         exitCode: 0,
@@ -98,7 +103,7 @@ describe('retryFailedWave (spec 6.1 — new linked wave + additive linkage)', ()
     const { wave, exitCode } = await retryFailedWave('w1', proj, { runFanout: fakeRunFanout, quiet: true });
 
     // only the failed leg (qwen) was retried, with its retryOfWaveId threaded
-    expect(launched.models).toEqual(['qwen']);
+    expect(launched.models).toBe('qwen');
     expect(launched.retryOfWaveId).toBe('w1');
     expect(launched.retryContexts[0].origLegId).toBe('w1-2');
     expect(exitCode).toBe(0);
@@ -146,5 +151,84 @@ describe('retryFailedWave (spec 6.1 — new linked wave + additive linkage)', ()
     const err = await retryFailedWave('w2', running, { runFanout: fake, quiet: true });
     expect(err.exitCode).toBe(1);
     expect(err.errorDoc.error.message).toMatch(/running/i); // ⚠️ DE-ROT (N7): buildErrorDoc nests the message at errorDoc.error.message — `errorDoc.error || errorDoc.message` yields the error OBJECT, and toMatch on an object throws "received must be a string".
+  });
+
+  // Fix Wave 1, Finding 1 (CRITICAL): `models` MUST reach runFanout as a
+  // comma-separated STRING (its own parseModelsList/validateFanoutModels
+  // contract) — an array silently fails validateFanoutModels, which bails
+  // BEFORE any leg launches. Dedicated multi-leg test so array-vs-string is
+  // unambiguous (`.toEqual(['gpt','qwen'])` would still "pass" a naive
+  // single-model check; `typeof ... === 'string'` cannot).
+  test('Finding 1: models is threaded to runFanout as a comma-separated STRING, not an array', async () => {
+    const proj = project();
+    writeWave(proj, 'w5', 'partial', ['w5-1', 'w5-2'], ['gpt', 'qwen']);
+    writeLeg(proj, 'w5-1', { taskId: 'w5-1', model: 'gpt', status: 'error' }, 'c1');
+    writeLeg(proj, 'w5-2', { taskId: 'w5-2', model: 'qwen', status: 'timeout' }, 'c2');
+
+    // wave:null keeps this test focused on the CAPTURED CALL ARGS — the
+    // linkage-write path (which needs on-disk new-wave/leg dirs) is already
+    // covered end-to-end by the first test above.
+    let captured = null;
+    const fake = async (o) => { captured = o; return { wave: null, exitCode: 0 }; };
+    await retryFailedWave('w5', proj, { runFanout: fake, quiet: true });
+
+    expect(typeof captured.models).toBe('string');
+    expect(captured.models).toBe('gpt,qwen');
+  });
+
+  // Fix Wave 1, Finding 2 (CRITICAL): if runFanout returns no wave (a
+  // pre-flight failure INSIDE the retry launch itself, e.g. the budget gate —
+  // distinct from buildRetryPlan's own error, which never calls runFanout at
+  // all), retryFailedWave must NOT record a false retry on the original wave.
+  test('Finding 2: a pre-flight failure inside the retry launch (wave:null) leaves the original wave metadata untouched', async () => {
+    const proj = project();
+    writeWave(proj, 'w6', 'partial', ['w6-1'], ['gpt']);
+    writeLeg(proj, 'w6-1', { taskId: 'w6-1', model: 'gpt', status: 'error' }, 'c1');
+    const origMetaPath = path.join(getSessionDir(proj, 'w6'), 'metadata.json');
+    const origMetaBefore = fs.readFileSync(origMetaPath, 'utf-8');
+
+    const fakeFail = async () => ({
+      wave: null, exitCode: 1,
+      errorDoc: { error: { code: 'BUDGET_EXCEEDED', message: 'refused' } },
+    });
+    const out = await retryFailedWave('w6', proj, { runFanout: fakeFail, quiet: true });
+
+    expect(out.wave).toBeNull();
+    expect(out.exitCode).toBe(1);
+    // ORIGINAL wave metadata byte-identical — no retriedBy, nothing rewritten
+    expect(fs.readFileSync(origMetaPath, 'utf-8')).toBe(origMetaBefore);
+    const origMeta = JSON.parse(origMetaBefore);
+    expect(origMeta.retriedBy).toBeUndefined();
+  });
+
+  // Fix Wave 1, Finding 4 (IMPORTANT): the saved-context happy path was
+  // previously untested — every fixture used a non-matching legacy string, so
+  // parseInitialContext always returned null and hadSavedContext was false in
+  // EVERY prior test. This exercises the REAL saveInitialContext framing and
+  // proves the byte-identical relaunch: plan-level parse + end-to-end thread
+  // into runFanout's retryContexts.
+  test('Finding 4: saved-context happy path — properly-framed initial_context.md round-trips verbatim', async () => {
+    const proj = project();
+    writeWave(proj, 'w7', 'partial', ['w7-1'], ['qwen']);
+    const legDir = writeLeg(proj, 'w7-1', { taskId: 'w7-1', model: 'qwen', status: 'error' });
+    saveInitialContext(legDir, 'SYSTEM PROMPT TEXT', 'USER MESSAGE TEXT');
+
+    // (a) buildRetryPlan parses the real framing: hadSavedContext:true + verbatim fields
+    const plan = buildRetryPlan('w7', proj, {});
+    expect(plan.eligible).toHaveLength(1);
+    expect(plan.eligible[0].hadSavedContext).toBe(true);
+    expect(plan.eligible[0].systemPrompt).toBe('SYSTEM PROMPT TEXT');
+    expect(plan.eligible[0].userMessage).toBe('USER MESSAGE TEXT');
+
+    // (b) retryFailedWave threads it through to runFanout's retryContexts
+    // verbatim. wave:null keeps this focused on the captured call args — the
+    // linkage-write path is already covered end-to-end by the first test.
+    let captured = null;
+    const fake = async (o) => { captured = o; return { wave: null, exitCode: 0 }; };
+    await retryFailedWave('w7', proj, { runFanout: fake, quiet: true });
+
+    expect(captured.retryContexts[0].hadSavedContext).toBe(true);
+    expect(captured.retryContexts[0].systemPrompt).toBe('SYSTEM PROMPT TEXT');
+    expect(captured.retryContexts[0].userMessage).toBe('USER MESSAGE TEXT');
   });
 });
