@@ -15,13 +15,16 @@ const { formatCost } = require('../utils/pricing');
 // ⚠️ DE-ROT (F25): v4.0 module (not v4.3) — safe for Phase 1. Single source of truth
 // for reading/validating council pointer files; do not re-parse them here.
 const runState = require('../council/run-state');
+// Same constant run-state.js itself imports (src/council/run-state.js:20), so a
+// future rename can't silently desync this module's walk from its pointer reads.
+const { SESSIONS_DIR } = require('../session-manager');
 
 // ⚠️ DE-ROT (F25): widened from /^council-([0-9a-f]{8})\.json$/ to match the shipped
 // walker's pattern (src/council/run-state.js:148) so ids that are not 8 hex still list.
 const POINTER_RE = /^council-([a-zA-Z0-9_-]{1,64})\.json$/;
 
 function sessionsDir(project) {
-  return path.join(project, '.claude', 'amicus_sessions');
+  return path.join(project, '.claude', SESSIONS_DIR);
 }
 
 function readJson(file) {

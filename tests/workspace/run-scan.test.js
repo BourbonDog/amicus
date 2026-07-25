@@ -39,6 +39,14 @@ describe('scanCouncilRuns', () => {
     // ⚠️ DE-ROT (F24): was '~$0.31' — unreachable. formatCost gives any amount < 1
     // four decimals (pricing.js:118), so {amount:0.31, source:'estimated'} → '~$0.3100'.
     expect(degraded.costDisplay).toBe('~$0.3100');
+    // Live/running run: usage is null (only finalize() ever writes it) and there is
+    // no verdict.json yet — costDisplay/tierCounts/overallVerdict must reflect that
+    // absent state rather than being left untested.
+    const live = rows.find((r) => r.runId === 'cccc3333');
+    expect(live.status).toBe('running');
+    expect(live.costDisplay).toBe('—');
+    expect(live.tierCounts).toBeNull();
+    expect(live.overallVerdict).toBeNull();
   });
 
   test('dangling pointer and unreadable run.json become error rows, never throw', () => {
@@ -49,9 +57,18 @@ describe('scanCouncilRuns', () => {
       path.join(project, '.claude', 'amicus_sessions', 'council-ffff5555.json'),
       JSON.stringify({ runId: 'ffff5555', runDir: badDir })
     );
+    // A pointer file that is itself malformed JSON. Unlike the two cases above (both
+    // well-formed pointers that fail later at the run.json read), this one exercises
+    // scanCouncilRuns's own `if (ptr.error)` branch — the readPointer adapter's
+    // null-pointer path, reached here because the walk loop only calls readPointer
+    // for filenames readdirSync just returned (so the missing-pointer-file case in
+    // the readPointer describe block below is unreachable from inside the scan).
+    fs.writeFileSync(path.join(project, '.claude', 'amicus_sessions', 'council-gggg6666.json'), '{not json');
     const rows = scanCouncilRuns(project);
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     for (const row of rows) { expect(row.error).toBeTruthy(); }
+    const malformedPointer = rows.find((r) => r.runId === 'gggg6666');
+    expect(malformedPointer.runDir).toBeNull();
   });
 
   test('non-council files in the sessions dir are ignored; missing dir yields []', () => {
