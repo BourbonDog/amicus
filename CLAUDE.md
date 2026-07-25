@@ -299,7 +299,9 @@ electron/
 │   └── icon.svg
 ├── workspace-ui/
 │   ├── index.html
+│   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
+│   ├── workspace-render.js  # Council Workspace — DOM painters (run list, header, stage rail, seats,
 │   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
