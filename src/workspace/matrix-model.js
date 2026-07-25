@@ -51,6 +51,7 @@ function buildMatrixModel(tally, labelMap, verdict) {
   const rows = findings.map((f) => {
     const votes = {};
     for (const adj of (Array.isArray(f.adjudications) ? f.adjudications : [])) {
+      if (!adj || typeof adj.judge !== 'string') { continue; }
       votes[adj.judge] = adj.verdict;
     }
     const vf = verdictById.get(f.id);

@@ -27,6 +27,11 @@ describe('buildMatrixModel', () => {
     expect(a1.cells[0].isRaiser).toBe(true);
     expect(a1.cells[1].verdict).toBe('agree');
     expect(a1.raiser).toEqual({ model: 'gemini', label: 'Review A' });
+    // Negative cases: a constant `true` on either flag would still pass every
+    // other assertion in this suite (only C2 is thin; only A1's own cell is
+    // its raiser's).
+    expect(a1.cells[1].isRaiser).toBe(false);
+    expect(a1.thin).toBe(false);
   });
 
   // ⚠️ DE-ROT (F07): tally.json's own `tierOverride` is unconditionally null on
@@ -42,6 +47,10 @@ describe('buildMatrixModel', () => {
     const c1 = m.rows.find((r) => r.id === 'C1');
     expect(c1.tierOverride).toBeNull();
     expect(c1.tier).toBe('Contested');
+    // C1 is the fixture's only finding with an asymmetric verdict pair
+    // (gemini agree / gpt dispute) — pins the column mapping and both
+    // non-blank symbols at once.
+    expect(c1.cells.map((c) => c.sym)).toEqual([SYMBOL.agree, SYMBOL.dispute, ' ']);
 
     const verdict = JSON.parse(fs.readFileSync(path.join(FX, 'verdict.json'), 'utf-8'));
     const mv = buildMatrixModel(tally, run.labelMap, verdict);
@@ -74,5 +83,15 @@ describe('buildMatrixModel', () => {
   test('degenerate tallies do not throw', () => {
     expect(buildMatrixModel({ meta: {}, findings: null }, {}).rows).toEqual([]);
     expect(buildMatrixModel({}, null).judges).toEqual([]);
+  });
+
+  // Review follow-up: a malformed `adjudications` element (on-disk JSON is
+  // hand-editable, and Task 3 feeds this a defensive parse of it) must blank
+  // one cell, not throw and blank the whole matrix panel.
+  test('a null/malformed adjudication element does not crash the row; other votes still register', () => {
+    const dm = buildMatrixModel({ meta: { models: ['gemini', 'gpt'] }, findings: [
+      { id: 'A1', raiser: 'gemini', tier: 'Confirmed', adjudications: [null, { judge: 'gpt', verdict: 'agree' }] },
+    ] }, {});
+    expect(dm.rows[0].cells.map((c) => c.verdict)).toEqual([null, 'agree']);
   });
 });
