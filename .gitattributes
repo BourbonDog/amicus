@@ -15,6 +15,13 @@
 # contributor's core.autocrlf setting (a CRLF install.sh breaks under sh).
 *.sh text eol=lf
 
+# Extensionless shell scripts need the same protection and the rule above does
+# not reach them. The husky hooks carry a `#!/usr/bin/env bash` shebang with no
+# .sh extension; under CRLF the shebang becomes `#!/usr/bin/env bash\r`, the
+# kernel looks for an interpreter named `bash\r`, and the hook dies with
+# "bad interpreter: No such file or directory" on macOS and Linux CI.
+.husky/* text eol=lf
+
 # Binary assets: never touched.
 *.png binary
 *.jpg binary
