@@ -1,3 +1,23 @@
+# Normalize every text file to CRLF in the working tree on this repo's primary
+# platform (Windows, core.autocrlf=true), and LF in the object database.
+#
+# Why this file exists: lint-staged captures a command's stderr INTO its stdout
+# (node_modules/lint-staged/lib/gitWorkflow.js:272 -> execGit.js) and feeds the
+# result to `git rev-parse --short <hash>`. A file whose working-tree endings
+# disagree with the index makes `git stash create` print
+#   warning: in the working copy of 'X', LF will be replaced by CRLF
+# on stderr, that warning lands in the captured "hash", and rev-parse fails with
+# `fatal: Needed a single revision` -- naming neither line endings nor the file.
+# Declaring the endings here removes the warning at its source.
+* text=auto eol=crlf
+
 # Shell installers must stay LF so `curl … | sh` works regardless of a
 # contributor's core.autocrlf setting (a CRLF install.sh breaks under sh).
 *.sh text eol=lf
+
+# Binary assets: never touched.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
