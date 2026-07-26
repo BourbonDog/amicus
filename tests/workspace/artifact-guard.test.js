@@ -270,4 +270,29 @@ describe('readRunArtifact — outer fence (runDir must resolve inside project)',
     expect(res.error).toBe('run directory escapes project');
     expect(res.text).toBeUndefined();
   });
+
+  // Round 4 (third live paid council review, blocker): the test above only asserts the
+  // FINAL error, which passes under either ordering — a fence-after-read implementation
+  // that reads+parses run.json BEFORE checking containment (the actual shipped bug this
+  // proves) still ends up returning the same 'run directory escapes project' string once
+  // the fence itself runs, so that assertion alone proves nothing about ORDER. This test
+  // additionally spies on the real fs.readFileSync (call-through, mirrors the established
+  // pattern in tests/workspace/run-scan.test.js's "rejects a runId ... before any
+  // filesystem read" test) and asserts run.json was never opened at all — the fixture
+  // directory is real, readable, and contains a genuine run.json, so a read-before-fence
+  // implementation WOULD read it (and this assertion would catch that), while a
+  // fence-before-read implementation refuses before ever constructing that read.
+  test('run.json is never read when the runDir fence would refuse it (proves ordering, not just outcome)', () => {
+    const outsideRunDir = path.join(FX, 'council-run-complete');
+    const project = seedProjectWithExternalRunDir(outsideRunDir);
+    const spy = jest.spyOn(fs, 'readFileSync');
+    try {
+      const res = readRunArtifact(project, 'aaaa1111', 'chair-output.md');
+      expect(res.error).toBe('run directory escapes project');
+      const runJsonReads = spy.mock.calls.filter(([p]) => String(p).endsWith('run.json'));
+      expect(runJsonReads).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

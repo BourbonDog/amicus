@@ -88,32 +88,42 @@ function readRunArtifact(project, runId, name, deps = {}) {
   const realpathSync = deps.realpathSync || ((p) => fsReal.realpathSync(p));
   const ptr = readPointer(project, runId);
   if (ptr.error) { return { error: ptr.error }; }
-  let run;
-  try { run = JSON.parse(fsReal.readFileSync(path.join(ptr.runDir, 'run.json'), 'utf-8')); }
-  catch (err) { return { error: `run.json: ${err.message}` }; }
-
-  if (!artifactAllowlist(run).includes(name)) { return { error: `artifact not allowed: ${name}` }; }
 
   let realDir;
   try { realDir = realpathSync(ptr.runDir); }
-  catch (err) { return { error: `run dir unreadable: ${err.message}` }; }
+  catch { return { error: 'run dir unreadable' }; }
 
-  // ⚠️ COUNCIL REVIEW R2 (A1): the only fence below this used to be "the artifact resolves
-  // inside runDir" — nothing ever checked that runDir ITSELF (straight from the pointer
-  // file's JSON, validated only for truthiness by src/council/run-state.js's readPointer)
-  // stays inside project. A tampered/stale pointer could point runDir at any directory on
-  // disk and, as long as the requested name happened to exist there, hand its content back
-  // — the allowlist only constrains the FILENAME, never which directory it is read from.
-  // Mirrors electron/ipc-workspace.js's workspace:open-report fence (first council review,
-  // finding C1) exactly: same isRealpathContained helper, same check, same error wording —
-  // now also on the channel that actually serves artifact bytes (workspace:read-artifact
-  // and workspace:fold's chair-output.md read both funnel through this function).
+  // ⚠️ COUNCIL REVIEW R2 (A1) / ROUND 4 ORDERING FIX (third live paid council, blocker):
+  // this outer fence — "runDir ITSELF (straight from the pointer file's JSON, validated
+  // only for truthiness by src/council/run-state.js's readPointer) stays inside project" —
+  // must run BEFORE any read reaches the filesystem. It used to run AFTER an unconditional
+  // read+JSON.parse of run.json from ptr.runDir: the fence still refused to hand back
+  // artifact bytes, so nothing ever leaked, but a tampered/stale pointer could still force
+  // this process to read-and-parse attacker-influenced JSON at an arbitrary path before any
+  // containment check ran — a parser surface with no corresponding gate. Mirrors
+  // src/workspace/run-detail.js's getRunDetail, which already resolves+fences BEFORE
+  // reading anything (round 3); this function was the one place in the workspace surface
+  // that got the ordering wrong. Also mirrors electron/ipc-workspace.js's
+  // workspace:open-report fence (first council review, finding C1): same isRealpathContained
+  // helper, same check, same error wording — now correctly ordered on the channel that
+  // actually serves artifact bytes (workspace:read-artifact and workspace:fold's
+  // chair-output.md read both funnel through this function).
   let realProject;
   try { realProject = realpathSync(project); }
-  catch (err) { return { error: `project unreadable: ${err.message}` }; }
+  catch { return { error: 'project unreadable' }; }
   if (!isRealpathContained(realProject, realDir)) {
     return { error: 'run directory escapes project' };
   }
+
+  let run;
+  try { run = JSON.parse(fsReal.readFileSync(path.join(ptr.runDir, 'run.json'), 'utf-8')); }
+  // Generic message (round 4): a readFileSync failure's err.message embeds the full
+  // resolved path it tried to open — interpolating it here would hand the renderer an
+  // internal filesystem path (in the pre-fence-ordering bug, potentially one entirely
+  // outside the project) via the IPC response.
+  catch { return { error: 'run.json unreadable' }; }
+
+  if (!artifactAllowlist(run).includes(name)) { return { error: `artifact not allowed: ${name}` }; }
 
   let realTarget;
   try { realTarget = realpathSync(path.join(ptr.runDir, name)); }
@@ -124,7 +134,7 @@ function readRunArtifact(project, runId, name, deps = {}) {
 
   let buf;
   try { buf = fsReal.readFileSync(realTarget); }
-  catch (err) { return { error: err.message }; }
+  catch { return { error: 'artifact unreadable' }; }
   if (buf.length > MAX_ARTIFACT_BYTES) {
     return { text: truncateUtf8(buf, MAX_ARTIFACT_BYTES).toString('utf-8'), truncated: true };
   }

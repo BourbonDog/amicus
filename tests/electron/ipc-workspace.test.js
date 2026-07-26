@@ -168,6 +168,25 @@ describe('registerWorkspaceHandlers', () => {
     expect(deps.openExternal).not.toHaveBeenCalled();
   });
 
+  // Round 4 (third live paid council review): the test above only asserts the FINAL
+  // result, which passes under EITHER ordering — deps.existsSync's default fake
+  // (`() => true`) doesn't short-circuit, so the fence trips and returns the same
+  // 'run directory escapes project' error whether the existsSync probe ran before or
+  // after it. That assertion alone proves nothing about order. This test additionally
+  // asserts deps.existsSync was never even called: the probe on the pointer-derived
+  // report path must not run until AFTER the containment fence has already accepted
+  // runDir — otherwise a tampered/stale pointer can use file-existence as an
+  // out-of-project oracle even though the eventual open is refused.
+  test('open-report never probes report.html existence before the containment fence runs', async () => {
+    const { ipc, goodEvent, deps } = setup({
+      readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\totally\\unrelated\\external-dir' })),
+    });
+    const res = await ipc.invoke('workspace:open-report', goodEvent, 'aaaa1111');
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('run directory escapes project');
+    expect(deps.existsSync).not.toHaveBeenCalled();
+  });
+
   // Mirrors artifact-guard.js's fence 2 exactly (readRunArtifact's own realpath
   // containment test): a report.html that is itself a symlink resolving
   // outside the run dir must not be opened, even though runDir itself is

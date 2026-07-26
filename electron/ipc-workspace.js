@@ -225,31 +225,46 @@ function registerWorkspaceHandlers(getWindow, ctx) {
     try {
       const ptr = deps.readPointer(project, String(runId));
       if (!ptr || ptr.error) { return { ok: false, error: (ptr && ptr.error) || 'run pointer not found' }; }
-      const report = path.join(ptr.runDir, 'report.html');
-      if (!deps.existsSync(report)) { return { ok: false, error: 'report.html not written' }; }
 
-      // Containment fence (council review C1, MAJOR, unanimous): this handler was
-      // the only filesystem-reaching workspace: channel with no containment check,
-      // and the only one that hands a disk-derived path to a shell verb
-      // (openExternal) — ptr.runDir is charset-blind and never validated beyond
-      // truthiness (src/council/run-state.js:133-139). Mirror artifact-guard's
-      // fence 2 (readRunArtifact) in BOTH directions: runDir itself must resolve
-      // inside the project (a stale/tampered pointer can't redirect us anywhere
-      // on disk — legitimate runDirs already satisfy this at creation time via
-      // isPathInside, src/mcp-council-run.js:109), and report.html must resolve
-      // inside runDir (a symlinked report.html can't escape the run dir either).
-      // Fail closed on any realpath error (missing dir, permission, dangling
-      // symlink) rather than let it fall through to openExternal.
-      let realProject, realRunDir, realReport;
+      // Containment fence FIRST (council review C1, MAJOR, unanimous; ROUND 4 ORDERING
+      // FIX, third live paid council, blocker-adjacent — this handler is the direct
+      // analogue of the same bug fixed in src/workspace/artifact-guard.js's
+      // readRunArtifact): this handler was the only filesystem-reaching workspace:
+      // channel with no containment check, and the only one that hands a disk-derived
+      // path to a shell verb (openExternal) — ptr.runDir is charset-blind and never
+      // validated beyond truthiness (src/council/run-state.js:133-139). The
+      // existsSync(report) probe used to run BEFORE this fence: read-only and
+      // Boolean, so it never leaked file content, but it let a tampered/stale pointer
+      // use file-EXISTENCE as an out-of-project oracle ahead of any containment check
+      // — the same "resolve+fence before touching the filesystem at all" invariant
+      // every other channel in this file now honours. Resolve+fence runDir first;
+      // only then probe/read anything derived from it.
+      let realProject, realRunDir;
       try {
         realProject = deps.realpathSync(project);
         realRunDir = deps.realpathSync(ptr.runDir);
-        realReport = deps.realpathSync(report);
-      } catch (err) {
-        return { ok: false, error: `report path unreadable: ${err.message}` };
+      } catch {
+        return { ok: false, error: 'run directory unreadable' };
       }
       if (!isRealpathContained(realProject, realRunDir)) {
         return { ok: false, error: 'run directory escapes project' };
+      }
+
+      const report = path.join(ptr.runDir, 'report.html');
+      if (!deps.existsSync(report)) { return { ok: false, error: 'report.html not written' }; }
+
+      // Inner fence (independent of the one above): report.html must resolve inside
+      // runDir too — a symlinked report.html can't escape the run dir either. Fail
+      // closed on any realpath error (permission, dangling symlink) rather than let
+      // it fall through to openExternal. Generic message (round 4): a readFileSync/
+      // realpathSync failure's err.message embeds the full resolved path it tried to
+      // open — interpolating it here would hand the renderer an internal filesystem
+      // path via the IPC response.
+      let realReport;
+      try {
+        realReport = deps.realpathSync(report);
+      } catch {
+        return { ok: false, error: 'report path unreadable' };
       }
       if (!isRealpathContained(realRunDir, realReport)) {
         return { ok: false, error: 'report escapes run directory' };
