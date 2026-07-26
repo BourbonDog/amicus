@@ -30,6 +30,7 @@
     labelByModel: {},
     listTimer: null,
     liveTimer: null, // LIVE (Task 15)
+    liveEpoch: 0,    // LIVE (Task 15): bumped by stopLiveLoop() to invalidate in-flight ticks
   };
 
   function labelOf(model) { return state.labelByModel[model] || null; }
@@ -112,7 +113,9 @@
     P.renderVerdictPanel();
     R.renderCost($('cost-body'), d.derived.cost, state.blind, labelOf);
     P.wireLazyPanels();
-    // LIVE (Task 15): V.startLiveLoop() when non-terminal
+    var isTerminal = window.AmicusLive.TERMINAL_STATUSES.indexOf(d.run.status) !== -1;
+    $('abort-btn').hidden = isTerminal;
+    V.startLiveLoop();
   }
 
   function renderBanners() {

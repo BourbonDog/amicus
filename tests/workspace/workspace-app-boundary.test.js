@@ -115,7 +115,12 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     ['renderSeatsPanel', 'renderMatrixPanel', 'renderVerdictPanel', 'wireLazyPanels', 'proseLoader', 'drillIntoJudge', 'sanitizeName'].forEach((k) => {
       expect(typeof P[k]).toBe('function');
     });
-    expect(typeof V.doFold).toBe('function');
+    // ⚠️ Task 15: startLiveLoop/stopLiveLoop/applyLive land in workspace-verbs.js (F05), not
+    // workspace-app.js — this contract is what catches a misplaced or missing export before
+    // the browser does.
+    ['doFold', 'startLiveLoop', 'stopLiveLoop', 'applyLive'].forEach((k) => {
+      expect(typeof V[k]).toBe('function');
+    });
   });
 
   test('openRun() -> renderDetail() drives seats/matrix/verdict/cost panels (all cross-file calls) with no throw', async () => {

@@ -26,8 +26,145 @@
     });
   }
 
-  // LIVE (Task 15): function startLiveLoop() { ... } / function stopLiveLoop() { ... } / function applyLive(doc) { ... }
+  // ---- live loop (spec §4.3; Task 15) -----------------------------------
+  // ⚠️ DE-ROT (F42): stopLiveLoop can only clearTimeout a SCHEDULED tick — it cannot cancel an
+  // invoke() already in flight, and the visibilitychange/blur/focus listeners at the bottom of
+  // this file re-enter startLiveLoop freely. Without a generation guard those forked chains
+  // outlive stopLiveLoop, reassign state.liveTimer (orphaning the timer the event just
+  // scheduled), and paint run A's legs into run B after openRun() swaps state.detail underneath
+  // them. The epoch + PER-TICK runId pin below are mandatory, not optional hardening.
+  function stopLiveLoop() {
+    var A = window.AmicusApp;
+    A.state.liveEpoch = (A.state.liveEpoch || 0) + 1; // invalidates any in-flight tick
+    if (A.state.liveTimer) { clearTimeout(A.state.liveTimer); A.state.liveTimer = null; }
+  }
+
+  function liveState(terminal) {
+    return {
+      terminal: terminal,
+      visible: document.visibilityState === 'visible',
+      focused: document.hasFocus(),
+    };
+  }
+
+  function startLiveLoop() {
+    var A = window.AmicusApp;
+    stopLiveLoop();
+    var d = A.state.detail;
+    if (!d || !d.run || window.AmicusLive.TERMINAL_STATUSES.indexOf(d.run.status) !== -1) { return; }
+    var epoch = A.state.liveEpoch; // F42: stopLiveLoop() above just bumped it; this chain owns it
+    var tick = function () {
+      // F42: pin the id PER TICK and SEND the pinned id — matching the reply against
+      // state.runId while the request carried state.runId would still let a post-switch
+      // request hit run B.
+      var runId = A.state.runId;
+      A.invoke('workspace:get-live', runId).then(function (live) {
+        if (epoch !== A.state.liveEpoch || runId !== A.state.runId) { return; } // stale chain
+        applyLive(live);
+        var terminal = !!(live && live.ok && live.terminal);
+        if (terminal) {
+          stopLiveLoop();
+          A.openRun(runId); // final durable snapshot refresh (spec §4.3)
+          return;
+        }
+        A.state.liveTimer = setTimeout(tick, window.AmicusLive.pollDelay(liveState(false)));
+      }).catch(function () {
+        // F42: a rejected invoke must not silently kill the loop — reschedule unless superseded.
+        if (epoch !== A.state.liveEpoch || runId !== A.state.runId) { return; }
+        A.state.liveTimer = setTimeout(tick, window.AmicusLive.pollDelay(liveState(false)));
+      });
+    };
+    A.state.liveTimer = setTimeout(tick, 0);
+  }
+
+  function applyLive(live) {
+    var A = window.AmicusApp;
+    var R = window.AmicusRender;
+    if (!live || !live.ok) {
+      // A1 failure: keep last-known panels; flag the live layer only (spec §9)
+      R.renderBanner(A.$('banner'), 'live data unavailable' + (live && live.error ? ' — ' + live.error : ''), 'info');
+      return;
+    }
+    if (live.seats.length) {
+      R.renderSeats(A.$('seats-body'), live.seats, A.state.blind, A.labelOf);
+    }
+    // F42: state.detail can be swapped/absent under a tick — never deref .derived unguarded.
+    var derived = A.state.detail && A.state.detail.derived ? A.state.detail.derived : null;
+    if (live.stages) {
+      // ⚠️ DE-ROT (F41): a raw-name fallback would show the RAW stage name for every stage that
+      // starts AFTER run-open (most of them — state.detail is a frozen run-open snapshot).
+      // STAGE_LABELS is mirrored onto window.AmicusLive (Task 12/14) for exactly this reason;
+      // label from the mirror, not the snapshot.
+      // ⚠️ DE-ROT (F40): live stage entries carry no startedAt/completedAt, so reading them off
+      // `s` wipes the durable times already on screen on the very first tick. Merge onto the
+      // run-open snapshot row instead (a stage that begins mid-session shows no times until the
+      // terminal openRun() refresh — status still updates every tick).
+      R.renderStageRail(A.$('stage-rail'), live.stages.map(function (s) {
+        var prior = (derived ? derived.stageRail.find(function (r) { return r.name === s.name; }) : null) || {};
+        return {
+          name: s.name,
+          label: window.AmicusLive.STAGE_LABELS[s.name] || s.name,
+          status: s.status || 'pending',
+          startedAt: prior.startedAt || null,
+          completedAt: prior.completedAt || null,
+        };
+      }));
+    }
+    // ⚠️ DE-ROT (F39): guard on costAmount ALONE. costDisplay is raw formatCost output and can be
+    // '?' (source 'unknown') or '—' (null cost); letting either string fall through would
+    // overwrite the durable total with a stage-scoped placeholder. The value is ACTIVE-STAGE
+    // spend, not a run total — labelled, never sold as one. The durable total returns on the
+    // terminal openRun() refresh.
+    if (live.costAmount !== null) {
+      R.renderGauge(A.$('cost-gauge-fill'), A.$('cost-gauge-text'),
+        live.costAmount, derived ? derived.cost.maxCost : null,
+        (live.costDisplay || '—') + ' (this stage)');
+    }
+    // Dead-run banner: DATA-LAYER flags only (A4) — never GUI heuristics.
+    // ⚠️ Task 14 review: flags.crashed really means "errored with a reason" — finalize() maps
+    // ANY exit code 1 to status:'error' with run.error set, including a clean, zero-spend,
+    // no-legs-ever-launched validation failure. "No leg activity — may be dead, abort to
+    // reclaim it" is dishonest there on two counts: leg activity may be irrelevant to why it
+    // failed, and status:'error' is already TERMINAL — the process has already exited, so
+    // there is nothing left to abort. Give crashed its own, honest copy with no abort claim;
+    // it is terminal, so this same tick's terminal branch (above) immediately calls openRun(),
+    // which repaints the banner with the real run.error text via renderBanners() — one tick of
+    // blast radius. Only `stalled` (a still-running, no-activity heuristic) gets the abort
+    // remedy, since only a non-terminal run can plausibly still be aborted.
+    if (live.flags.crashed) {
+      R.renderBanner(A.$('banner'), 'Run reported an error — refreshing with the final result…', '');
+    } else if (live.flags.stalled) {
+      var mins = live.flags.stalledForSeconds ? Math.round(live.flags.stalledForSeconds / 60) : null;
+      R.renderBanner(A.$('banner'),
+        'No leg activity' + (mins ? ' for ' + mins + 'm' : '') + ' — the run may be dead. Abort to reclaim it; everything on disk stays browsable.',
+        '');
+      A.$('abort-btn').hidden = false; // the remedy ships beside the diagnosis (Task 16 wires it)
+    } else if (A.$('banner').classList.contains('info')) {
+      R.renderBanner(A.$('banner'), null);
+    }
+  }
+
   // ABORT (Task 16): function openAbortDialog() { ... }
 
-  window.AmicusVerbs = { doFold: doFold };
+  // ⚠️ DE-ROT (F42): these three re-enter startLiveLoop on every focus/blur/visibility flip.
+  // That is only safe because startLiveLoop() calls stopLiveLoop() first, which bumps
+  // state.liveEpoch — any tick already awaiting invoke() sees the mismatch and drops instead of
+  // rescheduling itself. Without the epoch bump each flip forks a second poll chain that no stop
+  // can reach. Registered once at this file's load time (verbs.js loads before workspace-app.js,
+  // so window.AmicusApp does not exist yet — the callback bodies read it at call time via
+  // startLiveLoop/stopLiveLoop, never here).
+  document.addEventListener('visibilitychange', function () {
+    var A = window.AmicusApp;
+    if (A.state.liveTimer) { startLiveLoop(); }
+  });
+  window.addEventListener('blur', function () {
+    var A = window.AmicusApp;
+    if (A.state.liveTimer) { startLiveLoop(); }
+  });
+  window.addEventListener('focus', function () {
+    var A = window.AmicusApp;
+    if (A.state.liveTimer) { startLiveLoop(); }
+  });
+
+  window.AmicusVerbs = { doFold: doFold, startLiveLoop: startLiveLoop, stopLiveLoop: stopLiveLoop, applyLive: applyLive };
 })();
