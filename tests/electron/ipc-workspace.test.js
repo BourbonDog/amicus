@@ -15,6 +15,23 @@ const { registerWorkspaceHandlers, createFoldGate } = require('../../electron/ip
 // resetModules() calls have cleared the module registry), would resolve to a
 // freshly-evaluated, DIFFERENT `logger` object and silently observe nothing.
 const { logger } = require('../../src/utils/logger');
+const path = require('path');
+
+// Platform-neutral fixture roots (test-only fix for a Windows-only fixture that failed
+// on Linux CI). Built with path.join from segments — never with embedded '\\' literals
+// — so the project/runDir relationship these fixtures encode is a REAL containment
+// relationship under whichever OS this suite runs on. workspace:open-report's
+// containment fence (src/utils/path-fence.js's isRealpathContained) resolves its
+// separator from the NATIVE `path.sep`: on Linux that's '/', so a Windows literal like
+// 'C:\\proj\\council-aaaa1111' is a single opaque segment (backslash isn't a separator
+// there) and the fence correctly, but spuriously, refuses it — the production fence was
+// right, the fixture was wrong. See the `path.win32`/`path.posix` pin further below,
+// which proves this exact construction holds under BOTH separator conventions, not just
+// whichever one this OS happens to use.
+const PROJECT = path.join('C:', 'proj');
+const RUN_DIR = path.join(PROJECT, 'council-aaaa1111');
+const ESCAPE_DIR = path.join(path.dirname(PROJECT), 'totally-unrelated', 'external-dir');
+const ESCAPE_REPORT = path.join(path.dirname(RUN_DIR), 'somewhere-else', 'report.html');
 
 function fakeIpc() {
   const handlers = new Map();
@@ -45,9 +62,9 @@ function setup(depsOverride = {}) {
     // (mcp-council-run.js:109 rejects an outDir outside the project at
     // creation time), and the new containment fence in ipc-workspace.js now
     // enforces that same invariant again at read time — a runDir outside
-    // 'C:\\proj' would (correctly) trip the fence and break the happy-path
+    // PROJECT would (correctly) trip the fence and break the happy-path
     // open-report tests below if this fixture didn't reflect that.
-    readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\proj\\council-aaaa1111' })),
+    readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: RUN_DIR })),
     readRunArtifact: jest.fn(() => ({ text: 'artifact text' })),
     buildFoldText: jest.fn(() => 'FOLD-TEXT'),
     normalizeLive: jest.fn((doc) => ({ ok: true, runId: doc.taskId })),
@@ -65,9 +82,40 @@ function setup(depsOverride = {}) {
     realpathSync: jest.fn((p) => p),
     ...depsOverride,
   };
-  registerWorkspaceHandlers(() => win, { project: 'C:\\proj', nonce: 'cafef00dcafef00d', ipc, gate, deps });
+  registerWorkspaceHandlers(() => win, { project: PROJECT, nonce: 'cafef00dcafef00d', ipc, gate, deps });
   return { ipc, win, goodEvent, badEvent, gate, deps };
 }
+
+// Pin against a regression of the bug this file was just fixed for (the fixture used
+// Windows-literal separators feeding a path.sep-aware fence, which is fine on
+// windows-latest but wrong on ubuntu-latest — see PROJECT/RUN_DIR/ESCAPE_DIR above).
+// isRealpathContained (src/utils/path-fence.js) always resolves its separator from the
+// NATIVE `path.sep`, so it can't itself be fed foreign-flavored strings meaningfully —
+// that mismatch IS the bug class. Instead this reimplements its exact
+// resolved-prefix algorithm parameterized by path flavor (path.win32 / path.posix) to
+// prove the FIXTURE CONSTRUCTION PATTERN above (path.join from segments, never an
+// embedded '\\' or '/' literal) yields a genuine containment relationship for RUN_DIR
+// and a genuine escape for ESCAPE_DIR under BOTH conventions — not just whichever one
+// happens to be native to the OS running this suite.
+describe('fixture path construction holds under both path.win32 and path.posix semantics', () => {
+  function isContained(flavor, dirRealPath, targetRealPath) {
+    if (targetRealPath === dirRealPath) { return true; }
+    const base = dirRealPath.endsWith(flavor.sep) ? dirRealPath : dirRealPath + flavor.sep;
+    return targetRealPath.startsWith(base);
+  }
+
+  test.each([
+    ['win32', path.win32],
+    ['posix', path.posix],
+  ])('%s: RUN_DIR is contained, ESCAPE_DIR escapes', (_name, flavor) => {
+    const project = flavor.join('C:', 'proj');
+    const runDir = flavor.join(project, 'council-aaaa1111');
+    const escapeDir = flavor.join(flavor.dirname(project), 'totally-unrelated', 'external-dir');
+
+    expect(isContained(flavor, project, runDir)).toBe(true);
+    expect(isContained(flavor, project, escapeDir)).toBe(false);
+  });
+});
 
 describe('registerWorkspaceHandlers', () => {
   test('registers exactly the seven spec channels', () => {
@@ -90,10 +138,10 @@ describe('registerWorkspaceHandlers', () => {
     const { ipc, goodEvent, deps } = setup();
     expect(await ipc.invoke('workspace:list-runs', goodEvent)).toEqual([{ runId: 'aaaa1111' }]);
     await ipc.invoke('workspace:get-run', goodEvent, 'aaaa1111');
-    expect(deps.getRunDetail).toHaveBeenCalledWith('C:\\proj', 'aaaa1111');
+    expect(deps.getRunDetail).toHaveBeenCalledWith(PROJECT, 'aaaa1111');
     const art = await ipc.invoke('workspace:read-artifact', goodEvent, 'aaaa1111', 'chair-output.md');
     expect(art.text).toBe('artifact text');
-    expect(deps.readRunArtifact).toHaveBeenCalledWith('C:\\proj', 'aaaa1111', 'chair-output.md');
+    expect(deps.readRunArtifact).toHaveBeenCalledWith(PROJECT, 'aaaa1111', 'chair-output.md');
   });
 
   test('get-live parses the amicus_status text and normalizes it', async () => {
@@ -114,7 +162,7 @@ describe('registerWorkspaceHandlers', () => {
     const { ipc, goodEvent } = setup({ handlers: () => ({ amicus_abort: abortFn }) });
     const res = await ipc.invoke('workspace:abort-run', goodEvent, 'aaaa1111');
     expect(res.ok).toBe(true);
-    expect(abortFn).toHaveBeenCalledWith({ taskId: 'aaaa1111' }, 'C:\\proj');
+    expect(abortFn).toHaveBeenCalledWith({ taskId: 'aaaa1111' }, PROJECT);
   });
 
   test('fold writes the built text to stdout once; re-entry latched; already after success', async () => {
@@ -123,7 +171,7 @@ describe('registerWorkspaceHandlers', () => {
     expect(first).toEqual({ ok: true });
     expect(deps.stdoutWrite).toHaveBeenCalledTimes(1);
     expect(deps.stdoutWrite).toHaveBeenCalledWith('FOLD-TEXT\n');
-    expect(deps.buildFoldText).toHaveBeenCalledWith(expect.objectContaining({ nonce: 'cafef00dcafef00d', project: 'C:\\proj' }));
+    expect(deps.buildFoldText).toHaveBeenCalledWith(expect.objectContaining({ nonce: 'cafef00dcafef00d', project: PROJECT }));
     const second = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
     expect(second).toEqual({ ok: true, already: true });
     expect(deps.stdoutWrite).toHaveBeenCalledTimes(1);
@@ -161,7 +209,7 @@ describe('registerWorkspaceHandlers', () => {
   // openExternal (a shell verb) whatever it finds there.
   test('open-report refuses when the pointer\'s runDir resolves outside the project', async () => {
     const { ipc, goodEvent, deps } = setup({
-      readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\totally\\unrelated\\external-dir' })),
+      readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: ESCAPE_DIR })),
     });
     const res = await ipc.invoke('workspace:open-report', goodEvent, 'aaaa1111');
     expect(res.ok).toBe(false);
@@ -179,7 +227,7 @@ describe('registerWorkspaceHandlers', () => {
   // out-of-project oracle even though the eventual open is refused.
   test('open-report never probes report.html existence before the containment fence runs', async () => {
     const { ipc, goodEvent, deps } = setup({
-      readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\totally\\unrelated\\external-dir' })),
+      readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: ESCAPE_DIR })),
     });
     const res = await ipc.invoke('workspace:open-report', goodEvent, 'aaaa1111');
     expect(res.ok).toBe(false);
@@ -193,7 +241,7 @@ describe('registerWorkspaceHandlers', () => {
   // legitimate.
   test('open-report refuses when report.html is a symlink escaping the run dir', async () => {
     const { ipc, goodEvent, deps } = setup({
-      realpathSync: jest.fn((p) => (String(p).endsWith('report.html') ? 'C:\\somewhere\\else\\report.html' : p)),
+      realpathSync: jest.fn((p) => (String(p).endsWith('report.html') ? ESCAPE_REPORT : p)),
     });
     const res = await ipc.invoke('workspace:open-report', goodEvent, 'aaaa1111');
     expect(res.ok).toBe(false);
@@ -220,7 +268,7 @@ describe('registerWorkspaceHandlers — extra security-gate coverage', () => {
     await ipc.invoke('workspace:read-artifact', goodEvent, 'aaaa1111', 'chair-output.md');
     expect(deps.readRunArtifact).toHaveBeenCalledTimes(1);
     expect(deps.readRunArtifact.mock.calls[0]).toHaveLength(3);
-    expect(deps.readRunArtifact.mock.calls[0]).toEqual(['C:\\proj', 'aaaa1111', 'chair-output.md']);
+    expect(deps.readRunArtifact.mock.calls[0]).toEqual([PROJECT, 'aaaa1111', 'chair-output.md']);
 
     await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
     expect(deps.readRunArtifact).toHaveBeenCalledTimes(2);
@@ -347,7 +395,7 @@ describe('workspace:fold — code-review follow-ups', () => {
         buildFoldText: jest.fn(() => 'FOLD-TEXT'),
         // stdoutWrite intentionally OMITTED so the real defaultDeps() wrapper runs.
       };
-      registerWorkspaceHandlers(() => win, { project: 'C:\\proj', nonce: 'cafef00dcafef00d', ipc, gate, deps });
+      registerWorkspaceHandlers(() => win, { project: PROJECT, nonce: 'cafef00dcafef00d', ipc, gate, deps });
       const res = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
       expect(res).toEqual({ ok: false, error: 'EPIPE: write after end' });
       expect(gate.hasCompleted()).toBe(false);
