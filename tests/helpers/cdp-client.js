@@ -120,6 +120,24 @@ class CdpClient {
   }
 
   /**
+   * Dispatch a real keydown+keyup pair via CDP's Input domain — proves a
+   * page's keydown listener actually fires in a real browser event/focus
+   * pipeline, which a unit test's hand-invoked `dispatchEvent` on a fake DOM
+   * can never do (it never had a real listener-registration/bubbling path to
+   * miss in the first place).
+   * @param {'ArrowDown'|'ArrowUp'|'Escape'} key
+   * @returns {Promise<void>}
+   */
+  async pressKey(key) {
+    const CODES = { ArrowDown: 40, ArrowUp: 38, Escape: 27 };
+    const windowsVirtualKeyCode = CODES[key];
+    if (!windowsVirtualKeyCode) { throw new Error(`pressKey: unsupported key ${key}`); }
+    const base = { key, code: key, windowsVirtualKeyCode, nativeVirtualKeyCode: windowsVirtualKeyCode };
+    await this._send('Input.dispatchKeyEvent', { type: 'keyDown', ...base });
+    await this._send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+  }
+
+  /**
    * Capture a screenshot and save it as a PNG file.
    * @param {string} filePath - Absolute path to save the PNG
    * @returns {Promise<string>} The file path
@@ -187,6 +205,26 @@ class CdpClient {
       await new Promise(r => setTimeout(r, 500));
     }
     throw new Error(`Content target not found after ${timeoutMs}ms`);
+  }
+
+  /**
+   * Factory: connect to the Council Workspace target (file:// URL — the
+   * workspace is the only file:// page; toolbar=data:, content=http).
+   * @param {number} port - CDP debug port
+   * @param {number} timeoutMs - Max wait time
+   * @returns {Promise<CdpClient>}
+   */
+  static async workspace(port = 9223, timeoutMs = 15000) {
+    const cdp = new CdpClient(port);
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const target = await cdp.findTarget(t => t.type === 'page' && t.url && t.url.startsWith('file://'));
+        if (target) { await cdp.connect(target.id); return cdp; }
+      } catch { /* not ready */ }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    throw new Error(`Workspace target not found after ${timeoutMs}ms`);
   }
 }
 

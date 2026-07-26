@@ -126,7 +126,13 @@
         d.run.schemaVersion + ') — artifacts: ' + d.runDir, 'warn');
       return;
     }
-    if (d.run.error) {
+    // ⚠️ PRE-FLIGHT (P3), caught live by the CDP e2e (Task 18): gating on `d.run.error` ALONE
+    // never shows this banner for a `status:'partial'` run — `finalize()` only ever sets
+    // `run.error` on the exit-1 path (src/council/run.js:98-100); the exit-2 "degraded" path
+    // leaves it null (run-detail.js:83-91). `verdictPanel.reason` (degradedReason()) already
+    // covers BOTH cases — exit-1's {code, message} and the partial-run stage-failure/skip
+    // sentence — so check for either signal, not run.error alone.
+    if (d.run.error || d.derived.verdictPanel.reason) {
       // ⚠️ Code review round 2, finding 2: `d.run.error` is a structured {code, message} object
       // (never a string) — passing it straight to renderBanner set `textContent = <object>`,
       // which coerces to the literal string "[object Object]". `d.derived.verdictPanel.reason`

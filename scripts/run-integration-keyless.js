@@ -67,6 +67,21 @@ const { spawnSync } = require('child_process');
 const { PROVIDER_ENV_MAP, LEGACY_KEY_NAMES } = require('../src/utils/api-key-store');
 
 /**
+ * The three sandbox-rooted directories buildKeylessEnv() points
+ * XDG_DATA_HOME / XDG_CONFIG_HOME / APPDATA at. Shared with run() below so the
+ * paths it mkdir's can never drift from the ones actually placed in env.
+ * @param {string} sandboxHome
+ * @returns {{xdgDataHome: string, xdgConfigHome: string, appData: string}}
+ */
+function sandboxSubdirs(sandboxHome) {
+  return {
+    xdgDataHome: path.join(sandboxHome, '.local', 'share'),
+    xdgConfigHome: path.join(sandboxHome, '.config'),
+    appData: path.join(sandboxHome, 'AppData', 'Roaming'),
+  };
+}
+
+/**
  * Build a credential-free copy of an environment.
  * @param {NodeJS.ProcessEnv} sourceEnv
  * @param {string} sandboxHome absolute path to an empty home directory
@@ -98,9 +113,10 @@ function buildKeylessEnv(sourceEnv, sandboxHome) {
   //     before it ever falls back to $HOME/.local/share, and falls back to
   //     %APPDATA% on win32 before that -- so os.homedir() sandboxing alone
   //     does NOT contain them. See the module docstring above.
-  env.XDG_DATA_HOME = path.join(sandboxHome, '.local', 'share');
-  env.XDG_CONFIG_HOME = path.join(sandboxHome, '.config');
-  env.APPDATA = path.join(sandboxHome, 'AppData', 'Roaming');
+  const dirs = sandboxSubdirs(sandboxHome);
+  env.XDG_DATA_HOME = dirs.xdgDataHome;
+  env.XDG_CONFIG_HOME = dirs.xdgConfigHome;
+  env.APPDATA = dirs.appData;
 
   // 4. Opt-in escape hatches for the paid/network extras, so they cannot be
   //    switched on by ambient state either.
@@ -114,6 +130,16 @@ function run() {
   const sandboxHome = path.join(os.tmpdir(), 'amicus-keyless-home');
   try {
     fs.mkdirSync(sandboxHome, { recursive: true });
+    // Also create the three subdirectories env.APPDATA/XDG_DATA_HOME/XDG_CONFIG_HOME will
+    // point at (not just sandboxHome itself). Discovered via the Task 18 CDP workspace e2e
+    // suite: on Windows, Electron crashes hard (no window, no CDP target) the instant
+    // %APPDATA% resolves to a directory that does not exist -- every prior keyless-tier
+    // suite gates on HAS_API_KEY and self-skips before ever spawning Electron here, so this
+    // was never exercised until a fixture-driven (zero-model-calls) suite needed no key.
+    const { xdgDataHome, xdgConfigHome, appData } = sandboxSubdirs(sandboxHome);
+    fs.mkdirSync(xdgDataHome, { recursive: true });
+    fs.mkdirSync(xdgConfigHome, { recursive: true });
+    fs.mkdirSync(appData, { recursive: true });
   } catch { /* best effort: a missing dir still reads as "no credentials" */ }
 
   // NB: 'jest/bin/jest' (no .js) -- that is the subpath jest's package
