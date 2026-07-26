@@ -1,9 +1,10 @@
 'use strict';
 
 const { makeFakeDom } = require('./helpers/fake-workspace-page');
+const { SCRIPT_LOAD_ORDER } = require('./helpers/script-load-order');
 
 const UI = '../../electron/workspace-ui/';
-const LOAD_ORDER = ['md-lite', 'live-model', 'workspace-render', 'workspace-matrix', 'workspace-panels', 'workspace-verbs', 'workspace-app'];
+const LOAD_ORDER = SCRIPT_LOAD_ORDER;
 
 /**
  * Cross-file namespace boundary proof for Task 13's mandatory F05 three-file split
@@ -35,7 +36,15 @@ function buildFixtureDetail(runId) {
       labelMap, usage: { cost: { amount: 0.43 } }, options: { maxCost: 2 }, error: null, debate: null,
     },
     tally: {}, verdict: {},
-    artifacts: { 'chair-output.md': { present: false, bytes: 0 }, 'report.html': { present: true, bytes: 512 } },
+    // review-/judge- files present by default (a realistic terminal-run manifest) — tests
+    // for the code-review finding-2 presence filter override specific entries to false.
+    artifacts: Object.assign(
+      { 'chair-output.md': { present: false, bytes: 0 }, 'report.html': { present: true, bytes: 512 } },
+      ...bench.map((m) => ({
+        ['review-' + m + '.md']: { present: true, bytes: 100 },
+        ['judge-' + m + '.md']: { present: true, bytes: 100 },
+      })),
+    ),
     derived: {
       schemaSupported: true,
       names: Object.entries(labelMap).map(([label, model]) => ({ label, model })),
@@ -172,6 +181,7 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       if (channel === 'workspace:get-run') {
         const d = buildFixtureDetail(args[0]);
         d.run.debate = { outcome: 'ran' };
+        d.artifacts['revote-gpt.md'] = { present: true, bytes: 50 };
         return Promise.resolve(d);
       }
       if (channel === 'workspace:read-artifact' && args[1] === 'debate.json') {
@@ -209,5 +219,148 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
     const judgeCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'judge-gpt.md');
     expect(judgeCalls.length).toBeGreaterThan(0);
+  });
+
+  // ⚠️ CODE REVIEW (round 2, finding 1): openRun() nulls state.debate synchronously, but the
+  // debate.json fetch it kicks off is fire-and-forget with no runId guard on the resolution —
+  // this is the exact F09 class of bug (a stale async response landing after the user has
+  // navigated away), reintroduced by the new F38 code.
+  test('a stale debate.json fetch from a run navigated away from never overwrites state.debate for the run now open', async () => {
+    let resolveStaleDebate;
+    const staleDebate = new Promise((resolve) => { resolveStaleDebate = resolve; });
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.run.debate = { outcome: 'ran' };
+        return Promise.resolve(d);
+      }
+      if (channel === 'workspace:read-artifact' && args[1] === 'debate.json') {
+        if (args[0] === 'aaaa1111') { return staleDebate; } // held open until we resolve it below
+        return Promise.resolve({ text: JSON.stringify({ revotes: [{ judge: 'claude', id: 'A1', reason: 'RUN B REASON' }] }) });
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('aaaa1111'); // kicks off A's debate.json fetch, left pending
+    await global.window.AmicusApp.openRun('bbbb2222'); // fully resolves, including B's OWN debate.json
+    expect(global.window.AmicusApp.state.debate).toEqual({ revotes: [{ judge: 'claude', id: 'A1', reason: 'RUN B REASON' }] });
+    resolveStaleDebate({ text: JSON.stringify({ revotes: [{ judge: 'gpt', id: 'A1', reason: 'STALE FROM RUN A' }] }) });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    // Run A's now-resolved, stale response must not have clobbered run B's state.
+    expect(global.window.AmicusApp.state.runId).toBe('bbbb2222');
+    expect(global.window.AmicusApp.state.debate).toEqual({ revotes: [{ judge: 'claude', id: 'A1', reason: 'RUN B REASON' }] });
+  });
+
+  test('a rejecting debate.json fetch does not throw and leaves state.debate null, not an unhandled rejection', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.run.debate = { outcome: 'ran' };
+        return Promise.resolve(d);
+      }
+      if (channel === 'workspace:read-artifact' && args[1] === 'debate.json') { return Promise.reject(new Error('IPC channel closed')); }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await expect(global.window.AmicusApp.openRun('aaaa1111')).resolves.toBeUndefined();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(global.window.AmicusApp.state.debate).toBeNull();
+  });
+
+  // ⚠️ CODE REVIEW (round 2, finding 2): wireLazyPanels() speculatively requested EVERY
+  // revote-<model>.md whenever run.debate was truthy — which is seeded on the FIRST run.json
+  // write, so it's truthy even when the re-vote wave never ran (no contested findings, cost
+  // ceiling, abort). readRunArtifact's error message for a genuinely-missing artifact was
+  // rendered verbatim into the panel. run-detail.js already computes a presence manifest
+  // (state.detail.artifacts) for exactly these allowlisted names — filter on it instead of
+  // requesting files known ahead of time to be absent.
+  test('wireLazyPanels excludes review-/judge-/revote- files the artifacts manifest already reports absent — no round trip for a debate run where the re-vote wave never ran', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]); // bench ['gemini', 'gpt']
+        d.run.debate = { outcome: 'ran' }; // debate ran, but nothing was contested
+        d.artifacts['revote-gemini.md'] = { present: false, bytes: 0 };
+        d.artifacts['revote-gpt.md'] = { present: false, bytes: 0 };
+        d.artifacts['judge-gemini.md'] = { present: true, bytes: 10 };
+        d.artifacts['judge-gpt.md'] = { present: true, bytes: 10 };
+        return Promise.resolve(d);
+      }
+      if (channel === 'workspace:read-artifact' && args[1] === 'debate.json') { return Promise.resolve({ text: JSON.stringify({ revotes: [] }) }); }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const panel = global.document.getElementById('judges-panel');
+    panel.open = true;
+    panel._listeners.toggle[0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const revoteCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && String(c[2]).indexOf('revote-') === 0);
+    expect(revoteCalls.length).toBe(0);
+    const judgeCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && String(c[2]).indexOf('judge-') === 0);
+    expect(judgeCalls.length).toBe(2);
+  });
+
+  test('a review-<model>.md the manifest reports absent is never requested by the reviews panel either', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.artifacts['review-gemini.md'] = { present: false, bytes: 0 };
+        d.artifacts['review-gpt.md'] = { present: true, bytes: 10 };
+        return Promise.resolve(d);
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const panel = global.document.getElementById('reviews-panel');
+    panel.open = true;
+    panel._listeners.toggle[0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    const reviewCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && String(c[2]).indexOf('review-') === 0);
+    expect(reviewCalls).toEqual([['workspace:read-artifact', 'aaaa1111', 'review-gpt.md']]);
+  });
+
+  // ⚠️ CODE REVIEW (round 2, finding 4): loadPanel is cached per panel id, but the drill-in's
+  // DOM mutation (insert reason paragraph, wrap the finding id in <mark>) was not idempotent —
+  // a second drill into the same (judge, id) duplicated the reason paragraph and nested a
+  // second <mark> inside the first.
+  test('drilling into the same finding twice does not duplicate the revote-reason paragraph or nest a second <mark>', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.run.debate = { outcome: 'ran' };
+        d.artifacts['revote-gpt.md'] = { present: true, bytes: 50 };
+        return Promise.resolve(d);
+      }
+      if (channel === 'workspace:read-artifact' && args[1] === 'debate.json') {
+        return Promise.resolve({ text: JSON.stringify({ revotes: [{ judge: 'gpt', id: 'A1', reason: 'Reconsidered after rebuttal.' }] }) });
+      }
+      if (channel === 'workspace:read-artifact') { return Promise.resolve({ text: 'Prose about A1 for ' + args[2] + '.' }); }
+      return Promise.resolve(null);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    await Promise.resolve();
+    await Promise.resolve();
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    const judgesBody = global.document.getElementById('judges-body');
+    expect(judgesBody.querySelectorAll('.revote-reason').length).toBe(1);
+    expect(judgesBody.querySelectorAll('mark').length).toBe(1);
+  });
+
+  test('drilling into a plain (non-revote) dispute finding twice also does not nest a second <mark>', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    const judgesBody = global.document.getElementById('judges-body');
+    expect(judgesBody.querySelectorAll('mark').length).toBe(1);
   });
 });

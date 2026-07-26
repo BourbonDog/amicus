@@ -1,0 +1,23 @@
+'use strict';
+
+/**
+ * Canonical electron/workspace-ui/*.js script load order (index.html script tags, bottom to
+ * top: md-lite → live-model → workspace-render → workspace-matrix → workspace-panels →
+ * workspace-verbs → workspace-app). ⚠️ CODE REVIEW (round 2, finding 5): this list used to be
+ * hand-duplicated in both tests/electron/workspace-ui-static.test.js (which asserts index.html
+ * matches it) and tests/workspace/workspace-app-boundary.test.js (which requires the files in
+ * this order) — two copies with no cross-check can silently drift apart. Base names, no `.js`
+ * suffix, so each consumer can adapt it to its own need (a `src="./${name}.js"` substring match
+ * vs. a bare `require()` path).
+ */
+const SCRIPT_LOAD_ORDER = [
+  'md-lite',
+  'live-model',
+  'workspace-render',
+  'workspace-matrix',
+  'workspace-panels',
+  'workspace-verbs',
+  'workspace-app',
+];
+
+module.exports = { SCRIPT_LOAD_ORDER };

@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { SCRIPT_LOAD_ORDER } = require('../workspace/helpers/script-load-order');
+
 const UI = path.join(__dirname, '..', '..', 'electron', 'workspace-ui');
 const HTML = fs.readFileSync(path.join(UI, 'index.html'), 'utf-8');
 const CSS = fs.readFileSync(path.join(UI, 'workspace.css'), 'utf-8');
@@ -24,8 +26,10 @@ describe('workspace-ui static page posture', () => {
     expect(HTML).not.toMatch(/<script>[^<]/);
     // ⚠️ DE-ROT (F05): was five entries. Task 13 splits workspace-app.js into
     // app / panels / verbs, so index.html and this list both carry seven.
-    const order = ['md-lite.js', 'live-model.js', 'workspace-render.js', 'workspace-matrix.js',
-      'workspace-panels.js', 'workspace-verbs.js', 'workspace-app.js'];
+    // ⚠️ CODE REVIEW (round 2, finding 5): sourced from the single canonical list in
+    // tests/workspace/helpers/script-load-order.js — this file and
+    // workspace-app-boundary.test.js used to hand-duplicate it with no cross-check.
+    const order = SCRIPT_LOAD_ORDER.map((name) => `${name}.js`);
     let last = -1;
     for (const s of order) {
       const idx = HTML.indexOf(`src="./${s}"`);

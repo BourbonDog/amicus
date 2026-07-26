@@ -137,6 +137,8 @@ function makeFakeDom() {
   function matchOne(selector, el) {
     var idMatch = /^#([\w-]+)$/.exec(selector);
     if (idMatch) { return el.attributes.id === idMatch[1]; }
+    var classMatch = /^\.([\w-]+)$/.exec(selector);
+    if (classMatch) { return el.classList.contains(classMatch[1]); }
     var attrMatch = /^([a-zA-Z]*)\[data-([\w-]+)(?:="([^"]*)")?\]$/.exec(selector);
     if (attrMatch) {
       var tagOk = !attrMatch[1] || el.tagName === attrMatch[1].toUpperCase();

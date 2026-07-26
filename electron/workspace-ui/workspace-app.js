@@ -61,9 +61,18 @@
       // -skipped debate never writes it; a parse failure leaves state.debate null either way,
       // which drillIntoJudge treats as "no re-vote for this (judge, id)" and falls back to
       // today's judge-*.md path.
+      // ⚠️ CODE REVIEW (round 2, finding 1): this fire-and-forget fetch is exactly the F09
+      // class of bug if left unguarded — a stale response from a run the user has since
+      // navigated away from must never overwrite the run now open. Capture `runId` and check
+      // it's still `state.runId` before writing; a rejection (dead channel, closed window) is
+      // caught too, so it never surfaces as an unhandled rejection in the renderer.
       if (detail && detail.run && detail.run.debate) {
         invoke('workspace:read-artifact', runId, 'debate.json').then(function (res) {
+          if (state.runId !== runId) { return; }
           try { state.debate = JSON.parse(res.text); } catch (err) { state.debate = null; }
+        }).catch(function () {
+          if (state.runId !== runId) { return; }
+          state.debate = null;
         });
       }
       renderDetail();

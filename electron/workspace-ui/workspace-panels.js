@@ -108,16 +108,25 @@
       delete loading[id];
     });
     var bench = A.state.detail.run.bench || [];
-    // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose prose
-    // lives in revote-<model>.md (not judge-<model>.md). Speculatively include it per bench
-    // model, same as judge-*.md — a judge who never re-voted just renders its own
-    // "not written yet" empty state (spec §9), which is not an error here.
     var debated = !!A.state.detail.run.debate;
+    // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
+    // artifact is NOT translated into a friendly "not written yet" note anywhere in this
+    // read path — it lands in the panel verbatim, absolute host path and all. `run.debate` is
+    // seeded on run.json's FIRST write, so it's truthy on every --debate run, including ones
+    // where the re-vote wave never actually ran (no contested findings, cost ceiling, abort) —
+    // requesting revote-<model>.md speculatively in that (near-certain) case means one ugly
+    // error row per bench model for a condition that isn't an error at all. run-detail.js
+    // already computes a presence manifest (state.detail.artifacts) for exactly these
+    // allowlisted names via fs.statSync — filter on it instead of requesting known-absent
+    // files. Applies to review-/judge- too (the same latent gap, just plan-mandated rather
+    // than new).
+    var artifacts = A.state.detail.artifacts || {};
+    function present(name) { return !!(artifacts[name] && artifacts[name].present); }
     loaders['reviews-panel'] = { bodyId: 'reviews-body', files: function () {
       return bench.map(function (m) {
         var label = A.state.labelByModel[m];
         return { name: 'review-' + sanitizeName(m) + '.md', title: (A.state.blind && label ? label : m) };
-      });
+      }).filter(function (f) { return present(f.name); });
     } };
     loaders['bundle-panel'] = { bodyId: 'bundle-body', files: function () {
       return [{ name: 'bundle-stage2.md', title: 'bundle-stage2.md (verbatim)' }];
@@ -128,12 +137,20 @@
         return { name: 'judge-' + sanitizeName(m) + '.md', title: 'Judge ' + (A.state.blind && label ? label : m) };
       });
       if (debated) {
+        // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose
+        // prose lives in revote-<model>.md (not judge-<model>.md). Included per bench model
+        // like judge-*.md above, but — per the presence filter — only when the manifest
+        // confirms the file actually exists (see the code-review note above `present()`).
+        // ⚠️ CODE REVIEW (round 2, finding 3): this title is new code (unlike the review-/
+        // judge- titles above, which mirror the brief verbatim), so it goes through
+        // AmicusRender.display() — the single blind-flip definition — rather than adding a
+        // fourth hand-rolled copy of the same ternary.
         files = files.concat(bench.map(function (m) {
           var label = A.state.labelByModel[m];
-          return { name: 'revote-' + sanitizeName(m) + '.md', title: 'Re-vote ' + (A.state.blind && label ? label : m) };
+          return { name: 'revote-' + sanitizeName(m) + '.md', title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
         }));
       }
-      return files;
+      return files.filter(function (f) { return present(f.name); });
     } };
   }
 
@@ -161,10 +178,18 @@
       // A genuinely absent artifact is not an error here — the panel renders its own
       // "<file> not written yet" empty state (spec §9, last row).
       if (!section) { return; }
-      if (rv && rv.reason) {
+      // ⚠️ CODE REVIEW (round 2, finding 4): loadPanel() is cached per panel id, so a repeat
+      // drill into the SAME (judge, findingId) re-enters this .then() against the SAME DOM
+      // section every time — but the mutations below were not idempotent: a second click
+      // duplicated the reason paragraph and, since highlightText's tree-walk descends into a
+      // <mark> it already created, nested a second <mark> inside the first. Guard both on
+      // whether this section has already been annotated.
+      if (rv && rv.reason && !section.querySelector('.revote-reason')) {
         section.insertBefore(window.AmicusRender.el('p', { className: 'mono revote-reason' }, [rv.reason]), section.children[1] || null);
       }
-      window.AmicusMatrix.highlightText(section, findingId);
+      if (!section.querySelector('mark')) {
+        window.AmicusMatrix.highlightText(section, findingId);
+      }
       section.scrollIntoView({ block: 'start' });
     });
   }
