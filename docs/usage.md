@@ -14,7 +14,7 @@ amicus resume <task_id> [--no-ui --json]
 amicus continue <task_id> --prompt "Next step..." [--no-ui --json]
 amicus read <task_id> [--conversation|--metadata|--json]
 amicus status <task_id> [--json]          # One-shot status for a session or wave
-amicus watch <task_id> [--plain|--json] [--interval <sec>]  # Live-render a run from any terminal
+amicus watch <task_id> [--plain|--json] [--interval <sec>] [--ui]  # Live-render a run from any terminal, or open it in the Council Workspace window
 amicus abort <task_id> [--json]
 amicus abort --all [--json]
 
@@ -497,9 +497,24 @@ live or already-finished run — and resolves `<id>` with the same canonical
 resolution the rest of the CLI uses (council pointer file first, else session
 metadata: `type:'wave'` → wave, else solo). Exit code maps the run's terminal
 state: `complete`→`0`, `partial`→`2`, else `1` — so `amicus watch <id> &&
-next-step` works as a poor-man's wait. `--ui` registers the flag for the v4.4
-Council Workspace GUI (rejects `--json`); the GUI itself doesn't ship in v4.3, so
-`--ui` alone just falls through to the same render loop.
+next-step` works as a poor-man's wait. `--ui` opens the Council Workspace window
+instead of the terminal renderer (`--json` is rejected) — see the next section.
+
+### Watch a council in a window (v4.4)
+
+```bash
+amicus watch 1a2b3c4d --ui      # Council Workspace window for that run
+amicus watch --ui               # run list for the current project
+```
+
+Interactive-only (no `--json`; the terminal renderer above keeps `--json`) —
+passing both fails fast rather than silently falling back to the render loop.
+The window's **Fold** button writes the chair verdict back to this terminal's
+output exactly like an interactive sidecar fold; closing without folding exits
+`0`. Field-by-field detail — the run list, the live Seats table, the
+adjudication matrix, dissent drill-in, blind mode, and the two verbs (Abort /
+Fold) — is documented in **[docs/council.md's Council Workspace
+section](./council.md#council-workspace-gui)**.
 
 ### Stream a launching run (`--follow`)
 

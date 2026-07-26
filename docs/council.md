@@ -22,6 +22,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 - [The pipeline, end to end](#the-pipeline-end-to-end)
 - [`amicus council run`](#amicus-council-run)
   - [Debate mode](#debate-mode)
+- [Council Workspace (GUI)](#council-workspace-gui)
 - [`amicus council validate`](#amicus-council-validate)
 - [`amicus council tally`](#amicus-council-tally)
 - [`amicus council verdict`](#amicus-council-verdict)
@@ -246,6 +247,82 @@ after the re-vote keeps its final tier.
   entry; per the reserved-seat rule, it is never asked to defend in the debate round — its
   Contested/Disputed findings simply stand, the same "originals stand" outcome as a dead defense
   leg.
+
+---
+
+## Council Workspace (GUI)
+
+Watch a council think — not just tail a log:
+
+```bash
+amicus watch <councilRunId> --ui     # open one run
+amicus watch --ui                    # open the run list for this project
+```
+
+This is a third Electron mode (`AMICUS_MODE=council-workspace`), opened by `amicus watch --ui`
+itself — not a separate command or a separate launch surface (that's v4.5). One window per
+launch:
+
+- **Run list** (bare `--ui`, no id) — every council run in the current project, newest first,
+  discovered from the sessions-dir pointer files (`council-<runId>.json`); each row shows status,
+  the chair's `overallVerdict` chip once one exists, and cost.
+- **Run detail** (`--ui <runId>`) — header + status/verdict chips, a stage rail, a live **Seats**
+  table (model, role, status, stage, messages, tokens, cost, last activity, a stall flag), the
+  Stage-1 reviews, the **verbatim** anonymized Stage-2 packet (`bundle-stage2.md`, shown as-is —
+  never re-rendered), judge prose, the **adjudication matrix** (finding × judge, tier-colored
+  rows, `a/d/n` basis counts, a `thin` badge when `a+d<=1`, an override badge when a Stage-4
+  decision changed a finding's tier, capped at 500 rows with a "showing N of M" note past that),
+  dissent drill-in (click a ✗ cell to open that judge's prose with the finding id highlighted —
+  the Stage-2 contract carries no structured reason field, so rationale lives in prose; on a
+  `--debate` run, a re-voted cell instead opens `revote-<model>.md` and also surfaces the
+  structured `reason` `debate.json` records for that re-vote), chair verdict + street-cred +
+  Stage-4 decisions, and a cost-by-seat table with a `--max-cost` ceiling gauge.
+
+**Historical runs** render entirely from the run directory — open any old `council-<runId>` at any
+time; nothing here requires the run to still be live.
+
+**Live updates.** While a run is in progress, the window polls the same v4.3 data layer `amicus
+watch` reads from a terminal — every 1.5s while the window is visible and focused, every 5s
+otherwise, stopping once the run reaches a terminal status. A stall (no leg activity for a while)
+surfaces as a banner with an Abort shortcut next to it; if a live-data read itself fails, a
+separate "live data unavailable" banner appears while the last-known panels stay on screen — the
+poll keeps retrying rather than blanking anything.
+
+**Blind mode** (toggle, top right): labels (`Review A`, `Review B`…) instead of model names —
+**ON by default while a run is live, OFF once it reaches a terminal status**, flippable either way
+at any time. This is a **reading aid against anchoring bias, not a security control** — the label
+map is `run.json`'s own `labelMap` field, sitting in plaintext in the run directory like every
+other artifact; nothing stops you opening it in a text editor.
+
+**Two verbs, nothing else:**
+
+- **Abort** — confirm-gated, hidden once the run is terminal. It calls the same council-aware
+  abort path `amicus abort` uses. This is the one place the workspace changes anything on disk,
+  and it does so by delegating to the engine's own abort handling — not a direct write from the
+  workspace code itself.
+- **Fold** — writes the nonced `[SIDECAR_FOLD:…]` block plus the chair's verdict to the launching
+  terminal's stdout (no model call — it reformats what's already on disk). Folding again after a
+  successful fold just reports "already folded"; it doesn't write a second time.
+
+Apart from Abort, the workspace is **read-only against the run directory**. `--ui` is
+interactive-only — there is no `--json` for it, and passing both fails fast rather than silently
+falling back to the terminal renderer. Closing the window never auto-folds — everything is
+already on disk, so nothing is lost; reopen with `amicus watch <runId> --ui` and fold whenever
+you're ready.
+
+**Degraded states are rendered honestly, never hidden:** a run whose `run.json` can't be parsed at
+all shows an "unreadable" banner with the error and the run directory path; a run written by a
+different amicus schema version shows a schema-mismatch banner instead of guessing at a rendering;
+a tally with fewer than 2 completed judges shows an explicit "tally is peers-reduced" note instead
+of an adjudication matrix that looks more authoritative than the underlying data supports; and a
+chair-less verdict (retry + fallback promotion both failed, or the cost ceiling was hit before the
+chair ran) shows "no chair verdict" plus the engine's own reason, never a blank panel.
+
+**Posture, briefly** — this page renders another model's prose, so it's the most locked-down page
+in the app: full `sandbox`/`contextIsolation`, a minimal preload exposing exactly one `invoke()`
+gated by a 7-channel allowlist, a CSP with **no network directive at all** (`default-src 'none'`),
+and every model-derived string reaches the DOM through `textContent`/`createTextNode` only —
+never `innerHTML`, enforced by a static source scan in the test suite.
 
 ---
 

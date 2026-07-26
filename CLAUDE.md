@@ -259,6 +259,14 @@ src/
 │   ├── updater.js  # Updater Module
 │   ├── validators.js  # Input Validators
 │   └── version-info.js  # After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps
+├── workspace/
+│   ├── artifact-guard.js  # Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact).
+│   ├── blind-mode.js  # Council Workspace — blind-mode name mapping (v4.4 §6.3).
+│   ├── fold-format.js  # Council Workspace — fold payload builder (v4.4 §7).
+│   ├── live-normalize.js  # Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam).
+│   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
+│   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
+│   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
@@ -566,6 +574,13 @@ evals/
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
+| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `readRunArtifact()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()`, `MAX_ARTIFACT_BYTES()` |
+| `workspace/blind-mode.js` | Council Workspace — blind-mode name mapping (v4.4 §6.3). | `buildNamePairs()`, `labelFor()`, `pairFor()` |
+| `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
+| `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |
+| `workspace/matrix-model.js` | Council Workspace — adjudication matrix view model (v4.4 §5.2). | `buildMatrixModel()` |
+| `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `TERMINAL_STATUSES()`, `STAGE_LABELS()` |
+| `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE()` |
 <!-- /AUTO:modules -->
 
 ---

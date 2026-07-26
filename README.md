@@ -45,13 +45,14 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 
 ## What is Amicus
 
-One install delivers five things that work together:
+One install delivers six things that work together:
 
 - **The `second-opinion` LLM Council skill.** Structured multi-model review: independent reviews → anonymized peer cross-review → a non-Claude chair verdict → tiered accept/deny decisions. This is the hero.
 - **The `sidecar` chat skill.** Ad-hoc fork/work/fold — spin up one other model in a real window (or headless), work alongside it, fold the summary back.
 - **The `amicus` CLI (with an `am` alias) and an MCP server.** The engine underneath both skills: launches sessions, shares context, runs parallel waves, and exposes the same surface to Claude as MCP tools.
 - **A self-updating model catalog.** Aliases and validation resolve against a live catalog fetched from provider APIs (cached locally), so model names stay current without a hard-coded table.
 - **Observability.** `amicus watch <id>` renders any live or finished run (fan-out or council) from any terminal; `--follow` streams milestones as they happen; `--on-complete` fires a hook when a run lands; `--retry-failed` plus opt-in cheaper-model fallbacks recover dead legs without relaunching the whole wave; `amicus spend` answers "what did this cost, and where" with per-run attribution.
+- **Council Workspace.** `amicus watch <runId> --ui`: a window that shows a council *thinking* — live seats, the anonymized judge packet, the adjudication matrix, dissent drill-in, chair verdict, and cost-by-seat — for both live and historical runs.
 
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
@@ -314,7 +315,7 @@ amicus update
 | `amicus continue` | Start a new session building on a previous one. |
 | `amicus read` | Output a session's summary / conversation / metadata. |
 | `amicus status <id>` | One-shot status for a session or fan-out wave (human or `--json`; `--wave <id>` alternative spelling). |
-| `amicus watch <id>` | Live-render a fan-out wave, council run, or session from any terminal until it finishes — in-place table on a TTY, `--plain` milestone lines, or `--json` NDJSON; exit code maps the terminal state. |
+| `amicus watch <id>` | Live-render a fan-out wave, council run, or session from any terminal until it finishes — in-place table on a TTY, `--plain` milestone lines, or `--json` NDJSON; exit code maps the terminal state. `--ui` opens the [Council Workspace](./docs/council.md#council-workspace-gui) window instead (interactive-only, no `--json`). |
 | `amicus models` | List, search, refresh the catalog, or audit aliases. |
 | `amicus doctor` | Diagnose your setup — keys, default model, catalog, aliases, OpenCode binary, Electron, skills, MCP registration, OpenRouter credit (`--json`; `--fix` self-heals what it can). |
 | `amicus spend` | Cross-run cost rollup from the spend ledger, with per-run attribution — total + per-model spend, tokens, and source mix, most-expensive first (`--wave`/`--council`/`--project`/`--model`/`--op`/`--failed` filter it, `--group-by` buckets it, `--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |

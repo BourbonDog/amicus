@@ -8,7 +8,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'coverage', 'workspace', 'screenshots', 'fixtures']);
+// ⚠️ DOCS-DRIFT FIX (v4.4 Task 19): 'workspace' was a speculative scratch-dir
+// name with no real match anywhere under TREE_DIRS until v4.4 Task 2 added the
+// real, tracked `src/workspace/` module directory — which this exact-name skip
+// then silently hid from both the ASCII tree and the Key Modules table (the
+// drift the pre-commit hook has been warning about on every `src/workspace/`
+// commit since). Dropped: no other directory literally named `workspace`
+// exists under bin/, src/, electron/, scripts/, or evals/.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'coverage', 'screenshots', 'fixtures']);
 
 // ---------------------------------------------------------------------------
 // JSDoc & Export Extraction
