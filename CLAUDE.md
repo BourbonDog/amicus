@@ -171,7 +171,8 @@ src/
 │   ├── setup.js  # Sidecar Setup Wizard
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
 │   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
-│   └── wave-progress.js
+│   ├── wave-progress.js
+│   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 ├── utils/
 │   ├── abort-coordinator.js
 │   ├── abort-result.js  # The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
@@ -479,6 +480,7 @@ evals/
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
+| `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |
 | `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
