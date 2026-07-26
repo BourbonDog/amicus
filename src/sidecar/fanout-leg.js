@@ -132,14 +132,24 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
   const status = legStatusFromResult(result);
   const summary = result.summary || null;
   const { resolveUsage } = require('../utils/pricing');
-  // v4.4 Task 2 (B4): a leg that made a SUBAGENT (`task`) call has spend in a
-  // child OpenCode session that is billed separately, is NOT rolled into the
-  // parent session's cost, and that amicus never enumerates. Its own cost may be
-  // perfectly `reported` — its SUBTREE is what we cannot claim to know, so the
-  // run total that includes it must not claim to be exact.
-  const subtreeUnknown = !!(result && result.subagentToolCalls > 0);
+  // v4.4 Task 2 (B4) + v4.4.1 CA-1: a leg that made a SUBAGENT (`task`) call has
+  // spend in a child OpenCode session that is billed separately and is NOT
+  // rolled into the parent session's cost. runHeadless now WALKS those sessions
+  // (src/sidecar/child-sessions.js), so `subtreeUnknown` narrows from "this leg
+  // called `task`, therefore assume the worst" to what it should always have
+  // meant: the walk could not account for the subtree.
+  //
+  // The walk is authoritative when it ran — including in the direction that
+  // CLEARS the flag, which the name-string proxy could never do (backlog CA-5:
+  // a tool merely NAMED `task` that spawns nothing used to make an exact run
+  // report itself inexact). The proxy survives only as the fallback for a leg
+  // where the walk could not run at all.
+  const walked = result && result.subtree;
+  const subtreeUnknown = walked
+    ? !!walked.unknown
+    : !!(result && result.subagentToolCalls > 0);
   const usage = result && result.usage
-    ? resolveUsage({ model: leg.model, usageTotals: result.usage, subtreeUnknown })
+    ? resolveUsage({ model: leg.model, usageTotals: result.usage, subtreeUnknown, subtree: walked || undefined })
     : null;
   // If setup threw before the session dir existed, there is nothing on disk to
   // finalize — still resolve to an error run document so the wave aggregates.

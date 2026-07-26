@@ -38,7 +38,7 @@
 const {
   createMirrorState, mirrorMessages,
   TERMINAL_TOOL_STATUSES, LIVE_TOOL_STATUSES, isToolPartSettled, isToolPartLive,
-  toolPartName, getPendingToolCalls, getLiveToolCalls,
+  toolPartName, getPendingToolCalls, getLiveToolCalls, isSubagentToolCall,
 } = require('../../src/sidecar/conversation-mirror');
 
 /** A real-shape SDK tool part. */
@@ -224,5 +224,42 @@ describe('mirrorMessages tracks tool status, not a part type that does not exist
     t = 999000;
     mirrorMessages([asstMsg('m1', [toolPart('t1', 'task', 'running')])], state, { now });
     expect(getPendingToolCalls(state)[0].firstSeenAt).toBe(first);
+  });
+});
+
+describe('subagent detection — headless.js\'s "Tool calls summary" was dead code', () => {
+  // headless.js filtered `mirror.toolCalls` on `t.name === 'Task'`, which could
+  // never match for TWO independent reasons: the mirror read `part.name` (the
+  // real shape has `part.tool`) so every recorded name was undefined, AND
+  // OpenCode's tool is named `task` in lowercase. This is the exact expression
+  // headless.js now runs, so these lock both halves.
+
+  it('matches OpenCode\'s lowercase `task` — the old `=== \'Task\'` never could', () => {
+    expect(isSubagentToolCall({ name: 'task' })).toBe(true);
+    expect(isSubagentToolCall({ name: 'Task' })).toBe(true); // legacy capitalised fixtures
+    expect(isSubagentToolCall({ name: 'bash' })).toBe(false);
+    expect(isSubagentToolCall({ name: 'task_runner' })).toBe(false); // not a prefix match
+  });
+
+  it('never throws on the shape the pre-fix mirror actually produced (name undefined)', () => {
+    // All 36 recorded tool records carried an id and nothing else.
+    expect(isSubagentToolCall({ id: 'tc1' })).toBe(false);
+    expect(isSubagentToolCall({ name: undefined })).toBe(false);
+    expect(isSubagentToolCall(null)).toBe(false);
+    expect(isSubagentToolCall(undefined)).toBe(false);
+  });
+
+  it('END TO END: a real-shape `task` part survives the mirror into the summary filter', () => {
+    // The whole chain: part.tool -> toolCalls[].name -> isSubagentToolCall, plus
+    // state.input -> toolCalls[].input, which the summary reads for subagent_type.
+    const state = createMirrorState();
+    const taskPart = toolPart('t1', 'task', 'completed');
+    taskPart.state.input = { subagent_type: 'general-purpose', description: 'dig' };
+    mirrorMessages([asstMsg('m1', [taskPart, toolPart('t2', 'bash', 'completed')])], state);
+
+    const subagents = state.toolCalls.filter(isSubagentToolCall);
+    expect(subagents).toHaveLength(1);
+    expect(subagents[0].name).toBe('task');
+    expect(subagents[0].input.subagent_type).toBe('general-purpose');
   });
 });

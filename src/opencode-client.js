@@ -328,15 +328,27 @@ async function createChildSession(client, parentId) {
 }
 
 /**
- * Get child sessions for a parent session
+ * Get child (subagent) sessions for a parent session.
+ *
+ * ⚠️ v4.4.1 LC-7: this was the ONE per-session call that did not thread
+ * `directoryQuery(directory)`, unlike getMessages / createSession /
+ * abortSession. It went unnoticed because nothing called it — on a SHARED
+ * server (one server, many projects) an un-scoped call is the exact
+ * "session not found" failure mode issue #47 fixed everywhere else, and it
+ * would have broken child-session cost attribution on precisely the
+ * configuration that makes attribution matter. Fixed with CA-1, its first
+ * consumer (src/sidecar/child-sessions.js).
  *
  * @param {import('@opencode-ai/sdk').OpencodeClient} client - SDK client
  * @param {string} parentId - Parent session ID
+ * @param {string} [directory] - Optional project directory to scope the call to.
+ *   Omitting it keeps the call byte-for-byte identical to before.
  * @returns {Promise<Array>} Array of child sessions
  */
-async function getChildren(client, parentId) {
+async function getChildren(client, parentId, directory) {
   const result = await client.session.children({
-    path: { id: parentId }
+    path: { id: parentId },
+    ...directoryQuery(directory)
   });
 
   return result.data || [];

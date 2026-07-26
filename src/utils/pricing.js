@@ -111,34 +111,71 @@ function resolveLegCost({ reportedCost, tokens, pricing }) {
  * @param {string} opts.model full route id
  * @param {object} opts.usageTotals sumPerMessageUsage output
  * @param {boolean} [opts.subtreeUnknown] v4.4 Task 2 — this leg made a SUBAGENT
- *   (`task`) tool call, so it has spend in a CHILD OpenCode session that is billed
- *   separately, is NOT rolled into the parent session's cost, and that amicus
- *   never enumerates. The leg's OWN cost may be perfectly `reported`; what is
- *   unknown is its SUBTREE. Kept as a distinct concept from an unpriced leg
+ *   (`task`) tool call whose CHILD OpenCode session is billed separately, is NOT
+ *   rolled into the parent session's cost, and could NOT be enumerated (or could
+ *   only be walked in part). The leg's OWN cost may be perfectly `reported`; what
+ *   is unknown is its SUBTREE. Kept as a distinct concept from an unpriced leg
  *   (which means "we observed no tokens at all") because they are different
  *   statements and a reader must be able to tell them apart. Set only when true
  *   so an ordinary leg's usage block stays byte-identical.
+ * @param {{sessions: number, tokens: object, costReported: number}} [opts.subtree]
+ *   v4.4.1 CA-1 — the child sessions that WERE enumerated and priced
+ *   (src/sidecar/child-sessions.js). Attached beside the leg's own cost rather
+ *   than folded into it: `cost` keeps meaning "this leg's own session", which is
+ *   what every existing reader already assumes, and the subtree is a separate
+ *   measurement that the wave rollup adds on top. Folding them together would
+ *   also let a measured child amount launder an UNKNOWN parent into a
+ *   `reported`-looking number — `council-wsgate02/wsgate02-s1-3` is exactly that
+ *   shape (own cost unknown, child session $0.471046).
  */
-function resolveUsage({ model, usageTotals, subtreeUnknown }) {
+function resolveUsage({ model, usageTotals, subtreeUnknown, subtree }) {
   const totals = usageTotals || emptyUsageTotals();
   const cost = resolveLegCost({ reportedCost: totals.costReported, tokens: totals.tokens, pricing: lookupPricing(model) });
-  return subtreeUnknown
-    ? { tokens: totals.tokens, cost, subtreeUnknown: true }
-    : { tokens: totals.tokens, cost };
+  const usage = { tokens: totals.tokens, cost };
+  if (subtree && subtree.sessions > 0) {
+    const amount = subtree.costReported;
+    usage.subtree = {
+      sessions: subtree.sessions,
+      tokens: subtree.tokens || emptyUsageTotals().tokens,
+      // A child session's price comes from OpenCode's own billing, never from a
+      // catalog estimate (the SDK's Session record carries no model id, so an
+      // estimate would be a guess). Children that exist but reported nothing are
+      // `unknown` — the B2 rule one level down, and never a $0 claim.
+      cost: amount > 0
+        ? { amount, currency: 'USD', source: 'reported' }
+        : { amount: null, currency: 'USD', source: 'unknown' },
+    };
+  }
+  if (subtreeUnknown) { usage.subtreeUnknown = true; }
+  return usage;
 }
 
 /**
  * Aggregate leg usage into a wave-level usage block. Legs without usage count as
  * unpriced; legs carrying `subtreeUnknown` are counted separately in
  * `subtreeUnknownLegs` — a fully-priced wave can still have an incomplete total.
+ *
+ * v4.4.1 CA-1: a leg's enumerated CHILD-session spend (`usage.subtree`) is added
+ * to the wave total here, and reported separately as `subtreeCost` /
+ * `subtreeSessions` so a reader can always see how much of the total came from
+ * subagents. It is added INDEPENDENTLY of whether the leg's own cost resolved —
+ * they are two different measurements, and dropping a measured child amount
+ * because its parent is unknown would be a second under-report on top of the
+ * one this whole change exists to close.
  */
 function sumWaveUsage(legs) {
   const tokens = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
   let amount = 0; let anyAmount = false;
   let reportedLegs = 0, estimatedLegs = 0, unpricedLegs = 0, subtreeUnknownLegs = 0;
+  let subtreeCost = 0, subtreeSessions = 0;
   for (const leg of legs) {
     const u = leg && leg.usage;
     if (u && u.subtreeUnknown) { subtreeUnknownLegs++; }
+    const st = u && u.subtree;
+    if (st && st.cost && typeof st.cost.amount === 'number') {
+      amount += st.cost.amount; anyAmount = true;
+      subtreeCost += st.cost.amount; subtreeSessions += st.sessions || 0;
+    }
     if (!u || !u.cost) { unpricedLegs++; continue; }
     for (const k of Object.keys(tokens)) { tokens[k] += (u.tokens && u.tokens[k]) || 0; }
     if (typeof u.cost.amount === 'number') { amount += u.cost.amount; anyAmount = true; }
@@ -151,7 +188,8 @@ function sumWaveUsage(legs) {
   else if (estimatedLegs > 0 && reportedLegs === 0 && unpricedLegs === 0) { source = 'estimated'; }
   else if (reportedLegs === 0 && estimatedLegs === 0) { source = 'unknown'; }
   else { source = 'mixed'; }
-  return { tokens, cost: { amount: anyAmount ? amount : null, currency: 'USD', source, reportedLegs, estimatedLegs, unpricedLegs, subtreeUnknownLegs } };
+  return { tokens, cost: { amount: anyAmount ? amount : null, currency: 'USD', source,
+    reportedLegs, estimatedLegs, unpricedLegs, subtreeUnknownLegs, subtreeCost, subtreeSessions } };
 }
 
 /**

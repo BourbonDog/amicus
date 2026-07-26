@@ -84,6 +84,25 @@ const wedgedToolCallWithGrowingReasoning = (text) => [{
   ],
 }];
 
+// The REAL SDK shape (@opencode-ai/sdk `ToolPart`), tool reached `completed`.
+// There is NO tool_result part because OpenCode never emits one — that is the
+// entire v4.4 B4 point. Text is present but static, so the ONLY thing that can
+// keep this leg from tripping B53 is `state.status` clearing the pending entry.
+const completedRealShapeToolCall = [{
+  info: { role: 'assistant', id: 'm1', time: {} },
+  parts: [
+    {
+      id: 'tc1', sessionID: 'session-1', messageID: 'm1', type: 'tool',
+      callID: 'call_tc1', tool: 'bash',
+      state: {
+        status: 'completed', input: { command: 'echo hi' },
+        output: 'hi', title: 'bash', time: { start: 1, end: 2 },
+      },
+    },
+    { id: 'm1:t', type: 'text', text: 'working on it' },
+  ],
+}];
+
 // The tool call resolved with a result.
 const resolvedToolCall = [{
   info: { role: 'assistant', id: 'm1', time: { completed: 1 } },
@@ -306,4 +325,31 @@ describe('per-tool-call stall detector (B53)', () => {
     // reason this exits — it rides to the stable-poll idle completion instead.
     expect(result.error).toBeFalsy();
   });
+
+  it('(f) B53 CANNOT fire for a REAL-SHAPE leg whose tool COMPLETED (v4.4 B4 regression)', async () => {
+    // The other direction of the same detector, and the bug that shipped: the
+    // mirror used to clear `pendingToolCalls` ONLY on a `tool_result` part
+    // carrying `tool_use_id`. OpenCode emits no such part (36 tool_use / 0
+    // tool_result across the 35 recorded wsgate legs), so the pending set never
+    // drained and this healthy, finished tool call was one silent poll window
+    // away from being killed as "wedged". Nothing but `progressed` resetting the
+    // clock was saving it. Now `state.status: 'completed'` settles it outright.
+    mockGetMessages.mockResolvedValue(completedRealShapeToolCall);
+    const started = Date.now();
+
+    const result = await runHeadless(
+      'openrouter/a/b', 'sys', 'user', 'task1234', '/proj',
+      60000, 'build',
+      // stall threshold deliberately TINY relative to the idle exit (40 stable
+      // polls x 5ms) so the run cannot help but sit far past the wedge window
+      // with zero progress — the pre-fix code fires here.
+      { pollIntervalMs: 5, toolCallStallMs: 20, stableIdlePolls: 40, stableFinishedPolls: 40 }
+    );
+
+    // Teeth: assert the stall window was genuinely crossed, so this can never
+    // pass vacuously by exiting before the detector had a chance to fire.
+    expect(Date.now() - started).toBeGreaterThan(20);
+    expect(result.error || '').not.toMatch(/Tool call stalled/);
+    expect(mockAbortSession).not.toHaveBeenCalled();
+  }, 15000);
 });

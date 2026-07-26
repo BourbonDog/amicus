@@ -17,14 +17,19 @@
  * verified B4 amounts from §5. The catalog pricing is pinned in the fixture so
  * the replay never depends on this machine's catalog cache.
  *
- * What this file proves, and what it deliberately does NOT:
- *   ✔ no leg reports `estimated $0` off an all-zero token total any more
+ * What this file proves:
+ *   ✔ no leg reports `estimated $0` off an all-zero token total any more (B2)
  *   ✔ every dollar of the residual gap to OpenCode's truth is accounted for by
- *     the B4 amounts the diagnosis measured — nothing is unexplained
- *   ✘ it does NOT claim the in-scope fixes RECOVER that money. B4
- *     (child-session spend + a leg declared complete mid-Task-call) is out of
- *     scope by instruction; what changes is that the leg which swallowed it now
- *     reads `unknown`, not `$0.00`.
+ *     the amounts the diagnosis measured — nothing is unexplained
+ *   ✔ v4.4.1 CA-1: the measured CHILD-SESSION column ($0.492506 across the four
+ *     runs) is now RECOVERED into `known` rather than merely flagged — see the
+ *     `CA-1 replay` block below.
+ * What it still does NOT claim to recover, because no replay can:
+ *   ✘ the B1 finalization-race losses (`wsgate04`, $0.0145) and the
+ *     post-completion PARENT messages (`wsgate02`, $0.14279). Both were closed
+ *     at the CAPTURE layer (the post-loop usage settle; dcb0792's deferral of a
+ *     leg's completion until its `task` part goes terminal) and neither can be
+ *     reconstructed from a recording of a run that predates the fix.
  */
 
 const fs = require('fs');
@@ -238,6 +243,114 @@ describe('per-run reconciliation against the OpenCode oracle', () => {
     // contributes nothing to the gap — and `unknown` is precisely the right label
     // for work that happened and was tallied but whose cost we cannot state.
     expect(run.legs.find((l) => l.legId === 'wsgate04-s1-3').costReported).toBe(0);
+  });
+});
+
+/**
+ * v4.4.1 CA-1 — the same oracle, replayed with child-session attribution on.
+ *
+ * The fixture's `b4Unreachable` rows are the MEASURED per-defect amounts from
+ * the OpenCode DB, split by kind:
+ *   - `child-session`                   the subagent session amicus never walked
+ *   - `post-completion-parent-messages` the PARENT's own messages, billed after
+ *                                       the leg was declared complete mid-`task`
+ * CA-1 recovers the first kind and only the first kind. The second was closed at
+ * the CAPTURE layer by dcb0792 (a `task` part no longer goes terminal while its
+ * child session is live, so those messages are now inside the leg's own window)
+ * and cannot be recovered from a recording, exactly like the B1 race losses.
+ *
+ * Replay feeds each recorded leg the child-session amount its own run measured,
+ * through the SAME resolveUsage/sumWaveUsage path production now uses, and
+ * asserts the B4 child-session column has moved out of the residual and into
+ * `known`.
+ */
+describe('CA-1 replay: the child-session column moves into KNOWN', () => {
+  const childRows = (run) => run.b4Unreachable.filter((x) => x.kind === 'child-session');
+  const parentTailRows = (run) => run.b4Unreachable.filter((x) => x.kind !== 'child-session');
+
+  /** Re-roll a run WITH the measured child sessions attributed to their parent legs. */
+  function replayRunAttributed(run) {
+    const byParent = new Map();
+    for (const row of childRows(run)) {
+      const cur = byParent.get(row.parentLeg) || { sessions: 0, costReported: 0 };
+      byParent.set(row.parentLeg, { sessions: cur.sessions + 1, costReported: cur.costReported + row.amount });
+    }
+    const legs = run.legs.map((l) => {
+      const kids = byParent.get(l.legId);
+      return {
+        legId: l.legId,
+        usage: pricing.resolveUsage({
+          model: l.model,
+          usageTotals: { tokens: l.tokens, costReported: l.costReported },
+          subtree: kids ? { ...kids, tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 } } : undefined,
+        }),
+      };
+    });
+    return { legs, cost: pricing.sumWaveUsage(legs).cost };
+  }
+
+  test('wsgate01 — the run that reported costExact while 7.1% short now reconciles EXACTLY', () => {
+    const run = FIXTURE.runs.wsgate01;
+    const before = replayRun(run).cost.amount;
+    const { cost } = replayRunAttributed(run);
+    expect(before).toBeCloseTo(0.28210993974, 8);           // every leg priced, still short
+    expect(cost.subtreeSessions).toBe(1);
+    expect(cost.subtreeCost).toBeCloseTo(0.021460, 8);
+    // THE HEADLINE: known == OpenCode truth, with nothing left over.
+    expect(cost.amount).toBeCloseTo(run.openCodeTruth, 4);
+    expect(run.openCodeTruth - cost.amount).toBeLessThan(0.0002);
+    expect(parentTailRows(run)).toHaveLength(0);
+  });
+
+  test('wsgate02 — $0.471046 moves into known; only the parent tail remains', () => {
+    const run = FIXTURE.runs.wsgate02;
+    const { cost, legs } = replayRunAttributed(run);
+    // The fixture records the DB amounts at 5dp ($0.47105); the diagnosis quotes
+    // them at full precision ($0.471046). Assert to the fixture's own resolution.
+    expect(cost.subtreeCost).toBeCloseTo(0.471046, 4);
+    // The leg's OWN cost is still honestly unknown (it observed no tokens) —
+    // attribution must not launder that into a reported-looking number.
+    const s13 = legs.find((l) => l.legId === 'wsgate02-s1-3');
+    expect(s13.usage.cost).toEqual({ amount: null, currency: 'USD', source: 'unknown' });
+    expect(s13.usage.subtree.cost.source).toBe('reported');
+    expect(s13.usage.subtree.cost.amount).toBeCloseTo(0.471046, 4);
+    // …and the child money is banked anyway.
+    expect(cost.amount).toBeCloseTo(0.37202345 + 0.471046, 4);
+    // Residual is now EXACTLY the post-completion parent tail, which dcb0792
+    // closed at the capture layer and no replay can recover.
+    const tail = sum(parentTailRows(run).map((x) => x.amount));
+    expect(tail).toBeCloseTo(0.14279, 5);
+    expect(run.openCodeTruth - (cost.amount + tail)).toBeLessThan(0.0002);
+  });
+
+  test('THE RECONCILIATION: known(after CA-1) + B1 + parent-tail == OpenCode truth, all four runs', () => {
+    const table = RUN_KEYS.map((k) => {
+      const run = FIXTURE.runs[k];
+      const { cost } = replayRunAttributed(run);
+      const b1 = sum(run.b1RaceLoss.map((x) => x.amount));
+      const tail = sum(parentTailRows(run).map((x) => x.amount));
+      return { run: k, known: cost.amount, subtree: cost.subtreeCost, b1, tail,
+        truth: run.openCodeTruth, residual: run.openCodeTruth - (cost.amount + b1 + tail) };
+    });
+    for (const row of table) { expect(Math.abs(row.residual)).toBeLessThan(0.0002); }
+    // The B4 child-session column is now ZERO in the residual for every run: it
+    // is inside `known`. $0.021460 + $0.471046 = $0.492506 recovered.
+    expect(sum(table.map((r) => r.subtree))).toBeCloseTo(0.492506, 4);
+    expect(table.map((r) => [r.run, r.subtree > 0, r.b1 > 0, r.tail > 0])).toEqual([
+      ['wsgate01', true, false, false],
+      ['wsgate02', true, false, true],
+      ['wsgate03', false, false, false],
+      ['wsgate04', false, true, false],
+    ]);
+  });
+
+  test('a run with no subagents is not perturbed by the attribution path', () => {
+    // wsgate03 was already exact. Adding the CA-1 machinery must not move it.
+    const plain = replayRun(FIXTURE.runs.wsgate03).cost;
+    const attributed = replayRunAttributed(FIXTURE.runs.wsgate03).cost;
+    expect(attributed.amount).toBeCloseTo(plain.amount, 12);
+    expect(attributed.subtreeCost).toBe(0);
+    expect(attributed.subtreeSessions).toBe(0);
   });
 });
 

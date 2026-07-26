@@ -140,6 +140,7 @@ src/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
 │   ├── budget.js
+│   ├── child-sessions.js
 │   ├── context-builder.js  # Context Builder Module
 │   ├── continue.js  # Sidecar Continue Operations - Handles continuing from previous sessions
 │   ├── conversation-mirror.js
@@ -461,6 +462,7 @@ evals/
 | `observe/watch-render.js` |  | `renderTable()`, `renderPlainLines()`, `mapExitCode()`, `emitJsonChange()`, `runWatchLoop()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
+| `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH()`, `SUBTREE_MAX_SESSIONS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
 | `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `finalizeSpendForReopen()`, `continueSidecar()` |
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()`, `mirrorUsageOnly()`, `allAssistantUsagePresent()` |

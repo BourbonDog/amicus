@@ -161,9 +161,16 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
    * EITHER reason, which are different statements and are worded differently:
    *   - `unknownLegs`        — the leg reported no usage at all.
    *   - `subtreeUnknownLegs` — the leg's own cost is known, but it spawned a
-   *     subagent whose CHILD session is billed separately and never enumerated.
-   *     This is the one that made `council-wsgate01` report `costExact: true`
-   *     while $0.0215 short — 100% of that gap was one `explore` child session.
+   *     subagent whose CHILD session is billed separately and whose spend the
+   *     walk could NOT account for. This is the one that made
+   *     `council-wsgate01` report `costExact: true` while $0.0215 short — 100%
+   *     of that gap was one `explore` child session.
+   *
+   * v4.4.1 CA-1: child sessions are now enumerated and their measured spend IS
+   * attributed (`cost.subtreeCost`), so this second bucket has narrowed to the
+   * subtrees the walk genuinely could not price. It is deliberately still a
+   * separate statement from an unpriced leg: "we could not see this leg at all"
+   * and "we saw this leg but not what it spawned" are different facts.
    */
   const noticeUnknownSpend = () => {
     const s = spendState();
@@ -176,7 +183,7 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
     }
     if (s.subtreeUnknownLegs > 0) {
       parts.push(`${s.subtreeUnknownLegs} council leg(s) spawned a subagent whose CHILD session spend `
-        + 'is billed separately and is NOT attributed');
+        + 'is billed separately and could NOT be determined');
     }
     emit(`Notice: ${parts.join('; and ')} and is NOT included in the $${s.known.toFixed(4)} `
       + `total${ceiling}. Real spend is HIGHER than reported — this total is at least, not exactly, `

@@ -854,14 +854,70 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       }
     }
 
-    if (!externalServer) { await server.close(); }
-
     // Log summary of tool calls for debugging.
     // v4.4 B4: this used to filter on `t.name === 'Task'` and was DEAD twice over —
     // the mirror read `part.name` (the real shape has `part.tool`) so every name
     // was undefined, and OpenCode's tool is named `task` in lowercase anyway.
     const { isSubagentToolCall } = require('./sidecar/tool-part');
     const subagentToolCalls = mirror.toolCalls.filter(isSubagentToolCall);
+
+    // ---- v4.4.1 CA-1: enumerate CHILD (subagent) session spend ---------------
+    // MUST run before server.close() — the walk needs a live server. A `task`
+    // call spawns a child OpenCode session that OpenCode bills separately and
+    // does NOT roll into this session's cost; amicus never looked, so $0.492506
+    // across the four recorded paid runs was invisible to every total the
+    // product prints. Safe to do at finalization only because dcb0792 stopped a
+    // `task` part going terminal while its child session is still live — before
+    // that, walking here would have captured a partial child cost and traded a
+    // silent zero for a silent floor.
+    //
+    // Run for EVERY leg, not only ones whose tool calls looked like `task`: the
+    // name-string proxy (src/sidecar/tool-part.js) was verified 1:1 on a
+    // 37-session corpus and nowhere else, so a child created by some other
+    // mechanism would be a silent under-count wearing a costExact badge — the
+    // exact defect the flag exists to kill. Skipped only when there is nothing
+    // to ask (same predicate as the usage settle: the server is gone, or the
+    // caller pulled the plug), in which case the leg falls back to the proxy and
+    // honestly reports its subtree as unknown.
+    let subtree = null;
+    if (canSettleUsage) {
+      try {
+        const { collectSubtreeUsage, subtreeIsUnknown } = require('./sidecar/child-sessions');
+        const walked = await collectSubtreeUsage(client, sessionId, {
+          directory,
+          callTimeoutMs: Math.min(pollCallTimeoutMs, USAGE_SETTLE_CALL_TIMEOUT_MS),
+          logger,
+        });
+        subtree = {
+          sessions: walked.sessions.length,
+          tokens: walked.tokens,
+          costReported: walked.costReported,
+          // The honesty verdict is decided HERE, where both observations live —
+          // the walk's own completeness and the `task`-call evidence. See
+          // subtreeIsUnknown for why a failed walk with no evidence of a
+          // subagent must NOT flag (an older server would otherwise mark every
+          // leg of every run inexact forever).
+          unknown: subtreeIsUnknown({
+            walkComplete: walked.complete,
+            sessionsFound: walked.sessions.length,
+            subagentCalls: subagentToolCalls.length,
+          }),
+        };
+        if (walked.sessions.length > 0) {
+          logger.info('Child session spend attributed to this leg', {
+            taskId, sessions: walked.sessions.map((s) => s.id),
+            costReported: walked.costReported, subtreeUnknown: subtree.unknown,
+          });
+        }
+      } catch (subtreeErr) {
+        // Cannot happen by construction (the collector swallows its own
+        // failures), but a throw here must never cost a leg its answer.
+        subtree = null;
+        logger.debug('subtree enumeration failed (best-effort)', { taskId, error: subtreeErr.message });
+      }
+    }
+
+    if (!externalServer) { await server.close(); }
     if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
         totalToolCalls: mirror.toolCalls.length,
@@ -905,18 +961,30 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const settleFlags = toolSettleTimedOut
       ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling.length }
       : {};
-    try { writeProgress(sessionDir, 'complete', { usage, ...settleFlags }); }
-    catch (progressErr) {
-      logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
-    }
-
-    // v4.4 B4 (Task 2): a leg that made a SUBAGENT call has spend in a CHILD
-    // OpenCode session that amicus never enumerates and that is NOT rolled into
-    // the parent session's cost — so its total cannot be claimed complete. See
-    // src/sidecar/tool-part.js isSubagentToolCall for the 1:1 evidence.
+    // v4.4 B4 (Task 2) + v4.4.1 CA-1: a leg that made a SUBAGENT call has spend
+    // in a CHILD OpenCode session that is billed separately and is NOT rolled
+    // into the parent session's cost. `subtree` carries what the walk MEASURED;
+    // `subtreeUnknown` is what it could not. The proxy count survives as the
+    // fallback for the case where the walk could not run at all (see the
+    // enumeration block above) — src/sidecar/tool-part.js isSubagentToolCall
+    // has the 1:1 evidence for it.
     const subtreeFlags = subagentToolCalls.length > 0
       ? { subagentToolCalls: subagentToolCalls.length }
       : {};
+    const subtreeResult = subtree ? { subtree } : {};
+    // The live workspace reads progress.json directly (src/observe/live-doc.js
+    // enrichLegUsage), so the attribution has to travel on BOTH channels or the
+    // GUI's cost-by-seat silently disagrees with run.json.
+    const subtreeProgress = subtree
+      ? { ...(subtree.sessions > 0
+        ? { subtree: { sessions: subtree.sessions, tokens: subtree.tokens, costReported: subtree.costReported } }
+        : {}),
+      ...(subtree.unknown ? { subtreeUnknown: true } : {}) }
+      : (subagentToolCalls.length > 0 ? { subtreeUnknown: true } : {});
+    try { writeProgress(sessionDir, 'complete', { usage: { ...usage, ...subtreeProgress }, ...settleFlags }); }
+    catch (progressErr) {
+      logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
+    }
     const settleResult = toolSettleTimedOut
       ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling }
       : {};
@@ -932,6 +1000,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         usage,
         ...settleResult,
         ...subtreeFlags,
+        ...subtreeResult,
         error: sessionError
       };
     }
@@ -946,6 +1015,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       usage,
       ...settleResult,
       ...subtreeFlags,
+      ...subtreeResult,
       exitCode: 0
     };
 

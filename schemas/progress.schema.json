@@ -16,7 +16,20 @@
       "type": "object",
       "properties": {
         "tokens": { "type": "object" },
-        "costReported": { "type": "number" }
+        "costReported": { "type": "number" },
+        "subtree": {
+          "description": "v4.4.1 CA-1. Spend of the CHILD (subagent) OpenCode sessions this leg spawned, which OpenCode bills separately and does NOT roll into the parent session's cost. Attributed to this leg by the terminal walk in src/headless.js; resolved into usage.subtree by src/observe/live-doc.js enrichLegUsage so the live GUI and run.json agree. Absent when the leg spawned none.",
+          "type": "object",
+          "properties": {
+            "sessions": { "type": "number" },
+            "tokens": { "type": "object" },
+            "costReported": { "type": "number" }
+          }
+        },
+        "subtreeUnknown": {
+          "description": "The leg's own cost is stated, but there is positive evidence of a subagent subtree whose spend the walk could not account for. The total is a floor, not the bill. Present only when true.",
+          "const": true
+        }
       }
     }
   },

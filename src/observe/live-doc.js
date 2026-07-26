@@ -17,11 +17,29 @@ const { resolveUsage, sumWaveUsage } = require('../utils/pricing');
 
 const TERMINAL = new Set(['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'idle-timeout']);
 
-/** Attach read-time-resolved usage to a leg from its raw progress usage. */
+/**
+ * Attach read-time-resolved usage to a leg from its raw progress usage.
+ *
+ * v4.4.1 CA-1: the terminal progress record carries the leg's enumerated CHILD
+ * (subagent) session spend as `usage.subtree` / `usage.subtreeUnknown`
+ * (src/headless.js). Those must be forwarded, not dropped: the live workspace
+ * and `amicus watch` read progress.json directly, so silently keeping only
+ * {tokens, cost} here would make the GUI's cost-by-seat and its wave rollup
+ * disagree with run.json by exactly the child-session amount — reintroducing
+ * the under-report one surface down from where it was fixed.
+ */
 function enrichLegUsage(leg, progressUsage) {
   if (!progressUsage || !progressUsage.tokens) { return leg; }
-  const resolved = resolveUsage({ model: leg.model, usageTotals: progressUsage });
-  return { ...leg, usage: { tokens: resolved.tokens, cost: resolved.cost } };
+  const resolved = resolveUsage({
+    model: leg.model,
+    usageTotals: progressUsage,
+    subtree: progressUsage.subtree,
+    subtreeUnknown: progressUsage.subtreeUnknown,
+  });
+  const usage = { tokens: resolved.tokens, cost: resolved.cost };
+  if (resolved.subtree) { usage.subtree = resolved.subtree; }
+  if (resolved.subtreeUnknown) { usage.subtreeUnknown = true; }
+  return { ...leg, usage };
 }
 
 /** Stamp view:'live' on a non-terminal composed doc; no-op when terminal. */
