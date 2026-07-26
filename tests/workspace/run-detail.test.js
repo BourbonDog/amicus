@@ -193,7 +193,7 @@ describe('getRunDetail', () => {
 // for truthiness (src/council/run-state.js:133-139) — a tampered/stale pointer can point
 // runDir anywhere on disk. Mirrors src/workspace/artifact-guard.js's readRunArtifact outer
 // fence and electron/ipc-workspace.js's workspace:open-report fence — same
-// isRealpathContained helper (now shared via src/workspace/path-fence.js), same check.
+// isRealpathContained helper (now shared via src/utils/path-fence.js), same check.
 describe('getRunDetail — outer fence (runDir must resolve inside project)', () => {
   test('a tampered/stale pointer whose runDir resolves outside the project is refused, not read', () => {
     // A real, existing, fully-readable run directory — just not nested under `project`.

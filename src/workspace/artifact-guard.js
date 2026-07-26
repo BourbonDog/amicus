@@ -16,7 +16,7 @@ const fsReal = require('fs');
 const path = require('path');
 const { sanitizeName } = require('../council/run-launch');
 const { readPointer } = require('./run-scan');
-const { isRealpathContained } = require('./path-fence');
+const { isRealpathContained } = require('../utils/path-fence');
 
 const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json']);
 // ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
@@ -27,7 +27,7 @@ const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md',
 const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
-// isRealpathContained itself now lives in ./path-fence.js (the shared "fence 2"
+// isRealpathContained itself now lives in ../utils/path-fence.js (the shared "fence 2"
 // primitive: a realpath-based containment test that defeats symlink escapes AND
 // tampered/stale pointers). Re-exported below for backward compatibility — callers
 // outside this module (electron/ipc-workspace.js's workspace:open-report, this

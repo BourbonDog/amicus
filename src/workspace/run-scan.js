@@ -24,7 +24,7 @@ const { SESSIONS_DIR } = require('../session-manager');
 // readRunArtifact and run-detail.js's getRunDetail); it lives in its own leaf module
 // specifically so this file can require it without creating a cycle — artifact-guard.js
 // already requires THIS file for readPointer.
-const { isRealpathContained } = require('./path-fence');
+const { isRealpathContained } = require('../utils/path-fence');
 
 // ⚠️ DE-ROT (F25): widened from /^council-([0-9a-f]{8})\.json$/ to match the shipped
 // walker's pattern (src/council/run-state.js:148) so ids that are not 8 hex still list.

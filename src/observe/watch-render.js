@@ -93,6 +93,25 @@ function emitJsonChange(doc, prevText) {
  * @returns {Promise<number>} exit code
  */
 async function runWatchLoop(target, args, project, deps = {}) {
+  // Pointer-containment fence, defence in depth. cli-handlers-watch.js's
+  // resolveWatchTarget already refuses a council pointer whose runDir escapes
+  // the project, but this loop is exported, takes `target` from its caller, and
+  // opens events.jsonl straight out of target.runDir below — so it re-checks
+  // rather than trusting the hand-off. Reuses the shared fence
+  // (src/utils/path-fence.js) and reports through the SAME failJson
+  // BAD_SESSION envelope handleWatch uses for an unresolvable id, so a --json
+  // caller still gets exactly one typed error doc.
+  if (target.kind === 'council') {
+    const { containsOnDisk } = require('../utils/path-fence');
+    if (!containsOnDisk(project, target.runDir)) {
+      const { failJson, ERROR_CODES } = require('../utils/error-doc');
+      return failJson(!!args.json, {
+        code: ERROR_CODES.BAD_SESSION,
+        message: `watch: run directory for '${target.id}' resolves outside project ${project}`,
+        hint: 'Pass --project if the run was launched elsewhere.',
+      });
+    }
+  }
   const intervalSec = Math.max(0.5, Number(args.interval) || 2);
   const statusFn = deps.statusFn || ((id, p) => require('../mcp-server').handlers.amicus_status({ taskId: id }, p));
   const sleep = deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));

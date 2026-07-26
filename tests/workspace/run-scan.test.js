@@ -112,7 +112,7 @@ describe('scanCouncilRuns', () => {
 // inside project. The pointer file's {runId, runDir} JSON is validated only for
 // truthiness (src/council/run-state.js:133-139) — a tampered/stale pointer can point
 // runDir anywhere on disk. Mirrors artifact-guard.js's readRunArtifact / run-detail.js's
-// getRunDetail outer fence — same isRealpathContained helper (src/workspace/path-fence.js).
+// getRunDetail outer fence — same isRealpathContained helper (src/utils/path-fence.js).
 // This feeds the GUI run list, so unlike the other two call sites the fenced-out pointer
 // must become an error row, not a thrown exception — scanCouncilRuns must keep returning
 // every OTHER row.

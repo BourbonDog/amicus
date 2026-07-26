@@ -29,8 +29,21 @@ function resolveWatchTarget(id, project) {
   const clean = String(id).replace(/^council-/, '');
 
   const { readPointer } = require('./council/run-state');
+  const { containsOnDisk } = require('./utils/path-fence');
   const ptr = readPointer(project, clean);
-  if (ptr) { return { kind: 'council', id: clean, runDir: ptr.runDir }; }
+  // readPointer validates `council-<id>.json`'s {runId, runDir} only for
+  // truthiness (run-state.js:133-139), so a tampered or stale pointer can point
+  // runDir anywhere on disk — and this resolver's runDir is what
+  // observe/watch-render.js opens events.jsonl from. Same realpath-containment
+  // fence the v4.4 workspace reads use (src/utils/path-fence.js); a real
+  // runDir is always nested inside project (src/mcp-council-run.js:109 enforces
+  // it at creation time), so nothing legitimate is refused. An escaping pointer
+  // falls through to the session lookup and then 'unknown' — the same outcome a
+  // missing pointer already produces, so handleWatch's BAD_SESSION contract is
+  // unchanged.
+  if (ptr && containsOnDisk(project, ptr.runDir)) {
+    return { kind: 'council', id: clean, runDir: ptr.runDir };
+  }
 
   // getSessionDir THROWS on a path-traversal id ('..' / separators) — this
   // resolver is exported and docblocked "pure over disk", so it must be

@@ -15,6 +15,11 @@
 const fs = require('fs');
 const path = require('path');
 const runState = require('./council/run-state');
+// The pointer-containment fence. Lives in a dependency-free leaf module
+// (src/utils/path-fence.js) precisely so any surface can require it —
+// requiring it here adds no cycle and keeps ONE implementation of the check
+// shared with the v4.4 workspace reads.
+const { containsOnDisk } = require('./utils/path-fence');
 const { RUNNING_VERSION } = require('./utils/version-info');
 const { enrichLegUsage, markLive, rollupWaveUsage } = require('./observe/live-doc');
 const { buildLegRows } = require('./observe/council-legs');
@@ -95,6 +100,30 @@ function legUsage(project, legId) {
   return enrichLegUsage({ model }, progressUsage);
 }
 
+/**
+ * readPointer PLUS the containment check the pointer file itself cannot
+ * provide. runState.readPointer validates `council-<id>.json`'s {runId, runDir}
+ * JSON only for truthiness (run-state.js:133-139), so a tampered or stale
+ * pointer can point runDir anywhere on disk — and the two callers below do not
+ * merely READ from it, they runState.checkpoint() INTO it (crash detection and
+ * abort), which makes an unfenced pointer a write primitive at an
+ * attacker-chosen path. A real runDir is always nested inside the project:
+ * src/mcp-council-run.js:109 rejects an outDir outside it at creation time, so
+ * nothing legitimate is refused here.
+ *
+ * Fails to null — the SAME "not a council run" signal an absent/corrupt pointer
+ * already produces, so amicus_status / amicus_abort keep their existing
+ * "Session <id> not found in project <cwd>" error contract (mcp-server.js:586,
+ * :1005) and `amicus abort` keeps falling through to its own not-found path.
+ * No new error shape, and — because the fence runs before readRun — no read or
+ * write ever reaches the escaping directory.
+ * @returns {{runId: string, runDir: string}|null}
+ */
+function readFencedPointer(project, taskId) {
+  const ptr = runState.readPointer(project, taskId);
+  return ptr && containsOnDisk(project, ptr.runDir) ? ptr : null;
+}
+
 function elapsedOf(run) {
   const end = run.completedAt || new Date().toISOString();
   const ms = Math.max(0, new Date(end).getTime() - new Date(run.createdAt || end).getTime());
@@ -103,7 +132,7 @@ function elapsedOf(run) {
 
 /** Status payload for a council runId, or null when the id is not a council run. */
 function buildCouncilStatusPayload(project, taskId) {
-  const ptr = runState.readPointer(project, taskId);
+  const ptr = readFencedPointer(project, taskId);
   if (!ptr) { return null; }
   const run = runState.readRun(ptr.runDir);
   if (!run) { return null; }
@@ -176,6 +205,12 @@ function listCouncilRuns(project) {
   const { sanitizePreview } = require('./sidecar/progress-fields');
   const out = [];
   for (const ptr of runState.listPointers(project)) {
+    // Same fence as readFencedPointer, applied per enumerated pointer
+    // (listPointers parses the files itself and is no stricter about runDir).
+    // Skipping is the right failure mode here: an escaping pointer degrades
+    // exactly like the unreadable-run.json case below, so one tampered pointer
+    // can never blank the rest of the list.
+    if (!containsOnDisk(project, ptr.runDir)) { continue; }
     const run = runState.readRun(ptr.runDir);
     if (!run) { continue; }
     let briefing = '';
@@ -219,7 +254,7 @@ function cascadeWave(project, waveId) {
  * @returns {null|{notFound?: true}|{alreadyTerminal: true, status}|{aborted: true, cascaded: number}}
  */
 function abortCouncilRun(project, taskId) {
-  const ptr = runState.readPointer(project, taskId);
+  const ptr = readFencedPointer(project, taskId);
   if (!ptr) { return null; }
   const run = runState.readRun(ptr.runDir);
   if (!run) { return null; }

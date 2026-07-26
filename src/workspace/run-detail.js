@@ -14,7 +14,7 @@ const { readPointer } = require('./run-scan');
 const { buildNamePairs } = require('./blind-mode');
 const { buildMatrixModel } = require('./matrix-model');
 const { artifactAllowlist } = require('./artifact-guard');
-const { isRealpathContained } = require('./path-fence');
+const { isRealpathContained } = require('../utils/path-fence');
 
 /**
  * Shared terminal-status list (also mirrored renderer-side in live-model.js).
@@ -161,7 +161,7 @@ function getRunDetail(project, runId) {
   // {runId, runDir} JSON only for truthiness, so a tampered or stale pointer can point
   // runDir anywhere on disk. Mirrors src/workspace/artifact-guard.js's readRunArtifact
   // outer fence and electron/ipc-workspace.js's workspace:open-report fence — same
-  // isRealpathContained helper (src/workspace/path-fence.js), same check. Own
+  // isRealpathContained helper (src/utils/path-fence.js), same check. Own
   // distinguishable error string: getRunDetail's other error shapes ('run.json missing',
   // the readPointer-sourced messages) are asserted by name in several suites and must
   // not collide with this one. Checked BEFORE any read reaches the filesystem, unlike

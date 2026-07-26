@@ -230,6 +230,7 @@ src/
 │   ├── model-tiers.js  # Per-vendor cost tiers (economy/balanced/frontier) + resolution against the
 │   ├── model-validator.js  # Model Validator
 │   ├── node-version-guard.js
+│   ├── path-fence.js  # Shared realpath-containment fence.
 │   ├── path-setup.js
 │   ├── port-pid.js  # Cross-platform listener-PID lookup.
 │   ├── pricing.js
@@ -269,7 +270,6 @@ src/
 │   ├── fold-format.js  # Council Workspace — fold payload builder (v4.4 §7).
 │   ├── live-normalize.js  # Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam).
 │   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
-│   ├── path-fence.js  # Council Workspace — shared realpath-containment fence.
 │   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
 │   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
@@ -550,6 +550,7 @@ evals/
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
+| `utils/path-fence.js` | Shared realpath-containment fence. | `isRealpathContained()`, `containsOnDisk()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
 | `utils/port-pid.js` | Cross-platform listener-PID lookup. | `findListenerPid()` |
 | `utils/pricing.js` |  | `emptyUsageTotals()`, `sumPerMessageUsage()`, `lookupPricing()`, `hasObservedTokens()`, `resolveLegCost()` |
@@ -588,7 +589,6 @@ evals/
 | `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
 | `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |
 | `workspace/matrix-model.js` | Council Workspace — adjudication matrix view model (v4.4 §5.2). | `buildMatrixModel()` |
-| `workspace/path-fence.js` | Council Workspace — shared realpath-containment fence. | `isRealpathContained()` |
 | `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `costPanel()`, `TERMINAL_STATUSES()`, `STAGE_LABELS()` |
 | `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE()` |
 <!-- /AUTO:modules -->
