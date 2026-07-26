@@ -56,6 +56,7 @@ function liveDoc(overrides) {
 describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', () => {
   let invokeMock;
   let getLiveImpl;
+  let consoleErrorSpy;
 
   function defaultInvoke(channel, ...args) {
     if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
@@ -82,6 +83,7 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
     // assertions but otherwise a permanent +1 confound under jest fake timers. Clear it.
     clearInterval(global.window.AmicusApp.state.listTimer);
     global.window.AmicusApp.state.listTimer = null;
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -90,6 +92,7 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
     }
     jest.clearAllTimers();
     jest.useRealTimers();
+    consoleErrorSpy.mockRestore();
     delete global.window;
     delete global.document;
     delete global.NodeFilter;
@@ -239,6 +242,14 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
     rejectOnce(new Error('IPC channel closed'));
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     expect(jest.getTimerCount()).toBe(1); // rescheduled despite the rejection
+    // ⚠️ Code review round 2, finding 3 (cheap half): a genuinely rejected invoke() must not be
+    // silently absorbed — it's now logged, not just quietly retried.
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  test('applyLive throws synchronously on a live payload missing `.flags` — it does not defensively swallow malformed input (code review round 2, finding 3)', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    expect(() => global.window.AmicusVerbs.applyLive({ ok: true, terminal: false, seats: [] })).toThrow();
   });
 
   // ---- applyLive: seats/gauge/stage-rail/banner -----------------------------
@@ -316,6 +327,92 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
     expect(global.document.getElementById('banner').hidden).toBe(false);
     global.window.AmicusVerbs.applyLive(liveDoc());
     expect(global.document.getElementById('banner').hidden).toBe(true);
+  });
+
+  // ⚠️ Code review round 2, finding 1: renderBanner(el, text, '') sets className = 'banner ' —
+  // once the stalled branch (kind '') paints, classList.contains('info') is permanently false,
+  // so the OLD clear arm could never reach it even after activity resumed on the very next tick.
+  // This is the actual regression test for that bug: it fails pre-fix (banner stays visible
+  // forever) and passes once the live banners are tagged and cleared via `A.renderBanners()`.
+  test('a stalled banner is not permanently pinned — it clears once live data resumes with neither flag set', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    global.window.AmicusVerbs.applyLive(liveDoc({ flags: { crashed: false, stalled: true, stalledForSeconds: 60 } }));
+    expect(global.document.getElementById('banner').hidden).toBe(false);
+    global.window.AmicusVerbs.applyLive(liveDoc()); // activity resumes; both flags now false
+    expect(global.document.getElementById('banner').hidden).toBe(true);
+  });
+
+  // ⚠️ Code review round 2, finding 1 (second half): the same stuck-forever bug would also
+  // permanently destroy a genuine `warn`-kind durable banner (e.g. a schemaVersion mismatch)
+  // painted by renderBanners() before the live layer ever ran a tick over it — the OLD clear arm
+  // unconditionally blanked to null instead of restoring the durable state.
+  test('clearing the live layer\'s stalled banner restores the durable banner underneath (e.g. a schemaVersion-mismatch warning), not a blank one', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.derived.schemaSupported = false;
+        d.run.schemaVersion = 3;
+        return Promise.resolve(d);
+      }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const banner = global.document.getElementById('banner');
+    expect(banner.textContent).toContain('schemaVersion');
+    global.window.AmicusVerbs.applyLive(liveDoc({ flags: { crashed: false, stalled: true, stalledForSeconds: 30 } }));
+    expect(banner.textContent).toContain('No leg activity');
+    global.window.AmicusVerbs.applyLive(liveDoc());
+    expect(banner.textContent).toContain('schemaVersion'); // restored, not blanked
+  });
+
+  // ⚠️ Code review round 2, finding 2: workspace-app.js's renderBanners() used to pass the raw
+  // `run.error` OBJECT ({code, message}) straight into renderBanner, which sets
+  // `textContent = text` — coercing an object to the string "[object Object]". Claim 1's entire
+  // "refreshing with the final result…" mitigation depends on that handoff actually landing a
+  // readable string once the terminal openRun() refresh repaints the durable banner.
+  test('the durable run.error banner (what the crashed handoff repaints into) is a formatted string, never "[object Object]"', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0], 'error');
+        d.run.error = { code: 'INTERNAL', message: 'Council engine process exited unexpectedly' };
+        d.derived.verdictPanel.reason = 'INTERNAL: Council engine process exited unexpectedly';
+        return Promise.resolve(d);
+      }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const banner = global.document.getElementById('banner');
+    expect(banner.textContent).toBe('INTERNAL: Council engine process exited unexpectedly');
+    expect(banner.textContent).not.toContain('[object Object]');
+  });
+
+  // ---- applyLive: leaver removal + final-refresh failure --------------------
+  test('applyLive repaints seats with an empty array too — a leg roster that shrinks to zero between stages must clear stale rows (code review round 2, minor)', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    global.window.AmicusApp.state.blind = false;
+    global.window.AmicusVerbs.applyLive(liveDoc({
+      seats: [{ id: 's1', model: 'gpt', modelInput: null, role: null, status: 'running', stage: null,
+        messages: null, tokensIn: null, tokensOut: null, costDisplay: null, lastActivity: null,
+        latestPreview: null, stalled: false }],
+    }));
+    expect(global.document.getElementById('seats-body').children.length).toBe(1);
+    global.window.AmicusVerbs.applyLive(liveDoc({ seats: [] }));
+    expect(global.document.getElementById('seats-body').children.length).toBe(0);
+  });
+
+  test('a rejected final get-run refresh (after terminal) does not strand the "refreshing…" banner — it is replaced by an honest failure message and logged', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:get-run') { return Promise.reject(new Error('disk unmounted')); }
+      return defaultInvoke(channel, ...args);
+    });
+    getLiveImpl = () => Promise.resolve(liveDoc({ status: 'error', terminal: true, flags: { crashed: true, stalled: false, stalledForSeconds: null } }));
+    jest.advanceTimersByTime(0);
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    const banner = global.document.getElementById('banner');
+    expect(banner.hidden).toBe(false);
+    expect(banner.textContent).not.toContain('refreshing with the final result'); // no longer a stale promise
+    expect(consoleErrorSpy).toHaveBeenCalled();
   });
 
   // ---- renderDetail wiring: abort-btn + startLiveLoop -----------------------

@@ -58,19 +58,38 @@
       // state.runId while the request carried state.runId would still let a post-switch
       // request hit run B.
       var runId = A.state.runId;
+      // ⚠️ Code review round 2, finding 3: this MUST be `.then(onFulfilled, onRejected)`, not
+      // `.then(onFulfilled).catch(onRejected)`. The two look equivalent but are not: with a
+      // trailing `.catch`, a THROW inside onFulfilled (e.g. applyLive dereferencing a malformed
+      // payload, or a missing DOM id) is itself routed to the same catch and silently rescheduled
+      // — the loop keeps polling at full cadence, paints nothing, and logs nothing, indistinguishable
+      // from a healthy live view. With the two-argument form, onRejected only ever sees a
+      // REJECTED invoke() (a real IPC/network failure); a throw inside onFulfilled propagates as
+      // its own unhandled rejection instead, which surfaces (devtools/console) rather than being
+      // absorbed.
       A.invoke('workspace:get-live', runId).then(function (live) {
         if (epoch !== A.state.liveEpoch || runId !== A.state.runId) { return; } // stale chain
         applyLive(live);
         var terminal = !!(live && live.ok && live.terminal);
         if (terminal) {
           stopLiveLoop();
-          A.openRun(runId); // final durable snapshot refresh (spec §4.3)
+          // ⚠️ Code review round 2, minor: openRun() is fire-and-forget here with no consumer —
+          // a rejected final refresh (e.g. the run folder vanished mid-read) must not strand the
+          // transient "refreshing…" banner forever, since the loop has already stopped and no
+          // later tick will ever repaint it.
+          A.openRun(runId).catch(function (err) {
+            console.error('workspace live loop: final get-run refresh failed', err);
+            window.AmicusRender.renderBanner(A.$('banner'),
+              'Run ended, but refreshing the final details failed — reopen the run to retry.', '');
+          });
           return;
         }
         A.state.liveTimer = setTimeout(tick, window.AmicusLive.pollDelay(liveState(false)));
-      }).catch(function () {
-        // F42: a rejected invoke must not silently kill the loop — reschedule unless superseded.
+      }, function (err) {
+        // A genuinely rejected invoke() (IPC/network failure) — reschedule unless superseded,
+        // but log it; silently retrying forever with no trace was the code-review finding.
         if (epoch !== A.state.liveEpoch || runId !== A.state.runId) { return; }
+        console.error('workspace live loop: workspace:get-live failed', err);
         A.state.liveTimer = setTimeout(tick, window.AmicusLive.pollDelay(liveState(false)));
       });
     };
@@ -82,10 +101,17 @@
     var R = window.AmicusRender;
     if (!live || !live.ok) {
       // A1 failure: keep last-known panels; flag the live layer only (spec §9)
-      R.renderBanner(A.$('banner'), 'live data unavailable' + (live && live.error ? ' — ' + live.error : ''), 'info');
+      // 'live' (alongside 'info') is a marker class, not a style — see the clear-arm note below.
+      R.renderBanner(A.$('banner'), 'live data unavailable' + (live && live.error ? ' — ' + live.error : ''), 'info live');
       return;
     }
-    if (live.seats.length) {
+    // ⚠️ Code review round 2, minor: was `if (live.seats.length)`, which skips renderSeats
+    // entirely for an empty array — so a roster that shrinks to zero between stages (the
+    // composed doc's `legs` is only populated while a stage is active) leaves the PREVIOUS
+    // stage's rows frozen on screen forever, since renderSeats' own leaver-removal never runs.
+    // `live.seats` is always an array per the LiveModel contract (never undefined/null) when
+    // `live.ok` is true, so this is simply "always paint," empty roster included.
+    if (live.seats) {
       R.renderSeats(A.$('seats-body'), live.seats, A.state.blind, A.labelOf);
     }
     // F42: state.detail can be swapped/absent under a tick — never deref .derived unguarded.
@@ -135,12 +161,24 @@
       R.renderBanner(A.$('banner'), 'Run reported an error — refreshing with the final result…', '');
     } else if (live.flags.stalled) {
       var mins = live.flags.stalledForSeconds ? Math.round(live.flags.stalledForSeconds / 60) : null;
+      // ⚠️ Code review round 2, finding 1: tagged 'live' (a marker class, no CSS of its own —
+      // see workspace.css, which styles only 'warn'/'info') so the clear arm below can find it.
+      // `stalled` is recomputed per read and simply omitted once activity resumes
+      // (src/mcp-council-awareness.js), so this banner is expected to be transient — but the OLD
+      // clear arm only ever matched the 'info' class, so a `''`-kind stalled banner painted here
+      // could never be cleared again: `renderBanner(el, text, '')` sets `className = 'banner '`,
+      // permanently failing `classList.contains('info')` from that point on, for the rest of the
+      // session, even once `flags.stalled` goes back to false on the very next tick.
       R.renderBanner(A.$('banner'),
         'No leg activity' + (mins ? ' for ' + mins + 'm' : '') + ' — the run may be dead. Abort to reclaim it; everything on disk stays browsable.',
-        '');
+        'live');
       A.$('abort-btn').hidden = false; // the remedy ships beside the diagnosis (Task 16 wires it)
-    } else if (A.$('banner').classList.contains('info')) {
-      R.renderBanner(A.$('banner'), null);
+    } else if (A.$('banner').classList.contains('live')) {
+      // Restores whatever the DURABLE banner actually says (nothing, a schemaVersion mismatch,
+      // run.error, …) instead of just blanking it — a live-layer banner (info-unavailable or
+      // stalled) must hand back to the true state once neither condition holds, not stomp a
+      // real warning that predates it.
+      A.renderBanners();
     }
   }
 

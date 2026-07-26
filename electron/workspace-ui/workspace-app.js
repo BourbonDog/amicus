@@ -127,7 +127,14 @@
       return;
     }
     if (d.run.error) {
-      R.renderBanner($('banner'), d.run.error, d.run.status === 'error' ? '' : 'warn');
+      // ⚠️ Code review round 2, finding 2: `d.run.error` is a structured {code, message} object
+      // (never a string) — passing it straight to renderBanner set `textContent = <object>`,
+      // which coerces to the literal string "[object Object]". `d.derived.verdictPanel.reason`
+      // is already the correctly-formatted string (run-detail.js's degradedReason(): "CODE:
+      // message" on the exit-1 path, or a stage-failure/skip sentence otherwise) — reuse it
+      // rather than re-deriving the same formatting a second time here.
+      R.renderBanner($('banner'), d.derived.verdictPanel.reason || 'Run reported an error',
+        d.run.status === 'error' ? '' : 'warn');
       return;
     }
     R.renderBanner($('banner'), null);
