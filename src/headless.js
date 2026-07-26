@@ -13,7 +13,8 @@ const { ensurePortAvailable } = require('./utils/server-setup');
 const { mapAgentToOpenCode } = require('./utils/agent-mapping');
 const { writeProgress } = require('./sidecar/progress');
 const { writeFileAtomic } = require('./utils/atomic-write');
-const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls } = require('./sidecar/conversation-mirror');
+const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls,
+  mirrorUsageOnly, allAssistantUsagePresent } = require('./sidecar/conversation-mirror');
 const { buildFoldMarker, trailingFoldMarkerRegex, generateFoldNonce } = require('./utils/fold-marker');
 
 /**
@@ -73,6 +74,21 @@ const STABLE_IDLE_POLLS = Number(process.env.AMICUS_STABLE_IDLE_POLLS) || 30;   
 const POLL_CALL_TIMEOUT_MS = Number(process.env.AMICUS_POLL_CALL_TIMEOUT_MS) || 30000; // per getMessages call (used by a later task)
 const MAX_CONSECUTIVE_POLL_FAILURES = Number(process.env.AMICUS_MAX_CONSECUTIVE_POLL_FAILURES) || 15; // ≈30s at 2s polls
 const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 180000; // B53: wedged tool call w/ no progress
+/**
+ * v4.4 B1 — bounded post-loop usage reconciliation. The fold-marker (:~540) and
+ * SDK-idle (:~568) fast paths break WITHOUT requiring `info.time.completed`, but
+ * OpenCode stamps `info.tokens`/`info.cost` at message finalization — so those
+ * exits can win the race against the provider's usage payload and report a leg
+ * as free. Measured on real paid legs: $0.00759441096 lost by 155 ms and
+ * $0.00690565716 by 29 ms. 3 × 400 ms bounds the worst case at ~1.2 s of extra
+ * wall time on a leg that already finished, and the loop breaks early the moment
+ * every assistant message carries usage (the common case: one extra read).
+ */
+const USAGE_SETTLE_POLLS = Number(process.env.AMICUS_USAGE_SETTLE_POLLS) || 3;
+const USAGE_SETTLE_INTERVAL_MS = Number(process.env.AMICUS_USAGE_SETTLE_INTERVAL_MS) || 400;
+/** Deliberately much tighter than POLL_CALL_TIMEOUT_MS: the leg is already
+ *  finished, so a hung settle read must not add 30 s × 3 to a run's wall time. */
+const USAGE_SETTLE_CALL_TIMEOUT_MS = Number(process.env.AMICUS_USAGE_SETTLE_CALL_TIMEOUT_MS) || 5000;
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -397,6 +413,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
     const maxConsecutivePollFailures = options.maxConsecutivePollFailures || MAX_CONSECUTIVE_POLL_FAILURES;
     const toolCallStallMs = options.toolCallStallMs || TOOL_CALL_STALL_MS;
+    // `=== undefined` rather than `||`: 0 is a meaningful value (disable the
+    // v4.4 B1 settle re-poll entirely) and must survive injection.
+    const usageSettlePolls = options.usageSettlePolls === undefined
+      ? USAGE_SETTLE_POLLS : options.usageSettlePolls;
+    const usageSettleIntervalMs = options.usageSettleIntervalMs === undefined
+      ? USAGE_SETTLE_INTERVAL_MS : options.usageSettleIntervalMs;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -644,6 +666,48 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     watchdog.cancel();
     if (uninstallSignals) { uninstallSignals(); }
+
+    // ---- v4.4 B1: bounded post-loop usage reconciliation ----------------------
+    // MUST run before server.close() — the client needs a live server — and MUST
+    // NOT re-mirror text: mirrorMessages() would append the already-captured
+    // assistant output to conversation.jsonl a second time, so this uses the
+    // usage-only pass (src/sidecar/conversation-mirror.js mirrorUsageOnly).
+    //
+    // Strictly best-effort: every failure mode leaves the leg's completion
+    // verdict, summary and error exactly as the loop decided them. B2 is the
+    // safety net underneath — when the re-poll still sees nothing, the leg
+    // resolves to `unknown`, never a fabricated $0.
+    //
+    // Skipped when there is nothing to settle: an aborted leg (the caller pulled
+    // the plug), a leg that bailed on consecutive poll failures (the server is
+    // gone — three more reads would only burn the settle timeout), and a leg that
+    // errored with no output at all (no assistant message was ever billed).
+    // Deliberately NOT restricted to `completed`: a timed-out or tool-stalled leg
+    // spent real money too, and its usage is just as worth capturing.
+    const canSettleUsage = !aborted && !pollFailureBail && !(sessionError && !mirror.output);
+    if (canSettleUsage && usageSettlePolls > 0) {
+      for (let i = 0; i < usageSettlePolls; i++) {
+        let settled;
+        try {
+          settled = await withTimeout(
+            getMessages(client, sessionId, ...dirArgs),
+            Math.min(pollCallTimeoutMs, USAGE_SETTLE_CALL_TIMEOUT_MS),
+            'getMessages(usage-settle)',
+          );
+        } catch (settleErr) {
+          logger.debug('usage-settle re-poll failed (best-effort, leg unaffected)', {
+            taskId, attempt: i + 1, error: settleErr.message,
+          });
+          break;
+        }
+        mirrorUsageOnly(settled, mirror);
+        if (allAssistantUsagePresent(settled)) { break; }
+        if (i < usageSettlePolls - 1) {
+          await new Promise(resolve => setTimeout(resolve, usageSettleIntervalMs));
+        }
+      }
+    }
+
     if (!externalServer) { await server.close(); }
 
     // Log summary of tool calls for debugging
@@ -665,6 +729,25 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // as complete, even if some text streamed alongside it before the wedge).
     const { sumPerMessageUsage } = require('./utils/pricing');
     const usage = sumPerMessageUsage(mirror.usageByMsg);
+
+    // ---- v4.4 B3: one TERMINAL progress record carrying the settled usage ----
+    // progress.json's `usage` block was previously stamped only on 'receiving'
+    // flushes, which fire on text/tool/reasoning GROWTH — always strictly before
+    // OpenCode's finalization stamp — and writeProgress rebuilds the file from
+    // scratch, so it could not preserve an earlier snapshot either. Net effect on
+    // real runs: 31 of 35 legs ended with an all-zero usage snapshot while their
+    // metadata.json held thousands of real tokens. That snapshot is what the LIVE
+    // workspace GUI reads (src/observe/live-doc.js enrichLegUsage → resolveUsage),
+    // so every completed leg rendered as free.
+    //
+    // `messagesReceived` is deliberately omitted: readProgress() derives `messages`
+    // from conversation.jsonl's assistant entries and only falls back to this field
+    // when there are none, so re-stating it here would add nothing and could only
+    // disagree with the file it is meant to summarize.
+    try { writeProgress(sessionDir, 'complete', { usage }); }
+    catch (progressErr) {
+      logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
+    }
 
     if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
       return {
@@ -808,4 +891,7 @@ module.exports = {
   POLL_CALL_TIMEOUT_MS,
   MAX_CONSECUTIVE_POLL_FAILURES,
   TOOL_CALL_STALL_MS,
+  USAGE_SETTLE_POLLS,
+  USAGE_SETTLE_INTERVAL_MS,
+  USAGE_SETTLE_CALL_TIMEOUT_MS,
 };

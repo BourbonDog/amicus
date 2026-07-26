@@ -147,9 +147,12 @@
     // spend, not a run total — labelled, never sold as one. The durable total returns on the
     // terminal openRun() refresh.
     if (live.costAmount !== null) {
+      // v4.4 §8: 6th arg = costExact. A stage carrying an unpriced leg draws the
+      // indeterminate gauge + `≥` readout rather than a confident percentage.
       R.renderGauge(A.$('cost-gauge-fill'), A.$('cost-gauge-text'),
         live.costAmount, derived ? derived.cost.maxCost : null,
-        (live.costDisplay || '—') + ' (this stage)');
+        (live.costDisplay || '—') + ' (this stage)',
+        live.costExact !== false);
     }
     // Dead-run banner: DATA-LAYER flags only (A4) — never GUI heuristics.
     // ⚠️ Task 14 review: flags.crashed really means "errored with a reason" — finalize() maps

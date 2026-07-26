@@ -59,17 +59,26 @@ function rowKey(row, dimension) {
   }
 }
 
-/** Group rows into {key, amount, tokens, runs, sourceMix}, most-expensive first. */
+/**
+ * Group rows into {key, amount, tokens, runs, unpricedRows, sourceMix},
+ * most-expensive first.
+ *
+ * v4.4: `amount` deliberately stays a plain number — the published
+ * spend.schema.json pins `groups[].amount` to `type: "number"` — so
+ * `unpricedRows` is how a group says "this figure omits N rows we cannot
+ * price". Without it, a group of entirely unpriced rows was indistinguishable
+ * from a group that genuinely cost $0 (diagnosis §8).
+ */
 function groupRows(rows, dimension) {
   const map = new Map();
   for (const r of rows) {
     const key = rowKey(r, dimension);
-    if (!map.has(key)) { map.set(key, { key, amount: 0, tokens: emptyTokens(), runs: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } }); }
+    if (!map.has(key)) { map.set(key, { key, amount: 0, tokens: emptyTokens(), runs: 0, unpricedRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } }); }
     const b = map.get(key);
     b.runs += 1;
     addTokens(b.tokens, r.tokens);
     const cost = r.cost || {};
-    if (typeof cost.amount === 'number') { b.amount += cost.amount; }
+    if (typeof cost.amount === 'number') { b.amount += cost.amount; } else { b.unpricedRows += 1; }
     const src = (cost.source === 'reported' || cost.source === 'estimated') ? cost.source : 'unknown';
     b.sourceMix[src] += 1;
   }
@@ -87,16 +96,22 @@ function groupRows(rows, dimension) {
  * a row); computeWasted intentionally drops it instead.
  */
 function computeWasted(rows) {
-  const out = { amount: 0, tokens: emptyTokens(), runs: 0, byStatus: {} };
+  const out = { amount: 0, tokens: emptyTokens(), runs: 0, unpricedRows: 0, byStatus: {} };
   for (const r of rows) {
     if (r.status === 'complete' || !r.status) { continue; }
     out.runs += 1;
     addTokens(out.tokens, r.tokens);
-    const amt = (r.cost && typeof r.cost.amount === 'number') ? r.cost.amount : 0;
+    // v4.4: null→0 here is arithmetic, not a claim. `unpricedRows` records how
+    // many failed rows we could not price so "wasted $X" is never mistaken for
+    // the whole loss (see groupRows for why `amount` stays a number).
+    const priced = r.cost && typeof r.cost.amount === 'number';
+    const amt = priced ? r.cost.amount : 0;
+    if (!priced) { out.unpricedRows += 1; }
     out.amount += amt;
-    if (!out.byStatus[r.status]) { out.byStatus[r.status] = { amount: 0, runs: 0 }; }
+    if (!out.byStatus[r.status]) { out.byStatus[r.status] = { amount: 0, runs: 0, unpricedRows: 0 }; }
     out.byStatus[r.status].amount += amt;
     out.byStatus[r.status].runs += 1;
+    if (!priced) { out.byStatus[r.status].unpricedRows += 1; }
   }
   return out;
 }

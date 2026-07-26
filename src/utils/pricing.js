@@ -62,14 +62,43 @@ function lookupPricing(modelId) {
   return null;
 }
 
+/**
+ * Did we actually OBSERVE any token usage for this leg? (v4.4 B2)
+ *
+ * This is the predicate that separates "the provider billed us for a $0 tier"
+ * from "we never saw a usage payload at all" — a distinction the old
+ * `pricing && tokens` guard could not make, because it only inspected the
+ * PRICE. Accepts both the normalized totals shape (cacheRead/cacheWrite, as
+ * produced by sumPerMessageUsage) and OpenCode's raw per-message shape
+ * (`cache: {read, write}`), so callers holding either can ask one question.
+ * @param {object|null|undefined} tokens
+ * @returns {boolean}
+ */
+function hasObservedTokens(tokens) {
+  if (!tokens || typeof tokens !== 'object') { return false; }
+  const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {};
+  const cacheRead = tokens.cacheRead || cache.read || 0;
+  const cacheWrite = tokens.cacheWrite || cache.write || 0;
+  return (tokens.input || 0) > 0 || (tokens.output || 0) > 0
+    || (tokens.reasoning || 0) > 0 || cacheRead > 0 || cacheWrite > 0;
+}
+
 /** @returns {{amount:number|null, currency:'USD', source:'reported'|'estimated'|'unknown'}} */
 function resolveLegCost({ reportedCost, tokens, pricing }) {
   if (typeof reportedCost === 'number' && reportedCost > 0) {
     return { amount: reportedCost, currency: 'USD', source: 'reported' };
   }
-  if (pricing && tokens) {
+  // v4.4 B2: an all-zero token total is an ABSENCE OF OBSERVATION, not a $0
+  // bill. Pricing it as `0 × catalog = estimated $0` asserts "this seat was
+  // free" — a claim we cannot support, and one that silently under-counted the
+  // --max-cost ceiling on real paid runs (diagnosis §0: council-wsgate02 spent
+  // $0.9859 against a $0.75 ceiling while spent() believed $0.3720).
+  // The v4.2 §4.5 free-local-tier carve-out is DELIBERATELY preserved: a local
+  // Ollama/LM Studio seat legitimately costs $0 but still reports tokens, so
+  // hasObservedTokens() is true for it and it still resolves to `estimated $0`.
+  // Only a leg where we observed no tokens at all falls through to `unknown`.
+  if (pricing && hasObservedTokens(tokens)) {
     const est = (tokens.input || 0) * pricing.prompt + (tokens.output || 0) * pricing.completion;
-    // v4.2 §4.5: a genuine $0 estimate is a REAL priced tier (not unknown/null).
     if (est >= 0) { return { amount: est, currency: 'USD', source: 'estimated' }; }
   }
   return { amount: null, currency: 'USD', source: 'unknown' };
@@ -119,4 +148,5 @@ function formatCost(cost) {
   return (cost.source === 'estimated' || cost.source === 'mixed') ? `~${dollars}` : dollars;
 }
 
-module.exports = { emptyUsageTotals, sumPerMessageUsage, lookupPricing, resolveLegCost, resolveUsage, sumWaveUsage, formatCost };
+module.exports = { emptyUsageTotals, sumPerMessageUsage, lookupPricing, hasObservedTokens,
+  resolveLegCost, resolveUsage, sumWaveUsage, formatCost };

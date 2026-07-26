@@ -84,6 +84,84 @@ describe('buildLegRows', () => {
     });
   });
 
+  /**
+   * v4.4 B3 reader-side belt (diagnosis §7.3). progress.json's `usage` snapshot
+   * is stamped only on 'receiving' flushes — i.e. always before OpenCode's
+   * finalization stamp — so on real runs 31 of 35 legs ended with an all-zero
+   * snapshot while metadata.json held thousands of real tokens. The writer fix
+   * (headless.js's terminal progress write) repairs new runs; this makes the
+   * READER authoritative for any terminal leg regardless, including every leg
+   * already on disk from before the fix.
+   */
+  describe('B3: a terminal leg reports metadata.json usage, not the stale progress snapshot', () => {
+    test('complete leg with real metadata usage + all-zero progress usage reports the real cost', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run1');
+      const d = legDir(runDir, 'leg-done');
+      // The exact shape of council-wsgate01/wsgate01-s1-1 (minimax): a REAL
+      // reported cost in metadata, an all-zero 'receiving' snapshot in progress.
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-done', status: 'complete', model: 'openrouter/minimax/minimax-m2.7',
+        modelInput: 'gemini',
+        usage: {
+          tokens: { input: 39000, output: 1189, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+          cost: { amount: 0.01259735, currency: 'USD', source: 'reported' },
+        },
+      }));
+      fs.writeFileSync(path.join(d, 'progress.json'), JSON.stringify({
+        schemaVersion: 1, type: 'progress', stage: 'receiving',
+        stageLabel: 'Generating response...', updatedAt: new Date().toISOString(),
+        usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0 },
+      }));
+
+      const { rows } = buildLegRows(runDir, ['leg-done'], RUN_CTX);
+      expect(rows[0].usage.cost).toEqual({ amount: 0.01259735, currency: 'USD', source: 'reported' });
+      expect(rows[0].usage.tokens.input).toBe(39000);
+      expect(rows[0].usageError).toBeUndefined();
+    });
+
+    test('a RUNNING leg still reads the live progress snapshot (metadata has no usage yet)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run1');
+      const d = legDir(runDir, 'leg-live');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-live', status: 'running', model: 'openrouter/minimax/minimax-m2.7', modelInput: 'gemini',
+      }));
+      fs.writeFileSync(path.join(d, 'progress.json'), JSON.stringify({
+        schemaVersion: 1, type: 'progress', stage: 'receiving',
+        stageLabel: 'Generating response...', updatedAt: new Date().toISOString(),
+        usage: { tokens: { input: 4000, output: 100, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.0021 },
+      }));
+
+      const { rows } = buildLegRows(runDir, ['leg-live'], RUN_CTX);
+      expect(rows[0].usage.tokens.input).toBe(4000);
+      expect(rows[0].usage.cost.amount).toBeCloseTo(0.0021, 8);
+      expect(rows[0].usage.cost.source).toBe('reported');
+    });
+
+    test('a terminal leg whose zero-token usage is unknown reports unknown, never $0', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run1');
+      const d = legDir(runDir, 'leg-unknown');
+      // council-wsgate04/wsgate04-p1-1 after the B2 fix.
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-unknown', status: 'complete', model: 'openrouter/z-ai/glm-5.2', modelInput: 'gpt',
+        usage: {
+          tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+          cost: { amount: null, currency: 'USD', source: 'unknown' },
+        },
+      }));
+      fs.writeFileSync(path.join(d, 'progress.json'), JSON.stringify({
+        schemaVersion: 1, type: 'progress', stage: 'complete', stageLabel: 'Complete',
+        updatedAt: new Date().toISOString(),
+        usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0 },
+      }));
+
+      const { rows } = buildLegRows(runDir, ['leg-unknown'], RUN_CTX);
+      expect(rows[0].usage.cost).toEqual({ amount: null, currency: 'USD', source: 'unknown' });
+    });
+  });
+
   describe('run-level stalled rollup: "every still-running leg is stalled", not "any leg"', () => {
     function writeStaleProgress(dir, ageMs) {
       const staleTime = new Date(Date.now() - ageMs);

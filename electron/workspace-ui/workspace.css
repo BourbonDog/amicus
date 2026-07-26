@@ -133,6 +133,16 @@ td.vote-cell.dispute { cursor: pointer; text-decoration: underline dotted; }
 }
 .gauge-fill { height: 100%; width: 0; background: var(--accent-soft); border-right: 2px solid var(--accent); }
 .gauge.over .gauge-fill { background: var(--danger); border-right-color: var(--danger); }
+/* v4.4 §8: `unknown` = at least one seat reported no usage, so the filled
+   fraction is a LOWER BOUND, not a measurement. Hatch the whole track (not just
+   the fill) so the empty remainder reads "indeterminate" rather than "headroom",
+   and dash the leading edge so it is visibly not a hard boundary. Paired with the
+   `≥` prefix renderGauge writes into .gauge-text. */
+.gauge.unknown {
+  background-image: repeating-linear-gradient(135deg,
+    transparent 0 4px, var(--surface-3, var(--surface-2)) 4px 8px);
+}
+.gauge.unknown .gauge-fill { border-right-style: dashed; }
 .gauge-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: var(--fs-10); color: var(--text-2); }
 
 /* ---- buttons / dialog ---------------------------------------------------- */

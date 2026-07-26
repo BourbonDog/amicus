@@ -122,4 +122,61 @@ describe('engine invocation', () => {
     expect(text).toContain('Council run r1: complete (exit 0)');
     expect(text).toContain('chair: deepseek');
   });
+
+  /**
+   * v4.4: the human summary is one of the four surfaces an unknown cost must be
+   * impossible to miss on. Printing `cost: $0.3720 (mixed)` for the real
+   * council-wsgate02 — which actually spent $0.9859 — is the headline defect.
+   */
+  test('human mode marks the cost as a FLOOR when any leg is unpriced', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: {
+      runId: 'r1', status: 'complete', exitCode: 0, bench: ['gemini', 'gpt'], chair: 'deepseek',
+      options: { outDir: path.join(tmp, 'council-r1'), maxCost: 0.75 },
+      usage: {
+        cost: { amount: 0.372, source: 'mixed', reportedLegs: 8, estimatedLegs: 0, unpricedLegs: 3 },
+        unknownLegs: 3, costExact: false,
+      },
+      error: null,
+    } });
+    const args = argsBase(); args.json = false;
+    await handleCouncilRun(args);
+    const text = out.mock.calls.map(c => c[0]).join('');
+    expect(text).toMatch(/\$0\.3720/);
+    expect(text).toMatch(/3 leg\(s\) unknown/);
+    expect(text).toMatch(/at least/i);
+  });
+
+  test('human mode leaves a fully priced cost line alone', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: {
+      runId: 'r1', status: 'complete', exitCode: 0, bench: ['gemini'], chair: 'deepseek',
+      options: { outDir: path.join(tmp, 'council-r1') },
+      usage: { cost: { amount: 0.09, source: 'reported' }, unknownLegs: 0, costExact: true },
+      error: null,
+    } });
+    const args = argsBase(); args.json = false;
+    await handleCouncilRun(args);
+    const text = out.mock.calls.map(c => c[0]).join('');
+    expect(text).toContain('cost:  $0.0900 (reported)');
+    expect(text).not.toMatch(/unknown/i);
+  });
+
+  test('a run whose cost is ENTIRELY unknown still prints a cost line saying so', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: {
+      runId: 'r1', status: 'complete', exitCode: 0, bench: ['gemini'], chair: 'deepseek',
+      options: { outDir: path.join(tmp, 'council-r1') },
+      usage: {
+        cost: { amount: null, source: 'unknown', reportedLegs: 0, estimatedLegs: 0, unpricedLegs: 2 },
+        unknownLegs: 2, costExact: false,
+      },
+      error: null,
+    } });
+    const args = argsBase(); args.json = false;
+    await handleCouncilRun(args);
+    const text = out.mock.calls.map(c => c[0]).join('');
+    // The pre-fix behaviour printed NO cost line at all here (the `typeof
+    // amount === 'number'` guard skipped it), so a fully unpriced run looked
+    // like a run that cost nothing worth mentioning.
+    expect(text).toMatch(/cost:/);
+    expect(text).toMatch(/2 leg\(s\) unknown/);
+  });
 });

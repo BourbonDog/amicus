@@ -1,0 +1,811 @@
+{
+  "note": "Extracted READ-ONLY from four real paid council runs (council-wsgate01..04) plus the OpenCode session-DB oracle in .superpowers/sdd/v44/zero-usage-diagnosis.md §0/§5. Every `recorded` block is what the PRE-FIX pipeline produced; `tokens`/`costReported` are the raw inputs the fix is replayed over.",
+  "pricing": {
+    "openrouter/z-ai/glm-5.2": {
+      "prompt": "0.0000007168",
+      "completion": "0.0000022528"
+    },
+    "openrouter/qwen/qwen3.7-max": {
+      "prompt": "0.000001475",
+      "completion": "0.000004425"
+    },
+    "openrouter/minimax/minimax-m2.7": {
+      "prompt": "0.00000025",
+      "completion": "0.000001"
+    },
+    "openrouter/mistralai/mistral-medium-3-5": {
+      "prompt": "0.0000015",
+      "completion": "0.0000075"
+    },
+    "openrouter/moonshotai/kimi-k2.6": {
+      "prompt": "0.000000646",
+      "completion": "0.00000272"
+    },
+    "openrouter/x-ai/grok-4.3": {
+      "prompt": "0.00000125",
+      "completion": "0.0000025"
+    },
+    "openrouter/qwen/qwen3-coder-next": {
+      "prompt": "0.00000011",
+      "completion": "0.0000008"
+    },
+    "anthropic/claude-haiku-4-5-20251001": null,
+    "google/gemini-3.1-pro-preview": null,
+    "openai/gpt-5.6-terra": null
+  },
+  "runs": {
+    "wsgate01": {
+      "runId": "wsgate01",
+      "maxCost": 0.5,
+      "openCodeTruth": 0.3036,
+      "openCodeSessions": 8,
+      "recordedRunTotal": 0.28210993974,
+      "recordedRunCost": {
+        "amount": 0.28210993974,
+        "currency": "USD",
+        "source": "reported",
+        "reportedLegs": 7,
+        "estimatedLegs": 0,
+        "unpricedLegs": 0
+      },
+      "b1RaceLoss": [],
+      "b4Unreachable": [
+        {
+          "kind": "child-session",
+          "parentLeg": "wsgate01-s1-2",
+          "agent": "explore",
+          "amount": 0.02146
+        }
+      ],
+      "legs": [
+        {
+          "legId": "wsgate01-ch1-1",
+          "model": "deepseek/deepseek-v4-pro",
+          "status": "complete",
+          "tokens": {
+            "input": 37305,
+            "output": 1784,
+            "reasoning": 5236,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.022335075,
+          "recorded": {
+            "amount": 0.022335075,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate01-s1-1",
+          "model": "openrouter/minimax/minimax-m2.7",
+          "status": "complete",
+          "tokens": {
+            "input": 34519,
+            "output": 1171,
+            "reasoning": 2707,
+            "cacheRead": 1792,
+            "cacheWrite": 0
+          },
+          "costReported": 0.01259735,
+          "recorded": {
+            "amount": 0.01259735,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate01-s1-2",
+          "model": "openrouter/qwen/qwen3-coder-next",
+          "status": "complete",
+          "tokens": {
+            "input": 966589,
+            "output": 7228,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.11210719,
+          "recorded": {
+            "amount": 0.11210719,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 880476
+        },
+        {
+          "legId": "wsgate01-s1-3",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 3990,
+            "output": 2464,
+            "reasoning": 6100,
+            "cacheRead": 32277,
+            "cacheWrite": 0
+          },
+          "costReported": 0.02939432378,
+          "recorded": {
+            "amount": 0.02939432378,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate01-s2-1",
+          "model": "openrouter/minimax/minimax-m2.7",
+          "status": "complete",
+          "tokens": {
+            "input": 34205,
+            "output": 1083,
+            "reasoning": 2349,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.01198325,
+          "recorded": {
+            "amount": 0.01198325,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate01-s2-2",
+          "model": "openrouter/qwen/qwen3-coder-next",
+          "status": "complete",
+          "tokens": {
+            "input": 35283,
+            "output": 991,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.00467393,
+          "recorded": {
+            "amount": 0.00467393,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 36274
+        },
+        {
+          "legId": "wsgate01-s2-3",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 34504,
+            "output": 0,
+            "reasoning": 24574,
+            "cacheRead": 64,
+            "cacheWrite": 0
+          },
+          "costReported": 0.08901882096,
+          "recorded": {
+            "amount": 0.08901882096,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        }
+      ]
+    },
+    "wsgate02": {
+      "runId": "wsgate02",
+      "maxCost": 0.75,
+      "openCodeTruth": 0.9859,
+      "openCodeSessions": 12,
+      "recordedRunTotal": 0.37202345039999996,
+      "recordedRunCost": {
+        "amount": 0.37202345039999996,
+        "currency": "USD",
+        "source": "mixed",
+        "reportedLegs": 8,
+        "estimatedLegs": 1,
+        "unpricedLegs": 2
+      },
+      "b1RaceLoss": [],
+      "b4Unreachable": [
+        {
+          "kind": "child-session",
+          "parentLeg": "wsgate02-s1-3",
+          "agent": "explore",
+          "amount": 0.47105
+        },
+        {
+          "kind": "post-completion-parent-messages",
+          "parentLeg": "wsgate02-s1-3",
+          "amount": 0.14279
+        }
+      ],
+      "legs": [
+        {
+          "legId": "wsgate02-ch1-1",
+          "model": "anthropic/claude-haiku-4-5-20251001",
+          "status": "error",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": null,
+            "source": "unknown"
+          },
+          "progressStage": "prompt_sent",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-ch2-1",
+          "model": "anthropic/claude-haiku-4-5-20251001",
+          "status": "error",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": null,
+            "source": "unknown"
+          },
+          "progressStage": "prompt_sent",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-ch3-1",
+          "model": "openrouter/minimax/minimax-m2.7",
+          "status": "complete",
+          "tokens": {
+            "input": 26956,
+            "output": 1444,
+            "reasoning": 739,
+            "cacheRead": 1339,
+            "cacheWrite": 0
+          },
+          "costReported": 0.00898895,
+          "recorded": {
+            "amount": 0.00898895,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-p1-1",
+          "model": "openrouter/qwen/qwen3.7-max",
+          "status": "complete",
+          "tokens": {
+            "input": 25711,
+            "output": 89,
+            "reasoning": 129,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.038888375,
+          "recorded": {
+            "amount": 0.038888375,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-p2-1",
+          "model": "openrouter/qwen/qwen3.7-max",
+          "status": "complete",
+          "tokens": {
+            "input": 10983,
+            "output": 122,
+            "reasoning": 264,
+            "cacheRead": 14720,
+            "cacheWrite": 0
+          },
+          "costReported": 0.022250375,
+          "recorded": {
+            "amount": 0.022250375,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-s1-1",
+          "model": "openrouter/moonshotai/kimi-k2.6",
+          "status": "complete",
+          "tokens": {
+            "input": 14292,
+            "output": 2122,
+            "reasoning": 25314,
+            "cacheRead": 22352,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0862904496,
+          "recorded": {
+            "amount": 0.0862904496,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-s1-2",
+          "model": "openrouter/mistralai/mistral-medium-3-5",
+          "status": "complete",
+          "tokens": {
+            "input": 41940,
+            "output": 1581,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0747675,
+          "recorded": {
+            "amount": 0.0747675,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-s1-3",
+          "model": "openrouter/qwen/qwen3.7-max",
+          "status": "complete",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": 0,
+            "source": "estimated"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-s2-1",
+          "model": "openrouter/moonshotai/kimi-k2.6",
+          "status": "complete",
+          "tokens": {
+            "input": 9763,
+            "output": 1082,
+            "reasoning": 9884,
+            "cacheRead": 17356,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0380227508,
+          "recorded": {
+            "amount": 0.0380227508,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate02-s2-2",
+          "model": "openrouter/mistralai/mistral-medium-3-5",
+          "status": "complete",
+          "tokens": {
+            "input": 28290,
+            "output": 916,
+            "reasoning": 0,
+            "cacheRead": 1824,
+            "cacheWrite": 0
+          },
+          "costReported": 0.049305,
+          "recorded": {
+            "amount": 0.049305,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 31030
+        },
+        {
+          "legId": "wsgate02-s2-3",
+          "model": "openrouter/qwen/qwen3.7-max",
+          "status": "complete",
+          "tokens": {
+            "input": 29858,
+            "output": 714,
+            "reasoning": 1426,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.05351005,
+          "recorded": {
+            "amount": 0.05351005,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        }
+      ]
+    },
+    "wsgate03": {
+      "runId": "wsgate03",
+      "maxCost": 1,
+      "openCodeTruth": 0.1819,
+      "openCodeSessions": 6,
+      "recordedRunTotal": 0.1818700224,
+      "recordedRunCost": {
+        "amount": 0.1818700224,
+        "currency": "USD",
+        "source": "mixed",
+        "reportedLegs": 5,
+        "estimatedLegs": 0,
+        "unpricedLegs": 1
+      },
+      "b1RaceLoss": [],
+      "b4Unreachable": [],
+      "legs": [
+        {
+          "legId": "wsgate03-ch1-1",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 26912,
+            "output": 2200,
+            "reasoning": 45,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0243956124,
+          "recorded": {
+            "amount": 0.0243956124,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate03-s1-1",
+          "model": "openrouter/x-ai/grok-4.3",
+          "status": "complete",
+          "tokens": {
+            "input": 43424,
+            "output": 738,
+            "reasoning": 2582,
+            "cacheRead": 41024,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0707848,
+          "recorded": {
+            "amount": 0.0707848,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 43521
+        },
+        {
+          "legId": "wsgate03-s1-2",
+          "model": "anthropic/claude-haiku-4-5-20251001",
+          "status": "error",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": null,
+            "source": "unknown"
+          },
+          "progressStage": "prompt_sent",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate03-s1-3",
+          "model": "deepseek/deepseek-v4-pro",
+          "status": "complete",
+          "tokens": {
+            "input": 46586,
+            "output": 1276,
+            "reasoning": 19699,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.03851316,
+          "recorded": {
+            "amount": 0.03851316,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate03-s2-1",
+          "model": "openrouter/x-ai/grok-4.3",
+          "status": "complete",
+          "tokens": {
+            "input": 25771,
+            "output": 371,
+            "reasoning": 730,
+            "cacheRead": 192,
+            "cacheWrite": 0
+          },
+          "costReported": 0.03500465,
+          "recorded": {
+            "amount": 0.03500465,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate03-s2-2",
+          "model": "deepseek/deepseek-v4-pro",
+          "status": "complete",
+          "tokens": {
+            "input": 26674,
+            "output": 827,
+            "reasoning": 968,
+            "cacheRead": 1920,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0131718,
+          "recorded": {
+            "amount": 0.0131718,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        }
+      ]
+    },
+    "wsgate04": {
+      "runId": "wsgate04",
+      "maxCost": 6,
+      "openCodeTruth": 1.0662,
+      "openCodeSessions": 11,
+      "recordedRunTotal": 1.0517254332,
+      "recordedRunCost": {
+        "amount": 1.0517254332,
+        "currency": "USD",
+        "source": "mixed",
+        "reportedLegs": 8,
+        "estimatedLegs": 3,
+        "unpricedLegs": 0
+      },
+      "b1RaceLoss": [
+        {
+          "kind": "finalization-race",
+          "leg": "wsgate04-p1-1",
+          "amount": 0.00759441096,
+          "lostByMs": 155
+        },
+        {
+          "kind": "finalization-race",
+          "leg": "wsgate04-p2-1",
+          "amount": 0.00690565716,
+          "lostByMs": 29
+        }
+      ],
+      "b4Unreachable": [],
+      "legs": [
+        {
+          "legId": "wsgate04-ch1-1",
+          "model": "openrouter/moonshotai/kimi-k2.6",
+          "status": "complete",
+          "tokens": {
+            "input": 37313,
+            "output": 733,
+            "reasoning": 6319,
+            "cacheRead": 32,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0432891196,
+          "recorded": {
+            "amount": 0.0432891196,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-p1-1",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": 0,
+            "source": "estimated"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-p2-1",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": 0,
+            "source": "estimated"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s1-1",
+          "model": "deepseek/deepseek-v4-pro",
+          "status": "complete",
+          "tokens": {
+            "input": 41060,
+            "output": 1831,
+            "reasoning": 21761,
+            "cacheRead": 1920,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0383931,
+          "recorded": {
+            "amount": 0.0383931,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s1-2",
+          "model": "google/gemini-3.1-pro-preview",
+          "status": "complete",
+          "tokens": {
+            "input": 44590,
+            "output": 1131,
+            "reasoning": 30719,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.47138,
+          "recorded": {
+            "amount": 0.47138,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s1-3",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0,
+          "recorded": {
+            "amount": 0,
+            "source": "estimated"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s1-4",
+          "model": "openai/gpt-5.6-terra",
+          "status": "complete",
+          "tokens": {
+            "input": 3,
+            "output": 1332,
+            "reasoning": 2070,
+            "cacheRead": 0,
+            "cacheWrite": 37821
+          },
+          "costReported": 0.169228125,
+          "recorded": {
+            "amount": 0.169228125,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s2-1",
+          "model": "deepseek/deepseek-v4-pro",
+          "status": "complete",
+          "tokens": {
+            "input": 39119,
+            "output": 1743,
+            "reasoning": 3665,
+            "cacheRead": 1920,
+            "cacheWrite": 0
+          },
+          "costReported": 0.021728685,
+          "recorded": {
+            "amount": 0.021728685,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s2-2",
+          "model": "google/gemini-3.1-pro-preview",
+          "status": "complete",
+          "tokens": {
+            "input": 42994,
+            "output": 979,
+            "reasoning": 2979,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.133484,
+          "recorded": {
+            "amount": 0.133484,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s2-3",
+          "model": "openrouter/z-ai/glm-5.2",
+          "status": "complete",
+          "tokens": {
+            "input": 38824,
+            "output": 862,
+            "reasoning": 6257,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "costReported": 0.0439524036,
+          "recorded": {
+            "amount": 0.0439524036,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        },
+        {
+          "legId": "wsgate04-s2-4",
+          "model": "openai/gpt-5.6-terra",
+          "status": "complete",
+          "tokens": {
+            "input": 3,
+            "output": 430,
+            "reasoning": 340,
+            "cacheRead": 0,
+            "cacheWrite": 37988
+          },
+          "costReported": 0.13027,
+          "recorded": {
+            "amount": 0.13027,
+            "source": "reported"
+          },
+          "progressStage": "receiving",
+          "progressTokenTotal": 0
+        }
+      ]
+    }
+  }
+}

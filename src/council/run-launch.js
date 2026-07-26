@@ -18,11 +18,17 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * @param {{fanoutFn?: Function}} [deps] test seam; default = real runFanout
+ * @param {{fanoutFn?: Function, remainingBudget?: () => number|null}} [deps]
+ *   fanoutFn: test seam; default = real runFanout.
+ *   remainingBudget (v4.4): supplies the council's REMAINING `--max-cost`
+ *   allowance (ceiling − known spend) at launch time, threaded into the fanout
+ *   pre-flight estimate gate. Omitted (or returning null) leaves `maxCost` off
+ *   the transport call entirely, exactly as before.
  * @returns {{launchWave: Function, launchSolo: Function}}
  */
 function createLaunchers(deps = {}) {
   const fanoutFn = deps.fanoutFn || require('../sidecar/fanout').runFanout;
+  const remainingBudget = deps.remainingBudget || null;
 
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
@@ -37,7 +43,16 @@ function createLaunchers(deps = {}) {
    */
   async function launchWave(opts) {
     fs.mkdirSync(opts.project, { recursive: true });
+    // v4.4: arm fanout's SOFT total-$ ceiling with the council's remaining
+    // allowance. Previously omitted, so fanout fell back to `cfg.maxCost` (a key
+    // src/utils/config.js never defines) and the pre-flight estimate gate was
+    // inert for every council run — run.js's post-hoc check was the only ceiling,
+    // and it can only refuse after the money is gone. Left OFF when there is no
+    // provider or no ceiling, so the transport call is byte-identical for
+    // non-council callers and for `--max-cost`-less runs.
+    const remaining = remainingBudget ? remainingBudget() : null;
     const { wave, exitCode } = await fanoutFn({
+      ...(typeof remaining === 'number' ? { maxCost: remaining } : {}),
       models: opts.models.join(','),
       prompt: opts.prompt,
       promptMeta: { source: 'council-engine', file: null, chars: opts.prompt.length },

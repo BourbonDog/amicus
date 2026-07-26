@@ -32,7 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readProgress, isStalled } = require('../sidecar/progress');
-const { enrichLegUsage } = require('./live-doc');
+const { enrichLegUsage, TERMINAL } = require('./live-doc');
 const { roleFor } = require('../council/run-stages');
 
 /**
@@ -102,7 +102,23 @@ function buildLegRow(project, legId, runCtx) {
   // makes the failure mode truthful and distinguishable, additive to the row
   // (N3's undefined-key discipline still holds: only set usage/usageError when
   // there is something to say).
-  if (p && p.usage) {
+  //
+  // v4.4 B3 (diagnosis §4/§7.3): for a TERMINAL leg, metadata.json's `usage`
+  // block wins over the progress.json snapshot. progress.json's usage is stamped
+  // ONLY on 'receiving' flushes — which fire on text/tool/reasoning GROWTH, i.e.
+  // always strictly before OpenCode's finalization stamp — so on real paid runs
+  // 31 of 35 legs ended with an all-zero snapshot while metadata.json held
+  // thousands of real tokens and a reported cost. Reading the snapshot for a
+  // finished leg made every completed seat look free in the live doc.
+  // headless.js now also writes a terminal 'complete' progress record carrying
+  // the settled usage, which fixes the DATA; this makes the READER prefer the
+  // authoritative source either way, including for every leg already on disk.
+  // A still-RUNNING leg keeps reading progress.json — metadata.usage does not
+  // exist until the leg finalizes, and read-time resolution is what keeps a live
+  // in-flight cost current (live-doc.js's stated design).
+  if (TERMINAL.has(row.status) && meta.usage && meta.usage.cost) {
+    row.usage = meta.usage;
+  } else if (p && p.usage) {
     try {
       const enriched = enrichLegUsage(row, p.usage);
       if (enriched.usage) { row.usage = enriched.usage; }

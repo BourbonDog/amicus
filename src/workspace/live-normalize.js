@@ -63,6 +63,23 @@ function seatOf(leg) {
 }
 
 /**
+ * How many legs in this stage rollup contributed NO amount (v4.4 §8). Read off
+ * sumWaveUsage's `unpricedLegs` (src/observe/live-doc.js rollupWaveUsage), which
+ * the composed doc already carries — nothing new is invented renderer-side.
+ */
+function liveUnknownLegs(doc) {
+  const c = doc.usage && doc.usage.cost ? doc.usage.cost : null;
+  return (c && typeof c.unpricedLegs === 'number') ? c.unpricedLegs : 0;
+}
+
+function liveCostDisplay(doc) {
+  if (!doc.usage || !doc.usage.cost) { return null; }
+  const base = formatCost(doc.usage.cost);
+  const unknown = liveUnknownLegs(doc);
+  return unknown > 0 ? `${base} + ${unknown} unknown` : base;
+}
+
+/**
  * @param {object} doc composed live doc (amicus_status payload)
  * @returns {object} LiveModel (see plan Shared contracts); {ok:false, error?} on junk
  */
@@ -98,8 +115,12 @@ function normalizeLive(doc) {
     // add it onto `derived.cost.costAmount` — that is null for the entire life of the live loop
     // (run-detail reads run.json's `usage`, which stays null until finalize(), run.js:98-102), so
     // "adding" is just a rename of the same stage figure. The only run total is the terminal one.
-    costDisplay: doc.usage && doc.usage.cost ? formatCost(doc.usage.cost) : null,
+    // v4.4 §8: same treatment as the terminal panel (run-detail.js costPanel) —
+    // a stage rollup that omits unpriced legs reads as the full stage spend.
+    costDisplay: liveCostDisplay(doc),
     costAmount: doc.usage && doc.usage.cost && typeof doc.usage.cost.amount === 'number' ? doc.usage.cost.amount : null,
+    costUnknownLegs: liveUnknownLegs(doc),
+    costExact: liveUnknownLegs(doc) === 0,
     flags: {
       // ⚠️ DE-ROT (F03): `crashed` exists nowhere on the composed doc — Task 0.5 deliberately did
       // not add one (out of scope; see task-0.5-report.md). A crashed council instead flips

@@ -47,6 +47,66 @@ function getPendingToolCalls(state) {
 }
 
 /**
+ * Capture one assistant message's usage snapshot into `state.usageByMsg`.
+ * The poll loop re-reads ALL messages every poll, so the latest snapshot per
+ * message id wins (keyed Map, never additive) — see pricing.sumPerMessageUsage.
+ * @returns {boolean} true when this message carried a usage payload
+ */
+function captureMsgUsage(msg, state) {
+  if (msg.info.tokens || typeof msg.info.cost === 'number') {
+    state.usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * USAGE-ONLY mirror pass (v4.4 B1). Captures `info.tokens`/`info.cost` from a
+ * fresh getMessages() snapshot and NOTHING else — no appendLines, no
+ * `state.output` growth, no progress updates, no pending-tool bookkeeping.
+ *
+ * This exists because the headless poll loop's fast-path exits (trailing fold
+ * marker, SDK `idle`) break BEFORE OpenCode stamps usage at finalization, so a
+ * bounded post-loop re-read is required to see it. Calling the full
+ * mirrorMessages() there would append the already-mirrored assistant text to
+ * conversation.jsonl a second time; this function cannot, because it never
+ * touches seenTextParts/output at all.
+ * @param {Array} messages getMessages() snapshot
+ * @param {object} state from createMirrorState() (only usageByMsg is mutated)
+ * @returns {number} count of messages whose usage was captured
+ */
+function mirrorUsageOnly(messages, state) {
+  const list = Array.isArray(messages) ? messages : [];
+  let captured = 0;
+  for (const msg of list) {
+    if (!msg || !msg.info || msg.info.role !== 'assistant') { continue; }
+    if (captureMsgUsage(msg, state)) { captured += 1; }
+  }
+  return captured;
+}
+
+/**
+ * Does EVERY assistant message in this snapshot carry a usage payload we can
+ * act on — a billed cost, or genuinely observed tokens (v4.4 B1 early-break)?
+ *
+ * Keyed on `hasObservedTokens` rather than "tokens object exists" so an
+ * all-zero placeholder block does not satisfy the predicate — that is exactly
+ * the pre-finalization state the settle loop is waiting out. A legitimately
+ * free local seat still reports real token counts, so it satisfies this on the
+ * first re-read and never pays the full settle window.
+ * @param {Array} messages
+ * @returns {boolean} false when there are no assistant messages at all
+ */
+function allAssistantUsagePresent(messages) {
+  const { hasObservedTokens } = require('../utils/pricing');
+  const list = Array.isArray(messages) ? messages : [];
+  const assistants = list.filter((m) => m && m.info && m.info.role === 'assistant');
+  if (assistants.length === 0) { return false; }
+  return assistants.every((m) => (typeof m.info.cost === 'number' && m.info.cost > 0)
+    || hasObservedTokens(m.info.tokens));
+}
+
+/**
  * @param {Array} messages getMessages() snapshot
  * @param {object} state from createMirrorState() (mutated + returned)
  * @param {{now?: () => string}} [opts]
@@ -68,9 +128,7 @@ function mirrorMessages(messages, state, opts = {}) {
     // Track assistant message state
     if (role === 'assistant') {
       currentAssistantMsgId = msg.info.id;
-      if (msg.info.tokens || typeof msg.info.cost === 'number') {
-        state.usageByMsg.set(msg.info.id, { tokens: msg.info.tokens, cost: msg.info.cost });
-      }
+      captureMsgUsage(msg, state);
       // Check for errors — capture for result propagation
       if (msg.info.error) {
         sessionError = (msg.info.error.data && msg.info.error.data.message)
@@ -199,4 +257,5 @@ function logMessage(conversationPath, message) {
   fs.appendFileSync(conversationPath, JSON.stringify(message) + '\n', { mode: 0o600 });
 }
 
-module.exports = { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls };
+module.exports = { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls,
+  mirrorUsageOnly, allAssistantUsagePresent };

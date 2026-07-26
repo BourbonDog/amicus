@@ -111,8 +111,11 @@
 
     $('run-title').textContent = d.runId;
     R.renderHeaderChips($('run-chips'), d.run, state.blind, labelOf);
+    // v4.4 §8: 6th arg = costExact. A run with an unpriced seat draws an
+    // indeterminate gauge and a `≥` readout instead of a confident percentage.
     R.renderGauge($('cost-gauge-fill'), $('cost-gauge-text'),
-      d.derived.cost.costAmount, d.derived.cost.maxCost, d.derived.cost.totalDisplay);
+      d.derived.cost.costAmount, d.derived.cost.maxCost, d.derived.cost.totalDisplay,
+      d.derived.cost.costExact !== false);
     R.renderStageRail($('stage-rail'), d.derived.stageRail);
 
     renderBanners();

@@ -122,18 +122,30 @@
     if (run.options && run.options.gateway) { container.appendChild(chip('gw: ' + run.options.gateway, '')); }
   }
 
-  function renderGauge(fillEl, textEl, costAmount, maxCost, totalDisplay) {
+  /**
+   * v4.4 §8: `costExact` (optional, defaults TRUE so every pre-v4.4 5-arg call
+   * site is unchanged) says whether `costAmount` is the whole bill. When false —
+   * i.e. some seat reported no usage at all — a gauge reading "50% of budget" is
+   * affirmatively misleading, because the true figure can only be HIGHER. The
+   * bar still fills to the known fraction (that much is real), but the gauge is
+   * marked `unknown` for the hatched CSS treatment and the readout is prefixed
+   * `≥` so the number is never mistaken for a measurement.
+   */
+  function renderGauge(fillEl, textEl, costAmount, maxCost, totalDisplay, costExact) {
     var gauge = fillEl.parentElement;
+    var exact = costExact === undefined ? true : !!costExact;
+    var prefix = exact ? '' : '≥ ';
+    gauge.classList.toggle('unknown', !exact);
     if (maxCost === null || costAmount === null) {
       fillEl.style.width = '0%';
       gauge.classList.remove('over');
-      textEl.textContent = totalDisplay + (maxCost !== null ? ' / $' + maxCost.toFixed(2) : '');
+      textEl.textContent = prefix + totalDisplay + (maxCost !== null ? ' / $' + maxCost.toFixed(2) : '');
       return;
     }
     var pct = Math.min(100, (costAmount / maxCost) * 100);
     fillEl.style.width = pct.toFixed(1) + '%';
     gauge.classList.toggle('over', costAmount >= maxCost);
-    textEl.textContent = totalDisplay + ' / $' + maxCost.toFixed(2);
+    textEl.textContent = prefix + totalDisplay + ' / $' + maxCost.toFixed(2);
   }
 
   function renderStageRail(container, stageRail) {

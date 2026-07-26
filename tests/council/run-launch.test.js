@@ -57,6 +57,52 @@ describe('launchWave (DI over runFanout)', () => {
     expect(seen[0].directory).toBe(tmp);
     expect(seen[0].noMcp).toBe(true);
   });
+
+  /**
+   * v4.4 (diagnosis §9, final paragraph): the council's `--max-cost` was NEVER
+   * threaded into the per-wave pre-flight estimate. launchWave passed
+   * `noCostGate` but no `maxCost`, so src/sidecar/fanout.js fell back to
+   * `cfg.maxCost` — a key that does not exist in src/utils/config.js. Result:
+   * for council runs the src/sidecar/budget.js SOFT ceiling was inert, and
+   * src/council/run.js's post-hoc `overBudget()` was the ONLY ceiling, which by
+   * construction can only refuse AFTER money has already been spent.
+   *
+   * The value threaded is REMAINING budget (ceiling − known spend), not the raw
+   * ceiling: a mid-run wave must be measured against what is left, not against
+   * the whole allowance it has already partly consumed.
+   */
+  test('threads the REMAINING budget into the fanout pre-flight cost gate', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => {
+      seen.push(opts);
+      return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 };
+    };
+    const { launchWave } = createLaunchers({ fanoutFn, remainingBudget: () => 0.42 });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'abc123-s2' });
+    expect(seen[0].maxCost).toBeCloseTo(0.42, 6);
+  });
+
+  test('omits maxCost entirely when no budget provider is wired (non-council callers unchanged)', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => {
+      seen.push(opts);
+      return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 };
+    };
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'abc123-s1' });
+    expect(seen[0].maxCost).toBeUndefined();
+  });
+
+  test('a null/undefined remaining budget (no ceiling set) forwards nothing', async () => {
+    const seen = [];
+    const fanoutFn = async (opts) => {
+      seen.push(opts);
+      return { wave: { waveId: opts.waveId, status: 'complete', legs: [] }, exitCode: 0 };
+    };
+    const { launchWave } = createLaunchers({ fanoutFn, remainingBudget: () => null });
+    await launchWave({ models: ['gemini'], prompt: 'p', project: tmp, waveId: 'abc123-s1' });
+    expect(seen[0].maxCost).toBeUndefined();
+  });
 });
 
 describe('launchSolo (single-leg wave)', () => {

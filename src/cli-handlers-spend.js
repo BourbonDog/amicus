@@ -43,22 +43,31 @@ function parseSinceDays(since) {
  * A row with a null cost.amount contributes 0 to totals but is still counted
  * in `runs` and its source bucket — visibility into "how many runs are
  * unpriced" matters as much as the dollar figure.
+ *
+ * v4.4: `unpricedRows` is the count of rows that contributed NOTHING to
+ * `amount` (no numeric cost). `sourceMix.unknown` is adjacent but not the same
+ * question — it buckets by the row's declared source, whereas this counts what
+ * the arithmetic actually saw. It exists so the renderers can say "$X plus N
+ * unknown" instead of coercing null→0 and printing a measured-looking $0.0000
+ * (diagnosis §8, final paragraph).
  * @param {Array<object>} rows
  */
 function aggregateSpend(rows) {
-  const total = { amount: 0, tokens: emptyTokens(), runs: rows.length, sourceMix: { reported: 0, estimated: 0, unknown: 0 } };
+  const total = { amount: 0, tokens: emptyTokens(), runs: rows.length, unpricedRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } };
   const byModelMap = new Map();
   for (const r of rows) {
     const model = r.model || 'unknown';
     if (!byModelMap.has(model)) {
-      byModelMap.set(model, { model, amount: 0, tokens: emptyTokens(), runs: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } });
+      byModelMap.set(model, { model, amount: 0, tokens: emptyTokens(), runs: 0, unpricedRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } });
     }
     const bucket = byModelMap.get(model);
     bucket.runs += 1;
     addTokens(bucket.tokens, r.tokens);
     addTokens(total.tokens, r.tokens);
     const cost = r.cost || {};
-    const amount = typeof cost.amount === 'number' ? cost.amount : 0;
+    const priced = typeof cost.amount === 'number';
+    const amount = priced ? cost.amount : 0;
+    if (!priced) { bucket.unpricedRows += 1; total.unpricedRows += 1; }
     bucket.amount += amount;
     total.amount += amount;
     // Any source string outside {reported,estimated} buckets as unknown —
@@ -139,6 +148,18 @@ async function fetchCreditFooter(deps) {
   return res || null;
 }
 
+/**
+ * Cost cell for one rollup bucket. v4.4: a bucket in which NO row carried a
+ * numeric amount has no dollar figure to show — it renders formatCost's `?`
+ * rather than `$0.0000`, which previously read as a measured zero and was the
+ * only thing contradicting the (correct but easily missed) `u` count.
+ */
+function bucketCost(bucket) {
+  const unpriced = bucket.unpricedRows || 0;
+  const hasKnown = (bucket.runs || 0) > unpriced;
+  return formatCost({ amount: hasKnown ? bucket.amount : null, source: dominantSource(bucket.sourceMix) });
+}
+
 function renderHuman({ total, byModel, windowDays, credit, wasted }) {
   if (total.runs === 0) { return 'No spend recorded yet.\n'; }
   let out = windowDays ? `amicus spend (last ${windowDays}d)\n\n` : 'amicus spend (all time)\n\n';
@@ -148,9 +169,15 @@ function renderHuman({ total, byModel, windowDays, credit, wasted }) {
     const tokCol = `${m.tokens.input}/${m.tokens.output}`;
     out += `${String(m.model).slice(0, 48).padEnd(48)} ${String(m.runs).padStart(4)}  ` +
       `${tokCol.padStart(15)}  ` +
-      `${formatCost({ amount: m.amount, source: dominantSource(m.sourceMix) }).padStart(9)}  ${mix}\n`;
+      `${bucketCost(m).padStart(9)}  ${mix}\n`;
   }
-  out += `\nTotal: ${formatCost({ amount: total.amount, source: dominantSource(total.sourceMix) })} across ${total.runs} run(s)\n`;
+  out += `\nTotal: ${bucketCost(total)} across ${total.runs} run(s)\n`;
+  // v4.4: the total is a FLOOR whenever any row is unpriced. Stated on its own
+  // line rather than squeezed into the fixed-width cost column.
+  if (total.unpricedRows > 0) {
+    out += `${total.unpricedRows} unpriced row(s) — cost unknown and NOT in the total; `
+      + 'real spend is at least this much.\n';
+  }
   if (wasted && wasted.runs > 0) {
     out += `Wasted (failed runs): ${formatCost({ amount: wasted.amount, source: 'mixed' })} across ${wasted.runs} rows — see amicus spend --failed\n`;
   }

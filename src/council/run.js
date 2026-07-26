@@ -31,7 +31,7 @@ const runDebateMod = require('./run-debate');
 const { buildDebateAddendum } = require('./briefings-debate');
 const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
-const { sumWaveUsage } = require('../utils/pricing');
+const { createBudget } = require('./run-budget');
 const { emitRunStarted, emitRunTerminal, emitStageStarted, emitStageTerminal } = require('../observe/events');
 const { fireCouncilOnComplete } = require('../observe/on-complete');
 
@@ -52,7 +52,6 @@ async function runCouncil(options, deps = {}) {
   const o = { critic: null, lenses: null, maxCost: null, debate: false, claudeReviewFile: null,
     noCostGate: false, councilName: null, ...options };
   o.follow = o.follow ? require('../observe/follow').createFollowPrinter({ json: o.json }) : null; // Task 13: stderr mirror
-  const launchers = deps.launchers || createLaunchers();
   const appendRunFn = deps.appendRunFn || require('./ledger').appendRun;
   const statsFn = deps.statsFn || require('./ledger').deriveReliability;
   const installSignals = deps.installSignalAbortFn
@@ -61,11 +60,11 @@ async function runCouncil(options, deps = {}) {
 
   const allLegs = [];
   const addWave = (wave) => { if (wave && Array.isArray(wave.legs)) { allLegs.push(...wave.legs); } };
-  const spent = () => {
-    const c = sumWaveUsage(allLegs).cost;
-    return typeof c.amount === 'number' ? c.amount : 0;
-  };
-  const overBudget = () => o.maxCost !== null && o.maxCost !== undefined && spent() >= o.maxCost;
+  // v4.4: budget position lives in ./run-budget — see its docblock for the owner's
+  // "fail LOUD, not CLOSED" ruling (overBudget() trips on KNOWN spend only).
+  const { overBudget, remainingBudget, noticeUnknownSpend, usageBlock } =
+    createBudget({ allLegs, maxCost: o.maxCost });
+  const launchers = deps.launchers || createLaunchers({ remainingBudget });
 
   runState.initRun(o.runDir, {
     schemaVersion: 2, type: 'council-run', runId: o.runId, status: 'running', stages: [],
@@ -95,9 +94,10 @@ async function runCouncil(options, deps = {}) {
     const code = signalled || exitCode;
     const status = (code === 130 || code === 143) ? 'aborted'
       : code === 0 ? 'complete' : code === 1 ? 'error' : 'partial';
+    noticeUnknownSpend(); // v4.4: never finish a run silently short (run-budget.js)
     const run = runState.checkpoint(o.runDir, {
       status, exitCode: code, error: error || null,
-      usage: { cost: sumWaveUsage(allLegs).cost },
+      usage: usageBlock(),
       completedAt: now(),
     });
     emitRunTerminal(o.runDir, o.runId, status, code, o.follow);
@@ -144,6 +144,7 @@ async function runCouncil(options, deps = {}) {
     }
 
     // ---- Cost gate: Stage 2 is a paid launch; no tally exists yet (spec §4) ----
+    noticeUnknownSpend(); // v4.4: warn EARLY on a long run, not only at finalize
     if (overBudget()) {
       return finalize(1, {
         code: 'COST_EXCEEDED',

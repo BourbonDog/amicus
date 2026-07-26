@@ -73,10 +73,23 @@ function costPanel(run, tally) {
     costDisplay: formatCost(r.usage && r.usage.cost),
   }));
   const cost = run.usage && run.usage.cost ? run.usage.cost : null;
+  // v4.4 §8: the run total must not read as exact when any seat is unpriced.
+  // `run.usage.unknownLegs` is the v4.4 field src/council/run.js stamps; a run
+  // written before that (or by any other producer) still carries the count inside
+  // sumWaveUsage's `cost.unpricedLegs`, so read that as the fallback rather than
+  // silently claiming exactness for every historical run on disk.
+  const unknownLegs = run.usage && typeof run.usage.unknownLegs === 'number'
+    ? run.usage.unknownLegs
+    : ((cost && cost.unpricedLegs) || 0);
+  const total = formatCost(cost);
   return {
     rows,
-    totalDisplay: formatCost(cost),
+    totalDisplay: unknownLegs > 0 ? `${total} + ${unknownLegs} unknown` : total,
     costAmount: cost && typeof cost.amount === 'number' ? cost.amount : null,
+    // The gauge's guard (workspace-render.js renderGauge): false means "the
+    // percentage below is a LOWER BOUND", so it must render indeterminate.
+    costExact: unknownLegs === 0,
+    unknownLegs,
     maxCost: run.options && typeof run.options.maxCost === 'number' ? run.options.maxCost : null,
   };
 }

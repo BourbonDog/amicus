@@ -37,6 +37,74 @@ describe('resolveLegCost', () => {
   });
 });
 
+/**
+ * v4.4 B2 — "no usage observed" must never be priced as an authoritative $0.
+ * A leg whose captured token totals are ALL zero is an absence of observation,
+ * not a $0 bill: pricing it `0 × catalog = estimated $0.0000` asserts "this seat
+ * was free", a claim that (per the v4.4 diagnosis, four real paid runs) was false
+ * on every occurrence and silently under-counted the --max-cost ceiling.
+ * The v4.2 §4.5 free-local-tier carve-out survives because a local seat still
+ * REPORTS tokens — the predicate keys on observed tokens, never on the price.
+ */
+describe('resolveLegCost: zero-token totals are unknown, not $0 (B2)', () => {
+  const glm = { prompt: 7.168e-7, completion: 2.2528e-6 }; // real catalog row
+
+  it('all-zero tokens + a real catalog price → unknown, NOT estimated $0', () => {
+    expect(pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0 }, pricing: glm }))
+      .toEqual({ amount: null, currency: 'USD', source: 'unknown' });
+  });
+
+  it('the full zero token block (normalized shape) + price → unknown', () => {
+    const tokens = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 };
+    expect(pricing.resolveLegCost({ reportedCost: 0, tokens, pricing: glm }))
+      .toEqual({ amount: null, currency: 'USD', source: 'unknown' });
+  });
+
+  it('undefined/null tokens + price → unknown', () => {
+    expect(pricing.resolveLegCost({ reportedCost: 0, tokens: undefined, pricing: glm }).source).toBe('unknown');
+    expect(pricing.resolveLegCost({ reportedCost: 0, tokens: null, pricing: glm }).source).toBe('unknown');
+  });
+
+  it('observed OUTPUT tokens alone still estimate', () => {
+    const r = pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 1000 }, pricing: glm });
+    expect(r.source).toBe('estimated');
+    expect(r.amount).toBeCloseTo(1000 * 2.2528e-6, 12);
+  });
+
+  it('reasoning-only observation counts as observed (estimate may be $0 for an unpriced class)', () => {
+    const r = pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0, reasoning: 500 }, pricing: glm });
+    expect(r.source).toBe('estimated');
+    expect(r.amount).toBe(0);
+  });
+
+  it('cache tokens in the RAW OpenCode shape ({cache:{read,write}}) count as observed', () => {
+    const r = pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0, cache: { read: 900, write: 0 } }, pricing: glm });
+    expect(r.source).toBe('estimated');
+  });
+
+  it('v4.2 §4.5 REGRESSION GUARD: a free local seat with real tokens stays estimated $0', () => {
+    expect(pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 1200, output: 340 }, pricing: { prompt: 0, completion: 0 } }))
+      .toEqual({ amount: 0, currency: 'USD', source: 'estimated' });
+  });
+
+  it('a local seat that produced NO tokens is unknown too (it genuinely did nothing)', () => {
+    expect(pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0 }, pricing: { prompt: 0, completion: 0 } }))
+      .toEqual({ amount: null, currency: 'USD', source: 'unknown' });
+  });
+
+  it('a reported cost > 0 still wins even with no token observation', () => {
+    expect(pricing.resolveLegCost({ reportedCost: 0.0075, tokens: { input: 0, output: 0 }, pricing: glm }))
+      .toEqual({ amount: 0.0075, currency: 'USD', source: 'reported' });
+  });
+
+  it('hasObservedTokens is exported so other layers ask the same question one way', () => {
+    expect(typeof pricing.hasObservedTokens).toBe('function');
+    expect(pricing.hasObservedTokens({ input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 })).toBe(false);
+    expect(pricing.hasObservedTokens({ input: 1 })).toBe(true);
+    expect(pricing.hasObservedTokens(null)).toBe(false);
+  });
+});
+
 describe('sumWaveUsage', () => {
   const leg = (source, amount, input = 10) => ({ usage: { tokens: { input, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, cost: { amount, currency: 'USD', source } } });
   it('sums tokens, sums non-null amounts, classifies mixed + counts buckets', () => {

@@ -82,8 +82,21 @@ function renderRunHuman(run) {
     `  bench: ${(run.bench || []).join(', ')}  chair: ${run.chair}`,
     `  dir:   ${run.options && run.options.outDir}`,
   ];
-  if (run.usage && run.usage.cost && typeof run.usage.cost.amount === 'number') {
-    lines.push(`  cost:  $${run.usage.cost.amount.toFixed(4)} (${run.usage.cost.source})`);
+  // v4.4: a cost line that omits unpriced legs reads as the whole bill. The
+  // diagnosis measured council-wsgate02 printing $0.3720 for a run that really
+  // spent $0.9859. Say what we know, then say what we cannot know — and print
+  // the line even when NOTHING resolved (the old `typeof amount === 'number'`
+  // guard silently dropped it, so a fully unpriced run looked free).
+  const u = run.usage || null;
+  const unknownLegs = u && typeof u.unknownLegs === 'number'
+    ? u.unknownLegs
+    : (u && u.cost && u.cost.unpricedLegs) || 0;
+  if (u && u.cost && (typeof u.cost.amount === 'number' || unknownLegs > 0)) {
+    const known = typeof u.cost.amount === 'number' ? `$${u.cost.amount.toFixed(4)}` : '$0.0000';
+    const tail = unknownLegs > 0
+      ? ` + ${unknownLegs} leg(s) unknown — real spend is at least this much`
+      : '';
+    lines.push(`  cost:  ${known} (${u.cost.source})${tail}`);
   }
   if (run.error) { lines.push(`  error: ${run.error.code}: ${run.error.message}`); }
   return lines.join('\n') + '\n';
