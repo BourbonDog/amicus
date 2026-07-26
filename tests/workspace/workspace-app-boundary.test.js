@@ -115,10 +115,10 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     ['renderSeatsPanel', 'renderMatrixPanel', 'renderVerdictPanel', 'wireLazyPanels', 'proseLoader', 'drillIntoJudge', 'sanitizeName'].forEach((k) => {
       expect(typeof P[k]).toBe('function');
     });
-    // ⚠️ Task 15: startLiveLoop/stopLiveLoop/applyLive land in workspace-verbs.js (F05), not
-    // workspace-app.js — this contract is what catches a misplaced or missing export before
-    // the browser does.
-    ['doFold', 'startLiveLoop', 'stopLiveLoop', 'applyLive'].forEach((k) => {
+    // ⚠️ Task 15/16: startLiveLoop/stopLiveLoop/applyLive/openAbortDialog land in
+    // workspace-verbs.js (F05), not workspace-app.js — this contract is what catches a
+    // misplaced or missing export before the browser does.
+    ['doFold', 'startLiveLoop', 'stopLiveLoop', 'applyLive', 'openAbortDialog'].forEach((k) => {
       expect(typeof V[k]).toBe('function');
     });
   });

@@ -133,6 +133,10 @@ function makeFakeDom() {
     }
   };
   FakeElement.prototype.scrollIntoView = function () { /* no-op: jsdom-free harness */ };
+  // Task 16: openAbortDialog() focuses the dialog's Cancel button (so Esc/Enter both
+  // behave). A no-op-with-a-trace-flag is enough for tests to assert focus WAS requested
+  // without pulling in real focus-management semantics this headless harness has no use for.
+  FakeElement.prototype.focus = function () { this._focused = true; };
 
   function matchOne(selector, el) {
     var idMatch = /^#([\w-]+)$/.exec(selector);
@@ -192,7 +196,13 @@ function makeFakeDom() {
         nextNode: function () { i += 1; return i < nodes.length ? nodes[i] : null; },
       };
     },
-    addEventListener: function () { /* document-level keydown: not dispatched in this harness */ },
+    // Task 16: workspace-app.js's Escape-to-dismiss handler registers here at load time.
+    // Captured (not a no-op) so a test can dispatch it directly — same convention as a
+    // FakeElement's `_listeners.click[0]()` — instead of needing real DOM event dispatch.
+    _listeners: {},
+    addEventListener: function (type, fn) {
+      (this._listeners[type] = this._listeners[type] || []).push(fn);
+    },
     write: throwTrap('document.write'),
   };
 

@@ -12,6 +12,11 @@
 (function () {
   'use strict';
 
+  // Task 16: a LOCAL `$` for the one-time, module-load-time abort-dialog wiring below —
+  // the DOM (unlike window.AmicusApp) already exists at this file's load time, since
+  // index.html's script tags sit after all the markup. Never used to read AmicusApp state.
+  function $(id) { return document.getElementById(id); }
+
   function doFold() {
     var A = window.AmicusApp;
     var btn = A.$('fold-btn');
@@ -182,7 +187,35 @@
     }
   }
 
-  // ABORT (Task 16): function openAbortDialog() { ... }
+  // ---- abort (Task 16; spec §8) -----------------------------------------
+  // Confirm-gated: the dialog only ever shows/hides; workspace:abort-run is invoked
+  // solely from the confirm button below, never from opening the dialog itself.
+  function openAbortDialog() {
+    var A = window.AmicusApp;
+    A.$('dialog-abort').hidden = false;
+    A.$('dialog-abort-cancel').focus(); // Esc/Enter both land on Cancel — the safe default
+  }
+
+  $('abort-btn').addEventListener('click', openAbortDialog);
+  $('dialog-abort-cancel').addEventListener('click', function () {
+    $('dialog-abort').hidden = true;
+  });
+  $('dialog-abort-confirm').addEventListener('click', function () {
+    var A = window.AmicusApp;
+    var btn = $('dialog-abort-confirm');
+    if (btn.disabled) { return; } // a rapid second click while the first is in flight: no-op
+    btn.disabled = true;
+    A.invoke('workspace:abort-run', A.state.runId).then(function (res) {
+      btn.disabled = false;
+      $('dialog-abort').hidden = true;
+      if (!res.ok) {
+        window.AmicusRender.renderBanner(A.$('banner'), 'Abort failed: ' + (res.error || res.detail || 'unknown'), '');
+        return;
+      }
+      stopLiveLoop();
+      A.openRun(A.state.runId); // re-read: status flips to aborted, grey chip, no live poll
+    });
+  });
 
   // ⚠️ DE-ROT (F42): these three re-enter startLiveLoop on every focus/blur/visibility flip.
   // That is only safe because startLiveLoop() calls stopLiveLoop() first, which bumps
@@ -204,5 +237,8 @@
     if (A.state.liveTimer) { startLiveLoop(); }
   });
 
-  window.AmicusVerbs = { doFold: doFold, startLiveLoop: startLiveLoop, stopLiveLoop: stopLiveLoop, applyLive: applyLive };
+  window.AmicusVerbs = {
+    doFold: doFold, startLiveLoop: startLiveLoop, stopLiveLoop: stopLiveLoop, applyLive: applyLive,
+    openAbortDialog: openAbortDialog,
+  };
 })();
