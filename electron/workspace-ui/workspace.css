@@ -121,7 +121,7 @@ tr.tier-Disputed td { background: var(--tier-disputed); color: var(--tier-disput
 tr.tier-Singleton td { background: var(--tier-singleton); color: var(--tier-singleton-ink); }
 td.vote-cell { text-align: center; font-family: var(--font-mono); }
 td.vote-cell.dispute { cursor: pointer; text-decoration: underline dotted; }
-.thin-badge, .override-badge {
+.thin-badge, .override-badge, .debate-badge {
   font-size: var(--fs-9); border-radius: var(--r-full); padding: 0 var(--space-3);
   border: 1px solid currentColor; margin-left: var(--space-2);
 }

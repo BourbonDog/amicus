@@ -64,8 +64,10 @@ function buildMatrixModel(tally, labelMap, verdict) {
       // ⚠️ DE-ROT (F29): v4.1 decorates tally.json findings in place with
       // `debate: {action, previousTier}` (src/council/debate.js:71-75; action ∈
       // defended|amended|withdrawn|no-response) and verdict.json carries it through
-      // (src/council/verdict.js:43). Dropping it renders a WITHDRAWN finding as an
-      // ordinary live row. Absent on non-debate runs, hence `|| null`.
+      // (src/council/verdict.js:43). Consumed by electron/workspace-ui/workspace-matrix.js's
+      // renderMatrix, which renders a `.debate-badge` in the tier cell (alongside the
+      // thin/tierOverride badges) so a withdrawn/amended/defended/no-response finding never
+      // renders as an ordinary live row. Absent on non-debate runs, hence `|| null`.
       debate: f.debate || null,
       raiser: pairFor(f.raiser, map),
       basis: f.basis || { a: 0, d: 0, n: 0 },

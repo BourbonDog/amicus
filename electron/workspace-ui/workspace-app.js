@@ -89,6 +89,10 @@
 
     if (!d || d.error || !d.derived) {
       $('run-title').textContent = (d && d.runId) || 'run';
+      // ⚠️ Fix-wave item 1: an unreadable run has no derived model behind it, so the Abort
+      // button — otherwise left however the PREVIOUS (possibly live, non-terminal) run set it
+      // — must not stay enabled here pointed at a run whose detail can't back an abort.
+      $('abort-btn').hidden = true;
       R.renderBanner($('banner'),
         'Run unreadable: ' + ((d && d.error) || (d && d.run && d.run.parseError) || 'unknown') +
         (d && d.runDir ? ' — ' + d.runDir : ''), '');
@@ -154,6 +158,17 @@
 
   function renderDetail_preserveBlind() {
     var keep = state.blind;
+    // ⚠️ Fix-wave item 1: renderDetail() itself early-returns safely for an unreadable run
+    // (!d || d.error || !d.derived) — but this wrapper used to run past that guard
+    // unconditionally, dereferencing the (nonexistent) derived model via renderSeatsPanel()
+    // and again on the last line below. Reachable from a typo on the primary documented
+    // entry point: `amicus watch <badId> --ui` -> ?runId= boot -> getRunDetail -> error ->
+    // the error branch unhides #run-view before the derived-model guard, so the Blind
+    // checkbox is live with nothing behind it.
+    if (!state.detail || state.detail.error || !state.detail.derived) {
+      $('blind-toggle').checked = keep;
+      return;
+    }
     renderDetail();
     state.blind = keep;
     $('blind-toggle').checked = keep;

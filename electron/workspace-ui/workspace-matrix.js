@@ -22,6 +22,30 @@
     return window.AmicusRender.display(pair, blind);
   }
 
+  // ⚠️ Fix-wave item 2 (F29): matrix-model.js's buildMatrixModel already attaches
+  // row.debate ({action, previousTier}, action ∈ defended|amended|withdrawn|no-response) on
+  // every --debate run — renderMatrix used to never read it, so a withdrawn/amended/
+  // defended/no-response finding rendered identically to an ordinary live row (the exact
+  // defect F29 was filed against). Rendered as a badge alongside the existing thin/
+  // tierOverride badges (same element shape, same CSS rule) rather than new machinery.
+  var DEBATE_LABEL = { withdrawn: 'withdrawn', amended: 'amended', defended: 'defended', 'no-response': 'no response' };
+
+  function debateBadge(R, debate, tier) {
+    if (!debate || !debate.action) { return null; }
+    var label = DEBATE_LABEL[debate.action] || debate.action;
+    var moved = !!(debate.previousTier && tier && debate.previousTier !== tier);
+    var arrow = moved ? ' (' + debate.previousTier + ' → ' + tier + ')' : '';
+    var title;
+    if (debate.action === 'withdrawn') {
+      title = 'withdrawn by raiser — no longer live' + (arrow || (debate.previousTier ? ' (was ' + debate.previousTier + ')' : ''));
+    } else if (debate.action === 'no-response') {
+      title = 'no response — original stands' + arrow;
+    } else {
+      title = debate.action + ' after re-vote' + (arrow || ' — tier unchanged');
+    }
+    return R.el('span', { className: 'debate-badge debate-' + debate.action, title: title }, [label]);
+  }
+
   function renderMatrix(container, matrix, onDrill) {
     var R = window.AmicusRender;
     container.textContent = '';
@@ -64,6 +88,8 @@
           title: 'override: ' + row.tierOverride.from + ' → ' + row.tierOverride.to,
         }, ['override']));
       }
+      var dBadge = debateBadge(R, row.debate, row.tier);
+      if (dBadge) { tierTd.appendChild(dBadge); }
       cells.push(tierTd);
       cells.push(R.el('td', { className: 'num' }, [row.basis.a + '/' + row.basis.d + '/' + row.basis.n]));
       return R.el('tr', { className: 'tier-' + (row.tier || 'none'), dataset: { findingId: row.id } }, cells);

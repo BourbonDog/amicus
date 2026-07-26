@@ -368,4 +368,47 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     const judgesBody = global.document.getElementById('judges-body');
     expect(judgesBody.querySelectorAll('mark').length).toBe(1);
   });
+
+  // ⚠️ Fix-wave item 1: renderDetail()'s early return for an unreadable run (`!d || d.error ||
+  // !d.derived`) leaves `state.detail.derived` undefined, but the blind-toggle 'change'
+  // listener always calls renderDetail_preserveBlind(), which — unlike renderDetail() itself —
+  // used to unconditionally dereference `state.detail.derived.cost` via P.renderSeatsPanel()
+  // and again at its own last line. Reachable from a typo on `amicus watch <badId> --ui`.
+  test('toggling blind on an unreadable run does not throw (renderDetail_preserveBlind guard)', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') { return Promise.resolve({ runId: args[0], error: 'invalid runId' }); }
+      return Promise.resolve(null);
+    });
+    await global.window.AmicusApp.openRun('badid');
+    expect(global.document.getElementById('banner').textContent).toContain('Run unreadable');
+    const toggle = global.document.getElementById('blind-toggle');
+    expect(() => { toggle._listeners.change[0]({ target: { checked: true } }); }).not.toThrow();
+    expect(() => { toggle._listeners.change[0]({ target: { checked: false } }); }).not.toThrow();
+  });
+
+  // ⚠️ Fix-wave item 1 (second half): the same early-return branch never reset `abort-btn.hidden`
+  // — opening an unreadable run right after a LIVE (non-terminal) one left an enabled Abort
+  // button pointed at a run whose detail can't back an abort action.
+  test('opening an unreadable run after a live one hides the abort button', async () => {
+    const liveDetail = buildFixtureDetail('live1');
+    liveDetail.run.status = 'running';
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        if (args[0] === 'live1') { return Promise.resolve(liveDetail); }
+        return Promise.resolve({ runId: args[0], error: 'invalid runId' });
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('live1');
+    expect(global.document.getElementById('abort-btn').hidden).toBe(false);
+    // live1 is non-terminal, so openRun -> renderDetail started the real live poll loop
+    // (workspace-verbs.js startLiveLoop). Stop it before moving on — this test only cares
+    // about the abort-btn reset, not live polling, and an unstopped real setTimeout can
+    // otherwise fire after this test (and its fake DOM globals) have been torn down.
+    global.window.AmicusVerbs.stopLiveLoop();
+    await global.window.AmicusApp.openRun('badid');
+    expect(global.document.getElementById('abort-btn').hidden).toBe(true);
+  });
 });

@@ -417,6 +417,25 @@ describeE2E('council workspace e2e (CDP)', () => {
 
       const after = await cdp.evaluate(`document.querySelectorAll('#matrix-body tbody tr').length`);
       expect(after).toBe(4); // aaaa1111's stale rows, untouched by the early return
+
+      // ⚠️ Fix-wave item 1: opening a LIVE (non-terminal) run first makes Abort visible;
+      // opening the unreadable run right after must reset it — an enabled Abort pointed at a
+      // run with no derived detail behind it is a live, destructive control left dangling.
+      await cdp.evaluate(`window.AmicusApp.openRun('cccc3333')`);
+      await cdp.waitForSelector('#abort-btn:not([hidden])');
+
+      await cdp.evaluate(`window.AmicusApp.openRun('eeee4444')`);
+      await new Promise((r) => setTimeout(r, 400));
+      expect(await cdp.evaluate(`document.getElementById('abort-btn').hidden`)).toBe(true);
+
+      // ⚠️ Fix-wave item 1 (primary bug): the Blind checkbox stays live with no derived model
+      // behind it on this exact unreadable-run state (the error branch unhides #run-view
+      // before renderDetail's own derived-model guard) — toggling it used to throw a
+      // TypeError (renderDetail_preserveBlind dereferencing d.derived.cost unconditionally
+      // via renderSeatsPanel, and again on its own last line).
+      await cdp.evaluate(`document.getElementById('blind-toggle').click()`); // must not throw
+      await cdp.evaluate(`document.getElementById('blind-toggle').click()`); // toggle back — still must not throw
+      expect(await cdp.evaluate(`document.getElementById('run-title').textContent`)).toBe('eeee4444');
     } finally { cdp.close(); await kill(child); }
   });
 });

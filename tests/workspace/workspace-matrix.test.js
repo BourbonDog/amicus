@@ -92,6 +92,65 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(container.textContent).toContain('override');
     });
 
+    // ⚠️ Fix-wave item 2 (F29 half-landed): matrix-model.js's buildMatrixModel already emits
+    // row.debate ({action, previousTier}) on a --debate run, but renderMatrix never read it —
+    // so a withdrawn/amended/defended/no-response finding rendered identically to an ordinary
+    // live row, which is exactly the defect F29 was filed against.
+    test('a withdrawn finding (row.debate.action) renders a badge in the tier cell, not an ordinary live row', () => {
+      const container = document.createElement('div');
+      const matrix = {
+        judges: [{ model: 'gemini', label: 'Review A' }],
+        rows: [{
+          id: 'C3', severity: 'medium', tier: 'Singleton', thin: false, tierOverride: null,
+          debate: { action: 'withdrawn', previousTier: 'Contested' },
+          raiser: { model: 'gemini', label: 'Review A' }, basis: { a: 0, d: 0, n: 1 },
+          cells: [{ judge: { model: 'gemini', label: 'Review A' }, verdict: 'agree', sym: '✓', isRaiser: true }],
+        }],
+        tierCounts: { Singleton: 1 }, judged: true,
+      };
+      AmicusMatrix.renderMatrix(container, matrix, () => {});
+      const badge = container.querySelector('.debate-badge');
+      expect(badge).toBeTruthy();
+      expect(badge.textContent).toContain('withdrawn');
+      expect(badge.attributes.title).toContain('withdrawn');
+      expect(badge.attributes.title).toContain('Contested');
+    });
+
+    test('an amended finding renders a badge naming the action and the previousTier -> tier movement', () => {
+      const container = document.createElement('div');
+      const matrix = {
+        judges: [{ model: 'gemini', label: 'Review A' }],
+        rows: [{
+          id: 'D4', severity: 'high', tier: 'Confirmed', thin: false, tierOverride: null,
+          debate: { action: 'amended', previousTier: 'Disputed' },
+          raiser: { model: 'gemini', label: 'Review A' }, basis: { a: 1, d: 0, n: 0 },
+          cells: [{ judge: { model: 'gemini', label: 'Review A' }, verdict: 'agree', sym: '✓', isRaiser: true }],
+        }],
+        tierCounts: { Confirmed: 1 }, judged: true,
+      };
+      AmicusMatrix.renderMatrix(container, matrix, () => {});
+      const badge = container.querySelector('.debate-badge');
+      expect(badge).toBeTruthy();
+      expect(badge.textContent).toContain('amended');
+      expect(badge.attributes.title).toContain('Disputed');
+      expect(badge.attributes.title).toContain('Confirmed');
+    });
+
+    test('debate: null (non-debate run, or a finding no debate touched) renders no debate badge', () => {
+      const container = document.createElement('div');
+      const matrix = {
+        judges: [{ model: 'gemini', label: 'Review A' }],
+        rows: [{
+          id: 'A1', severity: 'high', tier: 'Confirmed', thin: false, tierOverride: null, debate: null,
+          raiser: { model: 'gemini', label: 'Review A' }, basis: { a: 1, d: 0, n: 0 },
+          cells: [{ judge: { model: 'gemini', label: 'Review A' }, verdict: 'agree', sym: '✓', isRaiser: true }],
+        }],
+        tierCounts: { Confirmed: 1 }, judged: true,
+      };
+      AmicusMatrix.renderMatrix(container, matrix, () => {});
+      expect(container.querySelector('.debate-badge')).toBeNull();
+    });
+
     test('hard-caps rendered rows at MATRIX_ROW_CAP with a show-more note (spec §5.4)', () => {
       const container = document.createElement('div');
       const rows = [];
