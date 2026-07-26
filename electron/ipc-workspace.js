@@ -17,6 +17,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { logger } = require('../src/utils/logger');
 const { isPrivilegedSender } = require('./ipc-guard');
+const { isRealpathContained } = require('../src/workspace/artifact-guard');
 
 function defaultDeps() {
   return {
@@ -36,6 +37,7 @@ function defaultDeps() {
     }),
     openExternal: (url) => require('electron').shell.openExternal(url),
     existsSync: (p) => require('fs').existsSync(p),
+    realpathSync: (p) => require('fs').realpathSync(p),
   };
 }
 
@@ -180,7 +182,35 @@ function registerWorkspaceHandlers(getWindow, ctx) {
       if (!ptr || ptr.error) { return { ok: false, error: (ptr && ptr.error) || 'run pointer not found' }; }
       const report = path.join(ptr.runDir, 'report.html');
       if (!deps.existsSync(report)) { return { ok: false, error: 'report.html not written' }; }
-      deps.openExternal(pathToFileURL(report).href);
+
+      // Containment fence (council review C1, MAJOR, unanimous): this handler was
+      // the only filesystem-reaching workspace: channel with no containment check,
+      // and the only one that hands a disk-derived path to a shell verb
+      // (openExternal) — ptr.runDir is charset-blind and never validated beyond
+      // truthiness (src/council/run-state.js:133-139). Mirror artifact-guard's
+      // fence 2 (readRunArtifact) in BOTH directions: runDir itself must resolve
+      // inside the project (a stale/tampered pointer can't redirect us anywhere
+      // on disk — legitimate runDirs already satisfy this at creation time via
+      // isPathInside, src/mcp-council-run.js:109), and report.html must resolve
+      // inside runDir (a symlinked report.html can't escape the run dir either).
+      // Fail closed on any realpath error (missing dir, permission, dangling
+      // symlink) rather than let it fall through to openExternal.
+      let realProject, realRunDir, realReport;
+      try {
+        realProject = deps.realpathSync(project);
+        realRunDir = deps.realpathSync(ptr.runDir);
+        realReport = deps.realpathSync(report);
+      } catch (err) {
+        return { ok: false, error: `report path unreadable: ${err.message}` };
+      }
+      if (!isRealpathContained(realProject, realRunDir)) {
+        return { ok: false, error: 'run directory escapes project' };
+      }
+      if (!isRealpathContained(realRunDir, realReport)) {
+        return { ok: false, error: 'report escapes run directory' };
+      }
+
+      deps.openExternal(pathToFileURL(realReport).href);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

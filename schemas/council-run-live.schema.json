@@ -45,7 +45,8 @@
           "latestPreview": { "type": ["string", "null"] },
           "lastActivityAt": { "type": ["string", "null"] },
           "stalled": { "type": "boolean" },
-          "usage": { "type": "object" }
+          "usage": { "type": "object" },
+          "usageError": { "type": "string", "description": "Council review C3: set when enrichLegUsage (pricing resolution) throws for this leg's progress usage, so the failure is distinguishable from a leg that simply has not billed yet (no `usage` key, no `usageError` key either). Additive; absent on every leg that priced cleanly or has no usage yet." }
         }
       }
     },

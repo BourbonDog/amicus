@@ -120,21 +120,72 @@ describe('buildCouncilStatusPayload: legs[] + stall flags (DE-ROT F01)', () => {
     expect(byId['run1-s1-2'].role).toBe('seat');
     expect(byId['run1-s1-3'].role).toBe('critic');
 
-    // Point 3: the stale leg flags itself, and the run-level rollup surfaces it.
+    // Point 3: the stale leg flags itself (per-leg `stalled` is unchanged and
+    // accurate) — but leg1 is fresh and leg2 is a just-started running leg
+    // with no progress yet (not stalled), so NOT every still-running leg is
+    // stalled. Council review finding: the run-level rollup used to be a MAX
+    // over all legs (any one stalled leg set payload.stalled), which fired the
+    // workspace's "no leg activity — the run may be dead" banner even while
+    // another seat was visibly active — a false claim. The rollup now means
+    // what the banner says: stalled only when EVERY still-running leg is.
     expect(byId['run1-s1-3'].stalled).toBe(true);
     expect(byId['run1-s1-1'].stalled).toBe(false);
-    expect(doc.stalled).toBe(true);
-    expect(typeof doc.stalledForSeconds).toBe('number');
-    expect(doc.stalledForSeconds).toBeGreaterThanOrEqual(170);
-    // ⚠️ Fix-wave item 3: an upper bound too — stalledForSeconds must be a DURATION (the ~3
-    // minutes since staleTime above), not an absolute epoch-seconds timestamp (~1.7e9), which
-    // would also satisfy the lower-bound-only assertion above and hide a regression that
-    // assigned an absolute timestamp instead of a duration.
-    expect(doc.stalledForSeconds).toBeLessThan(3600);
+    expect(doc.stalled).toBeUndefined();
+    expect(doc.stalledForSeconds).toBeUndefined();
 
     // Point 4: no regression — legsTotal/legsComplete computed exactly as before.
     expect(doc.legsTotal).toBe(3);
     expect(doc.legsComplete).toBe(0);
+  });
+
+  // Council review finding (run-level stall overclaim): the counterpart to the
+  // test above — when EVERY still-running leg has gone quiet, the run-level
+  // flag must fire, and stalledForSeconds must be the SHORTEST idle duration
+  // among them (the honest "how long has the whole run been quiet" reading),
+  // not the longest (the old max-based bug's arithmetic, kept for the wrong
+  // reason).
+  test('every still-running leg stalled sets the run-level flag, with the SHORTEST idle duration', () => {
+    const runDir = seedRun();
+
+    // leg1: stalled ~150s.
+    const d1 = legDir(runDir, 'run1-s1-1');
+    fs.writeFileSync(path.join(d1, 'metadata.json'), JSON.stringify({
+      taskId: 'run1-s1-1', status: 'running', model: 'google/gemini-2.5', modelInput: 'gemini',
+    }));
+    fs.writeFileSync(path.join(d1, 'progress.json'), JSON.stringify({
+      stage: 'receiving', stageLabel: 'Generating response...',
+      updatedAt: new Date(Date.now() - 150 * 1000).toISOString(),
+    }));
+
+    // leg2: stalled ~300s (the longer of the two — must NOT be what
+    // stalledForSeconds reports).
+    const d2 = legDir(runDir, 'run1-s1-2');
+    fs.writeFileSync(path.join(d2, 'metadata.json'), JSON.stringify({
+      taskId: 'run1-s1-2', status: 'running', model: 'openai/gpt-5', modelInput: 'gpt',
+    }));
+    fs.writeFileSync(path.join(d2, 'progress.json'), JSON.stringify({
+      stage: 'receiving', stageLabel: 'Generating response...',
+      updatedAt: new Date(Date.now() - 300 * 1000).toISOString(),
+    }));
+
+    // leg3 (the critic): already complete — terminal, so it must not count
+    // toward "every still-running leg" either way, no matter how stale its
+    // own last progress looked.
+    const d3 = legDir(runDir, 'run1-s1-3');
+    fs.writeFileSync(path.join(d3, 'metadata.json'), JSON.stringify({
+      taskId: 'run1-s1-3', status: 'complete', model: 'deepseek/deepseek-v3', modelInput: 'deepseek',
+    }));
+    fs.writeFileSync(path.join(d3, 'progress.json'), JSON.stringify({
+      stage: 'complete', stageLabel: 'Complete',
+      updatedAt: new Date(Date.now() - 3600 * 1000).toISOString(),
+    }));
+
+    const { buildCouncilStatusPayload } = require('../../src/mcp-council-awareness');
+    const doc = buildCouncilStatusPayload(projectDir, 'run1');
+
+    expect(doc.stalled).toBe(true);
+    expect(doc.stalledForSeconds).toBeGreaterThanOrEqual(145);
+    expect(doc.stalledForSeconds).toBeLessThan(200); // NOT ~300s (leg2's longer idle time)
   });
 
   test('chair-stage legs get role "chair" regardless of which alias actually ran', () => {

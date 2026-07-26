@@ -41,7 +41,13 @@ function setup(depsOverride = {}) {
   const deps = {
     scanCouncilRuns: jest.fn(() => [{ runId: 'aaaa1111' }]),
     getRunDetail: jest.fn(() => ({ runId: 'aaaa1111', run: { runId: 'aaaa1111', chair: 'deepseek', status: 'complete', usage: { cost: { amount: 1, source: 'reported' } }, stages: [] }, tally: null, verdict: null, artifacts: {}, derived: {} })),
-    readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\runs\\r1' })),
+    // Inside the project on purpose (council fix C1): a real run dir always is
+    // (mcp-council-run.js:109 rejects an outDir outside the project at
+    // creation time), and the new containment fence in ipc-workspace.js now
+    // enforces that same invariant again at read time — a runDir outside
+    // 'C:\\proj' would (correctly) trip the fence and break the happy-path
+    // open-report tests below if this fixture didn't reflect that.
+    readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\proj\\council-aaaa1111' })),
     readRunArtifact: jest.fn(() => ({ text: 'artifact text' })),
     buildFoldText: jest.fn(() => 'FOLD-TEXT'),
     normalizeLive: jest.fn((doc) => ({ ok: true, runId: doc.taskId })),
@@ -52,6 +58,11 @@ function setup(depsOverride = {}) {
     stdoutWrite: jest.fn(async () => {}),
     openExternal: jest.fn(),
     existsSync: jest.fn(() => true),
+    // Identity pass-through by default — the fake paths above aren't real disk
+    // paths, so a real fs.realpathSync would ENOENT. Tests that need to prove
+    // the containment fence override this explicitly (see the C1 describe
+    // block below).
+    realpathSync: jest.fn((p) => p),
     ...depsOverride,
   };
   registerWorkspaceHandlers(() => win, { project: 'C:\\proj', nonce: 'cafef00dcafef00d', ipc, gate, deps });
@@ -138,6 +149,34 @@ describe('registerWorkspaceHandlers', () => {
   test('open-report survives a null pointer (shipped readPointer contract)', async () => {
     const { ipc, goodEvent, deps } = setup({ readPointer: jest.fn(() => null) });
     const res = await ipc.invoke('workspace:open-report', goodEvent, 'nope99');
+    expect(res.ok).toBe(false);
+    expect(deps.openExternal).not.toHaveBeenCalled();
+  });
+
+  // Council review C1 (MAJOR, unanimous): workspace:open-report was the only
+  // filesystem-reaching channel with no containment fence — ptr.runDir is
+  // disk-derived and never validated beyond truthiness
+  // (src/council/run-state.js:133-139). A tampered/stale pointer whose runDir
+  // has drifted outside the project must fail closed rather than hand
+  // openExternal (a shell verb) whatever it finds there.
+  test('open-report refuses when the pointer\'s runDir resolves outside the project', async () => {
+    const { ipc, goodEvent, deps } = setup({
+      readPointer: jest.fn(() => ({ runId: 'aaaa1111', runDir: 'C:\\totally\\unrelated\\external-dir' })),
+    });
+    const res = await ipc.invoke('workspace:open-report', goodEvent, 'aaaa1111');
+    expect(res.ok).toBe(false);
+    expect(deps.openExternal).not.toHaveBeenCalled();
+  });
+
+  // Mirrors artifact-guard.js's fence 2 exactly (readRunArtifact's own realpath
+  // containment test): a report.html that is itself a symlink resolving
+  // outside the run dir must not be opened, even though runDir itself is
+  // legitimate.
+  test('open-report refuses when report.html is a symlink escaping the run dir', async () => {
+    const { ipc, goodEvent, deps } = setup({
+      realpathSync: jest.fn((p) => (String(p).endsWith('report.html') ? 'C:\\somewhere\\else\\report.html' : p)),
+    });
+    const res = await ipc.invoke('workspace:open-report', goodEvent, 'aaaa1111');
     expect(res.ok).toBe(false);
     expect(deps.openExternal).not.toHaveBeenCalled();
   });

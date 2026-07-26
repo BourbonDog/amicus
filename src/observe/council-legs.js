@@ -82,22 +82,34 @@ function buildLegRow(project, legId, runCtx) {
     modelInput, role: legRole({ ...runCtx, modelInput }),
   };
   let stalledMs = null;
+  let p = null;
   try {
-    const p = readProgress(legDir);
+    p = readProgress(legDir);
     row.messages = p.messages;
     row.stage = p.stage;
     row.latestPreview = p.latestPreview;
     row.lastActivityAt = p.lastActivityAt;
     row.stalled = row.status === 'running' && isStalled(p.lastActivityMs);
     if (row.stalled) { stalledMs = p.lastActivityMs; }
-    // N3: enrichLegUsage returns the bare leg (no `usage` key) when progress
-    // carries no usage yet — merge only when present so we never put an
-    // undefined key on the row.
-    const enriched = enrichLegUsage(row, p.usage);
-    if (enriched.usage) { row.usage = enriched.usage; }
-  } catch { /* no progress.json yet, OR enrichLegUsage threw pricing it (e.g. an unknown
-    model) — both land here indistinguishably and leave base fields only; mirrors the
-    pre-existing wave branch's same all-or-nothing catch (deliberate, not a gap to close) */ }
+  } catch { /* no progress.json yet — a just-started leg; base fields only. */ }
+
+  // council review C3: this is a SEPARATE try from readProgress's above, on
+  // purpose. The old code wrapped both in one try, so a pricing-resolution
+  // failure (an unknown model, a corrupt catalog row) landed in the exact same
+  // catch as "progress.json doesn't exist yet" — an operator (or the workspace's
+  // cost-by-seat panel) could not tell "pricing lookup failed" from "hasn't
+  // billed yet"; both rendered as a permanently blank cost cell. `usageError`
+  // makes the failure mode truthful and distinguishable, additive to the row
+  // (N3's undefined-key discipline still holds: only set usage/usageError when
+  // there is something to say).
+  if (p && p.usage) {
+    try {
+      const enriched = enrichLegUsage(row, p.usage);
+      if (enriched.usage) { row.usage = enriched.usage; }
+    } catch (err) {
+      row.usageError = err.message;
+    }
+  }
   return { row, stalledMs };
 }
 
@@ -105,8 +117,26 @@ function buildLegRow(project, legId, runCtx) {
  * Rows for every leg id, plus a run-level stall rollup. A council run fans
  * legs across several parallel sub-waves at once (seat wave, chair chain,
  * lens/critic solos), so — unlike the single-leg wave branch, which only
- * ever flags its own row — a run-level banner needs one worst-case summary
- * rather than making the caller inspect every row.
+ * ever flags its own row — a run-level banner needs one summary rather than
+ * making the caller inspect every row.
+ *
+ * The rollup means exactly what the workspace's dead-run banner claims ("no
+ * leg activity for Xm — the run may be dead"): the run is stalled only when
+ * EVERY still-running leg is stalled. A single stalled leg alongside another
+ * leg that is actively producing (message/cost climbing) must NOT set the
+ * flag — that was the old (max-based) bug, observed live: `glm` sat stalled
+ * for two minutes while `qwen-coder` was visibly working, and the banner
+ * fired anyway. A leg that has already finished (any non-'running' status)
+ * is terminal — it is excluded from the "every leg" population entirely: it
+ * can neither keep the run "healthy" by counting as active, nor drag it
+ * "dead" by counting as stalled. Per-leg `row.stalled` is untouched by this —
+ * it stays the accurate, per-row signal it already was.
+ *
+ * When the run genuinely is stalled, `stalledForSeconds` is the SHORTEST
+ * idle duration among the stalled running legs, not the longest: that is the
+ * honest answer to "how long has the whole run been quiet" — something was
+ * still happening as recently as the most-recently-active (but still
+ * over-threshold) leg's last activity.
  * @param {string} project
  * @param {string[]} legIds
  * @param {{bench: string[], critic: string|null, lenses: string[]|null, stageName: string}} runCtx
@@ -116,14 +146,21 @@ function buildLegRow(project, legId, runCtx) {
  */
 function buildLegRows(project, legIds, runCtx) {
   const rows = [];
-  let worstMs = null;
+  let runningCount = 0;
+  const stalledRunningMs = [];
   for (const legId of legIds) {
     const { row, stalledMs } = buildLegRow(project, legId, runCtx);
     rows.push(row);
-    if (stalledMs !== null && (worstMs === null || stalledMs > worstMs)) { worstMs = stalledMs; }
+    if (row.status === 'running') {
+      runningCount += 1;
+      if (stalledMs !== null) { stalledRunningMs.push(stalledMs); }
+    }
   }
   const out = { rows };
-  if (worstMs !== null) { out.stalled = true; out.stalledForSeconds = Math.floor(worstMs / 1000); }
+  if (runningCount > 0 && stalledRunningMs.length === runningCount) {
+    out.stalled = true;
+    out.stalledForSeconds = Math.floor(Math.min(...stalledRunningMs) / 1000);
+  }
   return out;
 }
 

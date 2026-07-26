@@ -27,6 +27,23 @@ const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
 /**
+ * True when `targetRealPath` is exactly `dirRealPath` or a proper descendant of
+ * it. Both arguments MUST already be resolved through realpathSync — this is a
+ * pure string-prefix check, the shared "fence 2" primitive: a realpath-based
+ * containment test that defeats symlink escapes (an artifact/report resolving
+ * outside the directory it is supposed to live under). Exported so callers
+ * outside this module (e.g. electron/ipc-workspace.js's workspace:open-report
+ * handler, council review finding C1) reuse the exact same check rather than
+ * re-implementing it.
+ * @param {string} dirRealPath
+ * @param {string} targetRealPath
+ * @returns {boolean}
+ */
+function isRealpathContained(dirRealPath, targetRealPath) {
+  return targetRealPath === dirRealPath || String(targetRealPath).startsWith(dirRealPath + path.sep);
+}
+
+/**
  * Trim a buffer to at most `max` bytes without splitting a multi-byte UTF-8 character.
  * A plain `buf.subarray(0, max)` can land mid-sequence — the tail bytes then decode as
  * U+FFFD replacement characters, which can even push the encoded string back over `max`.
@@ -89,7 +106,7 @@ function readRunArtifact(project, runId, name, deps = {}) {
   let realTarget;
   try { realTarget = realpathSync(path.join(ptr.runDir, name)); }
   catch { return { error: `not written yet: ${name}` }; }
-  if (realTarget !== realDir && !String(realTarget).startsWith(realDir + path.sep)) {
+  if (!isRealpathContained(realDir, realTarget)) {
     return { error: 'artifact escapes run directory' };
   }
 
@@ -102,4 +119,7 @@ function readRunArtifact(project, runId, name, deps = {}) {
   return { text: buf.toString('utf-8') };
 }
 
-module.exports = { artifactAllowlist, readRunArtifact, FIXED_ARTIFACTS, DEBATE_ARTIFACTS, MAX_ARTIFACT_BYTES };
+module.exports = {
+  artifactAllowlist, readRunArtifact, isRealpathContained,
+  FIXED_ARTIFACTS, DEBATE_ARTIFACTS, MAX_ARTIFACT_BYTES,
+};
