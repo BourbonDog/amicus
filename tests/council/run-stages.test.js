@@ -111,6 +111,59 @@ describe('runStage1', () => {
     expect(reviews.find(r => r.model === 'gpt').conformance).toBe('repaired');
   });
 
+  test('LC-6: the repair solo carries the review it is repairing', async () => {
+    // The defect: the repair prompt shipped the validation ERRORS without the
+    // REVIEW they were errors about, so three of five paid councils burned a
+    // seat — two models refused ("I don't have a previous review to correct")
+    // and one fabricated a finding to satisfy the schema.
+    const solos = [];
+    const badReview = 'Prose about the material, but no fenced block at all.';
+    const ctx = makeCtx({
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, m === 'gpt' ? badReview : review(m)))),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', review('gpt'))]); },
+    });
+    await runStage1(ctx);
+    expect(solos).toHaveLength(1);
+    expect(solos[0].prompt).toContain(badReview);
+    expect(solos[0].prompt).toContain('YOUR PREVIOUS REVIEW');
+  });
+
+  test('LC-6: the SECOND repair carries the first repair output, which is what failed', async () => {
+    // Errors and artifact must describe the same thing. On attempt 2 the errors
+    // come from validating attempt 1's output, so attempt 1's output — not the
+    // original review — is the text being repaired.
+    const solos = [];
+    const badReview = 'original prose, no json';
+    const firstRepair = 'first repair attempt, still no json';
+    const ctx = makeCtx({
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, m === 'gpt' ? badReview : review(m)))),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([mkLeg('gpt', solos.length === 1 ? firstRepair : 'second repair, still no json')]);
+      },
+    });
+    await runStage1(ctx);
+    expect(solos).toHaveLength(2);
+    expect(solos[0].prompt).toContain(badReview);
+    expect(solos[1].prompt).toContain(firstRepair);
+    expect(solos[1].prompt).not.toContain(badReview);
+  });
+
+  test('LC-6: a repair whose leg came back empty still names the text that failed', async () => {
+    // A dead/empty repair leg validates as '' — there is no newer artifact, so
+    // the next attempt must keep pointing at the last text we actually have
+    // rather than opening an empty "previous review" block.
+    const solos = [];
+    const badReview = 'original prose, no json';
+    const ctx = makeCtx({
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, m === 'gpt' ? badReview : review(m)))),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', '')]); },
+    });
+    await runStage1(ctx);
+    expect(solos).toHaveLength(2);
+    expect(solos[1].prompt).toContain(badReview);
+  });
+
   test('still malformed after 2 repairs → unstructured, findings [], review KEPT', async () => {
     let soloCount = 0;
     const ctx = makeCtx({

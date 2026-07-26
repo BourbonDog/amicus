@@ -119,13 +119,25 @@ async function runStage1(ctx) {
     let conformance = 'clean';
     let res = validateFindings(m.text);
     let attempts = 0;
+    // ⚠️ LC-6: the text the repair prompt must carry. A repair solo is a FRESH
+    // session — it has no memory of the review turn — so shipping only
+    // res.errors asked the model to correct something it had never seen. Two
+    // paid models refused ("I don't have a previous review to correct") and one
+    // fabricated a finding, which reached tally.json and the chair's verdict.
+    // Tracked rather than pinned to m.text so `repairing` and `res.errors`
+    // always describe the SAME artifact: on attempt 2 the errors came from
+    // validating attempt 1's output, so attempt 1's output is what is being
+    // repaired. An empty/dead repair leg leaves it on the last real text
+    // (there is no newer artifact to name).
+    let repairing = m.text;
     while (!res.ok && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
       const waveId = `${o.runId}-p${repairSeq}`;
       runState.appendStageWave(o.runDir, 'stage1', waveId);
       const solo = await ctx.launchers.launchSolo({
-        model: m.modelInput, prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors }),
+        model: m.modelInput,
+        prompt: briefings.buildFindingsRepairPrompt({ errors: res.errors, review: repairing }),
         project: o.runDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
         councilRunId: o.runId, councilName: o.councilName,
@@ -133,7 +145,9 @@ async function runStage1(ctx) {
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, reviews, deadLegs }; }
-      res = validateFindings((solo.leg && solo.leg.summary) || '');
+      const repaired = (solo.leg && solo.leg.summary) || '';
+      if (repaired.trim()) { repairing = repaired; }
+      res = validateFindings(repaired);
       if (res.ok) { conformance = 'repaired'; }
     }
     if (!res.ok) { conformance = 'unstructured'; }

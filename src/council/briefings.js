@@ -121,13 +121,46 @@ function buildLensBriefing({ lens, briefing, date }) {
  * repair loop). References ONLY the json-shape fragment — never the
  * "prose review THEN json" framing — so a headless model isn't handed license
  * to write a whole new prose review on a tight repair turn.
+ *
+ * ⚠️ LC-6. This used to carry the validation ERRORS without the REVIEW they
+ * were errors about, and a repair solo is a FRESH session with no memory of
+ * the review turn. Three of five paid councils burned a seat on it:
+ *   - wsgate02 `qwen`  — refused twice: "I don't have a previous review to correct"
+ *   - wsgate04 `glm`   — refused twice: "the previous review's content was
+ *                        excluded by the caller… I will not fabricate findings"
+ *   - costgate01 `grok` — COMPLIED, by inventing a self-referential finding
+ *                        about its own empty output, which then entered
+ *                        tally.json, the street-cred table and the chair
+ *                        synthesis as C1 and reached a human's decision.
+ * Honest models lose the seat (a 4-model bench silently adjudicating on 3,
+ * still paying for the fourth); compliant ones poison the record.
+ *
+ * `review` is the text that ACTUALLY failed — the original review on the first
+ * attempt, the previous repair's output on the second — so the errors and the
+ * artifact they describe are always the same thing. It is embedded verbatim and
+ * uncapped: the largest real case was 35 KB, and a silent truncation would
+ * recreate this defect in a subtler form (repairing a review the model can only
+ * half see).
+ * @param {{errors?: Array<{code: string, detail: string}>, review?: string}} args
  */
-function buildFindingsRepairPrompt({ errors }) {
+function buildFindingsRepairPrompt({ errors, review }) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
+  const text = typeof review === 'string' ? review.trim() : '';
+  // The absent case is stated, never papered over with an empty block: a model
+  // asked to repair nothing must be told to report nothing rather than left to
+  // guess, which is precisely what produced grok's invented finding.
+  const prior = text
+    ? ['--- YOUR PREVIOUS REVIEW (verbatim — this is the text to correct) ---',
+      text,
+      '--- END OF YOUR PREVIOUS REVIEW ---'].join('\n')
+    : 'Your previous response was empty — there is no prior review text to correct. ' +
+      'Do not invent findings to satisfy the schema: emit an empty "findings" array ' +
+      'and say so in "overall".';
   return [
     'Do NOT use any tools or read any files; everything is in this message; begin ' +
     'immediately with the JSON block.',
-    'Your previous review\'s trailing findings JSON failed validation with these errors:',
+    prior,
+    'That review\'s trailing findings JSON failed validation with these errors:',
     lines,
     'Re-emit ONLY the corrected findings JSON block (the same findings, fixed — do not ' +
     'add or remove findings), as a single fenced ```json block:',
