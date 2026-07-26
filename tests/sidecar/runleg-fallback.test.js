@@ -148,6 +148,64 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     expect(waveEvents.some(e => e.event === 'leg-terminal' && e.legId === 'w9-1')).toBe(true);
   });
 
+  // v4.4 B4 — the two leg-level truth signals runHeadless now returns must reach
+  // the leg's usage block and metadata.json, or they die with the process.
+  test('a leg that made a SUBAGENT call is marked subtreeUnknown on its usage block', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w8'), { recursive: true });
+    const { runHeadless } = require('../../src/headless');
+    runHeadless.mockImplementationOnce(async () => ({
+      summary: 'ok', completed: true, subagentToolCalls: 1,
+      usage: { tokens: { input: 966589, output: 7228 }, costReported: 0.11210719 },
+    }));
+
+    const doc = await runSingleAttempt({
+      leg: { model: 'openrouter/qwen/qwen3-coder-next', modelInput: 'qwen-coder' },
+      legId: 'w8-1', waveId: 'w8', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+
+    // The leg's OWN cost is a real reported figure — what is unknown is its subtree.
+    expect(doc.usage.cost.source).toBe('reported');
+    expect(doc.usage.cost.amount).toBeCloseTo(0.11210719, 10);
+    expect(doc.usage.subtreeUnknown).toBe(true);
+    const meta = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, 'w8-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.usage.subtreeUnknown).toBe(true);
+  });
+
+  test('toolSettleTimedOut travels onto the leg metadata; a clean leg carries neither flag', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    fs.mkdirSync(getSessionDir(project, 'w7'), { recursive: true });
+    const { runHeadless } = require('../../src/headless');
+    runHeadless.mockImplementationOnce(async () => ({
+      summary: 'partial', completed: true, toolSettleTimedOut: true,
+      unsettledToolCalls: [{ id: 'p1', name: 'task', firstSeenAt: '2026-07-26T04:35:02.492Z' }],
+      usage: { tokens: { input: 10, output: 5 }, costReported: 0.001 },
+    }));
+    await runSingleAttempt({
+      leg: { model: 'openrouter/a/b', modelInput: 'a' }, legId: 'w7-1', waveId: 'w7', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, 'w7-1'), 'metadata.json'), 'utf-8'));
+    expect(meta.toolSettleTimedOut).toBe(true);
+    expect(meta.status).toBe('complete'); // completed, not failed — fail loud, not closed
+
+    // …and the default mocked result (no flags) leaves both fields off entirely.
+    fs.mkdirSync(getSessionDir(project, 'w6'), { recursive: true });
+    await runSingleAttempt({
+      leg: { model: 'openrouter/a/b', modelInput: 'a' }, legId: 'w6-1', waveId: 'w6', project,
+      systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+      client: {}, server: {}, quiet: true,
+    });
+    const clean = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, 'w6-1'), 'metadata.json'), 'utf-8'));
+    expect(clean.toolSettleTimedOut).toBeUndefined();
+    expect(clean.usage.subtreeUnknown).toBeUndefined();
+  });
+
   test('a thrown setup still resolves to an error run doc (never rejects)', async () => {
     const project = tmp();
     const { runHeadless } = require('../../src/headless');

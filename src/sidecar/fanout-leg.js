@@ -132,7 +132,15 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
   const status = legStatusFromResult(result);
   const summary = result.summary || null;
   const { resolveUsage } = require('../utils/pricing');
-  const usage = result && result.usage ? resolveUsage({ model: leg.model, usageTotals: result.usage }) : null;
+  // v4.4 Task 2 (B4): a leg that made a SUBAGENT (`task`) call has spend in a
+  // child OpenCode session that is billed separately, is NOT rolled into the
+  // parent session's cost, and that amicus never enumerates. Its own cost may be
+  // perfectly `reported` — its SUBTREE is what we cannot claim to know, so the
+  // run total that includes it must not claim to be exact.
+  const subtreeUnknown = !!(result && result.subagentToolCalls > 0);
+  const usage = result && result.usage
+    ? resolveUsage({ model: leg.model, usageTotals: result.usage, subtreeUnknown })
+    : null;
   // If setup threw before the session dir existed, there is nothing on disk to
   // finalize — still resolve to an error run document so the wave aggregates.
   const legPatch = {
@@ -140,6 +148,10 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     reason: result.error || undefined,
     completedAt: new Date().toISOString(),
     usage: usage || undefined,
+    // v4.4 B4 part 1: the leg completed with tool calls still live, so its
+    // OpenCode session may have kept working (and billing) afterwards. Travels
+    // with the leg so it is readable long after the run's stderr is gone.
+    toolSettleTimedOut: (result && result.toolSettleTimedOut) || undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {

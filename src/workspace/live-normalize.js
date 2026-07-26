@@ -72,11 +72,26 @@ function liveUnknownLegs(doc) {
   return (c && typeof c.unpricedLegs === 'number') ? c.unpricedLegs : 0;
 }
 
+/**
+ * How many legs in this rollup have an unattributed subagent SUBTREE (v4.4
+ * Task 2) — their own cost is known, but they spawned a child OpenCode session
+ * that is billed separately and never enumerated. Distinct from an unpriced leg,
+ * and the reason a fully-priced total can still be short.
+ */
+function liveSubtreeUnknownLegs(doc) {
+  const c = doc.usage && doc.usage.cost ? doc.usage.cost : null;
+  return (c && typeof c.subtreeUnknownLegs === 'number') ? c.subtreeUnknownLegs : 0;
+}
+
 function liveCostDisplay(doc) {
   if (!doc.usage || !doc.usage.cost) { return null; }
   const base = formatCost(doc.usage.cost);
+  const parts = [];
   const unknown = liveUnknownLegs(doc);
-  return unknown > 0 ? `${base} + ${unknown} unknown` : base;
+  const subtree = liveSubtreeUnknownLegs(doc);
+  if (unknown > 0) { parts.push(`${unknown} unknown`); }
+  if (subtree > 0) { parts.push(`${subtree} subagent subtree`); }
+  return parts.length > 0 ? `${base} + ${parts.join(' + ')}` : base;
 }
 
 /**
@@ -120,7 +135,8 @@ function normalizeLive(doc) {
     costDisplay: liveCostDisplay(doc),
     costAmount: doc.usage && doc.usage.cost && typeof doc.usage.cost.amount === 'number' ? doc.usage.cost.amount : null,
     costUnknownLegs: liveUnknownLegs(doc),
-    costExact: liveUnknownLegs(doc) === 0,
+    costSubtreeUnknownLegs: liveSubtreeUnknownLegs(doc),
+    costExact: liveUnknownLegs(doc) === 0 && liveSubtreeUnknownLegs(doc) === 0,
     flags: {
       // ⚠️ DE-ROT (F03): `crashed` exists nowhere on the composed doc — Task 0.5 deliberately did
       // not add one (out of scope; see task-0.5-report.md). A crashed council instead flips

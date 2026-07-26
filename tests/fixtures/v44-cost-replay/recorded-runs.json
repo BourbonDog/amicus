@@ -1,5 +1,5 @@
 {
-  "note": "Extracted READ-ONLY from four real paid council runs (council-wsgate01..04) plus the OpenCode session-DB oracle in .superpowers/sdd/v44/zero-usage-diagnosis.md §0/§5. Every `recorded` block is what the PRE-FIX pipeline produced; `tokens`/`costReported` are the raw inputs the fix is replayed over.",
+  "note": "Extracted READ-ONLY from four real paid council runs (council-wsgate01..04) plus the OpenCode session-DB oracle in .superpowers/sdd/v44/zero-usage-diagnosis.md §0/§5. Every `recorded` block is what the PRE-FIX pipeline produced; `tokens`/`costReported` are the raw inputs the fix is replayed over. | v4.4 Task 2: subagentLegs = legs whose recorded tool parts include a TASK (subagent) call, resolved via part id against the OpenCode DB. Exactly 2 across all 37 wsgate sessions, in 1:1 correspondence with the 2 child sessions.",
   "pricing": {
     "openrouter/z-ai/glm-5.2": {
       "prompt": "0.0000007168",
@@ -191,6 +191,9 @@
           "progressStage": "receiving",
           "progressTokenTotal": 0
         }
+      ],
+      "subagentLegs": [
+        "wsgate01-s1-2"
       ]
     },
     "wsgate02": {
@@ -431,6 +434,9 @@
           "progressStage": "receiving",
           "progressTokenTotal": 0
         }
+      ],
+      "subagentLegs": [
+        "wsgate02-s1-3"
       ]
     },
     "wsgate03": {
@@ -564,7 +570,8 @@
           "progressStage": "receiving",
           "progressTokenTotal": 0
         }
-      ]
+      ],
+      "subagentLegs": []
     },
     "wsgate04": {
       "runId": "wsgate04",
@@ -805,7 +812,8 @@
           "progressStage": "receiving",
           "progressTokenTotal": 0
         }
-      ]
+      ],
+      "subagentLegs": []
     }
   }
 }

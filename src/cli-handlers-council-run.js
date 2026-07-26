@@ -91,10 +91,19 @@ function renderRunHuman(run) {
   const unknownLegs = u && typeof u.unknownLegs === 'number'
     ? u.unknownLegs
     : (u && u.cost && u.cost.unpricedLegs) || 0;
-  if (u && u.cost && (typeof u.cost.amount === 'number' || unknownLegs > 0)) {
+  // v4.4 Task 2: a fully-priced run can still be short. `council-wsgate01`
+  // printed an unqualified $0.2821 for a run that really spent $0.3036 — every
+  // leg `reported`, and 100% of the gap one unattributed `explore` child session.
+  const subtreeLegs = u && typeof u.subtreeUnknownLegs === 'number'
+    ? u.subtreeUnknownLegs
+    : (u && u.cost && u.cost.subtreeUnknownLegs) || 0;
+  if (u && u.cost && (typeof u.cost.amount === 'number' || unknownLegs > 0 || subtreeLegs > 0)) {
     const known = typeof u.cost.amount === 'number' ? `$${u.cost.amount.toFixed(4)}` : '$0.0000';
-    const tail = unknownLegs > 0
-      ? ` + ${unknownLegs} leg(s) unknown — real spend is at least this much`
+    const gaps = [];
+    if (unknownLegs > 0) { gaps.push(`${unknownLegs} leg(s) unknown`); }
+    if (subtreeLegs > 0) { gaps.push(`${subtreeLegs} leg(s) with unattributed subagent child-session spend`); }
+    const tail = gaps.length > 0
+      ? ` + ${gaps.join(' + ')} — real spend is at least this much`
       : '';
     lines.push(`  cost:  ${known} (${u.cost.source})${tail}`);
   }
@@ -243,4 +252,4 @@ async function handleCouncilRun(args) {
   return exitCode;
 }
 
-module.exports = { handleCouncilRun, CHAIR_DEFAULT };
+module.exports = { handleCouncilRun, renderRunHuman, CHAIR_DEFAULT };

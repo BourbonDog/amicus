@@ -17,6 +17,9 @@
 // bump in the headless idle detector.
 const MAX_TOOL_CALLS = 2000;
 
+const toolPart = require('./tool-part');
+const { isToolPart, toolPartName, toolPartInput, toolPartStatus, isToolPartSettled } = toolPart;
+
 /** Fresh cursor for a session's mirror. */
 function createMirrorState() {
   return {
@@ -24,26 +27,14 @@ function createMirrorState() {
     toolCalls: [],              // [{id,name,input}] — capped at MAX_TOOL_CALLS (most-recent-N)
     seenToolCallIds: new Set(), // stable dedup identity for tool calls (survives the cap)
     seenToolResultIds: new Set(),
-    pendingToolCalls: new Map(), // id -> {id,name,firstSeenAt} — tool_use with no tool_result yet (B53)
+    settledToolCallIds: new Set(), // ids that reached a TERMINAL state.status (v4.4 B4 part 1)
+    pendingToolCalls: new Map(), // id -> {id,name,firstSeenAt} — tool call not yet TERMINAL (B53/B4)
     receivingReported: false,
     output: '',                 // accumulated assistant text
     seenReasoningParts: new Map(), // partId -> last captured reasoning length
     reasoningOutput: '',        // accumulated reasoning text (promoted to output only if no text part arrives)
     usageByMsg: new Map(),      // msgId -> {tokens, cost}
   };
-}
-
-/**
- * Unresolved tool calls: tool_use ids seen with no matching tool_result yet
- * (matched by `part.tool_use_id`). Used by the headless poll loop's stall
- * detector (B53) to fail fast on a wedged tool call instead of burning the
- * full timeout. Returns a fresh array each call; `state.pendingToolCalls`
- * is the live source of truth.
- * @param {object} state from createMirrorState()
- * @returns {Array<{id:string,name:string,firstSeenAt:string}>}
- */
-function getPendingToolCalls(state) {
-  return Array.from(state.pendingToolCalls.values());
 }
 
 /**
@@ -157,29 +148,49 @@ function mirrorMessages(messages, state, opts = {}) {
             progressUpdates.push({ stage: 'receiving', extra: { messagesReceived: 1 } });
           }
         }
-      } else if ((part.type === 'tool_use' || part.type === 'tool') && !state.seenToolCallIds.has(part.id)) {
-        const toolCall = { id: part.id, name: part.name, input: part.input };
-        state.seenToolCallIds.add(part.id);
-        state.toolCalls.push(toolCall);
-        // Bound growth: keep the most recent N tool-call payloads (BL-4). Dedup is the
-        // Set above, so dropping the oldest here never causes a re-append.
-        if (state.toolCalls.length > MAX_TOOL_CALLS) { state.toolCalls.shift(); }
-        appendLines.push({ role: 'assistant', type: 'tool_use', toolCall, timestamp: now() });
+      } else if (isToolPart(part)) {
+        // v4.4 B4 part 1: this branch runs on EVERY poll, not only first sight,
+        // because a tool call's `state.status` transitions in place — that
+        // transition is the only signal OpenCode gives that the call finished
+        // (there is no tool_result part). Appending stays first-sight-only.
+        const toolName = toolPartName(part);
+        const firstSight = !state.seenToolCallIds.has(part.id);
+        if (firstSight) {
+          const toolCall = { id: part.id, name: toolName, input: toolPartInput(part) };
+          state.seenToolCallIds.add(part.id);
+          state.toolCalls.push(toolCall);
+          // Bound growth: keep the most recent N tool-call payloads (BL-4). Dedup is the
+          // Set above, so dropping the oldest here never causes a re-append.
+          if (state.toolCalls.length > MAX_TOOL_CALLS) { state.toolCalls.shift(); }
+          appendLines.push({ role: 'assistant', type: 'tool_use', toolCall, timestamp: now() });
 
-        // Track as pending until a matching tool_result arrives (B53 stall detector).
-        // firstSeenAt is captured once here — never touched again for this id.
-        state.pendingToolCalls.set(part.id, { id: part.id, name: part.name, firstSeenAt: now() });
-
-        // Update progress on tool_use detection
-        progressUpdates.push({
-          stage: 'receiving',
-          extra: {
-            messagesReceived: state.toolCalls.length,
-            latestTool: part.name || undefined,
-            stageLabel: part.name ? `Calling tool: ${part.name}` : 'Executing tool call...',
-          },
-        });
-        state.receivingReported = true;
+          // Update progress on tool-call detection
+          progressUpdates.push({
+            stage: 'receiving',
+            extra: {
+              messagesReceived: state.toolCalls.length,
+              latestTool: toolName || undefined,
+              stageLabel: toolName ? `Calling tool: ${toolName}` : 'Executing tool call...',
+            },
+          });
+          state.receivingReported = true;
+        }
+        // Pending until the status is positively observed TERMINAL. firstSeenAt
+        // is captured once — never bumped while the call stays non-terminal, so
+        // B53's "pending for Ns" reason string stays honest.
+        if (isToolPartSettled(part)) {
+          state.pendingToolCalls.delete(part.id);
+          state.settledToolCallIds.add(part.id);
+        } else if (!state.settledToolCallIds.has(part.id)) {
+          const prior = state.pendingToolCalls.get(part.id);
+          state.pendingToolCalls.set(part.id, {
+            id: part.id, name: toolName,
+            // undefined = legacy shape, status unknown. Kept explicitly so
+            // getLiveToolCalls can tell "still running" from "no idea".
+            status: toolPartStatus(part),
+            firstSeenAt: prior ? prior.firstSeenAt : now(),
+          });
+        }
       } else if (part.type === 'tool_result') {
         // Dedup: append only on first sight (fixes latent double-log bug in headless poll loop)
         if (!state.seenToolResultIds.has(partId)) {
@@ -257,5 +268,9 @@ function logMessage(conversationPath, message) {
   fs.appendFileSync(conversationPath, JSON.stringify(message) + '\n', { mode: 0o600 });
 }
 
-module.exports = { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls,
-  mirrorUsageOnly, allAssistantUsagePresent };
+module.exports = { createMirrorState, mirrorMessages, logMessage,
+  mirrorUsageOnly, allAssistantUsagePresent,
+  // Re-exported from ./tool-part so callers have ONE import surface for the
+  // mirror's tool-call model (that module exists separately to keep this file
+  // under the 300-line size gate).
+  ...toolPart };

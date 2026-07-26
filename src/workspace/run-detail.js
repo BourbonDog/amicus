@@ -81,15 +81,30 @@ function costPanel(run, tally) {
   const unknownLegs = run.usage && typeof run.usage.unknownLegs === 'number'
     ? run.usage.unknownLegs
     : ((cost && cost.unpricedLegs) || 0);
+  // v4.4 Task 2: a leg whose own cost is `reported` can STILL leave the run total
+  // short — a subagent's child session is billed separately and never enumerated
+  // (`council-wsgate01`: 7/7 legs reported, $0.0215 short, 100% one child session).
+  const subtreeUnknownLegs = run.usage && typeof run.usage.subtreeUnknownLegs === 'number'
+    ? run.usage.subtreeUnknownLegs
+    : ((cost && cost.subtreeUnknownLegs) || 0);
   const total = formatCost(cost);
+  const suffixes = [];
+  if (unknownLegs > 0) { suffixes.push(`${unknownLegs} unknown`); }
+  if (subtreeUnknownLegs > 0) { suffixes.push(`${subtreeUnknownLegs} subagent subtree`); }
   return {
     rows,
-    totalDisplay: unknownLegs > 0 ? `${total} + ${unknownLegs} unknown` : total,
+    totalDisplay: suffixes.length > 0 ? `${total} + ${suffixes.join(' + ')}` : total,
     costAmount: cost && typeof cost.amount === 'number' ? cost.amount : null,
     // The gauge's guard (workspace-render.js renderGauge): false means "the
     // percentage below is a LOWER BOUND", so it must render indeterminate.
-    costExact: unknownLegs === 0,
+    // PREFER the producer's own flag when run.json carries it — recomputing it
+    // from `unknownLegs` alone would silently re-assert exactness for a run whose
+    // writer already determined the total is incomplete for a different reason.
+    costExact: run.usage && typeof run.usage.costExact === 'boolean'
+      ? run.usage.costExact
+      : (unknownLegs === 0 && subtreeUnknownLegs === 0),
     unknownLegs,
+    subtreeUnknownLegs,
     maxCost: run.options && typeof run.options.maxCost === 'number' ? run.options.maxCost : null,
   };
 }
@@ -205,4 +220,4 @@ function getRunDetail(project, runId) {
   return { runId: ptr.runId, runDir, run, tally, verdict, artifacts, derived };
 }
 
-module.exports = { getRunDetail, TERMINAL_STATUSES, STAGE_LABELS };
+module.exports = { getRunDetail, costPanel, TERMINAL_STATUSES, STAGE_LABELS };

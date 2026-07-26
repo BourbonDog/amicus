@@ -53,6 +53,7 @@ function createBudget({ allLegs, maxCost, write }) {
     return {
       known: typeof c.amount === 'number' ? c.amount : 0,
       unknownLegs: c.unpricedLegs || 0,
+      subtreeUnknownLegs: c.subtreeUnknownLegs || 0,
       cost: c,
     };
   };
@@ -67,15 +68,32 @@ function createBudget({ allLegs, maxCost, write }) {
   const remainingBudget = () => (hasCeiling ? Math.max(maxCost - spent(), 0) : null);
 
   let noticed = false;
-  /** One prominent, un-missable notice per run when any leg is unpriced. */
+  /**
+   * One prominent, un-missable notice per run when the total is incomplete — for
+   * EITHER reason, which are different statements and are worded differently:
+   *   - `unknownLegs`        — the leg reported no usage at all.
+   *   - `subtreeUnknownLegs` — the leg's own cost is known, but it spawned a
+   *     subagent whose CHILD session is billed separately and never enumerated.
+   *     This is the one that made `council-wsgate01` report `costExact: true`
+   *     while $0.0215 short — 100% of that gap was one `explore` child session.
+   */
   const noticeUnknownSpend = () => {
     const s = spendState();
-    if (s.unknownLegs === 0 || noticed) { return; }
+    if ((s.unknownLegs === 0 && s.subtreeUnknownLegs === 0) || noticed) { return; }
     noticed = true;
     const ceiling = hasCeiling ? ` or the $${maxCost} --max-cost ceiling` : '';
-    emit(`Notice: ${s.unknownLegs} council leg(s) reported NO usage — their cost is UNKNOWN and is NOT `
-      + `included in the $${s.known.toFixed(4)} total${ceiling}. Real spend is HIGHER than reported. `
-      + 'See run.json usage.unknownLegs, or `amicus spend --json` (sourceMix.unknown).\n');
+    const parts = [];
+    if (s.unknownLegs > 0) {
+      parts.push(`${s.unknownLegs} council leg(s) reported NO usage — their cost is UNKNOWN`);
+    }
+    if (s.subtreeUnknownLegs > 0) {
+      parts.push(`${s.subtreeUnknownLegs} council leg(s) spawned a subagent whose CHILD session spend `
+        + 'is billed separately and is NOT attributed');
+    }
+    emit(`Notice: ${parts.join('; and ')} and is NOT included in the $${s.known.toFixed(4)} `
+      + `total${ceiling}. Real spend is HIGHER than reported — this total is at least, not exactly, `
+      + 'what was spent. See run.json usage (unknownLegs / subtreeUnknownLegs), or '
+      + '`amicus spend --json` (sourceMix.unknown).\n');
   };
 
   /**
@@ -89,7 +107,19 @@ function createBudget({ allLegs, maxCost, write }) {
    */
   const usageBlock = () => {
     const s = spendState();
-    return { cost: s.cost, unknownLegs: s.unknownLegs, costExact: s.unknownLegs === 0 };
+    return {
+      cost: s.cost,
+      unknownLegs: s.unknownLegs,
+      subtreeUnknownLegs: s.subtreeUnknownLegs,
+      // v4.4 Task 2: `costExact` used to be `unknownLegs === 0`, which asks "did
+      // every leg report tokens" — a statement about observation coverage of each
+      // leg's OWN session, NOT about whether the total is complete. That is how
+      // `council-wsgate01` asserted exactness while $0.0215 short: all 7 legs were
+      // `source: 'reported'`, and 100% of the gap was one unattributed `explore`
+      // child session. costExact must mean "this is the whole bill", so it now
+      // requires BOTH: every leg observed, AND no leg with an unattributed subtree.
+      costExact: s.unknownLegs === 0 && s.subtreeUnknownLegs === 0,
+    };
   };
 
   return { spendState, spent, overBudget, remainingBudget, noticeUnknownSpend, usageBlock };

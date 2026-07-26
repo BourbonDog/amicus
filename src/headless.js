@@ -14,7 +14,7 @@ const { mapAgentToOpenCode } = require('./utils/agent-mapping');
 const { writeProgress } = require('./sidecar/progress');
 const { writeFileAtomic } = require('./utils/atomic-write');
 const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls,
-  mirrorUsageOnly, allAssistantUsagePresent } = require('./sidecar/conversation-mirror');
+  getLiveToolCalls, mirrorUsageOnly, allAssistantUsagePresent } = require('./sidecar/conversation-mirror');
 const { buildFoldMarker, trailingFoldMarkerRegex, generateFoldNonce } = require('./utils/fold-marker');
 
 /**
@@ -89,6 +89,34 @@ const USAGE_SETTLE_INTERVAL_MS = Number(process.env.AMICUS_USAGE_SETTLE_INTERVAL
 /** Deliberately much tighter than POLL_CALL_TIMEOUT_MS: the leg is already
  *  finished, so a hung settle read must not add 30 s × 3 to a run's wall time. */
 const USAGE_SETTLE_CALL_TIMEOUT_MS = Number(process.env.AMICUS_USAGE_SETTLE_CALL_TIMEOUT_MS) || 5000;
+/**
+ * v4.4 B4 part 1 — how long a completion signal may be DEFERRED while a tool
+ * call has not yet reached a terminal `state.status`.
+ *
+ * THE DEFECT THIS BOUNDS. `council-wsgate02/wsgate02-s1-3` was declared
+ * `complete` by the STABLE_IDLE_POLLS gate at 04:36:09.700 on **166 characters**
+ * of reasoning preamble, while its `task` tool call ran until 04:38:19.061 —
+ * 129 s later — and its session went on to bill $0.14279 of parent spend plus a
+ * $0.47105 child session. 166 characters were adjudicated as a peer review.
+ *
+ * WHY IT MUST BE BOUNDED. 9 of the 1,307 tool parts persisted in this machine's
+ * OpenCode database are stuck non-terminal forever: `time_updated` within
+ * milliseconds of `time_created`, all from killed sessions that never wrote a
+ * terminal status. A stale `running` can therefore outlive everything, so an
+ * unbounded wait is not an option.
+ *
+ * WHY 5 MINUTES. The measured duration of the real subagent call that exposed
+ * this is **190.6 s** (`task`, 04:35:08.427 → 04:38:19.061) — already longer
+ * than B53's 180 s TOOL_CALL_STALL_MS, so anything at that scale would kill a
+ * healthy `task` leg 10 s short of its answer. 300 s clears the measured case
+ * with margin and still lands far inside the 15-minute default `--timeout`.
+ * Set to 0 to disable the deferral entirely (pre-v4.4 behaviour).
+ *
+ * ON EXCEEDING IT the leg COMPLETES anyway — never fails — carrying
+ * `toolSettleTimedOut` on the result, the terminal progress record and the
+ * error log channel. Owner's standing ruling: fail LOUD, not fail CLOSED.
+ */
+const TOOL_SETTLE_GRACE_MS = Number(process.env.AMICUS_TOOL_SETTLE_GRACE_MS) || 300000;
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -419,6 +447,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ? USAGE_SETTLE_POLLS : options.usageSettlePolls;
     const usageSettleIntervalMs = options.usageSettleIntervalMs === undefined
       ? USAGE_SETTLE_INTERVAL_MS : options.usageSettleIntervalMs;
+    // `=== undefined` rather than `||`: 0 is meaningful (disable the deferral).
+    const toolSettleGraceMs = options.toolSettleGraceMs === undefined
+      ? TOOL_SETTLE_GRACE_MS : options.toolSettleGraceMs;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -430,6 +461,61 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let lastReasoningLength = 0; // B53: track reasoning-output growth to detect thinking
     let lastProgressAt = Date.now(); // B53: last poll where `progressed` was true
     let toolStalled = false; // B53: distinct from completed/timedOut/aborted — see resolveTerminalState
+    let lastSettledToolCount = 0; // B4: tool calls observed reaching a terminal status
+
+    // ---- v4.4 B4 part 1: the tool-settle deferral -----------------------------
+    // Recomputed once per poll (see the loop body) so every completion gate in a
+    // single poll reads ONE consistent answer.
+    let liveTools = [];      // POSITIVELY 'pending'/'running' — gates completion
+    let pendingTools = [];   // not-yet-terminal incl. unknown shape — feeds B53
+    let toolSettleDeferredSince = null; // ms timestamp of the first deferral, or null
+    let toolSettleTimedOut = false;     // the grace ceiling was exceeded
+    let unsettledAtCeiling = [];        // what was still live when it was exceeded
+
+    /**
+     * Should this poll's completion signal be DEFERRED because a tool call has
+     * not reached a terminal `state.status`?
+     *
+     * Keyed on the REAL SDK shape (src/sidecar/tool-part.js): terminal is
+     * `state.status === 'completed' | 'error'`. It is deliberately NOT keyed on a
+     * `tool_result` part — OpenCode emits no such part type (36 `tool_use` records
+     * and 0 `tool_result` records across the 35 recorded legs), so the diagnosis's
+     * proposed `pendingToolCalls` gate would have hung every tool-using leg.
+     *
+     * It reads `getLiveToolCalls`, NOT `getPendingToolCalls`: a leg is only ever
+     * held open on POSITIVE evidence that OpenCode is still working ('pending' /
+     * 'running'). A tool part carrying no `state` at all is unknown, not live, and
+     * must not defer anything — deferring on an absence of evidence is exactly how
+     * this gate would hang. B53 still owns that no-evidence case.
+     *
+     * @param {string} exitPath which completion gate is asking (for the logs)
+     * @returns {boolean} true = keep polling; false = complete now
+     */
+    const deferForUnsettledTools = (exitPath) => {
+      if (toolSettleTimedOut) { return false; }       // ceiling blown — never defer again
+      if (!(toolSettleGraceMs > 0)) { return false; } // 0 = disabled (escape hatch)
+      if (liveTools.length === 0) { return false; }
+      if (toolSettleDeferredSince === null) {
+        toolSettleDeferredSince = Date.now();
+        logger.info('Deferring leg completion — tool call(s) still executing', {
+          taskId, exitPath, live: liveTools.length,
+          tools: liveTools.map(t => `${t.name}:${t.status}`).join(','), toolSettleGraceMs,
+        });
+        return true;
+      }
+      if ((Date.now() - toolSettleDeferredSince) <= toolSettleGraceMs) { return true; }
+      // The ceiling. Complete the leg (keep whatever output it produced) and make
+      // the uncertainty impossible to miss — never fail it closed.
+      toolSettleTimedOut = true;
+      unsettledAtCeiling = liveTools.slice();
+      logger.error('Tool call(s) did not settle within the grace window — completing leg '
+        + 'anyway; its OpenCode session may STILL be working and BILLING', {
+        taskId, sessionId, exitPath, toolSettleGraceMs,
+        unsettled: unsettledAtCeiling.length,
+        tools: unsettledAtCeiling.map(t => `${t.name}@${t.firstSeenAt}`).join(','),
+      });
+      return false;
+    };
 
     while (!completed && (Date.now() - startTime) < timeoutMs) {
       watchdog.touch();
@@ -481,6 +567,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         ));
         const currentAssistantMsgId = mr.currentAssistantMsgId;
         const assistantFinished = mr.assistantFinished;
+        // v4.4 B4 part 1: evaluate tool liveness ONCE per poll, before any
+        // completion gate reads it. Clearing the deferral here (rather than
+        // inside deferForUnsettledTools) matters: the gates only run when a
+        // completion signal fires, so a leg that resumes working after a
+        // deferral would otherwise keep B53 suppressed on a stale timestamp.
+        pendingTools = getPendingToolCalls(mirror);
+        liveTools = getLiveToolCalls(mirror);
+        if (liveTools.length === 0) { toolSettleDeferredSince = null; }
         if (mr.sessionError) {
           sessionError = mr.sessionError;
           logger.error('Session error detected in assistant message', { sessionId, message: mr.sessionError });
@@ -499,7 +593,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // marker on its own line mid-output (echoing a prior sidecar, these
         // instructions, or scraped content) — only the exact nonced marker,
         // with nothing but blank lines after it, is a completion signal.
-        if (findTrailingFoldMarker(mirror.output, foldNonce) !== -1) {
+        // v4.4 B4: a fold marker WITHOUT info.time.completed means OpenCode has
+        // not finalized the message, so a tool call may still be live and billing
+        // (this is the same window B1's usage race lives in). Defer, bounded.
+        if (findTrailingFoldMarker(mirror.output, foldNonce) !== -1
+            && !deferForUnsettledTools('fold-marker')) {
           completed = true;
           break;
         }
@@ -536,7 +634,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
               'getSessionStatus'
             );
             const s = (statusData && statusData.type) ? statusData : (statusData && statusData[sessionId]);
-            if (s && s.type === 'idle') {
+            if (s && s.type === 'idle' && !deferForUnsettledTools('sdk-idle')) {
               logger.debug('Session reported idle by SDK — completing', { sessionId });
               completed = true;
               break;
@@ -565,9 +663,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // the stall clock resets instead of falsely firing "Tool call stalled".
         const reasoningActivity = mirror.reasoningOutput.length > lastReasoningLength;
         lastReasoningLength = mirror.reasoningOutput.length;
+        // v4.4 B4: a tool call REACHING a terminal status is real activity. Before
+        // the shape fix this could never be observed (pending never cleared), so a
+        // multi-tool leg's stall clock only reset on text growth.
+        const settleActivity = mirror.settledToolCallIds.size > lastSettledToolCount;
+        lastSettledToolCount = mirror.settledToolCallIds.size;
 
         const progressed = outputGrew || toolActivity || resultActivity || messageActivity
-          || newAssistant || reasoningActivity;
+          || newAssistant || reasoningActivity || settleActivity;
         if (progressed) { lastProgressAt = Date.now(); }
 
         // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise
@@ -577,9 +680,19 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         // (text/tool/result/message/new-assistant) has been observed for the stall
         // window — this cannot false-positive during active streaming (progress
         // resets the clock every poll) and cannot fire without a wedged tool.
-        const pendingToolCalls = getPendingToolCalls(mirror);
-        if (pendingToolCalls.length > 0 && (Date.now() - lastProgressAt) > toolCallStallMs) {
-          const stalled = pendingToolCalls[0];
+        //
+        // v4.4 B4: SKIPPED while a tool-settle deferral is active. B53 was written
+        // against `pendingToolCalls`, which could never clear (no tool_result part
+        // exists), so its 180 s window was never calibrated against real tool
+        // durations — the measured `task` call that exposed this defect ran 190.6 s,
+        // so B53 would kill a healthy subagent leg 10 s short of its answer, and
+        // kill it CLOSED. Once a completion signal has fired, the bounded settle
+        // grace owns that decision and ends in a LOUD completion instead. B53's
+        // actual target — a wedge with NO output, where the idle gate never engages
+        // and therefore no deferral is ever active — is untouched.
+        if (pendingTools.length > 0 && toolSettleDeferredSince === null
+            && (Date.now() - lastProgressAt) > toolCallStallMs) {
+          const stalled = pendingTools[0];
           const pendingSeconds = Math.round((Date.now() - Date.parse(stalled.firstSeenAt)) / 1000);
           sessionError = `Tool call stalled: ${stalled.name} pending ${pendingSeconds}s with no result or output`;
           logger.error('Tool call stalled — no progress within threshold', {
@@ -602,7 +715,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           if (currentAssistantMsgId !== null && mirror.output.length > 0) {
             stablePolls++;
             const threshold = assistantFinished ? stableFinishedPolls : stableIdlePolls;
-            if (stablePolls >= threshold) {
+            // v4.4 B4 part 1 — THE MEASURED DEFECT SITE. This is the gate that
+            // declared `wsgate02-s1-3` complete on 166 characters of preamble 129 s
+            // before its `task` tool finished. Deferred (bounded) when a tool call
+            // is still live.
+            //
+            // The `assistantFinished` branch is deliberately NOT deferred:
+            // OpenCode finalizes an assistant message only AFTER its tool calls
+            // end, so `time.completed` structurally implies settled. VERIFIED on
+            // the defect leg itself — task end 04:38:19.061, message
+            // time.completed 04:38:19.301 — and on both recorded multi-tool legs,
+            // whose last tool ended 62.3 s and 14.8 s before the leg completed.
+            // Gating it would add pure hang risk for no truth gained.
+            if (stablePolls >= threshold
+                && !(!assistantFinished && deferForUnsettledTools('stable-idle'))) {
               logger.debug('Session appears complete (idle)', { stablePolls, assistantFinished });
               completed = true;
               break;
@@ -710,14 +836,19 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
     if (!externalServer) { await server.close(); }
 
-    // Log summary of tool calls for debugging
+    // Log summary of tool calls for debugging.
+    // v4.4 B4: this used to filter on `t.name === 'Task'` and was DEAD twice over —
+    // the mirror read `part.name` (the real shape has `part.tool`) so every name
+    // was undefined, and OpenCode's tool is named `task` in lowercase anyway.
+    const { isSubagentToolCall } = require('./sidecar/tool-part');
+    const subagentToolCalls = mirror.toolCalls.filter(isSubagentToolCall);
     if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
         totalToolCalls: mirror.toolCalls.length,
-        taskToolCalls: mirror.toolCalls.filter(t => t.name === 'Task').length,
-        subagentTypes: mirror.toolCalls
-          .filter(t => t.name === 'Task' && t.input?.subagent_type)
-          .map(t => ({ type: t.input.subagent_type, model: t.input.model || 'inherited' }))
+        taskToolCalls: subagentToolCalls.length,
+        subagentTypes: subagentToolCalls
+          .filter(t => t.input && (t.input.subagent_type || t.input.description))
+          .map(t => ({ type: t.input.subagent_type || t.input.description, model: (t.input && t.input.model) || 'inherited' }))
       });
     }
 
@@ -744,10 +875,31 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // from conversation.jsonl's assistant entries and only falls back to this field
     // when there are none, so re-stating it here would add nothing and could only
     // disagree with the file it is meant to summarize.
-    try { writeProgress(sessionDir, 'complete', { usage }); }
+    //
+    // v4.4 B4: when the settle grace was exceeded the leg completed with tool
+    // calls still live, so its reported cost is a FLOOR and its session may still
+    // be billing. That must travel with the leg, not just sit in a log line — the
+    // live GUI reads this file (src/observe/live-doc.js). `unsettledToolCalls` is
+    // a COUNT here (progress.json is a compact snapshot); the full list is on the
+    // returned result for the caller's metadata.
+    const settleFlags = toolSettleTimedOut
+      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling.length }
+      : {};
+    try { writeProgress(sessionDir, 'complete', { usage, ...settleFlags }); }
     catch (progressErr) {
       logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
     }
+
+    // v4.4 B4 (Task 2): a leg that made a SUBAGENT call has spend in a CHILD
+    // OpenCode session that amicus never enumerates and that is NOT rolled into
+    // the parent session's cost — so its total cannot be claimed complete. See
+    // src/sidecar/tool-part.js isSubagentToolCall for the 1:1 evidence.
+    const subtreeFlags = subagentToolCalls.length > 0
+      ? { subagentToolCalls: subagentToolCalls.length }
+      : {};
+    const settleResult = toolSettleTimedOut
+      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling }
+      : {};
 
     if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
       return {
@@ -758,6 +910,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         taskId,
         toolCalls: mirror.toolCalls,
         usage,
+        ...settleResult,
+        ...subtreeFlags,
         error: sessionError
       };
     }
@@ -770,6 +924,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       taskId,
       toolCalls: mirror.toolCalls, // Include tool calls in result for verification
       usage,
+      ...settleResult,
+      ...subtreeFlags,
       exitCode: 0
     };
 
@@ -894,4 +1050,5 @@ module.exports = {
   USAGE_SETTLE_POLLS,
   USAGE_SETTLE_INTERVAL_MS,
   USAGE_SETTLE_CALL_TIMEOUT_MS,
+  TOOL_SETTLE_GRACE_MS,
 };
