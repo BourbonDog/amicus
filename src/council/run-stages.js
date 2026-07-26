@@ -225,4 +225,4 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   return { aborted: null, judgeResults };
 }
 
-module.exports = { runStage1, runStage2, isAbortExit, slug };
+module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor };

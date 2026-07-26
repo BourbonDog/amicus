@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src file:; style-src file: 'unsafe-inline'; font-src file:; img-src file: data:">
+  <title>Amicus Council Workspace</title>
+  <link rel="stylesheet" href="../../src/design/tokens.css">
+  <link rel="stylesheet" href="./workspace.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="rail" aria-label="Council runs">
+      <header class="rail-head">
+        <span class="rail-title">Council runs</span>
+        <span id="rail-project" class="rail-project mono"></span>
+      </header>
+      <ul id="run-list" tabindex="0" aria-label="Run list"></ul>
+    </aside>
+
+    <main id="detail">
+      <div id="empty-state" class="empty-state">Select a council run</div>
+
+      <div id="run-view" hidden>
+        <header id="run-header">
+          <div class="run-head-row">
+            <h1 id="run-title" class="mono"></h1>
+            <div id="run-chips" class="chips"></div>
+          </div>
+          <div class="run-head-row">
+            <div id="cost-gauge" class="gauge" role="meter" aria-label="Run cost vs ceiling">
+              <div id="cost-gauge-fill" class="gauge-fill"></div>
+              <span id="cost-gauge-text" class="gauge-text mono"></span>
+            </div>
+            <label class="blind-label">
+              <input type="checkbox" id="blind-toggle"> Blind mode
+            </label>
+            <button id="abort-btn" class="btn danger" hidden>Abort run…</button>
+          </div>
+        </header>
+
+        <div id="banner" class="banner" hidden></div>
+
+        <nav id="stage-rail" class="stage-rail" aria-label="Stages"></nav>
+
+        <section id="seats-panel" class="panel" aria-label="Seats">
+          <h2 class="panel-title">Seats</h2>
+          <table class="table">
+            <thead>
+              <tr><th>Seat</th><th>Role</th><th>Status</th><th>Stage</th><th>Msgs</th>
+                  <th>Tokens in/out</th><th>Cost</th><th>Last activity</th><th></th></tr>
+            </thead>
+            <tbody id="seats-body"></tbody>
+          </table>
+        </section>
+
+        <details id="reviews-panel" class="panel">
+          <summary class="panel-title">Stage-1 reviews</summary>
+          <div id="reviews-body" class="prose-host"></div>
+        </details>
+
+        <details id="bundle-panel" class="panel">
+          <summary class="panel-title">Peer-review packet (verbatim)</summary>
+          <div id="bundle-body" class="prose-host"></div>
+        </details>
+
+        <details id="judges-panel" class="panel">
+          <summary class="panel-title">Judge outputs</summary>
+          <div id="judges-body" class="prose-host"></div>
+        </details>
+
+        <section id="matrix-panel" class="panel" aria-label="Adjudication matrix">
+          <h2 class="panel-title">Adjudication matrix</h2>
+          <div id="matrix-body"></div>
+        </section>
+
+        <section id="verdict-panel" class="panel" aria-label="Verdict">
+          <h2 class="panel-title">Verdict</h2>
+          <div id="verdict-body"></div>
+        </section>
+
+        <section id="cost-panel" class="panel" aria-label="Cost">
+          <h2 class="panel-title">Cost by seat</h2>
+          <div id="cost-body"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="dialog-abort" class="dialog-backdrop" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-abort-title">
+      <h2 id="dialog-abort-title">Abort this council run?</h2>
+      <p>The active wave and solo legs will be aborted via the engine's abort path. Artifacts already on disk stay browsable.</p>
+      <div class="dialog-actions">
+        <button id="dialog-abort-cancel" class="btn">Cancel</button>
+        <button id="dialog-abort-confirm" class="btn danger">Abort run</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./md-lite.js"></script>
+  <script src="./live-model.js"></script>
+  <script src="./workspace-render.js"></script>
+  <script src="./workspace-matrix.js"></script>
+  <!-- ⚠️ DE-ROT (F05): panels + verbs are the Task 13 split of workspace-app.js.
+       Load order matters: workspace-app.js boots last and owns `state`. -->
+  <script src="./workspace-panels.js"></script>
+  <script src="./workspace-verbs.js"></script>
+  <script src="./workspace-app.js"></script>
+</body>
+</html>

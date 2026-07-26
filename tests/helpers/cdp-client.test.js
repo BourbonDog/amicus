@@ -6,6 +6,7 @@ describe('CdpClient', () => {
   let mockServer;
   let wss;
   let serverPort;
+  let dispatchedKeyEvents;
 
   beforeAll((done) => {
     mockServer = http.createServer((req, res) => {
@@ -31,6 +32,14 @@ describe('CdpClient', () => {
             type: 'service_worker',
             url: 'data:text/html,sw',
             webSocketDebuggerUrl: `ws://127.0.0.1:${serverPort}/devtools/page/sw-id`
+          },
+          {
+            // The Council Workspace target — the only file:// page (toolbar=data:,
+            // content=http). CdpClient.workspace() must find this one.
+            id: 'workspace-page-id',
+            type: 'page',
+            url: 'file:///C:/x/workspace-ui/index.html?runId=aaaa1111',
+            webSocketDebuggerUrl: `ws://127.0.0.1:${serverPort}/devtools/page/workspace-page-id`
           }
         ]));
         return;
@@ -51,6 +60,9 @@ describe('CdpClient', () => {
         } else if (msg.method === 'Page.captureScreenshot') {
           const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
           ws.send(JSON.stringify({ id: msg.id, result: { data: pngBase64 } }));
+        } else if (msg.method === 'Input.dispatchKeyEvent') {
+          dispatchedKeyEvents.push(msg.params);
+          ws.send(JSON.stringify({ id: msg.id, result: {} }));
         }
       });
     });
@@ -71,13 +83,32 @@ describe('CdpClient', () => {
     });
   });
 
+  beforeEach(() => { dispatchedKeyEvents = []; });
+
+  it('pressKey sends a keyDown then a keyUp Input.dispatchKeyEvent pair', async () => {
+    const cdp = new CdpClient(serverPort);
+    await cdp.connect('toolbar-page-id');
+    await cdp.pressKey('ArrowDown');
+    cdp.close();
+    expect(dispatchedKeyEvents.map((e) => e.type)).toEqual(['keyDown', 'keyUp']);
+    expect(dispatchedKeyEvents[0]).toMatchObject({ key: 'ArrowDown', windowsVirtualKeyCode: 40 });
+  });
+
+  it('pressKey rejects an unsupported key name', async () => {
+    const cdp = new CdpClient(serverPort);
+    await cdp.connect('toolbar-page-id');
+    await expect(cdp.pressKey('Tab')).rejects.toThrow('unsupported key');
+    cdp.close();
+  });
+
   it('getTargets returns parsed target list', async () => {
     const cdp = new CdpClient(serverPort);
     const targets = await cdp.getTargets();
-    expect(targets).toHaveLength(3);
+    expect(targets).toHaveLength(4);
     expect(targets[0].id).toBe('toolbar-page-id');
     expect(targets[1].url).toContain('http://localhost');
     expect(targets[2].type).toBe('service_worker');
+    expect(targets[3].url).toContain('file://');
   });
 
   it('findTarget filters by predicate', async () => {
@@ -146,6 +177,14 @@ describe('CdpClient', () => {
     it('CdpClient.content connects to http: URL target', async () => {
       const cdp = await CdpClient.content(serverPort);
       expect(cdp).toBeInstanceOf(CdpClient);
+      cdp.close();
+    });
+
+    it('CdpClient.workspace connects to file:// URL target', async () => {
+      const cdp = await CdpClient.workspace(serverPort);
+      expect(cdp).toBeInstanceOf(CdpClient);
+      const result = await cdp.evaluate('1+1');
+      expect(result).toBeDefined();
       cdp.close();
     });
   });

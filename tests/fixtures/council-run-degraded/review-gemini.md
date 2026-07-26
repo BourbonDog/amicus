@@ -1,0 +1,1 @@
+- A1 (major): refreshToken() swallows the 401 and retries forever.

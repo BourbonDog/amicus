@@ -23,7 +23,7 @@ curl -s http://127.0.0.1:9223/json | python3 -m json.tool
 ### Known Limitations
 
 - **`contextBridge` does not work with `data:` URLs** — The toolbar is loaded via a `data:` URL in the main window. Electron's `contextBridge.exposeInMainWorld()` silently fails for `data:` origins, so `window.sidecar` is `undefined` in the toolbar. Any toolbar↔main-process communication must use `executeJavaScript()` polling instead of IPC.
-- **Two debug targets per session** — The Electron window creates two pages: the OpenCode content (BrowserView at `http://localhost:<port>`) and the toolbar (`data:text/html`). Filter by URL to target the right one.
+- **Debug targets by URL scheme** — sidecar mode creates two pages (OpenCode content at `http://localhost:<port>`, toolbar at `data:text/html`); the Council Workspace mode (`AMICUS_MODE=council-workspace`, v4.4) creates ONE page at a `file://` URL (`electron/workspace-ui/index.html`, loaded via `loadFile`). Filter by URL prefix: `CdpClient.toolbar()` → `data:`, `CdpClient.content()` → `http://localhost`, `CdpClient.workspace()` → `file://`. The workspace e2e suite runs on port 9225 (9223 is the manual/docs port used throughout this page; 9224 belongs to the toolbar suite). Unlike the `data:`-URL toolbar, the workspace page has a **working** `contextBridge` (`window.amicusWorkspace`) because `loadFile` is a real `file://` origin — see [docs/council.md's Council Workspace section](./council.md#council-workspace-gui) for what that bridge exposes.
 
 ## Testing UI State with Node.js
 

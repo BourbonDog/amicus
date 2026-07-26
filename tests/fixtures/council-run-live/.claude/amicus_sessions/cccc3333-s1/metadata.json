@@ -1,0 +1,1 @@
+{ "taskId": "cccc3333-s1", "type": "wave", "status": "running", "mode": "headless", "createdAt": "2026-07-19T10:00:01.000Z", "models": ["gemini", "gpt", "qwen"], "legs": ["dddd0001", "dddd0002", "dddd0003"] }

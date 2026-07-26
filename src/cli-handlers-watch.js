@@ -50,11 +50,33 @@ function resolveWatchTarget(id, project) {
 }
 
 /**
- * `amicus watch <id> [--json|--plain] [--interval <sec>] [--project <p>] [--ui]`
+ * `amicus watch [--ui] <id> [--json|--plain] [--interval <sec>] [--project <p>]`
  * @param {object} args parsed CLI args
  * @returns {Promise<number>} exit code (render loop: Task 12)
  */
 async function handleWatch(args) {
+  // v4.4: `amicus watch [--ui] [runId]` — GUI watch is the same verb (spec
+  // §4.4), not a separate command. Handled at the very top, above id
+  // resolution: unlike the machine-readable path, `--ui` alone (no runId)
+  // is valid and opens the Council Workspace run-list landing, so this
+  // branch must run BEFORE the "id is required" gate below.
+  if (args.ui) {
+    if (args.json) {
+      process.stderr.write('Error: --ui is interactive-only (no --json). Use amicus watch <id> --json for machine output.\n');
+      return 1;
+    }
+    // --project wins over --cwd (same precedence as the non-UI path below) —
+    // DE-ROT F46: `--project` is the documented first-priority option for
+    // `watch`; resolving from --cwd only would silently point the workspace
+    // at the wrong directory when a run was launched elsewhere.
+    const project = args.project || args.cwd || process.cwd();
+    const runId = args._[1] ? String(args._[1]) : '';
+    const { launchWorkspaceWindow } = require('./sidecar/workspace-window');
+    const res = await launchWorkspaceWindow({ project, runId });
+    if (res.error) { process.stderr.write(`${res.error}\n`); }
+    return res.code;
+  }
+
   const { failJson, ERROR_CODES } = require('./utils/error-doc');
   const id = args._[1];
   if (!id || id === true) {
@@ -63,14 +85,6 @@ async function handleWatch(args) {
   }
   const check = validateTaskId(String(id));
   if (!check.valid) { process.stderr.write(`${check.error}\n`); return 1; }
-
-  // --ui is registered as the v4.4 Council Workspace seam only; this rev
-  // (v4.3) registers the flag + this fail-fast, the GUI itself is out of
-  // scope. --ui alone is accepted and falls through to the loop.
-  if (args.ui && args.json) {
-    process.stderr.write('Error: --ui is interactive-only and cannot be combined with --json\n');
-    return 1;
-  }
 
   const project = args.project || args.cwd || process.cwd();
   const target = resolveWatchTarget(String(id), project);

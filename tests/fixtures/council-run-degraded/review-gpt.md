@@ -1,0 +1,1 @@
+- B1 (minor): logging writes the bearer token at debug level.

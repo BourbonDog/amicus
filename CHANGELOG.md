@@ -3,6 +3,17 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **Council Workspace (GUI)** — third Electron mode `council-workspace`, opened via `amicus watch <councilRunId> --ui` (bare `--ui` opens the project run list). Renders live and historical council runs: stage rail, live per-seat status/tokens/cost (v4.3 data layer, 1.5s/5s poll depending on window focus/visibility), verbatim anonymized Stage-2 packet, tier-colored adjudication matrix with basis counts/thin/override badges, dissent drill-in with prose highlight, chair verdict + street-cred + Stage-4 decisions, cost-by-seat with `--max-cost` gauge. Blind-mode toggle (labels vs models; ON while live, OFF once terminal — a reading aid against anchoring bias, not a security control: the label map is plaintext in `run.json`). Two verbs: confirm-gated Abort (delegates to the engine's own council-aware abort path) and nonced Fold (chair verdict to the launching terminal; no model call). Fully sandboxed first-party page (CSP with no network directive at all, `contextIsolation`, textContent-only rendering of model prose, enforced by a static source scan); read-only against run directories **apart from the Abort verb, which checkpoints the run through the engine's own in-process abort path** — not a direct write from the workspace code itself. `--ui` is interactive-only (`--json` is rejected, not silently ignored).
+- `CdpClient.workspace(port)` e2e factory (`file://` target, port 9225) + a fixture-driven workspace CDP suite.
+
+### Changed
+
+- **`amicus watch` now prints per-seat rows for council runs in the terminal**, not just the stage checklist. This is a side effect of the composed council live doc gaining `legs[]` (with per-leg model/status/messages/tokens/cost/stall data) so the Council Workspace's live Seats table would have something to poll — `watch`'s existing table renderer already loops `doc.legs || []` (`src/observe/watch-render.js:44`), so once council docs started carrying that array, seat rows appeared in the plain terminal renderer too, for free. A welcome, user-visible behavior change to an existing command: a terminal `amicus watch <councilRunId>` on this release shows more than it used to.
+
 ## [4.3.0] - 2026-07-24
 
 ### Added

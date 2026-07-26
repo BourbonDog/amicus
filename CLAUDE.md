@@ -129,6 +129,7 @@ src/
 │   ├── tokens.css
 │   └── tokens.js
 ├── observe/
+│   ├── council-legs.js
 │   ├── events.js
 │   ├── follow.js
 │   ├── live-doc.js
@@ -170,7 +171,8 @@ src/
 │   ├── setup.js  # Sidecar Setup Wizard
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
 │   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
-│   └── wave-progress.js
+│   ├── wave-progress.js
+│   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 ├── utils/
 │   ├── abort-coordinator.js
 │   ├── abort-result.js  # The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
@@ -257,6 +259,14 @@ src/
 │   ├── updater.js  # Updater Module
 │   ├── validators.js  # Input Validators
 │   └── version-info.js  # After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps
+├── workspace/
+│   ├── artifact-guard.js  # Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact).
+│   ├── blind-mode.js  # Council Workspace — blind-mode name mapping (v4.4 §6.3).
+│   ├── fold-format.js  # Council Workspace — fold payload builder (v4.4 §7).
+│   ├── live-normalize.js  # Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam).
+│   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
+│   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
+│   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
@@ -296,16 +306,28 @@ electron/
 ├── assets/
 │   ├── icon.png
 │   └── icon.svg
+├── workspace-ui/
+│   ├── index.html
+│   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
+│   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
+│   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
+│   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
+│   ├── workspace-panels.js  # Council Workspace — lazy/prose panels + the matrix/verdict panel adapters
+│   ├── workspace-render.js  # Council Workspace — DOM painters (run list, header, stage rail, seats,
+│   ├── workspace-verbs.js  # Council Workspace — action verbs (v4.4 §5, ⚠️ DE-ROT F05 split of
+│   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic
 ├── ipc-guard.js  # IPC Guard Helpers
 ├── ipc-setup-local.js  # IPC handlers for the Electron wizard's "Local server" card (Task 13, v4.2 §4.6).
 ├── ipc-setup.js  # IPC Setup Handlers
+├── ipc-workspace.js  # Council Workspace IPC (v4.4 §4.5) — all seven workspace: channels.
 ├── load-failsafe.js  # Load Failsafe
 ├── main.js  # Amicus Electron Shell - v3
 ├── opencode-theme.js
 ├── preload-content.js  # Content Preload - OpenCode WebContentsView (minimal, no privileged bridge)
 ├── preload-setup.js  # Sidecar Preload - Setup Mode
+├── preload-workspace.js  # Council Workspace Preload — minimal typed IPC bridge (v4.4 §4.2/§4.5).
 ├── preload.js  # Sidecar Preload - v3 Minimal
 ├── session-route.js  # Web-UI session route builder (#45).
 ├── setup-ui-alias-script.js  # Setup UI - Alias Editor Script
@@ -321,7 +343,8 @@ electron/
 ├── setup-ui.js  # Setup UI - Wizard Orchestrator: API Keys → Models → Aliases → Review
 ├── summary.js  # Summary Generation via OpenCode API
 ├── toolbar.js  # Amicus Toolbar HTML Builder
-└── window-position.js  # Window Position Calculator
+├── window-position.js  # Window Position Calculator
+└── workspace-shell.js  # Council Workspace window (v4.4 §4.1/§4.2) — the third Electron mode's
 scripts/
 ├── benchmark-api-direct.js  # Direct OpenRouter API Benchmark for Thinking Levels
 ├── benchmark-thinking.js  # Benchmark Thinking Levels
@@ -418,12 +441,13 @@ evals/
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()` |
-| `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()` |
+| `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `checkpoint()`, `updateStage()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `readOverallVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
+| `observe/council-legs.js` |  | `buildLegRows()` |
 | `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()`, `emitWaveStarted()` |
 | `observe/follow.js` |  | `createFollowPrinter()` |
 | `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL()` |
@@ -464,6 +488,7 @@ evals/
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
+| `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |
 | `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
@@ -549,6 +574,13 @@ evals/
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
 | `utils/version-info.js` | After an `npm i -g amicus` upgrade, a long-lived MCP server process keeps | `RUNNING_VERSION()`, `readOnDiskVersion()`, `versionWarning()`, `PKG_PATH()` |
+| `workspace/artifact-guard.js` | Council Workspace — artifact read guard (v4.4 §4.5 workspace:read-artifact). | `artifactAllowlist()`, `readRunArtifact()`, `FIXED_ARTIFACTS()`, `DEBATE_ARTIFACTS()`, `MAX_ARTIFACT_BYTES()` |
+| `workspace/blind-mode.js` | Council Workspace — blind-mode name mapping (v4.4 §6.3). | `buildNamePairs()`, `labelFor()`, `pairFor()` |
+| `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
+| `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |
+| `workspace/matrix-model.js` | Council Workspace — adjudication matrix view model (v4.4 §5.2). | `buildMatrixModel()` |
+| `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `TERMINAL_STATUSES()`, `STAGE_LABELS()` |
+| `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE()` |
 <!-- /AUTO:modules -->
 
 ---

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "type": "council-verdict",
+  "runId": "bbbb2222",
+  "runType": "headless",
+  "date": "2026-07-17",
+  "chair": "deepseek",
+  "council": ["gemini", "gpt", "qwen"],
+  "claudeInCouncil": false,
+  "overallVerdict": null,
+  "findings": [
+    { "id": "A1", "raiser": "gemini", "severity": "major", "tier": "Confirmed", "basis": { "a": 1, "d": 0, "n": 0 }, "confidence": "thin", "tierOverride": null, "duplicateOf": null,
+      "adjudications": [ { "judge": "gpt", "verdict": "agree" } ], "decision": null, "applied": false },
+    { "id": "B1", "raiser": "gpt", "severity": "minor", "tier": "Contested", "basis": { "a": 0, "d": 1, "n": 0 }, "confidence": "thin", "tierOverride": null, "duplicateOf": null,
+      "adjudications": [ { "judge": "gemini", "verdict": "dispute" } ], "decision": null, "applied": false }
+  ],
+  "streetCred": [
+    { "model": "gemini", "withSelf": 1.0, "peersOnly": 1.0 },
+    { "model": "gpt", "withSelf": 1.0, "peersOnly": 1.0 },
+    { "model": "qwen", "withSelf": 2.0, "peersOnly": 2.0 }
+  ],
+  "runStats": [
+    { "model": "gemini", "role": "seat", "wasChair": false, "conformance": "clean", "status": "complete", "durationMs": 115000, "usage": { "cost": { "amount": 0.1, "source": "reported" } } },
+    { "model": "gpt", "role": "seat", "wasChair": false, "conformance": "clean", "status": "complete", "durationMs": 125000, "usage": { "cost": { "amount": 0.12, "source": "reported" } } },
+    { "model": "qwen", "role": "seat", "wasChair": false, "conformance": "unstructured", "status": "complete", "durationMs": 240000, "usage": { "cost": { "amount": 0.05, "source": "estimated" } } }
+  ],
+  "tierCounts": { "Confirmed": 1, "Contested": 1, "Singleton": 0, "Disputed": 0 }
+}

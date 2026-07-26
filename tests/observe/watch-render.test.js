@@ -35,7 +35,12 @@ describe('renderTable', () => {
     const d = { ...WAVE, legs: [{ taskId: 'w1-3', model: 'x', status: 'running', phase: 'starting', messages: 0 }] };
     expect(renderTable(d)).toContain('—');
   });
-  test('council doc: stage checklist rendered above (no legs on the composed council payload)', () => {
+  // DE-ROT Task 0.5 (F01): buildCouncilStatusPayload now emits `legs[]`, so a
+  // real council doc renders BOTH the stage checklist above AND a seat row per
+  // leg below — this test's name used to assert the opposite (no legs existed
+  // on the composed payload at all; renderTable's `doc.legs || []` loop was
+  // dead code against real council docs). Updated to cover both.
+  test('council doc: stage checklist rendered above, one seat row per leg below', () => {
     const council = {
       taskId: 'c1', type: 'council-run', runId: 'c1', status: 'running',
       currentStage: 'stage2',
@@ -45,6 +50,16 @@ describe('renderTable', () => {
         { name: 'chair', status: 'pending', waveId: null },
       ],
       legsTotal: 3, legsComplete: 1, elapsed: '2m 0s',
+      // ⚠️ Fix-wave item 5 (F36): `model` is the RESOLVED executable id (metadata.model) on
+      // the real composed payload, never the council ALIAS — that alias lives in the
+      // separate `modelInput` field (src/observe/council-legs.js). A fixture with an alias
+      // in `model` doesn't resemble the document it stands in for, which is exactly how the
+      // model vs modelInput confusion (F36) got missed the first time; assertions below hold
+      // either way (substring match), so this fix is free.
+      legs: [
+        { taskId: 'w2-1', model: 'google/gemini-2.5', modelInput: 'gemini', status: 'complete', messages: 3, latestPreview: 'Done.' },
+        { taskId: 'w2-2', model: 'openai/gpt-5', modelInput: 'gpt', status: 'running', messages: 1, latestPreview: 'Working...', stalled: true },
+      ],
     };
     const table = renderTable(council);
     expect(table).toContain('c1');
@@ -52,6 +67,9 @@ describe('renderTable', () => {
     expect(table).toContain('✓ stage1');
     expect(table).toContain('▶ stage2');
     expect(table).toContain('· chair');
+    expect(table).toContain('gemini');
+    expect(table).toContain('gpt');
+    expect(table).toContain('⏳stalled');
   });
   // Finding 1: buildCouncilStatusPayload (src/mcp-council-awareness.js) inits
   // legsTotal/legsComplete to `null` and legitimately keeps them null through
