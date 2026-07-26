@@ -156,6 +156,28 @@ describe('getRunDetail', () => {
     expect(d.derived.verdictPanel.reason).toBe('COST_EXCEEDED: ceiling hit');
   });
 
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): sanitizeName collisions
+  // between distinct bench entries are a run-integrity defect (artifact-guard.js's
+  // artifactAllowlist now surfaces them via a `.collisions` array instead of silently
+  // deduping) — getRunDetail exposes that as `derived.artifactCollisions` so the renderer can
+  // warn the user instead of silently misattributing prose in the judges panel.
+  test('artifactCollisions surfaces distinct bench entries that sanitize to the same artifact name', () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+    run.bench = ['vendor/a', 'vendor?a'];
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    registerPointer(project, 'aaaa1111', runDir);
+    const d = getRunDetail(project, 'aaaa1111');
+    expect(d.derived.artifactCollisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+  });
+
+  test('artifactCollisions is empty when bench models sanitize to distinct names', () => {
+    const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
+    const d = getRunDetail(project, 'aaaa1111');
+    expect(d.derived.artifactCollisions).toEqual([]);
+  });
+
   test('TERMINAL_STATUSES mirrors the shipped composed-doc terminal set', () => {
     // ⚠️ DE-ROT (F26): widened from 5 names to the 7 in src/observe/live-doc.js:18
     // (added 'crashed' and 'idle-timeout'), same order, so the Task 14 drift pin passes.

@@ -154,6 +154,9 @@ function getRunDetail(project, runId) {
   const verdict = readDoc(runDir, 'verdict.json');
 
   let derived = null;
+  // Computed once, outside the `!run.parseError` guard's block so both the derived model
+  // (artifactCollisions) and the artifacts presence map below reuse the same call.
+  const artifactNames = run.parseError ? [] : artifactAllowlist(run);
   if (!run.parseError) {
     const labelMap = run.labelMap && typeof run.labelMap === 'object' ? run.labelMap : {};
     const tallyOk = tally && !tally.parseError ? tally : null;
@@ -165,11 +168,18 @@ function getRunDetail(project, runId) {
       matrix: tallyOk ? buildMatrixModel(tallyOk, labelMap, verdict && !verdict.parseError ? verdict : null) : null,
       cost: costPanel(run, tallyOk),
       verdictPanel: verdictPanel(run, verdict),
+      // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): two distinct bench
+      // entries that sanitize to the same artifact name (artifact-guard.js's
+      // artifactAllowlist) is a run-integrity defect — this run directory cannot hold both
+      // models' review/judge files under distinct names, so drillIntoJudge's artifact lookup
+      // would otherwise silently misattribute prose. Surfaced here (rather than only inside
+      // the low-level allowlist helper) so the renderer can warn the user directly.
+      artifactCollisions: artifactNames.collisions || [],
     };
   }
 
   const artifacts = {};
-  const names = run.parseError ? [] : artifactAllowlist(run);
+  const names = artifactNames;
   for (const name of [...names, 'report.html', 'run.json', 'tally.json', 'verdict.json']) {
     try {
       const st = fs.statSync(path.join(runDir, name));

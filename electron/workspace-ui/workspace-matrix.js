@@ -192,5 +192,21 @@
     });
   }
 
-  window.AmicusMatrix = { renderMatrix: renderMatrix, renderVerdict: renderVerdict, highlightText: highlightText, MATRIX_ROW_CAP: MATRIX_ROW_CAP };
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): undoes highlightText —
+  // needed because drillIntoJudge's prose section is built once (loadPanel's promise cache)
+  // and never rebuilt, so re-drilling into a DIFFERENT finding on the same judge must clear
+  // the PREVIOUS finding's <mark> before applying the new one, rather than leaving it stuck
+  // (the stale mark was what made the old idempotency guard misfire on a different finding).
+  function clearHighlight(container) {
+    var marks = container.querySelectorAll('mark');
+    for (var i = 0; i < marks.length; i++) {
+      var mark = marks[i];
+      if (mark.parentNode) { mark.parentNode.replaceChild(document.createTextNode(mark.textContent), mark); }
+    }
+  }
+
+  window.AmicusMatrix = {
+    renderMatrix: renderMatrix, renderVerdict: renderVerdict,
+    highlightText: highlightText, clearHighlight: clearHighlight, MATRIX_ROW_CAP: MATRIX_ROW_CAP,
+  };
 })();

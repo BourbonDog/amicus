@@ -54,7 +54,21 @@
     return Math.floor(h / 24) + 'd ago';
   }
 
-  function renderRunList(container, rows, selectedId, onOpen) {
+  /** display() for a bare model id, tolerating a missing labelOf (defaults to no label known). */
+  function displayModel(model, blindOn, labelOf) {
+    return display({ model: model, label: labelOf ? labelOf(model) : null }, blindOn);
+  }
+
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderRunList used to
+  // interpolate `row.chair` (a raw model id) directly into the run-row-sub line, bypassing
+  // display() — every other identity surface (seats, cost rows, revote titles) masks
+  // correctly through it. Christian has ruled blind mode DOES mask the roster (see
+  // docs/council.md and the v4.4 spec §6/resolved-Q2 amendment) — thread blind + labelOf
+  // through so the chair name masks here too. `labelOf` here is the CURRENTLY-OPEN run's
+  // labelByModel lookup (workspace-app.js), so it only resolves a label for the row that IS
+  // the open run; other rows' chairs have no label data available and degrade gracefully to
+  // the raw id — a reading aid, not a security control (§6.1), so best-effort is correct.
+  function renderRunList(container, rows, selectedId, onOpen, blindOn, labelOf) {
     container.textContent = '';
     rows.forEach(function (row) {
       if (row.error) {
@@ -80,7 +94,7 @@
         el('div', { className: 'run-row-sub' }, [
           relTime(row.startedAt),
           String(row.bench.length) + ' seats',
-          'chair ' + (row.chair || '—'),
+          'chair ' + displayModel(row.chair, blindOn, labelOf),
           row.overallVerdict || '',
           row.costDisplay || '',
         ].filter(Boolean).map(function (t) { return el('span', {}, [t]); })),
@@ -89,17 +103,22 @@
     });
   }
 
-  function renderHeaderChips(container, run) {
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): the bench/critic/chair
+  // chips interpolated raw model ids directly, bypassing display() — the seat table right
+  // below masks correctly, so a live blind run showed an unmasked roster in its own header.
+  // Lenses (`run.lenses`) are review-style slugs (e.g. 'skeptic'), never model identities —
+  // left unmasked, matching the raw display used elsewhere for non-identity chips.
+  function renderHeaderChips(container, run, blindOn, labelOf) {
     container.textContent = '';
     container.appendChild(chip(run.status || 'unknown', run.status));
     (Array.isArray(run.bench) ? run.bench : []).forEach(function (m) {
-      container.appendChild(chip(m, ''));
+      container.appendChild(chip(displayModel(m, blindOn, labelOf), ''));
     });
-    if (run.critic) { container.appendChild(chip('critic: ' + run.critic, '')); }
+    if (run.critic) { container.appendChild(chip('critic: ' + displayModel(run.critic, blindOn, labelOf), '')); }
     (Array.isArray(run.lenses) ? run.lenses : []).forEach(function (s) {
       container.appendChild(chip('lens: ' + s, ''));
     });
-    container.appendChild(chip('chair: ' + (run.chair || '—'), ''));
+    container.appendChild(chip('chair: ' + displayModel(run.chair, blindOn, labelOf), ''));
     if (run.options && run.options.gateway) { container.appendChild(chip('gw: ' + run.options.gateway, '')); }
   }
 

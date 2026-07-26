@@ -294,6 +294,15 @@ at any time. This is a **reading aid against anchoring bias, not a security cont
 map is `run.json`'s own `labelMap` field, sitting in plaintext in the run directory like every
 other artifact; nothing stops you opening it in a text editor.
 
+**Masks the roster, not just the seat table** (amended 2026-07-25 — see §6 resolved-Q2 amendment
+in the design spec). Blind mode covers *every* place a model id co-occurs with review authorship:
+the header's bench/critic/chair chips, the currently-open run's own row in the run-list rail
+(its chair chip), seat rows, cost rows, and revote titles — the same `display(pair, blind)`
+formatter backs all of them, so there is one place to get this right instead of five. Best-effort
+only for other rows in the run list: each row's chair can only be masked when a label happens to
+be known for it (in practice, only the currently-open run's own row), so an unopened run's row
+still shows its raw chair id — consistent with "reading aid," not a hard guarantee.
+
 **Two verbs, nothing else:**
 
 - **Abort** — confirm-gated, hidden once the run is terminal. It calls the same council-aware

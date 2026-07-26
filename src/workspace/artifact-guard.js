@@ -50,7 +50,13 @@ function truncateUtf8(buf, max) {
   return buf.subarray(0, end);
 }
 
-/** @param {object} run parsed run.json (may be partial) */
+/**
+ * @param {object} run parsed run.json (may be partial)
+ * @returns {string[]} the allowlist. When two or more DISTINCT bench entries sanitize to the
+ *   same artifact name, a non-enumerable-in-spirit (but plain, test-visible) `collisions`
+ *   array is attached: `[{sanitized, models: [rawA, rawB, ...]}, ...]`. See the R4
+ *   council-review note below for why this is surfaced rather than silently deduped.
+ */
 function artifactAllowlist(run) {
   const names = [...FIXED_ARTIFACTS];
   const bench = run && Array.isArray(run.bench) ? run.bench : [];
@@ -59,7 +65,35 @@ function artifactAllowlist(run) {
   // allowlist tight for the common case.
   const debated = !!(run && run.debate);
   if (debated) { names.push(...DEBATE_ARTIFACTS); }
-  for (const m of bench) {
+
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): sanitizeName is NOT
+  // injective — it maps every character outside [a-zA-Z0-9._-] to '-', so two DISTINCT bench
+  // entries ('vendor/a', 'vendor?a') both produce 'vendor-a'. Both models would then request
+  // the SAME artifact file, and the renderer's `[data-artifact="..."]` lookup (drillIntoJudge)
+  // hands back whichever section matches first — prose silently misattributed to the wrong
+  // model. That is a run-integrity defect (this run directory genuinely cannot hold both
+  // models' review/judge files under distinct names), not a display quirk, so it must be
+  // DETECTED and surfaced, never smoothed away by deduping the resulting name list.
+  //
+  // A bench with genuinely REPEATED identical entries (['gemini', 'gemini']) is a different,
+  // harmless case that must keep collapsing to one set of rows (preserved intent) — collapse
+  // those via a Set over the RAW bench values FIRST, so identical entries never even reach
+  // the collision check below (only entries that are distinct as raw strings but coincide
+  // after sanitizeName count as a collision).
+  const uniqueModels = [...new Set(bench)];
+  const rawBySanitized = new Map(); // sanitized name -> first raw model seen for it
+  const collisionModels = new Map(); // sanitized name -> Set(raw models) once >1 raw maps to it
+  for (const m of uniqueModels) {
+    const s = sanitizeName(m);
+    if (rawBySanitized.has(s)) {
+      if (!collisionModels.has(s)) { collisionModels.set(s, new Set([rawBySanitized.get(s)])); }
+      collisionModels.get(s).add(m);
+    } else {
+      rawBySanitized.set(s, m);
+    }
+  }
+
+  for (const m of uniqueModels) {
     names.push(`review-${sanitizeName(m)}.md`);
     names.push(`judge-${sanitizeName(m)}.md`);
     // rebuttal-/revote- are keyed on the same BENCH ALIAS through the same sanitizeName
@@ -69,10 +103,16 @@ function artifactAllowlist(run) {
       names.push(`revote-${sanitizeName(m)}.md`);
     }
   }
-  // Dedup: a bench with repeated entries (or an entry that collides with another after
-  // sanitizeName) would otherwise push duplicate review-/judge- rows, and Task 3 builds
-  // its artifacts presence map straight off this array.
-  return [...new Set(names)];
+  // `uniqueModels` already collapsed genuinely-repeated bench entries, so this final Set is
+  // now just a belt-and-suspenders no-op for names — it can no longer mask a real collision,
+  // since that path is detected above from the RAW (pre-sanitize) values instead.
+  const list = [...new Set(names)];
+  if (collisionModels.size) {
+    list.collisions = [...collisionModels.entries()].map(([sanitized, models]) => ({
+      sanitized, models: [...models],
+    }));
+  }
+  return list;
 }
 
 /**

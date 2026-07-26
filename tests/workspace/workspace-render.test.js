@@ -159,6 +159,78 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
     });
   });
 
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderHeaderChips and
+  // renderRunList interpolated raw model ids directly, bypassing display(pair, blind) — every
+  // OTHER identity surface (seat rows, cost rows, revote titles) masks correctly through it.
+  // Christian has ruled blind mode IS for masking the roster (superseding an earlier reading
+  // that the unmasked header/rail was correct-by-design) — route both through display().
+  describe('renderHeaderChips (blind flip) — bench/critic/chair chips must mask like every other identity surface', () => {
+    const run = { status: 'complete', bench: ['gemini', 'gpt'], critic: 'gemini', chair: 'gpt', lenses: ['skeptic'] };
+    const labelOf = (m) => ({ gemini: 'Review A', gpt: 'Review B' }[m] || null);
+
+    test('blind ON renders labels for bench/critic/chair chips', () => {
+      const container = document.createElement('div');
+      AmicusRender.renderHeaderChips(container, run, true, labelOf);
+      const chips = container.children.map((c) => c.textContent);
+      expect(chips).toContain('Review A');
+      expect(chips).toContain('Review B');
+      expect(chips).toContain('critic: Review A');
+      expect(chips).toContain('chair: Review B');
+      // lenses are style slugs, not model identities — never masked.
+      expect(chips).toContain('lens: skeptic');
+      expect(chips.some((t) => t === 'gemini' || t === 'gpt')).toBe(false);
+      expect(chips.some((t) => t.indexOf('gemini') !== -1 || t.indexOf('gpt') !== -1)).toBe(false);
+    });
+
+    test('blind OFF renders raw model ids for bench/critic/chair chips', () => {
+      const container = document.createElement('div');
+      AmicusRender.renderHeaderChips(container, run, false, labelOf);
+      const chips = container.children.map((c) => c.textContent);
+      expect(chips).toContain('gemini');
+      expect(chips).toContain('gpt');
+      expect(chips).toContain('critic: gemini');
+      expect(chips).toContain('chair: gpt');
+    });
+
+    test('a model with no known label degrades gracefully to the raw id even while blind (reading aid, not a hard cut)', () => {
+      const container = document.createElement('div');
+      AmicusRender.renderHeaderChips(container, { status: 'complete', bench: ['unknown-model'], chair: 'unknown-model' }, true, () => null);
+      const chips = container.children.map((c) => c.textContent);
+      expect(chips).toContain('unknown-model');
+      expect(chips).toContain('chair: unknown-model');
+    });
+  });
+
+  describe('renderRunList (blind flip) — the chair id in the run-row-sub line must mask like every other identity surface', () => {
+    const rows = [{
+      runId: 'aaaa1111', status: 'complete', startedAt: null, bench: ['gemini', 'gpt'],
+      chair: 'gpt', overallVerdict: '', costDisplay: '',
+    }];
+    const labelOf = (m) => (m === 'gpt' ? 'Review B' : null);
+
+    test('blind ON renders the chair label when known', () => {
+      const container = document.createElement('ul');
+      AmicusRender.renderRunList(container, rows, null, () => {}, true, labelOf);
+      const subText = container.children[0].children[1].textContent;
+      expect(subText).toContain('chair Review B');
+      expect(subText).not.toContain('chair gpt');
+    });
+
+    test('blind OFF renders the raw chair id', () => {
+      const container = document.createElement('ul');
+      AmicusRender.renderRunList(container, rows, null, () => {}, false, labelOf);
+      const subText = container.children[0].children[1].textContent;
+      expect(subText).toContain('chair gpt');
+    });
+
+    test('a row with no label data available for its chair still degrades gracefully to the raw id', () => {
+      const container = document.createElement('ul');
+      AmicusRender.renderRunList(container, rows, null, () => {}, true, () => null);
+      const subText = container.children[0].children[1].textContent;
+      expect(subText).toContain('chair gpt');
+    });
+  });
+
   describe('el() — every painter funnels through this, so one test proves textContent-only discipline file-wide', () => {
     test('a string child carrying a script/onerror payload lands as ONE literal text node, never parsed', () => {
       const payload = '<img src=x onerror=alert(1)>';

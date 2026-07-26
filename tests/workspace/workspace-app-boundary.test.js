@@ -66,6 +66,7 @@ function buildFixtureDetail(runId) {
         totalDisplay: '$0.43', costAmount: 0.43, maxCost: 2,
       },
       verdictPanel: { present: true, overallVerdict: 'Fix these first', tierCounts: { Confirmed: 1 }, streetCred: [], decisions: [], reason: null },
+      artifactCollisions: [],
     },
   };
 }
@@ -226,6 +227,55 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     expect(judgeCalls.length).toBeGreaterThan(0);
   });
 
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): loadPanel() guards
+  // re-ENTRY per panel id (`if (loading[panelId]) return loading[panelId];`) and
+  // wireLazyPanels() clears that cache on every run switch so a NEW request can be issued —
+  // but the completion handler never checked which run was open when ITS OWN request was
+  // issued. Open reviews-panel on run A, switch to run B (which clears the cache and, once
+  // its own panel toggle fires, issues its OWN request), then let A's held request resolve
+  // AFTER B's has already rendered: A's prose must not land in B's panel. Same class of bug
+  // as F09 (stale listener) and the debate.json race below — the fix mirrors both: capture
+  // the runId at request time, pass it through, and guard as the first statement of the
+  // completion handler.
+  test('a stale reviews-panel response from a run navigated away from never overwrites the panel now showing a different run (loadPanel race)', async () => {
+    let resolveStaleReview;
+    const staleReview = new Promise((resolve) => { resolveStaleReview = resolve; });
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') { return Promise.resolve(buildFixtureDetail(args[0])); }
+      if (channel === 'workspace:read-artifact' && args[1] === 'review-gemini.md') {
+        return staleReview; // run A's own artifact request — held open past the run switch
+      }
+      if (channel === 'workspace:read-artifact') { return Promise.resolve({ text: 'Prose about A1 for ' + args[1] + '.' }); }
+      return Promise.resolve(null);
+    });
+
+    await global.window.AmicusApp.openRun('aaaa1111'); // bench ['gemini', 'gpt']
+    const panel = global.document.getElementById('reviews-panel');
+    panel.open = true;
+    panel._listeners.toggle[0](); // issues run A's reviews-panel request; review-gemini.md is held
+    await Promise.resolve();
+
+    await global.window.AmicusApp.openRun('bbbb2222'); // switch runs; bench ['claude']
+    panel.open = true;
+    panel._listeners.toggle[0](); // issues run B's OWN request (loading cache was cleared)
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(global.document.getElementById('reviews-body').textContent).toContain('Prose about A1 for review-claude.md.');
+
+    // Now let run A's held request resolve, well after B has rendered.
+    resolveStaleReview({ text: 'STALE RUN A PROSE' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const bodyText = global.document.getElementById('reviews-body').textContent;
+    expect(bodyText).not.toContain('STALE RUN A PROSE');
+    expect(bodyText).toContain('Prose about A1 for review-claude.md.');
+  });
+
   // ⚠️ CODE REVIEW (round 2, finding 1): openRun() nulls state.debate synchronously, but the
   // debate.json fetch it kicks off is fire-and-forget with no runId guard on the resolution —
   // this is the exact F09 class of bug (a stale async response landing after the user has
@@ -367,6 +417,84 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
     const judgesBody = global.document.getElementById('judges-body');
     expect(judgesBody.querySelectorAll('mark').length).toBe(1);
+  });
+
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): the idempotency guard
+  // above (round 2, finding 4) checks for an existing <mark>/.revote-reason ANYWHERE in the
+  // section — but loadPanel's promise cache means the section is built once and never
+  // rebuilt, so once ANY finding has been drilled into for a judge, the guard is permanently
+  // tripped: a later drill into a DIFFERENT finding for the SAME judge silently does nothing.
+  // The fix must satisfy both: a repeat drill on the SAME finding stays a no-op (covered by
+  // the two tests above), and a drill into a DIFFERENT finding on the same judge must still
+  // highlight — by clearing the previous finding's mark/reason first.
+  test('drilling into a different finding for the same judge highlights the new finding, clearing the previous one (drill-down was single-use per judge)', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') { return Promise.resolve(buildFixtureDetail(args[0])); }
+      if (channel === 'workspace:read-artifact') {
+        return Promise.resolve({ text: 'Judge notes: A1 raised here. A2 raised here too.' });
+      }
+      return Promise.resolve(null);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111'); // bench ['gemini', 'gpt']
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    const judgesBody = global.document.getElementById('judges-body');
+    const section = judgesBody.querySelector('[data-artifact="judge-gpt.md"]');
+    expect(section.querySelectorAll('mark').length).toBe(1);
+    expect(section.querySelector('mark').textContent).toBe('A1');
+
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A2');
+    expect(section.querySelectorAll('mark').length).toBe(1); // old A1 mark cleared, not stacked
+    expect(section.querySelector('mark').textContent).toBe('A2');
+
+    // Drilling back into A1 must still work (and stay idempotent on a further repeat).
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    expect(section.querySelectorAll('mark').length).toBe(1);
+    expect(section.querySelector('mark').textContent).toBe('A1');
+    await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
+    expect(section.querySelectorAll('mark').length).toBe(1);
+    expect(section.querySelector('mark').textContent).toBe('A1');
+  });
+
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): a sanitizeName
+  // collision between two distinct bench entries is a run-integrity defect (the run
+  // directory cannot hold both models' artifacts under distinct names) — run-detail.js
+  // surfaces it as `derived.artifactCollisions`; the renderer must warn loudly rather than
+  // silently letting drillIntoJudge misattribute prose to the wrong model.
+  test('a run with artifactCollisions renders a run-integrity banner naming the colliding models', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.derived.artifactCollisions = [{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }];
+        return Promise.resolve(d);
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const bannerText = global.document.getElementById('banner').textContent;
+    expect(bannerText).toContain('vendor/a');
+    expect(bannerText).toContain('vendor?a');
+    expect(bannerText).toContain('vendor-a');
+  });
+
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderHeaderChips now
+  // masks bench/critic/chair chips via display(blind, labelOf) — but renderDetail_preserveBlind
+  // (the blind-toggle change handler's wrapper) re-renders seats/matrix/verdict/cost with the
+  // user's chosen blind value restored, and used to never re-render the header chips at all.
+  // renderDetail() itself resets state.blind to the run's DEFAULT mid-call (only restored to
+  // `keep` afterward), so a naive threading of blind through renderHeaderChips would leave the
+  // header chips painted with the wrong (default, not user-chosen) blind value after a toggle.
+  test('toggling blind mode also refreshes the header chips, not just seats/matrix/verdict/cost', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111'); // bench ['gemini', 'gpt']; status complete -> default blind OFF
+    const chips = global.document.getElementById('run-chips');
+    expect(chips.textContent).toContain('gemini');
+    const toggle = global.document.getElementById('blind-toggle');
+    toggle._listeners.change[0]({ target: { checked: true } });
+    expect(chips.textContent).toContain('Review A');
+    expect(chips.textContent).not.toContain('gemini');
+    toggle._listeners.change[0]({ target: { checked: false } });
+    expect(chips.textContent).toContain('gemini');
   });
 
   // ⚠️ Fix-wave item 1: renderDetail()'s early return for an unreadable run (`!d || d.error ||

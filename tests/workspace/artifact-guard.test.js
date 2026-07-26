@@ -94,6 +94,40 @@ describe('artifactAllowlist', () => {
     expect(list.filter((n) => n === 'judge-gemini.md')).toHaveLength(1);
   });
 
+  // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): sanitizeName maps every
+  // character outside [a-zA-Z0-9._-] to '-', so it is NOT injective — 'vendor/a' and 'vendor?a'
+  // both become 'vendor-a'. The old code's final `[...new Set(names)]` silently deduped this
+  // down to one row, so both models would request/share the SAME on-disk artifact and
+  // drillIntoJudge's `[data-artifact="..."]` selector would hand back whichever model's prose
+  // happened to match first — a run-integrity defect smoothed into a valid-looking allowlist.
+  // The genuinely-identical-entries case (test above) must keep collapsing harmlessly; only a
+  // collision between DISTINCT raw bench strings is a defect worth surfacing.
+  test('two distinct bench entries that sanitize to the same name are surfaced as a collision, not silently deduped', () => {
+    const list = artifactAllowlist({ bench: ['vendor/a', 'vendor?a'] });
+    // The run directory cannot hold both models' files under one sanitized name — only one
+    // review-/judge- row for it, exactly like the genuinely-duplicate case.
+    expect(list.filter((n) => n === 'review-vendor-a.md')).toHaveLength(1);
+    expect(list.filter((n) => n === 'judge-vendor-a.md')).toHaveLength(1);
+    expect(list.collisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+  });
+
+  test('no collisions field when every bench entry sanitizes to a distinct name', () => {
+    const list = artifactAllowlist({ bench: ['gemini', 'gpt'] });
+    expect(list.collisions).toBeUndefined();
+  });
+
+  test('genuinely identical bench entries (harmless dedup) do not register as a collision', () => {
+    const list = artifactAllowlist({ bench: ['gemini', 'gemini'] });
+    expect(list.collisions).toBeUndefined();
+  });
+
+  test('a three-way collision groups all three offending models together', () => {
+    const list = artifactAllowlist({ bench: ['vendor/a', 'vendor?a', 'vendor a'] });
+    expect(list.collisions).toEqual([
+      { sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a', 'vendor a'] },
+    ]);
+  });
+
   test('FIXED_ARTIFACTS and DEBATE_ARTIFACTS are frozen against consumer mutation', () => {
     expect(() => { FIXED_ARTIFACTS.push('evil'); }).toThrow();
     expect(() => { DEBATE_ARTIFACTS.push('evil'); }).toThrow();

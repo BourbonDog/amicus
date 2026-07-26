@@ -70,11 +70,23 @@
   function loadPanel(panelId, bodyId, files) {
     var A = window.AmicusApp;
     if (loading[panelId]) { return loading[panelId]; }
+    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): this is the third
+    // instance of the F09 class of bug (a stale async response overwriting shared DOM after
+    // the user has navigated away) — already fixed once for the toggle-listener stack (F09
+    // itself) and once for the fire-and-forget debate.json fetch in workspace-app.js (guards
+    // with `if (state.runId !== runId) return;`). wireLazyPanels() clearing `loading[panelId]`
+    // on every run switch permits a NEW request to be issued, but never fenced the PRIOR
+    // request's eventual resolution — open reviews-panel on run A, switch to run B (which
+    // issues its own request), and A's response — however late — used to overwrite whatever
+    // B had just rendered. Capture the runId this request was issued for, and guard as the
+    // FIRST statement of the completion handler, exactly like the debate.json fix.
+    var runId = A.state.runId;
     loading[panelId] = Promise.all(files().map(function (f) {
-      return A.invoke('workspace:read-artifact', A.state.runId, f.name).then(function (res) {
+      return A.invoke('workspace:read-artifact', runId, f.name).then(function (res) {
         return { name: f.name, title: f.title, text: res.text || '', truncated: res.truncated, error: res.error };
       });
     })).then(function (sections) {
+      if (A.state.runId !== runId) { return; } // stale: superseded by a later run switch
       window.AmicusRender.renderProseSections(A.$(bodyId), sections.map(function (s) {
         return s.error ? { name: s.name, title: s.title, error: s.name + ' — ' + s.error } : s;
       }));
@@ -178,18 +190,26 @@
       // A genuinely absent artifact is not an error here — the panel renders its own
       // "<file> not written yet" empty state (spec §9, last row).
       if (!section) { return; }
-      // ⚠️ CODE REVIEW (round 2, finding 4): loadPanel() is cached per panel id, so a repeat
-      // drill into the SAME (judge, findingId) re-enters this .then() against the SAME DOM
-      // section every time — but the mutations below were not idempotent: a second click
-      // duplicated the reason paragraph and, since highlightText's tree-walk descends into a
-      // <mark> it already created, nested a second <mark> inside the first. Guard both on
-      // whether this section has already been annotated.
-      if (rv && rv.reason && !section.querySelector('.revote-reason')) {
+      // ⚠️ CODE REVIEW (round 2, finding 4) + ⚠️ R4 COUNCIL REVIEW (fourth live paid council,
+      // major, unanimous): loadPanel() is cached per panel id, so this DOM section is built
+      // once and never rebuilt — every drill into this judge re-enters this .then() against
+      // the SAME section. The original guard ("skip if the section already has a <mark> /
+      // .revote-reason ANYWHERE") stopped a repeat drill into the SAME finding from
+      // duplicating the reason paragraph / nesting a second <mark> — but it also permanently
+      // wedged a LATER drill into a DIFFERENT finding on the same judge, since the stale
+      // mark from the first finding trips the same "already annotated" check forever.
+      // Track which finding is CURRENTLY highlighted on this section instead: a repeat drill
+      // on that same finding is a no-op (idempotent), while a drill into any other finding
+      // clears the previous mark/reason before applying the new one.
+      if (section.dataset.drilledFinding === findingId) { return; }
+      var staleReason = section.querySelector('.revote-reason');
+      if (staleReason) { staleReason.remove(); }
+      window.AmicusMatrix.clearHighlight(section);
+      if (rv && rv.reason) {
         section.insertBefore(window.AmicusRender.el('p', { className: 'mono revote-reason' }, [rv.reason]), section.children[1] || null);
       }
-      if (!section.querySelector('mark')) {
-        window.AmicusMatrix.highlightText(section, findingId);
-      }
+      window.AmicusMatrix.highlightText(section, findingId);
+      section.dataset.drilledFinding = findingId;
       section.scrollIntoView({ block: 'start' });
     });
   }

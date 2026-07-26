@@ -41,7 +41,11 @@
   // ---- run list ----------------------------------------------------------
   function refreshList() {
     return invoke('workspace:list-runs').then(function (rows) {
-      window.AmicusRender.renderRunList($('run-list'), rows, state.runId, openRun);
+      // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): thread the
+      // CURRENTLY-open run's blind state + label lookup through. labelOf only resolves a
+      // label for models that belong to the currently open run, so other rows' chair chips
+      // degrade gracefully to the raw id — see renderRunList's own note in workspace-render.js.
+      window.AmicusRender.renderRunList($('run-list'), rows, state.runId, openRun, state.blind, labelOf);
     });
   }
 
@@ -106,7 +110,7 @@
     d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; });
 
     $('run-title').textContent = d.runId;
-    R.renderHeaderChips($('run-chips'), d.run);
+    R.renderHeaderChips($('run-chips'), d.run, state.blind, labelOf);
     R.renderGauge($('cost-gauge-fill'), $('cost-gauge-text'),
       d.derived.cost.costAmount, d.derived.cost.maxCost, d.derived.cost.totalDisplay);
     R.renderStageRail($('stage-rail'), d.derived.stageRail);
@@ -128,6 +132,20 @@
     if (!d.derived.schemaSupported) {
       R.renderBanner($('banner'), 'This run was written by a different amicus version (schemaVersion ' +
         d.run.schemaVersion + ') — artifacts: ' + d.runDir, 'warn');
+      return;
+    }
+    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): two distinct bench
+    // entries that sanitize to the same artifact name (src/workspace/artifact-guard.js's
+    // artifactAllowlist) mean this run directory cannot hold both models' review/judge files
+    // under distinct names — drillIntoJudge's artifact lookup would otherwise silently
+    // misattribute one model's prose to the other. This is a run-integrity defect the user
+    // must see, not a display quirk to smooth over — surfaced ahead of the run.error/reason
+    // banner below since it calls into question every judges-panel section's attribution.
+    if (d.derived.artifactCollisions && d.derived.artifactCollisions.length) {
+      var c = d.derived.artifactCollisions[0];
+      R.renderBanner($('banner'),
+        'Run integrity error: bench entries ' + c.models.join(' and ') + ' both sanitize to "' + c.sanitized +
+        '" — this run directory cannot distinguish their artifacts, so prose below may be misattributed.', '');
       return;
     }
     // ⚠️ PRE-FLIGHT (P3), caught live by the CDP e2e (Task 18): gating on `d.run.error` ALONE
@@ -172,6 +190,12 @@
     renderDetail();
     state.blind = keep;
     $('blind-toggle').checked = keep;
+    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderDetail() (just
+    // called above) resets state.blind to the run's DEFAULT before this function restores the
+    // user's chosen `keep` value — renderHeaderChips was painted during that inner call with
+    // the (temporarily wrong) default blind state and, unlike seats/matrix/verdict/cost below,
+    // was never repainted afterward. Re-render it here too, now that state.blind is correct.
+    window.AmicusRender.renderHeaderChips($('run-chips'), state.detail.run, state.blind, labelOf);
     P.renderSeatsPanel();
     P.renderMatrixPanel();
     P.renderVerdictPanel();
