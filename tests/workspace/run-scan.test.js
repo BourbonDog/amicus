@@ -8,7 +8,13 @@ const { scanCouncilRuns, readPointer } = require('../../src/workspace/run-scan')
 
 const FX = path.join(__dirname, '..', 'fixtures');
 
-/** Seed a temp project whose sessions dir points at the given fixture dirs. */
+/** Seed a temp project whose sessions dir points at the given fixture dirs. Registers
+ *  whatever literal runDir string it's given — including nonexistent or
+ *  external-to-project ones — which is exactly what the dangling-pointer, malformed-run.json,
+ *  and readPointer-resolution tests below need. NOT used for tests that need
+ *  scanCouncilRuns to actually read the fixture content: since the outer containment fence
+ *  (runDir must resolve inside project — see the describe block below) rejects any runDir
+ *  outside project, those use seedProjectNested instead. */
 function seedProject(entries) {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-scan-'));
   const sessions = path.join(project, '.claude', 'amicus_sessions');
@@ -19,9 +25,26 @@ function seedProject(entries) {
   return project;
 }
 
+/** Seed a temp project whose sessions dir points at COPIES of the given fixture dirs,
+ *  nested under the project (mirrors production: a real runDir is always inside project —
+ *  src/mcp-council-run.js:109 rejects an outDir outside the project at creation time).
+ *  `entries` maps runId -> a fixture SOURCE dir to copy in. */
+function seedProjectNested(entries) {
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-scan-'));
+  const sessions = path.join(project, '.claude', 'amicus_sessions');
+  fs.mkdirSync(sessions, { recursive: true });
+  for (const [runId, source] of Object.entries(entries)) {
+    const runDir = path.join(project, 'runs', `council-${runId}`);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.cpSync(source, runDir, { recursive: true });
+    fs.writeFileSync(path.join(sessions, `council-${runId}.json`), JSON.stringify({ runId, runDir }));
+  }
+  return project;
+}
+
 describe('scanCouncilRuns', () => {
   test('builds rows for every pointer, sorted startedAt desc', () => {
-    const project = seedProject({
+    const project = seedProjectNested({
       aaaa1111: path.join(FX, 'council-run-complete'),
       bbbb2222: path.join(FX, 'council-run-degraded'),
       cccc3333: path.join(FX, 'council-run-live'),
@@ -51,7 +74,11 @@ describe('scanCouncilRuns', () => {
 
   test('dangling pointer and unreadable run.json become error rows, never throw', () => {
     const project = seedProject({ eeee4444: path.join(os.tmpdir(), 'ws-scan-nowhere-' + Date.now()) });
-    const badDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-scan-bad-'));
+    // Nested under project (not a separate temp dir) so this exercises the intended
+    // "well-formed pointer, unreadable run.json" path rather than tripping the outer
+    // containment fence below — that fence has its own dedicated describe block.
+    const badDir = path.join(project, 'runs', 'council-ffff5555');
+    fs.mkdirSync(badDir, { recursive: true });
     fs.writeFileSync(path.join(badDir, 'run.json'), '{not json');
     fs.writeFileSync(
       path.join(project, '.claude', 'amicus_sessions', 'council-ffff5555.json'),
@@ -72,11 +99,44 @@ describe('scanCouncilRuns', () => {
   });
 
   test('non-council files in the sessions dir are ignored; missing dir yields []', () => {
-    const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
+    const project = seedProjectNested({ aaaa1111: path.join(FX, 'council-run-complete') });
     fs.writeFileSync(path.join(project, '.claude', 'amicus_sessions', 'notes.txt'), 'x');
     fs.mkdirSync(path.join(project, '.claude', 'amicus_sessions', 'dddd0001'));
     expect(scanCouncilRuns(project)).toHaveLength(1);
     expect(scanCouncilRuns(path.join(os.tmpdir(), 'ws-scan-empty-' + Date.now()))).toEqual([]);
+  });
+});
+
+// Third council-review pass: scanCouncilRuns resolved each pointer and read run.json
+// (+ verdict.json) straight from ptr.runDir with no check that runDir itself resolves
+// inside project. The pointer file's {runId, runDir} JSON is validated only for
+// truthiness (src/council/run-state.js:133-139) — a tampered/stale pointer can point
+// runDir anywhere on disk. Mirrors artifact-guard.js's readRunArtifact / run-detail.js's
+// getRunDetail outer fence — same isRealpathContained helper (src/workspace/path-fence.js).
+// This feeds the GUI run list, so unlike the other two call sites the fenced-out pointer
+// must become an error row, not a thrown exception — scanCouncilRuns must keep returning
+// every OTHER row.
+describe('scanCouncilRuns — outer fence (runDir must resolve inside project)', () => {
+  test('a tampered/stale pointer whose runDir resolves outside the project becomes an error row; other rows still return', () => {
+    const project = seedProjectNested({ aaaa1111: path.join(FX, 'council-run-complete') });
+    // Tamper a second pointer to point completely outside the project — a real,
+    // existing, fully-readable directory, just not nested under `project`.
+    fs.writeFileSync(
+      path.join(project, '.claude', 'amicus_sessions', 'council-bbbb2222.json'),
+      JSON.stringify({ runId: 'bbbb2222', runDir: path.join(FX, 'council-run-degraded') })
+    );
+
+    const rows = scanCouncilRuns(project);
+
+    expect(rows).toHaveLength(2);
+    const escaped = rows.find((r) => r.runId === 'bbbb2222');
+    // Distinguishable from the existing dangling-pointer / unreadable-run.json error
+    // rows' messages — this is the outer fence firing, before run.json is ever read.
+    expect(escaped.error).toBe('run directory escapes project');
+    expect(escaped.status).toBeUndefined();
+    const ok = rows.find((r) => r.runId === 'aaaa1111');
+    expect(ok.error).toBeUndefined();
+    expect(ok.status).toBe('complete');
   });
 });
 

@@ -16,6 +16,7 @@ const fsReal = require('fs');
 const path = require('path');
 const { sanitizeName } = require('../council/run-launch');
 const { readPointer } = require('./run-scan');
+const { isRealpathContained } = require('./path-fence');
 
 const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json']);
 // ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
@@ -26,34 +27,15 @@ const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md',
 const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
-/**
- * True when `targetRealPath` is exactly `dirRealPath` or a proper descendant of
- * it. Both arguments MUST already be resolved through realpathSync — this is a
- * pure string-prefix check, the shared "fence 2" primitive: a realpath-based
- * containment test that defeats symlink escapes (an artifact/report resolving
- * outside the directory it is supposed to live under). Exported so callers
- * outside this module (e.g. electron/ipc-workspace.js's workspace:open-report
- * handler, council review finding C1) reuse the exact same check rather than
- * re-implementing it.
- * @param {string} dirRealPath
- * @param {string} targetRealPath
- * @returns {boolean}
- */
-function isRealpathContained(dirRealPath, targetRealPath) {
-  const dir = String(dirRealPath);
-  const target = String(targetRealPath);
-  if (target === dir) { return true; }
-  // ⚠️ COUNCIL REVIEW R2 (A6): when dirRealPath IS a filesystem root, it already
-  // ends in a separator ('/' on POSIX, 'C:\\' on Windows) — blindly appending
-  // another (the old `dirRealPath + path.sep`) doubles it ('//' / 'C:\\\\'), and
-  // no real path ever starts with that, so containment silently returned false
-  // for every path under a root dirRealPath. Only append the separator when it
-  // isn't already there.
-  const base = dir.endsWith(path.sep) ? dir : dir + path.sep;
-  // The separator-qualified prefix (not a bare `startsWith(dir)`) is what defeats
-  // the sibling-prefix trap: '/foobar' must not be considered inside '/foo'.
-  return target.startsWith(base);
-}
+// isRealpathContained itself now lives in ./path-fence.js (the shared "fence 2"
+// primitive: a realpath-based containment test that defeats symlink escapes AND
+// tampered/stale pointers). Re-exported below for backward compatibility — callers
+// outside this module (electron/ipc-workspace.js's workspace:open-report, this
+// file's own tests, and as of the third council-review pass src/workspace/run-detail.js
+// and src/workspace/run-scan.js) all reuse the exact same check rather than
+// re-implementing it. It could not stay defined here: run-scan.js needs it too, and
+// this file already requires run-scan.js for readPointer, so a shared leaf module
+// (no workspace/* deps of its own) is what keeps that from becoming a require cycle.
 
 /**
  * Trim a buffer to at most `max` bytes without splitting a multi-byte UTF-8 character.

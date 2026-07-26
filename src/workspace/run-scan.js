@@ -18,6 +18,13 @@ const runState = require('../council/run-state');
 // Same constant run-state.js itself imports (src/council/run-state.js:20), so a
 // future rename can't silently desync this module's walk from its pointer reads.
 const { SESSIONS_DIR } = require('../session-manager');
+// ⚠️ THIRD COUNCIL-REVIEW PASS: readPointer (below) only validates {runId, runDir}
+// for truthiness — a tampered/stale pointer can point runDir anywhere on disk. This
+// is the shared realpath-containment primitive (also used by artifact-guard.js's
+// readRunArtifact and run-detail.js's getRunDetail); it lives in its own leaf module
+// specifically so this file can require it without creating a cycle — artifact-guard.js
+// already requires THIS file for readPointer.
+const { isRealpathContained } = require('./path-fence');
 
 // ⚠️ DE-ROT (F25): widened from /^council-([0-9a-f]{8})\.json$/ to match the shipped
 // walker's pattern (src/council/run-state.js:148) so ids that are not 8 hex still list.
@@ -84,6 +91,31 @@ function scanCouncilRuns(project) {
       rows.push({ runId: m[1], runDir: null, error: ptr.error, pointerPath, startedAt: startedAtOf(null, pointerPath) });
       continue;
     }
+
+    // Outer containment fence (third council-review pass): mirrors artifact-guard.js's
+    // readRunArtifact / run-detail.js's getRunDetail — same isRealpathContained helper,
+    // same check. This feeds the GUI run list (spec §5.1), so a fenced-out pointer MUST
+    // degrade to an error row exactly like the dangling-pointer/unreadable-run.json cases
+    // below rather than throw — one bad pointer must never blank the whole run list.
+    let realProject, realRunDir;
+    try {
+      realProject = fs.realpathSync(project);
+      realRunDir = fs.realpathSync(ptr.runDir);
+    } catch (err) {
+      rows.push({
+        runId: m[1], runDir: ptr.runDir, error: `run dir unreadable: ${err.message}`,
+        pointerPath, startedAt: startedAtOf(null, pointerPath),
+      });
+      continue;
+    }
+    if (!isRealpathContained(realProject, realRunDir)) {
+      rows.push({
+        runId: m[1], runDir: ptr.runDir, error: 'run directory escapes project',
+        pointerPath, startedAt: startedAtOf(null, pointerPath),
+      });
+      continue;
+    }
+
     const r = readJson(path.join(ptr.runDir, 'run.json'));
     if (r.error) {
       rows.push({ runId: m[1], runDir: ptr.runDir, error: `run.json: ${r.error}`, pointerPath, startedAt: startedAtOf(null, pointerPath) });

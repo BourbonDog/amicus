@@ -265,6 +265,7 @@ src/
 │   ├── fold-format.js  # Council Workspace — fold payload builder (v4.4 §7).
 │   ├── live-normalize.js  # Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam).
 │   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
+│   ├── path-fence.js  # Council Workspace — shared realpath-containment fence.
 │   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
 │   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
@@ -579,6 +580,7 @@ evals/
 | `workspace/fold-format.js` | Council Workspace — fold payload builder (v4.4 §7). | `buildFoldText()` |
 | `workspace/live-normalize.js` | Council Workspace — live-doc normalization (v4.4 §3 A1/A2/A4 seam). | `normalizeLive()` |
 | `workspace/matrix-model.js` | Council Workspace — adjudication matrix view model (v4.4 §5.2). | `buildMatrixModel()` |
+| `workspace/path-fence.js` | Council Workspace — shared realpath-containment fence. | `isRealpathContained()` |
 | `workspace/run-detail.js` | Council Workspace — run detail: defensive parse of run.json / tally.json / | `getRunDetail()`, `TERMINAL_STATUSES()`, `STAGE_LABELS()` |
 | `workspace/run-scan.js` | Council Workspace — run discovery (v4.4 spec §4.3 / §5.1). | `scanCouncilRuns()`, `readPointer()`, `POINTER_RE()` |
 <!-- /AUTO:modules -->

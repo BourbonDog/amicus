@@ -14,6 +14,7 @@ const { readPointer } = require('./run-scan');
 const { buildNamePairs } = require('./blind-mode');
 const { buildMatrixModel } = require('./matrix-model');
 const { artifactAllowlist } = require('./artifact-guard');
+const { isRealpathContained } = require('./path-fence');
 
 /**
  * Shared terminal-status list (also mirrored renderer-side in live-model.js).
@@ -126,6 +127,27 @@ function getRunDetail(project, runId) {
   const ptr = readPointer(project, runId);
   if (ptr.error) { return { runId: ptr.runId, error: ptr.error }; }
   const runDir = ptr.runDir;
+
+  // Outer containment fence (third council-review pass): readPointer's shipped
+  // implementation (src/council/run-state.js:133-139) validates the pointer file's
+  // {runId, runDir} JSON only for truthiness, so a tampered or stale pointer can point
+  // runDir anywhere on disk. Mirrors src/workspace/artifact-guard.js's readRunArtifact
+  // outer fence and electron/ipc-workspace.js's workspace:open-report fence — same
+  // isRealpathContained helper (src/workspace/path-fence.js), same check. Own
+  // distinguishable error string: getRunDetail's other error shapes ('run.json missing',
+  // the readPointer-sourced messages) are asserted by name in several suites and must
+  // not collide with this one. Checked BEFORE any read reaches the filesystem, unlike
+  // readRunArtifact (which reads run.json first) — getRunDetail has no allowlist-shaped
+  // reason to read anything from an escaping runDir at all.
+  let realProject, realRunDir;
+  try { realProject = fs.realpathSync(project); }
+  catch (err) { return { runId: ptr.runId, runDir, error: `project unreadable: ${err.message}` }; }
+  try { realRunDir = fs.realpathSync(runDir); }
+  catch (err) { return { runId: ptr.runId, runDir, error: `run dir unreadable: ${err.message}` }; }
+  if (!isRealpathContained(realProject, realRunDir)) {
+    return { runId: ptr.runId, runDir, error: 'run directory escapes project' };
+  }
+
   const run = readDoc(runDir, 'run.json');
   if (!run) { return { runId: ptr.runId, runDir, error: 'run.json missing' }; }
   const tally = readDoc(runDir, 'tally.json');
