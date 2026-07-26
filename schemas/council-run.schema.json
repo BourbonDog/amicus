@@ -34,6 +34,20 @@
     "options": { "type": "object" },
     "usage": { "type": "object" },
     "exitCode": { "type": ["number", "null"] },
+    "budgetRefusals": {
+      "description": "Waves the --max-cost ceiling refused at pre-flight (v4.4). Present only once at least one wave was refused. The run CONTINUES with a partial bench and exits degraded (2) — it is never rolled back and never aborted.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["waveId", "models"],
+        "properties": {
+          "waveId": { "type": ["string", "null"] },
+          "models": { "type": "array", "items": { "type": "string" } },
+          "reason": { "type": "string" },
+          "at": { "type": "string" }
+        }
+      }
+    },
     "debate": {
       "type": "object",
       "properties": {

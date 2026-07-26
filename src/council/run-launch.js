@@ -18,17 +18,27 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * @param {{fanoutFn?: Function, remainingBudget?: () => number|null}} [deps]
+ * @param {{fanoutFn?: Function, remainingBudget?: () => number|null,
+ *   reserveBudget?: (waveId: string, estimate: number) => boolean,
+ *   onBudgetRefusal?: (info: {waveId, models, message}) => void}} [deps]
  *   fanoutFn: test seam; default = real runFanout.
  *   remainingBudget (v4.4): supplies the council's REMAINING `--max-cost`
- *   allowance (ceiling − known spend) at launch time, threaded into the fanout
- *   pre-flight estimate gate. Omitted (or returning null) leaves `maxCost` off
- *   the transport call entirely, exactly as before.
+ *   allowance (ceiling − known spend − outstanding reservations) at launch time,
+ *   threaded into the fanout pre-flight estimate gate. Omitted (or returning
+ *   null) leaves `maxCost` off the transport call entirely, exactly as before.
+ *   reserveBudget (v4.4 cost-council finding 1): the ATOMIC claim. Reading the
+ *   remaining allowance is not enough when two waves launch concurrently — both
+ *   read the same unreduced number and both pass. The transport calls this once,
+ *   synchronously, with the estimate it just computed; see run-budget.js.
+ *   onBudgetRefusal: notified when the ceiling refuses a wave, so a seat that
+ *   never launched can never vanish silently.
  * @returns {{launchWave: Function, launchSolo: Function}}
  */
 function createLaunchers(deps = {}) {
   const fanoutFn = deps.fanoutFn || require('../sidecar/fanout').runFanout;
   const remainingBudget = deps.remainingBudget || null;
+  const reserveBudget = deps.reserveBudget || null;
+  const onBudgetRefusal = deps.onBudgetRefusal || null;
 
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
@@ -51,8 +61,13 @@ function createLaunchers(deps = {}) {
     // provider or no ceiling, so the transport call is byte-identical for
     // non-council callers and for `--max-cost`-less runs.
     const remaining = remainingBudget ? remainingBudget() : null;
-    const { wave, exitCode } = await fanoutFn({
+    const { wave, exitCode, errorDoc } = await fanoutFn({
       ...(typeof remaining === 'number' ? { maxCost: remaining } : {}),
+      // v4.4 cost-council finding 1: `maxCost` above is a READ taken before the
+      // transport resolved routing; a concurrently launching sibling can claim
+      // part of that allowance in the meantime. This is the CLAIM that settles
+      // it — synchronous by contract, so two callers can never interleave.
+      ...(reserveBudget ? { reserveBudget: (est) => reserveBudget(opts.waveId, est) } : {}),
       models: opts.models.join(','),
       prompt: opts.prompt,
       promptMeta: { source: 'council-engine', file: null, chars: opts.prompt.length },
@@ -88,17 +103,25 @@ function createLaunchers(deps = {}) {
       directory: opts.project,
       noMcp: true,
     });
-    return { wave, exitCode };
+    // A ceiling refusal returns `wave: null`, which the council driver's
+    // addWave() treats as a no-op — so before v4.4 the seats simply vanished
+    // from the bench with nothing on stdout, stderr or run.json to say so. A
+    // partial bench is an acceptable outcome; an UNANNOUNCED one is not.
+    if (onBudgetRefusal && errorDoc && errorDoc.code === 'BUDGET_EXCEEDED') {
+      onBudgetRefusal({ waveId: opts.waveId, models: opts.models.slice(), message: errorDoc.message });
+    }
+    return { wave, exitCode, errorDoc: errorDoc || null };
   }
 
   /**
    * One-model launch (critic/lens legs, repairs, the chair) as a 1-leg wave.
-   * @returns {Promise<{wave: object|null, exitCode: number, leg: object|null}>}
+   * @returns {Promise<{wave: object|null, exitCode: number, leg: object|null,
+   *   errorDoc: object|null}>}
    */
   async function launchSolo(opts) {
-    const { wave, exitCode } = await launchWave({ ...opts, models: [opts.model] });
+    const { wave, exitCode, errorDoc } = await launchWave({ ...opts, models: [opts.model] });
     const leg = (wave && Array.isArray(wave.legs) && wave.legs[0]) || null;
-    return { wave, exitCode, leg };
+    return { wave, exitCode, leg, errorDoc };
   }
 
   return { launchWave, launchSolo };

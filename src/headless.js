@@ -16,6 +16,11 @@ const { writeFileAtomic } = require('./utils/atomic-write');
 const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls,
   getLiveToolCalls, mirrorUsageOnly, allAssistantUsagePresent } = require('./sidecar/conversation-mirror');
 const { buildFoldMarker, trailingFoldMarkerRegex, generateFoldNonce } = require('./utils/fold-marker');
+// v4.4 (cost-council finding 3): `Number(process.env.X) || DEFAULT` cannot express
+// an explicit `0`, and `0` is the DOCUMENTED disable switch for every knob below
+// that uses this helper. See src/utils/env-num.js for why the older `||` knobs are
+// deliberately left alone.
+const { envNumber } = require('./utils/env-num');
 
 /**
  * Fold marker that the agent outputs when done.
@@ -83,12 +88,14 @@ const TOOL_CALL_STALL_MS = Number(process.env.AMICUS_TOOL_CALL_STALL_MS) || 1800
  * $0.00690565716 by 29 ms. 3 × 400 ms bounds the worst case at ~1.2 s of extra
  * wall time on a leg that already finished, and the loop breaks early the moment
  * every assistant message carries usage (the common case: one extra read).
+ * Set AMICUS_USAGE_SETTLE_POLLS to 0 to disable the re-poll entirely.
  */
-const USAGE_SETTLE_POLLS = Number(process.env.AMICUS_USAGE_SETTLE_POLLS) || 3;
-const USAGE_SETTLE_INTERVAL_MS = Number(process.env.AMICUS_USAGE_SETTLE_INTERVAL_MS) || 400;
+const USAGE_SETTLE_POLLS = envNumber('AMICUS_USAGE_SETTLE_POLLS', 3);
+const USAGE_SETTLE_INTERVAL_MS = envNumber('AMICUS_USAGE_SETTLE_INTERVAL_MS', 400);
 /** Deliberately much tighter than POLL_CALL_TIMEOUT_MS: the leg is already
- *  finished, so a hung settle read must not add 30 s × 3 to a run's wall time. */
-const USAGE_SETTLE_CALL_TIMEOUT_MS = Number(process.env.AMICUS_USAGE_SETTLE_CALL_TIMEOUT_MS) || 5000;
+ *  finished, so a hung settle read must not add 30 s × 3 to a run's wall time.
+ *  0 means "no extra timer" (withTimeout passes the promise through untouched). */
+const USAGE_SETTLE_CALL_TIMEOUT_MS = envNumber('AMICUS_USAGE_SETTLE_CALL_TIMEOUT_MS', 5000);
 /**
  * v4.4 B4 part 1 — how long a completion signal may be DEFERRED while a tool
  * call has not yet reached a terminal `state.status`.
@@ -116,7 +123,7 @@ const USAGE_SETTLE_CALL_TIMEOUT_MS = Number(process.env.AMICUS_USAGE_SETTLE_CALL
  * `toolSettleTimedOut` on the result, the terminal progress record and the
  * error log channel. Owner's standing ruling: fail LOUD, not fail CLOSED.
  */
-const TOOL_SETTLE_GRACE_MS = Number(process.env.AMICUS_TOOL_SETTLE_GRACE_MS) || 300000;
+const TOOL_SETTLE_GRACE_MS = envNumber('AMICUS_TOOL_SETTLE_GRACE_MS', 300000);
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -813,24 +820,37 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const canSettleUsage = !aborted && !pollFailureBail && !(sessionError && !mirror.output);
     if (canSettleUsage && usageSettlePolls > 0) {
       for (let i = 0; i < usageSettlePolls; i++) {
-        let settled;
+        // v4.4 (cost-council finding 2): the boundary covers the WHOLE loop body,
+        // not just the network read. It previously wrapped only `withTimeout(...)`,
+        // leaving `mirrorUsageOnly` and `allAssistantUsagePresent` — which inspect
+        // an untrusted snapshot shape — outside it. A throw there escaped
+        // runHeadless entirely and DISCARDED a leg whose answer was already
+        // captured and already paid for: the most expensive possible outcome for
+        // a path whose entire job is a nice-to-have usage top-up. "Best-effort"
+        // has to mean the effort, not just its first statement.
+        let done = false;
         try {
-          settled = await withTimeout(
+          const settled = await withTimeout(
             getMessages(client, sessionId, ...dirArgs),
             Math.min(pollCallTimeoutMs, USAGE_SETTLE_CALL_TIMEOUT_MS),
             'getMessages(usage-settle)',
           );
+          mirrorUsageOnly(settled, mirror);
+          done = allAssistantUsagePresent(settled);
+          if (!done && i < usageSettlePolls - 1) {
+            await new Promise(resolve => setTimeout(resolve, usageSettleIntervalMs));
+          }
         } catch (settleErr) {
+          // Same disposition as the pre-existing network-failure branch: stop
+          // settling, keep every dollar already mirrored, and leave the loop's
+          // completion verdict, summary and error untouched. B2 remains the net
+          // underneath — no observation resolves to `unknown`, never a fake $0.
           logger.debug('usage-settle re-poll failed (best-effort, leg unaffected)', {
             taskId, attempt: i + 1, error: settleErr.message,
           });
           break;
         }
-        mirrorUsageOnly(settled, mirror);
-        if (allAssistantUsagePresent(settled)) { break; }
-        if (i < usageSettlePolls - 1) {
-          await new Promise(resolve => setTimeout(resolve, usageSettleIntervalMs));
-        }
+        if (done) { break; }
       }
     }
 

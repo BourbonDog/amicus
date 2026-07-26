@@ -132,17 +132,10 @@ async function runFanout(options) {
 
   // 1b. Budget gate (pre-creation; refuse before spending). Only legs that
   // will actually run cost anything — a leg that never routed never spends.
-  if (!options.noCostGate) {
-    const { checkBudget, formatBudgetError } = require('./budget');
-    const { loadConfig } = require('../utils/config');
-    const cfg = loadConfig() || {};
-    const maxCostPerMtok = options.maxCostPerMtok !== undefined ? options.maxCostPerMtok : cfg.maxCostPerMtok;
-    const promptChars = (options.promptMeta && options.promptMeta.chars) || (options.prompt ? options.prompt.length : 0);
-    const budget = checkBudget(okLegs, { maxCostPerMtok, maxCost: options.maxCost !== null && options.maxCost !== undefined ? options.maxCost : cfg.maxCost, promptChars });
-    if (!budget.ok) {
-      return failPre(ERROR_CODES.BUDGET_EXCEEDED, 'Error: budget gate refused the wave', formatBudgetError(budget));
-    }
-  }
+  // Lives in ./fanout-budget so the v4.4 concurrency reservation seam has room;
+  // that module's docblock carries the why.
+  const preflight = require('./fanout-budget').preflightBudget(okLegs, options);
+  if (!preflight.ok) { return failPre(ERROR_CODES.BUDGET_EXCEEDED, preflight.message, preflight.hint); }
 
   // 2. Wave record
   const waveId = options.waveId || generateTaskId();

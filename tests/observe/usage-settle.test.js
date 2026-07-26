@@ -199,6 +199,107 @@ describe('B1: the fold-marker fast path loses usage without a post-loop re-poll'
   }, 20000);
 });
 
+/**
+ * v4.4 cost-council finding 2 — the "best-effort" settle loop could still crash
+ * the leg.
+ *
+ * The try/catch wrapped ONLY the `withTimeout(getMessages(...))` network call.
+ * The synchronous work after it — `mirrorUsageOnly(settled, mirror)` and
+ * `allAssistantUsagePresent(settled)` — ran outside the boundary, so a throw
+ * there escaped `runHeadless`, DISCARDING a leg whose model output had already
+ * been captured and paid for, and surfacing as an unhandled rejection.
+ *
+ * Scope correction on the council's report: the specific payload it named (an
+ * error OBJECT where an array was expected) does NOT throw — `getMessages`
+ * normalizes a non-array SDK response to `[]`, and both helpers additionally
+ * guard with `Array.isArray`. The BOUNDARY gap it identified is nonetheless
+ * real: any throw raised while inspecting the snapshot destroys the leg. These
+ * tests drive that with a payload that is an array but whose element is hostile
+ * on property access, which is what "structurally malformed" has to mean once
+ * the two `Array.isArray` guards are accounted for.
+ */
+describe('the settle loop is a real best-effort boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckHealth.mockResolvedValue(true);
+    mockCreateSession.mockResolvedValue('ses_fault');
+    mockSendPromptAsync.mockResolvedValue(undefined);
+    mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
+    fs.existsSync.mockReturnValue(true);
+    fs.readFileSync.mockReturnValue('{}');
+    mockStartServer.mockResolvedValue({
+      client: {}, server: { url: 'http://127.0.0.1:4440', close: jest.fn() },
+    });
+  });
+
+  /** An array (so both Array.isArray guards pass) that throws when read. */
+  const hostileSnapshot = () => [{
+    get info() { throw new TypeError('Cannot read properties of undefined'); },
+  }];
+
+  test('a snapshot that throws while being inspected must not discard the leg', async () => {
+    mockGetMessages
+      .mockResolvedValueOnce([foldedMessage({ completed: false })])
+      .mockResolvedValue(hostileSnapshot());
+
+    const result = await run();
+
+    // The whole point: the model's answer was already captured and billed.
+    expect(result.completed).toBe(true);
+    expect(result.summary).toContain('The review body.');
+    expect(result.error).toBeUndefined();
+  }, 20000);
+
+  test('the throw is contained, logged, and stops further settle reads', async () => {
+    const { logger } = require('../../src/utils/logger');
+    mockGetMessages
+      .mockResolvedValueOnce([foldedMessage({ completed: false })])
+      .mockResolvedValue(hostileSnapshot());
+
+    await run({ usageSettlePolls: 3 });
+
+    // 1 loop poll + exactly 1 settle read: the first failure ends the re-poll,
+    // same as the network-failure branch — never a retry storm on a bad shape.
+    expect(mockGetMessages).toHaveBeenCalledTimes(2);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('usage-settle'),
+      expect.objectContaining({ error: expect.stringContaining('Cannot read properties') }),
+    );
+  }, 20000);
+
+  test('the terminal progress record still lands after a settle throw', async () => {
+    mockGetMessages
+      .mockResolvedValueOnce([foldedMessage({ completed: false })])
+      .mockResolvedValue(hostileSnapshot());
+
+    await run();
+
+    const writes = progressWrites();
+    expect(writes[writes.length - 1].stage).toBe('complete');
+  }, 20000);
+
+  test('a hostile snapshot on a LATER read keeps the usage already settled', async () => {
+    // Settle read 1 prices msg-1 but leaves msg-2 unpriced, so
+    // allAssistantUsagePresent is false and the loop goes round again; settle
+    // read 2 is hostile. The $ captured on read 1 must survive the throw.
+    const second = { info: { role: 'assistant', id: 'msg-2', time: {} }, parts: [] };
+    mockGetMessages
+      .mockResolvedValueOnce([foldedMessage({ completed: false })])
+      .mockResolvedValueOnce([
+        foldedMessage({ tokens: { input: 700, output: 42 }, cost: 0.0031, completed: false }),
+        second,
+      ])
+      .mockResolvedValue(hostileSnapshot());
+
+    const result = await run({ usageSettlePolls: 4 });
+
+    expect(result.completed).toBe(true);
+    expect(mockGetMessages).toHaveBeenCalledTimes(3); // 1 loop + 2 settle (2nd throws → stop)
+    expect(result.usage.tokens.input).toBe(700);
+    expect(result.usage.costReported).toBeCloseTo(0.0031, 10);
+  }, 20000);
+});
+
 describe('B3: a terminal progress write carries the settled usage', () => {
   beforeEach(() => {
     jest.clearAllMocks();

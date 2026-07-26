@@ -58,13 +58,14 @@ async function runCouncil(options, deps = {}) {
     || require('../utils/session-abort').installSignalAbort;
   const now = () => new Date().toISOString();
 
-  const allLegs = [];
-  const addWave = (wave) => { if (wave && Array.isArray(wave.legs)) { allLegs.push(...wave.legs); } };
-  // v4.4: budget position lives in ./run-budget — see its docblock for the owner's
-  // "fail LOUD, not CLOSED" ruling (overBudget() trips on KNOWN spend only).
-  const { overBudget, remainingBudget, noticeUnknownSpend, usageBlock } =
-    createBudget({ allLegs, maxCost: o.maxCost });
-  const launchers = deps.launchers || createLaunchers({ remainingBudget });
+  // v4.4: the whole budget position lives in ./run-budget — its docblock carries the "fail LOUD,
+  // not CLOSED" ruling, why reserveBudget (not merely remainingBudget) is what holds the ceiling
+  // across Stage-1's CONCURRENT launches, why addWave must release-and-account atomically, and
+  // why a refused wave sets `degraded` (a shrunken bench never exits 0) rather than aborting.
+  const degraded = { value: false };
+  const { addWave, overBudget, remainingBudget, noticeUnknownSpend, usageBlock, reserveBudget,
+    noteBudgetRefusal } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
+  const launchers = deps.launchers || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal });
 
   runState.initRun(o.runDir, {
     schemaVersion: 2, type: 'council-run', runId: o.runId, status: 'running', stages: [],
@@ -88,7 +89,6 @@ async function runCouncil(options, deps = {}) {
     },
   });
 
-  const degraded = { value: false };
   const finalize = async (exitCode, error) => {
     uninstall();
     const code = signalled || exitCode;

@@ -123,6 +123,14 @@ Key semantics:
 - `--max-cost` is a **whole-run** ceiling checked before each paid stage launch (Stage-1 wave,
   repair solos, Stage-2 wave, chair). Hitting it mid-run stops launching and finalizes what
   exists; in-flight legs are never aborted for cost.
+- Each launch is measured against the **remaining** allowance (ceiling − known spend −
+  allowances already claimed by a wave that is launching right now). Stage 1 launches its seat
+  wave and its critic/lens waves concurrently, so the claim is atomic — two waves can never
+  both spend the same remaining dollars. **If the ceiling refuses one of them, the run
+  continues with a partial bench**: launched waves are never rolled back and the run is never
+  aborted for cost. The refusal is printed as a `Notice:` naming the wave and its models,
+  recorded on `run.json` as `budgetRefusals[]`, and degrades the exit code to `2`. If it takes
+  the bench below two reviews, the usual `COUNCIL_QUORUM` failure (exit 1) applies.
 - Chair failure recovery: one retry of the same chair → promote the highest peers-only
   street-cred model (from `amicus council stats`) that is not a bench seat → give up and write
   the verdict with `overallVerdict: null`.
@@ -143,6 +151,7 @@ Key semantics:
 | Chair output missing `VERDICT:` line after 1 repair | chair prose kept, `overallVerdict:null` | 2 |
 | Cost ceiling hit after the tally exists | verdict written (no chair), `overallVerdict:null` | 2 |
 | Cost ceiling hit before the tally | stop; error doc `COST_EXCEEDED` | 1 |
+| Cost ceiling refused a wave at pre-flight | partial bench; `Notice:` + `run.json` `budgetRefusals[]` | 2 |
 | Aborted | `run.json` status `aborted` | 130/143 |
 
 **The run directory** (durable state; skill-compatible layout):

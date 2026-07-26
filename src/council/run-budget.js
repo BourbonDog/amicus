@@ -30,13 +30,20 @@ const { sumWaveUsage } = require('../utils/pricing');
 
 /**
  * @param {object} opts
- * @param {Array<object>} opts.allLegs live array the driver pushes every wave's legs into
+ * @param {Array<object>} [opts.allLegs] live array the driver pushes every wave's legs into
  * @param {number|null|undefined} opts.maxCost the `--max-cost` ceiling, if any
+ * @param {string} [opts.runDir] run directory; when given, budget refusals are
+ *   checkpointed into run.json so the record outlives the stderr notice
+ * @param {{value: boolean}} [opts.degraded] the driver's degrade flag; a budget
+ *   refusal sets it so the run can never exit 0 with a silently shrunken bench
  * @param {(s:string)=>void} [opts.write] stderr writer seam (defaults to process.stderr)
  * @returns {{spendState:Function, spent:Function, overBudget:Function,
- *   remainingBudget:Function, noticeUnknownSpend:Function}}
+ *   remainingBudget:Function, noticeUnknownSpend:Function, usageBlock:Function,
+ *   addWave:Function, reserveBudget:Function, releaseBudget:Function,
+ *   noteBudgetRefusal:Function, budgetRefusals:Function}}
  */
-function createBudget({ allLegs, maxCost, write }) {
+function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
+  const legs = allLegs || [];
   const emit = write || ((s) => process.stderr.write(s));
   const hasCeiling = maxCost !== null && maxCost !== undefined;
 
@@ -49,7 +56,7 @@ function createBudget({ allLegs, maxCost, write }) {
    * `amicus spend` and the GUI all read to say "this total is a floor".
    */
   const spendState = () => {
-    const c = sumWaveUsage(allLegs).cost;
+    const c = sumWaveUsage(legs).cost;
     return {
       known: typeof c.amount === 'number' ? c.amount : 0,
       unknownLegs: c.unpricedLegs || 0,
@@ -63,9 +70,90 @@ function createBudget({ allLegs, maxCost, write }) {
   /** Trips on KNOWN spend only — see the ruling in the module docblock. */
   const overBudget = () => hasCeiling && spent() >= maxCost;
 
-  /** Ceiling minus known spend, floored at 0; null when no ceiling is set.
-   *  Threaded into each wave's fanout pre-flight estimate (run-launch.js). */
-  const remainingBudget = () => (hasCeiling ? Math.max(maxCost - spent(), 0) : null);
+  // ---- Concurrency-safe reservations (v4.4 cost-council finding 1) ----------
+  /**
+   * THE DEFECT. `launchStage1()` builds the seat wave and the critic wave
+   * concurrently under one `Promise.all`, and each launcher called
+   * `remainingBudget()` BEFORE either wave's legs had been appended to `legs`.
+   * Both therefore observed the full, unreduced allowance, and both could pass
+   * a soft gate that — taken together — exceeded `--max-cost`. Only run.js's
+   * post-Stage-1 `overBudget()` noticed, by which point the money was committed.
+   * A read is not a claim.
+   *
+   * THE FIX. `reserveBudget` is a SYNCHRONOUS read-and-claim. Synchronicity is
+   * the entire guarantee: the JS event loop cannot interleave two callers inside
+   * a synchronous function, so a second concurrent wave necessarily observes the
+   * first wave's claim. No mutex, no async barrier, nothing to deadlock.
+   *
+   * WHY NOT SPLIT THE QUOTA. Handing each concurrent wave a fixed share is also
+   * safe but is strictly MORE refusing than the ceiling requires: three cheap
+   * seats plus one expensive critic can fit a ceiling that no proportional split
+   * admits. The owner's standing ruling is fail LOUD, not fail CLOSED — so the
+   * gate must refuse only what genuinely does not fit. First claim wins; a wave
+   * refused here does not stop the run (see noteBudgetRefusal).
+   */
+  const reservations = new Map(); // waveId -> pre-flight estimate ($)
+  const reserved = () => { let t = 0; for (const v of reservations.values()) { t += v; } return t; };
+
+  /** Ceiling minus known spend MINUS outstanding reservations, floored at 0;
+   *  null when no ceiling is set. Threaded into each wave's fanout pre-flight
+   *  estimate as its starting allowance (run-launch.js). */
+  const remainingBudget = () => (hasCeiling ? Math.max(maxCost - spent() - reserved(), 0) : null);
+
+  /**
+   * Atomically claim `estimate` against the allowance no sibling wave has taken.
+   * @returns {boolean} false ONLY when the estimate genuinely does not fit.
+   *   A $0 / unpriced / non-numeric estimate always fits: unknown cost must
+   *   never halt a run (the same ruling that keeps it out of `overBudget`).
+   */
+  const reserveBudget = (waveId, estimate) => {
+    if (!hasCeiling) { return true; }
+    const est = (typeof estimate === 'number' && Number.isFinite(estimate) && estimate > 0) ? estimate : 0;
+    if (est > remainingBudget()) { return false; }
+    reservations.set(waveId, (reservations.get(waveId) || 0) + est);
+    return true;
+  };
+
+  /** Drop a wave's outstanding claim (its real spend now speaks for it). */
+  const releaseBudget = (waveId) => { reservations.delete(waveId); };
+
+  /**
+   * Record a finished wave: its ESTIMATE stops counting and its MEASURED legs
+   * start counting, in one synchronous step so no concurrent launcher can ever
+   * observe a moment where the wave counts twice or not at all.
+   */
+  const addWave = (wave) => {
+    if (!wave) { return; }
+    if (wave.waveId) { releaseBudget(wave.waveId); }
+    if (Array.isArray(wave.legs)) { legs.push(...wave.legs); }
+  };
+
+  /**
+   * A wave the ceiling refused. POLICY (the owner's ruling applied to
+   * concurrency): the run CONTINUES with a partial bench — it never rolls back
+   * waves already launched (that would destroy paid work) and never aborts
+   * (that is fail-closed). What it must never do is lose the seat SILENTLY, so
+   * every refusal is announced on stderr, kept on run.json, and degrades the
+   * run's exit code. Stage 1's existing quorum gate still refuses to call a
+   * bench of fewer than two reviews a council.
+   */
+  const refusals = [];
+  const noteBudgetRefusal = (info) => {
+    const rec = { waveId: (info && info.waveId) || null, models: (info && info.models) || [],
+      reason: 'max-cost', at: new Date().toISOString() };
+    refusals.push(rec);
+    if (degraded) { degraded.value = true; }
+    emit(`Notice: the $${maxCost} --max-cost ceiling refused wave ${rec.waveId} `
+      + `(${rec.models.join(', ') || 'no models'}) — those seats DID NOT LAUNCH and are missing from `
+      + 'this council. The run continues with the bench that did launch and will exit degraded (2). '
+      + 'Raise --max-cost, or pass --no-cost-gate, to seat them.\n');
+    if (runDir) {
+      // Never let bookkeeping sink a run that is otherwise fine.
+      try { require('./run-state').checkpoint(runDir, { budgetRefusals: refusals.slice() }); }
+      catch (e) { emit(`Notice: could not record the budget refusal in run.json: ${e.message}\n`); }
+    }
+  };
+  const budgetRefusals = () => refusals.slice();
 
   let noticed = false;
   /**
@@ -122,7 +210,8 @@ function createBudget({ allLegs, maxCost, write }) {
     };
   };
 
-  return { spendState, spent, overBudget, remainingBudget, noticeUnknownSpend, usageBlock };
+  return { spendState, spent, overBudget, remainingBudget, noticeUnknownSpend, usageBlock,
+    addWave, reserveBudget, releaseBudget, noteBudgetRefusal, budgetRefusals };
 }
 
 module.exports = { createBudget };
