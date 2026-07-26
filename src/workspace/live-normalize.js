@@ -76,7 +76,13 @@ function normalizeLive(doc) {
     view: doc.view || null,
     runId: doc.runId || doc.taskId || null,
     status,
-    stageName: active ? active.name : (doc.stage || null),
+    // ⚠️ PRE-FLIGHT (P6): the fallback read `doc.stage`, which NO producer emits — the council
+    // payload's field is `currentStage` (src/mcp-council-awareness.js:155). Harmless today only by
+    // coincidence: `currentStage` is computed from the same `stages.find(status === 'running')`
+    // predicate as `active`, so both arms are null in exactly the same cases. But it is the same
+    // read-a-field-nobody-writes class as P5, and this is the arm that would matter if `stages`
+    // ever arrived non-array. Read the field that exists.
+    stageName: active ? active.name : (doc.currentStage || null),
     stages,
     seats: legRowsOf(doc).map(seatOf),
     // The two counters the payload already ships (src/mcp-council-awareness.js:149) — the honest

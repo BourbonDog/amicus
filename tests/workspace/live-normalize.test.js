@@ -106,4 +106,15 @@ describe('normalizeLive', () => {
     expect(labelFor(seat.modelInput, labelMap)).toBe('Review A');
     expect(labelFor(seat.model, labelMap)).toBeNull();
   });
+
+  // ⚠️ PRE-FLIGHT (P6): with no stage in `running`, stageName falls back to the doc's own field.
+  // The producer writes `currentStage` (src/mcp-council-awareness.js:155); it has never written
+  // `stage`. Pinning both directions so the fallback can't drift back onto a phantom field.
+  test('stageName falls back to currentStage — the field the producer actually writes', () => {
+    const base = { type: 'council-run', taskId: 'x', status: 'running',
+      stages: [{ name: 'stage1', status: 'complete' }] };
+    expect(normalizeLive({ ...base, currentStage: 'chair' }).stageName).toBe('chair');
+    // a doc carrying only the phantom `stage` key yields null, not a stage name
+    expect(normalizeLive({ ...base, stage: 'chair' }).stageName).toBeNull();
+  });
 });
