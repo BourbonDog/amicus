@@ -126,6 +126,11 @@ describe('buildCouncilStatusPayload: legs[] + stall flags (DE-ROT F01)', () => {
     expect(doc.stalled).toBe(true);
     expect(typeof doc.stalledForSeconds).toBe('number');
     expect(doc.stalledForSeconds).toBeGreaterThanOrEqual(170);
+    // ⚠️ Fix-wave item 3: an upper bound too — stalledForSeconds must be a DURATION (the ~3
+    // minutes since staleTime above), not an absolute epoch-seconds timestamp (~1.7e9), which
+    // would also satisfy the lower-bound-only assertion above and hide a regression that
+    // assigned an absolute timestamp instead of a duration.
+    expect(doc.stalledForSeconds).toBeLessThan(3600);
 
     // Point 4: no regression — legsTotal/legsComplete computed exactly as before.
     expect(doc.legsTotal).toBe(3);

@@ -50,9 +50,15 @@ describe('renderTable', () => {
         { name: 'chair', status: 'pending', waveId: null },
       ],
       legsTotal: 3, legsComplete: 1, elapsed: '2m 0s',
+      // ⚠️ Fix-wave item 5 (F36): `model` is the RESOLVED executable id (metadata.model) on
+      // the real composed payload, never the council ALIAS — that alias lives in the
+      // separate `modelInput` field (src/observe/council-legs.js). A fixture with an alias
+      // in `model` doesn't resemble the document it stands in for, which is exactly how the
+      // model vs modelInput confusion (F36) got missed the first time; assertions below hold
+      // either way (substring match), so this fix is free.
       legs: [
-        { taskId: 'w2-1', model: 'gemini', status: 'complete', messages: 3, latestPreview: 'Done.' },
-        { taskId: 'w2-2', model: 'gpt', status: 'running', messages: 1, latestPreview: 'Working...', stalled: true },
+        { taskId: 'w2-1', model: 'google/gemini-2.5', modelInput: 'gemini', status: 'complete', messages: 3, latestPreview: 'Done.' },
+        { taskId: 'w2-2', model: 'openai/gpt-5', modelInput: 'gpt', status: 'running', messages: 1, latestPreview: 'Working...', stalled: true },
       ],
     };
     const table = renderTable(council);

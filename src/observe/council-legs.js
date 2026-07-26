@@ -95,7 +95,9 @@ function buildLegRow(project, legId, runCtx) {
     // undefined key on the row.
     const enriched = enrichLegUsage(row, p.usage);
     if (enriched.usage) { row.usage = enriched.usage; }
-  } catch { /* no progress.json yet — leave base fields only */ }
+  } catch { /* no progress.json yet, OR enrichLegUsage threw pricing it (e.g. an unknown
+    model) — both land here indistinguishably and leave base fields only; mirrors the
+    pre-existing wave branch's same all-or-nothing catch (deliberate, not a gap to close) */ }
   return { row, stalledMs };
 }
 
