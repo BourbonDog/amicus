@@ -433,6 +433,41 @@ describe('workspace:fold — code-review follow-ups', () => {
     expect(res.ok).toBe(false);
     expect(win.close).not.toHaveBeenCalled();
   });
+
+  // Council review R2, finding A3: the renderer supports navigating to a DIFFERENT
+  // run within the same open window (openRun with a dynamic runId — bare `--ui`
+  // opens the whole project run list, spec §4.4/§4.3). Before this fix,
+  // hasCompleted() was a single unkeyed latch: fold run A -> succeeds; switch to
+  // run B -> workspace:fold silently returned {ok:true, already:true} WITHOUT
+  // ever calling stdoutWrite for B. The UI read "Folded ✓" for B and nothing
+  // reached the launching terminal — a silent wrong-result, not a cosmetic one.
+  test('cross-run fold: folding run A does not block an honest fold of run B afterward', async () => {
+    const runDetails = {
+      aaaa1111: { runId: 'aaaa1111', run: { runId: 'aaaa1111', chair: 'deepseek', status: 'complete', stages: [] }, tally: null, verdict: null },
+      bbbb2222: { runId: 'bbbb2222', run: { runId: 'bbbb2222', chair: 'gemini', status: 'complete', stages: [] }, tally: null, verdict: null },
+    };
+    const { ipc, goodEvent, deps } = setup({
+      getRunDetail: jest.fn((_project, runId) => runDetails[runId]),
+      buildFoldText: jest.fn(({ run }) => `FOLD-TEXT-${run.runId}`),
+    });
+
+    const first = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+    expect(first).toEqual({ ok: true });
+    expect(deps.stdoutWrite).toHaveBeenNthCalledWith(1, 'FOLD-TEXT-aaaa1111\n');
+
+    // Re-entry on the SAME run: still the documented "one fold write per launch,
+    // per run" already:true (spec §7) — no regression on that contract.
+    const sameRunAgain = await ipc.invoke('workspace:fold', goodEvent, 'aaaa1111');
+    expect(sameRunAgain).toEqual({ ok: true, already: true });
+    expect(deps.stdoutWrite).toHaveBeenCalledTimes(1);
+
+    // A DIFFERENT run must actually fold — not silently report already:true
+    // for a run that was never written.
+    const second = await ipc.invoke('workspace:fold', goodEvent, 'bbbb2222');
+    expect(second).toEqual({ ok: true });
+    expect(deps.stdoutWrite).toHaveBeenCalledTimes(2);
+    expect(deps.stdoutWrite).toHaveBeenNthCalledWith(2, 'FOLD-TEXT-bbbb2222\n');
+  });
 });
 
 describe('createFoldGate', () => {
@@ -454,5 +489,21 @@ describe('createFoldGate', () => {
     expect(gate.settle({ ok: false })).toBe(false);
     expect(gate.hasCompleted()).toBe(false);
     expect(gate.begin()).toBe(true);             // retry allowed after failure
+  });
+
+  // Council review R2, finding A3: hasCompleted() used to be a single UNKEYED
+  // boolean — completing a fold for ANY run permanently latched the gate for
+  // every OTHER run too, for the life of the window. Scoped per runId so a
+  // second, DIFFERENT run gets its own honest begin()/hasCompleted() pair.
+  test('hasCompleted/begin are scoped per runId — completing run A does not latch run B', () => {
+    const gate = createFoldGate();
+    expect(gate.begin('aaaa1111')).toBe(true);
+    expect(gate.settle({ ok: true })).toBe(false); // no pending close
+    expect(gate.hasCompleted('aaaa1111')).toBe(true);
+    expect(gate.hasCompleted('bbbb2222')).toBe(false);
+    expect(gate.begin('bbbb2222')).toBe(true);     // a DIFFERENT run still gets a real attempt
+    expect(gate.settle({ ok: true })).toBe(false);
+    expect(gate.hasCompleted('bbbb2222')).toBe(true);
+    expect(gate.hasCompleted('aaaa1111')).toBe(true); // A's completion is unaffected by B's
   });
 });

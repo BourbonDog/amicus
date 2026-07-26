@@ -5,7 +5,8 @@ const os = require('os');
 const path = require('path');
 
 const {
-  artifactAllowlist, readRunArtifact, FIXED_ARTIFACTS, DEBATE_ARTIFACTS, MAX_ARTIFACT_BYTES,
+  artifactAllowlist, readRunArtifact, isRealpathContained,
+  FIXED_ARTIFACTS, DEBATE_ARTIFACTS, MAX_ARTIFACT_BYTES,
 } = require('../../src/workspace/artifact-guard');
 
 const FX = path.join(__dirname, '..', 'fixtures');
@@ -25,12 +26,35 @@ afterAll(() => {
   }
 });
 
-// NOTE: the brief's seedProject hardcoded 'aaaa1111' regardless of runDir, which left the
-// degraded-fixture test's pointer lookup (queried by 'bbbb2222', the fixture's real run id)
-// unable to find its own pointer file. Parameterized with a default so every other call site
-// (all against the aaaa1111 complete fixture) is untouched.
-function seedProject(runDir, runId = 'aaaa1111') {
+// Council review R2 finding A1: readRunArtifact never checked that runDir (which comes
+// straight from the pointer file's JSON, validated only for truthiness by
+// src/council/run-state.js's readPointer) itself resolves inside project — only that the
+// requested artifact resolves inside runDir. A real runDir is ALWAYS nested under project
+// in production (src/mcp-council-run.js:109 rejects an outDir outside the project at
+// creation time), so these fixtures now model that invariant for real instead of pointing
+// project and runDir at two unrelated temp directories: seedProject nests a fresh, empty
+// runDir under a fresh scratch project, and seedFromFixture copies a read-only
+// tests/fixtures/* run into that nested runDir. A couple of tests below deliberately BREAK
+// this invariant (a tampered/stale pointer) to prove the new outer fence refuses them.
+function seedProject(runId = 'aaaa1111') {
   const project = mkScratchDir('ws-guard-');
+  const sessions = path.join(project, '.claude', 'amicus_sessions');
+  fs.mkdirSync(sessions, { recursive: true });
+  const runDir = path.join(project, 'runs', `council-${runId}`);
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(sessions, `council-${runId}.json`), JSON.stringify({ runId, runDir }));
+  return { project, runDir };
+}
+
+function seedFromFixture(fixtureName, runId = 'aaaa1111') {
+  const seeded = seedProject(runId);
+  fs.cpSync(path.join(FX, fixtureName), seeded.runDir, { recursive: true });
+  return seeded;
+}
+
+/** A pointer whose runDir is NOT nested under project — the tampered/stale-pointer shape. */
+function seedProjectWithExternalRunDir(runDir, runId = 'aaaa1111') {
+  const project = mkScratchDir('ws-guard-outerfence-');
   const sessions = path.join(project, '.claude', 'amicus_sessions');
   fs.mkdirSync(sessions, { recursive: true });
   fs.writeFileSync(path.join(sessions, `council-${runId}.json`), JSON.stringify({ runId, runDir }));
@@ -76,16 +100,60 @@ describe('artifactAllowlist', () => {
   });
 });
 
+// Second council review finding A6: isRealpathContained double-separates when
+// dirRealPath IS a filesystem root ('/' + path.sep -> '//'; 'C:\\' + path.sep ->
+// 'C:\\\\'), so a real path directly under root never matches the startsWith
+// check and containment wrongly returns false. Latent because project roots are
+// rarely '/' or 'C:\\' themselves, but container/CI environments are exactly
+// where a root-ish path shows up, and this primitive now backs BOTH readRunArtifact
+// (fence 2) and workspace:open-report (electron/ipc-workspace.js).
+//
+// Root-form assertions are platform-guarded (mirrors tests/mcp-project-containment.test.js's
+// existing `process.platform === 'win32' ? ... : ...` convention) because the function
+// under test resolves its separator from the NATIVE `path` module — feeding it the other
+// OS's literal separator style would fail regardless of correctness (a real cross-platform
+// bug can't be observed by mixing separator conventions). The CI matrix (ci.yml runs both
+// ubuntu-latest and windows-latest) exercises both root forms across the two OS legs.
+describe('isRealpathContained', () => {
+  const ROOT = process.platform === 'win32' ? 'C:\\' : '/';
+
+  test('a direct child of the filesystem root IS contained (regression: double-separator bug)', () => {
+    expect(isRealpathContained(ROOT, path.join(ROOT, 'foo'))).toBe(true);
+  });
+
+  test('the filesystem root contains itself', () => {
+    expect(isRealpathContained(ROOT, ROOT)).toBe(true);
+  });
+
+  test('an ordinary (non-root) directory still contains its children and itself', () => {
+    const dir = path.join(ROOT, 'a', 'b');
+    expect(isRealpathContained(dir, path.join(dir, 'c'))).toBe(true);
+    expect(isRealpathContained(dir, dir)).toBe(true);
+  });
+
+  test('a sibling directory sharing a name PREFIX is NOT contained (naive startsWith trap)', () => {
+    const dir = path.join(ROOT, 'foo');
+    const sibling = path.join(ROOT, 'foobar');
+    expect(isRealpathContained(dir, sibling)).toBe(false);
+  });
+
+  test('an unrelated directory is NOT contained', () => {
+    const dir = path.join(ROOT, 'a', 'b');
+    const other = path.join(ROOT, 'a', 'c');
+    expect(isRealpathContained(dir, other)).toBe(false);
+  });
+});
+
 describe('readRunArtifact', () => {
   test('reads an allowlisted artifact from the fixture run', () => {
-    const project = seedProject(path.join(FX, 'council-run-complete'));
+    const { project } = seedFromFixture('council-run-complete');
     const res = readRunArtifact(project, 'aaaa1111', 'chair-output.md');
     expect(res.text).toContain('VERDICT: Fix these first');
     expect(res.truncated).toBeUndefined();
   });
 
   test('rejects names not on the allowlist (traversal cannot even be expressed)', () => {
-    const project = seedProject(path.join(FX, 'council-run-complete'));
+    const { project } = seedFromFixture('council-run-complete');
     for (const bad of ['../secrets.txt', '..\\secrets.txt', 'run.json', 'review-notabench.md', 'report.html']) {
       expect(readRunArtifact(project, 'aaaa1111', bad).error).toBeTruthy();
     }
@@ -94,15 +162,15 @@ describe('readRunArtifact', () => {
   // Supplementary to the brief: the '../secrets.txt' cases above target a path where no
   // file actually exists, so they'd still error via plain ENOENT even with both fences
   // deleted — they don't prove traversal is blocked. This test places a REAL file outside
-  // runDir at the exact location a collapsed '..' would resolve to, with no mocking, so a
-  // leak would be observable if either fence were removed.
+  // runDir (but still inside project, one level up from it) at the exact location a
+  // collapsed '..' would resolve to, with no mocking, so a leak would be observable if
+  // either fence were removed.
   test('a real file placed at the traversed path is never leaked (unmocked realpath)', () => {
-    const runDir = mkScratchDir('ws-guard-escape-');
+    const { project, runDir } = seedProject();
     fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
     const secretPath = path.join(path.dirname(runDir), `secret-${path.basename(runDir)}.txt`);
     fs.writeFileSync(secretPath, 'TOP SECRET');
     try {
-      const project = seedProject(runDir);
       const relName = `../${path.basename(secretPath)}`;
       const res = readRunArtifact(project, 'aaaa1111', relName);
       expect(res.error).toBeTruthy();
@@ -113,7 +181,7 @@ describe('readRunArtifact', () => {
   });
 
   test('not-yet-written artifact reports a friendly error', () => {
-    const project = seedProject(path.join(FX, 'council-run-degraded'), 'bbbb2222');
+    const { project } = seedFromFixture('council-run-degraded', 'bbbb2222');
     const res = readRunArtifact(project, 'bbbb2222', 'chair-output.md');
     expect(res.error).toMatch(/not written yet/);
   });
@@ -123,7 +191,7 @@ describe('readRunArtifact', () => {
   // (src/workspace/run-scan.js). Covered at the unit level in run-scan.test.js; this
   // proves the guard's own entry point actually benefits from that fix end-to-end.
   test('a traversal runId is refused, not resolved to a runDir', () => {
-    const project = seedProject(path.join(FX, 'council-run-complete'));
+    const { project } = seedFromFixture('council-run-complete');
     for (const evil of ['../../../../Users/sendt/.ssh/id', '..\\..\\secrets']) {
       const res = readRunArtifact(project, evil, 'chair-output.md');
       expect(res.error).toBeTruthy();
@@ -132,7 +200,7 @@ describe('readRunArtifact', () => {
   });
 
   test('realpath escape (symlinked artifact) is refused — injected realpath', () => {
-    const project = seedProject(path.join(FX, 'council-run-complete'));
+    const { project } = seedFromFixture('council-run-complete');
     // A real file with known content: if the containment check were removed, this test
     // would see the leaked content in res.text rather than a coincidental ENOENT, so the
     // assertion is load-bearing rather than incidental.
@@ -150,10 +218,9 @@ describe('readRunArtifact', () => {
   });
 
   test('oversized artifact is truncated with a flag', () => {
-    const runDir = mkScratchDir('ws-guard-big-');
+    const { project, runDir } = seedProject();
     fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
     fs.writeFileSync(path.join(runDir, 'bundle-stage2.md'), 'x'.repeat(MAX_ARTIFACT_BYTES + 5000));
-    const project = seedProject(runDir);
     const res = readRunArtifact(project, 'aaaa1111', 'bundle-stage2.md');
     expect(res.truncated).toBe(true);
     expect(Buffer.byteLength(res.text, 'utf8')).toBeLessThanOrEqual(MAX_ARTIFACT_BYTES);
@@ -165,17 +232,42 @@ describe('readRunArtifact', () => {
   // encoded result back over the byte cap. Em dash is 3 bytes; MAX_ARTIFACT_BYTES % 3 !== 0,
   // so a plain repeat reliably lands the cut mid-character without any special-casing.
   test('oversized artifact with multi-byte characters truncates on a character boundary', () => {
-    const runDir = mkScratchDir('ws-guard-mb-');
+    const { project, runDir } = seedProject();
     fs.copyFileSync(path.join(FX, 'council-run-complete', 'run.json'), path.join(runDir, 'run.json'));
     const dash = '—'; // em dash, 3 bytes in UTF-8
     const count = Math.ceil((MAX_ARTIFACT_BYTES + 5000) / 3);
     fs.writeFileSync(path.join(runDir, 'bundle-stage2.md'), dash.repeat(count));
-    const project = seedProject(runDir);
     const res = readRunArtifact(project, 'aaaa1111', 'bundle-stage2.md');
     expect(res.truncated).toBe(true);
     const bytes = Buffer.byteLength(res.text, 'utf8');
     expect(bytes).toBeLessThanOrEqual(MAX_ARTIFACT_BYTES);
     expect(bytes % 3).toBe(0);
     expect(res.text).not.toMatch(new RegExp(String.fromCharCode(0xfffd)));
+  });
+});
+
+// Council review R2 finding A1: readRunArtifact checked that the ARTIFACT resolves inside
+// runDir (fence 2) but never checked that runDir itself resolves inside project. The
+// pointer file's {runId, runDir} JSON is validated only for truthiness
+// (src/council/run-state.js:133-139) — a tampered or stale pointer can point runDir at ANY
+// readable directory, and as long as the requested NAME happens to exist there (fence 1,
+// the allowlist, only constrains the filename, not which directory it is read from), its
+// content is handed back. Mirrors electron/ipc-workspace.js's workspace:open-report fence
+// (first council review, finding C1) — same isRealpathContained helper, same check, same
+// error wording ('run directory escapes project'), now also on the channel that actually
+// serves artifact bytes to the renderer (workspace:read-artifact and workspace:fold's
+// chair-output.md read both go through this function).
+describe('readRunArtifact — outer fence (runDir must resolve inside project)', () => {
+  test('a tampered/stale pointer whose runDir resolves outside the project is refused, not read', () => {
+    // A real, existing, fully-allowlisted run directory — just not nested under `project`.
+    const outsideRunDir = path.join(FX, 'council-run-complete');
+    const project = seedProjectWithExternalRunDir(outsideRunDir);
+
+    const res = readRunArtifact(project, 'aaaa1111', 'chair-output.md');
+
+    // Distinguishable from the inner fence's 'artifact escapes run directory' — this is the
+    // OUTER fence firing, before the artifact-level check is ever reached.
+    expect(res.error).toBe('run directory escapes project');
+    expect(res.text).toBeUndefined();
   });
 });

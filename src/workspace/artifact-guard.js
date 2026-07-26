@@ -40,7 +40,19 @@ const MAX_ARTIFACT_BYTES = 200 * 1024;
  * @returns {boolean}
  */
 function isRealpathContained(dirRealPath, targetRealPath) {
-  return targetRealPath === dirRealPath || String(targetRealPath).startsWith(dirRealPath + path.sep);
+  const dir = String(dirRealPath);
+  const target = String(targetRealPath);
+  if (target === dir) { return true; }
+  // ⚠️ COUNCIL REVIEW R2 (A6): when dirRealPath IS a filesystem root, it already
+  // ends in a separator ('/' on POSIX, 'C:\\' on Windows) — blindly appending
+  // another (the old `dirRealPath + path.sep`) doubles it ('//' / 'C:\\\\'), and
+  // no real path ever starts with that, so containment silently returned false
+  // for every path under a root dirRealPath. Only append the separator when it
+  // isn't already there.
+  const base = dir.endsWith(path.sep) ? dir : dir + path.sep;
+  // The separator-qualified prefix (not a bare `startsWith(dir)`) is what defeats
+  // the sibling-prefix trap: '/foobar' must not be considered inside '/foo'.
+  return target.startsWith(base);
 }
 
 /**
@@ -103,6 +115,24 @@ function readRunArtifact(project, runId, name, deps = {}) {
   let realDir;
   try { realDir = realpathSync(ptr.runDir); }
   catch (err) { return { error: `run dir unreadable: ${err.message}` }; }
+
+  // ⚠️ COUNCIL REVIEW R2 (A1): the only fence below this used to be "the artifact resolves
+  // inside runDir" — nothing ever checked that runDir ITSELF (straight from the pointer
+  // file's JSON, validated only for truthiness by src/council/run-state.js's readPointer)
+  // stays inside project. A tampered/stale pointer could point runDir at any directory on
+  // disk and, as long as the requested name happened to exist there, hand its content back
+  // — the allowlist only constrains the FILENAME, never which directory it is read from.
+  // Mirrors electron/ipc-workspace.js's workspace:open-report fence (first council review,
+  // finding C1) exactly: same isRealpathContained helper, same check, same error wording —
+  // now also on the channel that actually serves artifact bytes (workspace:read-artifact
+  // and workspace:fold's chair-output.md read both funnel through this function).
+  let realProject;
+  try { realProject = realpathSync(project); }
+  catch (err) { return { error: `project unreadable: ${err.message}` }; }
+  if (!isRealpathContained(realProject, realDir)) {
+    return { error: 'run directory escapes project' };
+  }
+
   let realTarget;
   try { realTarget = realpathSync(path.join(ptr.runDir, name)); }
   catch { return { error: `not written yet: ${name}` }; }

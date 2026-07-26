@@ -45,28 +45,70 @@ function defaultDeps() {
  * Two-flag fold latch (fold.js folded/completed pattern WITHOUT the
  * close-guard fallback-destroy machinery — a workspace fold does no async
  * model work, so that failure surface does not apply; spec §7).
+ *
+ * ⚠️ COUNCIL REVIEW R2 (A3): `completed` used to be a single unkeyed boolean —
+ * one successful fold latched the gate for the ENTIRE life of the window, for
+ * every run, not just the one that was actually folded. The renderer supports
+ * navigating to a different run within one open window (openRun with a
+ * dynamic runId; a bare `--ui` launch opens the whole project run list, spec
+ * §4.3/§4.4), so: open run A, Fold (succeeds) -> switch to run B, Fold ->
+ * the old code returned {ok:true, already:true} WITHOUT ever writing
+ * anything for B. Silent wrong-result, not cosmetic: the UI reads "Folded ✓"
+ * for a run that was never written to the launching terminal.
+ *
+ * Completion is now keyed per runId (a Set of runIds that have been
+ * successfully folded), so each DISTINCT run gets its own honest
+ * begin()/hasCompleted() pair. `writing` (in flight) stays a single GLOBAL
+ * flag on purpose: at most one fold write can be in progress at any instant
+ * regardless of which run it is for (there is exactly one stdout stream to
+ * write to), so a second concurrent call — for the SAME run or a different
+ * one — still correctly gets 'fold-in-flight' rather than interleaving two
+ * writes.
+ *
+ * Why per-run, not "reset the whole gate when the active run changes" or
+ * "keep one global one-shot latch and just report it more honestly": the
+ * plan's spec §7 line ("the fold nonce is per-window-launch... one fold
+ * write per launch... a second fold of the SAME run legitimately returns
+ * already:true") was written before multi-run navigation existed and reads
+ * naturally as "don't spam-refold what you already folded" rather than "the
+ * whole window may only ever fold one run, period." Concretely, allowing one
+ * successful fold per DISTINCT run within a single launch is safe: the
+ * workspace's fold-write path (src/sidecar/workspace-window.js) just relays
+ * accumulated stdout live and returns the exit code once the window closes —
+ * it does no first/last-marker disambiguation the way the OLDER headless
+ * model-session flow's findTrailingFoldMarker does (src/headless.js) — and
+ * every fold block is self-identifying (`Session: <runId>`,
+ * src/workspace/fold-format.js), so two distinct runs folded into the same
+ * launch's stdout are unambiguous to whatever reads it. A global
+ * one-shot-per-window latch would instead be a real product regression: it
+ * would make "browse several runs and fold the ones you care about" — the
+ * whole point of the window NOT auto-closing after a fold — impossible
+ * without reopening the workspace for every run after the first.
  */
 function createFoldGate() {
   let writing = false;
-  let completed = false;
+  let writingRunId = null;
+  const completedRuns = new Set();
   let pendingClose = false;
   return {
-    /** @returns {boolean} true when a write may start */
-    begin() {
-      if (writing || completed) { return false; }
+    /** @returns {boolean} true when a write may start for runId */
+    begin(runId) {
+      if (writing || completedRuns.has(runId)) { return false; }
       writing = true;
+      writingRunId = runId;
       return true;
     },
     /** @returns {boolean} true when a close was blocked during the write */
     settle({ ok }) {
       writing = false;
-      if (ok) { completed = true; }
+      if (ok) { completedRuns.add(writingRunId); }
+      writingRunId = null;
       const p = pendingClose;
       pendingClose = false;
       return p;
     },
     isWriting() { return writing; },
-    hasCompleted() { return completed; },
+    hasCompleted(runId) { return completedRuns.has(runId); },
     noteBlockedClose() { pendingClose = true; },
   };
 }
@@ -139,28 +181,31 @@ function registerWorkspaceHandlers(getWindow, ctx) {
 
   ipc.handle('workspace:fold', async (event, runId) => {
     if (!fromWorkspace(event)) { return { ok: false, error: 'unauthorized' }; }
-    if (gate.hasCompleted()) { return { ok: true, already: true }; }
-    if (!gate.begin()) { return { ok: false, error: 'fold-in-flight' }; }
+    const runKey = String(runId);
+    // Gate keyed on runKey (council review R2, A3 — see createFoldGate's
+    // docblock): completing run A must not latch a DIFFERENT run B.
+    if (gate.hasCompleted(runKey)) { return { ok: true, already: true }; }
+    if (!gate.begin(runKey)) { return { ok: false, error: 'fold-in-flight' }; }
     try {
-      const detail = deps.getRunDetail(project, String(runId));
+      const detail = deps.getRunDetail(project, runKey);
       if (detail.error || !detail.run || detail.run.parseError) {
         closeIfPending(gate.settle({ ok: false }));
         return { ok: false, error: detail.error || 'run.json unavailable' };
       }
-      const chairRead = deps.readRunArtifact(project, String(runId), 'chair-output.md');
+      const chairRead = deps.readRunArtifact(project, runKey, 'chair-output.md');
       // Distinguish a security fence firing (e.g. the realpath-escape check)
       // from a benign absence (not written yet) — both fall through to the
       // same safe fallback body below, but only one of them is worth an
       // operator's attention (code review fix).
       if (chairRead && chairRead.error) {
-        logger.warn('Workspace fold: chair-output.md unavailable', { runId: String(runId), reason: chairRead.error });
+        logger.warn('Workspace fold: chair-output.md unavailable', { runId: runKey, reason: chairRead.error });
       }
       const chairText = chairRead && chairRead.text ? chairRead.text : null;
       const text = deps.buildFoldText({
         nonce, project, run: detail.run, tally: detail.tally, verdict: detail.verdict, chairText,
       });
       await deps.stdoutWrite(text + '\n');
-      logger.info('Workspace fold completed', { runId: String(runId) });
+      logger.info('Workspace fold completed', { runId: runKey });
       closeIfPending(gate.settle({ ok: true }));
       return { ok: true };
     } catch (err) {
