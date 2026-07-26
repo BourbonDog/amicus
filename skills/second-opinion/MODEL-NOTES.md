@@ -4,8 +4,8 @@ This file is the `second-opinion` skill's evolving memory of **how to actually d
 well**. Read it before Stage 0 (council selection and launch); update it, with the user's
 approval, at the end of each run (Stage 6). Keep it tight — merge and prune rather than append.
 
-_Last updated: 2026-07-14 (v2.2.0 fold-back: v3.1 optional council elements verified live;
-claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see changelog)._
+_Last updated: 2026-07-26 (v4.4.0 fold-back: alias-resolution hygiene, `council run --run-id`,
+debate defense/re-vote waves now exercised, haiku and glm notes; see changelog)._
 
 ## Global operating rules (all models)
 - **Fast path:** `council run` applies `--agent Plan` / `--no-context` / `--summary-length
@@ -58,6 +58,20 @@ claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see ch
   including ones outside a judge's focus. A council reviewing this contract flagged the asymmetry
   unanimously. Weigh a lone `Confirmed` tier accordingly, and prefer `Contested` evidence over
   vote counts when a finding matters.
+- **`council run` prints nothing until the run is terminal.** The run id is generated internally and
+  the only stdout write happens after the run resolves, so a backgrounded `council run` gives you no
+  id to watch. **Pin it up front with `--run-id <id>`** and point `amicus watch <id>` at it directly.
+- **Resolve every alias before you spend.** Two failure shapes, both cheap to pre-empt:
+  - **An alias that does not exist aborts the run before any spend** — `resolveModel` throws
+    `Unknown model alias '<x>'`. `deepseek-r1` is a recurring guess and is **not** shipped; the real
+    alias is `deepseek`. Check the alias table (`amicus models`) rather than inferring a name from a
+    model's marketing string.
+  - **A local alias override can silently upgrade a "cheap" seat to a frontier model.** Aliases in
+    `~/.config/amicus/config.json` take precedence over the shipped routes, so a bench you picked for
+    price can resolve to a Pro/preview tier and trip a low `--max-cost` (exit 1) — or quietly cost
+    5-10× what you budgeted. Confirm what each seat actually resolves to before a budget bench.
+- **The chair cannot also hold a bench seat**, so a bench built from budget aliases cannot chair
+  itself with one of them — pick the chair from *outside* the bench list.
 - **Stage-6 approvals:** write the proposed MODEL-NOTES diff to a run-folder file and put that path
   in the approval prompt — chat-text diffs can be hidden behind the approval dialog.
 
@@ -85,9 +99,13 @@ claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see ch
 - **Optional council elements (v2.2.0) verified live:** critic seat (solo-alongside-fanout;
   `role: "critic"` passes through `council tally` untouched), debate mode's nothing-to-debate path
   (provisional `--no-ledger` tally → skip rebuttals → final ledger-recorded tally), and the chair
-  verdict scale (parseable `VERDICT:` line + hard questions) all behaved per SEAT-BRIEFS. **Debate
-  mode's defense/re-vote waves remain unexercised** — an all-Confirmed consensus run has no
-  rebuttal surface; exercise them on a contentious artifact before trusting that path blind.
+  verdict scale (parseable `VERDICT:` line + hard questions) all behaved per SEAT-BRIEFS.
+- **Debate's defense/re-vote waves have now been exercised** (an ideation council, where severity
+  means impact rather than correctness): they parse and tally cleanly, and the round behaves as a
+  **rescope** mechanism rather than a defense — raisers overwhelmingly AMEND (downgrade an
+  overstated severity, narrow a scope) rather than DEFEND, and amendments are re-confirmed on the
+  re-vote. Expect high-amend / low-defend; the idea usually survives, the severity claim often does
+  not.
 
 ## Per-model notes
 
@@ -135,6 +153,26 @@ claim-class dedup adjudication limit; minimax and qwen-coder debut notes; see ch
 
 ### Claude  (in-council, when toggle on)
 - Consistently the most *calibrated* reviewer (no severity inflation; findings overwhelmingly Confirmed; bench-best street-cred in recent runs) but sometimes the least *original* — it can miss the boldest single catch. Treat as a reliability floor, not a discovery engine.
+
+### haiku  (`--model haiku`) — **verify before using; it has been hard-404ing**
+- The direct-Anthropic route (`anthropic/claude-haiku-4-5-20251001`) returned a hard `Not Found`
+  on **every** invocation of a recent paid corpus — 3 of 3 legs across two separate runs, both as
+  **chair** (twice, incl. the fallback retry) and as a **bench seat** — in ~2 s with zero tokens.
+- Both runs degraded *around* it silently rather than failing: one fell back to another chair, the
+  other collapsed its bench from 3 seats to 2 and exited 2. **A dead alias does not stop a council;
+  it shrinks it.** In the bench-seat case every finding came out `confidence: "thin"` with a single
+  peer corroborator, purely because the bench had halved — and nothing in `verdict.json` said so.
+- Resolve the alias against the catalog (`amicus models --check`) before putting it on a paid
+  bench, and re-check the bench roster in `run.json` against what you asked for afterwards.
+
+### GLM  (`--model glm` → z-ai via OpenRouter)
+- Cheap and fast, and ranked best-by-peers on a clean debut — but a later run produced **35 KB of
+  prose with `conformance: unstructured` and 0 parsed findings**, twice. Its structured-output
+  reliability is **not** established; treat the debut as low-N.
+- Useful behavioural note: when its structured output failed it **refused to fabricate** on the
+  repair attempts. Honest — but an honest refusal still costs you the seat, so a bench that leans
+  on `glm` for quorum can silently adjudicate a seat short while still paying for its tokens.
+  Watch `conformance` per seat, not just the finding count.
 
 ### minimax  (`--model minimax` → via OpenRouter)
 - Fast (~2 min review legs), cheap, `clean` findings-JSON conformance on debut.
@@ -209,6 +247,16 @@ This section keeps only per-model **qualitative quirks** and **structural-confor
   GUI-hangs-on-this-machine rule (resolved 2026-06-10; headless stays the council default by
   design). Config path updated to `~/.config/amicus/.env`.
 - **2026-07-02** — Folded back field lessons from runs 4-7 (AV-receiver, pork-shoulder, resume, novel ×2 councils): PowerShell `--models` quoting; current-date injection; long-read model selection; judge no-tools preamble; severity-inflation-justifies-dispute; five-keys tally schema; new Grok/Kimi/Mistral/Claude-in-council sections. Quantitative history stays in the ledger (`amicus council stats`).
+- **2026-07-26 (v4.4.0)** — Fold-back from six paid councils (workspace/renderer review ×4, a
+  frontier cost-pipeline council, and an ideation council). Operating lessons: alias-resolution
+  hygiene before spending (a non-existent alias aborts the run; a local `config.json` override can
+  silently upgrade a "cheap" seat to a Pro tier and trip `--max-cost`); the chair may not also hold
+  a bench seat; `council run` prints nothing until terminal, so pin `--run-id` when backgrounding.
+  Debate's defense/re-vote waves exercised for the first time — they work, and behave as a rescope
+  (amend-heavy) rather than a defense. New per-model notes: **haiku** hard-404ed 3/3 legs across two
+  runs and both councils silently degraded around it; **glm** returned `unstructured` conformance
+  with 0 findings twice after a clean debut, and honestly refused to fabricate on repair — which
+  still costs the seat.
 - **2026-07-14 (v2.2.0)** — Optional council elements shipped and verified on a planted-flaw
   ground-truth council (critic seat, debate mode nothing-to-debate path, chair verdict scale;
   expert lenses defined but not yet field-run). New lessons: claim-class dedup glosses
