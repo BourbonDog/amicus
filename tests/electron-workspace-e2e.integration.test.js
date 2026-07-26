@@ -81,15 +81,21 @@ function seedTempProject() {
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-e2e-'));
   const sessions = path.join(proj, '.claude', 'amicus_sessions');
   fs.mkdirSync(sessions, { recursive: true });
-  // live fixture is COPIED (the test mutates its progress.json)
-  const liveDir = path.join(proj, 'run-cccc3333');
-  // ⚠️ DE-ROT (F16): must be copyRunFixture — a plain cpSync leaves stages[].project as the
-  // literal "__RUNDIR__" sentinel, so the leg rollup resolves against a nonexistent dir and the
-  // live seats panel stays empty for the whole e2e.
-  copyRunFixture(path.join(FX, 'council-run-live'), liveDir);
+  // ⚠️ All three fixtures are COPIED INTO the temp project, and that is load-bearing, not
+  // convenience. A council run dir is always nested inside its project (enforced at creation
+  // time), and every pointer-consuming read is fenced against that invariant
+  // (src/utils/path-fence.js). Pointing a pointer at the checked-in `tests/fixtures/` dir — which
+  // lives in the repo, not in the temp project — is precisely the tampered-pointer shape the fence
+  // exists to refuse: `scanCouncilRuns` returns `run directory escapes project` error rows and
+  // every panel in the suite stays empty. Seed production-shaped dirs; never fixture paths.
+  //
+  // ⚠️ DE-ROT (F16): must be copyRunFixture, not a plain cpSync — cpSync leaves stages[].project
+  // as the literal "__RUNDIR__" sentinel, so the leg rollup resolves against a nonexistent dir and
+  // the live seats panel stays empty for the whole e2e.
+  const liveDir = copyRunFixture(path.join(FX, 'council-run-live'), path.join(proj, 'run-cccc3333'));
   const entries = {
-    aaaa1111: path.join(FX, 'council-run-complete'),
-    bbbb2222: path.join(FX, 'council-run-degraded'),
+    aaaa1111: copyRunFixture(path.join(FX, 'council-run-complete'), path.join(proj, 'run-aaaa1111')),
+    bbbb2222: copyRunFixture(path.join(FX, 'council-run-degraded'), path.join(proj, 'run-bbbb2222')),
     cccc3333: liveDir,
   };
   for (const [runId, runDir] of Object.entries(entries)) {
