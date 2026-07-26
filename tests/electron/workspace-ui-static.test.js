@@ -72,6 +72,25 @@ describe('workspace-ui static page posture', () => {
     expect(CSS).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
   });
 
+  // ⚠️ DE-ROT (F61): workspace-panels.js keeps a LOCAL mirror of run-launch.js's
+  // sanitizeName (it cannot require() across the sandbox) because filenames carry the
+  // sanitized id, which state.labelByModel cannot invert back to the model id — so the
+  // two must never drift. Pin them with a behavioral equality assert rather than trusting
+  // a copy-paste to stay in sync forever.
+  test('workspace-panels.js sanitizeName is behaviorally IDENTICAL to the shipped src/council/run-launch.js sanitizeName', () => {
+    const shipped = require('../../src/council/run-launch').sanitizeName;
+    const prevWindow = global.window;
+    global.window = {};
+    delete require.cache[require.resolve(path.join(UI, 'workspace-panels'))];
+    // eslint-disable-next-line global-require, import/no-dynamic-require
+    require(path.join(UI, 'workspace-panels'));
+    const mirrored = global.window.AmicusPanels.sanitizeName;
+    global.window = prevWindow;
+    for (const s of ['gemini-2.5-pro', 'gpt-4o', 'a/b\\c:*?"<>|', 'local-model_v1', '', 'RE:VIEW.md']) {
+      expect(mirrored(s)).toBe(shipped(s));
+    }
+  });
+
   test('workspace.css uses token vars only — no hex colors', () => {
     // ⚠️ DE-ROT (F60): KEEP this assert. It is STRICTER than the repo-wide token-drift guard,
     // which structurally permits `var(--token, #hex)` fallbacks and waives any `drift-allow:`

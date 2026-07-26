@@ -301,7 +301,11 @@ electron/
 │   ├── index.html
 │   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
+│   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
+│   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
+│   ├── workspace-panels.js  # Council Workspace — lazy/prose panels + the matrix/verdict panel adapters
 │   ├── workspace-render.js  # Council Workspace — DOM painters (run list, header, stage rail, seats,
+│   ├── workspace-verbs.js  # Council Workspace — action verbs (v4.4 §5, ⚠️ DE-ROT F05 split of
 │   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
 ├── fold.js  # Fold Logic

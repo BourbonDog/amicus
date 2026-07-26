@@ -1,0 +1,173 @@
+/**
+ * Council Workspace — application state + wiring (v4.4 §5).
+ * Historical rendering in this task; Task 15 adds the live poll loop into
+ * the seams marked LIVE; Task 16/17 flip the Abort button + confirm dialog.
+ *
+ * ⚠️ DE-ROT (F05) / PRE-FLIGHT (P2): this file is the last of the three-way
+ * split (workspace-app.js / workspace-panels.js / workspace-verbs.js). It
+ * loads LAST (md-lite → live-model → workspace-render → workspace-matrix →
+ * workspace-panels → workspace-verbs → workspace-app), so panels/verbs
+ * already exist and may be captured once, here, at load time.
+ */
+(function () {
+  'use strict';
+
+  var P = window.AmicusPanels;
+  var V = window.AmicusVerbs;
+
+  var invoke = function (ch) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return window.amicusWorkspace.invoke.apply(null, [ch].concat(args));
+  };
+
+  var state = {
+    runId: null,
+    detail: null,
+    debate: null,   // ⚠️ DE-ROT (F38): parsed debate.json, fetched once per run-open; stays
+                     // null on a non-debate run, an aborted/skipped debate, or a parse failure —
+                     // drillIntoJudge's judge-*.md fallback covers all three.
+    blind: false,
+    labelByModel: {},
+    listTimer: null,
+    liveTimer: null, // LIVE (Task 15)
+  };
+
+  function labelOf(model) { return state.labelByModel[model] || null; }
+  function isBlind() { return state.blind; }
+
+  function $(id) { return document.getElementById(id); }
+
+  // ---- run list ----------------------------------------------------------
+  function refreshList() {
+    return invoke('workspace:list-runs').then(function (rows) {
+      window.AmicusRender.renderRunList($('run-list'), rows, state.runId, openRun);
+    });
+  }
+
+  function startListLoop() {
+    if (state.listTimer) { clearInterval(state.listTimer); }
+    state.listTimer = setInterval(refreshList, 5000); // spec §4.3
+    window.addEventListener('focus', refreshList);
+  }
+
+  // ---- run detail --------------------------------------------------------
+  function openRun(runId) {
+    state.runId = runId;
+    state.debate = null;
+    return invoke('workspace:get-run', runId).then(function (detail) {
+      state.detail = detail;
+      // ⚠️ DE-ROT (F38): debate.json is the re-vote index the matrix drill-in needs — fetched
+      // once per run-open (never per render), fire-and-forget. An aborted or cost-ceiling
+      // -skipped debate never writes it; a parse failure leaves state.debate null either way,
+      // which drillIntoJudge treats as "no re-vote for this (judge, id)" and falls back to
+      // today's judge-*.md path.
+      if (detail && detail.run && detail.run.debate) {
+        invoke('workspace:read-artifact', runId, 'debate.json').then(function (res) {
+          try { state.debate = JSON.parse(res.text); } catch (err) { state.debate = null; }
+        });
+      }
+      renderDetail();
+      refreshList();
+    });
+  }
+
+  function renderDetail() {
+    var d = state.detail;
+    $('empty-state').hidden = true;
+    $('run-view').hidden = false;
+    var R = window.AmicusRender;
+
+    if (!d || d.error || !d.derived) {
+      $('run-title').textContent = (d && d.runId) || 'run';
+      R.renderBanner($('banner'),
+        'Run unreadable: ' + ((d && d.error) || (d && d.run && d.run.parseError) || 'unknown') +
+        (d && d.runDir ? ' — ' + d.runDir : ''), '');
+      return;
+    }
+
+    // blind default: computed ONCE per run-open from status (resolution 9)
+    state.blind = window.AmicusLive.defaultBlind(d.run.status);
+    $('blind-toggle').checked = state.blind;
+    state.labelByModel = {};
+    d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; });
+
+    $('run-title').textContent = d.runId;
+    R.renderHeaderChips($('run-chips'), d.run);
+    R.renderGauge($('cost-gauge-fill'), $('cost-gauge-text'),
+      d.derived.cost.costAmount, d.derived.cost.maxCost, d.derived.cost.totalDisplay);
+    R.renderStageRail($('stage-rail'), d.derived.stageRail);
+
+    renderBanners();
+    P.renderSeatsPanel();
+    P.renderMatrixPanel();
+    P.renderVerdictPanel();
+    R.renderCost($('cost-body'), d.derived.cost, state.blind, labelOf);
+    P.wireLazyPanels();
+    // LIVE (Task 15): V.startLiveLoop() when non-terminal
+  }
+
+  function renderBanners() {
+    var d = state.detail;
+    var R = window.AmicusRender;
+    if (!d.derived.schemaSupported) {
+      R.renderBanner($('banner'), 'This run was written by a different amicus version (schemaVersion ' +
+        d.run.schemaVersion + ') — artifacts: ' + d.runDir, 'warn');
+      return;
+    }
+    if (d.run.error) {
+      R.renderBanner($('banner'), d.run.error, d.run.status === 'error' ? '' : 'warn');
+      return;
+    }
+    R.renderBanner($('banner'), null);
+  }
+
+  // ---- blind toggle + keyboard ------------------------------------------
+  $('blind-toggle').addEventListener('change', function (e) {
+    state.blind = !!e.target.checked;
+    renderDetail_preserveBlind();
+  });
+
+  function renderDetail_preserveBlind() {
+    var keep = state.blind;
+    renderDetail();
+    state.blind = keep;
+    $('blind-toggle').checked = keep;
+    P.renderSeatsPanel();
+    P.renderMatrixPanel();
+    P.renderVerdictPanel();
+    window.AmicusRender.renderCost($('cost-body'), state.detail.derived.cost, state.blind, labelOf);
+  }
+
+  $('run-list').addEventListener('keydown', function (e) {
+    var items = Array.prototype.slice.call($('run-list').querySelectorAll('li[data-run-id]'));
+    if (!items.length) { return; }
+    var idx = items.findIndex(function (li) { return li.dataset.runId === state.runId; });
+    if (e.key === 'ArrowDown') { e.preventDefault(); openRun(items[Math.min(items.length - 1, idx + 1)].dataset.runId); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); openRun(items[Math.max(0, idx - 1)].dataset.runId); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { $('dialog-abort').hidden = true; }
+  });
+
+  // ---- boot --------------------------------------------------------------
+  // ⚠️ PRE-FLIGHT (P2): publish the namespace BEFORE anything can call into panels/verbs — they
+  // read `window.AmicusApp.*` at call time and this file loads last.
+  window.AmicusApp = {
+    state: state, invoke: invoke, $: $, labelOf: labelOf,
+    isBlind: isBlind, openRun: openRun, renderDetail: renderDetail, renderBanners: renderBanners,
+  };
+
+  // ⚠️ PRE-FLIGHT (P4) + DE-ROT (F09): register the three prose `toggle` listeners exactly ONCE,
+  // here at boot. wireLazyPanels() (called from renderDetail, on every run-open and blind-toggle)
+  // only rewrites the per-run `loaders` spec map from now on — it never adds a listener.
+  P.proseLoader('reviews-panel');
+  P.proseLoader('bundle-panel');
+  P.proseLoader('judges-panel');
+
+  var boot = new URLSearchParams(window.location.search).get('runId');
+  refreshList().then(function () {
+    if (boot) { openRun(boot); }
+  });
+  startListLoop();
+})();
