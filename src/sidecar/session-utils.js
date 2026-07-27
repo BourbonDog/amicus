@@ -229,13 +229,14 @@ async function executeMode(options) {
  *   has no single default `config.model`, so this registers ALL of them in provider.models
  *   instead. Additive alongside the single-model `options.model` path used by owned-server
  *   callers (start/continue); see opencode-client.js's buildServerOptions.
+ * @param {number} [options.retryDelayMs] - Test seam: collapse the lock-race backoff.
  * @returns {Promise<{client: object, server: object}>}
  * @throws {Error} If server fails to start or health check fails
  */
 async function startOpenCodeServer(mcpConfig, options = {}) {
   const { checkHealth, startServer } = require('../opencode-client');
   const { ensureNodeModulesBinInPath } = require('../utils/path-setup');
-  const { ensurePortAvailable } = require('../utils/server-setup');
+  const { ensurePortAvailable, retryOnLockRace } = require('../utils/server-setup');
   const { waitForServer } = require('../headless');
 
   ensureNodeModulesBinInPath();
@@ -253,20 +254,27 @@ async function startOpenCodeServer(mcpConfig, options = {}) {
   if (options.systemPrompt) { serverOptions.systemPrompt = options.systemPrompt; }
   if (options.agentName) { serverOptions.agentName = options.agentName; }
 
-  const { client, server } = await startServer(serverOptions);
-  logger.debug('OpenCode server started', { url: server.url });
+  // v4.4.1 Task 0.5: a LOCK-CLASS start failure is retried (3 attempts, 250/500ms).
+  // The per-run shared server removes the races a single amicus process creates;
+  // this covers the ones it cannot — two amicus processes, or a CLI run beside a
+  // live MCP server, sharing one OpenCode SQLite database. Nothing else retries:
+  // see isLockClassStartFailure in ../utils/server-setup.
+  return retryOnLockRace(async () => {
+    const { client, server } = await startServer(serverOptions);
+    logger.debug('OpenCode server started', { url: server.url });
 
-  const ready = await waitForServer(client, checkHealth);
-  if (!ready) {
-    // Fire-and-forget: today close() is sync (Promise.resolve wraps a
-    // non-promise harmlessly); once close() becomes async (bounded
-    // kill-escalation poll) this guard prevents an unhandled rejection
-    // from racing the throw below.
-    Promise.resolve(server.close()).catch(() => {});
-    throw new Error('OpenCode server failed to become ready');
-  }
+    const ready = await waitForServer(client, checkHealth);
+    if (!ready) {
+      // Fire-and-forget: today close() is sync (Promise.resolve wraps a
+      // non-promise harmlessly); once close() becomes async (bounded
+      // kill-escalation poll) this guard prevents an unhandled rejection
+      // from racing the throw below.
+      Promise.resolve(server.close()).catch(() => {});
+      throw new Error('OpenCode server failed to become ready');
+    }
 
-  return { client, server };
+    return { client, server };
+  }, { retryDelayMs: options.retryDelayMs });
 }
 
 module.exports = {

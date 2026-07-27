@@ -573,7 +573,7 @@ evals/
 | `utils/route-error.js` | Shared renderer (#61 Task 6.1): turns a router RouteResult — an error or a | `toStructuredError()`, `toCliMessage()`, `toErrorDocFields()`, `REASON_TEXT()`, `ROUTE_ERROR_REASONS()` |
 | `utils/route-launch.js` | Route-launch views (#61 gateway routing integration, Task 4.2). | `buildLaunchKeys()`, `getRouteCatalogInfo()`, `resolveRouteForLaunch()`, `buildSuggestions()`, `ROUTE_VERSION()` |
 | `utils/route-suggestions.js` |  | `buildSuggestions()`, `applySuggestions()` |
-| `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()`, `ensurePortAvailable()` |
+| `utils/server-setup.js` | Server Setup Utilities | `DEFAULT_PORT()`, `LOCK_RETRY_DELAYS_MS()`, `isPortInUse()`, `getPortPid()`, `killPortProcess()` |
 | `utils/session-abort.js` | Session abort utilities: signal handler installation and terminal metadata writes. | `markTerminal()`, `markAborted()`, `installSignalAbort()`, `idleBackstopTeardown()` |
 | `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
 | `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME()`, `recordSession()`, `lookupSessionProject()` |

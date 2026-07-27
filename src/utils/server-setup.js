@@ -75,10 +75,76 @@ function ensurePortAvailable(port = DEFAULT_PORT) {
   return false;
 }
 
+/**
+ * A start failure that is a LOCK RACE, not a deterministic error.
+ *
+ * OpenCode opens one shared SQLite database (~/.local/share/opencode/opencode.db)
+ * at startup, so two servers starting in the same instant can collide on it and
+ * the loser exits 1 with `database is locked`. Measured: council run v441plan01
+ * lost four of five seats in 736ms to exactly this.
+ *
+ * Deliberately NARROW. A missing binary, a bad key, a busy port and a config
+ * error are all deterministic — retrying them only triples the latency before
+ * the same failure, so they must fall straight through untouched.
+ */
+const LOCK_CLASS_START_FAILURE = /database is locked|database table is locked|SQLITE_BUSY/i;
+
+/** Backoff between start attempts; 3 attempts total, ≤750ms of added latency. */
+const LOCK_RETRY_DELAYS_MS = [250, 500];
+
+/**
+ * @param {Error|null} error
+ * @returns {boolean} true only for a lock-class (retryable) start failure
+ */
+function isLockClassStartFailure(error) {
+  if (!error) { return false; }
+  // The real failure arrives as a message with the server's own stdout inlined
+  // ("Server exited with code 1 / Server output: … database is locked"), but
+  // check the usual carriers too so a wrapped/spawn-shaped error still matches.
+  const carriers = [error.message, error.stderr, error.stdout, error.cause && error.cause.message];
+  return carriers.some(c => typeof c === 'string' && LOCK_CLASS_START_FAILURE.test(c));
+}
+
+/**
+ * Run `attempt` with a BOUNDED retry on a lock-class failure only.
+ *
+ * Never fails closed: the final failure is rethrown unchanged, so every caller
+ * that already degrades on a start failure (runFanout writes an error wave; a
+ * council run falls back to per-wave servers) degrades exactly as before —
+ * just later, and far less often. This is the half of the fix that covers what
+ * a per-run shared server cannot: two separate `amicus` processes, or a CLI run
+ * beside a live MCP server, still contend for the same database.
+ *
+ * @param {(attempt: number) => Promise<T>} attempt
+ * @param {{retryDelayMs?: number}} [opts] retryDelayMs: test seam — collapses
+ *   every backoff to this value so a retry test does not sleep for real.
+ * @returns {Promise<T>}
+ * @template T
+ */
+async function retryOnLockRace(attempt, opts = {}) {
+  const delays = opts.retryDelayMs === undefined
+    ? LOCK_RETRY_DELAYS_MS
+    : LOCK_RETRY_DELAYS_MS.map(() => opts.retryDelayMs);
+  for (let i = 0; ; i += 1) {
+    try {
+      return await attempt(i);
+    } catch (error) {
+      if (i >= delays.length || !isLockClassStartFailure(error)) { throw error; }
+      logger.warn('OpenCode server start lost a lock race — retrying', {
+        attempt: i + 1, of: delays.length + 1, delayMs: delays[i], error: error.message,
+      });
+      await new Promise(resolve => setTimeout(resolve, delays[i]));
+    }
+  }
+}
+
 module.exports = {
   DEFAULT_PORT,
+  LOCK_RETRY_DELAYS_MS,
   isPortInUse,
   getPortPid,
   killPortProcess,
-  ensurePortAvailable
+  ensurePortAvailable,
+  isLockClassStartFailure,
+  retryOnLockRace
 };
