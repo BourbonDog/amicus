@@ -220,6 +220,58 @@ describe('readRunArtifact', () => {
     expect(res.error).toMatch(/not written yet/);
   });
 
+  // ⚠️ v4.4.1 RN-10. The artifact-realpath catch answered `not written yet: <name>` for ANY
+  // failure — ENOENT, EACCES, EPERM, EIO, ELOOP — so a file that exists but cannot be read was
+  // reported as one the council had not produced. electron/ipc-workspace.js's workspace:fold
+  // reads chair-output.md through here, so on a permission error the fold silently produced a
+  // CHAIRLESS fold reporting {ok: true}, and the logger.warn that was added as the mitigation
+  // logged this very string — so the operator's one diagnostic said "not written yet" about a
+  // file sitting right there. ⚠️ The sanitization stays: round 4 deliberately stopped
+  // interpolating err.message, whose text embeds the full resolved path.
+  describe('RN-10: a realpath failure that is NOT ENOENT is reported as its own thing', () => {
+    const errWithCode = (code) => { const e = new Error(`${code}: permission denied, lstat 'C:\\Users\\someone\\.claude\\x'`); e.code = code; return e; };
+
+    test.each(['EACCES', 'EPERM', 'EIO', 'ELOOP'])('%s is not reported as "not written yet"', (code) => {
+      const { project } = seedFromFixture('council-run-complete');
+      const res = readRunArtifact(project, 'aaaa1111', 'chair-output.md', {
+        realpathSync: (p) => { if (p.endsWith('chair-output.md')) { throw errWithCode(code); } return p; },
+      });
+      expect(res.text).toBeUndefined();
+      expect(res.error).not.toMatch(/not written yet/);
+      expect(res.error).toContain(code);          // the bare errno IS the diagnostic
+      // …still sanitized: no absolute host path, no err.message text.
+      expect(res.error).not.toMatch(/[A-Za-z]:\\|\/home\/|\/Users\//);
+      expect(res.error).not.toMatch(/permission denied/);
+    });
+
+    test('a genuinely absent artifact (ENOENT) still says "not written yet"', () => {
+      const { project } = seedFromFixture('council-run-complete');
+      const res = readRunArtifact(project, 'aaaa1111', 'bundle-stage2.md', {
+        realpathSync: (p) => { if (p.endsWith('bundle-stage2.md')) { throw errWithCode('ENOENT'); } return p; },
+      });
+      expect(res.error).toMatch(/not written yet: bundle-stage2\.md/);
+    });
+
+    test('an error with no usable code degrades to "unknown" rather than leaking anything', () => {
+      const { project } = seedFromFixture('council-run-complete');
+      const res = readRunArtifact(project, 'aaaa1111', 'chair-output.md', {
+        realpathSync: (p) => { if (p.endsWith('chair-output.md')) { throw new Error('C:\\secret\\path exploded'); } return p; },
+      });
+      expect(res.error).toBe('artifact unreadable (unknown): chair-output.md');
+    });
+
+    test('a hostile err.code cannot ride out through the message (whitelisted character class)', () => {
+      const { project } = seedFromFixture('council-run-complete');
+      const e = new Error('nope');
+      e.code = 'EACCES at C:\\Users\\someone\\.ssh\\id_rsa';   // not an errno
+      const res = readRunArtifact(project, 'aaaa1111', 'chair-output.md', {
+        realpathSync: (p) => { if (p.endsWith('chair-output.md')) { throw e; } return p; },
+      });
+      expect(res.error).toBe('artifact unreadable (unknown): chair-output.md');
+      expect(res.error).not.toMatch(/id_rsa/);
+    });
+  });
+
   // Security regression (Task 4 review finding #1): readRunArtifact forwards runId
   // straight into readPointer, which now rejects traversal shapes before any file access
   // (src/workspace/run-scan.js). Covered at the unit level in run-scan.test.js; this
