@@ -7,7 +7,10 @@
  * shared bundle, judge wave in _scratch, parse + bounded repair. Lifted
  * verbatim out of ./run-stages.js for the 300-line gate (v4.4.1 Task 2),
  * mirroring the briefings.js → briefings-stage2.js split. Stage 1 and the
- * shared helpers (isAbortExit, slug, roleFor) stay in ./run-stages.js.
+ * shared helpers (slug, roleFor) stay in ./run-stages.js, which re-exports
+ * runStage2 so callers keep one import surface. This module imports NOTHING
+ * from its parent: isAbortExit comes from run-launch.js, where the exit codes
+ * are produced, which is what dissolved the old cycle (v4.4.1 review F5).
  *
  * Headless adaptation (vs SKILL.md): a judge still malformed after 2 repairs is
  * dropped from rankings and adjudications (ok:false) and recorded conformance
@@ -18,9 +21,8 @@ const fs = require('fs');
 const path = require('path');
 const stage2 = require('./briefings-stage2');
 const { parseJudgeOutput } = require('./parse-stage2');
-const { sanitizeName } = require('./run-launch');
+const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
-const { isAbortExit } = require('./run-stages');
 
 /**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.

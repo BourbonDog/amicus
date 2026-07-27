@@ -18,6 +18,20 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Did a launch exit because a SIGNAL killed it (130 = SIGINT, 143 = SIGTERM)
+ * rather than because the work failed? Every stage loop short-circuits on this
+ * instead of treating the wave as a normal failure.
+ *
+ * It lives HERE, with the module that produces those exit codes, because every
+ * stage loop needs it — including run-stage2.js. Defining it in run-stages.js and
+ * importing it back from its own child made the two mutually circular, which is
+ * why runStage2 could not be re-exported from run-stages.js (v4.4.1 review F5).
+ * @param {number} code
+ * @returns {boolean}
+ */
+function isAbortExit(code) { return code === 130 || code === 143; }
+
+/**
  * @param {{fanoutFn?: Function, remainingBudget?: () => number|null,
  *   reserveBudget?: (waveId: string, estimate: number) => boolean,
  *   onBudgetRefusal?: (info: {waveId, models, message}) => void}} [deps]
@@ -185,4 +199,6 @@ function materializeDebate(runDir, legs, prefix) {
   return out;
 }
 
-module.exports = { createLaunchers, materializeReviews, materializeDebate, sanitizeName };
+module.exports = {
+  createLaunchers, materializeReviews, materializeDebate, sanitizeName, isAbortExit,
+};

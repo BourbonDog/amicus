@@ -41,20 +41,25 @@ function worseConformance(a, b) {
  * council alias) overrides leg.model (the resolved executable id) so ledger
  * rows join meta.models by exact string (ledger.js:20-24).
  *
- * ⚠️ LC-11: `findingsUnverified` is the same class of fact as `conformance` and
- * rides the same row — a 'repaired' seat whose repair contract could NOT be
- * checked (the original block was absent or unparseable, so there was no
- * finding count to compare) is recorded as unchecked rather than implying a
- * check passed. Additive and present only when true, so a run without one is
+ * ⚠️ LC-11 / review F1: `findingsUnverified` and `repairRefused` are the same
+ * class of fact as `conformance` and ride the same row. They are the two halves
+ * of the repair contract's outcome: `findingsUnverified` marks a 'repaired' seat
+ * whose contract could NOT be checked (the original block was absent or
+ * unparseable, so there was no finding count to compare), and `repairRefused`
+ * ({code, detail}) marks the stronger case — the contract WAS checked and broken,
+ * which is otherwise indistinguishable from a seat that never emitted JSON at
+ * all. Both are additive and present only when set, so a run without either is
  * byte-for-byte unchanged.
  */
-function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified }) {
+function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
+  repairRefused }) {
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
     wasChair: !!wasChair,
     conformance: conformance || 'clean',
     ...(findingsUnverified ? { findingsUnverified: true } : {}),
+    ...(repairRefused ? { repairRefused } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,
@@ -147,7 +152,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
-    findingsUnverified: r.findingsUnverified,
+    findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused,
   }));
   if (claudeReview) {
     meta.models.push(CLAUDE_SEAT);      // last, mirroring its review-N+1 label

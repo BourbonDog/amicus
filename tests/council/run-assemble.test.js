@@ -155,6 +155,34 @@ describe('buildRunStatsEntry / worseConformance', () => {
     expect('findingsUnverified' in input.runStats[1]).toBe(false);
   });
 
+  test('review F1: repairRefused rides the row, but ONLY when set', () => {
+    const refused = { code: 'REPAIR_CHANGED_FINDING_COUNT',
+      detail: 'repair returned 2 findings, original attempted 1' };
+    const row = asm.buildRunStatsEntry({
+      leg: null, role: 'seat', wasChair: false, conformance: 'unstructured', repairRefused: refused,
+    });
+    expect(row.repairRefused).toEqual(refused);
+    const clean = asm.buildRunStatsEntry({
+      leg: null, role: 'seat', wasChair: false, conformance: 'unstructured',
+    });
+    expect('repairRefused' in clean).toBe(false);
+  });
+
+  test('review F1: buildTallyInput carries a review\'s repairRefused onto its runStats row', () => {
+    const refused = { code: 'REPAIR_CHANGED_FINDING_COUNT', detail: 'd' };
+    const input = asm.buildTallyInput({
+      runId: 'abc123', date: '2026-07-19', bench: ['gemini', 'gpt'], chair: 'deepseek',
+      reviews: [
+        { model: 'gemini', role: 'seat', conformance: 'unstructured', repairRefused: refused,
+          leg: leg('gemini'), globalFindings: [] },
+        { model: 'gpt', role: 'seat', conformance: 'clean', leg: leg('gpt'), globalFindings: [] },
+      ],
+      judgeResults: [], chairStats: null,
+    });
+    expect(input.runStats[0].repairRefused).toEqual(refused);
+    expect('repairRefused' in input.runStats[1]).toBe(false);
+  });
+
   test('worst conformance wins', () => {
     expect(asm.worseConformance('clean', 'repaired')).toBe('repaired');
     expect(asm.worseConformance('unstructured', 'repaired')).toBe('unstructured');

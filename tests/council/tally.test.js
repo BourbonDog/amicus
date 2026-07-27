@@ -148,3 +148,36 @@ describe('tally() — defensive basis handling', () => {
     expect(record.findings[0].basis).toEqual({ a: 2, d: 0, n: 0 });
   });
 });
+
+describe('tally() — runStats carries what qualifies `conformance` (review F3)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['x'], chair: 'x', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+  };
+  const refused = { code: 'REPAIR_CHANGED_FINDING_COUNT',
+    detail: 'repair returned 2 findings, original attempted 1' };
+
+  test('findingsUnverified and repairRefused survive the runStats allowlist', () => {
+    const record = tally({
+      ...baseInput,
+      runStats: [
+        { model: 'a', role: 'seat', conformance: 'repaired', findingsUnverified: true,
+          status: 'complete', durationMs: 1, usage: null },
+        { model: 'b', role: 'seat', conformance: 'unstructured', repairRefused: refused,
+          status: 'complete', durationMs: 1, usage: null },
+      ],
+    });
+    expect(record.runStats[0].findingsUnverified).toBe(true);
+    expect(record.runStats[1].repairRefused).toEqual(refused);
+  });
+
+  test('neither key is invented for a row that does not carry it', () => {
+    const record = tally({
+      ...baseInput,
+      runStats: [{ model: 'a', role: 'seat', conformance: 'clean', status: 'complete',
+        durationMs: 1, usage: null }],
+    });
+    expect(Object.keys(record.runStats[0]))
+      .toEqual(['model', 'role', 'wasChair', 'conformance', 'status', 'durationMs', 'usage']);
+  });
+});

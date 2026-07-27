@@ -121,3 +121,26 @@ describe('countAttemptedFindings (LC-11: the repair contract is checked by cardi
       + '```json\n{"findings":[{"id":1},{"id":2},{"id":3}]}\n```')).toBe(3);
   });
 });
+
+describe('repairCanHonorContract (review F2: do not buy a repair that cannot succeed)', () => {
+  const { repairCanHonorContract } = require('../../src/council/findings');
+
+  test('a real count is always repairable', () => {
+    expect(repairCanHonorContract(1)).toBe(true);
+    expect(repairCanHonorContract(7)).toBe(true);
+  });
+
+  test('null (nothing to compare) is repairable — the wave\'s main legitimate use', () => {
+    expect(repairCanHonorContract(null)).toBe(true);
+  });
+
+  test('zero TRACKS the validator rather than hard-coding an answer', () => {
+    // The only contract-honoring repair of a zero-finding original is another
+    // empty set, so this predicate must be exactly "does the validator accept an
+    // empty set?". Asserted as a linkage, not as today's value: Task 3 (LC-10)
+    // flips the validator, and this test must keep passing when it does.
+    const emptySetIsValid = validateFindings(
+      '```json\n{"overall":"nothing found","findings":[]}\n```').ok;
+    expect(repairCanHonorContract(0)).toBe(emptySetIsValid);
+  });
+});

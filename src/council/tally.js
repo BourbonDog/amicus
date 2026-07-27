@@ -114,6 +114,16 @@ function tally(input) {
     findings: outFindings,
     runStats: (runStats || []).map(r => ({
       model: r.model, role: r.role, wasChair: !!r.wasChair, conformance: r.conformance || 'clean',
+      // ⚠️ Review F3: this allowlist already carries `conformance`, which makes
+      // tally.json (and verdict.json, which copies runStats verbatim) THE per-run
+      // artifact showing a seat's conformance — so the two facts that qualify it
+      // travel with it: LC-11's `findingsUnverified` (contract uncheckable) and
+      // F1's `repairRefused` (contract checked and broken). Additive, emitted only
+      // when set, and the runStats schema declares no additionalProperties, so a
+      // run without either is byte-for-byte unchanged. The append-only LEDGER is
+      // deliberately NOT extended — that is a schema-versioned product decision.
+      ...(r.findingsUnverified ? { findingsUnverified: true } : {}),
+      ...(r.repairRefused ? { repairRefused: r.repairRefused } : {}),
       status: r.status || 'unknown',
       durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
       usage: r.usage || null,

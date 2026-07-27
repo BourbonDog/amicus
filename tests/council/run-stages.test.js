@@ -3,10 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { runStage1, slug } = require('../../src/council/run-stages');
-// Stage 2 was split into its own module for the 300-line gate (v4.4.1 Task 2);
-// its tests stay here, next to Stage 1's, because they share makeCtx.
-const { runStage2 } = require('../../src/council/run-stage2');
+// Stage 2 was split into its own module for the 300-line gate (v4.4.1 Task 2) and
+// is re-exported from run-stages, which is again the single import surface for the
+// stage loops (review F5). Its tests stay here, next to Stage 1's — they share makeCtx.
+const { runStage1, runStage2, slug } = require('../../src/council/run-stages');
 const { assignLabels, toGlobalFindings } = require('../../src/council/anonymize');
 
 let tmp;
@@ -242,7 +242,10 @@ describe('runStage1', () => {
     const original = 'Prose about exactly one problem.\n```json\n'
       + '{"overall":"o","findings":[{"id":1,"severity":"huge","claim":"c",'
       + '"location":"l","rationale":"r"}]}\n```';
-    // Two findings out, one in. This is the costgate01 fabrication shape.
+    // Two findings out, one in: the repair invented a claim the prose never made.
+    // NOT the costgate01 shape — that leg emitted no fenced block at all, so the
+    // count is unverifiable and the repair is accepted-but-flagged below; LC-12's
+    // prompt fix is what addresses that incident (review F4).
     const repaired = '```json\n{"overall":"o","findings":['
       + '{"id":1,"severity":"major","claim":"c","location":"l","rationale":"r"},'
       + '{"id":2,"severity":"major","claim":"invented","location":"l","rationale":"r"}]}\n```';
@@ -250,6 +253,33 @@ describe('runStage1', () => {
     expect(reviews[0].conformance).toBe('unstructured');
     expect(reviews[0].findings).toEqual([]);
     expect(reviews[0].text).toBe(original);
+  });
+
+  test('review F1: the refusal is RECORDED, not silently folded into unstructured', async () => {
+    // Without this the strongest case (contract provably broken) is invisible while
+    // the weakest (contract uncheckable) carries findingsUnverified — backwards.
+    const original = 'Prose about exactly one problem.\n```json\n'
+      + '{"overall":"o","findings":[{"id":1,"severity":"huge","claim":"c",'
+      + '"location":"l","rationale":"r"}]}\n```';
+    const repaired = '```json\n{"overall":"o","findings":['
+      + '{"id":1,"severity":"major","claim":"c","location":"l","rationale":"r"},'
+      + '{"id":2,"severity":"major","claim":"invented","location":"l","rationale":"r"}]}\n```';
+    const { reviews } = await runStage1WithFixture({ original, repaired });
+    expect(reviews[0].repairRefused.code).toBe('REPAIR_CHANGED_FINDING_COUNT');
+    expect(reviews[0].repairRefused.detail).toBe('repair returned 2 findings, original attempted 1');
+    // …and it is the OTHER half of the contract outcome, never both at once.
+    expect(reviews[0].findingsUnverified).toBeUndefined();
+  });
+
+  test('review F1: an unstructured seat that never emitted JSON carries NO refusal', async () => {
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, 'prose, no block'))),
+      onSolo: () => okWave([mkLeg('gemini', 'still no block')]),
+    });
+    const { reviews } = await runStage1(ctx);
+    expect(reviews[0].conformance).toBe('unstructured');
+    expect('repairRefused' in reviews[0]).toBe(false);
   });
 
   test('a repair that DROPS a finding is refused too', async () => {
@@ -280,6 +310,32 @@ describe('runStage1', () => {
     const { reviews } = await runStage1WithFixture({ original: 'Prose, no block.', repaired });
     expect(reviews[0].conformance).toBe('repaired');
     expect(reviews[0].findingsUnverified).toBe(true);
+  });
+
+  test('review F2: an original declaring ZERO findings never pays for a repair', async () => {
+    // The deadlock: EMPTY_FINDINGS puts this review into the repair loop, but the
+    // only contract-honoring repair is another empty set — which the validator
+    // rejects — while any repair that validates has ≥1 finding and is refused on
+    // the count. Two PAID solo legs with one reachable outcome. So the loop is
+    // skipped while that validator rule stands.
+    //
+    // Task-3-proof on purpose: LC-10 makes this same original VALID (findings []
+    // with a real `overall`), which also launches no solo — so the assertion below
+    // holds before and after. Only the conformance label moves ('unstructured'
+    // today, 'clean' after LC-10), which is why it is not asserted here.
+    const original = 'I read it and found nothing.\n```json\n{"overall":"o","findings":[]}\n```';
+    let solos = 0;
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
+      onSolo: () => { solos += 1; return okWave([mkLeg('gemini', review('gemini'))]); },
+    });
+    const { reviews } = await runStage1(ctx);
+    expect(solos).toBe(0);
+    expect(reviews).toHaveLength(1);          // the seat is KEPT, as always
+    expect(reviews[0].text).toBe(original);
+    expect(reviews[0].findings).toEqual([]);
+    expect('repairRefused' in reviews[0]).toBe(false);
   });
 
   test('a CLEAN review is never marked unverified and never count-checked', async () => {
