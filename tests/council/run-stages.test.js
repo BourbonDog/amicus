@@ -3,7 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { runStage1, runStage2, slug } = require('../../src/council/run-stages');
+const { runStage1, slug } = require('../../src/council/run-stages');
+// Stage 2 was split into its own module for the 300-line gate (v4.4.1 Task 2);
+// its tests stay here, next to Stage 1's, because they share makeCtx.
+const { runStage2 } = require('../../src/council/run-stage2');
 const { assignLabels, toGlobalFindings } = require('../../src/council/anonymize');
 
 let tmp;
@@ -207,6 +210,90 @@ describe('runStage1', () => {
     expect(deadLegs[0].model).toBe('qwen');
   });
 
+  // ---- LC-11: a repaired review keeps its own prose, and the repair's contract
+  // ("the same findings, fixed — do not add or remove findings") is enforced. ----
+  async function runStage1WithFixture({ original, repaired }) {
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
+      onSolo: () => okWave([mkLeg('gemini', repaired)]),
+    });
+    return runStage1(ctx);
+  }
+
+  test('a repaired review always keeps its own prose — never the repair JSON', async () => {
+    const original = 'Original prose naming the ordering bug.\n```json\n'
+      + '{"overall":"o","findings":[{"id":1,"severity":"huge","claim":"c",'
+      + '"location":"l","rationale":"r"}]}\n```';
+    // A repair leg returns ONLY the corrected JSON — briefings.js:19-26 omits the
+    // two-part prose framing on purpose. Substituting this as `text` would hand the
+    // judges a review with no narrative and put a JSON dump in bundle-stage2.md.
+    const repaired = '```json\n{"overall":"o","findings":[{"id":1,"severity":"major",'
+      + '"claim":"c","location":"l","rationale":"r"}]}\n```';
+    const { reviews } = await runStage1WithFixture({ original, repaired });
+    expect(reviews[0].conformance).toBe('repaired');
+    expect(reviews[0].text).toBe(original);
+    expect(reviews[0].text).toContain('Original prose naming the ordering bug');
+    expect(reviews[0].findings).toHaveLength(1);
+    expect(reviews[0].findingsUnverified).toBeFalsy();   // count matched: contract honored
+  });
+
+  test('a repair that ADDS a finding is refused — the prose cannot support it', async () => {
+    const original = 'Prose about exactly one problem.\n```json\n'
+      + '{"overall":"o","findings":[{"id":1,"severity":"huge","claim":"c",'
+      + '"location":"l","rationale":"r"}]}\n```';
+    // Two findings out, one in. This is the costgate01 fabrication shape.
+    const repaired = '```json\n{"overall":"o","findings":['
+      + '{"id":1,"severity":"major","claim":"c","location":"l","rationale":"r"},'
+      + '{"id":2,"severity":"major","claim":"invented","location":"l","rationale":"r"}]}\n```';
+    const { reviews } = await runStage1WithFixture({ original, repaired });
+    expect(reviews[0].conformance).toBe('unstructured');
+    expect(reviews[0].findings).toEqual([]);
+    expect(reviews[0].text).toBe(original);
+  });
+
+  test('a repair that DROPS a finding is refused too', async () => {
+    const original = 'Prose about two problems.\n```json\n{"overall":"o","findings":['
+      + '{"id":1,"severity":"huge","claim":"c","location":"l","rationale":"r"},'
+      + '{"id":2,"severity":"major","claim":"c2","location":"l","rationale":"r"}]}\n```';
+    const repaired = '```json\n{"overall":"o","findings":[{"id":1,"severity":"major",'
+      + '"claim":"c","location":"l","rationale":"r"}]}\n```';
+    const { reviews } = await runStage1WithFixture({ original, repaired });
+    expect(reviews[0].conformance).toBe('unstructured');
+    expect(reviews[0].findings).toEqual([]);
+  });
+
+  test('an unparseable original accepts the repair but marks it unverified', async () => {
+    const original = 'Prose about three problems.\n```json\n{this is not json\n```';
+    const repaired = '```json\n{"overall":"o","findings":[{"id":1,"severity":"major",'
+      + '"claim":"c","location":"l","rationale":"r"}]}\n```';
+    const { reviews } = await runStage1WithFixture({ original, repaired });
+    expect(reviews[0].conformance).toBe('repaired');
+    expect(reviews[0].findingsUnverified).toBe(true);
+    expect(reviews[0].text).toBe(original);
+  });
+
+  test('an original with NO fenced block accepts the repair but marks it unverified', async () => {
+    // The main legitimate use of the repair wave: nothing to compare against.
+    const repaired = '```json\n{"overall":"o","findings":[{"id":1,"severity":"major",'
+      + '"claim":"c","location":"l","rationale":"r"}]}\n```';
+    const { reviews } = await runStage1WithFixture({ original: 'Prose, no block.', repaired });
+    expect(reviews[0].conformance).toBe('repaired');
+    expect(reviews[0].findingsUnverified).toBe(true);
+  });
+
+  test('a CLEAN review is never marked unverified and never count-checked', async () => {
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
+      onSolo: () => { throw new Error('no repairs expected'); },
+    });
+    const { reviews } = await runStage1(ctx);
+    expect(reviews[0].conformance).toBe('clean');
+    expect(reviews[0].findingsUnverified).toBeUndefined();
+    expect('findingsUnverified' in reviews[0]).toBe(false);
+  });
+
   test('signal-aborted wave short-circuits with the abort exit code', async () => {
     const ctx = makeCtx({
       onWave: () => ({ wave: { status: 'aborted', legs: [] }, exitCode: 130 }),
@@ -287,6 +374,68 @@ describe('runStage2', () => {
     const g = judgeResults.find(j => j.judge === 'gemini');
     expect(g.ok).toBe(true);
     expect(g.conformance).toBe('repaired');
+  });
+
+  test('LC-12: the judge repair solo carries the judgement it is repairing', async () => {
+    // The defect: the repair prompt shipped the validation ERRORS without the
+    // JUDGEMENT they were errors about. Stage 2 is the worse place for it — a
+    // refused judge has no conformance column, so the tally silently shows fewer
+    // votes and a finding's basis counts can flip its tier.
+    const badJudge = 'Judged at length in prose, but the trailing JSON never appeared.';
+    const solos = [];
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', badJudge),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]))]);
+      },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(solos).toHaveLength(1);
+    expect(solos[0].prompt).toContain(badJudge);
+    expect(solos[0].prompt).toContain('YOUR PREVIOUS JUDGEMENT');
+  });
+
+  test('LC-12: the SECOND judge repair carries the first repair output, which is what failed', async () => {
+    const solos = [];
+    const badJudge = 'original judging prose, no json';
+    const firstRepair = 'first judge repair, still no json';
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', badJudge),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: (opts) => {
+        solos.push(opts);
+        return okWave([mkLeg('gemini', solos.length === 1 ? firstRepair : 'second repair, still no json')]);
+      },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(solos).toHaveLength(2);
+    expect(solos[0].prompt).toContain(badJudge);
+    expect(solos[1].prompt).toContain(firstRepair);
+    expect(solos[1].prompt).not.toContain(badJudge);
+  });
+
+  test('LC-12: a judge repair whose leg came back empty still names the text that failed', async () => {
+    const solos = [];
+    const badJudge = 'original judging prose, no json';
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', badJudge),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gemini', '')]); },
+    });
+    await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    expect(solos).toHaveLength(2);
+    expect(solos[1].prompt).toContain(badJudge);
   });
 
   test('judge still bad after 2 repairs → ok false, conformance unstructured', async () => {

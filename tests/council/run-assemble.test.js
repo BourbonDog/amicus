@@ -124,6 +124,37 @@ describe('buildRunStatsEntry / worseConformance', () => {
     expect(row.model).toBe('gpt');
   });
 
+  test('LC-11: findingsUnverified rides the row, but ONLY when true', () => {
+    // Same class of fact as `conformance`: a 'repaired' seat whose repair contract
+    // could not be checked (no original count to compare) is recorded as unchecked
+    // rather than implying a check passed. Absent otherwise, so the v4.4 row shape
+    // is byte-for-byte unchanged for every other run.
+    const row = asm.buildRunStatsEntry({
+      leg: null, role: 'seat', wasChair: false, conformance: 'repaired', findingsUnverified: true,
+    });
+    expect(row.findingsUnverified).toBe(true);
+    for (const v of [false, undefined]) {
+      const clean = asm.buildRunStatsEntry({
+        leg: null, role: 'seat', wasChair: false, conformance: 'repaired', findingsUnverified: v,
+      });
+      expect('findingsUnverified' in clean).toBe(false);
+    }
+  });
+
+  test('LC-11: buildTallyInput carries a review\'s findingsUnverified onto its runStats row', () => {
+    const input = asm.buildTallyInput({
+      runId: 'abc123', date: '2026-07-19', bench: ['gemini', 'gpt'], chair: 'deepseek',
+      reviews: [
+        { model: 'gemini', role: 'seat', conformance: 'repaired', findingsUnverified: true,
+          leg: leg('gemini'), globalFindings: [] },
+        { model: 'gpt', role: 'seat', conformance: 'clean', leg: leg('gpt'), globalFindings: [] },
+      ],
+      judgeResults: [], chairStats: null,
+    });
+    expect(input.runStats[0].findingsUnverified).toBe(true);
+    expect('findingsUnverified' in input.runStats[1]).toBe(false);
+  });
+
   test('worst conformance wins', () => {
     expect(asm.worseConformance('clean', 'repaired')).toBe('repaired');
     expect(asm.worseConformance('unstructured', 'repaired')).toBe('unstructured');

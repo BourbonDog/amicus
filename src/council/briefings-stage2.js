@@ -68,15 +68,38 @@ function buildJudgeBundle({ reviews, findings, date }) {
   return parts.join('\n\n');
 }
 
-/** Bounded judge-repair re-prompt (solo; ≤ 2 per judge — spec §5). */
-function buildJudgeRepairPrompt({ errors }) {
+/**
+ * Bounded judge-repair re-prompt (solo; ≤ 2 per judge — spec §5).
+ *
+ * ⚠️ LC-12: a repair solo is a FRESH session with no memory of the judging turn.
+ * Shipping only `errors` asked the model to correct something it had never seen —
+ * the identical defect LC-6 fixed one stage earlier, where it cost three of five
+ * paid councils a seat. Stage 2 is worse: a refused judge has no `conformance`
+ * column, so the tally silently shows fewer votes and basis counts can flip a tier.
+ *
+ * `judgement` is embedded verbatim and uncapped — a silent truncation would
+ * recreate the defect in a subtler form (repairing a judgement the model can only
+ * half see) — and the absent case is STATED rather than papered over with an
+ * empty block.
+ * @param {{errors?: Array<{code:string,detail:string}>, judgement?: string}} args
+ */
+function buildJudgeRepairPrompt({ errors, judgement }) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
+  const text = typeof judgement === 'string' ? judgement.trim() : '';
+  const prior = text
+    ? ['--- YOUR PREVIOUS JUDGEMENT (verbatim — this is the text to correct) ---',
+      text,
+      '--- END OF YOUR PREVIOUS JUDGEMENT ---'].join('\n')
+    : 'Your previous response was empty — there is no prior judgement to correct. '
+      + 'Do not invent rankings or adjudications to satisfy the schema: say so in your output.';
   return [
-    'Do NOT use any tools or read any files; everything is in this message; begin ' +
-    'immediately with the JSON block.',
-    'Your previous judging response\'s trailing JSON failed validation with these errors:',
+    'Do NOT use any tools or read any files; everything is in this message; begin '
+    + 'immediately with the JSON block.',
+    prior,
+    'That judging response\'s trailing JSON failed validation with these errors:',
     lines,
-    'Re-emit ONLY the corrected JSON block as a single fenced ```json block:',
+    'Re-emit ONLY the corrected JSON block (the same rankings and adjudications, fixed — '
+    + 'do not change your votes), as a single fenced ```json block:',
     JUDGE_OUTPUT_CONTRACT,
   ].join('\n\n');
 }
@@ -137,13 +160,28 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }
   return parts.join('\n\n');
 }
 
-/** One-shot chair repair: the VERDICT line was missing (spec §5 chair contract). */
-function buildChairRepairPrompt() {
+/**
+ * One-shot chair repair: the VERDICT line was missing (spec §5 chair contract).
+ *
+ * ⚠️ LC-12: this builder took NO arguments at all, so the repair solo — a fresh
+ * session — was asked for a verdict on a synthesis it could not see. The chair's
+ * synthesis WAS received; it is the verdict line that is missing. Handing back the
+ * synthesis lets the chair pick the verdict its own prose supports instead of
+ * re-deriving one from nothing.
+ * @param {{synthesis?: string}} [args]
+ */
+function buildChairRepairPrompt({ synthesis } = {}) {
+  const text = typeof synthesis === 'string' ? synthesis.trim() : '';
+  const prior = text
+    ? ['--- YOUR SYNTHESIS (verbatim — verdict on THIS) ---', text,
+      '--- END OF YOUR SYNTHESIS ---'].join('\n')
+    : null;
   return [
-    'Do NOT use any tools or read any files; everything is in this message; begin ' +
-    'immediately with the VERDICT line.',
-    'Your synthesis was received, but the final parseable line was missing. Emit ONLY ' +
-    'one line, exactly one of:',
+    'Do NOT use any tools or read any files; everything is in this message; begin '
+    + 'immediately with the VERDICT line.',
+    ...(prior ? [prior] : []),
+    'Your synthesis was received, but the final parseable line was missing. Emit ONLY '
+    + 'one line, exactly one of:',
     'VERDICT: Ship it',
     'VERDICT: Fix these first',
     'VERDICT: Fundamental rethink',

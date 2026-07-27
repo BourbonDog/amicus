@@ -130,6 +130,72 @@ describe('findings repair prompt', () => {
   });
 });
 
+describe('repair prompts carry the artifact being repaired', () => {
+  // LC-12: buildFindingsRepairPrompt was fixed in f2f554b; these four builders had
+  // the identical omission (buildChairRepairPrompt took no arguments at all). A
+  // repair leg is a FRESH session with no memory of the turn it is repairing.
+  const stage2 = require('../../src/council/briefings-stage2');
+  const dbrief = require('../../src/council/briefings-debate');
+  const errors = [{ code: 'BAD_SEVERITY', detail: "bad severity 'huge' on id 1" }];
+
+  test('buildJudgeRepairPrompt embeds the judgement verbatim', () => {
+    const judgement = 'RANKING: C, A, B\nF1: agree — the fence is real.';
+    const p = stage2.buildJudgeRepairPrompt({ errors, judgement });
+    expect(p).toContain(judgement);
+    expect(p).toContain('BAD_SEVERITY');
+  });
+
+  test('buildJudgeRepairPrompt states the absent case instead of papering over it', () => {
+    const p = stage2.buildJudgeRepairPrompt({ errors, judgement: '' });
+    expect(p).toMatch(/no prior|was empty/i);
+    expect(p).not.toMatch(/--- YOUR PREVIOUS/);
+  });
+
+  test('buildChairRepairPrompt embeds the synthesis it must verdict on', () => {
+    const synthesis = 'The bench converged on three blockers.';
+    const p = stage2.buildChairRepairPrompt({ synthesis });
+    expect(p).toContain(synthesis);
+    expect(p).toContain('VERDICT: Ship it');
+  });
+
+  test('buildChairRepairPrompt still works with no synthesis', () => {
+    expect(() => stage2.buildChairRepairPrompt({})).not.toThrow();
+    expect(() => stage2.buildChairRepairPrompt()).not.toThrow();
+    expect(stage2.buildChairRepairPrompt({})).toContain('VERDICT: Ship it');
+    expect(stage2.buildChairRepairPrompt({})).not.toContain('YOUR SYNTHESIS');
+  });
+
+  test('buildDefenseRepairPrompt embeds the defense', () => {
+    const defense = 'F3: amend — the reviewer is right about the ordering.';
+    expect(dbrief.buildDefenseRepairPrompt({ errors, defense })).toContain(defense);
+  });
+
+  test('buildRevoteRepairPrompt embeds the re-vote', () => {
+    const revote = 'F3: hold dispute.';
+    expect(dbrief.buildRevoteRepairPrompt({ errors, revote })).toContain(revote);
+  });
+
+  test('the debate builders state the absent case rather than opening an empty block', () => {
+    for (const p of [dbrief.buildDefenseRepairPrompt({ errors }),
+      dbrief.buildRevoteRepairPrompt({ errors, revote: '   ' })]) {
+      expect(p).not.toContain('YOUR PREVIOUS DEFENSE');
+      expect(p).not.toContain('YOUR PREVIOUS RE-VOTE');
+      expect(p).toMatch(/was empty/i);
+      expect(p).toMatch(/do not invent/i);
+    }
+  });
+
+  test('no repair builder truncates the artifact, however long it is', () => {
+    // glm's wsgate04 review was 35 KB. A silent cap recreates the defect in a
+    // subtler form: repairing an artifact the model can only half see.
+    const long = 'y'.repeat(40000);
+    expect(stage2.buildJudgeRepairPrompt({ errors, judgement: long })).toContain(long);
+    expect(stage2.buildChairRepairPrompt({ synthesis: long })).toContain(long);
+    expect(dbrief.buildDefenseRepairPrompt({ errors, defense: long })).toContain(long);
+    expect(dbrief.buildRevoteRepairPrompt({ errors, revote: long })).toContain(long);
+  });
+});
+
 describe('FINDINGS_CONTRACT composition (fragment split)', () => {
   test('is the two-part framing and the json-shape fragment, joined by a blank line', () => {
     expect(b.FINDINGS_CONTRACT).toBe(`${b.FINDINGS_TWO_PART_FRAMING}\n\n${b.FINDINGS_JSON_SHAPE}`);

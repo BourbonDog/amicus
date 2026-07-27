@@ -89,3 +89,35 @@ describe('lastJsonBlock (exported for parse-stage2)', () => {
     expect(lastJsonBlock('no blocks here')).toBeNull();
   });
 });
+
+describe('countAttemptedFindings (LC-11: the repair contract is checked by cardinality)', () => {
+  const { countAttemptedFindings } = require('../../src/council/findings');
+
+  test('counts entries in an INVALID block', () => {
+    // The block parses as JSON but fails validation (bad severity). We still need
+    // its cardinality, because that is the repair contract's checkable half.
+    expect(countAttemptedFindings('p\n```json\n{"findings":[{"id":1,"severity":"huge"},'
+      + '{"id":2,"severity":"nit"}]}\n```')).toBe(2);
+  });
+
+  test('returns null when there is nothing to count', () => {
+    expect(countAttemptedFindings('no fenced block here')).toBeNull();
+    expect(countAttemptedFindings('```json\n{not json\n```')).toBeNull();
+    expect(countAttemptedFindings('')).toBeNull();
+    expect(countAttemptedFindings(undefined)).toBeNull();
+  });
+
+  test('returns null when the block parses but declares no findings ARRAY', () => {
+    expect(countAttemptedFindings('```json\n{"overall":"o"}\n```')).toBeNull();
+    expect(countAttemptedFindings('```json\n{"findings":"none"}\n```')).toBeNull();
+  });
+
+  test('an explicitly empty findings array counts as zero, not as unverifiable', () => {
+    expect(countAttemptedFindings('```json\n{"overall":"o","findings":[]}\n```')).toBe(0);
+  });
+
+  test('counts the LAST block, matching validateFindings', () => {
+    expect(countAttemptedFindings('```json\n{"findings":[{"id":1}]}\n```\nmore\n'
+      + '```json\n{"findings":[{"id":1},{"id":2},{"id":3}]}\n```')).toBe(3);
+  });
+});

@@ -46,6 +46,34 @@ function validateFindings(jsonText) {
 }
 
 /**
+ * How many findings a review's trailing block ATTEMPTED to declare, regardless of
+ * whether they validate.
+ *
+ * ⚠️ LC-11: the repair prompt's contract is "the same findings, fixed — do not add
+ * or remove findings". Cardinality is the checkable half of that contract, and it
+ * is the half that matters: a repair which changes the count has produced findings
+ * the ORIGINAL PROSE never narrates, and that prose is what the judges read in
+ * bundle-stage2.md.
+ *
+ * Deliberately NOT validateFindings: an invalid block (bad severity, missing
+ * field) still declares a cardinality, and that is exactly the case the repair
+ * wave exists for.
+ *
+ * @param {string} text full review text (prose + fenced block)
+ * @returns {number|null} null when there is no block or it does not parse — in
+ *   which case there is nothing to compare and the caller must mark the result
+ *   unverified rather than implying a check happened.
+ */
+function countAttemptedFindings(text) {
+  const body = lastJsonBlock(text || '');
+  if (body === null) { return null; }
+  try {
+    const parsed = JSON.parse(body);
+    return Array.isArray(parsed.findings) ? parsed.findings.length : null;
+  } catch { return null; }
+}
+
+/**
  * v4.0 §7: stamp the council v2 envelope onto a validateFindings result
  * (additive — ok/findings/errors stay top-level; existing key-readers keep
  * working). Used by `amicus council validate --json`.
@@ -57,4 +85,6 @@ function buildValidateDoc(result) {
   return { schemaVersion: COUNCIL_SCHEMA_VERSION, type: 'council-validate', ...result };
 }
 
-module.exports = { validateFindings, buildValidateDoc, SEVERITIES, lastJsonBlock };
+module.exports = {
+  validateFindings, buildValidateDoc, SEVERITIES, lastJsonBlock, countAttemptedFindings,
+};

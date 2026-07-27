@@ -40,13 +40,21 @@ function worseConformance(a, b) {
  * leg doc yields durationMs/usage null (never invent a value). `model` (the
  * council alias) overrides leg.model (the resolved executable id) so ledger
  * rows join meta.models by exact string (ledger.js:20-24).
+ *
+ * ⚠️ LC-11: `findingsUnverified` is the same class of fact as `conformance` and
+ * rides the same row — a 'repaired' seat whose repair contract could NOT be
+ * checked (the original block was absent or unparseable, so there was no
+ * finding count to compare) is recorded as unchecked rather than implying a
+ * check passed. Additive and present only when true, so a run without one is
+ * byte-for-byte unchanged.
  */
-function buildRunStatsEntry({ leg, model, role, wasChair, conformance }) {
+function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified }) {
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
     wasChair: !!wasChair,
     conformance: conformance || 'clean',
+    ...(findingsUnverified ? { findingsUnverified: true } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,
@@ -139,6 +147,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
+    findingsUnverified: r.findingsUnverified,
   }));
   if (claudeReview) {
     meta.models.push(CLAUDE_SEAT);      // last, mirroring its review-N+1 label

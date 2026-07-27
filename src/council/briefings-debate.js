@@ -110,20 +110,40 @@ function buildRevoteBundle({ findings, date }) {
   return parts.join('\n\n');
 }
 
-function repair(kind, contract, errors) {
+/**
+ * ⚠️ LC-12: same omission as LC-6 one stage earlier — a repair solo is a FRESH
+ * session and cannot see the response it is repairing unless we hand it over.
+ * `prior` is embedded verbatim and uncapped; the absent case is stated rather
+ * than papered over with an empty block, so a model with nothing to correct is
+ * told to say so instead of left to invent a position.
+ * @param {string} kind 'defense' | 're-vote'
+ * @param {string} contract the trailing-JSON contract for that kind
+ * @param {Array<{code:string,detail:string}>} errors
+ * @param {string} [prior] the text that ACTUALLY failed validation
+ */
+function repair(kind, contract, errors, prior) {
   const lines = (errors || []).map(e => `- ${e.code}: ${e.detail}`).join('\n');
+  const text = typeof prior === 'string' ? prior.trim() : '';
+  const block = text
+    ? [`--- YOUR PREVIOUS ${kind.toUpperCase()} (verbatim — this is the text to correct) ---`,
+      text,
+      `--- END OF YOUR PREVIOUS ${kind.toUpperCase()} ---`].join('\n')
+    : `Your previous ${kind} response was empty — there is no prior text to correct. `
+      + 'Do not invent a position to satisfy the schema: say so in your output.';
   return [
-    'Do NOT use any tools or read any files; everything is in this message; begin ' +
-    'immediately with the JSON block.',
-    `Your previous ${kind} response's trailing JSON failed validation with these errors:`,
+    'Do NOT use any tools or read any files; everything is in this message; begin '
+    + 'immediately with the JSON block.',
+    block,
+    `That ${kind} response's trailing JSON failed validation with these errors:`,
     lines,
-    'Re-emit ONLY the corrected JSON block as a single fenced ```json block:',
+    'Re-emit ONLY the corrected JSON block (the same position, fixed — do not change '
+    + 'your votes), as a single fenced ```json block:',
     contract,
   ].join('\n\n');
 }
 
-function buildDefenseRepairPrompt({ errors }) { return repair('defense', DEFENSE_CONTRACT, errors); }
-function buildRevoteRepairPrompt({ errors }) { return repair('re-vote', REVOTE_CONTRACT, errors); }
+function buildDefenseRepairPrompt({ errors, defense }) { return repair('defense', DEFENSE_CONTRACT, errors, defense); }
+function buildRevoteRepairPrompt({ errors, revote }) { return repair('re-vote', REVOTE_CONTRACT, errors, revote); }
 
 /**
  * Chair-packet "Debate round outcomes" section (spec §5.3c). De-anonymized —

@@ -95,7 +95,8 @@ async function runDefenseSolo(ctx, raiser, findings, idx) {
     runState.appendStageWave(ctx.o.runDir, 'debate-defense', repairId);
     const res2 = await ctx.launchers.launchSolo({
       ...legOpts(ctx, repairId), model: raiser,
-      prompt: dbrief.buildDefenseRepairPrompt({ errors: parsed.errors }),
+      // ⚠️ LC-12: a repair solo is a fresh session — the defense that failed rides along.
+      prompt: dbrief.buildDefenseRepairPrompt({ errors: parsed.errors, defense: leg.summary }),
     });
     ctx.addWave(res2.wave);
     if (isAbortExit(res2.exitCode)) { return { raiser, aborted: res2.exitCode }; }
@@ -144,7 +145,8 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
       const repairId = `${waveId}-${judge}r`;
       runState.appendStageWave(ctx.o.runDir, 'debate-revote', repairId);
       const r2 = await ctx.launchers.launchSolo({ ...legOpts(ctx, repairId), model: judge,
-        prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors }) });
+        // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors.
+        prompt: dbrief.buildRevoteRepairPrompt({ errors: parsed.errors, revote: leg.summary }) });
       ctx.addWave(r2.wave);
       if (isAbortExit(r2.exitCode)) { return { aborted: r2.exitCode }; }
       const leg2 = r2.leg && r2.leg.status === 'complete' ? r2.leg : null;
