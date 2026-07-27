@@ -22,13 +22,11 @@ const path = require('path');
 const { tally } = require('./tally');
 const { assignLabels, toGlobalFindings } = require('./anonymize');
 const briefings = require('./briefings');
-const stage2 = require('./briefings-stage2');
 const runState = require('./run-state');
 const { createLaunchers } = require('./run-launch');
 const { runStage1, runStage2 } = require('./run-stages');
 const { runChair, pickFallbackChair } = require('./run-chair');
 const runDebateMod = require('./run-debate');
-const { buildDebateAddendum } = require('./briefings-debate');
 const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { createBudget } = require('./run-budget');
@@ -45,7 +43,8 @@ const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
  *   launchWave/launchSolo for leg ledger attribution. fallback/catalog (v4.3 Task 18
  *   §6.2): ctx.o carries both, but only run-stages.js's stage launches read them —
  *   the chair/debate legs never substitute via chains.
- * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?}
+ * @param {object} [deps] {launchers?, appendRunFn?, statsFn?, installSignalAbortFn?,
+ *   startOpenCodeServerFn? (v4.4.1 Task 0.5 test seam, see ./run-server)}
  * @returns {Promise<{exitCode: number, run: object}>}
  */
 async function runCouncil(options, deps = {}) {
@@ -65,20 +64,14 @@ async function runCouncil(options, deps = {}) {
   const degraded = { value: false };
   const { addWave, overBudget, remainingBudget, noticeUnknownSpend, usageBlock, reserveBudget,
     noteBudgetRefusal } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
-  const launchers = deps.launchers || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal });
+  // v4.4.1 Task 0.5: ONE OpenCode server for the whole run — ./run-server carries
+  // the why and the evidence that `_scratch` judge isolation survives it. Acquired
+  // below (a getter, because the launchers are built first); null = as before.
+  let sharedServer = null;
+  const launchers = deps.launchers
+    || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal, sharedServer: () => sharedServer });
 
-  runState.initRun(o.runDir, {
-    schemaVersion: 2, type: 'council-run', runId: o.runId, status: 'running', stages: [],
-    bench: o.models.slice(), chair: o.chair, critic: o.critic, lenses: o.lenses,
-    labelMap: null,
-    // Seeded ONLY under --debate (a `debate:null` seed would both break the v4.0
-    // "no debate key" contract and fail the object-typed schema), and with a VALID
-    // outcome from the first write so a run killed mid-debate stays schema-valid.
-    ...(o.debate ? { debate: { enabled: true, outcome: 'nothing-to-debate' } } : {}),
-    options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
-    usage: null, pid: process.pid, createdAt: now(),
-  });
-  runState.writePointer(o.project, o.runId, o.runDir);
+  runState.initCouncilRun(o); // run.json seed + sessions-dir pointer (run-state.js)
   emitRunStarted(o.runDir, o.runId, { bench: o.models, chair: o.chair }, o.follow);
 
   let signalled = null;
@@ -91,6 +84,8 @@ async function runCouncil(options, deps = {}) {
 
   const finalize = async (exitCode, error) => {
     uninstall();
+    // ONE close site: finalize is the single path every terminal outcome takes.
+    await require('./run-server').releaseRunServer(sharedServer);
     const code = signalled || exitCode;
     const status = (code === 130 || code === 143) ? 'aborted'
       : code === 0 ? 'complete' : code === 1 ? 'error' : 'partial';
@@ -104,6 +99,9 @@ async function runCouncil(options, deps = {}) {
     await fireCouncilOnComplete(o.onComplete, run, { runId: o.runId, runDir: o.runDir, exitCode: code, project: o.project }, o.onCompleteDeps);
     return { exitCode: code, run };
   };
+
+  // Injected launchers bring their own transport. Never throws — degrades to null.
+  if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer(o, deps); }
 
   const ctx = { o, launchers, addWave, overBudget, scratchDir: path.join(o.runDir, '_scratch') };
 
@@ -248,16 +246,10 @@ async function runCouncil(options, deps = {}) {
       runState.checkpoint(o.runDir, { debate: debateSummary });
     }
 
-    const packet = stage2.buildChairPacket({
-      // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
-      // no rankings/adjudications, so it appears ONLY as one more review block.
-      reviews: s1.reviews.map(r => ({ model: r.model, text: r.text }))
-        .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
-      rankings: debatedInput.rankings,
-      adjudications: debatedInput.adjudications,
-      tierCounts: debatedRecord.tierCounts, date: o.date,
-    }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
-    fs.writeFileSync(path.join(o.runDir, 'chair-packet.md'), packet, { mode: 0o600 });
+    const packet = asm.buildChairPacketFile({
+      runDir: o.runDir, reviews: s1.reviews, claudeReview, date: o.date,
+      tallyInput: debatedInput, record: debatedRecord, debateOutcomes,
+    });
 
     const chairRes = await runChair(ctx, {
       packet, degraded, statsFn, isSignalled: () => signalled,

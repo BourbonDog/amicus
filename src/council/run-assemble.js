@@ -176,7 +176,34 @@ function writeVerdictFiles({ runDir, record, overallVerdict, chairText }) {
   return verdict;
 }
 
+/**
+ * Build the chair packet and persist it as `chair-packet.md`. Lifted verbatim
+ * out of run.js for the 300-line gate (v4.4.1 Task 0.5) — same composition,
+ * same debate addendum, same file write.
+ * @param {{runDir: string, reviews: Array, claudeReview: object|null,
+ *   tallyInput: object, record: object, debateOutcomes: Array|null, date: string}} args
+ *   `tallyInput`/`record` are the DEBATED ones when --debate ran, the
+ *   provisional pair otherwise (run.js keeps that sequencing).
+ * @returns {string} the packet text (run.js hands it straight to runChair)
+ */
+function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, record, debateOutcomes, date }) {
+  const { buildChairPacket } = require('./briefings-stage2');
+  const { buildDebateAddendum } = require('./briefings-debate');
+  const packet = buildChairPacket({
+    // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
+    // no rankings/adjudications, so it appears ONLY as one more review block.
+    reviews: reviews.map(r => ({ model: r.model, text: r.text }))
+      .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
+    rankings: tallyInput.rankings,
+    adjudications: tallyInput.adjudications,
+    tierCounts: record.tierCounts, date,
+  }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
+  fs.writeFileSync(path.join(runDir, 'chair-packet.md'), packet, { mode: 0o600 });
+  return packet;
+}
+
 module.exports = {
   buildRunStatsEntry, worseConformance, buildTallyInput, writeTallyFiles, writeVerdictFiles,
+  buildChairPacketFile,
   preflightClaudeReview, labelClaudeReview, claudeRunStatsRow, CLAUDE_SEAT,
 };

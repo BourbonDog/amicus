@@ -85,6 +85,28 @@ function initRun(runDir, seed) {
   return writeRun(runDir, run);
 }
 
+/**
+ * Seed run.json for a NEW council run and write its sessions-dir pointer.
+ * Lifted verbatim out of run.js for the 300-line gate (v4.4.1 Task 0.5, which
+ * needed room for the per-run shared server) — same seed, same order, same
+ * pointer write.
+ * @param {object} o the council run's resolved options
+ */
+function initCouncilRun(o) {
+  initRun(o.runDir, {
+    schemaVersion: 2, type: 'council-run', runId: o.runId, status: 'running', stages: [],
+    bench: o.models.slice(), chair: o.chair, critic: o.critic, lenses: o.lenses,
+    labelMap: null,
+    // Seeded ONLY under --debate (a `debate:null` seed would both break the v4.0
+    // "no debate key" contract and fail the object-typed schema), and with a VALID
+    // outcome from the first write so a run killed mid-debate stays schema-valid.
+    ...(o.debate ? { debate: { enabled: true, outcome: 'nothing-to-debate' } } : {}),
+    options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
+    usage: null, pid: process.pid, createdAt: new Date().toISOString(),
+  });
+  writePointer(o.project, o.runId, o.runDir);
+}
+
 /** Read-merge-write checkpoint (atomic; abort-wins on status). */
 function checkpoint(runDir, patch) {
   const existing = readRun(runDir) || {};
@@ -155,7 +177,7 @@ function listPointers(project) {
 }
 
 module.exports = {
-  RUN_FILE, readRun, initRun, checkpoint, updateStage, appendStageWave,
+  RUN_FILE, readRun, initRun, initCouncilRun, checkpoint, updateStage, appendStageWave,
   writeSpawnPid, readSpawnPid,
   pointerPath, writePointer, readPointer, listPointers,
 };
