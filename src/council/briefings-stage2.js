@@ -43,13 +43,45 @@ const JUDGE_OUTPUT_CONTRACT = [
   '  agree | dispute | neutral. An "I missed this — it\'s valid" counts as agree.',
 ].join('\n');
 
+/** Task B when there is something to adjudicate (the ordinary case). */
+const JUDGE_TASK_B =
+  'Task B — Adjudicate: for EVERY finding id listed below, state agree, dispute, or ' +
+  'neutral with your reasoning in prose.';
+
+/**
+ * Task B when the whole bench came back clean (LC-10).
+ *
+ * ⚠️ Once a well-formed empty findings set is a VALID review, a run in which every
+ * seat found nothing reaches Stage 2 with an EMPTY findings index — and the ordinary
+ * Task B then orders the judge to adjudicate "EVERY finding id listed below" when
+ * none are listed, under a bare heading with nothing beneath it. That is not merely
+ * untidy: `parse-stage2` validates every adjudication id against the run-global set,
+ * so a judge that answers the dangling instruction by inventing an id fails with
+ * UNKNOWN_FINDING_ID and buys up to two PAID repair solos per judge. Stating the
+ * empty case and naming the exact output (`"adjudications": []`) is what keeps the
+ * clean bench cheap.
+ */
+const JUDGE_TASK_B_NO_FINDINGS =
+  'Task B — Adjudicate: there is nothing to adjudicate on this bundle. No review ' +
+  'raised a finding, so the findings index below is empty. Emit "adjudications": [] ' +
+  'and do not invent finding ids to fill it — a review that read the material and ' +
+  'found nothing is a valid review. Task A still applies in full.';
+
+/** The findings index body when the bench raised nothing — never a bare heading. */
+const NO_FINDINGS_INDEX = '(none — no review in this bundle raised a finding)';
+
 /**
  * The single shared anonymized judge bundle.
  * @param {{reviews: Array<{label: string, text: string}>,
  *   findings: Array<{id: string, severity: string, claim: string}>}} args
+ *   `findings` may legitimately be EMPTY (LC-10): every seat reported a clean read.
+ *   The bundle then states so explicitly instead of emitting a heading over nothing.
  */
 function buildJudgeBundle({ reviews, findings, date }) {
-  const findingLines = findings.map(f => `${f.id} [${f.severity}] ${f.claim}`).join('\n');
+  const raised = Array.isArray(findings) ? findings : [];
+  const findingLines = raised.length
+    ? raised.map(f => `${f.id} [${f.severity}] ${f.claim}`).join('\n')
+    : NO_FINDINGS_INDEX;
   const reviewBlocks = reviews
     .map(r => `--- ${r.label} ---\n${r.text}`)
     .join('\n\n');
@@ -58,8 +90,7 @@ function buildJudgeBundle({ reviews, findings, date }) {
   parts.push(
     'You are judging the anonymized peer reviews below. Do two things:',
     'Task A — Rank: order the reviews from most to least accurate and insightful.',
-    'Task B — Adjudicate: for EVERY finding id listed below, state agree, dispute, or ' +
-    'neutral with your reasoning in prose.',
+    raised.length ? JUDGE_TASK_B : JUDGE_TASK_B_NO_FINDINGS,
     JUDGE_OUTPUT_CONTRACT,
     '--- FINDINGS INDEX (run-global ids) ---',
     findingLines,
@@ -125,20 +156,47 @@ const VERDICT_SCALE_ADDENDUM = [
 ].join('\n');
 
 /**
+ * What the chair is told when the bench raised nothing at all (LC-10).
+ *
+ * Without this the packet asks the chair to "distinguish findings the bench broadly
+ * endorsed from contested or singleton claims" over an empty tier table and two bare
+ * section headings — an instruction whose only satisfiable reading is to invent
+ * material. The clean bench is stated as the finding it is.
+ */
+const CHAIR_CLEAN_BENCH_NOTE =
+  'NOTE: this bench raised NO findings. Every reviewer read the material and reported ' +
+  'nothing to fix, which is a valid outcome — not a failed run. Synthesize on that ' +
+  'basis: say what the reviews actually establish and where the bench\'s agreement is ' +
+  'thin, and do not manufacture concerns to fill the sections below.';
+
+/** A section body, or an explicit reason it is empty — never a heading over nothing. */
+function orNone(text, none) {
+  return (typeof text === 'string' && text.trim()) ? text : none;
+}
+
+/**
  * De-anonymized chair packet (spec §5/§6: the chair sees identities).
  * @param {{reviews: Array<{model: string, text: string}>,
  *   rankings: Array<{judge: string, order: Array<string|string[]>}>,
  *   adjudications: Array<{findingId: string, judge: string, verdict: string}>,
  *   tierCounts: object}} args
+ *   `rankings` and `adjudications` may both be empty — an all-clean bench (LC-10)
+ *   has nothing to adjudicate, and a Stage 2 whose judges all died has nothing to
+ *   rank. Each empty section says WHICH of those it is rather than rendering blank.
  */
 function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }) {
   const reviewBlocks = reviews.map(r => `--- Review by ${r.model} ---\n${r.text}`).join('\n\n');
-  const rankingLines = rankings
+  const rankingLines = (rankings || [])
     .map(r => `${r.judge}: ${JSON.stringify(r.order)}`)
     .join('\n');
-  const adjLines = adjudications
+  const adjLines = (adjudications || [])
     .map(a => `${a.findingId} — ${a.judge}: ${a.verdict}`)
     .join('\n');
+  // Every finding lands in exactly one tier (tally.js countTiers), so the tier
+  // counts sum to the record's finding count — which is how an all-clean bench is
+  // told apart from a bench whose judges simply never voted.
+  const raisedCount = Object.values(tierCounts || {})
+    .reduce((s, n) => s + (typeof n === 'number' ? n : 0), 0);
   const tiers = JSON.stringify(tierCounts);
   const parts = [CHAIR_NO_TOOLS_PREAMBLE];
   if (date) { parts.push(dateLine(date)); }
@@ -148,13 +206,18 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }
     'peer-validated standing (rank position and adjudication pattern), distinguish ' +
     'findings the bench broadly endorsed from contested or singleton claims, and ' +
     'arrive at an overall assessment of the material.',
+  );
+  if (raisedCount === 0) { parts.push(CHAIR_CLEAN_BENCH_NOTE); }
+  parts.push(
     `Deterministic tier counts (peers-only cascade): ${tiers}`,
     '--- STAGE-1 REVIEWS (de-anonymized) ---',
     reviewBlocks,
     '--- PEER RANKINGS (judge: order, best first) ---',
-    rankingLines,
+    orNone(rankingLines, '(none — no judge produced a usable ranking)'),
     '--- PER-FINDING ADJUDICATIONS ---',
-    adjLines,
+    orNone(adjLines, raisedCount === 0
+      ? '(none — the bench raised no findings, so there was nothing to adjudicate)'
+      : '(none — no judge produced a usable adjudication)'),
     VERDICT_SCALE_ADDENDUM,
   );
   return parts.join('\n\n');
@@ -191,5 +254,6 @@ function buildChairRepairPrompt({ synthesis } = {}) {
 module.exports = {
   JUDGE_NO_TOOLS_PREAMBLE, CHAIR_NO_TOOLS_PREAMBLE, CHAIR_VERDICT_VALUES,
   JUDGE_OUTPUT_CONTRACT, VERDICT_SCALE_ADDENDUM, dateLine,
+  JUDGE_TASK_B, JUDGE_TASK_B_NO_FINDINGS, NO_FINDINGS_INDEX, CHAIR_CLEAN_BENCH_NOTE,
   buildJudgeBundle, buildJudgeRepairPrompt, buildChairPacket, buildChairRepairPrompt,
 };

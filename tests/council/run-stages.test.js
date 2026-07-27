@@ -338,6 +338,50 @@ describe('runStage1', () => {
     expect('repairRefused' in reviews[0]).toBe(false);
   });
 
+  test('LC-10: a seat that honestly found nothing ends CLEAN, not unstructured', async () => {
+    // The marker gap review F2 left open, closed by the validator flip: this seat
+    // used to fall out of the loop as a bare `conformance: 'unstructured'` with no
+    // qualifying key — indistinguishable, in tally.json and verdict.json, from a
+    // seat whose output was broken. It is now what it always was: a clean review.
+    const original = 'I read the material and found nothing to report.\n```json\n'
+      + '{"overall":"No defects in any category.","findings":[]}\n```';
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
+      onSolo: () => { throw new Error('no repairs expected on a clean review'); },
+    });
+    const { reviews } = await runStage1(ctx);
+    expect(reviews[0].conformance).toBe('clean');
+    expect(reviews[0].findings).toEqual([]);
+    expect(reviews[0].text).toBe(original);
+    expect('findingsUnverified' in reviews[0]).toBe(false);
+    expect('repairRefused' in reviews[0]).toBe(false);
+  });
+
+  test('LC-10: an empty set with a BLANK overall still repairs — and can now succeed', async () => {
+    // The other half of the flip. A hollow shell stays invalid, so it re-enters the
+    // repair loop that review F2's guard had closed off (repairCanHonorContract now
+    // returns true for a zero-finding original) — and the contract-honoring repair,
+    // another empty set with a real `overall`, now VALIDATES instead of being a
+    // predetermined 'unstructured'. One paid leg that can actually buy an outcome.
+    const original = 'Prose.\n```json\n{"overall":"","findings":[]}\n```';
+    const repaired = '```json\n{"overall":"I read the material and found nothing.","findings":[]}\n```';
+    let solos = 0;
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
+      onSolo: () => { solos += 1; return okWave([mkLeg('gemini', repaired)]); },
+    });
+    const { reviews } = await runStage1(ctx);
+    expect(solos).toBe(1);
+    expect(reviews[0].conformance).toBe('repaired');
+    expect(reviews[0].findings).toEqual([]);
+    // The count contract WAS checkable here (0 attempted, 0 returned), so the
+    // repair is verified rather than merely accepted.
+    expect('findingsUnverified' in reviews[0]).toBe(false);
+    expect('repairRefused' in reviews[0]).toBe(false);
+  });
+
   test('a CLEAN review is never marked unverified and never count-checked', async () => {
     const ctx = makeCtx({
       models: ['gemini'],

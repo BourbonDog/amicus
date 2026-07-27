@@ -27,9 +27,32 @@ function validateFindings(jsonText) {
   try { parsed = JSON.parse(body); }
   catch (e) { return { ok: false, findings: [], errors: [{ code: 'NOT_PARSEABLE', detail: e.message }] }; }
 
-  const findings = Array.isArray(parsed.findings) ? parsed.findings : [];
-  if (findings.length === 0) {
-    errors.push({ code: 'EMPTY_FINDINGS', detail: 'findings is missing or empty' });
+  // ⚠️ LC-10 (owner ruling, 2026-07-26). A review that read the material and found
+  // nothing is a VALID review — the anti-sycophancy clause shipped in every Stage-1
+  // briefing says so verbatim ("An empty severity category is a valid result"), and
+  // rejecting it structurally pressured models into inventing findings to satisfy
+  // the schema. costgate01's grok did exactly that, and the fabrication reached
+  // tally.json, the street-cred rankings, the chair synthesis and a human decision.
+  //
+  // The distinction that makes this safe: a BROKEN emit already has its own codes
+  // (NO_FENCED_BLOCK, NOT_PARSEABLE) and returns above this line. What reaches here
+  // is a cleanly-parsed object. A non-empty `overall` is what separates a deliberate
+  // "nothing found" from a model that emitted a hollow shell — the empty-overall case
+  // stays an error.
+  //
+  // The ruling blesses `findings: []` — an array that is PRESENT and empty. A missing
+  // or non-array `findings` key is not a declaration of zero and stays an error, which
+  // is the same line countAttemptedFindings already draws: an explicit `[]` counts as
+  // zero, an absent array returns null (unverifiable). Widening this to "no findings
+  // key at all is fine" would let a bare {"overall":"looks good"} — the exact hollow
+  // shell the `overall` guard exists to catch — pass as a clean review.
+  const declared = Array.isArray(parsed.findings);
+  const findings = declared ? parsed.findings : [];
+  const overall = typeof parsed.overall === 'string' ? parsed.overall.trim() : '';
+  if (!declared) {
+    errors.push({ code: 'EMPTY_FINDINGS', detail: 'findings is missing or not an array' });
+  } else if (findings.length === 0 && overall === '') {
+    errors.push({ code: 'EMPTY_FINDINGS', detail: 'findings is empty and overall is missing or blank' });
   }
   const seen = new Set();
   findings.forEach((f, i) => {

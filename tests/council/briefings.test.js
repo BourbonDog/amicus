@@ -41,6 +41,53 @@ describe('structured-output contract', () => {
   });
 });
 
+describe('LC-10: the briefing and the validator finally say the same thing', () => {
+  // The contradiction this closes: every Stage-1 briefing has always shipped the
+  // anti-sycophancy clause's "An empty severity category is a valid result" while
+  // validateFindings rejected exactly that answer (EMPTY_FINDINGS) — so the only
+  // way to satisfy the schema was to produce a finding. The clause is not the fix
+  // on its own; the OUTPUT CONTRACT is what a model reads when it writes the block.
+  const { validateFindings } = require('../../src/council/findings');
+
+  test.each(['buildSeatBriefing', 'buildCriticBriefing'])(
+    '%s tells the model an empty findings array is acceptable', (fn) => {
+      const text = b[fn](ARGS);
+      expect(text).toContain('emit [] and say so in "overall"');
+      expect(text).toMatch(/[Nn]ever invent a finding/);
+    });
+
+  test('every Stage-1 briefing requires a non-empty "overall"', () => {
+    for (const text of [
+      b.buildSeatBriefing(ARGS),
+      b.buildCriticBriefing(ARGS),
+      b.buildLensBriefing({ ...ARGS, lens: 'security architect' }),
+    ]) {
+      expect(text).toContain('"overall" — a non-empty string');
+    }
+  });
+
+  test('the answer the briefing describes actually VALIDATES', () => {
+    // The linkage, not a restatement: the briefing promises `[]` + a real
+    // `overall` is acceptable, so the validator must accept it. If either side
+    // ever moves alone, this fails.
+    expect(b.buildSeatBriefing(ARGS)).toContain('emit [] and say so in "overall"');
+    expect(validateFindings('Prose.\n```json\n{"overall":"I read the material and '
+      + 'found nothing to report.","findings":[]}\n```').ok).toBe(true);
+  });
+
+  test('the repair prompt\'s empty-response branch describes a VALID answer too', () => {
+    // briefings.js's "your previous response was empty" branch tells the model to
+    // emit an empty findings array and say so in "overall". While EMPTY_FINDINGS
+    // stood, a model that complied burned its repair attempt and still landed
+    // 'unstructured' — the instruction and the validator disagreed on the ONE
+    // case where nothing else can guard the spend.
+    const p = b.buildFindingsRepairPrompt({ errors: [{ code: 'NO_FENCED_BLOCK', detail: 'none' }] });
+    expect(p).toMatch(/emit an empty "findings" array/);
+    expect(validateFindings('```json\n{"overall":"My previous response was empty; I have '
+      + 'nothing to report.","findings":[]}\n```').ok).toBe(true);
+  });
+});
+
 describe('critic brief (four passes)', () => {
   test('names all four passes', () => {
     const text = b.buildCriticBriefing(ARGS);

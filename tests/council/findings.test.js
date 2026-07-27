@@ -37,7 +37,7 @@ describe('validateFindings', () => {
     expect(res.errors[0].code).toBe('NOT_PARSEABLE');
   });
 
-  test('EMPTY_FINDINGS when list empty', () => {
+  test('EMPTY_FINDINGS when the list is empty AND overall is absent', () => {
     const res = validateFindings('```json\n{"findings":[]}\n```');
     expect(res.errors.map(e => e.code)).toContain('EMPTY_FINDINGS');
   });
@@ -64,6 +64,59 @@ describe('validateFindings', () => {
       { id: 1, severity: 'minor', claim: 'a' },
     ] }) + '\n```';
     expect(validateFindings(miss).errors.map(e => e.code)).toContain('MISSING_FIELD');
+  });
+});
+
+describe('EMPTY_FINDINGS — a clean review is a valid review (LC-10, owner ruling)', () => {
+  test('a well-formed empty set with a real overall is VALID', () => {
+    const text = 'I found nothing wrong.\n```json\n{"overall":"No defects found in '
+      + 'any category; the fence and the ordering are both correct.","findings":[]}\n```';
+    const r = validateFindings(text);
+    expect(r.ok).toBe(true);
+    expect(r.findings).toEqual([]);
+    expect(r.errors).toEqual([]);
+  });
+
+  test('an empty set with an EMPTY overall is still EMPTY_FINDINGS', () => {
+    const text = 'x\n```json\n{"overall":"","findings":[]}\n```';
+    const r = validateFindings(text);
+    expect(r.ok).toBe(false);
+    expect(r.errors.map(e => e.code)).toContain('EMPTY_FINDINGS');
+  });
+
+  test('an empty set with a WHITESPACE-ONLY overall is still EMPTY_FINDINGS', () => {
+    const r = validateFindings('x\n```json\n{"overall":"   \\n ","findings":[]}\n```');
+    expect(r.ok).toBe(false);
+    expect(r.errors.map(e => e.code)).toContain('EMPTY_FINDINGS');
+  });
+
+  test('an empty set with a NON-STRING overall is still EMPTY_FINDINGS', () => {
+    // A hollow shell can be typed as well as blank: {"overall": 0} parses, but it
+    // is not a model saying "I read this and found nothing".
+    for (const bad of ['0', 'null', 'true', '{}', '[]']) {
+      const r = validateFindings(`x\n\`\`\`json\n{"overall":${bad},"findings":[]}\n\`\`\``);
+      expect(r.errors.map(e => e.code)).toContain('EMPTY_FINDINGS');
+    }
+  });
+
+  test('an empty set with a MISSING overall is still EMPTY_FINDINGS', () => {
+    const r = validateFindings('x\n```json\n{"findings":[]}\n```');
+    expect(r.ok).toBe(false);
+    expect(r.errors.map(e => e.code)).toContain('EMPTY_FINDINGS');
+  });
+
+  test('a MISSING findings key with a real overall is still EMPTY_FINDINGS', () => {
+    // `findings` absent is not "I found nothing" — it is a block that never
+    // declared the array at all (countAttemptedFindings returns null for it).
+    // Keeping it an error is what stops a bare {"overall":"…"} from passing.
+    const r = validateFindings('x\n```json\n{"overall":"looks fine to me"}\n```');
+    expect(r.ok).toBe(false);
+    expect(r.errors.map(e => e.code)).toContain('EMPTY_FINDINGS');
+  });
+
+  test('a broken emit is still its own error code, not EMPTY_FINDINGS', () => {
+    expect(validateFindings('no block at all').errors[0].code).toBe('NO_FENCED_BLOCK');
+    expect(validateFindings('```json\n{nope\n```').errors[0].code).toBe('NOT_PARSEABLE');
   });
 });
 

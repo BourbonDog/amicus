@@ -369,10 +369,39 @@ fenced block) against the findings-block contract, without calling a model. Thin
 - A ` ```json ` fenced block exists (last one in the file wins if there are several) —
   `NO_FENCED_BLOCK` if not.
 - It parses as JSON — `NOT_PARSEABLE` if not.
-- `findings` is a non-empty array — `EMPTY_FINDINGS` if not.
+- `findings` is present and is an array — `EMPTY_FINDINGS` if it is missing or is some other
+  type. **An array that is present and empty is valid**, provided `overall` is a non-empty
+  string; `EMPTY_FINDINGS` if the array is empty *and* `overall` is missing, blank, or not a
+  string. See "A clean review is a valid review" below.
 - Every finding has a **sequential integer `id`** starting at 1 (`NON_SEQUENTIAL_ID` /
   `DUPLICATE_ID` otherwise), a `severity` in `{blocker, major, minor, nit}` (`BAD_SEVERITY`
   otherwise), and non-empty string `claim`, `location`, `rationale` (`MISSING_FIELD` otherwise).
+
+**A clean review is a valid review.** A reviewer that read the material, found nothing wrong,
+and said so passes validation with `"findings": []` — it is not sent to a repair re-prompt and
+its seat is recorded `conformance: clean`, exactly like any other well-formed review. Three
+things make that safe:
+
+- A **broken** emit is a different outcome with its own code: no fenced block at all is
+  `NO_FENCED_BLOCK`, and a block that does not parse is `NOT_PARSEABLE`. Both return before the
+  empty-set rule is ever reached, so "my output broke" is never mistaken for "I found nothing".
+- **`overall` is what carries the claim.** An empty findings array with a blank, missing, or
+  non-string `overall` is a hollow shell, not a judgement, and stays `EMPTY_FINDINGS`. The
+  Stage-1 briefing states the same rule to the model: `overall` is always required, `findings`
+  may be `[]`, and a finding is never to be invented to fill it.
+- A **missing** `findings` key is not a declaration of zero and stays an error. Only an array
+  that is present and empty counts as "I found nothing" — the same line `countAttemptedFindings`
+  draws when it checks a repair against the count the original declared.
+
+This closes a contradiction that used to be shipped in every run: the anti-sycophancy clause in
+each Stage-1 briefing says "An empty severity category is a valid result", while the validator
+rejected exactly that answer — so the only way for a reviewer to satisfy the schema was to
+produce a finding. Downstream, an all-clean bench degrades cleanly rather than silently: Stage 2
+still runs (the peer **ranking** — and therefore street-cred — is unaffected by an empty findings
+pool, only the adjudication half is vacuous), the judge bundle and chair packet state the empty
+findings index explicitly instead of rendering a heading over nothing, `tierCounts` comes out
+all-zeros, per-model `confirmRate`/`factErrorRate` are `null` (no denominator to divide by), and
+a `--debate` run records `debate.outcome: "nothing-to-debate"` on `run.json`.
 
 **Exit codes are a tri-state contract, not the usual 0/1:**
 
