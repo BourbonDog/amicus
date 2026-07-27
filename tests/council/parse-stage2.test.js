@@ -118,3 +118,47 @@ describe('parseChairVerdict', () => {
     expect(parseChairVerdict('VERDICT: Ship its all good')).toBeNull();
   });
 });
+
+/**
+ * ⚠️ v4.4.1 Task 10 — the Stage-2 parsers share findings.js's lastJsonBlock, so
+ * they carried the SAME truncate-on-inner-fence defect as Stage-1 findings. A
+ * judge adjudicating a review about markdown, or a rebuttal quoting a fenced
+ * snippet, lost its whole block to NOT_PARSEABLE. Fixed once at the extractor;
+ * pinned here per consumer so a future re-implementation cannot regress one of
+ * them silently.
+ */
+describe('Stage-2 parsers inherit the line-start closing-fence fix', () => {
+  const { parseDebateDefense, parseRevote } = require('../../src/council/parse-stage2');
+  const F = '`'.repeat(3);
+
+  test('parseJudgeOutput: a reason quoting ```js survives', () => {
+    const r = parseJudgeOutput(wrap({
+      ranking: ['Review A', 'Review B', 'Review C'],
+      adjudications: [
+        { id: 'A1', verdict: 'agree', reason: `the ${F}js info string is dropped` },
+        { id: 'B2', verdict: 'dispute', reason: `/^${F}/ is only a prefix test` },
+      ],
+    }), CTX);
+    expect(r.ok).toBe(true);
+    expect(r.adjudications).toHaveLength(2);
+    expect(r.errors).toEqual([]);
+  });
+
+  test('parseDebateDefense: an argument quoting a fence survives', () => {
+    const r = parseDebateDefense(wrap({
+      responses: [{ id: 'A1', action: 'defend',
+        argument: `The example was ${F}json\n{}\n${F} — still a fence in prose.` }],
+    }), ['A1', 'B1']);
+    expect(r.ok).toBe(true);
+    expect(r.byId.A1.action).toBe('defend');
+    expect(r.byId.B1).toEqual({ action: 'no-response' }); // untouched fallback
+  });
+
+  test('parseRevote: a reason quoting a fence survives', () => {
+    const r = parseRevote(wrap({
+      revotes: [{ id: 'A1', verdict: 'dispute', reason: `${F} in a claim is not a bug` }],
+    }), ['A1']);
+    expect(r.ok).toBe(true);
+    expect(r.byId.A1).toEqual({ verdict: 'dispute', reason: `${F} in a claim is not a bug` });
+  });
+});

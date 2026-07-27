@@ -4,9 +4,37 @@
 const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const REQUIRED = ['claim', 'location', 'rationale'];
 
-/** Extract the LAST ```json fenced block's body, or null. */
+/**
+ * Extract the LAST ```json fenced block's body, or null.
+ *
+ * ⚠️ v4.4.1 (Task 10). The closing fence is anchored to LINE START — the markdown
+ * convention — via the `m` flag. It used to be a bare non-greedy `([\s\S]*?)```,
+ * so the first triple-backtick ANYWHERE inside the JSON body ended the match. A
+ * findings block whose `claim` quotes a fence — which any review of markdown
+ * inevitably writes — was truncated mid-string and then failed JSON.parse as
+ * NOT_PARSEABLE, collapsing the seat to `conformance: unstructured`.
+ *
+ * This is not hypothetical. Measured on the paid md-lite council preserved in
+ * output/md-lite-council/: THREE of four seats hit it. `opus` cut at "```/) for
+ * both open and" (5 findings lost), `glm` at "```js) is silently disca" (6 lost),
+ * `minimax` at a repeated-backtick example (rescued only by the repair wave).
+ * Same family as LC-6/LC-10: an output contract that cannot express what the task
+ * requires. A council reviewing anything that DISCUSSES markdown silently loses
+ * seats, and the chair synthesizes from what survived without knowing.
+ *
+ * Line-start anchoring is sufficient rather than merely better: a raw newline
+ * inside a JSON string is invalid JSON, so no line of a WELL-FORMED body can ever
+ * begin with a fence. Leading horizontal whitespace is tolerated on the closing
+ * line (CommonMark allows an indented closing fence); a `\n` is still required
+ * before it, so a fence sharing a line with body content no longer closes a block.
+ *
+ * Every Stage-1/Stage-2 extractor funnels through here — validateFindings,
+ * countAttemptedFindings, and parse-stage2's parseJudgeOutput / parseDebateDefense
+ * / parseRevote — so judge, debate-defense and re-vote parsing all carried the
+ * identical defect and are all fixed by this one change.
+ */
 function lastJsonBlock(text) {
-  const re = /```json\s*\n([\s\S]*?)```/g;
+  const re = /```json\s*\n([\s\S]*?)^[ \t]*```/gm;
   let m, last = null;
   while ((m = re.exec(text)) !== null) { last = m[1]; }
   return last;

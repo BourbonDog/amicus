@@ -1,6 +1,11 @@
 // tests/council/findings.test.js
 'use strict';
+const fs = require('fs');
+const path = require('path');
 const { validateFindings, buildValidateDoc } = require('../../src/council/findings');
+
+/** A literal triple-backtick, built so this file's own fences stay unambiguous. */
+const F = '`'.repeat(3);
 
 const valid = '```json\n' + JSON.stringify({
   overall: 'ok',
@@ -140,6 +145,77 @@ describe('lastJsonBlock (exported for parse-stage2)', () => {
 
   test('returns null when no fenced json block exists', () => {
     expect(lastJsonBlock('no blocks here')).toBeNull();
+  });
+});
+
+/**
+ * ⚠️ v4.4.1 Task 10 — the closing fence must count only at LINE START.
+ *
+ * The old pattern was `/```json\s*\n([\s\S]*?)```/g`: the first triple-backtick
+ * anywhere INSIDE the body ended the match, so a findings block whose `claim`
+ * quotes a fence was truncated mid-JSON-string and reported NOT_PARSEABLE. Any
+ * council reviewing markdown — or any model quoting a fenced example — silently
+ * lost the seat. Measured on a real paid run: 3 of 4 seats, 11 findings.
+ */
+describe('lastJsonBlock — a fence INSIDE the body must not close the block', () => {
+  const { lastJsonBlock, countAttemptedFindings } = require('../../src/council/findings');
+
+  const fencedClaims = {
+    overall: 'The renderer discusses markdown, so the prose quotes fences.',
+    findings: [
+      { id: 1, severity: 'minor',
+        claim: `Fence detection is a loose prefix test (/^${F}/) for both open and close.`,
+        location: 'md-lite.js parseMdLite', rationale: 'r1' },
+      { id: 2, severity: 'nit',
+        claim: `The fence info string (e.g. 'js' in ${F}js) is silently discarded.`,
+        location: 'md-lite.js parseMdLite fence branch', rationale: 'r2' },
+    ],
+  };
+  const block = `${F}json\n${JSON.stringify(fencedClaims, null, 2)}\n${F}`;
+
+  test('a claim containing ``` and ```js survives extraction intact', () => {
+    const body = lastJsonBlock(`prose about fences\n\n${block}`);
+    expect(body).not.toBeNull();
+    const parsed = JSON.parse(body);           // the old regex died right here
+    expect(parsed.findings).toHaveLength(2);
+    expect(parsed.findings[0].claim).toContain(F);
+    expect(parsed.findings[1].claim).toContain(`${F}js`);
+  });
+
+  test('such a block VALIDATES instead of collapsing to NOT_PARSEABLE', () => {
+    const res = validateFindings(`prose\n\n${block}`);
+    expect(res.ok).toBe(true);
+    expect(res.errors).toEqual([]);
+    expect(res.findings).toHaveLength(2);
+    expect(countAttemptedFindings(`prose\n\n${block}`)).toBe(2);
+  });
+
+  test('the LAST qualifying block still wins when an EARLIER block also holds a fence', () => {
+    // The earlier block is the trap: under the old regex it ended at its own
+    // inline fence, and the scan resumed mid-body — so "last" was not even
+    // well-defined. Both blocks are now delimited correctly and the last wins.
+    const earlier = `${F}json\n{"overall":"decoy quoting ${F}js here","findings":[]}\n${F}`;
+    const body = lastJsonBlock(`${earlier}\nmore prose\n${block}`);
+    expect(JSON.parse(body).findings).toHaveLength(2);
+  });
+
+  test('an indented closing fence still closes (CommonMark allows it)', () => {
+    const indented = `${F}json\n{"overall":"o","findings":[]}\n   ${F}`;
+    expect(JSON.parse(lastJsonBlock(indented))).toEqual({ overall: 'o', findings: [] });
+  });
+
+  test('REAL paid-run regression fixture: the seat that was truncated now parses', () => {
+    // Verbatim copy of review-opus.md from the md-lite council (the run that
+    // exposed this bug). Its finding #4 quotes `/^```/` inside a JSON string —
+    // the exact byte sequence that cut the block and cost the seat 5 findings.
+    const real = fs.readFileSync(
+      path.join(__dirname, 'fixtures', 'review-opus-fenced-claims.md'), 'utf-8');
+    const res = validateFindings(real);
+    expect(res.ok).toBe(true);
+    expect(res.findings).toHaveLength(5);
+    expect(countAttemptedFindings(real)).toBe(5);
+    // The fixture must keep carrying the trigger, or it stops being a regression test.
+    expect(res.findings.some((f) => f.claim.includes(F))).toBe(true);
   });
 });
 
