@@ -11,6 +11,23 @@
 const COARSE_STAGES = ['starting', 'generating', 'folding', 'terminal'];
 
 /**
+ * The stages src/headless.js can write on its ONE terminal progress record.
+ *
+ * ⚠️ v4.4.1 LC-3: this list must stay byte-identical to resolveTerminalState's
+ * status vocabulary (src/sidecar/session-finalize.js), because headless.js
+ * derives the terminal stage straight from that function. A drift pin in
+ * tests/sidecar/progress-fields.test.js asserts it.
+ *
+ * Before LC-3 the terminal record hardcoded 'complete' on every path, so this
+ * set had exactly one member and deriveStage could match the literal. Widening
+ * the writer without widening this set would have been the WORSE bug: an
+ * aborted/errored/timed-out leg would fall through to 'starting' and a finished
+ * leg would read as barely begun for the whole window before metadata.json
+ * lands.
+ */
+const TERMINAL_PROGRESS_STAGES = new Set(['complete', 'error', 'timed-out', 'aborted']);
+
+/**
  * Collapse whitespace and defang fence/tag characters so the preview can be
  * embedded in a one-line JSON status without opening a code fence or tag
  * (prompt-injection hygiene: the FULL text is only available via amicus_read,
@@ -42,8 +59,10 @@ function latestAssistantPreview(entries) {
  * Map (metadata.status, progress.stage) to the coarse agent-facing stage.
  *  - terminal metadata status -> 'terminal'
  *  - progress 'receiving' -> 'generating'
- *  - progress 'complete' while metadata still says running -> 'folding'
- *    (mirror stopped; summary/conflict finalize in flight)
+ *  - a TERMINAL progress stage while metadata still says running -> 'folding'
+ *    (mirror stopped; summary/conflict finalize in flight). v4.4.1 LC-3: that is
+ *    any of TERMINAL_PROGRESS_STAGES, not just 'complete' — an aborted or
+ *    errored leg is every bit as "done streaming, finalizing" as a clean one.
  *  - anything else -> 'starting'
  * @param {string|undefined} metadataStatus @param {string|undefined} progressStage
  * @returns {string}
@@ -53,8 +72,11 @@ function deriveStage(metadataStatus, progressStage) {
     return 'terminal';
   }
   if (progressStage === 'receiving') { return 'generating'; }
-  if (progressStage === 'complete') { return 'folding'; }
+  if (TERMINAL_PROGRESS_STAGES.has(progressStage)) { return 'folding'; }
   return 'starting';
 }
 
-module.exports = { sanitizePreview, latestAssistantPreview, deriveStage, COARSE_STAGES };
+module.exports = {
+  sanitizePreview, latestAssistantPreview, deriveStage, COARSE_STAGES,
+  TERMINAL_PROGRESS_STAGES,
+};

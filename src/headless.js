@@ -978,7 +978,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           'abortSession(tool-settle)',
         );
         toolSettleAborted = true;
-        logger.warn('Aborted the OpenCode session after the tool-settle ceiling', {
+        // Task 6 review X2: a LANDED abort is the good outcome of a condition
+        // that is already logged at `error` (the ceiling itself). Logging the
+        // remedy at `warn` reads as a second problem; `info` reads honestly.
+        // The FAILED abort below stays at `warn` — that one really is a problem
+        // ("it may still be billing").
+        logger.info('Aborted the OpenCode session after the tool-settle ceiling', {
           taskId, sessionId, unsettled: unsettledAtCeiling.length,
         });
       } catch (abortErr) {
@@ -1057,7 +1062,38 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         : {}),
       ...(subtree.unknown ? { subtreeUnknown: true } : {}) }
       : (subagentToolCalls.length > 0 ? { subtreeUnknown: true } : {});
-    try { writeProgress(sessionDir, 'complete', { usage: { ...usage, ...subtreeProgress }, ...settleFlags }); }
+    // ---- v4.4.1 LC-3: the terminal stage is DERIVED, never hardcoded ---------
+    // This write sits above BOTH returns below, so EVERY terminal path reaches
+    // it — the external-abort break, the --timeout, the poll-failure bail, the
+    // tool-call wedge — and it used to stamp 'complete' on all of them. The live
+    // workspace reads progress.json directly (src/observe/live-doc.js
+    // enrichLegUsage), so an aborted or errored leg rendered with a green check
+    // until metadata.json landed. Fix the WRITER: src/observe/council-legs.js
+    // already prefers metadata.json for a terminal leg and is NOT the problem.
+    //
+    // resolveTerminalState is the codebase's single source of truth for the
+    // (completed, timedOut, aborted, error) → status mapping, and it is what
+    // start.js / continue.js / resume.js / finalizeHeadlessResult will run on
+    // THIS function's return value to stamp metadata.json. Deriving the stage
+    // from it — rather than re-deriving a second, hand-rolled expression here —
+    // is what guarantees progress.json's stage and metadata.json's status cannot
+    // disagree. It also covers the two cases a hand-rolled `aborted ? … :
+    // sessionError ? …` would get wrong: a TIMED-OUT leg (which would still have
+    // read 'complete'), and the F1 case where a session error arrived alongside
+    // usable output and the leg legitimately returns completed (which would have
+    // read a false 'error').
+    //
+    // `failedWithNoUsableOutput` is hoisted out of the `if` below so the stage
+    // and the returned shape are decided by ONE predicate and cannot drift.
+    const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled));
+    const { resolveTerminalState } = require('./sidecar/session-finalize');
+    const terminalStage = resolveTerminalState({
+      completed,
+      timedOut,
+      aborted,
+      error: failedWithNoUsableOutput ? sessionError : null,
+    }).status;
+    try { writeProgress(sessionDir, terminalStage, { usage: { ...usage, ...subtreeProgress }, ...settleFlags }); }
     catch (progressErr) {
       logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
     }
@@ -1065,7 +1101,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling, toolSettleAborted }
       : {};
 
-    if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
+    if (failedWithNoUsableOutput) {
       return {
         summary: mirror.output ? extractSummary(mirror.output, foldNonce) : '',
         completed: false,

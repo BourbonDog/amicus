@@ -389,6 +389,66 @@ describe('the ceiling ABORTS the session so it stops billing (LC-2, owner ruling
     expect(result.toolSettleAborted).toBe(false);
   }, 20000);
 
+  /**
+   * Task 6 review X1. The ordering test above uses an OWNED server so `close`
+   * can join the assertion array — but the case the LC-2 abort exists for is
+   * `externalServer: true`, i.e. EVERY council leg, where `close()` is never
+   * called and the abort is the only thing that stops the session billing
+   * against a server that outlives the leg. That was the regression with no
+   * test. It is provably fine by inspection (the abort block is not guarded by
+   * `externalServer`), so this is a guard, not a bug report — but the guard is
+   * what stops a future `if (!externalServer)` from silently un-fixing the
+   * expensive half of the case.
+   */
+  test('X1: on a SHARED server (every council leg) the abort still fires — and close() does NOT', async () => {
+    const calls = [];
+    const sharedClose = jest.fn(async () => { calls.push('close'); });
+    mockGetMessages.mockResolvedValue(stuck());
+    mockGetChildren.mockImplementation(async () => { calls.push('walk'); return []; });
+    mockAbortSession.mockImplementation(async () => { calls.push('abort'); });
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc2shared', '/proj', 60000, 'build', {
+      ...OPTS,
+      toolSettleGraceMs: 60,
+      // Shared-server mode is detected from client+server both being supplied.
+      client: {},
+      server: { url: 'http://127.0.0.1:1', close: sharedClose },
+    });
+
+    expect(result.completed).toBe(true);
+    expect(result.summary).toBe('partial output');
+    expect(result.toolSettleTimedOut).toBe(true);
+    // THE POINT: the abort landed even though nothing else will ever stop this
+    // session — the shared server is not ours to close.
+    expect(result.toolSettleAborted).toBe(true);
+    expect(mockAbortSession).toHaveBeenCalled();
+    expect(mockAbortSession.mock.calls[0][1]).toBe('ses_parent');
+    // …and the walk still ran first, with no close() anywhere.
+    expect(calls).toEqual(['walk', 'abort']);
+    expect(sharedClose).not.toHaveBeenCalled();
+  }, 20000);
+
+  test('X2: a LANDED abort is logged at info, not warn (a good outcome is not a warning)', async () => {
+    mockGetMessages.mockResolvedValue(stuck());
+    await runHeadless(MODEL, 'sys', 'user', 'lc2level', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60 });
+
+    const infos = mockLogger.info.mock.calls.map((c) => c[0]);
+    const warns = mockLogger.warn.mock.calls.map((c) => c[0]);
+    expect(infos).toContain('Aborted the OpenCode session after the tool-settle ceiling');
+    expect(warns.join(' | ')).not.toMatch(/^Aborted the OpenCode session/m);
+  }, 20000);
+
+  test('X2: a FAILED abort stays at warn — that one really is a problem', async () => {
+    mockGetMessages.mockResolvedValue(stuck());
+    mockAbortSession.mockRejectedValue(new Error('boom'));
+    await runHeadless(MODEL, 'sys', 'user', 'lc2lvl2', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60 });
+
+    const warns = mockLogger.warn.mock.calls.map((c) => c[0]).join(' | ');
+    expect(warns).toMatch(/Could not abort the session/);
+  }, 20000);
+
   test('an abort that never returns is bounded — the leg is not held hostage', async () => {
     mockGetMessages.mockResolvedValue(stuck());
     mockAbortSession.mockImplementation(() => new Promise(() => {})); // never settles
@@ -474,6 +534,16 @@ describe('the pre-existing exit paths are preserved', () => {
     expect(result.error).toMatch(/bash/);
   }, 20000);
 
+  test('LC-3 regression floor: the pre-existing exit paths still WRITE a terminal record at all', async () => {
+    // Cheap belt on the refactor: the terminal write sits above both returns, so
+    // a leg that errors out with no output must still leave a progress record —
+    // deriving the stage must not have moved the write behind a branch.
+    mockGetMessages.mockResolvedValue([msg('m1', [toolPart('p1', 'bash', 'running')])]);
+    await runHeadless(MODEL, 'sys', 'user', 'lc3floor', '/proj', 60000, 'build',
+      { ...OPTS, toolCallStallMs: 40, toolSettleGraceMs: 100000 });
+    expect(progressWrites().length).toBeGreaterThan(0);
+  }, 20000);
+
   test('B1 usage settle still runs AFTER the deferral ends (ordering preserved)', async () => {
     // The tool settles and the fold marker lands with NO usage; usage is stamped
     // only on the post-loop settle re-poll. Both mechanisms must compose.
@@ -502,5 +572,144 @@ describe('the pre-existing exit paths are preserved', () => {
     expect(result.usage.costReported).toBeCloseTo(0.00759441096, 11);
     // …and the assistant text was mirrored exactly once despite the extra reads.
     expect(mirroredText().match(/text/g)).toHaveLength(1);
+  }, 20000);
+});
+
+/**
+ * v4.4.1 LC-3 — the terminal progress record must tell the TRUTH about how the
+ * leg ended.
+ *
+ * THE DEFECT. `writeProgress(sessionDir, 'complete', …)` sits above BOTH returns
+ * at the bottom of runHeadless, so every terminal path reached it: the external
+ * abort, the --timeout, the poll-failure bail, the tool-call wedge. The live
+ * Council Workspace reads progress.json DIRECTLY (src/observe/live-doc.js
+ * enrichLegUsage), so an aborted or errored leg rendered with a green check for
+ * the whole window before metadata.json landed. A green check on a failed leg is
+ * exactly the class of lie the v4.4 cost effort exists to remove.
+ *
+ * THE FIX IS AT THE WRITER. src/observe/council-legs.js already prefers
+ * metadata.json for a terminal leg and is not the problem; the live doc's other
+ * consumer has nothing else to read. The stage is derived from
+ * resolveTerminalState (src/sidecar/session-finalize.js) — the same function
+ * that will stamp metadata.json's status from this function's return value — so
+ * the two can never disagree.
+ */
+describe('LC-3: the terminal progress record states how the leg actually ended', () => {
+  const lastStage = () => progressWrites().pop().stage;
+
+  test('a CLEAN leg still writes stage "complete" (no regression)', async () => {
+    mockGetMessages.mockResolvedValue([msg('m1', [
+      textPart('m1:t', 'clean'), toolPart('p1', 'read', 'completed'),
+    ], { completed: true })]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3ok', '/proj', 60000, 'build', OPTS);
+    expect(result.completed).toBe(true);
+    expect(lastStage()).toBe('complete');
+  }, 20000);
+
+  test('an ABORTED leg writes stage "aborted", not "complete"', async () => {
+    mockGetMessages.mockResolvedValue([msg('m1', [
+      textPart('m1:t', 'working'), toolPart('p1', 'task', 'running'),
+    ])]);
+    // The external abort marker the MCP/CLI abort verb writes.
+    fs.readFileSync.mockReturnValue(JSON.stringify({ status: 'aborted' }));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3abort', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 100000 });
+
+    expect(result.aborted).toBe(true);
+    expect(lastStage()).toBe('aborted');
+  }, 20000);
+
+  test('a TIMED-OUT leg writes stage "timed-out", not "complete"', async () => {
+    // The case a hand-rolled `aborted ? … : sessionError ? … : 'complete'` would
+    // still have got wrong: neither flag is set, yet the leg plainly failed.
+    mockGetMessages.mockResolvedValue([msg('m1', [
+      textPart('m1:t', 'working'), toolPart('p1', 'task', 'running'),
+    ])]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3tmo', '/proj', 200, 'build',
+      { ...OPTS, toolSettleGraceMs: 100000 });
+
+    expect(result.timedOut).toBe(true);
+    expect(result.completed).toBe(false);
+    expect(lastStage()).toBe('timed-out');
+  }, 20000);
+
+  test('a WEDGED leg (B53, error with no output) writes stage "error"', async () => {
+    mockGetMessages.mockResolvedValue([msg('m1', [toolPart('p1', 'bash', 'running')])]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3wedge', '/proj', 60000, 'build',
+      { ...OPTS, toolCallStallMs: 40, toolSettleGraceMs: 100000 });
+
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(/Tool call stalled/);
+    expect(lastStage()).toBe('error');
+  }, 20000);
+
+  test('a model error with NO output writes stage "error"', async () => {
+    mockGetMessages.mockResolvedValue([{
+      info: {
+        role: 'assistant', id: 'm1', time: { created: 1, completed: 2 },
+        error: { name: 'ProviderError', data: { message: 'upstream 502' } },
+      },
+      parts: [],
+    }]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3err', '/proj', 60000, 'build', OPTS);
+    expect(result.error).toBe('upstream 502');
+    expect(lastStage()).toBe('error');
+  }, 20000);
+
+  test('F1 SEMANTICS: a model error ALONGSIDE usable output is still "complete"', async () => {
+    // The other case the hand-rolled expression would have got wrong, in the
+    // opposite direction. This leg returns exitCode 0 with a usable summary and
+    // finalizeHeadlessResult will stamp metadata.status = 'complete', so a
+    // progress stage of 'error' would be a fresh lie pointed the other way.
+    mockGetMessages.mockResolvedValue([msg('m1', [
+      textPart('m1:t', `a real answer\n${MARKER}\n`), toolPart('p1', 'read', 'completed'),
+    ], { completed: true, cost: 0.01, tokens: { input: 10, output: 5 } })].map((m) => ({
+      ...m,
+      info: { ...m.info, error: { name: 'ProviderError', data: { message: 'late warning' } } },
+    })));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3f1', '/proj', 60000, 'build', OPTS);
+
+    expect(result.completed).toBe(true);
+    expect(result.summary).toBe('a real answer');
+    expect(result.error).toBeUndefined();   // F1: output present ⇒ not propagated
+    expect(lastStage()).toBe('complete');   // …and the stage agrees with the result
+  }, 20000);
+
+  test('the stage always matches what resolveTerminalState will stamp on metadata.json', async () => {
+    // The invariant behind the whole fix, asserted end-to-end rather than by
+    // inspection: progress.json's stage and metadata.json's status come from one
+    // function, so a leg can never render green in the GUI and red in the file.
+    const { resolveTerminalState } = require('../../src/sidecar/session-finalize');
+
+    mockGetMessages.mockResolvedValue([msg('m1', [
+      textPart('m1:t', 'working'), toolPart('p1', 'task', 'running'),
+    ])]);
+    fs.readFileSync.mockReturnValue(JSON.stringify({ status: 'aborted' }));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3pin', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 100000 });
+
+    expect(lastStage()).toBe(resolveTerminalState(result).status);
+    expect(lastStage()).toBe('aborted');
+  }, 20000);
+
+  test('the settle flags still ride the terminal record on a NON-complete stage', async () => {
+    // The B4/LC-2 payload is orthogonal to the stage — widening the stage must
+    // not have dropped it on any path.
+    mockGetMessages.mockResolvedValue(stuck());
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc3flags', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60 });
+
+    const last = progressWrites().pop();
+    expect(result.completed).toBe(true);
+    expect(last.stage).toBe('complete');
+    expect(last.toolSettleTimedOut).toBe(true);
+    expect(last.toolSettleAborted).toBe(true);
   }, 20000);
 });

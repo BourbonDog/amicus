@@ -34,6 +34,7 @@ const path = require('path');
 const { readProgress, isStalled } = require('../sidecar/progress');
 const { enrichLegUsage, TERMINAL } = require('./live-doc');
 const { roleFor } = require('../council/run-stages');
+const { logger } = require('../utils/logger');
 
 /**
  * A leg's council role. The chair stage is the one case alias identity
@@ -54,6 +55,23 @@ const { roleFor } = require('../council/run-stages');
 function legRole({ bench, critic, lenses, stageName, modelInput }) {
   if (!modelInput) { return null; }
   if (stageName === 'chair') { return 'chair'; }
+  // ⚠️ v4.4.1 LC-4: roleFor's LENS branch does `o.models.indexOf(alias)`, so a
+  // run.json carrying truthy `lenses` with a missing or non-array `bench` throws
+  // a TypeError. This function runs on every status poll, so one malformed
+  // run.json took out three surfaces at once: `amicus status`, the amicus_status
+  // MCP tool, and `amicus watch`. It was unreachable only because
+  // src/council/run.js:72 happens to write `bench` and `lenses` together — an
+  // argument that rests entirely on one writer never changing.
+  //
+  // A role we cannot compute is `null` — the module's existing, documented
+  // degradation (an em-dash in the Role column), never a guess and never a
+  // throw. The non-lens branch never touches `models`, so it stays exact.
+  if (lenses && !Array.isArray(bench)) {
+    logger.debug('leg role unresolved: run.json has lenses but no bench array', {
+      modelInput, stageName, benchType: bench === null ? 'null' : typeof bench,
+    });
+    return null;
+  }
   return roleFor({ models: bench, critic, lenses }, modelInput);
 }
 
@@ -71,15 +89,30 @@ function buildLegRow(project, legId, runCtx) {
   const { getSessionDir } = require('../session-manager');
   const legDir = getSessionDir(project, legId);
   let meta = {};
+  // ⚠️ v4.4.1 LC-9: the catch stays ALL-OR-NOTHING on purpose (Appendix A-9) —
+  // it mirrors the wave branch, and a half-parsed metadata object is worse than
+  // an empty one. What was wrong was the SILENCE: a corrupt metadata.json, an
+  // EACCES on the leg dir, and "the file doesn't exist yet" were indistinguishable
+  // and left no trace anywhere, so a leg with corrupt metadata rendered as a
+  // just-started leg forever. `code` is what separates them — ENOENT is the
+  // ordinary just-started case, anything else is a real fault. Logging only; the
+  // branching is untouched.
   try { meta = JSON.parse(fs.readFileSync(path.join(legDir, 'metadata.json'), 'utf-8')); }
-  catch { /* leg metadata not written yet — just-started leg */ }
+  catch (metaErr) {
+    logger.debug('leg metadata.json unreadable — rendering the leg with base fields only', {
+      legId, code: metaErr.code || null, error: metaErr.message,
+    });
+  }
   // Truthful null, never metadata.model as a fallback: showing the resolved
   // id where the alias was expected is exactly the F36 bug (blind mode would
   // leak the real model id instead of degrading to an em-dash).
   const modelInput = meta.modelInput || null;
+  // LC-4: hoisted out of the object literal below so the guard inside legRole is
+  // the only thing standing between a malformed run.json and three live surfaces.
+  const role = legRole({ ...runCtx, modelInput });
   const row = {
     taskId: legId, model: meta.model || null, status: meta.status || 'unknown',
-    modelInput, role: legRole({ ...runCtx, modelInput }),
+    modelInput, role,
   };
   let stalledMs = null;
   let p = null;
@@ -91,7 +124,17 @@ function buildLegRow(project, legId, runCtx) {
     row.lastActivityAt = p.lastActivityAt;
     row.stalled = row.status === 'running' && isStalled(p.lastActivityMs);
     if (row.stalled) { stalledMs = p.lastActivityMs; }
-  } catch { /* no progress.json yet — a just-started leg; base fields only. */ }
+  } catch (progressErr) {
+    // ⚠️ v4.4.1 LC-9: same deal as the metadata catch above — all-or-nothing by
+    // design (A-9), silent by accident. readProgress swallows a malformed
+    // progress.json itself, so reaching here means the leg DIR could not be
+    // stat'd/read at all (EACCES, a vanished session dir) or readProgress threw
+    // on a shape it could not handle — neither of which is "hasn't started yet",
+    // and both of which previously left the row indistinguishable from one.
+    logger.debug('leg progress unreadable — rendering the leg with base fields only', {
+      legId, code: progressErr.code || null, error: progressErr.message,
+    });
+  }
 
   // council review C3: this is a SEPARATE try from readProgress's above, on
   // purpose. The old code wrapped both in one try, so a pricing-resolution
