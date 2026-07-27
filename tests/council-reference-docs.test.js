@@ -216,8 +216,7 @@ describe('B46 — every fenced ```json block is valid, parseable JSON (adversari
 });
 
 describe('docs/council.md v4.1 additions', () => {
-  const fs = require('fs'); const path = require('path');
-  const DOC = fs.readFileSync(path.join(__dirname, '..', 'docs', 'council.md'), 'utf-8');
+  const DOC = read('docs/council.md');
   test('debate subsection documents --debate and the one-round rule', () => {
     expect(DOC).toContain('--debate');
     expect(DOC).toMatch(/exactly one round/i);
