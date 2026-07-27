@@ -49,6 +49,12 @@ const WRITE_APIS = new Set([
   'rmSync', 'rm', 'rmdirSync', 'rmdir', 'unlinkSync', 'unlink',
   'renameSync', 'rename', 'copyFileSync', 'copyFile', 'cpSync', 'cp',
   'truncateSync', 'truncate', 'ftruncateSync', 'writeSync', 'openSync',
+  // The fd-level trio. Only reachable once a raw fd exists — and `openSync`, the
+  // only way to get one here, is already on this list — so they are close to
+  // unreachable in practice. They cost nothing to name, and the list's value is
+  // that it is exhaustive: a reader must never have to ask whether an omission
+  // was a judgement or an oversight.
+  'writev', 'writevSync', 'fchmodSync',
   'chmodSync', 'chmod', 'chownSync', 'chown',
   'symlinkSync', 'symlink', 'linkSync', 'utimesSync', 'utimes',
   'createWriteStream',
@@ -122,11 +128,21 @@ function offendersIn(relPath) {
   return guardSource(readSource(relPath)).map((h) => `${relPath}:${h.line} ${h.name}`);
 }
 
-/** Every `.js` file directly inside a repo-relative directory, repo-relative. */
+/**
+ * Every `.js` file at or below a repo-relative directory, repo-relative.
+ *
+ * ⚠️ RECURSIVE ON PURPOSE. Both directories are flat today, so a shallow readdir
+ * would give the same answer — but only today. A future `src/workspace/sub/x.js`
+ * would go unscanned and this guard would stay GREEN while the invariant it names
+ * had actually been broken. A guard that can quietly become incomplete is the exact
+ * failure mode this file exists to prevent, so the scan follows the tree.
+ */
 function jsFilesIn(relDir) {
-  return fs.readdirSync(path.join(ROOT, relDir))
-    .filter((f) => f.endsWith('.js'))
-    .map((f) => `${relDir}/${f}`);
+  return fs.readdirSync(path.join(ROOT, relDir), { withFileTypes: true })
+    .flatMap((e) => {
+      if (e.isDirectory()) { return jsFilesIn(`${relDir}/${e.name}`); }
+      return e.name.endsWith('.js') ? [`${relDir}/${e.name}`] : [];
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +188,16 @@ describe('the guard is comment-blind but not call-blind', () => {
     const engineOffenders = offendersIn('src/council/run-state.js');
     expect(engineOffenders.length).toBeGreaterThan(0);
     expect(engineOffenders.join('\n')).toContain('mkdirSync');
+  });
+
+  test('the file scan RECURSES — a nested module cannot hide from the invariant', () => {
+    // `src/workspace/` and `electron/workspace-ui/` are flat today, so nothing below
+    // proves recursion by itself. `tests/workspace/` is the nearest directory in the
+    // repo that genuinely nests, so it is what pins the behaviour: the day a scanned
+    // directory grows a subdirectory, the walk must already have been following it.
+    const nested = jsFilesIn('tests/workspace');
+    expect(nested).toContain('tests/workspace/helpers/fake-workspace-page.js');
+    expect(nested).toContain('tests/workspace/read-only-invariant.test.js');
   });
 
   test('read APIs are never offenders (no over-broad matching)', () => {
