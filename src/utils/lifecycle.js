@@ -41,4 +41,40 @@ function armExitWatchdog(code = 0, ms = 1500, deps = {}) {
   return t;
 }
 
-module.exports = { isOneShotCommand, armExitWatchdog, ONE_SHOT_COMMANDS };
+/**
+ * An `exit` hook for armExitWatchdog that REAPS an OpenCode server this process
+ * is using but does not own, on its way out (v4.4.1 fix wave, finding F3).
+ *
+ * The force-exit path is the one place where "not ours to close" stops being the
+ * safe answer. A wave running on an injected server deliberately never closes it
+ * — the owner does, once, in its own finalize. But if the watchdog fires first
+ * the parent dies anyway, and the Go server survives it: an orphan still holding
+ * the OpenCode SQLite lock that the per-run shared server exists to stop
+ * contending on. Before the external-server seam, fanout's own close() covered
+ * this by accident; this restores it deliberately.
+ *
+ * SIGTERM only, and synchronous: process.exit cannot await server.close()'s
+ * escalation, so this sends the one signal that fits in the window and gets out
+ * of the way. Never signals this process, and never lets a dead/absent pid throw
+ * — the exit must happen regardless.
+ *
+ * @param {{goPid?: number|null}|null} server the injected server handle
+ * @param {{kill?: Function, exit?: Function}} [deps] test seams
+ * @returns {(code: number) => void}
+ */
+function exitReaping(server, deps = {}) {
+  return (code) => {
+    // Resolved at CALL time, not creation time: this hook is built the instant a
+    // signal lands and invoked up to 10s later, so binding process.kill/exit
+    // early would freeze whatever was installed at signal time.
+    const kill = deps.kill || ((p, sig) => process.kill(p, sig));
+    const exit = deps.exit || ((c) => process.exit(c));
+    const pid = server && server.goPid;
+    if (pid && pid !== process.pid) {
+      try { kill(pid, 'SIGTERM'); } catch { /* already gone: nothing to reap */ }
+    }
+    exit(code);
+  };
+}
+
+module.exports = { isOneShotCommand, armExitWatchdog, exitReaping, ONE_SHOT_COMMANDS };

@@ -56,7 +56,7 @@ async function runFanout(options) {
   const { buildContext } = require('./context-builder');
   const { buildPrompts } = require('../prompt-builder');
   const { generateFoldNonce } = require('../utils/fold-marker');
-  const { installSignalAbort, markAborted } = require('../utils/session-abort');
+  const { installWaveAbort } = require('./fanout-signals');
   const { getSessionDir } = require('../session-manager');
   const { emitWaveStarted } = require('../observe/events'); // wave-terminal is emitted by finishWave
 
@@ -216,31 +216,12 @@ async function runFanout(options) {
   // OpenCode server", which on an injected server would kill every sibling wave.
   if (!externalServer && server.goPid) { writeWaveMetadata(waveDir, { goPid: server.goPid }); }
 
-  // 5. Signal abort: mark wave + all legs aborted, close the server, then let
-  // NORMAL control flow finalize — legs see their abort marker within one poll
-  // (~2s) and settle, so step 7 still writes wave.json and emits a parseable
-  // aborted document. An unref'd force-exit watchdog backstops a wedged leg.
+  // 5. Signal abort (./fanout-signals owns the handler — size gate): mark wave +
+  // all legs aborted, close an OWNED server, then let NORMAL control flow
+  // finalize, so step 7 still writes wave.json and emits a parseable aborted
+  // document. An unref'd force-exit watchdog backstops a wedged leg.
   const legDirs = legIds.map(id => getSessionDir(project, id));
-  let signalled = null;
-  const uninstallSignals = installSignalAbort({
-    onAbort: (signal) => {
-      const code = signal === 'SIGINT' ? 130 : 143;
-      if (signalled) { process.exit(code); } // second signal: exit NOW
-      signalled = signal;
-      logger.warn('Signal received — aborting wave', { waveId, signal });
-      markAborted(waveDir, signal);
-      for (const dir of legDirs) { markAborted(dir, signal); }
-      // close() is async (B06 escalation); this handler stays sync, so
-      // fire-and-forget with a rejection guard. The 10s exit watchdog below
-      // comfortably outlives the ~2s escalation grace inside close().
-      // ⚠️ close site 1 of 2 — NEVER an injected server: it belongs to the
-      // council run, whose own signal handler tears it down in finalize().
-      // Closing it here would kill every sibling and later wave in the run.
-      if (!externalServer) { try { server.close().catch(() => {}); } catch { /* best-effort */ } }
-      const { armExitWatchdog } = require('../utils/lifecycle');
-      armExitWatchdog(code, 10000, { log: (m, meta) => logger.debug(m, meta) });
-    },
-  });
+  const waveAbort = installWaveAbort({ waveId, waveDir, legDirs, server, externalServer });
 
   // 6. Launch all ROUTABLE legs concurrently (runLeg never rejects). A leg that
   // failed to route (leg.ok === false) resolves to an error run doc in its own
@@ -274,7 +255,7 @@ async function runFanout(options) {
     }));
   } finally {
     heartbeat.stop();
-    uninstallSignals();
+    waveAbort.uninstall();
     // ⚠️ close site 2 of 2 (`grep -n "server.close()" src/sidecar/fanout.js`).
     // An injected server outlives this wave by design — the owner closes it once.
     if (!externalServer) { try { await server.close(); } catch { /* already closed on signal */ } }
@@ -282,6 +263,7 @@ async function runFanout(options) {
 
   // 7. Aggregate, persist (atomic: tmp + rename), finalize, emit
   const completedAt = new Date().toISOString();
+  const signalled = waveAbort.signal();
   const wave = buildWaveResult({
     waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
     status: signalled ? 'aborted' : null, notices,

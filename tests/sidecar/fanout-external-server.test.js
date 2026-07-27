@@ -48,6 +48,20 @@ jest.mock('../../src/sidecar/context-builder', () => ({
   parseDuration: jest.fn(),
 }));
 
+// The signal seam. installSignalAbort is captured (not registered) so a test can
+// fire the handler deterministically; armExitWatchdog is captured so its 10s
+// force-exit timer never actually arms inside a jest worker.
+const mockInstallSignalAbort = jest.fn();
+jest.mock('../../src/utils/session-abort', () => {
+  const actual = jest.requireActual('../../src/utils/session-abort');
+  return { ...actual, installSignalAbort: (...args) => mockInstallSignalAbort(...args) };
+});
+const mockArmExitWatchdog = jest.fn();
+jest.mock('../../src/utils/lifecycle', () => {
+  const actual = jest.requireActual('../../src/utils/lifecycle');
+  return { ...actual, armExitWatchdog: (...args) => mockArmExitWatchdog(...args) };
+});
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -68,13 +82,24 @@ const legOk = (taskId) => ({
 
 describe('runFanout external-server seam (v4.4.1 Task 0.5)', () => {
   let project;
+  const armed = { onAbort: null };
 
   beforeEach(() => {
     jest.clearAllMocks();
     project = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-extsrv-'));
     mockStartOpenCodeServer.mockImplementation(async () => fakeServerPair('owned'));
     mockRunHeadless.mockImplementation(async (_m, _s, _u, taskId) => legOk(taskId));
+    armed.onAbort = null;
+    mockInstallSignalAbort.mockImplementation((opts) => { armed.onAbort = opts.onAbort; return jest.fn(); });
   });
+
+  /** Fire the wave's signal handler once, from inside the first leg. */
+  const signalDuringFirstLeg = (signal) => {
+    mockRunHeadless.mockImplementation(async (_m, _s, _u, taskId) => {
+      if (armed.onAbort) { const fire = armed.onAbort; armed.onAbort = null; fire(signal); }
+      return legOk(taskId);
+    });
+  };
 
   afterEach(() => { fs.rmSync(project, { recursive: true, force: true }); });
 
@@ -177,6 +202,71 @@ describe('runFanout external-server seam (v4.4.1 Task 0.5)', () => {
     const owned = JSON.parse(fs.readFileSync(
       path.join(getSessionDir(project, 'aaaa0011'), 'metadata.json'), 'utf-8'));
     expect(owned.goPid).toBe(4242);
+  });
+
+  // ---- close site 1 of 2: the SIGNAL path (fanout-signals.js) --------------
+  //
+  // Previously unpinned at both levels — the guard read correctly and nothing
+  // held it there. It is also where F3 lives: fanout no longer closes an
+  // injected server on signal, so the 10s force-exit watchdog could kill the
+  // parent and leave the OpenCode process orphaned, still holding the very
+  // SQLite lock the per-run shared server exists to stop contending on.
+  describe('signal path', () => {
+    test('an injected server is NOT closed on signal — the run owns it', async () => {
+      const pair = fakeServerPair();
+      signalDuringFirstLeg('SIGINT');
+      const { wave, exitCode } = await runFanout(
+        fanoutOpts({ waveId: 'aaaa0020', serverClient: pair.client, server: pair.server }));
+
+      expect(pair.server.close).not.toHaveBeenCalled();
+      // …and normal control flow still finalized a parseable aborted document.
+      expect(wave.status).toBe('aborted');
+      expect(exitCode).toBe(130);
+      const doc = JSON.parse(fs.readFileSync(
+        path.join(getSessionDir(project, 'aaaa0020'), 'wave.json'), 'utf-8'));
+      expect(doc.status).toBe('aborted');
+    });
+
+    test('an OWNED server IS still closed on signal', async () => {
+      const pair = fakeServerPair('owned');
+      mockStartOpenCodeServer.mockResolvedValue(pair);
+      signalDuringFirstLeg('SIGTERM');
+      const { exitCode } = await runFanout(fanoutOpts({ waveId: 'aaaa0021' }));
+      expect(exitCode).toBe(143);
+      expect(pair.server.close).toHaveBeenCalled(); // signal close + the finally
+    });
+
+    // F3: the force-exit hook. An owned server was already closed above, so it
+    // gets no hook; an injected one gets a reaper, and the reaper really reaps.
+    test('a signalled wave on an injected server arms a REAPING force-exit', async () => {
+      const pair = fakeServerPair();
+      signalDuringFirstLeg('SIGINT');
+      await runFanout(fanoutOpts({ waveId: 'aaaa0022', serverClient: pair.client, server: pair.server }));
+
+      expect(mockArmExitWatchdog).toHaveBeenCalledTimes(1);
+      const [code, ms, deps] = mockArmExitWatchdog.mock.calls[0];
+      expect(code).toBe(130);
+      expect(ms).toBe(10000);
+      expect(typeof deps.exit).toBe('function');
+
+      // Drive the hook: it must SIGTERM the injected server's Go pid on the way
+      // out, so a hard exit cannot orphan the OpenCode process.
+      const kill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+      const exit = jest.spyOn(process, 'exit').mockImplementation(() => {});
+      try {
+        deps.exit(130);
+        expect(kill).toHaveBeenCalledWith(4242, 'SIGTERM');
+        expect(exit).toHaveBeenCalledWith(130);
+      } finally { kill.mockRestore(); exit.mockRestore(); }
+    });
+
+    test('an OWNED server arms the plain watchdog — no reaper, close() already signalled it', async () => {
+      mockStartOpenCodeServer.mockResolvedValue(fakeServerPair('owned'));
+      signalDuringFirstLeg('SIGINT');
+      await runFanout(fanoutOpts({ waveId: 'aaaa0023' }));
+      expect(mockArmExitWatchdog).toHaveBeenCalledTimes(1);
+      expect(mockArmExitWatchdog.mock.calls[0][2].exit).toBeUndefined();
+    });
   });
 
   // Step 10: the failed run wrote metadata.json with the reason but no
