@@ -102,6 +102,7 @@ These variables control the polling loop that drives headless sessions. The defa
 | `AMICUS_STABLE_FINISHED_POLLS` | Number of consecutive idle polls required after the SDK reports the session as `completed` before the headless runner exits. A small number (2) guards against a race where the assistant message is flagged complete but trailing content is still streaming. | `2` |
 | `AMICUS_STABLE_IDLE_POLLS` | Number of consecutive idle polls required when no explicit completion signal is received (approximately 60 s at the 2 s default). This is the fallback heuristic for models or SDK versions that don't emit a clean completion event. | `30` |
 | `AMICUS_MAX_CONSECUTIVE_POLL_FAILURES` | Consecutive poll failures before the headless runner bails. At the 2 s interval this is approximately 30 s. Prevents a dead server from burning the full session timeout on futile polls. | `15` |
+| `AMICUS_TOOL_SETTLE_GRACE_MS` | How long a completion signal may be deferred while a tool call has not reached a terminal status, so a leg is not declared complete while its session is still working and billing. On exceeding the grace the leg **completes anyway** — its partial output is kept and it is never failed — carrying `toolSettleTimedOut` on its result, its `metadata.json` and its terminal `progress.json`; its OpenCode session is then **aborted** so it stops billing for output nobody will read, and whether that abort landed is recorded as `toolSettleAborted`. Set to `0` to disable the deferral entirely (and with it the abort) — pre-v4.4 behaviour. | `300000` |
 
 ---
 

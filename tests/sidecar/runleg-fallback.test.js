@@ -203,7 +203,36 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     });
     const clean = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, 'w6-1'), 'metadata.json'), 'utf-8'));
     expect(clean.toolSettleTimedOut).toBeUndefined();
+    expect(clean.toolSettleAborted).toBeUndefined();
     expect(clean.usage.subtreeUnknown).toBeUndefined();
+  });
+
+  test('LC-2: toolSettleAborted travels onto the leg metadata — including `false`', async () => {
+    const project = tmp();
+    const { getSessionDir } = require('../../src/session-manager');
+    const { runHeadless } = require('../../src/headless');
+    const base = {
+      summary: 'partial', completed: true, toolSettleTimedOut: true,
+      unsettledToolCalls: [{ id: 'p1', name: 'task', firstSeenAt: '2026-07-26T04:35:02.492Z' }],
+      usage: { tokens: { input: 10, output: 5 }, costReported: 0.001 },
+    };
+    const run = async (legId, waveId, patch) => {
+      fs.mkdirSync(getSessionDir(project, waveId), { recursive: true });
+      runHeadless.mockImplementationOnce(async () => ({ ...base, ...patch }));
+      await runSingleAttempt({
+        leg: { model: 'openrouter/a/b', modelInput: 'a' }, legId, waveId, project,
+        systemPrompt: 'sys', userMessage: 'task', timeoutMs: 60000, agent: 'build',
+        client: {}, server: {}, quiet: true,
+      });
+      return JSON.parse(fs.readFileSync(path.join(getSessionDir(project, legId), 'metadata.json'), 'utf-8'));
+    };
+
+    expect((await run('w5-1', 'w5', { toolSettleAborted: true })).toolSettleAborted).toBe(true);
+    // The load-bearing half: `false` means "we tried to stop the session and
+    // could not — it may still be billing" and must NOT be dropped as falsy.
+    const failed = await run('w4-1', 'w4', { toolSettleAborted: false });
+    expect(failed.toolSettleAborted).toBe(false);
+    expect(failed.status).toBe('complete'); // a failed abort never demotes the leg
   });
 
   test('a thrown setup still resolves to an error run doc (never rejects)', async () => {

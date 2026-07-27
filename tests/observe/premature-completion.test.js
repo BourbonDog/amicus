@@ -52,6 +52,7 @@ const mockCheckHealth = jest.fn();
 const mockStartServer = jest.fn();
 const mockAbortSession = jest.fn();
 const mockGetSessionStatus = jest.fn();
+const mockGetChildren = jest.fn();
 
 jest.mock('../../src/opencode-client', () => ({
   createSession: mockCreateSession,
@@ -62,6 +63,10 @@ jest.mock('../../src/opencode-client', () => ({
   startServer: mockStartServer,
   abortSession: mockAbortSession,
   getSessionStatus: mockGetSessionStatus,
+  // v4.4.1 CA-1's child-session walk destructures this at module load. Stubbed
+  // so the walk RUNS (returning "no children") instead of throwing on an
+  // undefined function — LC-2 asserts the abort is ordered after it.
+  getChildren: mockGetChildren,
 }));
 
 const mockLogger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() };
@@ -86,6 +91,12 @@ const toolPart = (id, tool, status) => ({
 });
 
 const textPart = (id, text) => ({ id, type: 'text', text });
+
+/** A leg with real output whose `task` tool NEVER reaches a terminal status. */
+const stuck = () => [msg('m1', [
+  textPart('m1:t', 'partial output'),
+  toolPart('p_stuck', 'task', 'running'),
+])];
 
 const msg = (id, parts, { completed, cost, tokens } = {}) => ({
   info: {
@@ -120,6 +131,7 @@ beforeEach(() => {
   mockCreateSession.mockResolvedValue('ses_parent');
   mockSendPromptAsync.mockResolvedValue(undefined);
   mockAbortSession.mockResolvedValue(undefined);
+  mockGetChildren.mockResolvedValue([]);
   // The real run's session was BUSY running the tool — the SDK never said idle,
   // so the STABLE_IDLE_POLLS gate is what fired. Model that faithfully.
   mockGetSessionStatus.mockResolvedValue({ type: 'busy' });
@@ -223,11 +235,6 @@ describe('the idle gate must not complete a leg while a tool call is live', () =
 });
 
 describe('the wait is BOUNDED and the ceiling is LOUD, not silent', () => {
-  const stuck = () => [msg('m1', [
-    textPart('m1:t', 'partial output'),
-    toolPart('p_stuck', 'task', 'running'),
-  ])];
-
   test('a tool call that never settles completes the leg anyway after the grace', async () => {
     mockGetMessages.mockResolvedValue(stuck());
     const started = Date.now();
@@ -308,6 +315,92 @@ describe('the wait is BOUNDED and the ceiling is LOUD, not silent', () => {
     // Pre-v4.4 behaviour: completes at the idle threshold, no waiting, no flag.
     expect(result.completed).toBe(true);
     expect(result.toolSettleTimedOut).toBeFalsy();
+  }, 20000);
+});
+
+describe('the ceiling ABORTS the session so it stops billing (LC-2, owner ruling 2026-07-26)', () => {
+  /** Rebind the server so its close() lands in the same ordering log as the walk/abort. */
+  const recordingServer = (calls) => {
+    mockStartServer.mockResolvedValue({
+      client: {},
+      server: { url: 'http://127.0.0.1:1', close: jest.fn(async () => { calls.push('close'); }) },
+    });
+  };
+
+  test('the settle ceiling aborts the session, after the child walk', async () => {
+    const calls = [];
+    recordingServer(calls);
+    mockGetMessages.mockResolvedValue(stuck());
+    mockGetChildren.mockImplementation(async () => { calls.push('walk'); return []; });
+    mockAbortSession.mockImplementation(async () => { calls.push('abort'); });
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc2ord', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60 });
+
+    expect(result.completed).toBe(true);           // unchanged: never fail closed
+    expect(result.summary).toBe('partial output'); // unchanged: partial output kept
+    expect(result.toolSettleTimedOut).toBe(true);  // unchanged: still loud
+    expect(result.toolSettleAborted).toBe(true);   // new
+    // ORDER IS THE POINT. Before the walk and the subtree cost data v4.4.0 exists
+    // to capture is lost; after server.close() and there is no server to ask.
+    expect(calls).toEqual(['walk', 'abort', 'close']);
+    expect(mockAbortSession.mock.calls[0][1]).toBe('ses_parent'); // its OWN session
+  }, 20000);
+
+  test('the abort flag rides the terminal progress record the live GUI reads', async () => {
+    mockGetMessages.mockResolvedValue(stuck());
+    await runHeadless(MODEL, 'sys', 'user', 'lc2prog', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60 });
+
+    const last = progressWrites().pop();
+    expect(last.stage).toBe('complete');
+    expect(last.toolSettleTimedOut).toBe(true);
+    expect(last.toolSettleAborted).toBe(true);
+  }, 20000);
+
+  test('a leg that settles normally is never aborted', async () => {
+    mockGetMessages.mockResolvedValue([msg('m1', [
+      textPart('m1:t', 'clean'), toolPart('p1', 'read', 'completed'),
+    ], { completed: true })]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc2clean', '/proj', 60000, 'build', OPTS);
+
+    expect(result.toolSettleTimedOut).toBeFalsy();
+    expect(result.toolSettleAborted).toBeFalsy();
+    expect(result.toolSettleAborted).toBeUndefined(); // absent, not a false alarm
+    expect(mockAbortSession).not.toHaveBeenCalled();
+    expect(progressWrites().pop().toolSettleAborted).toBeUndefined();
+  }, 20000);
+
+  test('an abort failure never sinks a completed leg (standing ruling A-8)', async () => {
+    mockGetMessages.mockResolvedValue(stuck());
+    mockAbortSession.mockRejectedValue(new Error('boom'));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc2boom', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60 });
+
+    // The leg already succeeded and was already paid for. An optimization layered
+    // on top of it must never subtract value from it.
+    expect(result.completed).toBe(true);
+    expect(result.summary).toBe('partial output');
+    expect(result.error).toBeUndefined();
+    expect(result.toolSettleTimedOut).toBe(true);
+    // …and it says so: we tried and could not, so the session MAY still be billing.
+    expect(result.toolSettleAborted).toBe(false);
+  }, 20000);
+
+  test('an abort that never returns is bounded — the leg is not held hostage', async () => {
+    mockGetMessages.mockResolvedValue(stuck());
+    mockAbortSession.mockImplementation(() => new Promise(() => {})); // never settles
+    const started = Date.now();
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'lc2hang', '/proj', 60000, 'build',
+      { ...OPTS, toolSettleGraceMs: 60, toolSettleAbortTimeoutMs: 50 });
+
+    expect(result.completed).toBe(true);
+    expect(result.summary).toBe('partial output');
+    expect(result.toolSettleAborted).toBe(false);
+    expect(Date.now() - started).toBeLessThan(15000);
   }, 20000);
 });
 

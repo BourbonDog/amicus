@@ -122,8 +122,22 @@ const USAGE_SETTLE_CALL_TIMEOUT_MS = envNumber('AMICUS_USAGE_SETTLE_CALL_TIMEOUT
  * ON EXCEEDING IT the leg COMPLETES anyway — never fails — carrying
  * `toolSettleTimedOut` on the result, the terminal progress record and the
  * error log channel. Owner's standing ruling: fail LOUD, not fail CLOSED.
+ *
+ * v4.4.1 LC-2 (owner ruling, 2026-07-26): the leg's completion and its partial
+ * output are unchanged, but its OpenCode session is now ABORTED at the ceiling
+ * (see the finalization block) so it stops billing for work nobody will read.
  */
 const TOOL_SETTLE_GRACE_MS = envNumber('AMICUS_TOOL_SETTLE_GRACE_MS', 300000);
+/**
+ * v4.4.1 LC-2 — how long the ceiling's abort call may take before we stop
+ * waiting on it. A hard constant rather than an env knob (the same disposition
+ * as src/sidecar/child-sessions.js's bounds): it exists to stop a pathological
+ * hang, not to be tuned. The leg is already complete and already paid for when
+ * this runs, so an unbounded wait here would hold a finished answer hostage to a
+ * best-effort cost optimization — exactly the trade A-8 forbids. Injectable via
+ * `options.toolSettleAbortTimeoutMs` so the bound itself is testable.
+ */
+const TOOL_SETTLE_ABORT_TIMEOUT_MS = 5000;
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -468,6 +482,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // `=== undefined` rather than `||`: 0 is meaningful (disable the deferral).
     const toolSettleGraceMs = options.toolSettleGraceMs === undefined
       ? TOOL_SETTLE_GRACE_MS : options.toolSettleGraceMs;
+    const toolSettleAbortTimeoutMs = options.toolSettleAbortTimeoutMs === undefined
+      ? TOOL_SETTLE_ABORT_TIMEOUT_MS : options.toolSettleAbortTimeoutMs;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -489,6 +505,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let toolSettleDeferredSince = null; // ms timestamp of the first deferral, or null
     let toolSettleTimedOut = false;     // the grace ceiling was exceeded
     let unsettledAtCeiling = [];        // what was still live when it was exceeded
+    let toolSettleAborted = false;      // LC-2: the ceiling's abort landed (see finalization)
 
     /**
      * Should this poll's completion signal be DEFERRED because a tool call has
@@ -928,6 +945,49 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       }
     }
 
+    // ---- v4.4.1 LC-2: stop paying for a session nobody will read -------------
+    // OWNER RULING (2026-07-26). The leg is complete and runHeadless is returning,
+    // so nothing will ever read further session output — the outcome was already
+    // discarded by completing. Aborting here does not truncate an answer that
+    // would have been used; it stops paying for work nobody will read. The
+    // original objection ("stops the bleeding at the cost of truncating a
+    // possibly-healthy call") applied to aborting ON the completion route, where
+    // the call might still have mattered. Here it cannot.
+    //
+    // ORDER IS LOAD-BEARING, on BOTH sides:
+    //   AFTER the child-session walk above — aborting first risks losing the
+    //     subtree cost data v4.4.0 exists to capture, trading one silent
+    //     under-report for another.
+    //   BEFORE server.close() below — the abort is an SDK call and needs a live
+    //     server. It is not redundant with close(): on a SHARED server (every
+    //     council run) close() is never called here, and the session would go on
+    //     billing against a server that outlives this leg.
+    //
+    // A-8 APPLIES: "never lose the answer" outranks "never report inaccurate
+    // usage". This is an optimization layered on an already-successful,
+    // already-paid-for leg, so every failure — rejection, hang, or a missing
+    // session id — is logged and dropped. Nothing here may alter `completed`,
+    // `summary`, `usage` or `error`. `toolSettleAborted: false` is the honest
+    // record of "we tried and could not; it may still be billing".
+    if (toolSettleTimedOut && sessionId) {
+      try {
+        const { abortSession } = require('./opencode-client');
+        await withTimeout(
+          abortSession(client, sessionId, ...dirArgs),
+          toolSettleAbortTimeoutMs,
+          'abortSession(tool-settle)',
+        );
+        toolSettleAborted = true;
+        logger.warn('Aborted the OpenCode session after the tool-settle ceiling', {
+          taskId, sessionId, unsettled: unsettledAtCeiling.length,
+        });
+      } catch (abortErr) {
+        toolSettleAborted = false;
+        logger.warn('Could not abort the session after the tool-settle ceiling — it may '
+          + 'still be billing', { taskId, sessionId, error: abortErr.message });
+      }
+    }
+
     if (!externalServer) { await server.close(); }
     if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
@@ -969,8 +1029,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // live GUI reads this file (src/observe/live-doc.js). `unsettledToolCalls` is
     // a COUNT here (progress.json is a compact snapshot); the full list is on the
     // returned result for the caller's metadata.
+    //
+    // v4.4.1 LC-2: `toolSettleAborted` rides alongside it — `true` = the session
+    // was told to stop, `false` = it may still be billing. Both are meaningful
+    // ONLY when the ceiling was hit, so neither appears on a clean leg.
     const settleFlags = toolSettleTimedOut
-      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling.length }
+      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling.length,
+        toolSettleAborted }
       : {};
     // v4.4 B4 (Task 2) + v4.4.1 CA-1: a leg that made a SUBAGENT call has spend
     // in a CHILD OpenCode session that is billed separately and is NOT rolled
@@ -997,7 +1062,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
     }
     const settleResult = toolSettleTimedOut
-      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling }
+      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling, toolSettleAborted }
       : {};
 
     if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
