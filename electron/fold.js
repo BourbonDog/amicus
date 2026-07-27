@@ -66,7 +66,7 @@ function createFoldHandler(state) {
         `Session: ${state.sessionId || state.taskId}`,
         `Client: ${state.client}`,
         `CWD: ${state.cwd}`,
-        `Mode: interactive`,
+        'Mode: interactive',
         '---',
         summary || 'Session ended without summary.'
       ].join('\n');

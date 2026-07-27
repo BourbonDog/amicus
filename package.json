@@ -54,7 +54,7 @@
     "test:all": "jest --testPathIgnorePatterns='/node_modules/' --testPathIgnorePatterns='worktrees' && node scripts/mark-test-passed.js",
     "test:e2e:mcp": "jest tests/mcp-repomix-e2e.integration.test.js --testTimeout=180000 --forceExit",
     "posttest": "node scripts/mark-test-passed.js",
-    "lint": "eslint src/",
+    "lint": "eslint src/ electron/",
     "postinstall": "node scripts/postinstall.js",
     "test:thinking": "node scripts/benchmark-thinking.js",
     "test:thinking:quick": "MODELS=gemini node scripts/benchmark-thinking.js",
@@ -99,6 +99,9 @@
   },
   "lint-staged": {
     "src/**/*.js": [
+      "eslint --fix"
+    ],
+    "electron/**/*.js": [
       "eslint --fix"
     ]
   }

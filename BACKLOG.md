@@ -337,3 +337,31 @@ strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`
 - [ ] **MODEL-NOTES fold-back still deferred** — now carried through 4.0.0, 4.0.1, 4.1.0, 4.1.1 and
   4.1.2. The machine-local copy is staler than the shipped one in places, so a bulk port would
   regress the repo; it needs a per-section diff, not a copy. [S]
+
+## v4.4.1 lint-gate deferrals (ENV-5, 2026-07-27)
+
+v4.4.1 put `electron/` under the lint gate (`npm run lint` is now `eslint src/ electron/`, and
+`lint-staged` globs `electron/**/*.js`). Owner ruling for that task was **config + errors only** —
+265 errors were resolved, and the one style class below was deliberately left alone rather than
+turned into a large untested rewrite inside a patch release. It is written down here so the
+deferral is a decision with a number attached rather than a silent config line.
+
+- [ ] **`no-var` is OFF for `electron/workspace-ui/**` — 159 declarations to modernise** — [M]
+  The renderer is served raw to a sandboxed page under a strict CSP with **no build step and no
+  transpiler**, and is written in ES5 IIFE style throughout. Per file:
+  `workspace-matrix.js` 35 · `workspace-panels.js` 30 · `md-lite.js` 26 · `workspace-render.js` 26 ·
+  `workspace-verbs.js` 20 · `workspace-app.js` 15 · `live-model.js` 7.
+  Electron 43 ships Chromium, so `let`/`const` are safe at runtime — this is style, not
+  compatibility. But it is a 159-site diff across a GUI with no lint history and thin renderer
+  test coverage, so it wants its own task with a real smoke pass, not a `--fix` run.
+  ⚠️ **Do not "fix" this by setting the rule to `warn`.** `lint-staged` runs `eslint --fix`, which
+  auto-fixes warnings as well as errors, so `warn` would perform the whole rewrite silently at
+  commit time, spread across whatever unrelated files someone happened to stage. Either do the
+  conversion deliberately in one reviewed commit, or leave the rule off.
+
+  Not backlog, recorded so the next reader does not re-litigate them: `no-console` is **off** for
+  `electron/workspace-ui/**` (5 sites in `workspace-verbs.js` — the renderer cannot reach
+  `src/utils/logger.js`; console goes to DevTools) and for `electron/main.js` + `electron/ipc-guard.js`
+  (3 sites — last-resort crash reporting inside the stdout-error and `uncaughtException` handlers,
+  i.e. exactly where routing through a logger that writes to the failed stream is unsafe). Both are
+  permanent, justified exemptions, not deferrals.

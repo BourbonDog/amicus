@@ -142,7 +142,10 @@ function createAmicusWindow() {
   let updateInfo = null;
   const updateInfoRaw = process.env.AMICUS_UPDATE_INFO;
   if (updateInfoRaw) {
-    try { updateInfo = JSON.parse(updateInfoRaw); } catch (_) {}
+    try { updateInfo = JSON.parse(updateInfoRaw); } catch (_) {
+      // A malformed AMICUS_UPDATE_INFO is not worth failing launch over:
+      // updateInfo stays null and the direct check below takes over.
+    }
   }
   if (!updateInfo) {
     const { getUpdateInfo, initUpdateCheck } = require('../src/utils/updater');
