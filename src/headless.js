@@ -258,7 +258,17 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       if (options.mcp) {
         serverOptions.mcp = options.mcp;
       }
-      const result = await startServer(serverOptions);
+      // v4.4.1 fix wave (F5): this is the OTHER server-start site. It calls
+      // startServer directly rather than going through startOpenCodeServer, so
+      // the lock-class retry added for the concurrent-start race never covered
+      // it — a plain `amicus start` that lost the race still died on the first
+      // `database is locked`. "Two separate amicus processes contending" is half
+      // that retry's stated justification, and this is one of the two processes.
+      // Same bounded, narrow policy: 3 attempts, lock-class messages only, final
+      // failure rethrown unchanged into the degrade path below.
+      const { retryOnLockRace } = require('./utils/server-setup');
+      const result = await retryOnLockRace(() => startServer(serverOptions),
+        { retryDelayMs: options.retryDelayMs });
       client = result.client;
       server = result.server;
       logger.debug('Server started', { url: server.url });
