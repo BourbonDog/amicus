@@ -198,6 +198,46 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
       expect(startFn.mock.calls[0][1].models).toContain('moonshot/kimi-k3');
     });
 
+    /**
+     * ⚠️ Findings B1/C2 — the REGRESSION pin, taken at the mechanism.
+     *
+     * Every other test in this block asserts a property of the seed STRING
+     * (contains a `/`, is not an alias name). That is one refactor away from
+     * being vacuous. This one runs the seed through the real consumer:
+     * `buildProviderModels` (utils/config.js), whose `addRoute` returns early on
+     * any string with fewer than two `/`-separated parts. That silent drop is
+     * the whole defect — an alias-shaped seed registered NOTHING and the failure
+     * was invisible, because nothing throws and nothing warns.
+     *
+     * So: the resolved seed must actually register, and the alias-shaped seed
+     * must be provably inert — measured against this machine's own alias
+     * baseline rather than a hard-coded list.
+     */
+    test('every seeded id really REGISTERS — an alias-shaped seed is provably inert', async () => {
+      await run({ critic: null });
+      const seeded = startFn.mock.calls[0][1].models;
+      const { buildProviderModels } = require('../../src/utils/config');
+      const flatten = (providers) => new Set(Object.entries(providers)
+        .flatMap(([vendor, block]) => Object.keys(block.models || {}).map(m => `${vendor}/${m}`)));
+
+      // The alias loop's output with NO seed at all — the floor to measure against.
+      const baseline = flatten(buildProviderModels([]));
+      const withSeed = flatten(buildProviderModels(seeded));
+
+      expect(seeded.length).toBeGreaterThan(0);
+      // 1. Every id the run seeds survives addRoute and lands in provider.models.
+      for (const id of seeded) { expect([...withSeed]).toContain(id); }
+      // 2. …and the seed genuinely CONTRIBUTED — it is not merely re-stating what
+      //    the alias loop registers anyway, which is the only way (1) could pass
+      //    while the seed itself was being dropped.
+      expect([...withSeed].filter(id => !baseline.has(id)).length).toBeGreaterThan(0);
+      // 3. The defect, pinned at the mechanism: seed the RAW ALIASES this run was
+      //    given and the registered set does not move by a single entry.
+      const aliasShaped = flatten(buildProviderModels(['gemini', 'gpt', 'qwen', 'deepseek']));
+      expect([...aliasShaped].filter(id => !baseline.has(id))).toEqual([]);
+      expect(aliasShaped.size).toBe(baseline.size);
+    });
+
     // Registration is config, not spend: an unroutable entry is dropped and
     // logged, never an abort. The leg fails loudly in its own wave instead.
     test('a model that cannot route is dropped from the seed, never fatal', async () => {
@@ -321,13 +361,47 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
   // and DURABLE (Step 10.5). Run v441plan02 degraded exactly here, lost 4 of 5
   // seats to `database is locked`, and left nothing on run.json to show for it.
   describe('a shared-server start failure degrades — loudly, durably, never fatally', () => {
-    let stderr;
-    const failToStart = () => { startFn = jest.fn(async () => { throw new Error('database is locked'); }); };
+    let stderr; let perWaveStart;
     const runDoc = () => JSON.parse(
       fs.readFileSync(path.join(baseOptions(tmp).runDir, 'run.json'), 'utf-8'));
 
+    /**
+     * ⚠️ Finding A3 — this fixture now MODELS the fallback instead of ignoring it.
+     *
+     * Previously the block set the run-level starter to throw and left runFanout
+     * mocked to succeed unconditionally. Every wave therefore "worked" no matter
+     * what, so `expect(exitCode).toBe(0)` was true by construction: the fixture
+     * could not distinguish "the run degraded to per-wave servers and carried
+     * on" — the claim — from "the run degraded and every wave then died", which
+     * is what a real `database is locked` environment produces and is exactly
+     * how run v441plan02 actually ended. A test that cannot fail for the reason
+     * it exists to catch proves nothing.
+     *
+     * runFanout starts its OWN server whenever none is injected (fanout.js), so
+     * the fake does too, via `perWaveStart`. Its default succeeds — that is the
+     * fallback working. `perWaveStart.mockRejectedValue(...)` makes the fallback
+     * fail, and the discriminator test below proves that fixture really does
+     * produce a failing run.
+     */
+    const perWaveServer = () => ({ url: 'http://127.0.0.1:9/wave', goPid: 1, close: jest.fn() });
+
     beforeEach(() => {
-      failToStart();
+      startFn = jest.fn(async () => { throw new Error('database is locked'); });
+      perWaveStart = jest.fn(async () => perWaveServer());
+      mockRunFanout.mockImplementation(async (o) => {
+        if (!o.server) {
+          // The wave owns its server — fanout.js's own path, error shape included.
+          try { await perWaveStart(o.waveId); }
+          catch (err) {
+            return { wave: { waveId: o.waveId, status: 'error', legs: [],
+              error: `Failed to start server: ${err.message}`,
+              reason: `Failed to start server: ${err.message}` }, exitCode: 1 };
+          }
+        }
+        const fn = script[o.waveId];
+        if (!fn) { throw new Error(`no transport script for waveId ${o.waveId}`); }
+        return fn(o);
+      });
       stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
     });
     afterEach(() => { stderr.mockRestore(); });
@@ -339,13 +413,38 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
         expect(o.server).toBeUndefined();
         expect(o.serverClient).toBeUndefined();
       }
+      // …and the fallback was genuinely EXERCISED: every wave started its own.
+      expect(perWaveStart.mock.calls.length).toBe(mockRunFanout.mock.calls.length);
+      expect(perWaveStart.mock.calls.length).toBeGreaterThanOrEqual(3);
       expect(stderr.mock.calls.map(c => String(c[0])).join('')).toMatch(/shared OpenCode server/i);
     });
 
-    // NEVER FAIL CLOSED, pinned on its own: degrading must not abort the run.
+    // NEVER FAIL CLOSED: the ACQUISITION failure is not what decides the exit
+    // code. With a working per-wave fallback the run still finishes clean.
     test('the run still completes when the shared server is unavailable', async () => {
       const { exitCode } = await run();
+      expect(exitCode).toBe(0);
       expect(exitCode).not.toBe(1);
+    });
+
+    /**
+     * ⚠️ THE DISCRIMINATOR. The two assertions above are only worth anything if
+     * this fixture is capable of producing a failing run — so here the per-wave
+     * fallback fails too, i.e. the real v441plan02 environment where nothing can
+     * open the database. The run must then NOT exit 0.
+     *
+     * This is not a contradiction of "never fail closed": the run still resolves
+     * rather than rejecting, still records the degrade, and fails for the honest
+     * reason (no Stage-1 review survived), not because bookkeeping aborted it.
+     */
+    test('the fixture CAN fail: when the per-wave fallback also fails, the run does not exit 0', async () => {
+      perWaveStart.mockRejectedValue(new Error('database is locked'));
+      const { exitCode, run: doc } = await run(); // resolves, never rejects
+      expect(exitCode).not.toBe(0);
+      expect(exitCode).toBe(1);
+      expect(doc.error.code).toBe('COUNCIL_QUORUM');
+      // The degrade is still on the record — that is what points at the cause.
+      expect(doc.sharedServerUnavailable.error).toMatch(/database is locked/);
     });
 
     // (a): the degrade lands on the run's OWN record, next to budgetRefusals[].
@@ -359,6 +458,8 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
       const onDisk = runDoc();
       expect(onDisk.sharedServerUnavailable.error).toMatch(/database is locked/);
       expect(onDisk.status).toBe('complete');
+      // Mutually exclusive with the positive record — never both.
+      expect(onDisk.sharedServer).toBeUndefined();
     });
 
     test('the degraded run.json still validates against the published schema', () => {
@@ -392,6 +493,73 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
       try {
         const { exitCode } = await run(); // must RESOLVE, not reject
         expect(exitCode).toBe(0);
+      } finally { spy.mockRestore(); }
+    });
+  });
+
+  /**
+   * Finding D10 — a POSITIVE, durable signal that the shared server was used.
+   *
+   * Step 10.5 made only the FAILURE durable, so "the shared server WAS used"
+   * remained provable solely by inference: fanout writes `goPid` into a wave's
+   * metadata.json only for a wave that owns its server, so an investigator had
+   * to spot a goPid where there should not be one and reason backwards. Step
+   * 10.5's own text says that inference "should not be the primary diagnostic",
+   * and then shipped no alternative. `sharedServer` is the alternative.
+   */
+  describe('a successful acquisition is recorded too (finding D10)', () => {
+    const runDoc = () => JSON.parse(
+      fs.readFileSync(path.join(baseOptions(tmp).runDir, 'run.json'), 'utf-8'));
+
+    test('run.json says, affirmatively, that one shared server served the run', async () => {
+      const { run: doc } = await run();
+      expect(doc.sharedServer).toMatchObject({ acquired: true, goPid: 77 });
+      expect(typeof doc.sharedServer.at).toBe('string');
+      expect(doc.sharedServer.models).toBeGreaterThan(0);
+      // On disk, not merely in the return value — a durable artifact is the point.
+      expect(runDoc().sharedServer.acquired).toBe(true);
+      // …and the negative key is absent: exactly one of the two is ever present.
+      expect(doc.sharedServerUnavailable).toBeUndefined();
+    });
+
+    // The pid is what makes it a CORRELATOR rather than a boolean: run.json
+    // names the shared server's pid, and no wave riding it writes a goPid of
+    // its own — so the two records together say which process served the run
+    // without anyone having to infer it.
+    test('the recorded goPid is the shared server\'s, and no wave claims one', async () => {
+      const { run: doc } = await run();
+      expect(doc.sharedServer.goPid).toBe(pair.server.goPid);
+      for (const [o] of mockRunFanout.mock.calls) { expect(o.server).toBe(pair.server); }
+    });
+
+    test('a server with no goPid records null rather than dropping the record', async () => {
+      pair = { client: { tag: 'c' }, server: { url: 'http://x/', close: jest.fn(async () => {}) } };
+      startFn = jest.fn(async () => pair);
+      const { run: doc } = await run();
+      expect(doc.sharedServer).toMatchObject({ acquired: true, goPid: null });
+    });
+
+    test('the healthy run.json validates against the published schema', async () => {
+      const Ajv2020 = require('ajv/dist/2020');
+      const schema = JSON.parse(fs.readFileSync(
+        path.join(__dirname, '..', '..', 'schemas', 'council-run.schema.json'), 'utf-8'));
+      const validate = new Ajv2020({ strict: false }).compile(schema);
+      const { run: doc } = await run();
+      if (!validate(doc)) { throw new Error('schema errors: ' + JSON.stringify(validate.errors, null, 2)); }
+    });
+
+    // Same ruling as the failure path: bookkeeping must never sink the run.
+    test('an unwritable run.json does not turn a SUCCESSFUL acquisition into a rejection', async () => {
+      const runState = require('../../src/council/run-state');
+      const real = runState.checkpoint;
+      const spy = jest.spyOn(runState, 'checkpoint').mockImplementation((dir, patch) => {
+        if (patch && patch.sharedServer) { throw new Error('run.json is unwritable'); }
+        return real(dir, patch);
+      });
+      try {
+        const { exitCode } = await run(); // must RESOLVE, not reject
+        expect(exitCode).toBe(0);
+        expect(pair.server.close).toHaveBeenCalledTimes(1);
       } finally { spy.mockRestore(); }
     });
   });

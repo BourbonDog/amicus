@@ -133,6 +133,31 @@ async function resolveRunServerModels(o, deps = {}) {
 }
 
 /**
+ * Record the shared server's fate on run.json — guarded, always.
+ *
+ * ⚠️ BOOKKEEPING MUST NEVER SINK THE RUN IT REPORTS ON. run.js awaits
+ * `acquireRunServer` OUTSIDE its try, so a throw from here would escape
+ * runCouncil as a rejection, past its documented "never rejects for run errors"
+ * contract, with no result for the caller at all (the run-finalize precedent).
+ *
+ * `checkpoint` is a READ-MERGE-WRITE (run-state.js: read run.json → shallow
+ * `{...existing, ...patch}` → one atomic whole-file write), so writing this key
+ * cannot clobber `budgetRefusals[]` or anything else already on the document.
+ * Verified, not assumed — `tests/council/run-state.test.js` pins it.
+ *
+ * @param {object} o the council run's resolved options
+ * @param {object} patch a single top-level run.json key
+ * @param {string} what the field name, for the failure log
+ */
+function recordServerFate(o, patch, what) {
+  const { logger } = require('../utils/logger');
+  try { require('./run-state').checkpoint(o.runDir, patch); }
+  catch (writeErr) {
+    logger.warn(`Could not record ${what} on run.json`, { runId: o.runId, error: writeErr.message });
+  }
+}
+
+/**
  * Start the run's single OpenCode server.
  *
  * Never fails closed (standing project ruling): a start failure is a NOTICE, not
@@ -141,6 +166,17 @@ async function resolveRunServerModels(o, deps = {}) {
  * lock-class retry in session-utils still in front of it. That fallback is also
  * the bug this task removed, so it is recorded on run.json as
  * `sharedServerUnavailable` (Step 10.5); see the catch block.
+ *
+ * ⚠️ BOTH OUTCOMES ARE RECORDED, and the POSITIVE one is the point. Step 10.5
+ * originally made only the failure durable, which left "the shared server WAS
+ * used" provable solely by INFERENCE: fanout writes `goPid` into a wave's
+ * metadata only for a wave that owns its server (`if (!externalServer …)`), so
+ * an investigator had to notice a goPid on the wrong wave and reason backwards.
+ * Step 10.5's own text says that inference "should not be the primary
+ * diagnostic" — so `sharedServer {acquired, at, goPid, models}` is written on
+ * acquisition SUCCESS. A run record now answers the question directly, in the
+ * affirmative, and the two keys are mutually exclusive by construction: exactly
+ * one of them is present on any run that reached the acquisition.
  *
  * @param {object} o the council run's resolved options ({models, critic, chair, …})
  * @param {{startOpenCodeServerFn?: Function, resolveRouteFn?: Function,
@@ -163,6 +199,16 @@ async function acquireRunServer(o, deps = {}) {
     const { client, server } = await startFn(mcpServers, { models });
     logger.info('Council run using ONE shared OpenCode server',
       { runId: o.runId, url: server.url, models: models.length });
+    // The POSITIVE, durable signal (see the ⚠️ above). `goPid` is the field that
+    // makes it a correlator rather than a boolean: no wave writes a goPid when a
+    // server is injected, so "run.json names pid N and no wave metadata does"
+    // reads as proof the shared server served the run — no inference required.
+    recordServerFate(o, {
+      sharedServer: {
+        acquired: true, at: new Date().toISOString(),
+        goPid: (server && server.goPid) || null, models: models.length,
+      },
+    }, 'sharedServer');
     return { serverClient: client, server };
   } catch (err) {
     // ⚠️ v4.4.1 Step 10.5: a failed acquisition drops the run back to ONE SERVER
@@ -177,15 +223,7 @@ async function acquireRunServer(o, deps = {}) {
     // for the same reason — a silent partial is the failure mode this whole
     // release exists to remove.
     const degrade = { error: err.message, at: new Date().toISOString() };
-    // …and the recording itself must never sink the run it reports on. run.js
-    // awaits acquireRunServer OUTSIDE its try, so a throw here would escape
-    // runCouncil as a rejection, past its "never rejects for run errors"
-    // contract, with no result for the caller (the run-finalize precedent).
-    try { require('./run-state').checkpoint(o.runDir, { sharedServerUnavailable: degrade }); }
-    catch (writeErr) {
-      logger.warn('Could not record sharedServerUnavailable on run.json',
-        { runId: o.runId, error: writeErr.message });
-    }
+    recordServerFate(o, { sharedServerUnavailable: degrade }, 'sharedServerUnavailable');
     logger.warn('Shared OpenCode server unavailable — falling back to one server per wave', {
       runId: o.runId, error: err.message,
     });

@@ -48,6 +48,17 @@
         }
       }
     },
+    "sharedServer": {
+      "description": "The run acquired its single shared OpenCode server and threaded it through every wave (v4.4.1 Task 0.5). Present only on a successful acquisition; mutually exclusive with sharedServerUnavailable. `goPid` is the shared server's process id — no wave writes a goPid into its own metadata.json while riding an injected server, so this field is the POSITIVE, direct evidence that one server served the run, replacing the goPid-absence inference.",
+      "type": "object",
+      "required": ["acquired"],
+      "properties": {
+        "acquired": { "const": true },
+        "at": { "type": "string" },
+        "goPid": { "type": ["number", "null"] },
+        "models": { "type": "number" }
+      }
+    },
     "sharedServerUnavailable": {
       "description": "The run could not start its single shared OpenCode server and fell back to one server per wave (v4.4.1 Task 0.5). Present only when the acquisition failed. The run CONTINUES — this is never fatal — but the per-wave configuration is the one that races on OpenCode's SQLite, so results may be degraded.",
       "type": "object",

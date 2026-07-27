@@ -105,6 +105,68 @@ describe('run.json init + checkpoint', () => {
   });
 });
 
+/**
+ * v4.4.1 council finding D6 — `checkpoint()` is a READ-MERGE-WRITE, pinned.
+ *
+ * Every "never fail closed" degrade in a council run records itself by patching
+ * ONE top-level key onto run.json from a different code path: run-budget.js
+ * writes `budgetRefusals[]` when the ceiling refuses a wave, run-server.js
+ * writes `sharedServer`/`sharedServerUnavailable` at acquisition, run-finalize.js
+ * writes the terminal fields. If `checkpoint` were a whole-file WRITE rather
+ * than a read-merge-write, whichever of those landed last would silently erase
+ * the others — one degrade would hide another, which is precisely the failure
+ * mode this release exists to remove. Nothing pinned that, so these do.
+ */
+describe('checkpoint merge semantics (finding D6)', () => {
+  test('independent degrade records written by different code paths all survive together', () => {
+    rs.initRun(runDirOf(), { schemaVersion: 2, runId: 'abc123', status: 'running', stages: [] });
+    // The exact writes, in the exact order a degraded run makes them.
+    rs.checkpoint(runDirOf(), { sharedServerUnavailable: { error: 'database is locked', at: 'T1' } });
+    rs.updateStage(runDirOf(), 'stage1', { status: 'partial' });
+    rs.checkpoint(runDirOf(), { budgetRefusals: [{ waveId: 'abc123-c1', models: ['kimi'] }] });
+    rs.checkpoint(runDirOf(), { labelMap: { 'Review A': 'gpt' } });
+    rs.checkpoint(runDirOf(), { status: 'partial', exitCode: 2, completedAt: 'T9' });
+
+    const doc = rs.readRun(runDirOf());
+    expect(doc.sharedServerUnavailable).toEqual({ error: 'database is locked', at: 'T1' });
+    expect(doc.budgetRefusals).toEqual([{ waveId: 'abc123-c1', models: ['kimi'] }]);
+    expect(doc.labelMap).toEqual({ 'Review A': 'gpt' });
+    expect(doc.stages).toEqual([{ name: 'stage1', status: 'partial' }]);
+    expect(doc.exitCode).toBe(2);
+    expect(doc.runId).toBe('abc123'); // …and the seed is still there
+  });
+
+  test('order does not matter — the same two keys survive written the other way round', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { budgetRefusals: [{ waveId: 'w1', models: ['a'] }] });
+    rs.checkpoint(runDirOf(), { sharedServerUnavailable: { error: 'locked' } });
+    const doc = rs.readRun(runDirOf());
+    expect(doc.budgetRefusals).toHaveLength(1);
+    expect(doc.sharedServerUnavailable.error).toBe('locked');
+  });
+
+  test('the positive shared-server record coexists with a budget refusal too', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { sharedServer: { acquired: true, at: 'T0', goPid: 4242, models: 4 } });
+    rs.checkpoint(runDirOf(), { budgetRefusals: [{ waveId: 'w1', models: ['a'] }] });
+    const doc = rs.readRun(runDirOf());
+    expect(doc.sharedServer).toEqual({ acquired: true, at: 'T0', goPid: 4242, models: 4 });
+    expect(doc.budgetRefusals).toHaveLength(1);
+  });
+
+  // ⚠️ The merge is TOP-LEVEL ONLY. Patching a key replaces its whole value —
+  // it is not a deep merge. Harmless for the disjoint keys above (each is owned
+  // end to end by one writer), but a future writer that patches a SUB-field of
+  // someone else's object would drop the rest of it. Pinned so that limit is
+  // documented behaviour and not a discovery.
+  test('the merge is shallow: patching a key replaces its whole value', () => {
+    rs.initRun(runDirOf(), { runId: 'abc123', status: 'running' });
+    rs.checkpoint(runDirOf(), { usage: { cost: { amount: 1 }, tokens: 500 } });
+    rs.checkpoint(runDirOf(), { usage: { cost: { amount: 2 } } });
+    expect(rs.readRun(runDirOf()).usage).toEqual({ cost: { amount: 2 } }); // `tokens` is gone
+  });
+});
+
 describe('updateStage', () => {
   test('upserts by name, preserving other stages', () => {
     rs.initRun(runDirOf(), { runId: 'abc123', status: 'running', stages: [] });
