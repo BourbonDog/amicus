@@ -416,19 +416,24 @@ under "Deferred out of v4.4.1 into v4.5". **ENV-1** is not among them: it is a d
 new defects to fix one. The two items below are deferrals *created* by this release rather than
 carried by it, so they are written out in full.
 
-### Open arbitration — needs a ruling
+### Refuted findings — do NOT re-file (v4.4.1)
 
-- [ ] **RN-6 · the Abort button "never re-hides" — the prescribed fix is a regression** — [S]
-  The inventory asks for `abort-btn.hidden = true` in `applyLive`'s banner-clearing arm, on the
-  premise that the stalled branch's `hidden = false` is what puts the button on screen. Both halves
-  of that premise are false: `renderDetail` already runs `hidden = isTerminal` on every run-open
-  (pinned by an existing test), and `startLiveLoop` returns early for a terminal run, so the
-  stalled branch's assignment is a no-op on every path that can reach it. Implementing it as
-  written would **hide Abort on the tick a momentary stall recovers**, with nothing repainting it
-  until the next run-open — leaving a live, healthy council with no way to abort it. Shipped
-  instead: behaviour unchanged, the finding documented in place, and a regression test that fails
-  the moment anyone implements RN-6 as written. **Ruling wanted:** close as WONTFIX-with-evidence,
-  or state the intended behaviour. Detail: `.superpowers/sdd/task-8-report.md` §2.
+- [-] **RN-6 · "the Abort button never re-hides"** — **WONTFIX, refuted with evidence.**
+  **OWNER RULING 2026-07-27: closed as refuted, not deferred.** Both halves of the premise are
+  false, verified against source: `renderDetail` already runs `abort-btn.hidden = isTerminal` on
+  every run-open (pinned by an existing test), and `startLiveLoop` returns early for a terminal
+  run — so the stalled branch's `hidden = false` is a **no-op on every path that can reach it**.
+  Implementing the prescribed fix would **hide Abort on the tick a momentary stall recovers**,
+  leaving a live, healthy council with no way to abort it until the next run-open.
+  Shipped instead: behaviour unchanged, the reasoning documented in place, and a regression test
+  asserting the real invariant — *a live run must stay abortable* — which fails the moment anyone
+  implements RN-6 as written. Detail: `.superpowers/sdd/task-8-report.md` §2.
+  ⚠️ **Provenance, and why this recurs:** raised independently by `wsgate01` C7 and `wsgate02` A7,
+  both of which were briefed on `workspace-verbs.js` **without** `workspace-app.js` — the same
+  incomplete-briefing failure recorded as **Appendix B-1** in
+  `.superpowers/sdd/v44/v4.4.1-backlog.md`. A bench cannot certify what it has not seen, and it
+  cannot refute what it has not seen either. **When re-briefing a council on the workspace verbs,
+  include `workspace-app.js`.**
 
 ### v4.4.1 lint-gate deferrals (ENV-5, 2026-07-27)
 
