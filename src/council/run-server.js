@@ -36,6 +36,103 @@
  */
 
 /**
+ * Resolve the EXECUTABLE model ids the run's single server must register.
+ *
+ * ⚠️ Why raw inputs are not enough (v4.4.1 fix wave, finding F1). The seed lands
+ * in `buildProviderModels` (utils/config.js), whose `addRoute` DROPS any string
+ * without a `/` — and a council bench is alias-shaped (`gpt`, `glm`, `minimax`).
+ * So seeding `[models, critic, chair]` verbatim registered nothing at all beyond
+ * the alias loop's own defaults, which is exactly the pre-#61 state Task 4.6/7.3
+ * fixed: a leg whose router decision diverges from its alias's stored value (and
+ * from that value's curated OpenRouter mirror) is told to launch an id the
+ * server never registered.
+ *
+ * ⚠️ AND PREFIX-STRIPPING IS NOT A SUBSTITUTE. For a DIVERGENT vendor the two
+ * gateway-native ids are DIFFERENT STRINGS, not differently prefixed —
+ * OpenRouter serves `anthropic/claude-opus-4.8`, the direct API serves
+ * `anthropic/claude-opus-4-8` (see utils/curated-models.js `DIVERGENT_VENDORS` /
+ * `toGatewayRoutes`). Nothing here derives an id: every id in the seed is one
+ * `resolveRouteForLaunch` handed back, which is the same call, with the same
+ * inputs, that `fanout-validate.js` makes to decide what a per-wave server
+ * registers. Same function, same arguments, same answer.
+ *
+ * Three sources, matching the three reachable divergences:
+ *  1. every bench seat + the critic + the chair (the launches that always happen);
+ *  2. the v4.3 Task 18 §6.2 FALLBACK-CHAIN UNION — a substitute that never runs
+ *     must still be an allowed model if one IS selected mid-wave. run-launch.js
+ *     forwards `fallback`/`catalog` on every stage launch, so a per-wave server
+ *     would have registered these; the shared server must too;
+ *  3. the chair `pickFallbackChair` could promote out of the reliability ledger.
+ *     Deterministic from the ledger as it stands at run start — this run's own
+ *     row is appended only AFTER the chair leg, so the pick cannot move under us.
+ *
+ * NEVER FAILS CLOSED: an unresolvable entry is logged and DROPPED, never an
+ * error. Registration is config, not spend — and a leg that cannot route will
+ * fail on its own, loudly, in its own wave.
+ *
+ * @param {object} o the council run's resolved options
+ * @param {{resolveRouteFn?: Function, statsFn?: Function}} [deps] test seams
+ * @returns {Promise<{models: string[], notices: string[]}>}
+ */
+async function resolveRunServerModels(o, deps = {}) {
+  const { logger } = require('../utils/logger');
+  const resolveFn = deps.resolveRouteFn
+    || require('../utils/route-launch').resolveRouteForLaunch;
+  const gatewayMode = o.gateway || 'auto';
+  const validateModel = !o.noValidateModel;
+  const ids = new Set();
+  const notices = [];
+
+  const resolve = async (input, source) => {
+    if (!input || typeof input !== 'string') { return null; }
+    let route;
+    try {
+      route = await resolveFn({ model: input, gatewayMode, source, allowSelection: false, validateModel });
+    } catch { route = { kind: 'error' }; }
+    if (!route || route.kind !== 'resolved' || !route.executableId) {
+      logger.warn('Council model failed to route — dropped from the shared server registration',
+        { runId: o.runId, model: input });
+      return null;
+    }
+    ids.add(route.executableId);
+    // resolveRouteForLaunch BURNS the one-shot per-vendor migration flag when it
+    // builds the result, so whichever caller resolves first owns the notice.
+    // That is now this one — carry it out so acquireRunServer can print it
+    // rather than letting it evaporate (council waves run quiet, so the wave
+    // doc's `notices` were never shown for a council run anyway).
+    if (route.notice) { notices.push(route.notice); }
+    return route.executableId;
+  };
+
+  const primaries = [];
+  for (const input of [...(o.models || []), o.critic, o.chair].filter(Boolean)) {
+    const id = await resolve(input, 'cli');
+    if (id) { primaries.push(id); }
+  }
+
+  // (2) fallback-chain union — same derivation fanout-validate.js uses.
+  if (o.fallback && o.fallback.enabled) {
+    const { deriveChain } = require('../sidecar/fallback-chains');
+    for (const primary of primaries) {
+      let chain = [];
+      try { chain = deriveChain(primary, { config: { chains: o.fallback.chains }, catalog: o.catalog }) || []; }
+      catch { chain = []; }
+      for (const candidate of chain) { await resolve(candidate, 'fallback'); }
+    }
+  }
+
+  // (3) the chair the ledger could promote mid-run (run-chair.js).
+  try {
+    const statsFn = deps.statsFn || require('./ledger').deriveReliability;
+    const { pickFallbackChair } = require('./run-chair');
+    const promoted = pickFallbackChair(statsFn() || [], o.models || [], o.chair);
+    if (promoted) { await resolve(promoted, 'cli'); }
+  } catch { /* no ledger yet, or an unreadable one: nothing to promote */ }
+
+  return { models: [...ids], notices: [...new Set(notices)] };
+}
+
+/**
  * Start the run's single OpenCode server.
  *
  * Never fails closed (standing project ruling): a start failure is a NOTICE, not
@@ -44,7 +141,8 @@
  * lock-class retry in session-utils still in front of it.
  *
  * @param {object} o the council run's resolved options ({models, critic, chair, …})
- * @param {{startOpenCodeServerFn?: Function}} [deps] test seam
+ * @param {{startOpenCodeServerFn?: Function, resolveRouteFn?: Function,
+ *   statsFn?: Function}} [deps] test seams
  * @returns {Promise<{serverClient: object, server: object}|null>}
  */
 async function acquireRunServer(o, deps = {}) {
@@ -55,17 +153,14 @@ async function acquireRunServer(o, deps = {}) {
 
   // Same inputs run-launch.js hands every council launch (see note 3 above).
   const mcpServers = buildMcpConfig({ noMcp: true });
-  // Seed provider.models with every model this run can launch. buildProviderModels
-  // already registers every CONFIGURED alias (plus its OpenRouter mirror), which
-  // covers the alias-shaped bench a council normally runs; this adds any
-  // fully-qualified `vendor/model` a caller passed literally, which the alias
-  // loop would not see. A chair promoted from the ledger mid-run is the one
-  // residual case the seed cannot know about — it is alias-shaped in practice.
-  const models = [...(o.models || []), o.critic, o.chair].filter(Boolean);
+  // #61 Task 4.6/7.3 sole-input invariant, applied one scope level up.
+  const { models, notices } = await resolveRunServerModels(o, deps);
+  for (const notice of notices) { process.stderr.write(`Notice: ${notice}\n`); }
 
   try {
     const { client, server } = await startFn(mcpServers, { models });
-    logger.info('Council run using ONE shared OpenCode server', { runId: o.runId, url: server.url });
+    logger.info('Council run using ONE shared OpenCode server',
+      { runId: o.runId, url: server.url, models: models.length });
     return { serverClient: client, server };
   } catch (err) {
     logger.warn('Shared OpenCode server unavailable — falling back to one server per wave', {
@@ -89,4 +184,4 @@ async function releaseRunServer(shared) {
   try { await shared.server.close(); } catch { /* best-effort: the run is over */ }
 }
 
-module.exports = { acquireRunServer, releaseRunServer };
+module.exports = { acquireRunServer, releaseRunServer, resolveRunServerModels };

@@ -22,6 +22,35 @@ jest.mock('../../src/sidecar/fanout', () => ({
   runFanout: (...args) => mockRunFanout(...args),
 }));
 
+/**
+ * The router, faked at the SAME seam a wave's own routing uses
+ * (fanout-validate.js → utils/route-launch). `opus` is deliberately a DIVERGENT
+ * vendor: OpenRouter serves `anthropic/claude-opus-4.8` while the direct API
+ * serves `anthropic/claude-opus-4-8`. Any fix that "strips the openrouter/
+ * prefix" instead of asking the router produces an id neither gateway serves.
+ */
+const ROUTES = {
+  gemini: 'google/gemini-3.5-pro',
+  gpt: 'openai/gpt-5.5',
+  qwen: 'openrouter/qwen/qwen3-max',
+  deepseek: 'deepseek/deepseek-v4',
+  opus: 'anthropic/claude-opus-4-8',
+  'openai/gpt-5.5-mini': 'openai/gpt-5.5-mini',
+  ledgerpick: 'moonshot/kimi-k3',
+};
+const mockResolveRouteForLaunch = jest.fn(async ({ model }) => (
+  ROUTES[model]
+    ? { kind: 'resolved', executableId: ROUTES[model], gateway: 'direct', provenance: {} }
+    : { kind: 'error', code: 'UNKNOWN_MODEL' }
+));
+jest.mock('../../src/utils/route-launch', () => ({
+  resolveRouteForLaunch: (...args) => mockResolveRouteForLaunch(...args),
+}));
+jest.mock('../../src/utils/pricing', () => {
+  const actual = jest.requireActual('../../src/utils/pricing');
+  return { ...actual, lookupPricing: jest.fn(() => null) };
+});
+
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -94,9 +123,90 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     expect(mockRunFanout.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 
-  test('the server is seeded with every model the run can launch (bench + critic + chair)', async () => {
-    await run({ critic: null });
-    expect(startFn.mock.calls[0][1].models).toEqual(['gemini', 'gpt', 'qwen', 'deepseek']);
+  // ---- F1: the seed is RESOLVED executable ids, not raw alias names ----------
+  //
+  // buildProviderModels (utils/config.js) drops any seed string without a `/`,
+  // so raw aliases registered NOTHING — the pre-#61 state Task 4.6/7.3 fixed.
+  describe('the shared server is seeded with the ids a per-wave server would have', () => {
+    test('bench + critic + chair are seeded as RESOLVED ids, never as aliases', async () => {
+      await run({ critic: null });
+      const seeded = startFn.mock.calls[0][1].models;
+      expect(seeded).toEqual([
+        'google/gemini-3.5-pro', 'openai/gpt-5.5', 'openrouter/qwen/qwen3-max', 'deepseek/deepseek-v4',
+      ]);
+      // The defect, pinned: not one bare alias survives into the seed, and
+      // every entry carries the `/` addRoute requires.
+      for (const id of seeded) {
+        expect(Object.keys(ROUTES)).not.toContain(id);
+        expect(id).toContain('/');
+      }
+    });
+
+    // The evidence the fix is equivalent, not merely different: ask the REAL
+    // per-wave routing path what each wave would have registered on a server of
+    // its own, and require the shared seed to be a superset of that union.
+    test('the seed is a superset of what every per-wave server would have registered', async () => {
+      await run();
+      const { validateFanoutModels } = require('../../src/sidecar/fanout-validate');
+      const seeded = new Set(startFn.mock.calls[0][1].models);
+      const perWave = new Set();
+      for (const [o] of mockRunFanout.mock.calls) {
+        const v = await validateFanoutModels(o.models, {
+          noValidateModel: o.noValidateModel, gatewayMode: o.gatewayMode,
+          fallback: o.fallback, catalog: o.catalog,
+        });
+        const ids = v.serverModels || v.legs.filter(l => l.ok).map(l => l.model);
+        for (const id of ids) { perWave.add(id); }
+      }
+      expect(perWave.size).toBeGreaterThan(0);
+      expect([...perWave].filter(id => !seeded.has(id))).toEqual([]);
+    });
+
+    // A divergent vendor's two gateway ids are DIFFERENT STRINGS, not
+    // differently prefixed. The seed must be exactly what the router returned.
+    test('a divergent-vendor route is seeded verbatim — nothing is derived by prefixing', async () => {
+      await run({ models: ['gemini', 'gpt', 'opus'], critic: null });
+      const seeded = startFn.mock.calls[0][1].models;
+      expect(seeded).toContain('anthropic/claude-opus-4-8'); // direct: dash form
+      expect(seeded).not.toContain('openrouter/anthropic/claude-opus-4-8');
+      expect(seeded).not.toContain('anthropic/claude-opus-4.8');
+    });
+
+    // v4.3 Task 18 §6.2: run-launch.js forwards fallback/catalog on every stage
+    // launch, so a per-wave server registered the chain union. So must this one.
+    // Chains are keyed by the RESOLVED id (or its vendor), exactly as
+    // fanout-validate.js keys them — another place a raw alias would miss.
+    const chains = { 'google/gemini-3.5-pro': ['openai/gpt-5.5-mini'] };
+
+    test('with fallback enabled, every chain candidate is in the seed', async () => {
+      await run({ critic: null, fallback: { enabled: true, chains } });
+      expect(startFn.mock.calls[0][1].models).toContain('openai/gpt-5.5-mini');
+    });
+
+    test('with fallback DISABLED the chain candidates stay out of the seed', async () => {
+      await run({ critic: null, fallback: { enabled: false, chains } });
+      expect(startFn.mock.calls[0][1].models).not.toContain('openai/gpt-5.5-mini');
+    });
+
+    // run-chair.js can promote a non-bench model out of the reliability ledger
+    // mid-run. It is deterministic at run start (this run's own row is appended
+    // only after the chair leg), so the seed can and must cover it.
+    test('a chair the ledger could promote mid-run is seeded too', async () => {
+      await run({ critic: null }, {
+        statsFn: () => [{ model: 'ledgerpick', avgStreetCredPeersOnly: 1.1 }],
+      });
+      expect(startFn.mock.calls[0][1].models).toContain('moonshot/kimi-k3');
+    });
+
+    // Registration is config, not spend: an unroutable entry is dropped and
+    // logged, never an abort. The leg fails loudly in its own wave instead.
+    test('a model that cannot route is dropped from the seed, never fatal', async () => {
+      const { exitCode } = await run({ models: ['gemini', 'gpt', 'nosuchmodel'], critic: null });
+      expect(exitCode).toBe(0);
+      const seeded = startFn.mock.calls[0][1].models;
+      expect(seeded).not.toContain('nosuchmodel');
+      expect(seeded).toContain('google/gemini-3.5-pro');
+    });
   });
 
   test('every launch in the run rides the SAME injected pair, under serverClient (not client)', async () => {

@@ -450,7 +450,7 @@ evals/
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()` |
-| `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()` |
+| `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
