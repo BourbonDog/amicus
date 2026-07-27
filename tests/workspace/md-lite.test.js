@@ -120,6 +120,13 @@ function makeFakeDoc() {
     });
   });
   FakeElement.prototype.insertAdjacentHTML = throwTrap('insertAdjacentHTML');
+  // ⚠️ v4.4.1 (opus finding 3): the ATTRIBUTE sink, trapped the same way. md-lite
+  // emits no attributes today, so the trap is silent — but if a link/image feature
+  // ever set one from model text, every render test below fails immediately rather
+  // than staying green while a javascript:/data: URL vector opens. This is the
+  // behavioral half of the guard; the source-grep half is at the bottom of the file.
+  FakeElement.prototype.setAttribute = throwTrap('setAttribute');
+  FakeElement.prototype.setAttributeNS = throwTrap('setAttributeNS');
 
   return {
     createElement: (tag) => new FakeElement(tag),
@@ -216,7 +223,265 @@ describe('source-level negative proof (kept alongside the behavioral tests above
     }
   });
 
+  /**
+   * ⚠️ v4.4.1 — opus finding 3, harvested from the review the fence bug truncated.
+   * The grep above guards four HTML-STRING APIs and would not have caught a future
+   * `setAttribute('href', userText)`. No live vulnerability exists today (md-lite
+   * emits no attributes at all), so this is purely a CI safety net for the day
+   * links or images are added — which is precisely when nobody re-reads this file.
+   *
+   * Scoped to md-lite.js on purpose: workspace-render.js legitimately calls the
+   * attribute API for its own trusted, non-model-derived markup.
+   */
+  const ATTRIBUTE_SINKS = ['set' + 'Attribute', 'srcdoc', 'createContextualFragment'];
+
+  test('the raw source never spells an ATTRIBUTE sink either', () => {
+    for (const token of ATTRIBUTE_SINKS) {
+      expect(SRC).not.toContain(token);
+    }
+  });
+
+  test('the attribute-sink guard is not vacuous — it catches a simulated regression', () => {
+    // Without this control the test above passes for a file that simply does not
+    // contain the string, and would keep passing if the token list were emptied.
+    const regressed = SRC + '\n  a.set' + 'Attribute(\'href\', userText);\n';
+    expect(ATTRIBUTE_SINKS.some((t) => regressed.includes(t))).toBe(true);
+    expect(ATTRIBUTE_SINKS.some((t) => SRC.includes(t))).toBe(false);
+  });
+
   test('zero runtime dependencies: no require() of any package', () => {
     expect(SRC).not.toMatch(/require\(/);
+  });
+});
+
+/**
+ * ============================================================================
+ * v4.4.1 Task 10 — adversarial coverage (accepted finding A2/D2).
+ *
+ * The suite above proves exactly one theorem: "no string is ever assigned as
+ * HTML." The paid bench confirmed 4/4 that the rest of the threat model was
+ * untested. The specific list below is harvested from the two Stage-1 reviews
+ * (opus, glm) that never reached the tally, because src/council/findings.js
+ * truncated their findings blocks on a fence inside a claim string — the
+ * Part-1 defect fixed in this same change. These are those reviewers' own
+ * recommendations, implemented.
+ * ============================================================================
+ */
+
+describe('heading edges (v4.4.1 D3 + D4)', () => {
+  test('D3: heading text is trimmed, not padded out to end of line', () => {
+    // H_RE's `\s+` already ate the run after the hashes, but `(.*)$` kept
+    // everything to EOL — so trailing blanks were baked into the text node.
+    expect(parseMdLite('#   Title   ')).toEqual([{ t: 'h', level: 1, text: 'Title' }]);
+    expect(parseMdLite('## Sub\t\t')).toEqual([{ t: 'h', level: 2, text: 'Sub' }]);
+    expect(parseMdLite('# ')).toEqual([{ t: 'h', level: 1, text: '' }]);
+  });
+
+  test('D4: h6 is the TRUE ceiling at level 4, not a clamp', () => {
+    // The removed `Math.min(6, level + 2)` was unreachable: H_RE's `#{1,4}` is
+    // the only thing bounding this. Pin the boundary so a future widening of
+    // that quantifier fails here instead of silently emitting an <h7>.
+    const doc = makeFakeDoc();
+    const container = doc.createElement('div');
+    renderMdLite(container, '#'.repeat(4) + ' X', doc);
+    expect(container.childNodes[0].tagName).toBe('H6');
+
+    for (let n = 1; n <= 4; n++) {
+      const d = makeFakeDoc();
+      const c = d.createElement('div');
+      renderMdLite(c, '#'.repeat(n) + ' T', d);
+      expect(c.childNodes[0].tagName).toBe('H' + (n + 2));
+    }
+  });
+
+  test('D4: five hashes is not a heading, so no tag above h6 is reachable', () => {
+    // `#{1,4}` cannot be followed by `\s+` here at any backtrack depth.
+    expect(parseMdLite('#'.repeat(5) + ' X')).toEqual([{ t: 'p', text: '##### X' }]);
+    expect(parseMdLite('#NoSpace')).toEqual([{ t: 'p', text: '#NoSpace' }]);
+  });
+});
+
+describe('resource budget (v4.4.1 A1/D1 — the O(n) parseInline rewrite)', () => {
+  const { MAX_ARTIFACT_BYTES } = require('../../src/workspace/artifact-guard');
+
+  /**
+   * Why this absolute budget is a BOUND and not a wall-clock guess.
+   *
+   * Measured in this repo at exactly MAX_ARTIFACT_BYTES of backtick pairs:
+   *   - the linear implementation:             ~5 ms   (400x UNDER the budget)
+   *   - a genuinely copying quadratic one:  ~78,000 ms  (39x OVER the budget)
+   *
+   * The two populations sit ~15,000x apart, so any threshold in the gap
+   * separates them. 2 s is in that gap with ~400x of headroom for a loaded CI
+   * box, and jest's own 5 s default timeout is the backstop if a regression is
+   * slower still. Note the clock is the weaker half of each test: the
+   * assertion that actually proves the work happened is the deterministic
+   * segment/child count next to it.
+   */
+  const BUDGET_MS = 2000;
+
+  test('a full-cap line of backtick pairs completes within the budget', () => {
+    const pairs = Math.floor(MAX_ARTIFACT_BYTES / 3);
+    const line = '`a`'.repeat(pairs);
+    expect(line.length).toBeLessThanOrEqual(MAX_ARTIFACT_BYTES);
+
+    const t0 = Date.now();
+    const segs = parseInline(line);
+    const elapsed = Date.now() - t0;
+
+    expect(segs).toHaveLength(pairs);                 // deterministic proof of the work
+    expect(segs.every((s) => s.code === true && s.text === 'a')).toBe(true);
+    expect(elapsed).toBeLessThan(BUDGET_MS);
+  });
+
+  test('a full-cap line with NO closing backtick does not backtrack quadratically', () => {
+    // The other pathological shape: one open backtick then a long non-backtick
+    // run, forcing `[^`\n]+` to give ground one character at a time before the
+    // match can fail.
+    const line = '`' + 'a'.repeat(MAX_ARTIFACT_BYTES - 1);
+    const t0 = Date.now();
+    const segs = parseInline(line);
+    expect(Date.now() - t0).toBeLessThan(BUDGET_MS);
+    expect(segs).toEqual([{ code: false, text: line }]);
+  });
+
+  test('a full-cap document of structural lines renders within the budget', () => {
+    // glm's D2: no regex in the file had ever been fed a stress input. This
+    // mixes every branch (fence, heading, ul, ol, paragraph, inline span) so a
+    // single slow regex anywhere in the parser shows up here.
+    const unit = '# H\n- a\n* b\n1. c\n2) d\ntext `x` more\n\n';
+    const doc = makeFakeDoc();
+    const container = doc.createElement('div');
+    const text = unit.repeat(Math.floor(MAX_ARTIFACT_BYTES / unit.length));
+
+    const t0 = Date.now();
+    renderMdLite(container, text, doc);
+    expect(Date.now() - t0).toBeLessThan(BUDGET_MS);
+    expect(container.childNodes.length).toBeGreaterThan(1000);
+  });
+});
+
+describe('malformed inline code spans stay literal (v4.4.1 A2/D2)', () => {
+  test('unmatched and odd-count backticks never open a span', () => {
+    expect(parseInline('`')).toEqual([{ code: false, text: '`' }]);
+    expect(parseInline('``')).toEqual([{ code: false, text: '``' }]);
+    expect(parseInline('```')).toEqual([{ code: false, text: '```' }]);
+    expect(parseInline('`a')).toEqual([{ code: false, text: '`a' }]);
+    expect(parseInline('a`')).toEqual([{ code: false, text: 'a`' }]);
+    expect(parseInline('')).toEqual([]);
+  });
+
+  test('an odd run closes the first pair and leaves the remainder literal', () => {
+    expect(parseInline('`a`b`')).toEqual([
+      { code: true, text: 'a' },
+      { code: false, text: 'b`' },
+    ]);
+    expect(parseInline('``x``')).toEqual([
+      { code: false, text: '`' },
+      { code: true, text: 'x' },
+      { code: false, text: '`' },
+    ]);
+  });
+
+  test('an empty span is not a span — the pattern requires content', () => {
+    expect(parseInline('a `` b')).toEqual([{ code: false, text: 'a `` b' }]);
+  });
+
+  test('a span cannot straddle a newline inside a single call', () => {
+    expect(parseInline('a `x\ny` b')).toEqual([{ code: false, text: 'a `x\ny` b' }]);
+  });
+});
+
+describe('prototype-pollution inertness (v4.4.1 A2/D2 — glm finding 3)', () => {
+  test('__proto__ / constructor / prototype in prose become TEXT, never keys', () => {
+    const payload = [
+      '# __proto__',
+      '',
+      'constructor and prototype in a paragraph',
+      '',
+      '- __proto__',
+      '- constructor',
+      '',
+      '```',
+      '{"__proto__": {"polluted": true}}',
+      '```',
+      '',
+      'inline `__proto__` span',
+    ].join('\n');
+
+    const blocks = parseMdLite(payload);
+
+    // 1. Nothing reached Object.prototype.
+    expect({}.polluted).toBeUndefined();
+    expect(Object.prototype.polluted).toBeUndefined();
+
+    // 2. Every block object carries ONLY the parser's own literal keys.
+    const allowed = ['t', 'level', 'text', 'items'];
+    for (const b of blocks) {
+      expect(Object.keys(b).every((k) => allowed.includes(k))).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(b, '__proto__')).toBe(false);
+      expect(Object.getPrototypeOf(b)).toBe(Object.prototype);
+    }
+
+    // 3. The payload still survives as CONTENT — inert, not silently dropped.
+    expect(JSON.stringify(blocks)).toContain('__proto__');
+  });
+
+  test('rendering the same payload pollutes nothing and emits it as text', () => {
+    const doc = makeFakeDoc();
+    const container = doc.createElement('div');
+    renderMdLite(container, '__proto__ constructor prototype', doc);
+    expect(container.textContent).toBe('__proto__ constructor prototype');
+    expect({}.polluted).toBeUndefined();
+    expect([].polluted).toBeUndefined();
+  });
+
+  test('inline segment objects are plain too', () => {
+    for (const seg of parseInline('a `__proto__` b')) {
+      expect(Object.keys(seg).sort()).toEqual(['code', 'text']);
+      expect(Object.getPrototypeOf(seg)).toBe(Object.prototype);
+    }
+  });
+});
+
+describe('URL inertness — md-lite has no link grammar (v4.4.1 A2/D2 — glm finding 5)', () => {
+  // Worth asserting even though the code is clean: the Workspace CSP allows
+  // `img-src data:`, so the day a link or image feature is added, these
+  // payloads stop being inert. The fake DOM's attribute trap is the other half.
+  test('javascript: and data: URLs render as literal text, not links or images', () => {
+    const doc = makeFakeDoc();
+    const container = doc.createElement('div');
+    const payload = '[click](javascript:alert(1)) and ![x](data:text/html;base64,PHNjcmlwdD4=)';
+    renderMdLite(container, payload, doc);
+
+    expect(container.textContent).toBe(payload);
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.childNodes).toHaveLength(1);
+    expect(container.childNodes[0].tagName).toBe('P');
+  });
+
+  test('a bare javascript: URL inside inline code is still only text', () => {
+    const doc = makeFakeDoc();
+    const container = doc.createElement('div');
+    renderMdLite(container, 'try `javascript:alert(1)` here', doc);
+    expect(container.querySelector('code').textContent).toBe('javascript:alert(1)');
+    expect(container.querySelector('a')).toBeNull();
+  });
+});
+
+describe('fence info string is discarded (v4.4.1 A2/D2 — glm finding 4)', () => {
+  test('the info string never reaches the block or the DOM', () => {
+    expect(parseMdLite('```js\nlet x = 1;\n```')).toEqual([{ t: 'code', text: 'let x = 1;' }]);
+    expect(parseMdLite('```html\n<b>hi</b>\n```')).toEqual([{ t: 'code', text: '<b>hi</b>' }]);
+
+    const doc = makeFakeDoc();
+    const container = doc.createElement('div');
+    renderMdLite(container, '```js\nlet x = 1;\n```', doc);
+    expect(container.textContent).toBe('let x = 1;');
+    // No class/lang attribute was derived from `js`: the element carries only
+    // what the fake DOM's constructor puts there. (The attribute API is a trap,
+    // so a future setter would have thrown before reaching this assertion.)
+    expect(Object.keys(container.querySelector('code'))).toEqual(['tagName', 'childNodes']);
   });
 });

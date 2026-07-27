@@ -15,16 +15,41 @@
   var UL_RE = /^\s*[-*]\s+/;
   var OL_RE = /^\s*\d+[.)]\s+/;
 
+  /**
+   * Split one line into literal / inline-code segments in a SINGLE linear pass.
+   *
+   * ⚠️ v4.4.1 A1/D1 (Confirmed 4/4). The previous form re-`exec`ed a freshly
+   * sliced `rest` string each iteration and advanced with
+   * `rest = rest.slice(...)` — quadratic by construction in both time and
+   * transient allocation, on a string parseMdLite has already coalesced from
+   * every consecutive prose line (`p.join(' ')`) and which artifact-guard.js
+   * caps at only 200 KB. A `lastIndex` cursor walks the ORIGINAL string once
+   * and never copies a tail, so total work is linear in input length no matter
+   * how many spans the line holds.
+   *
+   * Output is identical to the old function for every input: the pattern is
+   * context-free — no `^`, `\b`, lookaround or backreference — so a /g scan
+   * resuming at `lastIndex` lands on exactly the same match positions that
+   * re-`exec`ing the remainder did. The three boundary cases match too: no
+   * match at all yields one literal segment, a trailing match yields no empty
+   * tail segment, and empty input yields [].
+   *
+   * The regex is constructed per call and deliberately NOT hoisted to module
+   * scope: a /g regex carries mutable `lastIndex`, so one shared instance would
+   * leak cursor state between calls and silently drop spans.
+   */
   function parseInline(text) {
     var out = [];
-    var rest = String(text);
-    while (rest.length) {
-      var m = /`([^`\n]+)`/.exec(rest);
-      if (!m) { out.push({ code: false, text: rest }); break; }
-      if (m.index > 0) { out.push({ code: false, text: rest.slice(0, m.index) }); }
+    var s = String(text);
+    var re = /`([^`\n]+)`/g;
+    var pos = 0;
+    var m;
+    while ((m = re.exec(s)) !== null) {
+      if (m.index > pos) { out.push({ code: false, text: s.slice(pos, m.index) }); }
       out.push({ code: true, text: m[1] });
-      rest = rest.slice(m.index + m[0].length);
+      pos = re.lastIndex;
     }
+    if (pos < s.length) { out.push({ code: false, text: s.slice(pos) }); }
     return out;
   }
 
@@ -43,7 +68,11 @@
         continue;
       }
       var h = H_RE.exec(line);
-      if (h) { blocks.push({ t: 'h', level: h[1].length, text: h[2] }); i += 1; continue; }
+      // ⚠️ v4.4.1 D3: trim the heading text. H_RE's `\s+` eats the run of
+      // whitespace after the hashes, but `(.*)$` keeps everything to end of
+      // line — so `# Title   ` rendered a heading with trailing blanks baked
+      // into its text node.
+      if (h) { blocks.push({ t: 'h', level: h[1].length, text: h[2].trim() }); i += 1; continue; }
       if (UL_RE.test(line)) {
         var ul = [];
         while (i < lines.length && UL_RE.test(lines[i])) { ul.push(lines[i].replace(UL_RE, '')); i += 1; }
@@ -91,7 +120,14 @@
       var b = blocks[i];
       var el;
       if (b.t === 'h') {
-        el = d.createElement('h' + Math.min(6, b.level + 2));
+        // ⚠️ v4.4.1 D4: the `Math.min(6, …)` that used to wrap this was
+        // unreachable — H_RE's `#{1,4}` bounds level to 1–4, so the tag is
+        // always h3–h6 and the clamp could never fire. Dead defensive code is
+        // worse than none here: it made the h6 ceiling look enforced when the
+        // real guarantee lives in H_RE. If that `#{1,4}` is ever widened, THIS
+        // line must widen with it — h7 is not an element. The
+        // `'#'.repeat(4) + ' X'` → h6 test pins the true boundary.
+        el = d.createElement('h' + (b.level + 2));
         applyInline(el, parseInline(b.text), d);
       } else if (b.t === 'code') {
         el = d.createElement('pre');
