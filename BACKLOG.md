@@ -509,3 +509,80 @@ deferral is a decision with a number attached rather than a silent config line.
   (3 sites — last-resort crash reporting inside the stdout-error and `uncaughtException` handlers,
   i.e. exactly where routing through a logger that writes to the failed stream is unsafe). Both are
   permanent, justified exemptions, not deferrals.
+
+### Filed at the v4.4.1 final whole-branch review (2026-07-27)
+
+Three items the v4.4.1 session ledgers recorded but this file did not. A deferral that exists only
+in session scratch is not deferred, it is lost — so they are written out here in full, with the
+evidence needed to act on them without re-deriving it. None blocks the v4.4.1 tag.
+
+- [ ] **FR-1 · `runHeadless`'s three early `return`s carry A3's stale-progress defect** — [S]
+  **OVERDUE: a reviewer asked for this ticket two tasks ago (task-8 report §5 "Known remaining hole,
+  NOT in A3's scope", repeated as open item 9.4) and it was never filed.**
+  A3 fixed `runHeadless`'s outer `catch` so a failed run stamps a terminal stage into
+  `progress.json` instead of leaving the last non-terminal one. Three `return`s bypass that fix, in
+  `src/headless.js`:
+  - `:290-298` — the server-start failure. It returns from the server-start `catch`, which sits
+    **before** the outer `try` at `:307` entirely, so A3's handler was never in scope for it.
+    Leaves `'initializing'` (`:247`) on disk.
+  - `:315-323` — the `!serverReady` bail. Returns from **inside** the outer `try`, so the outer
+    `catch` never sees it. Leaves `'server_ready'` (`:313`) on disk.
+  - `:351-360` — the `createSession` failure. Same shape. Leaves `'server_ready'` (`:326`) on disk.
+  - ⚠️ **`:351-360` is the reachable one on a council run.** Under T0.5's shared server
+    (`externalServer` truthy) the `if (!externalServer)` guards at `:275` and `:308` skip the other
+    two paths outright, so the createSession return is the only one a council leg can hit — and when
+    it does, the Workspace reads a non-terminal `'server_ready'` and shows that seat **perpetually
+    live** while `metadata.json` says `'error'`. That is the same progress/metadata disagreement A3
+    and LC-3 were filed to end.
+  - **Do it the way A3 did**: derive the stage from `resolveTerminalState({ error })` (the single
+    source of truth LC-3 established), and **read the prior `usage` back and re-attach it** —
+    `writeProgress` *rebuilds* `progress.json` rather than merging, so a bare terminal write silently
+    deletes whatever spend the last flush recorded, trading a stale stage for a cost under-report on
+    exactly the legs that failed. Wrap it in its own `try`/swallow so it can never mask the original
+    error. Model the tests on `tests/observe/premature-completion.test.js`.
+  - Compounds with **FR-3**: a `createSession` lock race is one way to *reach* `:351-360`.
+
+- [ ] **FR-2 · `repairCanHonorContract` is now INERT — a deletion hazard, not a live guard** — [S]
+  **Self-inversion was the design; the consequence still needs recording.** The predicate asks the
+  validator rather than hard-coding an answer precisely so that LC-10 would switch it off on its own
+  the day it landed. LC-10 has landed, so `validateFindings(EMPTY_SET_REPAIR_PROBE).ok` is now
+  `true` and the function **returns `true` for every input** (verified: `null`, `0`, `1`, `7`,
+  `undefined`, `-1` all → `true`). Therefore `run-stages.js:189`'s `repairable &&` can no longer
+  short-circuit anything, and the paid-leg protection it represents has **no live path**.
+  - ⚠️ **`tests/council/run-stages.test.js:315` — "an original declaring ZERO findings never pays
+    for a repair" — now passes for a DIFFERENT REASON THAN ITS NAME.** The original it feeds in
+    simply *validates* post-LC-10, so `!res.ok` is false and the loop is never entered; `repairable`
+    is never consulted. The test's own comment predicted this ("Task-3-proof on purpose … which is
+    why it is not asserted here"), which is why it is not a bug — but it does mean **nothing in the
+    suite currently fails if `repairCanHonorContract` is deleted**.
+  - **The hazard is deletion, not the inertness.** A future reader running a coverage or dead-code
+    pass will find a predicate that is constant-`true` with no failing test behind it and remove it —
+    silently re-arming the deadlock F2 was filed for, the moment anyone tightens the validator on
+    empty sets again.
+  - **Decide, don't drift.** Either (a) keep it and add a test that pins the *linkage* by
+    constructing a validator state where an empty set is rejected, so the predicate is exercised in
+    both positions; or (b) remove it deliberately, with the F2 reasoning moved into a comment at
+    `run-stages.js:189` so the next person to tighten `validateFindings` reads it.
+
+- [ ] **FR-3 · T0.5 moved the lock contention and `retryOnLockRace` did not follow** — [S–M]
+  ⚠️ **HYPOTHESIS, NOT AN OBSERVED FAILURE. Say so in any commit that touches it.** The T0.5
+  acceptance run `v441plan04` launched **5 legs clean** (2026-07-26), and nothing since has
+  reproduced this. It is filed because the *reasoning* that justified the retry now points at an
+  unprotected call, not because a run has died.
+  - `retryOnLockRace` (`src/utils/server-setup.js:136`) wraps **server start only**: two call sites,
+    `src/headless.js:285` and `src/sidecar/session-utils.js:263`.
+  - `createSession` has none — `src/headless.js:350` → `src/opencode-client.js:143`.
+  - T0.5 made a council run share **one** OpenCode server, which removed the concurrent-*start*
+    race that cost `v441plan01` four of five seats in 736 ms to `database is locked`. But Stage 1
+    still launches the seat wave and the critic solo under a single `Promise.all`
+    (`src/council/run-stages.js:81`), so **N near-simultaneous `session.create` calls now land on
+    one OpenCode SQLite** — the same lock class, one layer down, unretried.
+  - **Before writing any retry, get evidence**: instrument `createSession` and launch a wide council
+    (≥6 seats + critic) against a cold server; a lock-class rejection there confirms it, and its
+    absence over several runs is worth recording as a negative result. Keep any fix to the same
+    bounded policy the existing retry uses (5 attempts, lock-class messages only, final failure
+    rethrown unchanged).
+  - Compounds with **FR-1**: today a `createSession` failure returns via `src/headless.js:351-360`,
+    which is exactly the path that leaves a seat showing as perpetually live in the Workspace. Fixing
+    FR-1 makes any occurrence of FR-3 *visible* instead of silent, which is the cheaper order to do
+    them in.

@@ -18,14 +18,22 @@
   /**
    * Split one line into literal / inline-code segments in a SINGLE linear pass.
    *
-   * ⚠️ v4.4.1 A1/D1 (Confirmed 4/4). The previous form re-`exec`ed a freshly
-   * sliced `rest` string each iteration and advanced with
-   * `rest = rest.slice(...)` — quadratic by construction in both time and
-   * transient allocation, on a string parseMdLite has already coalesced from
-   * every consecutive prose line (`p.join(' ')`) and which artifact-guard.js
-   * caps at only 200 KB. A `lastIndex` cursor walks the ORIGINAL string once
-   * and never copies a tail, so total work is linear in input length no matter
-   * how many spans the line holds.
+   * ⚠️ v4.4.1 A1/D1 (Confirmed 4/4), with its SEVERITY CLAIM CORRECTED. The
+   * previous form re-`exec`ed a freshly sliced `rest` each iteration
+   * (`rest = rest.slice(...)`) — quadratic as WRITTEN, but not as it ran. V8's
+   * `String.prototype.slice` returns a SlicedString (parent pointer + offset),
+   * not a copy, so the old code measured ~8 ms at artifact-guard.js's 200 KB cap
+   * and scaled LINEARLY (~2x per doubling out to 2.4 MB). A deliberately-copying
+   * control took 78,232 ms at that same 200 KB — that is the freeze the finding
+   * described, and it is not what shipped. Numbers:
+   * `.superpowers/sdd/task-10-report.md:127-148`.
+   *
+   * What the rewrite removes is therefore a silent dependence on an undocumented
+   * engine optimisation that nothing here states or tests — a latent PORTABILITY
+   * hazard on any engine without sliced strings — and not a live performance
+   * defect or an exploitable-DoS-that-was. The `lastIndex` cursor walks the
+   * ORIGINAL string once and never copies a tail, so linearity is now a property
+   * of the algorithm rather than of the engine.
    *
    * Output is identical to the old function for every input: the pattern is
    * context-free — no `^`, `\b`, lookaround or backreference — so a /g scan
