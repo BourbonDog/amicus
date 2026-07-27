@@ -713,3 +713,95 @@ describe('LC-3: the terminal progress record states how the leg actually ended',
     expect(last.toolSettleAborted).toBe(true);
   }, 20000);
 });
+
+/**
+ * v4.4.1 A3 — the last hole in LC-3's story.
+ *
+ * LC-3 fixed the SUCCESS path: the terminal progress record's stage is now derived from
+ * resolveTerminalState instead of being hardcoded 'complete', so an aborted/errored/timed-out
+ * leg stops rendering with a green check. But runHeadless also has an outer `catch (error)`,
+ * and that path wrote NO terminal progress record at all — so on an exception progress.json
+ * kept whatever non-terminal stage the last flush left on it (usually 'receiving') while the
+ * caller's finalizeHeadlessResult stamped metadata.json 'error' off the returned result.
+ *
+ * That is the same stale-state class LC-3 closed one path over, and it matters for the same
+ * reason: the live Council Workspace and `amicus watch` read progress.json DIRECTLY
+ * (src/observe/live-doc.js enrichLegUsage, src/observe/council-legs.js), so a leg that blew up
+ * rendered as still-streaming for the rest of the window.
+ */
+describe('A3: the exception path writes a terminal progress record too', () => {
+  const lastProgress = () => progressWrites().pop();
+
+  test('a throw before the poll loop still stamps a terminal stage, not "receiving"', async () => {
+    mockSendPromptAsync.mockRejectedValue(new Error('session prompt exploded'));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'a3boom', '/proj', 60000, 'build', OPTS);
+
+    expect(result.completed).toBe(false);
+    expect(result.error).toBe('session prompt exploded');
+    // Pre-fix the LAST progress write on this path was 'session_created' — a non-terminal stage
+    // that the GUI and `amicus watch` both read as "still working".
+    expect(lastProgress().stage).toBe('error');
+    expect(lastProgress().stageLabel).toBe('Failed');
+  }, 20000);
+
+  test('the stage agrees with what finalizeHeadlessResult will stamp on metadata.json', async () => {
+    // The same invariant LC-3 asserts for the success path: one function decides both, so a leg
+    // can never render green in the GUI and red in the file.
+    const { resolveTerminalState } = require('../../src/sidecar/session-finalize');
+    mockSendPromptAsync.mockRejectedValue(new Error('boom'));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'a3pin', '/proj', 60000, 'build', OPTS);
+
+    expect(lastProgress().stage).toBe(resolveTerminalState(result).status);
+  }, 20000);
+
+  test('the last known usage is carried onto the terminal record, not deleted', async () => {
+    // writeProgress REBUILDS progress.json rather than merging, so a bare terminal write would
+    // silently drop whatever real spend the last 'receiving' flush recorded — trading a
+    // stale-stage bug for a cost UNDER-report on exactly the legs that failed.
+    const priorUsage = { tokens: { input: 4000, output: 120 }, costReported: 0.0031 };
+    fs.readFileSync.mockImplementation((p) => (String(p).includes('progress.json')
+      ? JSON.stringify({ schemaVersion: 1, type: 'progress', stage: 'receiving', usage: priorUsage })
+      : JSON.stringify({ status: 'running' })));
+    mockSendPromptAsync.mockRejectedValue(new Error('boom'));
+
+    await runHeadless(MODEL, 'sys', 'user', 'a3usage', '/proj', 60000, 'build', OPTS);
+
+    expect(lastProgress().stage).toBe('error');
+    expect(lastProgress().usage).toEqual(priorUsage);
+  }, 20000);
+
+  test('an unreadable prior progress.json does not stop the terminal record (never throws inside the error handler)', async () => {
+    fs.readFileSync.mockImplementation((p) => {
+      if (String(p).includes('progress.json')) { throw new Error('EACCES'); }
+      return JSON.stringify({ status: 'running' });
+    });
+    mockSendPromptAsync.mockRejectedValue(new Error('boom'));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'a3unreadable', '/proj', 60000, 'build', OPTS);
+
+    expect(result.error).toBe('boom');           // the ORIGINAL error, never masked
+    expect(lastProgress().stage).toBe('error');
+    expect(lastProgress().usage).toBeUndefined();
+  }, 20000);
+
+  test('a progress write that itself fails is swallowed — the original error still comes back', async () => {
+    // Armed only once the run is underway — the 'initializing' write at the top of runHeadless
+    // sits OUTSIDE the outer try, so failing it would abort before this path is even reached.
+    let armed = false;
+    mockSendPromptAsync.mockImplementation(async () => { armed = true; throw new Error('the real failure'); });
+    fs.writeFileSync.mockImplementation((p) => {
+      if (armed && String(p).includes('progress.json')) { throw new Error('disk full'); }
+    });
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'a3wfail', '/proj', 60000, 'build', OPTS);
+
+    expect(result.error).toBe('the real failure');
+    expect(result.completed).toBe(false);
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'terminal progress write failed after exception (best-effort)',
+      expect.objectContaining({ taskId: 'a3wfail' }),
+    );
+  }, 20000);
+});

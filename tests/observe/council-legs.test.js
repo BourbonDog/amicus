@@ -160,6 +160,35 @@ describe('buildLegRows', () => {
       const { rows } = buildLegRows(runDir, ['leg-unknown'], RUN_CTX);
       expect(rows[0].usage.cost).toEqual({ amount: null, currency: 'USD', source: 'unknown' });
     });
+
+    // ⚠️ v4.4.1 A1, second reachable consequence. The metadata-preference branch above is gated on
+    // `TERMINAL.has(row.status)` (src/observe/council-legs.js:162) reading a leg's metadata.status
+    // — which for a timed-out leg is 'timed-out' (session-finalize.js resolveTerminalState), a
+    // spelling the TERMINAL set did not contain. So a timed-out leg fell through to the stale
+    // 'receiving' progress snapshot and reported an under-counted cost: exactly the B3 defect,
+    // still live on one status.
+    test("A1: a 'timed-out' leg prefers metadata usage too, not the stale progress snapshot", () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-a1');
+      const d = legDir(runDir, 'leg-tmo');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-tmo', status: 'timed-out', model: 'openrouter/minimax/minimax-m2.7',
+        modelInput: 'gemini',
+        usage: {
+          tokens: { input: 39000, output: 1189, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+          cost: { amount: 0.0126, currency: 'USD', source: 'reported' },
+        },
+      }));
+      fs.writeFileSync(path.join(d, 'progress.json'), JSON.stringify({
+        schemaVersion: 1, type: 'progress', stage: 'receiving',
+        stageLabel: 'Generating response...', updatedAt: new Date().toISOString(),
+        usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0 },
+      }));
+
+      const { rows } = buildLegRows(runDir, ['leg-tmo'], RUN_CTX);
+      expect(rows[0].usage.cost.amount).toBeCloseTo(0.0126, 8); // pre-fix: the all-zero snapshot
+      expect(rows[0].usage.tokens.input).toBe(39000);
+    });
   });
 
   /**
@@ -229,6 +258,40 @@ describe('buildLegRows', () => {
       expect(buildLegRows(runDir, ['leg-1'], {
         bench: undefined, critic: null, lenses: ['security'], stageName: 'chair',
       }).rows[0].role).toBe('chair');
+    });
+
+    // ⚠️ v4.4.1 A2. LC-4 guarded `bench` and took `lenses` on trust — but roleFor's lens branch
+    // indexes BOTH (`o.lenses[o.models.indexOf(alias)]`). Neither surviving shape THROWS, because
+    // slug() coerces with String(), so instead of a crash they produced a confident lie in the
+    // Role column. The lens/bench length pairing is an enforced invariant, not an assumption:
+    // src/cli-handlers-council-run.js:170 refuses `--lenses` unless it has exactly one lens per
+    // seat. A run.json that breaks it is malformed, and the honest answer is LC-4's same null.
+    test.each([
+      ['lenses a bare string (indexes the STRING: used to read "lens:s")', 'security', ['gpt']],
+      ['lenses an object (used to read "lens:undefined")', { 0: 'security' }, ['gpt']],
+      ['lenses SHORTER than bench (used to read "lens:undefined" for the tail seat)', ['security'], ['gemini', 'gpt']],
+      ['lenses LONGER than bench (a pairing nothing can justify)', ['security', 'perf', 'ux'], ['gemini', 'gpt']],
+    ])('run.json with %s degrades the role to null rather than inventing one', (_name, lenses, bench) => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = oneLeg(path.join(projectDir, 'run-a2'));
+      let out;
+      expect(() => {
+        out = buildLegRows(runDir, ['leg-1'], { bench, critic: null, lenses, stageName: 'stage1' });
+      }).not.toThrow();
+      expect(out.rows[0].role).toBeNull();
+      expect(out.rows[0].modelInput).toBe('gpt'); // the rest of the row still tells the truth
+    });
+
+    test('A2 did not narrow the happy path: a matched lens/bench pair still resolves exactly', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = oneLeg(path.join(projectDir, 'run-a2b'));
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: ['gemini', 'gpt'], critic: null, lenses: ['security', 'perf'], stageName: 'stage1',
+      }).rows[0].role).toBe('lens:perf');
+      // A one-seat lens run is a matched pair too.
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: ['gpt'], critic: null, lenses: ['security'], stageName: 'stage1',
+      }).rows[0].role).toBe('lens:security');
     });
 
     test('a leg with no modelInput is still null, not a guess (pre-existing contract)', () => {

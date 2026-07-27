@@ -1149,6 +1149,41 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     if (watchdog) { watchdog.cancel(); }
     if (uninstallSignals) { uninstallSignals(); }
     if (!externalServer) { await server.close(); }
+    // ⚠️ v4.4.1 A3 — the last hole in LC-3's story. LC-3 made the SUCCESS path's terminal
+    // progress write derive its stage from resolveTerminalState instead of hardcoding 'complete',
+    // so an aborted/errored/timed-out leg stopped rendering with a green check. This path — the
+    // outer exception handler — wrote NO terminal progress record at all, so progress.json kept
+    // whatever non-terminal stage the last flush left on it (usually 'receiving') while the
+    // caller's finalizeHeadlessResult stamped metadata.json 'error' off the return value below.
+    // The live workspace and `amicus watch` read progress.json DIRECTLY (live-doc.js
+    // enrichLegUsage, council-legs.js), so a leg that exploded rendered as still-streaming
+    // forever: exactly the stale-state class LC-3 closed one path over.
+    //
+    // ⚠️ This runs INSIDE an error handler: it must never throw and must never mask the original
+    // error, so the whole thing sits in its own try and its failure is a debug line, exactly like
+    // the success path's write. The stage comes from the same single source of truth that path
+    // uses, so progress.json's stage and metadata.json's status still cannot disagree.
+    //
+    // ⚠️ The prior `usage` is READ BACK and re-attached deliberately. writeProgress REBUILDS
+    // progress.json from `{stage, stageLabel, updatedAt, ...extra}` — it does not merge — so a
+    // bare terminal write would silently delete whatever real spend the last 'receiving' flush had
+    // already recorded, trading a stale-stage bug for a cost-under-report on exactly the legs that
+    // failed. There are no settled totals on this path (that is what the exception cost us), so
+    // carrying the last known ones forward unchanged is the honest maximum.
+    try {
+      let priorUsage = null;
+      try {
+        const prior = JSON.parse(fs.readFileSync(path.join(sessionDir, 'progress.json'), 'utf-8'));
+        if (prior && prior.usage) { priorUsage = prior.usage; }
+      } catch { /* no readable prior record: write the terminal stage without usage */ }
+      const { resolveTerminalState } = require('./sidecar/session-finalize');
+      const stage = resolveTerminalState({ error: error.message }).status;
+      writeProgress(sessionDir, stage, priorUsage ? { usage: priorUsage } : {});
+    } catch (progressErr) {
+      logger.debug('terminal progress write failed after exception (best-effort)', {
+        taskId, error: progressErr.message,
+      });
+    }
     const { emptyUsageTotals } = require('./utils/pricing');
     return {
       summary: '',

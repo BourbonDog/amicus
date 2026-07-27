@@ -66,9 +66,23 @@ function legRole({ bench, critic, lenses, stageName, modelInput }) {
   // A role we cannot compute is `null` — the module's existing, documented
   // degradation (an em-dash in the Role column), never a guess and never a
   // throw. The non-lens branch never touches `models`, so it stays exact.
-  if (lenses && !Array.isArray(bench)) {
-    logger.debug('leg role unresolved: run.json has lenses but no bench array', {
-      modelInput, stageName, benchType: bench === null ? 'null' : typeof bench,
+  //
+  // ⚠️ v4.4.1 A2: the guard above was ASYMMETRIC — it validated `bench` and took `lenses` on
+  // trust, but roleFor's lens branch indexes BOTH (`o.lenses[o.models.indexOf(alias)]`). Neither
+  // remaining shape throws, because slug() coerces with String(), so both produced a confident
+  // LIE instead of a crash: `lenses: 'security'` with `bench: ['gpt']` indexes the STRING and
+  // yields `lens:s`, and a `lenses` array shorter than `bench` yields `lens:undefined`. The
+  // length pairing is a real, enforced invariant, not an assumption — cli-handlers-council-run.js:170
+  // refuses `--lenses` unless it has exactly one lens per seat — so a run.json that violates it is
+  // malformed, and the honest answer for a malformed pairing is the same `null` (an em-dash in the
+  // Role column) that LC-4 established, never a guess.
+  if (lenses && (!Array.isArray(bench) || !Array.isArray(lenses) || lenses.length !== bench.length)) {
+    logger.debug('leg role unresolved: run.json lenses/bench are not a matched pair', {
+      modelInput, stageName,
+      benchType: bench === null ? 'null' : typeof bench,
+      lensesType: lenses === null ? 'null' : typeof lenses,
+      benchLength: Array.isArray(bench) ? bench.length : null,
+      lensesLength: Array.isArray(lenses) ? lenses.length : null,
     });
     return null;
   }
