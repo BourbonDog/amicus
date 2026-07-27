@@ -223,6 +223,13 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
    * invalid JSON, so no line of a WELL-FORMED body can begin with a fence — which means
    * treating a same-line fence as a closer can only ever be a guess about a malformed
    * emit, and guessing is exactly what handed the chair truncated reviews before.
+   *
+   * ⚠️ Amended by the v4.4.1 owner ruling two tests below. The same-line reading is now
+   * consulted — but only to RE-SEGMENT text in which the anchored reading already found a
+   * closed block, and only where JSON.parse ratifies the result. It is never used to
+   * DISCOVER a block, which is why these assertions still hold: with no anchored close
+   * anywhere in the text, there is nothing to re-segment and the extractor still declines
+   * to guess. The guess the paragraph above warns about is the unratified kind.
    */
   test('a closing fence SHARING A LINE with body content does not close the block', () => {
     // The canonical single-line emit. Well-formed JSON, no closing fence on its own line.
@@ -248,32 +255,85 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
   });
 
   /**
-   * ⚠️ MEASURED, AND DELIBERATELY NOT "FIXED" HERE — surfaced for an owner ruling.
+   * ⚠️ OWNER RULING (v4.4.1): "the last block" means the last candidate that PARSES.
    *
-   * The composite shape: a sloppy same-line-fenced block FIRST, then a well-formed one.
-   * Because the sloppy block's own closer is not at line start, the lazy body runs on to
-   * the next line-start fence — which is the GOOD block's OPENING fence — so the extractor
-   * returns the decoy body with a stray fence glued on, and the well-formed block is never
-   * reached. The old unanchored regex would have returned the good block here.
+   * WHAT THIS TEST USED TO ASSERT. Task 11 measured this exact shape and pinned it as
+   * `MEASURED: a sloppy same-line block BEFORE a good one swallows it — loudly, into
+   * repair`, asserting the DEFECT's own output:
    *
-   * It is pinned rather than changed because (a) it fails LOUD — NOT_PARSEABLE, into the
-   * paid repair wave, never a truncated review passed to the chair as if complete, which is
-   * the failure mode Task 10 existed to kill — and (b) it needs a malformed emit to reach
-   * at all. Changing the extractor is a product decision, not a test-task decision.
+   *     lastJsonBlock(composite) === '{"overall":"decoy","findings":[]}```\nprose\n'
+   *     validateFindings(composite).errors[0].code === 'NOT_PARSEABLE'
+   *
+   * Because the sloppy block's closer is not at line start, the anchored close let its
+   * lazy body run on to the next line-START fence — which is the GOOD block's OPENING
+   * fence — so the well-formed block was never reached and a paid repair leg was bought.
+   * (The pre-Task-10 unanchored regex found the good block here; the anchor, which is
+   * what rescues a body CONTAINING a fence, is what lost it.) It was pinned rather than
+   * fixed because changing the extractor is a product decision, not a test-task one.
+   *
+   * The owner ruled: generate candidates under BOTH closing-fence readings and return
+   * the last one that `JSON.parse`s. The pin's purpose survives inverted — it still goes
+   * red the moment the extractor stops considering the same-line reading, which is the
+   * one edit that re-opens this trap.
    */
-  test('MEASURED: a sloppy same-line block BEFORE a good one swallows it — loudly, into repair', () => {
+  test('a sloppy same-line block BEFORE a good one no longer swallows it (owner ruling)', () => {
     const sloppy = `${F}json\n{"overall":"decoy","findings":[]}${F}`;
     const good = `${F}json\n{"overall":"real","findings":[]}\n${F}`;
     const composite = `${sloppy}\nprose\n${good}`;
 
-    // The body runs from the sloppy opener to the GOOD block's opener, stray fence included.
-    expect(lastJsonBlock(composite)).toBe('{"overall":"decoy","findings":[]}```\nprose\n');
-    // …which cannot parse, so the seat goes to the repair wave rather than being scored on
-    // the decoy. No silent partial parse, and no `real` findings quietly dropped as if the
-    // model had never declared them.
+    // The well-formed block wins: it is the last opener whose body parses. The decoy
+    // also parses (under the same-line reading) but comes first; the swallowed run-on
+    // body, which is all the anchored reading alone produced, parses not at all.
+    expect(lastJsonBlock(composite)).toBe('{"overall":"real","findings":[]}\n');
     const res = validateFindings(composite);
-    expect(res.ok).toBe(false);
-    expect(res.errors[0].code).toBe('NOT_PARSEABLE');
+    expect(res.ok).toBe(true);
+    expect(res.errors).toEqual([]);
+    expect(countAttemptedFindings(composite)).toBe(0);
+  });
+
+  /**
+   * BOTH TRAPS AT ONCE, which is the shape that decides the algorithm.
+   *
+   * A sloppy block first (trap 2) AND the good block's body quotes a fence (trap 1) —
+   * the ordinary case for any council reviewing markdown. Neither closing-fence reading
+   * finds the good block on its own here: the anchored one is swallowed by the sloppy
+   * predecessor, and the same-line one truncates at the fence inside the claim. Only
+   * enumerating each ```json opener INDEPENDENTLY reaches it.
+   *
+   * This is the test that fails if the extractor ever goes back to one left-to-right
+   * scan whose cursor resumes after each match, however the close is written — and it
+   * fails LOUD rather than subtly: without it, the decoy parses cleanly and a seat's
+   * findings are replaced, silently, by an empty set the model never declared.
+   */
+  test('sloppy block first AND a fence inside the good body — the good block still wins', () => {
+    const sloppy = `${F}json\n{"overall":"decoy","findings":[]}${F}`;
+    const good = `${F}json\n${JSON.stringify(fencedClaims, null, 2)}\n${F}`;
+    const res = validateFindings(`${sloppy}\nprose\n${good}`);
+    expect(res.ok).toBe(true);
+    expect(res.findings).toHaveLength(2);
+    expect(res.findings[0].claim).toContain(F);
+    expect(countAttemptedFindings(`${sloppy}\nprose\n${good}`)).toBe(2);
+  });
+
+  /**
+   * The other half of the ruling: when NO candidate parses, a malformed emit must not be
+   * dressed up as an absent one. `null` and "a body that fails JSON.parse" are different
+   * answers to different questions, and the difference is load-bearing downstream —
+   * countAttemptedFindings returns null either way here, but validateFindings must say
+   * NOT_PARSEABLE (the model emitted something broken) rather than NO_FENCED_BLOCK (the
+   * model emitted nothing at all), because that is what the repair prompt is told.
+   */
+  test('when nothing parses, the last ANCHORED body is still returned', () => {
+    const broken = `${F}json\n{"overall": broken,\n${F}`;
+    expect(lastJsonBlock(broken)).toBe('{"overall": broken,\n');
+    expect(validateFindings(broken).errors[0].code).toBe('NOT_PARSEABLE');
+
+    // …including in the composite shape above when the trailing block is ALSO malformed.
+    // The fallback names the LAST opener's anchored body — the block the model finished
+    // on, which is the one a repair prompt is about — not the first opener's run-on.
+    const composite = `${F}json\n{"decoy":}${F}\nprose\n${F}json\n{"real":}\n${F}`;
+    expect(lastJsonBlock(composite)).toBe('{"real":}\n');
+    expect(validateFindings(composite).errors[0].code).toBe('NOT_PARSEABLE');
     expect(countAttemptedFindings(composite)).toBeNull();
   });
 

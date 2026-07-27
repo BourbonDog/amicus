@@ -4,40 +4,115 @@
 const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const REQUIRED = ['claim', 'location', 'rationale'];
 
+/** The start of a ```json block. Openers are enumerated INDEPENDENTLY — see below. */
+const OPENER = /```json\s*\n/g;
+
 /**
- * Extract the LAST ```json fenced block's body, or null.
+ * The two readings of "where does this block close?", primary first.
  *
- * ⚠️ v4.4.1 (Task 10). The closing fence is anchored to LINE START — the markdown
- * convention — via the `m` flag. It used to be a bare non-greedy `([\s\S]*?)```,
- * so the first triple-backtick ANYWHERE inside the JSON body ended the match. A
- * findings block whose `claim` quotes a fence — which any review of markdown
- * inevitably writes — was truncated mid-string and then failed JSON.parse as
- * NOT_PARSEABLE, collapsing the seat to `conformance: unstructured`.
+ * ANCHORED_CLOSE is the primary and the definition of a block: the closing fence
+ * starts a line (CommonMark's rule; leading horizontal whitespace allowed). It is
+ * what makes a body that CONTAINS a fence extractable at all.
  *
- * This is not hypothetical. Measured on the paid md-lite council preserved in
- * output/md-lite-council/: THREE of four seats hit it. `opus` cut at "```/) for
- * both open and" (5 findings lost), `glm` at "```js) is silently disca" (6 lost),
- * `minimax` at a repeated-backtick example (rescued only by the repair wave).
- * Same family as LC-6/LC-10: an output contract that cannot express what the task
- * requires. A council reviewing anything that DISCUSSES markdown silently loses
- * seats, and the chair synthesizes from what survived without knowing.
+ * The same-line reading — the first triple-backtick anywhere ends the body — is the
+ * pre-Task-10 one. As a way to FIND blocks it is broken (it truncates any body that
+ * quotes a fence), but as a way to read a body a sloppy emit mis-delimited it is
+ * right, and JSON.parse rather than the regex decides which reading was.
+ */
+const ANCHORED_CLOSE = /^[ \t]*```/m;
+const FENCE = '```';
+
+/**
+ * How one opener's body can be read, primary first.
+ * @param {string} rest the text immediately following an opener
+ * @returns {Array<{body: string, anchored: boolean}>} 0–2 readings
+ */
+function bodyReadings(rest) {
+  const out = [];
+  const anchored = ANCHORED_CLOSE.exec(rest);
+  if (anchored) { out.push({ body: rest.slice(0, anchored.index), anchored: true }); }
+  const inline = rest.indexOf(FENCE);
+  if (inline !== -1) { out.push({ body: rest.slice(0, inline), anchored: false }); }
+  return out;
+}
+
+/**
+ * Extract the last ```json fenced block that is VALID JSON, or null.
  *
- * Line-start anchoring is sufficient rather than merely better: a raw newline
- * inside a JSON string is invalid JSON, so no line of a WELL-FORMED body can ever
- * begin with a fence. Leading horizontal whitespace is tolerated on the closing
- * line (CommonMark allows an indented closing fence); a `\n` is still required
- * before it, so a fence sharing a line with body content no longer closes a block.
+ * ⚠️ OWNER RULING (v4.4.1). "Last block" means the last candidate that PARSES, not
+ * the last one that is merely syntactically delimited. One rule closes two traps
+ * that no single regex can close at once — both of them measured, not hypothetical:
+ *
+ * TRAP 1 — a fence INSIDE the body (pre-Task-10). The pattern was
+ * `/```json\s*\n([\s\S]*?)```/g`: the first triple-backtick ANYWHERE in the JSON
+ * ended the match, so a findings block whose `claim` quotes a fence — which any
+ * review of markdown inevitably writes — was truncated mid-string and failed
+ * JSON.parse. On the paid md-lite council preserved in output/md-lite-council/,
+ * THREE of four seats hit it: `opus` cut at "```/) for both open and" (5 findings
+ * lost), `glm` at "```js) is silently disca" (6 lost), `minimax` at a
+ * repeated-backtick example. The chair synthesized from what survived, unaware.
+ *
+ * TRAP 2 — a sloppy block BEFORE a good one (introduced by Task 10's `c5f4a9e`,
+ * measured and pinned by Task 11). With the close anchored to line start, a
+ * same-line-fenced block's body runs on to the next line-start fence — which is the
+ * NEXT block's OPENING fence. A well-formed block behind a sloppy one became
+ * unreachable; the old unanchored regex found it.
+ *
+ * The algorithm, in three moves.
+ *
+ * 1. OPENERS ARE ENUMERATED INDEPENDENTLY, not by a single scan that resumes after
+ *    each match. That alone is what killed trap 2: the old scan's cursor jumped past
+ *    the good block's opener because the sloppy block's run-on body had swallowed
+ *    it, so the good block was never even a candidate. Every ```json opener now gets
+ *    considered on its own terms, whatever the block before it did.
+ * 2. EACH OPENER IS READ BOTH WAYS — anchored close (primary) and same-line close
+ *    (fallback) — so a sloppy but parseable emit stays reachable.
+ * 3. THE LAST OPENER WHOSE BODY PARSES WINS, preferring its anchored reading. A
+ *    truncated reading can never beat a whole one, because a truncated body does not
+ *    parse; JSON.parse is the arbiter, not the regex.
+ *
+ * The safety of consulting the sloppy reading at all is structural, not lucky: a raw
+ * newline inside a JSON string is invalid JSON, so no line of a WELL-FORMED body can
+ * begin with a fence, and no well-formed body can contain a `\n`-terminated ```json
+ * opener. The readings therefore agree on every well-formed block and can only
+ * disagree about a malformed one.
+ *
+ * The one thing the same-line reading is NOT allowed to do is DISCOVER a block: if
+ * no opener in the whole text has an anchored close, the answer is null. Nothing was
+ * ever closed, the extractor declines to guess where a body ended, and the text goes
+ * to the repair wave — Task 10's ruling, unchanged and still pinned in the tests.
+ *
+ * When NOTHING parses, the last anchored body is returned rather than null —
+ * deliberately. A malformed emit must not look like an absent one: callers key off
+ * that distinction (validateFindings reports NOT_PARSEABLE with a real body instead
+ * of NO_FENCED_BLOCK; countAttemptedFindings returns null vs 0, which
+ * repairCanHonorContract then reads).
  *
  * Every Stage-1/Stage-2 extractor funnels through here — validateFindings,
  * countAttemptedFindings, and parse-stage2's parseJudgeOutput / parseDebateDefense
- * / parseRevote — so judge, debate-defense and re-vote parsing all carried the
- * identical defect and are all fixed by this one change.
+ * / parseRevote — so judge, debate-defense and re-vote parsing carried both defects
+ * and are fixed by this one change.
+ *
+ * @param {string} text full model output (prose + fenced block)
+ * @returns {string|null} the winning block body, or null when nothing closed
  */
 function lastJsonBlock(text) {
-  const re = /```json\s*\n([\s\S]*?)^[ \t]*```/gm;
-  let m, last = null;
-  while ((m = re.exec(text)) !== null) { last = m[1]; }
-  return last;
+  const src = String(text ?? '');
+  const perOpener = [];
+  OPENER.lastIndex = 0;
+  let m;
+  while ((m = OPENER.exec(src)) !== null) {
+    perOpener.push(bodyReadings(src.slice(m.index + m[0].length)));
+  }
+  const anchored = perOpener.map((r) => r.find((x) => x.anchored)).filter(Boolean);
+  if (anchored.length === 0) { return null; }               // nothing ever closed
+  for (let i = perOpener.length - 1; i >= 0; i--) {
+    for (const reading of perOpener[i]) {
+      try { JSON.parse(reading.body); return reading.body; }
+      catch { /* not this reading — keep walking backwards */ }
+    }
+  }
+  return anchored[anchored.length - 1].body;
 }
 
 /**
