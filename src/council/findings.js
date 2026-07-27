@@ -77,16 +77,25 @@ function bodyReadings(rest) {
  * opener. The readings therefore agree on every well-formed block and can only
  * disagree about a malformed one.
  *
- * The one thing the same-line reading is NOT allowed to do is DISCOVER a block: if
- * no opener in the whole text has an anchored close, the answer is null. Nothing was
- * ever closed, the extractor declines to guess where a body ended, and the text goes
- * to the repair wave — Task 10's ruling, unchanged and still pinned in the tests.
+ * ⚠️ WIDENED BY A SECOND OWNER RULING (v4.4.1, same release). The same-line reading
+ * may also DISCOVER a block, not merely recover one. The first cut of this function
+ * gated it — "recover, never discover" — so an opener whose ONLY close shared a line
+ * with body content returned null even when its JSON was perfect, buying a paid
+ * repair leg over a cosmetic closer. The owner widened it: every reading of every
+ * opener is a candidate, and JSON.parse arbitrates, full stop. Simulated before the
+ * ruling and re-pinned below: a body that QUOTES a fence still parses (trap 1 stays
+ * closed — per-opener arbitration keeps the anchored reading winning, because it is
+ * the one that parses), and a lone same-line block now parses instead of repairing.
  *
- * When NOTHING parses, the last anchored body is returned rather than null —
- * deliberately. A malformed emit must not look like an absent one: callers key off
- * that distinction (validateFindings reports NOT_PARSEABLE with a real body instead
- * of NO_FENCED_BLOCK; countAttemptedFindings returns null vs 0, which
- * repairCanHonorContract then reads).
+ * Only an opener that never closed AT ALL — no fence of either kind after it, i.e. a
+ * cut-off emit — yields no candidate. When no opener yields a candidate, the answer
+ * is null: nothing was ever closed, and the text goes to the repair wave.
+ *
+ * When candidates exist but NOTHING parses, the last opener's preferred (anchored if
+ * it has one) body is returned rather than null — deliberately. A malformed emit must
+ * not look like an absent one: callers key off that distinction (validateFindings
+ * reports NOT_PARSEABLE with a real body instead of NO_FENCED_BLOCK;
+ * countAttemptedFindings returns null vs 0, which repairCanHonorContract then reads).
  *
  * Every Stage-1/Stage-2 extractor funnels through here — validateFindings,
  * countAttemptedFindings, and parse-stage2's parseJudgeOutput / parseDebateDefense
@@ -102,17 +111,17 @@ function lastJsonBlock(text) {
   OPENER.lastIndex = 0;
   let m;
   while ((m = OPENER.exec(src)) !== null) {
-    perOpener.push(bodyReadings(src.slice(m.index + m[0].length)));
+    const readings = bodyReadings(src.slice(m.index + m[0].length));
+    if (readings.length > 0) { perOpener.push(readings); } // an opener that never closed is no candidate
   }
-  const anchored = perOpener.map((r) => r.find((x) => x.anchored)).filter(Boolean);
-  if (anchored.length === 0) { return null; }               // nothing ever closed
+  if (perOpener.length === 0) { return null; }              // nothing ever closed
   for (let i = perOpener.length - 1; i >= 0; i--) {
     for (const reading of perOpener[i]) {
       try { JSON.parse(reading.body); return reading.body; }
       catch { /* not this reading — keep walking backwards */ }
     }
   }
-  return anchored[anchored.length - 1].body;
+  return perOpener[perOpener.length - 1][0].body;           // malformed ≠ absent
 }
 
 /**

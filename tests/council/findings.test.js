@@ -205,53 +205,85 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
   });
 
   /**
-   * ⚠️ THE DECLARED COST OF THE ANCHOR, made executable (v4.4.1, Task 10 follow-up).
+   * ⚠️ THE SAME-LINE CLOSER — THIRD CONTRACT. These two tests have been rewritten twice;
+   * the whole history lives here, because the shape they cover is the one every future
+   * edit to lastJsonBlock will be tempted to change.
    *
-   * Anchoring the closing fence to line start bought back three of four seats, but it is
-   * not free: a fence SHARING A LINE with body content no longer closes a block. That
-   * consequence was stated in c5f4a9e's message and in lastJsonBlock's docblock, and
-   * asserted nowhere — so the whole trade lived in prose.
+   * CONTRACT 1 (pre-Task-10). `/```json\s*\n([\s\S]*?)```/g` — the first triple-backtick
+   * ANYWHERE closed the block. A same-line closer worked; a body that QUOTED a fence was
+   * truncated mid-JSON-string. Measured cost on a real paid run: 3 of 4 seats, 11 findings,
+   * synthesized by the chair without anyone knowing.
    *
-   * Why that is dangerous rather than merely untidy: this shape routes to the PAID repair
-   * wave instead of parsing, so it shows up in the field as "the repair leg fired on a
-   * block that looks fine to me". Someone reacting to that complaint by dropping the `m`
-   * flag / re-loosening the anchor would have a fully green suite and would silently
-   * re-open the 15-findings-lost defect. These tests are the tripwire on that edit: they
-   * fail the moment the anchor is loosened, and they say WHY the behaviour is intended.
+   * CONTRACT 2 (Task 10 + its follow-up, what these tests USED TO ASSERT). The closer was
+   * anchored to line start, which rescued the fence-quoting body — and, as its declared
+   * cost, stopped a same-line closer from closing anything. The v4.4.1 per-opener ruling
+   * then let the same-line reading RECOVER a body but never DISCOVER one, so these two
+   * tests kept asserting, verbatim:
    *
-   * The behaviour is also correct on its own terms. A raw newline inside a JSON string is
-   * invalid JSON, so no line of a WELL-FORMED body can begin with a fence — which means
-   * treating a same-line fence as a closer can only ever be a guess about a malformed
-   * emit, and guessing is exactly what handed the chair truncated reviews before.
+   *     lastJsonBlock(`${F}json\n{"a":1}${F}`) === null
+   *     lastJsonBlock(`${F}json\n{"a":1}${F} done`) === null
+   *     validateFindings(sameLine).errors === [{code:'NO_FENCED_BLOCK', …}]
+   *     countAttemptedFindings(sameLine) === null
    *
-   * ⚠️ Amended by the v4.4.1 owner ruling two tests below. The same-line reading is now
-   * consulted — but only to RE-SEGMENT text in which the anchored reading already found a
-   * closed block, and only where JSON.parse ratifies the result. It is never used to
-   * DISCOVER a block, which is why these assertions still hold: with no anchored close
-   * anywhere in the text, there is nothing to re-segment and the extractor still declines
-   * to guess. The guess the paragraph above warns about is the unratified kind.
+   * WHY THE CONTRACT CHANGED (owner ruling, this fix wave). That gate was a judgment call
+   * surfaced rather than taken, and the owner overruled it: a LONE same-line-fenced block
+   * whose JSON is perfectly well-formed was returning null → NO_FENCED_BLOCK → a PAID
+   * repair leg, spent on a cosmetic closer. Let JSON.parse arbitrate, full stop.
+   *
+   * WHY THAT DOES NOT RE-OPEN CONTRACT 1's DEFECT — the point the whole design turns on.
+   * Widening is safe only because openers are enumerated INDEPENDENTLY and each one is read
+   * BOTH ways with the anchored reading FIRST. For a fence-quoting body the anchored reading
+   * is the one that parses, so it still wins; the same-line reading of that same opener is a
+   * truncated string that JSON.parse throws on. The regex is no longer choosing — parse
+   * success is. Simulated on both shapes before the ruling was issued.
+   *
+   * WHAT THESE TESTS ARE STILL THE TRIPWIRE ON. Not the anchor's strictness any more, but
+   * its PRIMACY: the last assertion below fails the moment anything reorders the readings so
+   * the same-line one is tried first, which is the edit that resurrects contract 1.
    */
-  test('a closing fence SHARING A LINE with body content does not close the block', () => {
-    // The canonical single-line emit. Well-formed JSON, no closing fence on its own line.
-    expect(lastJsonBlock(`${F}json\n{"a":1}${F}`)).toBeNull();
-    // …nor does trailing prose after the fence rescue it.
-    expect(lastJsonBlock(`${F}json\n{"a":1}${F} done`)).toBeNull();
-    // A newline before the fence is what closes it — the ONLY difference from the above.
+  test('a closing fence SHARING A LINE with body content DOES close the block (owner ruling)', () => {
+    // The canonical single-line emit. Well-formed JSON — under contract 2 this was null.
+    expect(lastJsonBlock(`${F}json\n{"a":1}${F}`)).toBe('{"a":1}');
+    // …and trailing prose after the fence does not disturb it.
+    expect(lastJsonBlock(`${F}json\n{"a":1}${F} done`)).toBe('{"a":1}');
+    // The anchored reading is still PRIMARY, not merely available: with a newline before
+    // the fence the body keeps its trailing \n, which only the anchored reading produces.
     expect(lastJsonBlock(`${F}json\n{"a":1}\n${F}`)).toBe('{"a":1}\n');
+    // ⚠️ THE TRIPWIRE. Same opener, both readings available, and they DISAGREE: the anchored
+    // one is the whole object, the same-line one truncates inside the string. Reorder the
+    // readings and this goes red — it is contract 1's defect in one line.
+    const quoting = `${F}json\n{"claim":"a fence ${F} inside a string"}\n${F}`;
+    expect(JSON.parse(lastJsonBlock(quoting)).claim).toContain(F);
   });
 
-  test('that shape routes to the repair wave rather than being silently mis-parsed', () => {
+  test('that shape parses instead of buying a repair leg (owner ruling)', () => {
     const sameLine = `here are my findings\n${F}json\n{"overall":"o","findings":[]}${F}`;
     const res = validateFindings(sameLine);
-    // NO_FENCED_BLOCK, not NOT_PARSEABLE and never a partial parse: the extractor declines
-    // to guess where the body ended.
-    expect(res.ok).toBe(false);
-    expect(res.errors).toEqual([{ code: 'NO_FENCED_BLOCK', detail: 'no ```json block found' }]);
-    // countAttemptedFindings answers null (nothing to compare), which is precisely the
-    // input repairCanHonorContract treats as "always repairable" — so the leg is handed to
-    // the repair wave with an honest "unverified", not scored against a fabricated count.
-    expect(countAttemptedFindings(sameLine)).toBeNull();
-    expect(repairCanHonorContract(countAttemptedFindings(sameLine))).toBe(true);
+    // Under contract 2 this was NO_FENCED_BLOCK and a paid repair wave. It is a clean,
+    // well-formed, zero-finding review; LC-10 makes the empty set valid, so it validates.
+    expect(res.ok).toBe(true);
+    expect(res.errors).toEqual([]);
+    expect(res.findings).toEqual([]);
+    // countAttemptedFindings now answers 0 (a declared empty set) rather than null
+    // (unverifiable) — the difference repairCanHonorContract keys off. Zero still tracks
+    // the validator rather than short-circuiting: nothing about that linkage changed.
+    expect(countAttemptedFindings(sameLine)).toBe(0);
+    expect(repairCanHonorContract(0)).toBe(validateFindings(
+      `${F}json\n{"overall":"nothing found","findings":[]}\n${F}`).ok);
+  });
+
+  /**
+   * The absent case the widening must NOT swallow. An opener with no closing fence of
+   * EITHER kind — a cut-off emit — still yields no candidate at all, so `null` /
+   * NO_FENCED_BLOCK survives as a reachable answer distinct from NOT_PARSEABLE. Without
+   * this, "the model emitted nothing" and "the model emitted something broken" collapse
+   * into one code and the repair prompt is told the wrong story.
+   */
+  test('an opener that never closed at ALL is still absent, not malformed', () => {
+    expect(lastJsonBlock(`${F}json\n{"a":1}`)).toBeNull();
+    expect(validateFindings(`prose\n${F}json\n{"a":1}`).errors)
+      .toEqual([{ code: 'NO_FENCED_BLOCK', detail: 'no ```json block found' }]);
+    expect(countAttemptedFindings(`${F}json\n{"a":1}`)).toBeNull();
   });
 
   /**
@@ -322,8 +354,11 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
    * countAttemptedFindings returns null either way here, but validateFindings must say
    * NOT_PARSEABLE (the model emitted something broken) rather than NO_FENCED_BLOCK (the
    * model emitted nothing at all), because that is what the repair prompt is told.
+   *
+   * "Preferred" = the last opener's anchored reading when it has one, its same-line reading
+   * otherwise. Both shapes below have an anchored close, so both name an anchored body.
    */
-  test('when nothing parses, the last ANCHORED body is still returned', () => {
+  test('when nothing parses, the last opener\'s preferred body is still returned', () => {
     const broken = `${F}json\n{"overall": broken,\n${F}`;
     expect(lastJsonBlock(broken)).toBe('{"overall": broken,\n');
     expect(validateFindings(broken).errors[0].code).toBe('NOT_PARSEABLE');
