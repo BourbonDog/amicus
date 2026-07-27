@@ -210,8 +210,17 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
       + 'subtreeUnknownLegs), or `amicus spend --json` (sourceMix.unknown).'
       // v4.4.1 CA-6: with a ceiling set, an inexact total is not a clean run — say
       // so where the uncertainty is announced, so exit 2 is never a surprise.
-      + (hasCeiling ? ' Because a ceiling is set and this total is inexact, the run will exit '
-        + 'degraded (2); the ceiling itself still never halts a run.' : '') + '\n');
+      //
+      // ⚠️ Review F2: hedged to "is on track to" rather than "will". This notice
+      // fires from noticeUnknownSpend(), which run.js calls immediately BEFORE
+      // the overBudget() check — so a run whose KNOWN spend also crosses the
+      // ceiling right here prints this sentence and then exits 1
+      // (COST_EXCEEDED), not 2. A signalled run exits 130/143. "Will" would be a
+      // guarantee this code cannot make; "is on track to" states the tendency
+      // that holds in the common case without promising an outcome decided
+      // later, downstream of this call.
+      + (hasCeiling ? ' Because a ceiling is set and this total is inexact, the run is on track '
+        + 'to exit degraded (2); the ceiling itself still never halts a run.' : '') + '\n');
   };
 
   /**

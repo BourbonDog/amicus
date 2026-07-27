@@ -130,10 +130,11 @@ Key semantics:
   **$0.9859 against a $0.75 ceiling (131%)** while amicus believed $0.3720 — and exited `0`.
   So when a ceiling is set **and** the run's total is inexact (`usage.costExact: false` — any
   `unknownLegs` or `subtreeUnknownLegs`), the run **exits `2`**, through the same degrade
-  channel as a bench the ceiling shrank. Every stage still runs to completion and `run.json` is
-  unaffected; only the exit code changes, because `0` reads as "clean, and inside your ceiling"
-  and a run publishing a floor has not earned that. With **no** ceiling there is nothing to be
-  inexact against and an unpriced leg leaves the exit code alone.
+  channel as a bench the ceiling shrank — the stages, verdict and usage block are untouched;
+  `exitCode` becomes `2` and `status` becomes `partial`, as for every other degradation, because
+  `0`/`complete` reads as "clean, and inside your ceiling" and a run publishing a floor has not
+  earned that. With **no** ceiling there is nothing to be inexact against and an unpriced leg
+  leaves the exit code (and status) alone.
 - Each launch is measured against the **remaining** allowance (ceiling − known spend −
   allowances already claimed by a wave that is launching right now). Stage 1 launches its seat
   wave and its critic/lens waves concurrently, so the claim is atomic — two waves can never
@@ -174,7 +175,7 @@ Key semantics:
 | Cost ceiling hit after the tally exists | verdict written (no chair), `overallVerdict:null` | 2 |
 | Cost ceiling hit before the tally | stop; error doc `COST_EXCEEDED` | 1 |
 | Cost ceiling refused a wave at pre-flight | partial bench; `Notice:` + `run.json` `budgetRefusals[]` | 2 |
-| `--max-cost` set and `usage.costExact:false` | run completes untouched; the total is a floor, so it is not reported as clean | 2 |
+| `--max-cost` set and `usage.costExact:false` | stages/verdict/usage untouched; `run.json` `status` becomes `partial` — the total is a floor, so it is not reported as clean | 2 |
 | Aborted | `run.json` status `aborted` | 130/143 |
 
 **The run directory** (durable state; skill-compatible layout):
