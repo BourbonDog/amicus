@@ -50,7 +50,7 @@
     "start": "node --experimental-top-level-await --experimental-vm-modules bin/amicus.js",
     "test": "jest",
     "test:integration": "node scripts/run-integration-keyless.js",
-    "test:integration:live": "jest --testPathIgnorePatterns='worktrees' --testMatch='**/tests/**/*.integration.test.js'",
+    "test:integration:live": "jest --runInBand --testPathIgnorePatterns='worktrees' --testMatch='**/tests/**/*.integration.test.js'",
     "test:all": "jest --testPathIgnorePatterns='/node_modules/' --testPathIgnorePatterns='worktrees' && node scripts/mark-test-passed.js",
     "test:e2e:mcp": "jest tests/mcp-repomix-e2e.integration.test.js --testTimeout=180000 --forceExit",
     "posttest": "node scripts/mark-test-passed.js",

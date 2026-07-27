@@ -31,7 +31,7 @@ npm test -- --coverage                      # Coverage report
 npm test -- -t "should extract"             # Run tests matching pattern
 
 npm run test:integration                    # Integration tier, KEYLESS — credentials scrubbed, paid suites skip (free, ~10s)
-npm run test:integration:live               # Integration tier with real keys — SPENDS MONEY
+npm run test:integration:live               # Integration tier with real keys — SPENDS MONEY (serial: --runInBand is baked in)
 npm run test:all                            # Unit + integration with real keys — SPENDS MONEY (not a gate anywhere)
 npm run test:e2e:mcp                        # MCP E2E with real repomix (requires OPENROUTER_API_KEY)
 npm run lint                                # ESLint on src/
@@ -451,6 +451,15 @@ module.exports = {
 | `npm test` | unit suite only | every push (pre-push hook), `ci.yml` `test` job on the 3x2 OS/Node matrix | free |
 | `npm run test:integration` | integration tier, keyless | `ci.yml` `integration` job, every push + PR (ubuntu only) | free |
 | `npm run test:integration:live` | integration tier, real keys | `integration-live.yml`, `workflow_dispatch` only | **spends money** |
+
+**Why the live rail runs serially.** `test:integration:live` carries `--runInBand`, and it is the only
+rail that does. It is also the only configuration in the repo that spawns several **real OpenCode
+servers** at once: the keyless rail is parallel-safe only because those suites skip there. Run in
+parallel, the live rail flakes on `fanout-e2e` — real legs erroring in ~1.2 s under contention from
+concurrent servers, which reads exactly like a dead model alias and is not one. A worker cap would
+only narrow that window; the contention is over ports and processes, not CPU, so the flag closes it
+instead. Do **not** pass `--maxWorkers` to "speed it up": a paid rail that lies costs more than the
+~2 minutes serialization spends.
 
 The pre-push hook gates on **`npm test` only** — it does not run the integration tier. That is deliberate: `test:all` lets the paid suites see your real credentials, so wiring it into pre-push would bill you on every push. CI watches the tier instead.
 

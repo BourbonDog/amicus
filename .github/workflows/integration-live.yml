@@ -39,6 +39,12 @@ jobs:
       # The suites self-gate on key presence: with this secret set they run for
       # real, and if the secret is ever missing they SKIP rather than fail, so a
       # misconfigured run is loud in the log but not a false red.
+      #
+      # Deliberately invoked through the npm script, NOT `npx jest ...` directly:
+      # the script owns `--runInBand` (v4.4.1 REL-1), and this rail is the only
+      # one that spawns several real OpenCode servers at once, so running it in
+      # parallel flakes on fanout-e2e under port/process contention. Inlining the
+      # jest invocation here would silently drop the flag and re-open that window.
       - name: Run the paid integration tier
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

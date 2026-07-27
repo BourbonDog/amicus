@@ -55,3 +55,39 @@ describe('MCP Registry metadata (Phase 9c)', () => {
     expect(yml.indexOf('npm publish')).toBeLessThan(yml.indexOf('mcp-publisher publish'));
   });
 });
+
+/**
+ * v4.4.1 REL-1. The live rail is the only configuration in the repo that spawns
+ * several REAL OpenCode servers at once, so in parallel it flakes on fanout-e2e
+ * (legs erroring in ~1.2 s under port/process contention — which reads exactly
+ * like a dead model alias and is not one). `--runInBand` closes that window; a
+ * worker cap would only narrow it, because the contention is over ports and
+ * processes rather than CPU.
+ *
+ * Both halves are pinned because either one alone can silently undo the fix: drop
+ * the flag from the script, or inline `npx jest ...` into the workflow so the job
+ * stops going through the script that owns the flag.
+ */
+describe('live integration rail runs serially (v4.4.1 REL-1)', () => {
+  const fs2 = require('fs');
+  const path2 = require('path');
+  const LIVE_WF = path2.join(__dirname, '..', '..', '.github', 'workflows', 'integration-live.yml');
+
+  test('test:integration:live carries --runInBand', () => {
+    expect(pkg.scripts['test:integration:live']).toContain('--runInBand');
+  });
+
+  test('the paid rail is the ONLY script that serializes — the keyless/unit rails stay parallel', () => {
+    const serialized = Object.entries(pkg.scripts)
+      .filter(([, cmd]) => String(cmd).includes('--runInBand'))
+      .map(([name]) => name);
+    expect(serialized).toEqual(['test:integration:live']);
+  });
+
+  test('integration-live.yml runs the npm script, never a bare jest invocation', () => {
+    const yml = fs2.readFileSync(LIVE_WF, 'utf-8');
+    expect(yml).toContain('run: npm run test:integration:live');
+    // A bare `jest`/`npx jest` run step would bypass the script and drop the flag.
+    expect(yml).not.toMatch(/run:\s*(npx\s+)?jest\b/);
+  });
+});
