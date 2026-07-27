@@ -48,35 +48,83 @@ function recordAttemptSpend({ doc, leg, currentModel, legId, waveId, project, at
   } catch { /* best-effort */ }
 }
 
+/** Add up a list of token blocks, key by key. */
+function foldTokens(blocks) {
+  const tokens = {};
+  for (const t of blocks) {
+    for (const [k, v] of Object.entries(t || {})) { tokens[k] = (tokens[k] || 0) + (v || 0); }
+  }
+  return tokens;
+}
+
 /**
- * Fold token totals + cost amount across a leg's attempts[]. A single-attempt
- * leg returns that attempt's usage verbatim (no behavior change for non-fallback
- * legs). Multi-attempt sums tokens.* and cost.amount, tagging source 'mixed'
- * when attempts' sources differ — matching formatCost's `~` behavior so a summed
- * cost never reads as authoritative.
+ * Add up a list of resolved cost objects, tagging source 'mixed' when they
+ * differ — matching formatCost's `~` behavior so a summed cost never reads as
+ * authoritative. `none` is returned when not one of them carried a number,
+ * because a sum of nothing is not $0.
+ */
+function foldCosts(costs, none) {
+  let amount = 0;
+  let anyCost = false;
+  const sources = new Set();
+  for (const c of costs) {
+    if (c && typeof c.amount === 'number') {
+      amount += c.amount;
+      anyCost = true;
+      if (c.source) { sources.add(c.source); }
+    }
+  }
+  if (!anyCost) { return none; }
+  return { amount, currency: 'USD',
+    source: sources.size > 1 ? 'mixed' : (sources.values().next().value || 'reported') };
+}
+
+/**
+ * Fold a leg's attempts[] into ONE usage block. A single-attempt leg returns that
+ * attempt's usage verbatim (no behavior change for non-fallback legs).
+ *
+ * ⚠️ v4.4.1 A1. This used to `return { tokens, cost }` — silently DISCARDING every
+ * other key resolveUsage puts on a usage block. The casualty was `subtreeUnknown`:
+ * a leg that fell back to a substitute AND left an unattributable subagent subtree
+ * lost the flag here, `sumWaveUsage` never counted it in `subtreeUnknownLegs`, and
+ * run.json reported `costExact: true` for a total that was not — precisely the lie
+ * `costExact` exists to prevent, and reachable only on the fallback path. So the
+ * fold now starts from a merge of every attempt's usage and overwrites only the
+ * keys it has a real opinion about; anything added to the block later survives by
+ * default instead of being dropped by omission.
+ *
+ * HOW EACH KIND OF KEY FOLDS, and why:
+ *  - `tokens` / `cost` — SUMMED. They are per-attempt measurements of one leg's
+ *    total consumption; every attempt really was billed.
+ *  - `subtreeUnknown` — OR'd. It is a claim about EXACTNESS, not a quantity: if
+ *    even one attempt left a subtree it could not account for, the leg's total is
+ *    a floor, and that stays true no matter how exact the other attempts were.
+ *    Any other fold (last-wins, or requiring every attempt to agree) would let a
+ *    later clean attempt erase an earlier attempt's admitted gap.
+ *  - `subtree` — SUMMED, not last-wins. Two attempts can each have walked and
+ *    PRICED child sessions, and both spent real money; keeping only the last one's
+ *    measurement would re-open the same under-report one level down, which
+ *    sumWaveUsage's CA-1 docblock explicitly refuses to make.
+ *  - anything else — last attempt wins, which is what the merge already does.
  */
 function sumAttemptUsage(attempts) {
   const withUsage = (attempts || []).filter(a => a.usage && a.usage.tokens);
   if (withUsage.length === 0) { return null; }
   if (withUsage.length === 1) { return withUsage[0].usage; }
-  const tokens = {};
-  let amount = 0;
-  let anyCost = false;
-  const sources = new Set();
-  for (const a of withUsage) {
-    for (const [k, v] of Object.entries(a.usage.tokens || {})) {
-      tokens[k] = (tokens[k] || 0) + (v || 0);
-    }
-    if (a.usage.cost && typeof a.usage.cost.amount === 'number') {
-      amount += a.usage.cost.amount;
-      anyCost = true;
-      if (a.usage.cost.source) { sources.add(a.usage.cost.source); }
-    }
+  const usages = withUsage.map(a => a.usage);
+  const out = Object.assign({}, ...usages);
+  out.tokens = foldTokens(usages.map(u => u.tokens));
+  out.cost = foldCosts(usages.map(u => u.cost), null);
+  const subtrees = usages.map(u => u.subtree).filter(Boolean);
+  if (subtrees.length > 0) {
+    out.subtree = {
+      sessions: subtrees.reduce((n, s) => n + (s.sessions || 0), 0),
+      tokens: foldTokens(subtrees.map(s => s.tokens)),
+      cost: foldCosts(subtrees.map(s => s.cost), { amount: null, currency: 'USD', source: 'unknown' }),
+    };
   }
-  const cost = anyCost
-    ? { amount, currency: 'USD', source: sources.size > 1 ? 'mixed' : (sources.values().next().value || 'reported') }
-    : null;
-  return { tokens, cost };
+  if (usages.some(u => u.subtreeUnknown)) { out.subtreeUnknown = true; }
+  return out;
 }
 
 /**

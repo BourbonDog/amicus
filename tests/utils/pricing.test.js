@@ -71,15 +71,42 @@ describe('resolveLegCost: zero-token totals are unknown, not $0 (B2)', () => {
     expect(r.amount).toBeCloseTo(1000 * 2.2528e-6, 12);
   });
 
-  it('reasoning-only observation counts as observed (estimate may be $0 for an unpriced class)', () => {
+  /**
+   * v4.4.1 CA-7. These two used to assert the OPPOSITE — that a reasoning-only
+   * or cache-only observation was enough to estimate — and the estimate they
+   * reached was always `$0`, because resolveLegCost prices input/output and
+   * nothing else. That is the exact false-zero the v4.4 B2 fix exists to kill,
+   * surviving in the one corner B2's predicate did not cover. The contract is
+   * now the honest one: observed, but not in a currency we can price, is
+   * `unknown`.
+   */
+  it('a reasoning-only leg is unknown, never a fabricated $0', () => {
     const r = pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0, reasoning: 500 }, pricing: glm });
-    expect(r.source).toBe('estimated');
-    expect(r.amount).toBe(0);
+    expect(r.source).toBe('unknown');
+    expect(r.amount).toBeNull();
   });
 
-  it('cache tokens in the RAW OpenCode shape ({cache:{read,write}}) count as observed', () => {
-    const r = pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0, cache: { read: 900, write: 0 } }, pricing: glm });
+  it('a cache-only leg is unknown, never a fabricated $0 (normalized AND raw shapes)', () => {
+    const normalized = pricing.resolveLegCost({
+      reportedCost: null,
+      tokens: { input: 0, output: 0, cacheRead: 40000, cacheWrite: 0 },
+      pricing: { prompt: 0.000001, completion: 0.000003 },
+    });
+    expect(normalized.source).toBe('unknown');
+    expect(normalized.amount).toBeNull();
+    const raw = pricing.resolveLegCost({ reportedCost: 0, tokens: { input: 0, output: 0, cache: { read: 900, write: 0 } }, pricing: glm });
+    expect(raw.source).toBe('unknown');
+    expect(raw.amount).toBeNull();
+  });
+
+  it('a real local leg still resolves to estimated ~$0 (the v4.2 promise CA-7 must not break)', () => {
+    const r = pricing.resolveLegCost({
+      reportedCost: null,
+      tokens: { input: 1200, output: 300 },
+      pricing: { prompt: 0, completion: 0 },
+    });
     expect(r.source).toBe('estimated');
+    expect(r.amount).toBe(0);
   });
 
   it('v4.2 §4.5 REGRESSION GUARD: a free local seat with real tokens stays estimated $0', () => {
@@ -101,7 +128,13 @@ describe('resolveLegCost: zero-token totals are unknown, not $0 (B2)', () => {
     expect(typeof pricing.hasObservedTokens).toBe('function');
     expect(pricing.hasObservedTokens({ input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 })).toBe(false);
     expect(pricing.hasObservedTokens({ input: 1 })).toBe(true);
+    expect(pricing.hasObservedTokens({ output: 1 })).toBe(true);
     expect(pricing.hasObservedTokens(null)).toBe(false);
+    // CA-7: the predicate answers "can the estimate price what we saw", so the
+    // token classes the estimate never prices do not satisfy it on their own.
+    expect(pricing.hasObservedTokens({ input: 0, output: 0, reasoning: 500 })).toBe(false);
+    expect(pricing.hasObservedTokens({ input: 0, output: 0, cacheRead: 40000 })).toBe(false);
+    expect(pricing.hasObservedTokens({ input: 0, output: 0, cache: { read: 900, write: 12 } })).toBe(false);
   });
 });
 

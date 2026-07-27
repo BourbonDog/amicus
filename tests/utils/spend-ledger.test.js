@@ -125,4 +125,28 @@ describe('readSpendRows', () => {
     expect(rows).toHaveLength(2);
     expect(rows.map(r => r.taskId)).toEqual(['ok1', 'ok2']);
   });
+
+  /**
+   * v4.4.1 A2. A line that PARSES but is not a row is corrupt too. These used to
+   * survive `filter(Boolean)` and be treated as rows: aggregateSpend counted each
+   * in `runs` and scored it into `unpricedRows`/`sourceMix.unknown` off its absent
+   * cost block, inflating exactly the counters that exist to say how much of the
+   * total is unmeasured — and `--rows` echoed them into a published document whose
+   * schema says rows are objects.
+   */
+  it('skips valid JSON that is not a row object (a scalar or array line)', () => {
+    const dir = mkTmpDir();
+    appendSpend({
+      taskId: 'ok1', model: 'opus', mode: 'headless',
+      usage: { tokens: { input: 1, output: 1 }, cost: { amount: 0.001, currency: 'USD', source: 'estimated' } },
+    }, { dir });
+    fs.appendFileSync(path.join(dir, SPEND_LEDGER_FILE), '"foo"\n42\n[1,2]\ntrue\nnull\n');
+    const rows = readSpendRows(dir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].taskId).toBe('ok1');
+
+    const { aggregateSpend } = require('../../src/cli-handlers-spend');
+    expect(aggregateSpend(rows).total.runs).toBe(1);
+    expect(aggregateSpend(rows).total.unpricedRows).toBe(0);
+  });
 });

@@ -31,9 +31,9 @@ const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { createBudget } = require('./run-budget');
 const { emitRunStarted, emitStageStarted, emitStageTerminal } = require('../observe/events');
-const { writeRunTerminal } = require('./run-finalize');
-
-const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
+// v4.4.1 CA-6: the whole exit-code vocabulary (SIGNAL_EXIT, statusForExit and the
+// degradation in resolveTerminalExit) lives in ./run-finalize — see its docblock.
+const { writeRunTerminal, resolveTerminalExit, SIGNAL_EXIT } = require('./run-finalize');
 
 /**
  * @param {object} options {briefing, models, chair, critic?, lenses?, project, runId,
@@ -63,7 +63,7 @@ async function runCouncil(options, deps = {}) {
   // why a refused wave sets `degraded` (a shrunken bench never exits 0) rather than aborting.
   const degraded = { value: false };
   const { addWave, overBudget, remainingBudget, noticeUnknownSpend, usageBlock, reserveBudget,
-    noteBudgetRefusal } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
+    noteBudgetRefusal, inexactUnderCeiling } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
   // v4.4.1 Task 0.5: ONE OpenCode server for the whole run — ./run-server carries
   // the why and the evidence that `_scratch` judge isolation survives it. Acquired
   // below (a getter, because the launchers are built first); null = as before.
@@ -93,7 +93,7 @@ async function runCouncil(options, deps = {}) {
     const claimed = sharedServer;
     sharedServer = null;
     await require('./run-server').releaseRunServer(claimed);
-    const code = signalled || exitCode;
+    const code = resolveTerminalExit({ signalled, exitCode, degraded, inexactUnderCeiling });
     const run = await writeRunTerminal({ o, code, error, noticeUnknownSpend, usageBlock });
     return { exitCode: code, run };
   };

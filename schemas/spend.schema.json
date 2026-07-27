@@ -63,7 +63,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "description": "A raw spend-ledger.jsonl row (internal v1 shape, echoed verbatim when --rows is passed). Only the fields this document makes claims about are pinned here.",
+        "description": "A raw spend-ledger.jsonl row (internal v1 shape, echoed verbatim when --rows is passed). Always an object: readSpendRows drops any ledger line that does not parse as one, scalars and arrays included. Only the fields this document makes claims about are pinned beyond that.",
         "properties": {
           "subtreeUnknown": {
             "type": "boolean",

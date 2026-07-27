@@ -102,12 +102,23 @@ function appendSpend({ taskId, waveId, model, mode, usage,
   }
 }
 
-/** @param {string} [dir] @returns {Array<object>} parsed rows; corrupt lines skipped */
+/**
+ * Read the ledger. Corrupt lines are skipped — and v4.4.1 A2 widens "corrupt"
+ * from "does not parse" to "does not parse AS A ROW". A line that is valid JSON
+ * but not a plain object (`"foo"`, `42`, `[1,2]`) used to survive `filter(Boolean)`
+ * and be treated as a row by every consumer: `aggregateSpend` counted it in
+ * `runs`, scored it into `unpricedRows`/`sourceMix.unknown` off its absent cost
+ * block, and `--rows` echoed it into a published document that says rows are
+ * objects. A scalar in a JSONL ledger of row objects is a corrupt line, so it is
+ * now dropped like any other — one fewer way the totals can be inflated by damage.
+ * @param {string} [dir] @returns {Array<object>} parsed rows; corrupt lines skipped
+ */
 function readSpendRows(dir) {
   const file = path.join(dir || getConfigDir(), SPEND_LEDGER_FILE);
   if (!fs.existsSync(file)) { return []; }
   return fs.readFileSync(file, 'utf-8').split('\n').map(l => l.trim()).filter(Boolean)
-    .map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(r => r !== null && typeof r === 'object' && !Array.isArray(r));
 }
 
 module.exports = { appendSpend, readSpendRows, SPEND_LEDGER_FILE, SPEND_LEDGER_SCHEMA_VERSION };

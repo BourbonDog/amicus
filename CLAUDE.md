@@ -452,7 +452,7 @@ evals/
 | `council/run-budget.js` |  | `createBudget()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
-| `council/run-finalize.js` |  | `statusForExit()`, `writeRunTerminal()` |
+| `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()` |
 | `council/run-stage2.js` |  | `runStage2()` |

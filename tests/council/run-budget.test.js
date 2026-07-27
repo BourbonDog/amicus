@@ -186,3 +186,61 @@ describe('usageBlock is what run.json publishes', () => {
     expect(u.cost.amount).toBeNull();
   });
 });
+
+/**
+ * v4.4.1 CA-6 (owner ruling). A ceiling never BLOCKS — that is absolute and
+ * `overBudget` is untouched. What changes is only what the run claims on the way
+ * out: exit 0 reads as "clean, and inside your ceiling", and a run publishing a
+ * total it knows is a floor has not earned that. See run-finalize.js's
+ * resolveTerminalExit for where the flag becomes the code.
+ */
+describe('inexactUnderCeiling — the CA-6 degrade condition', () => {
+  const subtree = () => ({ usage: { tokens: {}, cost: { amount: 0.01, currency: 'USD', source: 'reported' }, subtreeUnknown: true } });
+
+  test('a ceiling over an inexact total is the degrade case', () => {
+    expect(mk([priced(0.372), unknown()], 0.75).inexactUnderCeiling()).toBe(true);
+  });
+
+  test('an UNATTRIBUTED SUBTREE counts too — costExact means "this is the whole bill"', () => {
+    expect(mk([priced(0.372), subtree()], 0.75).inexactUnderCeiling()).toBe(true);
+  });
+
+  test('an exact total under a ceiling is NOT degraded', () => {
+    expect(mk([priced(0.372), priced(0.1)], 0.75).inexactUnderCeiling()).toBe(false);
+  });
+
+  test('no ceiling → never degraded, however inexact (nothing to be inexact against)', () => {
+    expect(mk([unknown(), unknown()], null).inexactUnderCeiling()).toBe(false);
+    expect(mk([unknown(), unknown()], undefined).inexactUnderCeiling()).toBe(false);
+  });
+
+  test('a ceiling of exactly 0 is still a ceiling', () => {
+    expect(mk([unknown()], 0).inexactUnderCeiling()).toBe(true);
+  });
+
+  test('it is a pure READ — asking never trips the ceiling or mutates anything', () => {
+    const b = mk([unknown(), unknown(), unknown()], 0.01);
+    expect(b.inexactUnderCeiling()).toBe(true);
+    expect(b.overBudget()).toBe(false);        // unknown legs still cannot halt a run
+    expect(b.remainingBudget()).toBeCloseTo(0.01, 8);
+    expect(b.written()).toBe('');              // and it announces nothing of its own
+  });
+
+  test('the notice says WHY the run will exit 2 — but only when a ceiling is set', () => {
+    const withCeiling = mk([priced(0.372), unknown()], 0.75);
+    withCeiling.noticeUnknownSpend();
+    expect(withCeiling.written()).toMatch(/exit degraded \(2\)/);
+    expect(withCeiling.written()).toMatch(/never halts a run/);
+    const without = mk([priced(0.372), unknown()], null);
+    without.noticeUnknownSpend();
+    expect(without.written()).not.toMatch(/degraded/);
+  });
+
+  // v4.4.1 A3: "1 council leg(s)…" then "4 council leg(s)…" reads as two findings
+  // a user can add up to five. The counts are cumulative and must say so.
+  test('the notice marks its counts as running totals, not increments', () => {
+    const b = mk([unknown()], null);
+    b.noticeUnknownSpend();
+    expect(b.written()).toMatch(/so far this run, 1 council leg\(s\)/);
+  });
+});

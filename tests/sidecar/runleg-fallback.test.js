@@ -220,3 +220,92 @@ describe('runSingleAttempt (the real, non-injected setup->runHeadless->finalize 
     expect(doc.reason).toMatch(/server exploded/);
   });
 });
+
+/**
+ * v4.4.1 A1 — the multi-attempt fold used to `return { tokens, cost }`, throwing
+ * away every other key resolveUsage puts on a usage block. `subtreeUnknown` was
+ * the casualty: a leg that fell back to a substitute AND left an unattributable
+ * subagent subtree lost the flag, sumWaveUsage never counted it, and run.json
+ * claimed `costExact: true` for a total that was a floor. Only fallback legs were
+ * affected — the single-attempt path returns its usage verbatim.
+ */
+describe('sumAttemptUsage keeps every truth signal across a fallback', () => {
+  const { sumAttemptUsage } = require('../../src/sidecar/fanout-leg-fallback');
+  const att = (usage) => ({ model: 'm', status: 'complete', usage });
+
+  test('a single attempt is returned verbatim (unchanged for non-fallback legs)', () => {
+    const usage = { tokens: { input: 1 }, cost: { amount: 0.5, currency: 'USD', source: 'reported' },
+      subtreeUnknown: true };
+    expect(sumAttemptUsage([att(usage)])).toBe(usage);
+  });
+
+  test('no attempt with usage folds to null, not to a fabricated $0', () => {
+    expect(sumAttemptUsage([])).toBeNull();
+    expect(sumAttemptUsage([{ model: 'm', status: 'error', usage: null }])).toBeNull();
+  });
+
+  test('tokens and cost still SUM across attempts, mixed sources still tagged', () => {
+    const folded = sumAttemptUsage([
+      att({ tokens: { input: 50, output: 0 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' } }),
+      att({ tokens: { input: 100, output: 60 }, cost: { amount: 0.03, currency: 'USD', source: 'estimated' } }),
+    ]);
+    expect(folded.tokens).toEqual({ input: 150, output: 60 });
+    expect(folded.cost.amount).toBeCloseTo(0.04, 10);
+    expect(folded.cost.source).toBe('mixed');
+  });
+
+  test('attempts that report tokens but no cost fold to cost null — a sum of nothing is not $0', () => {
+    const folded = sumAttemptUsage([att({ tokens: { input: 5 } }), att({ tokens: { input: 7 } })]);
+    expect(folded.cost).toBeNull();
+    expect(folded.tokens.input).toBe(12);
+  });
+
+  // THE BUG. Attempt 0 leaves an unattributable subtree, then the substitute
+  // succeeds cleanly. The leg's total is a floor and must keep saying so.
+  test('subtreeUnknown on ANY attempt survives the fold — a later clean attempt cannot erase it', () => {
+    const folded = sumAttemptUsage([
+      att({ tokens: { input: 50 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' }, subtreeUnknown: true }),
+      att({ tokens: { input: 100 }, cost: { amount: 0.03, currency: 'USD', source: 'reported' } }),
+    ]);
+    expect(folded.subtreeUnknown).toBe(true);
+    // …and it reaches the wave rollup, which is where the lie actually surfaced.
+    const { sumWaveUsage } = require('../../src/utils/pricing');
+    expect(sumWaveUsage([{ usage: folded }]).cost.subtreeUnknownLegs).toBe(1);
+  });
+
+  test('the flag survives in either order, and stays OFF when no attempt set it', () => {
+    const clean = att({ tokens: { input: 1 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' } });
+    const dirty = att({ tokens: { input: 1 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' }, subtreeUnknown: true });
+    expect(sumAttemptUsage([dirty, clean]).subtreeUnknown).toBe(true);
+    expect(sumAttemptUsage([clean, dirty]).subtreeUnknown).toBe(true);
+    expect(sumAttemptUsage([clean, clean]).subtreeUnknown).toBeUndefined();
+  });
+
+  test('measured child-session spend from EVERY attempt survives — last-wins would under-report', () => {
+    const withSub = (amount, sessions) => att({ tokens: { input: 10 },
+      cost: { amount: 0.01, currency: 'USD', source: 'reported' },
+      subtree: { sessions, tokens: { input: 5 }, cost: { amount, currency: 'USD', source: 'reported' } } });
+    const folded = sumAttemptUsage([withSub(0.4, 1), withSub(0.25, 2)]);
+    expect(folded.subtree.sessions).toBe(3);
+    expect(folded.subtree.tokens.input).toBe(10);
+    expect(folded.subtree.cost.amount).toBeCloseTo(0.65, 10);
+    expect(folded.subtree.cost.source).toBe('reported');
+  });
+
+  test('a subtree that exists but reported nothing stays unknown, never $0', () => {
+    const folded = sumAttemptUsage([
+      att({ tokens: { input: 10 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' },
+        subtree: { sessions: 1, tokens: {}, cost: { amount: null, currency: 'USD', source: 'unknown' } } }),
+      att({ tokens: { input: 10 }, cost: { amount: 0.01, currency: 'USD', source: 'reported' } }),
+    ]);
+    expect(folded.subtree.cost).toEqual({ amount: null, currency: 'USD', source: 'unknown' });
+  });
+
+  test('any OTHER key on the usage block survives the fold instead of being dropped', () => {
+    const folded = sumAttemptUsage([
+      att({ tokens: { input: 1 }, cost: null, someFutureFact: 'kept' }),
+      att({ tokens: { input: 1 }, cost: null }),
+    ]);
+    expect(folded.someFutureFact).toBe('kept');
+  });
+});

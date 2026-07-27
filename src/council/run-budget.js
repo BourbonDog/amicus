@@ -24,6 +24,10 @@
  * UNDER-REPORTING, not "continuing in the presence of uncertainty" — and
  * nothing here converts uncertainty into a fabricated number in either
  * direction (no rounding unknown up to a guess, no rounding it down to zero).
+ *
+ * v4.4.1 CA-6 completes that posture at the EXIT CODE (see inexactUnderCeiling
+ * below): a ceiling never blocks, but a run under a ceiling no longer exits 0
+ * while publishing a total it knows is only a floor.
  */
 
 const { sumWaveUsage } = require('../utils/pricing');
@@ -40,7 +44,7 @@ const { sumWaveUsage } = require('../utils/pricing');
  * @returns {{spendState:Function, spent:Function, overBudget:Function,
  *   remainingBudget:Function, noticeUnknownSpend:Function, usageBlock:Function,
  *   addWave:Function, reserveBudget:Function, releaseBudget:Function,
- *   noteBudgetRefusal:Function, budgetRefusals:Function}}
+ *   noteBudgetRefusal:Function, budgetRefusals:Function, inexactUnderCeiling:Function}}
  */
 function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
   const legs = allLegs || [];
@@ -196,10 +200,18 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
       parts.push(`${s.subtreeUnknownLegs} council leg(s) spawned a subagent whose CHILD session spend `
         + 'is billed separately and could NOT be determined');
     }
-    emit(`Notice: ${parts.join('; and ')} and is NOT included in the $${s.known.toFixed(4)} `
-      + `total${ceiling}. Real spend is HIGHER than reported — this total is at least, not exactly, `
-      + 'what was spent. See run.json usage (unknownLegs / subtreeUnknownLegs), or '
-      + '`amicus spend --json` (sourceMix.unknown).\n');
+    // v4.4.1 A3: the counts are CUMULATIVE, and re-announcing a grown total
+    // ("1 council leg(s)…" then "4 council leg(s)…") reads as two separate
+    // findings that a reader can reasonably add up to five. "so far this run"
+    // says once, for both clauses, that each number is a running total.
+    emit(`Notice: so far this run, ${parts.join('; and ')} and is NOT included in the `
+      + `$${s.known.toFixed(4)} total${ceiling}. Real spend is HIGHER than reported — this total `
+      + 'is at least, not exactly, what was spent. See run.json usage (unknownLegs / '
+      + 'subtreeUnknownLegs), or `amicus spend --json` (sourceMix.unknown).'
+      // v4.4.1 CA-6: with a ceiling set, an inexact total is not a clean run — say
+      // so where the uncertainty is announced, so exit 2 is never a surprise.
+      + (hasCeiling ? ' Because a ceiling is set and this total is inexact, the run will exit '
+        + 'degraded (2); the ceiling itself still never halts a run.' : '') + '\n');
   };
 
   /**
@@ -228,8 +240,29 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
     };
   };
 
+  /**
+   * v4.4.1 CA-6 (OWNER RULING, 2026-07-26). Is a `--max-cost` ceiling in force
+   * over a total we already know to be incomplete?
+   *
+   * `--max-cost` bounds KNOWN spend: an unknown leg contributes nothing to it and
+   * never halts a run — see `overBudget` above, which this deliberately does NOT
+   * touch, and which must keep ignoring unknown legs. That policy is right and it
+   * stays. What was wrong was the REPORT. A run could exit 0 — read by every
+   * script and every human as "clean, and inside your ceiling" — while knowingly
+   * publishing a floor: `council-wsgate02` really spent $0.9859 against a $0.75
+   * ceiling (131%) while amicus believed $0.3720, and exited 0.
+   *
+   * So the exit code degrades to 2, through the SAME `degraded` channel
+   * `noteBudgetRefusal` already uses for a shrunken bench: the run finished, its
+   * answer is good, and the cost figure underneath it is not the whole bill.
+   * With NO ceiling there is nothing to be inexact against and the exit code is
+   * untouched — an unpriced leg on an unbounded run is a fact, not a degradation.
+   * @returns {boolean}
+   */
+  const inexactUnderCeiling = () => hasCeiling && !usageBlock().costExact;
+
   return { spendState, spent, overBudget, remainingBudget, noticeUnknownSpend, usageBlock,
-    addWave, reserveBudget, releaseBudget, noteBudgetRefusal, budgetRefusals };
+    addWave, reserveBudget, releaseBudget, noteBudgetRefusal, budgetRefusals, inexactUnderCeiling };
 }
 
 module.exports = { createBudget };
