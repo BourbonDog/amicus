@@ -20,10 +20,14 @@
 const { formatCost } = require('../utils/pricing');
 const { TERMINAL_STATUSES } = require('./run-detail');
 
+// ⚠️ v4.4.1 RN-7: the `doc.wave.legs` fallback that used to sit here is GONE, deliberately.
+// No producer nests legs under `wave` — the WAVE composed doc (src/mcp-server.js:592-662)
+// carries a TOP-LEVEL `legs`, exactly like the council one, and this file's header already
+// says not to model the wave doc at all. The arm asserted a shape that does not exist, and
+// wsgate01's reviewer believed it. If a nested shape ever appears, add it back WITH a
+// producer to point at.
 function legRowsOf(doc) {
-  if (Array.isArray(doc.legs)) { return doc.legs; }
-  if (doc.wave && Array.isArray(doc.wave.legs)) { return doc.wave.legs; }
-  return [];
+  return Array.isArray(doc.legs) ? doc.legs : [];
 }
 
 function numOrNull(v) { return typeof v === 'number' ? v : null; }
@@ -32,7 +36,9 @@ function seatOf(leg) {
   const usage = leg.usage || null;
   const tokens = usage && usage.tokens ? usage.tokens : null;
   return {
-    id: leg.taskId || leg.legId || null,
+    // ⚠️ v4.4.1 RN-7: `leg.legId` was a second dead fallback here — no leg row, council or
+    // wave, has ever carried it (src/observe/council-legs.js stamps `taskId`). Deleted.
+    id: leg.taskId || null,
     // ⚠️ DE-ROT (F34/F36): `model` and `modelInput` are TWO SEPARATE fields, never collapsed.
     // A live leg's `model` is the resolved executable id (e.g. `google/gemini-2.5`); `modelInput`
     // is the council ALIAS (e.g. `gemini`) that run.json's labelMap and blind mode's labelFor()
@@ -108,19 +114,26 @@ function normalizeLive(doc) {
     view: doc.view || null,
     runId: doc.runId || doc.taskId || null,
     status,
-    // ⚠️ PRE-FLIGHT (P6): the fallback read `doc.stage`, which NO producer emits — the council
-    // payload's field is `currentStage` (src/mcp-council-awareness.js:155). Harmless today only by
-    // coincidence: `currentStage` is computed from the same `stages.find(status === 'running')`
-    // predicate as `active`, so both arms are null in exactly the same cases. But it is the same
-    // read-a-field-nobody-writes class as P5, and this is the arm that would matter if `stages`
-    // ever arrived non-array. Read the field that exists.
-    stageName: active ? active.name : (doc.currentStage || null),
+    // ⚠️ v4.4.1 RN-7 (was PRE-FLIGHT P6): the `|| doc.currentStage` fallback is GONE. P6 had
+    // already corrected it once — from the phantom `doc.stage` to the real `currentStage` — and
+    // its own comment conceded the arm was "harmless today only by coincidence". It is in fact
+    // strictly unreachable: buildCouncilStatusPayload writes `stages` as `(run.stages || []).map(…)`
+    // (always an array) and derives `currentStage` from the SAME
+    // `stages.find(s => s.status === 'running')` predicate `active` uses one line up
+    // (src/mcp-council-awareness.js:155-157), so `active` is null in exactly the cases
+    // `currentStage` is too. Keeping it asserted a divergence between the two fields that no
+    // producer can create.
+    stageName: active ? active.name : null,
     stages,
     seats: legRowsOf(doc).map(seatOf),
-    // The two counters the payload already ships (src/mcp-council-awareness.js:149) — the honest
-    // fallback readout if a seat row is ever unavailable.
-    legsTotal: typeof doc.legsTotal === 'number' ? doc.legsTotal : null,
-    legsComplete: typeof doc.legsComplete === 'number' ? doc.legsComplete : null,
+    // ⚠️ v4.4.1 RN-8 (D1 ruling: delete the promise). `legsTotal`/`legsComplete` used to be
+    // mapped here under a comment promising them as "the honest fallback readout if a seat row
+    // is ever unavailable" — a UI fallback nobody ever wired. Nothing in electron/workspace-ui/
+    // read either field. Documenting a feature that does not exist is worse than not having it,
+    // so the fields and the promise are both gone. ⚠️ The SAME names on the composed doc
+    // (src/mcp-council-awareness.js) and in src/cli-handlers-status.js / src/mcp-wait.js ARE
+    // consumed — this deletion is scoped to the workspace's LiveModel only. If a future task
+    // wants the counters in the GUI, re-add them WITH the renderer that paints them.
     // ⚠️ DE-ROT (F39): these two are ACTIVE-STAGE spend, not the run total.
     // buildCouncilStatusPayload rolls up only the legs of the currently-RUNNING stage's sub-waves
     // (mcp-council-awareness.js:136-146) and omits `usage` entirely until one of those legs flushes
