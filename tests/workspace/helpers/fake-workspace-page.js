@@ -272,11 +272,20 @@ function makeFakeDom() {
   mount('dialog-abort-confirm', 'button', dialogAbort);
   mount('dialog-abort-cancel', 'button', dialogAbort);
 
+  // ⚠️ v4.4.1 TST-5: `window.addEventListener` used to be a bare no-op, so the three
+  // cadence listeners workspace-verbs.js registers on `window` ('blur'/'focus') and the
+  // run-list refresh workspace-app.js registers ('focus') were unreachable from a test —
+  // Task 16 extended only `document.addEventListener` to capture. Same convention as the
+  // document one: record the callbacks so a test can dispatch them directly
+  // (`window._listeners.blur[0]()`), instead of needing real DOM event dispatch.
   var win = {
     document: document,
     location: { search: '' },
     amicusWorkspace: { invoke: function () { return Promise.resolve(null); } },
-    addEventListener: function () { /* focus listener: not dispatched in this harness */ },
+    _listeners: {},
+    addEventListener: function (type, fn) {
+      (this._listeners[type] = this._listeners[type] || []).push(fn);
+    },
   };
 
   return { window: win, document: document, NodeFilter: { SHOW_TEXT: 4 } };

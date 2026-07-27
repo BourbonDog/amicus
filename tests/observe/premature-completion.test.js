@@ -123,10 +123,34 @@ function mirroredText() {
     .map((o) => o.content).join('');
 }
 
+/**
+ * ⚠️ v4.4.1 X2 — SUITE-LEVEL fs mock reset. `jest.clearAllMocks()` clears CALLS but not
+ * IMPLEMENTATIONS, so a `fs.writeFileSync.mockImplementation(...)` set by one test carried
+ * forward into every test after it. Two tests below (M2, M3) worked around that locally by
+ * re-stubbing writeFileSync themselves, which fixed those two and left every future test in
+ * the file exposed to the same leak — and to a much nastier version of it: the leaked
+ * implementation here is a THROWING one ('disk full'), so the symptom in a new test would be
+ * an unrelated progress-write failure with no connection to the test that caused it.
+ *
+ * Restoring the jest.mock factory's defaults for every fs member closes it once, for all of
+ * them. Deliberately NOT `resetAllMocks()`: that would also blow away the opencode-client and
+ * logger stubs this beforeEach re-arms just below, and mockGetMessages, which each test
+ * supplies for itself.
+ */
+const FS_DEFAULTS = {
+  existsSync: () => true,
+  readFileSync: () => JSON.stringify({ status: 'running' }),
+  writeFileSync: () => {},
+  appendFileSync: () => {},
+  mkdirSync: () => {},
+  unlinkSync: () => {},
+  renameSync: () => {},
+  rmSync: () => {},
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
-  fs.existsSync.mockReturnValue(true);
-  fs.readFileSync.mockReturnValue(JSON.stringify({ status: 'running' }));
+  for (const [name, impl] of Object.entries(FS_DEFAULTS)) { fs[name].mockImplementation(impl); }
   mockCheckHealth.mockResolvedValue(true);
   mockCreateSession.mockResolvedValue('ses_parent');
   mockSendPromptAsync.mockResolvedValue(undefined);
@@ -814,11 +838,9 @@ describe('A3: the exception path writes a terminal progress record too', () => {
    * best-effort close in this file.
    */
   test('M2: a server.close() rejection in the exception path does not mask the original error or skip the terminal write', async () => {
-    // The PRECEDING test overrides fs.writeFileSync with a throwing implementation that
-    // jest.clearAllMocks() (in beforeEach) does not remove — only mockReset()/resetAllMocks()
-    // clears an implementation, and this suite only clears calls. Restore the harness default
-    // (a bare no-op) so this test observes ITS OWN scenario, not the previous test's.
-    fs.writeFileSync.mockImplementation(() => {});
+    // (The local `fs.writeFileSync.mockImplementation(() => {})` that used to sit here — to
+    // undo the PRECEDING test's throwing stub, which jest.clearAllMocks() does not clear — is
+    // gone: beforeEach now restores every fs default for the whole suite. See X2 above.)
     mockStartServer.mockResolvedValue({
       client: {},
       server: { url: 'http://127.0.0.1:1', close: jest.fn(async () => { throw new Error('close blew up'); }) },
@@ -848,9 +870,8 @@ describe('A3: the exception path writes a terminal progress record too', () => {
    * started) costs nothing real.
    */
   test('M3: only `usage` survives onto the exception terminal record — other prior extras (e.g. messagesReceived) are dropped, by design', async () => {
-    // See the M2 test above for why this reset is needed: a preceding test's writeFileSync
-    // mock implementation otherwise leaks in (clearAllMocks() does not clear implementations).
-    fs.writeFileSync.mockImplementation(() => {});
+    // (Same story as M2: the local writeFileSync re-stub is gone, replaced by the suite-level
+    // fs reset in beforeEach. See X2 above.)
     const priorUsage = { tokens: { input: 10, output: 2 }, costReported: 0.0001 };
     fs.readFileSync.mockImplementation((p) => (String(p).includes('progress.json')
       ? JSON.stringify({ schemaVersion: 1, type: 'progress', stage: 'receiving', messagesReceived: 7, usage: priorUsage })
@@ -863,4 +884,27 @@ describe('A3: the exception path writes a terminal progress record too', () => {
     expect(last.usage).toEqual(priorUsage);
     expect(last).not.toHaveProperty('messagesReceived');
   }, 20000);
+});
+
+/**
+ * v4.4.1 X2 — the guard on the suite-level fs reset itself.
+ *
+ * Order-deterministic by construction (jest runs a file's tests in declaration order): the
+ * first test installs the exact hostile implementation that used to leak, the second asserts
+ * the harness defaults are back. Without the reset in beforeEach the second test fails, which
+ * is the whole point — the previous workaround was two ad-hoc re-stubs that proved nothing
+ * about the next test anyone writes.
+ */
+describe('X2: the fs mock harness resets between tests, implementations included', () => {
+  test('a test may install a hostile fs implementation', () => {
+    fs.writeFileSync.mockImplementation(() => { throw new Error('disk full'); });
+    expect(() => fs.writeFileSync('p', 'x')).toThrow('disk full');
+  });
+
+  test('the NEXT test sees the harness defaults again, not the leak', () => {
+    expect(() => fs.writeFileSync('p', 'x')).not.toThrow();
+    expect(fs.existsSync('p')).toBe(true);
+    expect(fs.readFileSync('p')).toBe(JSON.stringify({ status: 'running' }));
+    expect(fs.writeFileSync).not.toHaveBeenCalledWith('p', 'x', expect.anything());
+  });
 });

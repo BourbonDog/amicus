@@ -35,6 +35,7 @@ const os = require('os');
 const path = require('path');
 const { CdpClient } = require('./helpers/cdp-client');
 const { copyRunFixture } = require('./helpers/copy-run-fixture');
+const { hasDisplay, chooseDescribe } = require('./helpers/display-guard');
 
 // require('electron') from plain Node returns the absolute path to the real
 // binary (dist/electron.exe on Windows) — same pattern as the toolbar suite
@@ -49,8 +50,14 @@ const NONCE = 'cafef00dcafef00d';
 // runner — Electron cannot open a window there. Combined with ensureDisplay()
 // below (which provisions Xvfb when this is false), this is what keeps the
 // keyless `integration` CI job green instead of timing out on all 5 tests.
-const HAS_DISPLAY = process.platform !== 'linux' || !!process.env.DISPLAY;
-const describeE2E = (ELECTRON_BIN && HAS_DISPLAY) ? describe : describe.skip;
+// ⚠️ v4.4.1 TST-10c: the predicate and the describe selection moved to
+// tests/helpers/display-guard.js so both branches can actually be EXERCISED —
+// tests/electron/display-guard.test.js drives `linux && !DISPLAY` on every
+// platform. It was previously an inline expression defended only by a comment
+// claiming code-identity with the toolbar suite, inside a suite that skips
+// itself exactly when the interesting branch is true.
+const HAS_DISPLAY = hasDisplay();
+const describeE2E = chooseDescribe(!!ELECTRON_BIN, HAS_DISPLAY);
 
 // ⚠️ DE-ROT (F06): copied verbatim from the toolbar suite's guard
 // (tests/electron-toolbar-e2e.integration.test.js:46-64) — the second half of
@@ -253,6 +260,60 @@ describeE2E('council workspace e2e (CDP)', () => {
       expect(judgesState.open).toBe(true);
       expect(judgesState.loaded).toBe('1');
       expect(judgesState.hasMark).toBe(true);
+    } finally { cdp.close(); await kill(child); }
+  });
+
+  /**
+   * TST-6 — assert the CSP, don't infer it.
+   *
+   * Every other test in this file "proves" the policy only by operating successfully, which
+   * a LOOSENED policy would also do — a `script-src 'unsafe-inline'` slipped into
+   * index.html's meta would leave all of them green. The static half of the pair already
+   * exists (tests/electron/workspace-ui-static.test.js pins the exact spec §4.2 policy
+   * text); this is the runtime half: with that policy actually enforced by Chromium, the
+   * renderer must complete a full boot + drill-in + lazy-panel load without the page
+   * refusing a single thing.
+   *
+   * A CSP refusal is a Log entry with `source: 'security'`, not a console.* call — hence
+   * CdpClient.enableLogging()'s `Log.enable`, whose replay also surfaces violations emitted
+   * during boot, before this client could connect.
+   */
+  test('no Content Security Policy violation occurs while the workspace renders', async () => {
+    const { child } = launchWorkspace(proj, 'aaaa1111', displayInfo.display);
+    const cdp = await CdpClient.workspace(CDP_PORT);
+    try {
+      await cdp.waitForSelector('#matrix-body table');
+      // Exercise the paths that build DOM at runtime — a lazy prose panel (fetch + md-lite
+      // render) and a matrix drill-in — since those are where an inline handler or an
+      // injected <style> would trip the policy if a painter ever reached for innerHTML.
+      await cdp.evaluate(`document.querySelector('#reviews-panel summary').click()`);
+      await new Promise((r) => setTimeout(r, 500));
+      await cdp.evaluate(`document.querySelector('tr[data-finding-id="B1"] td.vote-cell.dispute').click()`);
+      await new Promise((r) => setTimeout(r, 500));
+
+      const cspViolations = (m) => /Content Security Policy/i.test(m.text);
+      expect(cdp.consoleMessages().filter(cspViolations)).toEqual([]);
+      // The security channel must be clean outright, not merely free of that one phrasing —
+      // Chromium words some refusals differently across versions.
+      expect(cdp.consoleMessages().filter((m) => m.source === 'security')).toEqual([]);
+      // …and the panels really did load, so the clean result is a clean RENDER, not a page
+      // that never got far enough to violate anything.
+      expect(await cdp.evaluate(`document.getElementById('reviews-panel').dataset.loaded`)).toBe('1');
+
+      // ⚠️ POSITIVE CONTROL — this is what makes the assertions above mean something.
+      // "No violations" is also what a LOOSENED policy produces, and what a broken
+      // observation channel produces. Append an inline <script>, which `script-src file:`
+      // must refuse: under the shipped policy this fires a violation we can see, so a
+      // future `'unsafe-inline'` (or a dropped meta tag, or a Log domain that stopped
+      // delivering) turns THIS assertion red instead of sliding through silently.
+      await cdp.evaluate(`(function () {
+        var s = document.createElement('script');
+        s.textContent = 'window.__cspProbe = true;';
+        document.body.appendChild(s);
+      })()`);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(cdp.consoleMessages().filter(cspViolations).length).toBeGreaterThan(0);
+      expect(await cdp.evaluate('window.__cspProbe === true')).toBe(false); // it really did not run
     } finally { cdp.close(); await kill(child); }
   });
 

@@ -8,8 +8,19 @@ const { getRunDetail, TERMINAL_STATUSES } = require('../../src/workspace/run-det
 
 const FX = path.join(__dirname, '..', 'fixtures');
 
+// TST-10a (same litter, sibling file): every scratch project made here is swept in afterAll
+// rather than accumulating under os.tmpdir() across runs — artifact-guard.test.js's pattern.
+const SCRATCH_DIRS = [];
+
+afterAll(() => {
+  for (const dir of SCRATCH_DIRS) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 function makeProject() {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-detail-'));
+  SCRATCH_DIRS.push(project);
   fs.mkdirSync(path.join(project, '.claude', 'amicus_sessions'), { recursive: true });
   return project;
 }
@@ -154,6 +165,84 @@ describe('getRunDetail', () => {
     registerPointer(project, 'aaaa1111', runDir);
     const d = getRunDetail(project, 'aaaa1111');
     expect(d.derived.verdictPanel.reason).toBe('COST_EXCEEDED: ceiling hit');
+  });
+
+  /**
+   * TST-8 — degradedReason()'s THIRD branch (a `skipped` stage) had no coverage. It was
+   * deferred as YAGNI and is no longer: the v4.4 cost work added two fresh ways to skip a
+   * stage that did not exist when it was deferred — `overBudget()` (src/council/run-chair.js:84
+   * checkpoints the chair stage `skipped`; src/council/run.js:229 does the same for
+   * debate-revote) and the pre-flight BUDGET_EXCEEDED refusal that stamps `budgetRefusals[]`.
+   * A run that reaches the verdict panel with a cost-ceiling skip is now a normal outcome, and
+   * this branch is the only thing that explains it to the user.
+   *
+   * The stage list order also encodes the precedence: `error` is looked for BEFORE `skipped`,
+   * and `run.error.code` before either. Both orderings are pinned below, because "the chair
+   * errored" and "the chair was skipped to stay under the ceiling" are different stories and
+   * showing the wrong one is exactly the class of lie the panel exists to remove.
+   */
+  const withStages = (stages, extra) => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-degraded', 'run.json'), 'utf-8'));
+    run.stages = stages;
+    Object.assign(run, extra || {});
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+    registerPointer(project, 'aaaa1111', runDir);
+    return getRunDetail(project, 'aaaa1111');
+  };
+
+  test('degradedReason skipped path: a cost-ceiling-skipped chair names the stage and the cause', () => {
+    // run-chair.js:84-90 — `if (overBudget()) { updateStage(…, {status:'skipped'}) }`, with no
+    // startedAt and no run.error anywhere. Before this branch the panel had nothing to say.
+    const d = withStages([
+      { name: 'stage1', status: 'complete' },
+      { name: 'stage2', status: 'complete' },
+      { name: 'chair', status: 'skipped', completedAt: '2026-07-17T15:05:32.000Z' },
+      { name: 'tally', status: 'complete' },
+    ]);
+    expect(d.derived.verdictPanel.reason).toBe('Chair synthesis stage was skipped (cost ceiling)');
+  });
+
+  test('degradedReason skipped path: the label comes from STAGE_LABELS, not the raw stage name', () => {
+    // run.js:229 skips `debate-revote` the same way. A raw name would read
+    // "debate-revote stage was skipped", which is wire vocabulary, not user copy.
+    const d = withStages([
+      { name: 'stage1', status: 'complete' },
+      { name: 'debate-revote', status: 'skipped', completedAt: '2026-07-17T15:05:32.000Z' },
+    ]);
+    expect(d.derived.verdictPanel.reason).toBe('Debate — re-vote stage was skipped (cost ceiling)');
+  });
+
+  test('degradedReason skipped path: an unknown stage name passes through raw (graceful-when-present)', () => {
+    const d = withStages([{ name: 'some-future-stage', status: 'skipped' }]);
+    expect(d.derived.verdictPanel.reason).toBe('some-future-stage stage was skipped (cost ceiling)');
+  });
+
+  test('degradedReason precedence: an errored stage outranks a skipped one', () => {
+    // Both are present on a ceiling-truncated run (the chair errors, the re-vote is then
+    // skipped). The failure is the story; the skip is its consequence.
+    const d = withStages([
+      { name: 'chair', status: 'error' },
+      { name: 'debate-revote', status: 'skipped' },
+    ]);
+    expect(d.derived.verdictPanel.reason).toBe('Chair synthesis stage failed');
+  });
+
+  test('degradedReason precedence: a structured run.error outranks a skipped stage', () => {
+    const d = withStages(
+      [{ name: 'chair', status: 'skipped' }],
+      { error: { code: 'BUDGET_EXCEEDED', message: 'budget gate refused the run' } },
+    );
+    expect(d.derived.verdictPanel.reason).toBe('BUDGET_EXCEEDED: budget gate refused the run');
+  });
+
+  test('degradedReason returns null when nothing is degraded — no invented explanation', () => {
+    const d = withStages([
+      { name: 'stage1', status: 'complete' },
+      { name: 'chair', status: 'complete' },
+    ]);
+    expect(d.derived.verdictPanel.reason).toBeNull();
   });
 
   // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): sanitizeName collisions

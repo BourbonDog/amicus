@@ -178,6 +178,106 @@ describe('isRealpathContained', () => {
   });
 });
 
+/**
+ * SEC-3 — the fence's own precondition, checked in debug mode only.
+ *
+ * isRealpathContained is a pure string-prefix comparison and is sound ONLY if both
+ * arguments were already resolved through realpathSync. Nothing enforced that, so a caller
+ * who forgot got a silently WEAKER check rather than an error — and "silently weaker
+ * security check" is the worst possible failure mode for a primitive four call sites lean on.
+ *
+ * The remedy has to be a DIAGNOSTIC, not a gate. Turning a forgotten realpathSync into a
+ * throw would make the fence itself the outage — exactly the failure it exists to prevent —
+ * so it is opt-in via AMICUS_DEBUG_FENCE=1, it only ever warns, and the answer it returns is
+ * byte-identical either way. The last two tests here are the ones that matter: the flag can
+ * never change the result, and nothing inside the diagnostic can escape as an exception.
+ */
+describe('isRealpathContained — SEC-3 debug-mode contract check', () => {
+  const { logger } = require('../../src/utils/logger');
+  // Native separators throughout: the function under test derives its separator from the
+  // NATIVE `path` module, so a hand-written 'relative/dir' would answer differently on
+  // Windows for reasons that have nothing to do with what is being tested (same convention
+  // as the platform-guarded root-form assertions above).
+  const REL_DIR = path.join('relative', 'dir');
+  const REL_CHILD = path.join('relative', 'dir', 'child');
+  let warn;
+
+  beforeEach(() => { warn = jest.spyOn(logger, 'warn').mockImplementation(() => {}); });
+  afterEach(() => { warn.mockRestore(); delete process.env.AMICUS_DEBUG_FENCE; });
+
+  /** An absolute path that EXISTS but is not realpath-resolved (unnormalized `..` hop). */
+  function unresolvedButReal() {
+    const dir = mkScratchDir('ws-fence-');
+    fs.mkdirSync(path.join(dir, 'sub'));
+    return { dir, unresolved: [dir, 'sub', '..', 'sub'].join(path.sep) };
+  }
+
+  test('the flag is OFF by default — no diagnostics, no cost, whatever the arguments', () => {
+    expect(process.env.AMICUS_DEBUG_FENCE).toBeUndefined();
+    isRealpathContained(REL_DIR, REL_CHILD);
+    const { dir, unresolved } = unresolvedButReal();
+    isRealpathContained(dir, unresolved);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('a NON-ABSOLUTE argument is reported (the caller skipped realpathSync entirely)', () => {
+    process.env.AMICUS_DEBUG_FENCE = '1';
+    isRealpathContained(REL_DIR, REL_CHILD);
+    const args = warn.mock.calls.map((c) => [c[0], c[1].arg]);
+    expect(args).toEqual([
+      ['path-fence: argument is not absolute', 'dirRealPath'],
+      ['path-fence: argument is not absolute', 'targetRealPath'],
+    ]);
+  });
+
+  test('an absolute-but-UNRESOLVED argument is reported (the subtler half)', () => {
+    process.env.AMICUS_DEBUG_FENCE = '1';
+    const { dir, unresolved } = unresolvedButReal();
+    isRealpathContained(dir, unresolved);
+    const messages = warn.mock.calls.map((c) => `${c[0]} (${c[1].arg})`);
+    expect(messages).toEqual(['path-fence: argument is not realpath-resolved (targetRealPath)']);
+  });
+
+  test('a properly resolved pair is silent — no false alarms on the normal path', () => {
+    process.env.AMICUS_DEBUG_FENCE = '1';
+    const dir = fs.realpathSync(mkScratchDir('ws-fence-'));
+    fs.mkdirSync(path.join(dir, 'sub'));
+    isRealpathContained(dir, fs.realpathSync(path.join(dir, 'sub')));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('a NON-EXISTENT absolute path is not reported — that is a legitimate argument here', () => {
+    // Callers fence a path BEFORE probing it; "does not exist yet" is not a contract breach.
+    process.env.AMICUS_DEBUG_FENCE = '1';
+    const dir = fs.realpathSync(mkScratchDir('ws-fence-'));
+    isRealpathContained(dir, path.join(dir, 'never-created', 'report.html'));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('the diagnostic NEVER changes the answer', () => {
+    const { dir, unresolved } = unresolvedButReal();
+    const cases = [
+      [dir, path.join(dir, 'sub')],
+      [dir, unresolved],
+      [REL_DIR, REL_CHILD],
+      [path.join(dir, 'foo'), path.join(dir, 'foobar')], // the sibling-prefix trap
+      [dir, mkScratchDir('ws-fence-other-')],
+    ];
+    const off = cases.map(([a, b]) => isRealpathContained(a, b));
+    process.env.AMICUS_DEBUG_FENCE = '1';
+    const on = cases.map(([a, b]) => isRealpathContained(a, b));
+    expect(on).toEqual(off);
+    expect(off).toEqual([true, true, true, false, false]);
+  });
+
+  test('the fence never becomes the failure it exists to prevent — a throwing logger is swallowed', () => {
+    process.env.AMICUS_DEBUG_FENCE = '1';
+    warn.mockImplementation(() => { throw new Error('logger exploded'); });
+    expect(() => isRealpathContained(REL_DIR, REL_CHILD)).not.toThrow();
+    expect(isRealpathContained(REL_DIR, REL_CHILD)).toBe(true);
+  });
+});
+
 describe('readRunArtifact', () => {
   test('reads an allowlisted artifact from the fixture run', () => {
     const { project } = seedFromFixture('council-run-complete');

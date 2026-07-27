@@ -78,6 +78,69 @@ describe('buildFoldText', () => {
     expect(text).toContain('(no chair output — tally summary above)');
   });
 
+  /**
+   * TST-10b — stripFoldMarkers has TWO branches and TWO marker spellings, and this suite
+   * only ever exercised one cell of that 2x2: a NONCED marker ALONE on its own line.
+   *
+   * The other cells are the ones that matter for untrusted chair prose. A chair asked to
+   * summarise a council whose subject is amicus itself will write the marker mid-sentence,
+   * and #BL-7's whole point is that the BARE `[SIDECAR_FOLD]` spelling (no nonce) still
+   * exists in the wild — echoed instructions, a prior sidecar summary, scraped content. If
+   * either leaked through, chair prose could truncate or spoof the fold block it is embedded
+   * in, which is the exact hazard the per-run nonce closure exists for.
+   */
+  describe('marker stripping covers both branches and both spellings', () => {
+    const foldWithChair = (chairText) => {
+      const run = load('council-run-complete', 'run.json');
+      const tally = load('council-run-complete', 'tally.json');
+      const verdict = load('council-run-complete', 'verdict.json');
+      return buildFoldText({ nonce: NONCE, project: '/p', run, tally, verdict, chairText });
+    };
+    /** Everything after the 10-line head — the embedded chair body. */
+    const bodyOf = (text) => text.split('\n').slice(10).join('\n');
+
+    test('a NONCED marker mid-line is removed in place, keeping the rest of the sentence', () => {
+      const text = foldWithChair('Findings: [SIDECAR_FOLD:deadbeefdeadbeef] and three more.');
+      expect(text).not.toContain('deadbeefdeadbeef');
+      expect(bodyOf(text)).toBe('Findings:  and three more.');
+      // …and the real marker is still the only one in the block, exactly once.
+      expect(text.split(buildFoldMarker(NONCE)).length).toBe(2);
+    });
+
+    test('a BARE [SIDECAR_FOLD] mid-line is removed too — the pre-nonce spelling still counts', () => {
+      const text = foldWithChair('See [SIDECAR_FOLD] for the older wire format.');
+      expect(text).not.toContain('[SIDECAR_FOLD]');
+      expect(bodyOf(text)).toBe('See  for the older wire format.');
+    });
+
+    test('a BARE [SIDECAR_FOLD] alone on its own line takes the line terminator with it', () => {
+      const text = foldWithChair('before\n[SIDECAR_FOLD]\nafter');
+      expect(text).not.toContain('[SIDECAR_FOLD]');
+      expect(bodyOf(text)).toBe('before\nafter'); // no blank line left behind
+    });
+
+    test('an INDENTED marker line is still a marker-only line (leading whitespace tolerated)', () => {
+      const text = foldWithChair('before\n   [SIDECAR_FOLD:deadbeefdeadbeef]   \nafter');
+      expect(text).not.toContain('deadbeefdeadbeef');
+      expect(bodyOf(text)).toBe('before\nafter');
+    });
+
+    test('a chair body that is only a BARE marker falls back to the no-chair label, not a blank body', () => {
+      // The nonced spelling of this is covered above; the bare one is the #BL-7 case and
+      // strips to '' just the same, so the emptiness check must run on the STRIPPED text.
+      const text = foldWithChair('[SIDECAR_FOLD]\n');
+      expect(bodyOf(text)).toBe('(no chair output — tally summary above)');
+    });
+
+    test('several markers of both spellings in one body are ALL removed', () => {
+      const text = foldWithChair('[SIDECAR_FOLD]\nkeep me [SIDECAR_FOLD:aaaabbbbccccdddd] too\n[SIDECAR_FOLD:eeeeffff00001111]\ntail');
+      expect(text).not.toContain('[SIDECAR_FOLD]');
+      expect(text).not.toContain('aaaabbbbccccdddd');
+      expect(text).not.toContain('eeeeffff00001111');
+      expect(bodyOf(text)).toBe('keep me  too\ntail');
+    });
+  });
+
   // Review follow-up #2: overallVerdict is embedded from verdict.json, which
   // this module does not re-validate (the MCP path types it as a bare
   // nullable string — mcp-tools.js:428). Defense-in-depth: newlines are

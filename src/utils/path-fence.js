@@ -7,7 +7,10 @@
  * for truthiness by src/council/run-state.js's readPointer, so nothing
  * upstream of this check guarantees it stays inside the project).
  *
- * It is a LEAF: `fs` + `path` and nothing else, no require cycle possible.
+ * It is a LEAF: `fs` + `path` at load time and nothing else, no require cycle
+ * possible. (SEC-3's debug-mode diagnostic requires src/utils/logger.js lazily,
+ * inside the flag branch — logger.js has zero requires of its own, so even that
+ * cannot introduce a cycle, and nothing is loaded at all with the flag unset.)
  * That was first needed inside the v4.4 workspace layer —
  * src/workspace/artifact-guard.js requires src/workspace/run-scan.js for
  * readPointer, so if run-scan.js also required artifact-guard.js for this
@@ -31,6 +34,39 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * ⚠️ SEC-3: isRealpathContained is a pure string-prefix comparison, and it is only SOUND
+ * if both arguments were already resolved through realpathSync. Nothing enforced that, so
+ * a caller who forgot got a silently WEAKER check rather than an error — a raw
+ * (unresolved) path containing a symlink can prefix-match a directory it does not
+ * physically live under.
+ *
+ * This is a DIAGNOSTIC, opt-in via `AMICUS_DEBUG_FENCE=1`, and it MUST NEVER THROW: the
+ * fence must never become the failure it exists to prevent. Every step is wrapped, and a
+ * non-existent path is a legitimate argument here (callers fence paths before probing
+ * them), so it is not reported. The logger is required lazily so this module keeps its
+ * `fs` + `path` load-time surface (see the header) for the 99.99% of calls that run with
+ * the flag unset.
+ * @param {string} dir already-stringified dirRealPath
+ * @param {string} target already-stringified targetRealPath
+ */
+function assertResolvedArgs(dir, target) {
+  try {
+    const { logger } = require('./logger');
+    for (const [name, p] of [['dirRealPath', dir], ['targetRealPath', target]]) {
+      if (!path.isAbsolute(p)) {
+        logger.warn('path-fence: argument is not absolute', { arg: name, value: p });
+        continue;
+      }
+      try {
+        if (fs.existsSync(p) && fs.realpathSync(p) !== p) {
+          logger.warn('path-fence: argument is not realpath-resolved', { arg: name, value: p });
+        }
+      } catch { /* unreadable / dangling: not this diagnostic's business */ }
+    }
+  } catch { /* a broken logger must never break the fence */ }
+}
+
+/**
  * True when `targetRealPath` is exactly `dirRealPath` or a proper descendant
  * of it. Both arguments MUST already be resolved through realpathSync — this
  * is a pure string-prefix check.
@@ -41,6 +77,8 @@ const path = require('path');
 function isRealpathContained(dirRealPath, targetRealPath) {
   const dir = String(dirRealPath);
   const target = String(targetRealPath);
+  // SEC-3: debug-mode contract check only — never a gate, never a throw (see above).
+  if (process.env.AMICUS_DEBUG_FENCE === '1') { assertResolvedArgs(dir, target); }
   if (target === dir) { return true; }
   // ⚠️ COUNCIL REVIEW R2 (A6): when dirRealPath IS a filesystem root, it already
   // ends in a separator ('/' on POSIX, 'C:\\' on Windows) — blindly appending

@@ -8,6 +8,23 @@ const { scanCouncilRuns, readPointer } = require('../../src/workspace/run-scan')
 
 const FX = path.join(__dirname, '..', 'fixtures');
 
+// TST-10a: every scratch project this file creates is swept in afterAll, so temp-dir litter
+// stops accumulating under os.tmpdir() across runs (same pattern as artifact-guard.test.js).
+// Only dirs actually CREATED are tracked — the deliberately-nonexistent `ws-scan-nowhere-*`
+// / `ws-scan-empty-*` paths below are never made and so have nothing to sweep.
+const SCRATCH_DIRS = [];
+function mkScratchDir(prefix) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  SCRATCH_DIRS.push(dir);
+  return dir;
+}
+
+afterAll(() => {
+  for (const dir of SCRATCH_DIRS) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 /** Seed a temp project whose sessions dir points at the given fixture dirs. Registers
  *  whatever literal runDir string it's given — including nonexistent or
  *  external-to-project ones — which is exactly what the dangling-pointer, malformed-run.json,
@@ -16,7 +33,7 @@ const FX = path.join(__dirname, '..', 'fixtures');
  *  (runDir must resolve inside project — see the describe block below) rejects any runDir
  *  outside project, those use seedProjectNested instead. */
 function seedProject(entries) {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-scan-'));
+  const project = mkScratchDir('ws-scan-');
   const sessions = path.join(project, '.claude', 'amicus_sessions');
   fs.mkdirSync(sessions, { recursive: true });
   for (const [runId, runDir] of Object.entries(entries)) {
@@ -30,7 +47,7 @@ function seedProject(entries) {
  *  src/mcp-council-run.js:109 rejects an outDir outside the project at creation time).
  *  `entries` maps runId -> a fixture SOURCE dir to copy in. */
 function seedProjectNested(entries) {
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-scan-'));
+  const project = mkScratchDir('ws-scan-');
   const sessions = path.join(project, '.claude', 'amicus_sessions');
   fs.mkdirSync(sessions, { recursive: true });
   for (const [runId, source] of Object.entries(entries)) {
