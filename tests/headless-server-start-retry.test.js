@@ -11,9 +11,10 @@
  * `database is locked`. "Two separate amicus processes contending" is half the
  * retry's stated justification — this is one of the two processes.
  *
- * Same narrow policy as the other site: lock-class messages only, bounded at 3
- * attempts, final failure rethrown UNCHANGED into headless's existing degrade
- * path (never fails closed differently than before).
+ * Same narrow policy as the other site: lock-class messages only, bounded at 5
+ * attempts (widened from 3 by v4.4.1 Step 10.5), final failure rethrown
+ * UNCHANGED into headless's existing degrade path (never fails closed
+ * differently than before).
  */
 
 const mockCreateSession = jest.fn();
@@ -90,10 +91,10 @@ describe('runHeadless server start: lock-class retry (F5)', () => {
     expect(mockStartServer).toHaveBeenCalledTimes(2);
   });
 
-  it('is bounded at 3 attempts, then degrades exactly as before', async () => {
+  it('is bounded at 5 attempts, then degrades exactly as before', async () => {
     mockStartServer.mockRejectedValue(new Error(LOCKED));
     const result = await run();
-    expect(mockStartServer).toHaveBeenCalledTimes(3);
+    expect(mockStartServer).toHaveBeenCalledTimes(5);
     // Never fails closed differently: same shaped result headless always gave.
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(/Failed to start server: .*database is locked/s);

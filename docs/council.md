@@ -131,6 +131,11 @@ Key semantics:
   aborted for cost. The refusal is printed as a `Notice:` naming the wave and its models,
   recorded on `run.json` as `budgetRefusals[]`, and degrades the exit code to `2`. If it takes
   the bench below two reviews, the usual `COUNCIL_QUORUM` failure (exit 1) applies.
+- A run starts **one** OpenCode server and threads it through every wave (two concurrent
+  starts race on OpenCode's SQLite). If that server cannot start, the run **still proceeds**
+  on one server per wave — the configuration that races — so the fallback is printed as a
+  `Notice:` and recorded on `run.json` as `sharedServerUnavailable` `{error, at}`. It does
+  not change the exit code; treat its presence as "expect degraded results".
 - Chair failure recovery: one retry of the same chair → promote the highest peers-only
   street-cred model (from `amicus council stats`) that is not a bench seat → give up and write
   the verdict with `overallVerdict: null`.

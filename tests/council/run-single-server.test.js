@@ -316,10 +316,23 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
 
   // Standing ruling: never fail closed on availability. A shared server that
   // cannot start is a NOTICE — the run continues with one server per wave.
-  test('a shared-server start failure degrades to per-wave servers, it does not abort the run', async () => {
-    startFn = jest.fn(async () => { throw new Error('database is locked'); });
-    const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    try {
+  //
+  // ⚠️ …but that fallback IS the bug this task removed, so it must also be LOUD
+  // and DURABLE (Step 10.5). Run v441plan02 degraded exactly here, lost 4 of 5
+  // seats to `database is locked`, and left nothing on run.json to show for it.
+  describe('a shared-server start failure degrades — loudly, durably, never fatally', () => {
+    let stderr;
+    const failToStart = () => { startFn = jest.fn(async () => { throw new Error('database is locked'); }); };
+    const runDoc = () => JSON.parse(
+      fs.readFileSync(path.join(baseOptions(tmp).runDir, 'run.json'), 'utf-8'));
+
+    beforeEach(() => {
+      failToStart();
+      stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    });
+    afterEach(() => { stderr.mockRestore(); });
+
+    test('it degrades to per-wave servers rather than aborting the run', async () => {
       const { exitCode } = await run();
       expect(exitCode).toBe(0);
       for (const [o] of mockRunFanout.mock.calls) {
@@ -327,7 +340,60 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
         expect(o.serverClient).toBeUndefined();
       }
       expect(stderr.mock.calls.map(c => String(c[0])).join('')).toMatch(/shared OpenCode server/i);
-    } finally { stderr.mockRestore(); }
+    });
+
+    // NEVER FAIL CLOSED, pinned on its own: degrading must not abort the run.
+    test('the run still completes when the shared server is unavailable', async () => {
+      const { exitCode } = await run();
+      expect(exitCode).not.toBe(1);
+    });
+
+    // (a): the degrade lands on the run's OWN record, next to budgetRefusals[].
+    // A stderr Notice scrolls past; a `| tail` discarded the only one there was.
+    test('a failed acquisition records sharedServerUnavailable on run.json', async () => {
+      const { run: doc } = await run();
+      expect(doc.sharedServerUnavailable).toBeTruthy();
+      expect(doc.sharedServerUnavailable.error).toMatch(/database is locked/);
+      expect(typeof doc.sharedServerUnavailable.at).toBe('string');
+      // …and it survives to the ON-DISK terminal record, not just the return value.
+      const onDisk = runDoc();
+      expect(onDisk.sharedServerUnavailable.error).toMatch(/database is locked/);
+      expect(onDisk.status).toBe('complete');
+    });
+
+    test('the degraded run.json still validates against the published schema', () => {
+      const Ajv2020 = require('ajv/dist/2020');
+      const schema = JSON.parse(fs.readFileSync(
+        path.join(__dirname, '..', '..', 'schemas', 'council-run.schema.json'), 'utf-8'));
+      const validate = new Ajv2020({ strict: false }).compile(schema);
+      return run().then(({ run: doc }) => {
+        if (!validate(doc)) { throw new Error('schema errors: ' + JSON.stringify(validate.errors, null, 2)); }
+      });
+    });
+
+    // A clean acquisition must leave NO trace of a degrade — otherwise the field
+    // is noise and a reader learns nothing from its presence.
+    test('a healthy run carries no sharedServerUnavailable at all', async () => {
+      startFn = jest.fn(async () => pair);
+      const { run: doc } = await run();
+      expect(doc.sharedServerUnavailable).toBeUndefined();
+    });
+
+    // Bookkeeping must never sink the run it reports on: run.js awaits the
+    // acquisition OUTSIDE its try, so a throw here would escape runCouncil as a
+    // rejection, past its "never rejects for run errors" contract.
+    test('an unwritable run.json does not turn the degrade into a rejection', async () => {
+      const runState = require('../../src/council/run-state');
+      const real = runState.checkpoint;
+      const spy = jest.spyOn(runState, 'checkpoint').mockImplementation((dir, patch) => {
+        if (patch && patch.sharedServerUnavailable) { throw new Error('run.json is unwritable'); }
+        return real(dir, patch);
+      });
+      try {
+        const { exitCode } = await run(); // must RESOLVE, not reject
+        expect(exitCode).toBe(0);
+      } finally { spy.mockRestore(); }
+    });
   });
 
   // ---- the `_scratch/` anonymisation boundary, verified rather than assumed ----

@@ -264,8 +264,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       // it — a plain `amicus start` that lost the race still died on the first
       // `database is locked`. "Two separate amicus processes contending" is half
       // that retry's stated justification, and this is one of the two processes.
-      // Same bounded, narrow policy: 3 attempts, lock-class messages only, final
-      // failure rethrown unchanged into the degrade path below.
+      // Same bounded, narrow policy: 5 attempts (Step 10.5 widened it from 3),
+      // lock-class messages only, final failure rethrown unchanged into the
+      // degrade path below.
       const { retryOnLockRace } = require('./utils/server-setup');
       const result = await retryOnLockRace(() => startServer(serverOptions),
         { retryDelayMs: options.retryDelayMs });

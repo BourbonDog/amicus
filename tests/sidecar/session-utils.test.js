@@ -703,10 +703,12 @@ describe('startOpenCodeServer lock-class start retry', () => {
     expect(mockStartServer).toHaveBeenCalledTimes(2);
   });
 
-  it('gives up after 3 attempts and rethrows the lock error unchanged', async () => {
+  // 5, not 3: Step 10.5 widened the window to ~3.75s after run v441plan02
+  // exhausted the old ~750ms one and the council degraded to per-wave servers.
+  it('gives up after 5 attempts and rethrows the lock error unchanged', async () => {
     mockStartServer.mockRejectedValue(new Error('database is locked'));
     await expect(startOpenCodeServer({}, { retryDelayMs: 1 })).rejects.toThrow(/database is locked/);
-    expect(mockStartServer).toHaveBeenCalledTimes(3); // bounded: never unbounded
+    expect(mockStartServer).toHaveBeenCalledTimes(5); // bounded: never unbounded
   });
 
   it('does NOT retry a missing binary', async () => {

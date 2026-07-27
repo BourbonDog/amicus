@@ -138,7 +138,9 @@ async function resolveRunServerModels(o, deps = {}) {
  * Never fails closed (standing project ruling): a start failure is a NOTICE, not
  * an abort. Returning null simply means no server is injected, so every wave
  * falls back to starting its own — exactly the pre-v4.4.1 behaviour, with the
- * lock-class retry in session-utils still in front of it.
+ * lock-class retry in session-utils still in front of it. That fallback is also
+ * the bug this task removed, so it is recorded on run.json as
+ * `sharedServerUnavailable` (Step 10.5); see the catch block.
  *
  * @param {object} o the council run's resolved options ({models, critic, chair, …})
  * @param {{startOpenCodeServerFn?: Function, resolveRouteFn?: Function,
@@ -163,12 +165,33 @@ async function acquireRunServer(o, deps = {}) {
       { runId: o.runId, url: server.url, models: models.length });
     return { serverClient: client, server };
   } catch (err) {
+    // ⚠️ v4.4.1 Step 10.5: a failed acquisition drops the run back to ONE SERVER
+    // PER WAVE — precisely the racy behaviour this task removed. Degrading is
+    // correct (never fail closed); degrading QUIETLY is not. Run v441plan02 did
+    // exactly this and lost 4 of 5 seats to `database is locked`, and the only
+    // signal was a single stderr `Notice:` that a `| tail` discarded. run.json
+    // recorded nothing, so the degrade was diagnosable only by inference — a
+    // `goPid` on the critic wave, which fanout writes only for a wave that owns
+    // its own server. That inference is not a diagnostic. So the degrade is now
+    // DURABLE: it lands on the run's own record, next to `budgetRefusals[]`,
+    // for the same reason — a silent partial is the failure mode this whole
+    // release exists to remove.
+    const degrade = { error: err.message, at: new Date().toISOString() };
+    // …and the recording itself must never sink the run it reports on. run.js
+    // awaits acquireRunServer OUTSIDE its try, so a throw here would escape
+    // runCouncil as a rejection, past its "never rejects for run errors"
+    // contract, with no result for the caller (the run-finalize precedent).
+    try { require('./run-state').checkpoint(o.runDir, { sharedServerUnavailable: degrade }); }
+    catch (writeErr) {
+      logger.warn('Could not record sharedServerUnavailable on run.json',
+        { runId: o.runId, error: writeErr.message });
+    }
     logger.warn('Shared OpenCode server unavailable — falling back to one server per wave', {
       runId: o.runId, error: err.message,
     });
     process.stderr.write(
-      `Notice: could not start a shared OpenCode server (${err.message}); ` +
-      'each wave will start its own.\n');
+      `Notice: could not start a shared OpenCode server (${err.message}); each wave will start `
+      + 'its own, which is the configuration that races. Expect degraded results.\n');
     return null;
   }
 }

@@ -254,7 +254,8 @@ async function startOpenCodeServer(mcpConfig, options = {}) {
   if (options.systemPrompt) { serverOptions.systemPrompt = options.systemPrompt; }
   if (options.agentName) { serverOptions.agentName = options.agentName; }
 
-  // v4.4.1 Task 0.5: a LOCK-CLASS start failure is retried (3 attempts, 250/500ms).
+  // v4.4.1 Task 0.5: a LOCK-CLASS start failure is retried (5 attempts,
+  // 250/500/1000/2000ms — widened from 3/750ms by Step 10.5, see server-setup).
   // The per-run shared server removes the races a single amicus process creates;
   // this covers the ones it cannot — two amicus processes, or a CLI run beside a
   // live MCP server, sharing one OpenCode SQLite database. Nothing else retries:

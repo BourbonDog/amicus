@@ -25,6 +25,9 @@ const {
   isPortInUse,
   killPortProcess,
   ensurePortAvailable,
+  isLockClassStartFailure,
+  retryOnLockRace,
+  LOCK_RETRY_DELAYS_MS,
   DEFAULT_PORT
 } = require('../src/utils/server-setup');
 
@@ -188,5 +191,59 @@ describe('server-setup', () => {
       killSpy.mockImplementation(() => { throw new Error('EPERM'); });
       expect(ensurePortAvailable(4096)).toBe(false);
     });
+  });
+});
+
+/**
+ * v4.4.1 Step 10.5 — the lock-race retry window, WIDENED.
+ *
+ * The first cut was 3 attempts at 250/500ms (~750ms). Run v441plan02 exhausted
+ * it: the shared-server acquisition failed, the council silently dropped back to
+ * one server per wave, and lost four of five seats to `database is locked`. The
+ * window is now 5 attempts with exponential backoff to ~3.75s. These pin the
+ * shape itself, so a future edit cannot quietly narrow it back.
+ */
+describe('lock-race retry window (Step 10.5)', () => {
+  it('is 5 attempts — 4 backoffs — not 3', () => {
+    expect(LOCK_RETRY_DELAYS_MS).toHaveLength(4);
+  });
+
+  it('backs off exponentially and totals ~3.75s, comfortably inside ~4s', () => {
+    expect(LOCK_RETRY_DELAYS_MS).toEqual([250, 500, 1000, 2000]);
+    for (let i = 1; i < LOCK_RETRY_DELAYS_MS.length; i += 1) {
+      expect(LOCK_RETRY_DELAYS_MS[i]).toBe(LOCK_RETRY_DELAYS_MS[i - 1] * 2);
+    }
+    const total = LOCK_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0);
+    expect(total).toBe(3750);
+    expect(total).toBeLessThanOrEqual(4000);
+    // …and >4x the ~750ms window that was measured as too thin.
+    expect(total).toBeGreaterThan(3000);
+  });
+
+  it('retries a lock-class failure exactly 5 times, then rethrows unchanged', async () => {
+    const attempt = jest.fn(async () => { throw new Error('database is locked'); });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 }))
+      .rejects.toThrow('database is locked');
+    expect(attempt).toHaveBeenCalledTimes(5);
+  });
+
+  // Widening the window must NOT widen what it applies to: a deterministic
+  // failure still costs exactly one attempt and zero added latency.
+  it('still never retries a deterministic failure', async () => {
+    const attempt = jest.fn(async () => { throw new Error('ENOENT: opencode not found'); });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 })).rejects.toThrow(/ENOENT/);
+    expect(attempt).toHaveBeenCalledTimes(1);
+    expect(isLockClassStartFailure(new Error('ENOENT: opencode not found'))).toBe(false);
+  });
+
+  it('a start that recovers on the 5th attempt still succeeds', async () => {
+    let n = 0;
+    const attempt = jest.fn(async () => {
+      n += 1;
+      if (n < 5) { throw new Error('SQLITE_BUSY: database is busy'); }
+      return 'started';
+    });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 })).resolves.toBe('started');
+    expect(attempt).toHaveBeenCalledTimes(5);
   });
 });

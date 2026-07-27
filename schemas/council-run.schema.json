@@ -48,6 +48,15 @@
         }
       }
     },
+    "sharedServerUnavailable": {
+      "description": "The run could not start its single shared OpenCode server and fell back to one server per wave (v4.4.1 Task 0.5). Present only when the acquisition failed. The run CONTINUES — this is never fatal — but the per-wave configuration is the one that races on OpenCode's SQLite, so results may be degraded.",
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": { "type": "string" },
+        "at": { "type": "string" }
+      }
+    },
     "debate": {
       "type": "object",
       "properties": {

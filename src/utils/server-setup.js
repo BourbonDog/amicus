@@ -89,8 +89,20 @@ function ensurePortAvailable(port = DEFAULT_PORT) {
  */
 const LOCK_CLASS_START_FAILURE = /database is locked|database table is locked|SQLITE_BUSY/i;
 
-/** Backoff between start attempts; 3 attempts total, ≤750ms of added latency. */
-const LOCK_RETRY_DELAYS_MS = [250, 500];
+/**
+ * Backoff between start attempts; 5 attempts total, ≤3.75s of added latency.
+ *
+ * ⚠️ WIDENED from 3 attempts at 250/500ms (≤750ms) by v4.4.1 Step 10.5. 750ms is
+ * thin against a multi-megabyte WAL and any concurrent process touching the same
+ * OpenCode database: run v441plan02 exhausted it, the council degraded to one
+ * server per wave, and then lost four of five seats to the very race the retry
+ * exists to survive. The wait is bounded and paid at most once per acquisition;
+ * the cost of not waiting is a dead bench.
+ *
+ * Still lock-class ONLY — a deterministic failure (missing binary, bad key, busy
+ * port, config error) never sleeps a single millisecond here.
+ */
+const LOCK_RETRY_DELAYS_MS = [250, 500, 1000, 2000];
 
 /**
  * @param {Error|null} error
