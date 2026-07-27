@@ -347,6 +347,11 @@ turned into a large untested rewrite inside a patch release. It is written down 
 deferral is a decision with a number attached rather than a silent config line.
 
 - [ ] **`no-var` is OFF for `electron/workspace-ui/**` — 159 declarations to modernise** — [M]
+  **OWNER RULING (Christian, 2026-07-27): do the rewrite, as its OWN task immediately AFTER
+  Task 14 (the v4.4.1 release cut) — not deferred to v4.5, and not folded into the patch.**
+  So 4.4.1 ships with the exemption in place; the rewrite is a separate reviewed change on a
+  green tree, where a 159-site diff can be judged on its own merits instead of competing with
+  a release.
   The renderer is served raw to a sandboxed page under a strict CSP with **no build step and no
   transpiler**, and is written in ES5 IIFE style throughout. Per file:
   `workspace-matrix.js` 35 · `workspace-panels.js` 30 · `md-lite.js` 26 · `workspace-render.js` 26 ·
