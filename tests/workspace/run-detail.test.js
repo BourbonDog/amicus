@@ -181,8 +181,10 @@ describe('getRunDetail', () => {
   test('TERMINAL_STATUSES mirrors the shipped composed-doc terminal set', () => {
     // ⚠️ DE-ROT (F26): widened from 5 names to the 7 in src/observe/live-doc.js:18
     // (added 'crashed' and 'idle-timeout'), same order, so the Task 14 drift pin passes.
+    // ⚠️ v4.4.1 A1: widened again to 8 — 'timed-out' alongside 'timeout'. The two spellings come
+    // from two different producers and both are live; see the note at src/observe/live-doc.js:18.
     expect(TERMINAL_STATUSES).toEqual(
-      ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'idle-timeout']
+      ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'timed-out', 'idle-timeout']
     );
   });
 });

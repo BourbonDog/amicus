@@ -15,7 +15,24 @@
 
 const { resolveUsage, sumWaveUsage } = require('../utils/pricing');
 
-const TERMINAL = new Set(['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'idle-timeout']);
+// ⚠️ v4.4.1 A1: 'timeout' AND 'timed-out' — the codebase genuinely has two spellings for one
+// state, written by two different producers, and this set has to cover both.
+//   'timeout'   — src/utils/result-schema.js:23 statusFromResult, i.e. the LEG/wave-document and
+//                 `--json` run-document vocabulary. Correct, still emitted, stays.
+//   'timed-out' — src/sidecar/session-finalize.js:21 resolveTerminalState, i.e. what actually
+//                 lands in a session's metadata.json `status` and (since LC-3) progress.json's
+//                 terminal stage. It was MISSING here, and this set is the one every observability
+//                 reader consults, so three real consequences followed: `amicus watch <taskId>` on
+//                 a timed-out single session never exited (watch-render.js:138 polls until
+//                 TERMINAL.has(doc.status), and amicus_status stamps metadata.status straight onto
+//                 the doc — mcp-server.js:687); a timed-out leg skipped the "prefer metadata.usage
+//                 over the stale progress.json snapshot" branch in council-legs.js:162 and reported
+//                 an under-counted cost; and markLive kept stamping view:'live' on a finished
+//                 single-session doc.
+// NOTE this is deliberately NOT the same list as src/utils/result-schema.js:13 TERMINAL_STATUSES
+// (the leg set, no 'partial'). Two mirrors of THIS list exist — src/workspace/run-detail.js:26 and
+// electron/workspace-ui/live-model.js:14 — byte-identical, held by drift pins. Edit all three.
+const TERMINAL = new Set(['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'timed-out', 'idle-timeout']);
 
 /**
  * Attach read-time-resolved usage to a leg from its raw progress usage.

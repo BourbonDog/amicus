@@ -306,4 +306,51 @@ describe('runWatchLoop', () => {
     expect(rollupLines[0]).toContain('running');
     expect(rollupLines[1]).toContain('complete');
   });
+
+  // ⚠️ v4.4.1 A1 — the reachable consequence of the 'timed-out' / 'timeout' vocabulary split.
+  //
+  // The codebase genuinely has two spellings for one state, written by two different producers:
+  // 'timeout' from src/utils/result-schema.js:23 statusFromResult (the leg/wave-document and
+  // --json vocabulary), and 'timed-out' from src/sidecar/session-finalize.js:21
+  // resolveTerminalState — which is what actually lands in a session's metadata.json. live-doc.js's
+  // TERMINAL set listed only the first, and amicus_status stamps metadata.status straight onto the
+  // status doc (src/mcp-server.js:687), so `amicus watch <taskId>` on a timed-out single session
+  // polled forever: it never matched terminal, never printed a final state, never exited.
+  //
+  // statusFn throws on the 6th call so the pre-fix behaviour fails LOUDLY instead of hanging the
+  // suite — which is what it would otherwise do.
+  test("A1: `amicus watch` exits on a session whose status is 'timed-out' (it used to poll forever)", async () => {
+    const doc = { taskId: 't1', type: 'run', status: 'timed-out', elapsed: '10m 0s' };
+    let call = 0;
+    const statusFn = jest.fn(async () => {
+      call += 1;
+      if (call > 5) { throw new Error('runWatchLoop never exited on a timed-out session'); }
+      return { content: [{ type: 'text', text: JSON.stringify(doc) }] };
+    });
+    const { result: code } = await captureStdout(() => runWatchLoop(
+      { kind: 'session', id: 't1' }, {}, os.tmpdir(),
+      { statusFn, sleep: async () => {}, isTTY: false }
+    ));
+    expect(statusFn).toHaveBeenCalledTimes(1); // recognised terminal on the very first tick
+    expect(code).toBe(mapExitCode(doc));       // non-zero: honestly not a completed run
+    expect(code).not.toBe(0);
+  });
+
+  test("A1 did not REPLACE the other spelling: a leg-vocabulary 'timeout' doc still exits too", async () => {
+    // statusFromResult really does emit 'timeout' for wave legs and --json run docs, so the
+    // original entry was correct and had to stay. Both spellings terminate.
+    const doc = { taskId: 'w9', type: 'wave', status: 'timeout', legsComplete: 0, legsTotal: 1, elapsed: '9m', legs: [] };
+    let call = 0;
+    const statusFn = jest.fn(async () => {
+      call += 1;
+      if (call > 5) { throw new Error('runWatchLoop never exited on a timeout wave'); }
+      return { content: [{ type: 'text', text: JSON.stringify(doc) }] };
+    });
+    const { result: code } = await captureStdout(() => runWatchLoop(
+      { kind: 'wave', id: 'w9' }, {}, os.tmpdir(),
+      { statusFn, sleep: async () => {}, isTTY: false }
+    ));
+    expect(statusFn).toHaveBeenCalledTimes(1);
+    expect(code).not.toBe(0);
+  });
 });

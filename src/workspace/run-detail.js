@@ -23,7 +23,13 @@ const { isRealpathContained } = require('../utils/path-fence');
  * ("zero v4.3") and live-doc.js is v4.3. Not to be confused with the shipped
  * src/utils/result-schema.js:13 TERMINAL_STATUSES, which is the LEG set (no 'partial').
  */
-const TERMINAL_STATUSES = ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'idle-timeout'];
+// ⚠️ v4.4.1 A1: 'timed-out' added alongside 'timeout' — see the long note at
+// src/observe/live-doc.js:18 for why both spellings are real and which producer writes each.
+// Council run.json only ever carries aborted|complete|error|partial (run-finalize.js:38
+// statusForExit), so the new name is inert for THIS module's own reads; it is carried anyway
+// because the drift pin demands byte-identity with the source list, and that pin is the only
+// thing keeping the three copies honest.
+const TERMINAL_STATUSES = ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'timed-out', 'idle-timeout'];
 
 /** Friendly labels for known v4.0 stage names; unknown names pass through raw
  *  — the graceful-when-present rule (spec §5.2). */
