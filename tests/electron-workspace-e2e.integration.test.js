@@ -136,12 +136,27 @@ function launchWorkspace(proj, runId, display) {
   return { child, getStdout: () => stdout };
 }
 
+// ⚠️ v4.4.1 ENV-6: the SIGKILL escalation timer MUST be cleared on the normal `close` path.
+// It was not, so every one of the 9 tests left a live 4s timer behind after its child had
+// already exited cleanly — and a timer, unlike the child, holds the event loop. Under the old
+// parallel runner jest force-exited the worker and absorbed it ("A worker process has failed to
+// exit gracefully"); under Task 12's `--runInBand` (REL-1) jest waits on the main process
+// instead, so the same timers became a hang the live rail would have paid for at
+// integration-live.yml's `timeout-minutes: 45`.
+//
+// The escalation itself is load-bearing and stays: an Electron child that ignores SIGTERM must
+// still be reaped. What changes is that winning the race now *cancels the loser* rather than
+// leaving it armed. `unref()` was considered and rejected — it would only hide the timer from
+// the loop while still leaving teardown half-done, and this rail exists to catch exactly that.
 function kill(child) {
   return new Promise((resolve) => {
     if (!child || child.exitCode !== null) { resolve(); return; }
-    child.on('close', resolve);
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* gone */ }
+      resolve();
+    }, 4000);
+    child.on('close', () => { clearTimeout(timer); resolve(); });
     child.kill('SIGTERM');
-    setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* gone */ } resolve(); }, 4000);
   });
 }
 
