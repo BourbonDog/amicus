@@ -66,6 +66,11 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 
 ## v4.5 — "Save, share, and compose your councils"
 **Benefit:** complex councils become one-command, repeatable, and chainable.
+- **★ Auto-open the Council Workspace on a council run (Christian, 2026-07-26)** — when a council is
+  invoked from Claude Desktop and Electron is already present, the Workspace window opens by
+  default instead of requiring a separate `amicus watch <runId> --ui`. Today the GUI is opt-in and
+  discoverable only from `watch --help`, so the flagship v4.4 surface goes unseen on the very
+  client best able to show it. *(S–M; the pieces exist — see the design notes below.)*
 - **Council policy packs + full run-profiles** (bench + lenses + options + briefing template, invoke by name) — B7/F5 *(M)*
 - **Composable/chained waves** (`--input-from <waveId>` / pipe) for generate→critique→refine — F6 *(M)*
 - **Briefing templates + library** (F9), **session/wave tagging + `--search` + grouped history** (F8), **GUI power ergonomics** (F10) *(S–M)*
@@ -82,6 +87,46 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 > These cluster because they share one prerequisite you don't have yet: an org buyer + the org to support. Revisit as a funded track.
 
 ---
+
+### Design notes — auto-open the Council Workspace
+
+Recorded 2026-07-26 from a read of the shipped code, so the v4.5 implementer starts from facts
+rather than re-deriving them.
+
+**The pieces already exist.**
+
+| Need | Where it lives today |
+|---|---|
+| Launch the window | `src/sidecar/workspace-window.js` `launchWorkspaceWindow({project, runId})` |
+| Detect the client | `src/utils/client-detect.js` `detectClient(mcpServer)` → `code-local` \| `code-web` \| `cowork` |
+| Is Electron usable | `src/sidecar/electron-install.js` `isElectronUsable` / `resolveElectronBinary` |
+| Current entry point | `amicus watch <runId> --ui` (`src/cli-handlers-watch.js:87`) |
+
+**"Claude Desktop" maps to `code-local`.** ⚠️ But `detectClient` reads the MCP client's
+`getClientVersion().name`, so it **only works on the MCP path** — `amicus_council_run`, which is
+exactly the Claude Desktop case. A `council run` typed into a terminal has no MCP server, so
+detection there falls through to the env override or the `cowork` status-quo default. Do not build
+this on the CLI path expecting detection to work; either gate it on the MCP entry point or thread
+an explicit client tag through. (Related: the Phase 12 backlog item about persisting the client tag
+into shared-server `metadata.json` is the same seam.)
+
+**Four guards, all load-bearing:**
+
+1. **Never under `--json`.** `--ui` already rejects `--json` (interactive-only); an implicit default
+   must not create the combination the explicit flag refuses.
+2. **Never in CI or headless.** `council run` is the engine behind the Council Review GitHub Action
+   and every headless fanout. A popped window on a runner is a hang, not a feature. Gate on the same
+   display check the e2e suite uses (`HAS_DISPLAY`).
+3. **Never trigger an install.** Requirement is *"where Electron is installed"* — check
+   `isElectronUsable`, and if it is absent, do nothing silently. An implicit ~100 MB Electron
+   download on someone's first council run is a hostile surprise.
+4. **Must be opt-out.** A `--no-ui` (or config key) that suppresses it, because this changes default
+   behaviour for an existing command.
+
+**Why not v4.4.1.** It is a new default behaviour — a feature — and 4.4.1 is a patch on a shipped
+release whose scope was explicitly locked. The patch already carries two behaviour changes (LC-2,
+LC-10) that stretch the definition; a third that pops a GUI window would not be defensible as a
+patch. Sits naturally beside v4.5's existing **GUI power ergonomics (F10)** line.
 
 ## Backlog (tracked, not scheduled)
 - **`--dry-run` / cost & route preview** across start/fanout/council — E2/C7/F4 *(M)* — "know the cost/route before you commit"; useful, not essential to the near-term line.
