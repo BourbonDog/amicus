@@ -346,6 +346,26 @@ v4.4.1 put `electron/` under the lint gate (`npm run lint` is now `eslint src/ e
 turned into a large untested rewrite inside a patch release. It is written down here so the
 deferral is a decision with a number attached rather than a silent config line.
 
+- [ ] **Integration-suite handle leaks beyond ENV-6 — a NAMED leak, not vague flakiness** — [S–M]
+  **Filed 2026-07-27 by owner ruling**, after v4.4.1's Task 12.5 fixed ENV-6 and found the live
+  rail still warns from *different* suites. Start from this evidence rather than re-deriving it:
+  - `tests/mcp-protocol.integration.test.js:68` — `request()` arms a 10 s response timer and never
+    `clearTimeout`s it on the resolve path (`:47`). **11 leaked `Timeout`s in one run.** The
+    identical helper is at `mcp-headless-e2e:73`. `electron-toolbar-e2e` also warns.
+  - ⚠️ **Fixing that obvious timer in all three suites produced NO measurable improvement**, and the
+    change was deliberately reverted rather than shipped unverifiable. So the response timer is real
+    but is **not the whole story** — expect a second holder.
+  - ⚠️ **`--detectOpenHandles` CANNOT diagnose this class**, verified against jest v29.7.0:
+    `jest-cli/build/run.js:219` gates the "did not exit" warning behind
+    `!globalConfig.detectOpenHandles`, so the flag *suppresses the very message it is meant to
+    explain*; and `collectHandles`'s `stackIsFromUser()` only recognises synchronous circus frames,
+    so a timer armed after an `await` is invisible to it. **This is almost certainly why ENV-6 sat
+    in triage for a full release as unexplained "flakiness."** Use a timer-stack probe instead.
+  - **Impact is bounded, contrary to how ENV-6 was framed**: jest's warning timer is `.unref()`d and
+    jest issues no force-exit on that path, so a leaked timer costs only its own duration. The live
+    rail finished in 166 s, exit 0. A 45-minute hang needs a handle that *never* clears.
+  - **Verifiable for $0** — `mcp-protocol` is keyless.
+
 - [ ] **`no-var` is OFF for `electron/workspace-ui/**` — 159 declarations to modernise** — [M]
   **OWNER RULING (Christian, 2026-07-27): do the rewrite, as its OWN task immediately AFTER
   Task 14 (the v4.4.1 release cut) — not deferred to v4.5, and not folded into the patch.**
