@@ -435,6 +435,28 @@ carried by it, so they are written out in full.
   cannot refute what it has not seen either. **When re-briefing a council on the workspace verbs,
   include `workspace-app.js`.**
 
+### Closed at the v4.4.1 release cut (2026-07-27)
+
+- [x] **ENV-7 · Unexplained test-count drift** — **CLOSED. Did not recur; the one deviation seen
+  this release was fully explained.**
+  ENV-7 was filed during the v4.4 cycle after Task 19 measured a **+1** test count that no commit
+  in the range accounted for. It was carried into v4.4.1 as a standing warning, not a task: the
+  failure mode it exists to catch is *someone bisecting a phantom*, so the standing instruction was
+  to bisect a genuinely unexplained drift and to close the item if none appeared.
+  - The only deviation observed during v4.4.1 was the **+2** at Task 0, and it was **not** drift:
+    it came from comparing against the v4.4.0 release-prep figure (5,317 / 5,324, measured at
+    `eaf441b`), while this branch's merge-base `ce8216a` had since added a two-case `test.each`.
+    Against the correct merge-base baseline the delta was **0**. A stale baseline, not a ghost.
+  - At the release cut the full suite measured **446 suites / 5,711 passed / 5,718 total**, which
+    matches the last measured state of the branch exactly. **Every test added on this branch is
+    attributable to the commit that added it.** No unexplained delta at any point in the release.
+  - ⚠️ **The durable lesson is the one worth keeping, and it is not about a flaky test.** Both
+    incidents — the original +1 and this release's +2 — are consistent with *a baseline compared
+    against the wrong commit*, which is the cheaper explanation and the one that fits the evidence.
+    **Always re-measure the baseline at the branch's own merge-base before calling a delta drift.**
+    A figure carried forward from a previous release's report is stale by construction the moment
+    anything lands after it.
+
 ### v4.4.1 lint-gate deferrals (ENV-5, 2026-07-27)
 
 v4.4.1 put `electron/` under the lint gate (`npm run lint` is now `eslint src/ electron/`, and

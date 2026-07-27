@@ -167,9 +167,15 @@ describe('buildFoldText', () => {
    * v4.4.1 DOC-5 — the Cost line said the same thing twice. `formatCost`
    * (src/utils/pricing.js) already encodes inexactness as a leading `~` for both
    * 'estimated' and 'mixed', and returns a bare `?` for 'unknown'; appending the
-   * source name on top produced `~$0.3720 (mixed)`. `reported` stays spelled out
-   * because a plain `$0.4321` is also what an unrecognised source renders as, so
-   * the glyph alone cannot carry it (pinned by the full-fold test above).
+   * source name on top produced `~$0.0100 (estimated)` and `? (unknown)`. Those
+   * two words are gone.
+   *
+   * Two sources keep their word, because the glyph vocabulary cannot express
+   * them: `reported`, because a plain `$0.4321` is also what an unrecognised
+   * source renders as (pinned by the full-fold test above); and `mixed`,
+   * because `~` says *inexact* without saying *which kind* — a bare `~$0.3720`
+   * cannot be told apart from 'estimated', yet 'mixed' asserts that part of the
+   * number is genuinely measured. Release-cut ruling, 2026-07-27.
    */
   describe('the Cost line labels inexactness once, not twice (DOC-5)', () => {
     const foldWithCost = (cost) => {
@@ -179,16 +185,21 @@ describe('buildFoldText', () => {
     };
     const costLine = (text) => text.split('\n').find((l) => l.startsWith('Cost: '));
 
-    test("a 'mixed' total is `~$…` with no trailing (mixed)", () => {
+    test("a 'mixed' total keeps its label — `~` cannot say WHICH kind of inexact", () => {
       const text = foldWithCost({ amount: 0.37202345, currency: 'USD', source: 'mixed' });
-      expect(costLine(text)).toBe('Cost: ~$0.3720');
-      expect(text).not.toContain('(mixed)');
+      expect(costLine(text)).toBe('Cost: ~$0.3720 (mixed)');
     });
 
     test("an 'estimated' total is `~$…` with no trailing (estimated)", () => {
       const text = foldWithCost({ amount: 0.01, currency: 'USD', source: 'estimated' });
       expect(costLine(text)).toBe('Cost: ~$0.0100');
       expect(text).not.toContain('(estimated)');
+    });
+
+    test("'mixed' and 'estimated' do not collide — the whole point of keeping one word", () => {
+      const mixed = costLine(foldWithCost({ amount: 0.372, currency: 'USD', source: 'mixed' }));
+      const estimated = costLine(foldWithCost({ amount: 0.372, currency: 'USD', source: 'estimated' }));
+      expect(mixed).not.toBe(estimated);
     });
 
     test("an 'unknown' total is a bare `?` with no trailing (unknown)", () => {

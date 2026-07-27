@@ -7,12 +7,20 @@ major jump, gated on funding/cofounder. The observability arc is split so the **
 first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
 preview dropped to the backlog.
 
-Amicus is at **v4.4.0** (tagged 2026-07-26), with the **v4.4.1** fast-follow patch in flight. Each
+Amicus is at **v4.4.1** (2026-07-27), the fast-follow patch on v4.4.0 (tagged 2026-07-26). Each
 4.x rev below leads with the benefit, not the plumbing.
 
-**Status:** v4.0 through **v4.4** have **shipped** — everything down to the v4.5 heading is a record
-of what landed, not a plan. **v4.5 (policy packs + composition) is the next rev.** v5.0 remains
-forward-looking.
+**Status:** v4.0 through **v4.4.1** have **shipped** — everything down to the v4.5 heading is a
+record of what landed, not a plan. **v4.5 (policy packs + composition) is the next rev.** v5.0
+remains forward-looking.
+
+> 📁 **Reading this from an npm install?** Some references below point at working documents that
+> live in the git repository and are deliberately **not** in the published package — anything under
+> `.superpowers/` (the SDD working area, gitignored) and the root `BACKLOG.md`. The npm tarball
+> ships `docs/*.md` only. Read those files at
+> [github.com/BourbonDog/amicus](https://github.com/BourbonDog/amicus); the `.superpowers/` ones are
+> local-only working notes and are not published anywhere. Every claim this roadmap makes is
+> summarized here — the pointers are provenance, not prerequisites.
 
 ---
 
@@ -62,7 +70,7 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 > produced the 4.4.1 backlog below: the GUI shipped, and running real money through it is what
 > surfaced the cost-attribution and repair-path defects that patch closes.
 
-## v4.4.1 — "What the gate councils found" *(fast-follow patch on 4.4.0)*
+## v4.4.1 — "What the gate councils found" *(fast-follow patch on 4.4.0)* — ✅ SHIPPED v4.4.1, 2026-07-27
 **Benefit:** the product stops mis-stating its own spend, a repair leg stops fabricating findings,
 and a review that honestly finds nothing stops being an error.
 - **Cost truthfulness** — subtree-unknown spend carried into the ledger, the sticky unknown-spend notice unstuck, a cache-only leg reported `unknown` rather than falsely free, and `--max-cost` degraded to exit `2` when the total is inexact rather than claiming a percentage it cannot know — CA-2/CA-3/CA-6/CA-7 *(M)*
@@ -73,8 +81,9 @@ and a review that honestly finds nothing stops being an error.
 > Why a patch and not a rev: every item is a correction to something already shipped, all of it
 > measured against real paid runs. Two behaviour changes ride along (LC-2's session abort at the
 > tool-settle ceiling, LC-10's acceptance of an empty finding set) — both owner-ruled, both
-> corrections rather than new capability. Scope, rulings and the full 61-item inventory:
-> `.superpowers/sdd/v441/backlog-and-proposal.md`; see also root `BACKLOG.md`.
+> corrections rather than new capability. Scope, rulings and the full 61-item inventory live in the
+> repo's working notes (`.superpowers/sdd/v441/backlog-and-proposal.md`, local-only) and in the
+> repo's root `BACKLOG.md` — neither ships in the npm package; see the note at the top.
 
 ## v4.5 — "Save, share, and compose your councils"
 **Benefit:** complex councils become one-command, repeatable, and chainable.
@@ -92,10 +101,11 @@ and a review that honestly finds nothing stops being an error.
 ### Deferred out of v4.4.1 into v4.5 (2026-07-27)
 
 Each is `M`+, or needs data or a design decision — the bar a patch on a published release cannot
-carry. Full write-ups (what, where, what breaks if it stays) live in
-`.superpowers/sdd/v44/v4.4.1-backlog.md`; the disposition that put them here is
-`.superpowers/sdd/v441/backlog-and-proposal.md`. **Read that backlog's Appendix A (settled
-decisions) and Appendix B (known false positives) before re-filing anything from this list.**
+carry. The table below is self-contained; the full write-ups (what, where, what breaks if it stays)
+live in the repo's local-only working notes — `.superpowers/sdd/v44/v4.4.1-backlog.md`, with the
+disposition that put them here in `.superpowers/sdd/v441/backlog-and-proposal.md`. **If you have
+those notes, read that backlog's Appendix A (settled decisions) and Appendix B (known false
+positives) before re-filing anything from this list.**
 
 | ID | What | Why not 4.4.1 |
 |---|---|---|
@@ -111,7 +121,7 @@ decisions) and Appendix B (known false positives) before re-filing anything from
 | **TST-1 / TST-2** | No real `--debate` fixture; the `lens:<slug>` role branch has zero coverage | `M` each, and they want doing together |
 | **TST-3** | Abort confirm→status-flip is proven only against the fake DOM | `M` — needs a real CDP pass |
 | **TST-7** | Six render functions have no unit coverage | `M` |
-| *(new)* | **Residual integration-suite handle leaks** — a NAMED leak with evidence, filed 2026-07-27 after 4.4.1 fixed ENV-6 and the live rail still warned from *different* suites | `S–M`. Full evidence, including why `--detectOpenHandles` cannot diagnose this class, is in root `BACKLOG.md` — start there rather than re-deriving it |
+| *(new)* | **Residual integration-suite handle leaks** — a NAMED leak with evidence, filed 2026-07-27 after 4.4.1 fixed ENV-6 and the live rail still warned from *different* suites | `S–M`. Full evidence, including why `--detectOpenHandles` cannot diagnose this class, is in the repo's root `BACKLOG.md` (not in the npm package — read it on GitHub) — start there rather than re-deriving it |
 
 **ENV-6 is NOT on this list** — it was pulled into 4.4.1 by owner ruling and fixed at the source
 (the CDP e2e suite's SIGKILL escalation timer). **ENV-1** is not on it either: it is a decision

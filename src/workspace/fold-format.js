@@ -88,14 +88,26 @@ function buildFoldText(o) {
   }
   // ⚠️ v4.4.1 DOC-5: this used to append ` (${cost.source})` for EVERY source,
   // on top of a glyph formatCost had already spent on the same fact —
-  // `~$0.3720 (mixed)`, `~$0.0100 (estimated)`, `? (unknown)`. formatCost
-  // (src/utils/pricing.js) prefixes `~` for both 'estimated' and 'mixed', and
-  // returns a bare `?` when the source is 'unknown'. `reported` is the one
-  // source the glyph vocabulary cannot express — a plain `$0.4321` is also what
-  // an unrecognised/absent source renders as — so it is the only one still
-  // spelled out. This is the *fold* line, the thing that lands in the user's
-  // terminal, so it says each thing once.
-  const costSourceLabel = cost && cost.source === 'reported' ? ' (reported)' : '';
+  // `~$0.0100 (estimated)`, `? (unknown)`. formatCost (src/utils/pricing.js)
+  // prefixes `~` for both 'estimated' and 'mixed', and returns a bare `?` when
+  // the source is 'unknown'. So for 'estimated' and 'unknown' the word was pure
+  // repetition and is gone.
+  //
+  // Two sources still spell themselves out, because the glyph vocabulary cannot
+  // express them:
+  //   - `reported` — a plain `$0.4321` is also what an unrecognised/absent
+  //     source renders as, so the absence of a glyph cannot mean "exact".
+  //   - `mixed` — `~` encodes *inexact*, not *which kind of inexact*. Collapsing
+  //     'mixed' into a bare `~$…` makes it indistinguishable from 'estimated',
+  //     and the two are not the same claim: 'mixed' means some legs reported
+  //     real usage and some were estimated, i.e. part of this number is
+  //     measured. That is strictly more information than 'estimated', and this
+  //     is the fold line of a release whose theme is cost truthfulness.
+  // Each thing is still said exactly once — the `~` says "inexact", the word
+  // says "which kind", and neither restates the other.
+  const costSourceLabel = cost && (cost.source === 'reported' || cost.source === 'mixed')
+    ? ` (${cost.source})`
+    : '';
   head.push(`Cost: ${formatCost(cost)}${costSourceLabel}`);
 
   // Review follow-up #1: strip FIRST, then test emptiness on the STRIPPED
