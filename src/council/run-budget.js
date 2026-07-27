@@ -155,10 +155,20 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
   };
   const budgetRefusals = () => refusals.slice();
 
-  let noticed = false;
+  // ⚠️ v4.4.1 CA-3: a plain `noticed` boolean announced the FIRST unknown leg and
+  // silently swallowed every one created afterwards (Stage 2, repairs, debate,
+  // chair) — run.json kept the correct final count, so the data was right and
+  // only the announcement was wrong, which is exactly the failure mode the
+  // fail-loud posture exists to prevent. Track the count that was last announced
+  // instead, so a GROWING total re-announces while an unchanged one stays quiet:
+  // the notice keeps its "once per new fact" character without going silent on
+  // the later stages. (The alternative — deferring every notice to finalize() —
+  // was rejected: the notice exists to inform a decision still in flight.)
+  let noticedAt = -1;
   /**
-   * One prominent, un-missable notice per run when the total is incomplete — for
-   * EITHER reason, which are different statements and are worded differently:
+   * One prominent, un-missable notice each time the incomplete total GROWS (see
+   * `noticedAt` above; re-calling it with nothing new is silent) — for EITHER
+   * reason, which are different statements and are worded differently:
    *   - `unknownLegs`        — the leg reported no usage at all.
    *   - `subtreeUnknownLegs` — the leg's own cost is known, but it spawned a
    *     subagent whose CHILD session is billed separately and whose spend the
@@ -174,8 +184,9 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
    */
   const noticeUnknownSpend = () => {
     const s = spendState();
-    if ((s.unknownLegs === 0 && s.subtreeUnknownLegs === 0) || noticed) { return; }
-    noticed = true;
+    const n = s.unknownLegs + s.subtreeUnknownLegs;
+    if (n === 0 || n === noticedAt) { return; }
+    noticedAt = n;
     const ceiling = hasCeiling ? ` or the $${maxCost} --max-cost ceiling` : '';
     const parts = [];
     if (s.unknownLegs > 0) {

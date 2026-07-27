@@ -9,8 +9,28 @@
     "schemaVersion": { "const": 2 },
     "type": { "const": "spend" },
     "windowDays": { "type": ["number", "null"] },
-    "total": { "type": "object" },
-    "byModel": { "type": "array", "items": { "type": "object" } },
+    "total": {
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "runs": { "type": "number" },
+        "unpricedRows": { "$ref": "#/$defs/unpricedRows" },
+        "unattributedSubtreeRows": { "$ref": "#/$defs/unattributedSubtreeRows" }
+      }
+    },
+    "byModel": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "model": { "type": "string" },
+          "amount": { "type": "number" },
+          "runs": { "type": "number" },
+          "unpricedRows": { "$ref": "#/$defs/unpricedRows" },
+          "unattributedSubtreeRows": { "$ref": "#/$defs/unattributedSubtreeRows" }
+        }
+      }
+    },
     "credit": { "type": ["object", "null"] },
     "filters": { "type": "object" },
     "groupBy": { "enum": ["model", "wave", "council", "project", "op", "day"] },
@@ -22,7 +42,9 @@
         "properties": {
           "key": { "type": "string" },
           "amount": { "type": "number" },
-          "runs": { "type": "number" }
+          "runs": { "type": "number" },
+          "unpricedRows": { "$ref": "#/$defs/unpricedRows" },
+          "unattributedSubtreeRows": { "$ref": "#/$defs/unattributedSubtreeRows" }
         }
       }
     },
@@ -32,10 +54,36 @@
       "properties": {
         "amount": { "type": "number" },
         "runs": { "type": "number" },
+        "unpricedRows": { "$ref": "#/$defs/unpricedRows" },
+        "unattributedSubtreeRows": { "$ref": "#/$defs/unattributedSubtreeRows" },
         "byStatus": { "type": "object" }
       }
     },
-    "rows": { "type": "array" },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "A raw spend-ledger.jsonl row (internal v1 shape, echoed verbatim when --rows is passed). Only the fields this document makes claims about are pinned here.",
+        "properties": {
+          "subtreeUnknown": {
+            "type": "boolean",
+            "description": "v4.4.1. Present (and always true) only when this leg's own cost resolved but it spawned a child session whose spend could not be determined — the row is PRICED yet its cost is a floor. OMITTED entirely otherwise, so an ordinary row is byte-identical to a pre-4.4.1 one."
+          }
+        }
+      }
+    },
     "rowsTruncated": { "type": "boolean" }
+  },
+  "$defs": {
+    "unpricedRows": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Rows that contributed NOTHING to `amount` (no numeric cost). The bucket's figure omits them entirely: real spend is at least this much."
+    },
+    "unattributedSubtreeRows": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "v4.4.1 CA-2. Rows that ARE priced and DO contribute to `amount`, but whose leg spawned a subagent whose child-session spend could not be determined — the second, independent reason the figure is a floor. A row can be counted in both this and `unpricedRows`; the two are never substitutes."
+    }
   }
 }

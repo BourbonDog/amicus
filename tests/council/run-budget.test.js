@@ -117,6 +117,50 @@ describe('noticeUnknownSpend', () => {
     b.noticeUnknownSpend();
     expect((b.written().match(/UNKNOWN/g) || [])).toHaveLength(1);
   });
+
+  /**
+   * v4.4.1 CA-3 (TST-9). The guard used to be a sticky `noticed` boolean, so the
+   * FIRST unknown leg was announced and every one created afterwards — Stage 2,
+   * the repair loops, the debate, the chair — was silently swallowed. run.json
+   * kept the correct final count, so the data was right and only the
+   * announcement was wrong: precisely the failure the fail-loud posture exists
+   * to prevent. The guard is now the count that was last announced, so a GROWING
+   * total re-announces while an unchanged one stays quiet.
+   */
+  test('a later stage\'s unknown legs are announced too — the guard is a count, not a flag', () => {
+    const out = [];
+    const b = createBudget({ allLegs: [], maxCost: 1, write: (s) => out.push(s) });
+    b.addWave({ waveId: 'w1', legs: [unknown()] });               // stage 1
+    b.noticeUnknownSpend();
+    b.addWave({ waveId: 'w2', legs: [unknown(), unknown()] });    // stage 2 / repairs / chair
+    b.noticeUnknownSpend();
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatch(/1 council leg\(s\)/);
+    expect(out[out.length - 1]).toMatch(/3 council leg\(s\)/);    // not the stale "1"
+  });
+
+  test('a growing subtree-unknown count re-announces on the same rule', () => {
+    const out = [];
+    const subtree = () => ({ usage: { tokens: {}, cost: { amount: 0.01, source: 'reported' }, subtreeUnknown: true } });
+    const b = createBudget({ allLegs: [], maxCost: null, write: (s) => out.push(s) });
+    b.addWave({ legs: [subtree()] });
+    b.noticeUnknownSpend();
+    b.addWave({ legs: [subtree()] });
+    b.noticeUnknownSpend();
+    expect(out).toHaveLength(2);
+    expect(out[out.length - 1]).toMatch(/2 council leg\(s\) spawned a subagent/);
+  });
+
+  test('waves that add no NEW unknowns stay quiet — no notice per priced wave', () => {
+    const out = [];
+    const b = createBudget({ allLegs: [], maxCost: null, write: (s) => out.push(s) });
+    b.addWave({ legs: [unknown()] });
+    b.noticeUnknownSpend();
+    b.addWave({ legs: [priced(0.02), priced(0.03)] }); // paid, but nothing new is unknown
+    b.noticeUnknownSpend();
+    b.noticeUnknownSpend();
+    expect(out).toHaveLength(1);
+  });
 });
 
 describe('usageBlock is what run.json publishes', () => {

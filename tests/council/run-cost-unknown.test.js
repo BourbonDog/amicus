@@ -61,6 +61,24 @@ function scriptWithUnknownSeat() {
   return s;
 }
 
+/**
+ * scriptWithUnknownSeat, plus a Stage 2 in which ALL THREE judges are unknown
+ * too. The unknown count therefore GROWS after the Stage-1 notice has already
+ * fired (1 → 4) — the shape v4.4.1 CA-3 was silent about.
+ */
+function scriptWithUnknownStage2() {
+  const s = scriptWithUnknownSeat();
+  s['abc123-s2'] = () => okWave([
+    unknownLeg('gemini', judgeOut(['Review B', 'Review C', 'Review A'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }])),
+    unknownLeg('gpt', judgeOut(['Review A', 'Review C', 'Review B'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'dispute' }])),
+    unknownLeg('qwen', judgeOut(['Review A', 'Review B', 'Review C'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }, { id: 'C1', verdict: 'agree' }])),
+  ]);
+  return s;
+}
+
 describe('an unknown-cost leg never halts the run (fail LOUD, not CLOSED)', () => {
   test('a run with an unknown leg and a generous ceiling still completes', async () => {
     const { exitCode, run } = await runCouncil(
@@ -144,5 +162,15 @@ describe('the run announces unknown spend on stderr', () => {
     await runCouncil(baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(scriptWithUnknownSeat())));
     const hits = stderrText().match(/cost is UNKNOWN/gi) || [];
     expect(hits).toHaveLength(1);
+  });
+
+  // v4.4.1 CA-3: the Stage-1 gate announces "1 council leg"; the notice used to
+  // memoize on a sticky boolean, so the three unknown Stage-2 judges were never
+  // announced at all. run.json still carried 4 — only the announcement lied.
+  test('unknown legs appearing AFTER stage 1 are announced too, with the grown count', async () => {
+    await runCouncil(baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(scriptWithUnknownStage2())));
+    const hits = stderrText().match(/cost is UNKNOWN/gi) || [];
+    expect(hits.length).toBeGreaterThan(1);
+    expect(stderrText()).toMatch(/4 council leg\(s\) reported NO usage/);
   });
 });

@@ -35,6 +35,14 @@ const unpriced = (model, extra = {}) => ({
   status: 'complete', op: 'leg', ts: '2026-07-26T00:00:00.000Z', ...extra,
 });
 
+/**
+ * v4.4.1 CA-2. The row that `unpricedRows` structurally cannot see: the leg's
+ * OWN cost resolved (it is PRICED, it lands in the `r` bucket, it contributes
+ * to the total), but it spawned a child session the walk could not price — so
+ * the total it contributes to is a floor, not a measurement.
+ */
+const subtreeUnknown = (model, amount, extra = {}) => priced(model, amount, { subtreeUnknown: true, ...extra });
+
 describe('aggregateSpend counts rows that contribute NO amount', () => {
   test('total + per-model carry unpricedRows', () => {
     const { total, byModel } = aggregateSpend([
@@ -59,6 +67,23 @@ describe('aggregateSpend counts rows that contribute NO amount', () => {
     const { total } = aggregateSpend([{ model: 'x', tokens: null, status: 'complete' }]);
     expect(total.unpricedRows).toBe(1);
   });
+
+  test('total + per-model carry unattributedSubtreeRows for a PRICED but incomplete row', () => {
+    const { total, byModel } = aggregateSpend([
+      subtreeUnknown('glm', 0.02), priced('glm', 0.03), priced('qwen', 0.01),
+    ]);
+    expect(total.amount).toBeCloseTo(0.06, 8); // every row's own cost still counts
+    expect(total.unpricedRows).toBe(0);        // …and none of them is unpriced
+    expect(total.unattributedSubtreeRows).toBe(1);
+    expect(byModel.find((m) => m.model === 'glm').unattributedSubtreeRows).toBe(1);
+    expect(byModel.find((m) => m.model === 'qwen').unattributedSubtreeRows).toBe(0);
+  });
+
+  test('a row can be BOTH unpriced and unattributed-subtree — the counts sit beside each other', () => {
+    const { total } = aggregateSpend([unpriced('glm', { subtreeUnknown: true })]);
+    expect(total.unpricedRows).toBe(1);
+    expect(total.unattributedSubtreeRows).toBe(1);
+  });
 });
 
 describe('groupRows and computeWasted carry the same count', () => {
@@ -78,6 +103,28 @@ describe('groupRows and computeWasted carry the same count', () => {
     expect(w.runs).toBe(2);
     expect(w.amount).toBeCloseTo(0.02, 8);
     expect(w.unpricedRows).toBe(1);
+  });
+
+  test('groupRows counts unattributed-subtree rows separately from unpriced rows', () => {
+    const [g] = groupRows([
+      subtreeUnknown('a', 0.01),
+      priced('a', 0.02),
+      unpriced('a'),
+    ], 'model');
+    expect(g.amount).toBeCloseTo(0.03, 8);
+    expect(g.unpricedRows).toBe(1);            // the null-cost row
+    expect(g.unattributedSubtreeRows).toBe(1); // the priced-but-incomplete row
+  });
+
+  test('computeWasted carries unattributedSubtreeRows on the roll-up and per status', () => {
+    const w = computeWasted([
+      subtreeUnknown('a', 0.01, { status: 'error' }),
+      priced('a', 0.02, { status: 'error' }),
+      subtreeUnknown('a', 0.5, { status: 'complete' }), // excluded: not wasted
+    ]);
+    expect(w.runs).toBe(2);
+    expect(w.unattributedSubtreeRows).toBe(1);
+    expect(w.byStatus.error.unattributedSubtreeRows).toBe(1);
   });
 
   test('amount stays a plain number so spend.schema.json still validates', () => {
@@ -144,6 +191,37 @@ describe('the human table never prints a bare $0.0000 for an unpriced model', ()
     expect(doc.byModel.find((m) => m.model === 'qwen').unpricedRows).toBe(1);
     expect(doc.groups.find((g) => g.key === 'qwen').unpricedRows).toBe(1);
     expect(doc.wasted.unpricedRows).toBe(1);
+  });
+
+  // v4.4.1 CA-2: this row is PRICED, so nothing in the unpriced machinery above
+  // can surface it — the table has to say the second thing itself.
+  test('a subtree-unknown row adds its own line saying real spend is HIGHER', async () => {
+    writeLedger([subtreeUnknown('glm', 0.372)]);
+    await handleSpend({ _: [] }, { dir, readApiKeyValues: () => ({}), now: () => Date.now() });
+    const t = text();
+    expect(t).toMatch(/Total: \$0\.3720/);   // the leg's own cost is still exact
+    expect(t).not.toMatch(/unpriced/);       // and it is NOT an unpriced row
+    expect(t).toMatch(/1 row\(s\) spawned a subagent/);
+    expect(t).toMatch(/HIGHER/);
+  });
+
+  test('the two lines are different statements and both appear when both apply', async () => {
+    writeLedger([subtreeUnknown('glm', 0.372), unpriced('qwen')]);
+    await handleSpend({ _: [] }, { dir, readApiKeyValues: () => ({}), now: () => Date.now() });
+    const t = text();
+    expect(t).toMatch(/1 unpriced row\(s\) — cost unknown and NOT in the total/);
+    expect(t).toMatch(/1 row\(s\) spawned a subagent whose CHILD session spend could NOT be determined/);
+  });
+
+  test('the --json doc carries unattributedSubtreeRows everywhere unpricedRows lives', async () => {
+    writeLedger([subtreeUnknown('glm', 0.372, { status: 'error' }), priced('qwen', 0.01)]);
+    await handleSpend({ _: [], json: true }, { dir, readApiKeyValues: () => ({}), now: () => Date.now() });
+    const doc = JSON.parse(text());
+    expect(doc.total.unattributedSubtreeRows).toBe(1);
+    expect(doc.byModel.find((m) => m.model === 'glm').unattributedSubtreeRows).toBe(1);
+    expect(doc.byModel.find((m) => m.model === 'qwen').unattributedSubtreeRows).toBe(0);
+    expect(doc.groups.find((g) => g.key === 'glm').unattributedSubtreeRows).toBe(1);
+    expect(doc.wasted.unattributedSubtreeRows).toBe(1);
   });
 });
 

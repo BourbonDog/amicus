@@ -45,7 +45,10 @@ const SPEND_LEDGER_FILE = 'spend-ledger.jsonl';
  * @param {string} [opts.waveId] present for a fanout leg
  * @param {string} opts.model resolved model id (or alias, if that's all the caller has)
  * @param {'headless'|'interactive'|'leg'} opts.mode
- * @param {{tokens:object, cost:{amount:number|null,currency:string,source:string}}|null} opts.usage
+ * @param {{tokens:object, cost:{amount:number|null,currency:string,source:string},
+ *   subtreeUnknown?:boolean}|null} opts.usage `subtreeUnknown` (v4.4.1 CA-2) is
+ *   copied onto the row when truthy — this leg's own cost resolved, but a child
+ *   session it spawned could not be priced, so the row's `cost` is a FLOOR
  * @param {string} [opts.op] 'leg' | 'start' | 'continue' | 'resume'
  * @param {string} [opts.status] terminal status
  * @param {string} [opts.councilRunId] council run id (additive attribution)
@@ -86,6 +89,13 @@ function appendSpend({ taskId, waveId, model, mode, usage,
     if (attempt !== undefined) { row.attempt = attempt; }
     if (substitutedFor !== undefined) { row.substitutedFor = substitutedFor; }
     if (retryOfWaveId !== undefined) { row.retryOfWaveId = retryOfWaveId; }
+    // v4.4.1 CA-2: a leg whose OWN cost is known but which spawned a child
+    // session the walk could not price writes a PRICED row — so `unpricedRows`
+    // never catches it and `amicus spend` reads as a complete measurement while
+    // `council run` says `costExact:false` about the same dollars. Omitted (not
+    // `|| false`) so a pre-4.4.1 row and an ordinary row stay identical, matching
+    // the linkage-field convention above.
+    if (usage.subtreeUnknown) { row.subtreeUnknown = true; }
     fs.appendFileSync(path.join(dir, SPEND_LEDGER_FILE), JSON.stringify(row) + '\n');
   } catch (e) {
     logger.debug('spend-ledger append failed (best-effort, run unaffected)', { taskId, error: e.message });
