@@ -207,7 +207,15 @@ describe('isRealpathContained — SEC-3 debug-mode contract check', () => {
 
   /** An absolute path that EXISTS but is not realpath-resolved (unnormalized `..` hop). */
   function unresolvedButReal() {
-    const dir = mkScratchDir('ws-fence-');
+    // ⚠️ realpathSync is REQUIRED here, not cosmetic. os.tmpdir() is /var/folders/… on
+    // macOS and /var is a symlink to /private/var, so a bare mkdtemp path is itself
+    // unresolved there. `dir` is passed as dirRealPath, so leaving it unresolved makes
+    // assertResolvedArgs — which checks BOTH arguments — fire twice on macOS while the
+    // caller below asserts exactly one message about targetRealPath. Green on Windows and
+    // Linux, red on macOS: caught by CI on PR #75, not locally.
+    // The `..` in `unresolved` is what makes THAT path unresolved on every platform, which
+    // is the single contract breach this fixture exists to produce.
+    const dir = fs.realpathSync(mkScratchDir('ws-fence-'));
     fs.mkdirSync(path.join(dir, 'sub'));
     return { dir, unresolved: [dir, 'sub', '..', 'sub'].join(path.sep) };
   }
