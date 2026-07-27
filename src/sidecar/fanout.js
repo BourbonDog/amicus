@@ -16,7 +16,10 @@ const { logger } = require('../utils/logger');
 const { runLeg, buildRoutingFailureLeg } = require('./fanout-leg');
 const { parseModelsList, DEFAULT_MAX_LEGS, validateFanoutModels } = require('./fanout-validate');
 const { ERROR_CODES } = require('../utils/error-doc');
-const { writeFileAtomic } = require('../utils/atomic-write');
+// Wave-document persistence lives in ./fanout-wave-io (size-gate split, v4.4.1
+// Task 0.5). writeWaveMetadata is re-exported below — fanout-retry.js and the
+// fanout tests import it from here.
+const { writeWaveMetadata, writeWaveDoc, finishWave } = require('./fanout-wave-io');
 
 /**
  * Derive leg task IDs: <waveId>-1 .. <waveId>-N (matches TASK_ID_PATTERN).
@@ -29,27 +32,6 @@ function deriveLegIds(waveId, count) {
 }
 
 /**
- * Write/merge wave metadata (preserves fields an MCP pre-spawn handler wrote).
- * Abort-wins: once existing status is 'aborted', a patch cannot demote it back
- * to a softer status (same precedence rule as writeLegPatch — a signal/abort
- * marker must never lose a write race against an in-flight init/finalize).
- */
-function writeWaveMetadata(waveDir, patch) {
-  const metaPath = path.join(waveDir, 'metadata.json');
-  let existing = {};
-  if (fs.existsSync(metaPath)) {
-    try { existing = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* corrupt → rewrite */ }
-  }
-  const safePatch = { ...patch };
-  if (existing.status === 'aborted' && safePatch.status && safePatch.status !== 'aborted') {
-    delete safePatch.status;
-  }
-  const merged = { ...existing, ...safePatch };
-  writeFileAtomic(metaPath, JSON.stringify(merged, null, 2), { mode: 0o600 });
-  return merged;
-}
-
-/**
  * Run a fan-out wave. Spec §4.3.
  * @param {object} options - models, prompt, promptMeta, waveId?, project, agent?,
  *   thinking?, timeout? (minutes), summaryLength?, includeContext?, sessionId?,
@@ -59,7 +41,11 @@ function writeWaveMetadata(waveDir, patch) {
  *   with routing.prefer, applied per leg), json?, client?, quiet? (suppress
  *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs),
  *   fallback? / catalog? (v4.3 Task 18 §6.2: opt-in substitution; off/absent unchanged),
- *   retryContexts? / retryOfWaveId? (v4.3 Task 19: --retry-failed relaunch seam; absent -> byte-identical)
+ *   retryContexts? / retryOfWaveId? (v4.3 Task 19: --retry-failed relaunch seam; absent -> byte-identical),
+ *   server? + serverClient? (v4.4.1 Task 0.5: an ALREADY-STARTED OpenCode server
+ *     to run this wave's legs on. Both or neither. When supplied this wave never
+ *     starts a server and never closes one — see the seam comment in step 4.
+ *     NOT `client`, which is the client TYPE string on this function.)
  * @returns {Promise<{wave: object, exitCode: number}>} Never rejects for leg errors.
  */
 async function runFanout(options) {
@@ -72,7 +58,7 @@ async function runFanout(options) {
   const { generateFoldNonce } = require('../utils/fold-marker');
   const { installSignalAbort, markAborted } = require('../utils/session-abort');
   const { getSessionDir } = require('../session-manager');
-  const { emitWaveStarted, emitWaveTerminal } = require('../observe/events');
+  const { emitWaveStarted } = require('../observe/events'); // wave-terminal is emitted by finishWave
 
   const project = options.project || process.cwd();
   const createdAt = new Date().toISOString();
@@ -88,9 +74,17 @@ async function runFanout(options) {
       console.log(formatWaveHuman(doc));
     }
   };
-  const errorWave = (waveId, message) => {
+  // v4.4.1 Task 0.5: a wave that dies BEFORE its legs still owes the run a
+  // wave.json. Backlog C1 covered the pre-`try` throw; a server that never
+  // started was its uncovered sibling — run v441plan01's four dead seats left a
+  // `reason` in metadata.json, no wave.json, and stage1 recorded 'complete'.
+  // waveDir is optional (only the post-creation caller has one).
+  const errorWave = (waveId, message, waveDir) => {
     const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, createdAt, completedAt: new Date().toISOString(), status: 'error' });
     doc.error = message;
+    doc.reason = message; // classifier alias, same as fanout-leg.js's run docs
+    // best-effort: an unwritable wave dir must not mask the real error
+    if (waveDir) { try { writeWaveDoc(waveDir, doc); } catch { /* ignore */ } }
     emit(doc);
     return { wave: doc, exitCode: 1 };
   };
@@ -162,14 +156,9 @@ async function runFanout(options) {
     const wave = buildWaveResult({
       waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt, notices,
     });
-    const wavePath = path.join(waveDir, 'wave.json');
-    writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
-    writeWaveMetadata(waveDir, { status: wave.status, completedAt });
-    const routingExitCode = waveExitCode(wave.status);
-    emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode: routingExitCode }, follow);
-    await require('../observe/on-complete').fireWaveOnComplete(options.onComplete, wave, { waveId, waveDir, wavePath, exitCode: routingExitCode, project }, options.onCompleteDeps);
-    emit(wave);
-    return { wave, exitCode: routingExitCode };
+    return finishWave({ wave, waveDir, waveId, project, completedAt, follow, emit,
+      exitCode: waveExitCode(wave.status),
+      onComplete: options.onComplete, onCompleteDeps: options.onCompleteDeps });
   }
 
   // 3. Context + prompts built ONCE (model-independent)
@@ -198,14 +187,34 @@ async function runFanout(options) {
     mcp: options.mcp, mcpConfig: options.mcpConfig, clientType: options.client,
     noMcp: options.noMcp, excludeMcp: options.excludeMcp,
   });
+  // ⚠️ v4.4.1 Task 0.5 — the external-server seam runHeadless has carried since
+  // v4.0 (src/headless.js:245): a caller that already owns a server passes it in
+  // and we must NOT close it. Added here because a council run launches its
+  // Stage-1 seat wave and its critic solo under ONE Promise.all (run-stages.js:83)
+  // and two concurrent startOpenCodeServer calls race on OpenCode's SQLite —
+  // run v441plan01 lost four of five seats in 736ms to `database is locked`.
+  // NAME DIVERGENCE, deliberate: runHeadless spells the pair client+server, but
+  // runFanout's `options.client` is ALREADY the client TYPE string (buildMcpConfig
+  // above, buildContext, buildPrompts, cli-handlers-run.js `client: args.client`),
+  // so the SDK client is `options.serverClient`. Both or neither: a half-injection
+  // falls back to owning a server rather than running clientless.
+  const externalServer = !!(options.server && options.serverClient);
   let client, server;
-  try {
-    ({ client, server } = await startOpenCodeServer(mcpServers, { models: validated.serverModels || okLegs.map(l => l.model) }));
-  } catch (err) {
-    writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
-    return errorWave(waveId, `Failed to start server: ${err.message}`);
+  if (externalServer) {
+    ({ serverClient: client, server } = options);
+    logger.debug('Using external server (shared server mode)', { waveId, url: server.url });
+  } else {
+    try {
+      ({ client, server } = await startOpenCodeServer(mcpServers, { models: validated.serverModels || okLegs.map(l => l.model) }));
+    } catch (err) {
+      writeWaveMetadata(waveDir, { status: 'error', reason: err.message, completedAt: new Date().toISOString() });
+      return errorWave(waveId, `Failed to start server: ${err.message}`, waveDir);
+    }
   }
-  if (server.goPid) { writeWaveMetadata(waveDir, { goPid: server.goPid }); }
+  // Only an OWNED server's pid belongs in this wave's metadata: mcp-server.js's
+  // wave abort SIGTERMs `metadata.goPid` as "the orchestrator + its OWNED
+  // OpenCode server", which on an injected server would kill every sibling wave.
+  if (!externalServer && server.goPid) { writeWaveMetadata(waveDir, { goPid: server.goPid }); }
 
   // 5. Signal abort: mark wave + all legs aborted, close the server, then let
   // NORMAL control flow finalize — legs see their abort marker within one poll
@@ -224,7 +233,10 @@ async function runFanout(options) {
       // close() is async (B06 escalation); this handler stays sync, so
       // fire-and-forget with a rejection guard. The 10s exit watchdog below
       // comfortably outlives the ~2s escalation grace inside close().
-      try { server.close().catch(() => {}); } catch { /* best-effort */ }
+      // ⚠️ close site 1 of 2 — NEVER an injected server: it belongs to the
+      // council run, whose own signal handler tears it down in finalize().
+      // Closing it here would kill every sibling and later wave in the run.
+      if (!externalServer) { try { server.close().catch(() => {}); } catch { /* best-effort */ } }
       const { armExitWatchdog } = require('../utils/lifecycle');
       armExitWatchdog(code, 10000, { log: (m, meta) => logger.debug(m, meta) });
     },
@@ -263,7 +275,9 @@ async function runFanout(options) {
   } finally {
     heartbeat.stop();
     uninstallSignals();
-    try { await server.close(); } catch { /* already closed on signal */ }
+    // ⚠️ close site 2 of 2 (`grep -n "server.close()" src/sidecar/fanout.js`).
+    // An injected server outlives this wave by design — the owner closes it once.
+    if (!externalServer) { try { await server.close(); } catch { /* already closed on signal */ } }
   }
 
   // 7. Aggregate, persist (atomic: tmp + rename), finalize, emit
@@ -272,16 +286,11 @@ async function runFanout(options) {
     waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
     status: signalled ? 'aborted' : null, notices,
   });
-  const wavePath = path.join(waveDir, 'wave.json');
-  writeFileAtomic(wavePath, JSON.stringify(wave, null, 2), { mode: 0o600 });
-  writeWaveMetadata(waveDir, { status: wave.status, completedAt });
   const exitCode = signalled
     ? (signalled === 'SIGINT' ? 130 : 143)
     : waveExitCode(wave.status);
-  emitWaveTerminal(waveDir, waveId, { status: wave.status, counts: wave.counts, usage: wave.usage, exitCode }, follow);
-  await require('../observe/on-complete').fireWaveOnComplete(options.onComplete, wave, { waveId, waveDir, wavePath, exitCode, project }, options.onCompleteDeps);
-  emit(wave);
-  return { wave, exitCode };
+  return finishWave({ wave, waveDir, waveId, project, exitCode, completedAt, follow, emit,
+    onComplete: options.onComplete, onCompleteDeps: options.onCompleteDeps });
 }
 
 module.exports = {
