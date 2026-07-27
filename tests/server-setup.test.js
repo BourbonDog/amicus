@@ -220,6 +220,70 @@ describe('lock-race retry window (Step 10.5)', () => {
     expect(total).toBeGreaterThan(3000);
   });
 
+  /**
+   * ⚠️ Finding D5: everything above pins the exported CONSTANT, and every other
+   * retry test in the repo passes `retryDelayMs` (a test seam that collapses the
+   * whole schedule to one value) — so nothing pinned the delays `retryOnLockRace`
+   * ACTUALLY SLEEPS. "5 attempts with exponential backoff to ~4s" is satisfied by
+   * 250/500/1000/2000 (3.75s), by 250/500/1000/2000/4000 (7.75s) and by
+   * 100/200/400/800/1600 (3.1s) alike; a green suite distinguished none of them,
+   * and an implementation that ignored the constant outright would still pass.
+   *
+   * This one observes the real schedule — no `retryDelayMs` override — by
+   * intercepting setTimeout and recording the requested durations (firing the
+   * callback immediately, so the test itself never sleeps).
+   */
+  it('the delays it actually SLEEPS are exactly 250/500/1000/2000 — the seam is not used here', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      const attempt = jest.fn(async () => { throw new Error('database is locked'); });
+      await expect(retryOnLockRace(attempt)).rejects.toThrow('database is locked');
+      // 5 attempts ⇒ 4 sleeps, in this order and no other.
+      expect(slept).toEqual([250, 500, 1000, 2000]);
+      expect(attempt).toHaveBeenCalledTimes(5);
+      expect(slept.reduce((a, b) => a + b, 0)).toBe(3750);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('a deterministic failure sleeps ZERO times, not merely fewer', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      const attempt = jest.fn(async () => { throw new Error('EADDRINUSE: port busy'); });
+      await expect(retryOnLockRace(attempt)).rejects.toThrow(/EADDRINUSE/);
+      expect(slept).toEqual([]);
+      expect(attempt).toHaveBeenCalledTimes(1);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('a start that recovers on attempt 3 sleeps only the first two delays', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      let n = 0;
+      const attempt = jest.fn(async () => {
+        n += 1;
+        if (n < 3) { throw new Error('database is locked'); }
+        return 'started';
+      });
+      await expect(retryOnLockRace(attempt)).resolves.toBe('started');
+      expect(slept).toEqual([250, 500]);
+    } finally { spy.mockRestore(); }
+  });
+
   it('retries a lock-class failure exactly 5 times, then rethrows unchanged', async () => {
     const attempt = jest.fn(async () => { throw new Error('database is locked'); });
     await expect(retryOnLockRace(attempt, { retryDelayMs: 0 }))
