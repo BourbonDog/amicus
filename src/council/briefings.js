@@ -31,7 +31,20 @@ const FINDINGS_TWO_PART_FRAMING = [
   '2. A trailing fenced ```json block immediately after the prose — no text after it:',
 ].join('\n');
 
-/** JSON shape + field rules — shared by the full Stage-1 contract AND the repair prompt. */
+/**
+ * JSON shape + field rules — shared by the full Stage-1 contract AND the repair prompt.
+ *
+ * ⚠️ LC-10 (owner ruling, 2026-07-26). The `"overall"` and `"findings"` rules below
+ * are what finally make this prompt and `validateFindings` say the same thing. The
+ * briefing has always shipped the anti-sycophancy clause's "An empty severity category
+ * is a valid result" while the validator rejected exactly that answer (EMPTY_FINDINGS),
+ * so the only way for a model to satisfy the schema was to produce a finding —
+ * structural pressure to fabricate, which costgate01's grok obeyed. The validator now
+ * accepts a well-formed empty set, and these two lines state the same rule to the model:
+ * `findings` may be `[]`, `overall` may never be blank. Stating `overall` explicitly
+ * matters more than it looks — it is the field that separates "I read it and found
+ * nothing" from a hollow shell, and it was never in the field rules at all.
+ */
 const FINDINGS_JSON_SHAPE = [
   '```json',
   '{',
@@ -43,6 +56,10 @@ const FINDINGS_JSON_SHAPE = [
   '}',
   '```',
   '',
+  '- "overall" — a non-empty string. Always required, including when you found nothing.',
+  '- "findings" — the array of findings, always present. If you genuinely found nothing,',
+  '  emit [] and say so in "overall": a review that read the material and found nothing',
+  '  is a valid review. Never invent a finding to fill the array.',
   '- "id" — sequential integer within this review, starting at 1.',
   '- "severity" — one of: blocker | major | minor | nit.',
   '- "claim", "location", "rationale" — non-empty strings.',
@@ -149,6 +166,12 @@ function buildFindingsRepairPrompt({ errors, review }) {
   // The absent case is stated, never papered over with an empty block: a model
   // asked to repair nothing must be told to report nothing rather than left to
   // guess, which is precisely what produced grok's invented finding.
+  //
+  // ⚠️ LC-10: this branch's instruction — "emit an empty findings array and say so
+  // in overall" — described an answer the validator then REJECTED, so a model that
+  // complied burned its second repair attempt and still landed 'unstructured'. It is
+  // now the correct answer: an empty set with a real `overall` validates, and the
+  // seat ends 'repaired' + findingsUnverified rather than 'unstructured'.
   const prior = text
     ? ['--- YOUR PREVIOUS REVIEW (verbatim — this is the text to correct) ---',
       text,

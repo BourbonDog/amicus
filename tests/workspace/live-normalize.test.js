@@ -37,8 +37,12 @@ describe('normalizeLive', () => {
     expect(m.runId).toBe('cccc3333');
     expect(m.stageName).toBe('stage1');
     expect(m.terminal).toBe(false);
-    expect(m.legsTotal).toBe(2);
-    expect(m.legsComplete).toBe(0);
+    // ⚠️ v4.4.1 RN-8 (D1 ruling): the fixture doc still CARRIES legsTotal/legsComplete — the
+    // producer really does ship them — but the LiveModel no longer republishes them. They were
+    // mapped under a comment promising a UI fallback that was never wired, and nothing in
+    // electron/workspace-ui/ ever read either one. This used to assert `.toBe(2)` / `.toBe(0)`.
+    expect(m).not.toHaveProperty('legsTotal');
+    expect(m).not.toHaveProperty('legsComplete');
     expect(m.seats).toHaveLength(2);
     expect(m.seats[0]).toMatchObject({
       id: 'dddd0001', model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat',
@@ -54,10 +58,25 @@ describe('normalizeLive', () => {
     expect(m.costAmount).toBeCloseTo(0.06);
   });
 
-  test('wave-nested legs and legId spellings are tolerated (shape seam)', () => {
+  // ⚠️ v4.4.1 RN-7: this test used to be "wave-nested legs and legId spellings are tolerated
+  // (shape seam)" and asserted the exact opposite of what it now asserts. Both fallbacks were
+  // dead code that ASSERTED A SHAPE NO PRODUCER EMITS — the WAVE composed doc
+  // (src/mcp-server.js:590-665) carries a TOP-LEVEL `legs` exactly like the council one, and no
+  // leg row has ever carried `legId` (council-legs.js stamps `taskId`). This file's own header
+  // says "Do NOT copy the WAVE doc's shape", yet these two arms did precisely that, and
+  // wsgate01's reviewer read them and believed the wave shape was supported here. The pin now
+  // faces the other way so nobody re-adds a fallback without a producer to point at.
+  test('a wave-nested `wave.legs` doc yields NO seats — the dead shape fallback is gone (RN-7)', () => {
     const m = normalizeLive({ taskId: 'x', status: 'running', wave: { legs: [{ legId: 'l1', model: 'qwen', status: 'running' }] } });
+    expect(m.ok).toBe(true);      // still degrades, never throws
+    expect(m.seats).toEqual([]);
+  });
+
+  test('a leg carrying only the phantom `legId` gets id:null, not an invented identity (RN-7)', () => {
+    const m = normalizeLive({ taskId: 'x', status: 'running', legs: [{ legId: 'l1', model: 'qwen', status: 'running' }] });
     expect(m.seats).toHaveLength(1);
-    expect(m.seats[0].id).toBe('l1');
+    expect(m.seats[0].id).toBeNull();
+    expect(m.seats[0].model).toBe('qwen');   // the rest of the row still maps
   });
 
   test('data-layer liveness flags pass through; the GUI never invents its own (A4)', () => {
@@ -107,14 +126,19 @@ describe('normalizeLive', () => {
     expect(labelFor(seat.model, labelMap)).toBeNull();
   });
 
-  // ⚠️ PRE-FLIGHT (P6): with no stage in `running`, stageName falls back to the doc's own field.
-  // The producer writes `currentStage` (src/mcp-council-awareness.js:155); it has never written
-  // `stage`. Pinning both directions so the fallback can't drift back onto a phantom field.
-  test('stageName falls back to currentStage — the field the producer actually writes', () => {
+  // ⚠️ v4.4.1 RN-7 (supersedes PRE-FLIGHT P6). P6 corrected this fallback once — from the
+  // phantom `doc.stage` to the real `currentStage` — and its own comment conceded the arm was
+  // "harmless today only by coincidence". It is in fact strictly unreachable: the producer
+  // writes `stages` as `(run.stages || []).map(…)`, always an array, and derives `currentStage`
+  // from the SAME `find(s => s.status === 'running')` predicate normalizeLive uses for `active`
+  // (src/mcp-council-awareness.js:155-157) — so the two can never disagree. The arm is deleted;
+  // stageName now comes from the running stage or is null. Both phantom keys pinned as inert.
+  test('stageName comes from the running stage only — no doc-level fallback (RN-7)', () => {
     const base = { type: 'council-run', taskId: 'x', status: 'running',
       stages: [{ name: 'stage1', status: 'complete' }] };
-    expect(normalizeLive({ ...base, currentStage: 'chair' }).stageName).toBe('chair');
-    // a doc carrying only the phantom `stage` key yields null, not a stage name
+    expect(normalizeLive({ ...base, currentStage: 'chair' }).stageName).toBeNull();
     expect(normalizeLive({ ...base, stage: 'chair' }).stageName).toBeNull();
+    // …and the real path is untouched: a stage actually in `running` still names itself.
+    expect(normalizeLive({ ...base, stages: [{ name: 'chair', status: 'running' }] }).stageName).toBe('chair');
   });
 });

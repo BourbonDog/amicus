@@ -7,11 +7,20 @@ major jump, gated on funding/cofounder. The observability arc is split so the **
 first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
 preview dropped to the backlog.
 
-Amicus is at **v4.3.0** (tagged 2026-07-24). Each 4.x rev below leads with the benefit, not the plumbing.
+Amicus is at **v4.4.1** (2026-07-27), the fast-follow patch on v4.4.0 (tagged 2026-07-26). Each
+4.x rev below leads with the benefit, not the plumbing.
 
-**Status:** v4.0 through v4.3 have **shipped** — everything down to the v4.4 heading is a record of
-what landed, not a plan. **v4.4 (Council Workspace) is the next rev**; its implementation plan is
-written and de-rotted against shipped v4.3 (see that section). v4.5 and v5.0 remain forward-looking.
+**Status:** v4.0 through **v4.4.1** have **shipped** — everything down to the v4.5 heading is a
+record of what landed, not a plan. **v4.5 (policy packs + composition) is the next rev.** v5.0
+remains forward-looking.
+
+> 📁 **Reading this from an npm install?** Some references below point at working documents that
+> live in the git repository and are deliberately **not** in the published package — anything under
+> `.superpowers/` (the SDD working area, gitignored) and the root `BACKLOG.md`. The npm tarball
+> ships `docs/*.md` only. Read those files at
+> [github.com/BourbonDog/amicus](https://github.com/BourbonDog/amicus); the `.superpowers/` ones are
+> local-only working notes and are not published anywhere. Every claim this roadmap makes is
+> summarized here — the pointers are provenance, not prerequisites.
 
 ---
 
@@ -51,26 +60,74 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 - **README + docs update** — `watch`/`--follow`, failed-leg retry, and `spend query` documented in `README.md` and `docs/usage.md` *(S)*
 > Why here / why first: this is the observability data layer + terminal surface. It ships **before** the GUI (v4.4) because the desktop workspace is a front-end on exactly this data. All M-effort, so it lands fast.
 
-## v4.4 — "The Council Workspace" *(desktop GUI on the v4.3 data layer)* — ⏭️ NEXT, plan ready
+## v4.4 — "The Council Workspace" *(desktop GUI on the v4.3 data layer)* — ✅ SHIPPED v4.4.0, 2026-07-26
 **Benefit:** the same live data as a rich desktop app — watch a council *think*, not just tail a log.
 - **★ Electron "Council Workspace" GUI** — live reviewer progress, anonymized peer packets, adjudication tiers, dissent, cost-by-seat, one-click fold into Claude Code — **B9** *(L)*
 - **README + docs update** — Council Workspace walkthrough + screenshots in `README.md` and `docs/` *(S)*
 > Why here: a GUI layer on top of v4.3's data layer. Split into its own point release because it's the one **L-effort** build in the observability arc — keeping v4.3 small and shippable.
 >
-> **Plan status (2026-07-25):** `docs/superpowers/plans/2026-07-19-v4.4-council-workspace.md` is
-> written and **de-rotted against shipped v4.3** (68 verified findings applied inline; ledger at
-> `.superpowers/sdd/v44/preflight-v44-findings.md`). One scope note the de-rot surfaced: the
-> composed council live doc emits **no per-leg rows**, so the plan now opens with a **Task 0.5** that
-> adds them to the v4.3 data layer. v4.4 is therefore *almost* pure front-end — one additive,
-> tested change to `src/mcp-council-awareness.js`, then pixels over existing data.
+> The five paid gate councils run against it (`wsgate01`–`wsgate04`, `costgate01`) are also what
+> produced the 4.4.1 backlog below: the GUI shipped, and running real money through it is what
+> surfaced the cost-attribution and repair-path defects that patch closes.
+
+## v4.4.1 — "What the gate councils found" *(fast-follow patch on 4.4.0)* — ✅ SHIPPED v4.4.1, 2026-07-27
+**Benefit:** the product stops mis-stating its own spend, a repair leg stops fabricating findings,
+and a review that honestly finds nothing stops being an error.
+- **Cost truthfulness** — subtree-unknown spend carried into the ledger, the sticky unknown-spend notice unstuck, a cache-only leg reported `unknown` rather than falsely free, and `--max-cost` degraded to exit `2` when the total is inexact rather than claiming a percentage it cannot know — CA-2/CA-3/CA-6/CA-7 *(M)*
+- **The repair path, whole** — all four remaining repair-prompt builders now carry the artifact they are repairing, and a repaired review no longer splices two generations together — LC-12/LC-11 *(M)*
+- **A clean review is a valid review** — `EMPTY_FINDINGS` accepts a well-formed empty set, and the tally, street-cred and chair degrade gracefully on an all-clean bench — LC-10 *(M)*
+- **One OpenCode server per council run** — concurrent waves no longer race each other's SQLite open, which was making `--critic` a coin flip *(M)*
+- Renderer, progress and leg-row robustness; `electron/` under the lint gate; the read-only-workspace invariant test; live rails green as documented *(S each)*
+> Why a patch and not a rev: every item is a correction to something already shipped, all of it
+> measured against real paid runs. Two behaviour changes ride along (LC-2's session abort at the
+> tool-settle ceiling, LC-10's acceptance of an empty finding set) — both owner-ruled, both
+> corrections rather than new capability. Scope, rulings and the full 61-item inventory live in the
+> repo's working notes (`.superpowers/sdd/v441/backlog-and-proposal.md`, local-only) and in the
+> repo's root `BACKLOG.md` — neither ships in the npm package; see the note at the top.
 
 ## v4.5 — "Save, share, and compose your councils"
 **Benefit:** complex councils become one-command, repeatable, and chainable.
+- **★ Auto-open the Council Workspace on a council run (Christian, 2026-07-26)** — when a council is
+  invoked from Claude Desktop and Electron is already present, the Workspace window opens by
+  default instead of requiring a separate `amicus watch <runId> --ui`. Today the GUI is opt-in and
+  discoverable only from `watch --help`, so the flagship v4.4 surface goes unseen on the very
+  client best able to show it. *(S–M; the pieces exist — see the design notes below.)*
 - **Council policy packs + full run-profiles** (bench + lenses + options + briefing template, invoke by name) — B7/F5 *(M)*
 - **Composable/chained waves** (`--input-from <waveId>` / pipe) for generate→critique→refine — F6 *(M)*
 - **Briefing templates + library** (F9), **session/wave tagging + `--search` + grouped history** (F8), **GUI power ergonomics** (F10) *(S–M)*
 - **README + docs update** — policy packs, chained waves, and the briefing-template library in `README.md` and `docs/` *(S)*
 > Why here: velocity multipliers that only pay off once councils are a command (v4.0) and observable (v4.3/v4.4).
+
+### Deferred out of v4.4.1 into v4.5 (2026-07-27)
+
+Each is `M`+, or needs data or a design decision — the bar a patch on a published release cannot
+carry. The table below is self-contained; the full write-ups (what, where, what breaks if it stays)
+live in the repo's local-only working notes — `.superpowers/sdd/v44/v4.4.1-backlog.md`, with the
+disposition that put them here in `.superpowers/sdd/v441/backlog-and-proposal.md`. **If you have
+those notes, read that backlog's Appendix A (settled decisions) and Appendix B (known false
+positives) before re-filing anything from this list.**
+
+| ID | What | Why not 4.4.1 |
+|---|---|---|
+| **CA-4** | `tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`) | `M` — a schema question, not a fix |
+| **CA-5** | `isSubagentToolCall` is still a `name === 'task'` string proxy | `M`, and **reduced** by v4.4.0: it is now only the fallback when the real subtree walk finds nothing |
+| **LC-1** | B53's stall kill is skipped while a tool-settle deferral is active | `S–M` — shipped deliberately; the author wants a second opinion, which needs data from real runs |
+| **LC-5** | A chair fallback leaves no trace in `run.json` (`wsgate02`'s haiku failed twice; only `"chair":"minimax"` was recorded) | `M` — a run-record schema addition |
+| **RN-1** | `sanitizeName` collisions surface as a banner rather than a refusal | `S` + a product decision that was already argued once |
+| **RN-2** | `renderRunList` blind masking is best-effort — only the open run resolves labels | `M` |
+| **RN-5** | A blind-mode flip closes every open prose panel and repaints twice | `S–M` |
+| **RN-11** | `renderSeats` never reorders existing rows | `S`, cosmetic, no consequence yet |
+| **REL-2** | `mcp-repomix-e2e` skips, so plugin-chain MCP discovery is exercised nowhere | `M` — needs `AMICUS_REPOMIX_E2E_PROJECT` pointed at a real project *and* `repomix` on PATH |
+| **TST-1 / TST-2** | No real `--debate` fixture; the `lens:<slug>` role branch has zero coverage | `M` each, and they want doing together |
+| **TST-3** | Abort confirm→status-flip is proven only against the fake DOM | `M` — needs a real CDP pass |
+| **TST-7** | Six render functions have no unit coverage | `M` |
+| *(new)* | **Residual integration-suite handle leaks** — a NAMED leak with evidence, filed 2026-07-27 after 4.4.1 fixed ENV-6 and the live rail still warned from *different* suites | `S–M`. Full evidence, including why `--detectOpenHandles` cannot diagnose this class, is in the repo's root `BACKLOG.md` (not in the npm package — read it on GitHub) — start there rather than re-deriving it |
+
+**ENV-6 is NOT on this list** — it was pulled into 4.4.1 by owner ruling and fixed at the source
+(the CDP e2e suite's SIGKILL escalation timer). **ENV-1** is not on it either: it is a decision
+record ("eleven `Number(env) || default` sites"), not a task — a blanket migration would introduce
+six new defects to fix one, and `src/utils/env-num.js`'s docblock records which knobs deliberately
+keep the old form.
 
 ## v5.0 — Enterprise-readiness *(the deliberate major jump — a venture unto itself, gated on funding / cofounder)*
 **Benefit:** team/org deployment — but a distinct product + go-to-market motion (SOC2, SLAs, sales, support), not a feature drop. Parked as the 5.0 major per the chair's hard-question #5: a solo dev can't credibly ship or support this alone.
@@ -82,6 +139,46 @@ second-opinion skill delegates Stages 1–3+5 to `council run` and keeps only th
 > These cluster because they share one prerequisite you don't have yet: an org buyer + the org to support. Revisit as a funded track.
 
 ---
+
+### Design notes — auto-open the Council Workspace
+
+Recorded 2026-07-26 from a read of the shipped code, so the v4.5 implementer starts from facts
+rather than re-deriving them.
+
+**The pieces already exist.**
+
+| Need | Where it lives today |
+|---|---|
+| Launch the window | `src/sidecar/workspace-window.js` `launchWorkspaceWindow({project, runId})` |
+| Detect the client | `src/utils/client-detect.js` `detectClient(mcpServer)` → `code-local` \| `code-web` \| `cowork` |
+| Is Electron usable | `src/sidecar/electron-install.js` `isElectronUsable` / `resolveElectronBinary` |
+| Current entry point | `amicus watch <runId> --ui` (`src/cli-handlers-watch.js:87`) |
+
+**"Claude Desktop" maps to `code-local`.** ⚠️ But `detectClient` reads the MCP client's
+`getClientVersion().name`, so it **only works on the MCP path** — `amicus_council_run`, which is
+exactly the Claude Desktop case. A `council run` typed into a terminal has no MCP server, so
+detection there falls through to the env override or the `cowork` status-quo default. Do not build
+this on the CLI path expecting detection to work; either gate it on the MCP entry point or thread
+an explicit client tag through. (Related: the Phase 12 backlog item about persisting the client tag
+into shared-server `metadata.json` is the same seam.)
+
+**Four guards, all load-bearing:**
+
+1. **Never under `--json`.** `--ui` already rejects `--json` (interactive-only); an implicit default
+   must not create the combination the explicit flag refuses.
+2. **Never in CI or headless.** `council run` is the engine behind the Council Review GitHub Action
+   and every headless fanout. A popped window on a runner is a hang, not a feature. Gate on the same
+   display check the e2e suite uses (`HAS_DISPLAY`).
+3. **Never trigger an install.** Requirement is *"where Electron is installed"* — check
+   `isElectronUsable`, and if it is absent, do nothing silently. An implicit ~100 MB Electron
+   download on someone's first council run is a hostile surprise.
+4. **Must be opt-out.** A `--no-ui` (or config key) that suppresses it, because this changes default
+   behaviour for an existing command.
+
+**Why not v4.4.1.** It is a new default behaviour — a feature — and 4.4.1 is a patch on a shipped
+release whose scope was explicitly locked. The patch already carries two behaviour changes (LC-2,
+LC-10) that stretch the definition; a third that pops a GUI window would not be defensible as a
+patch. Sits naturally beside v4.5's existing **GUI power ergonomics (F10)** line.
 
 ## Backlog (tracked, not scheduled)
 - **`--dry-run` / cost & route preview** across start/fanout/council — E2/C7/F4 *(M)* — "know the cost/route before you commit"; useful, not essential to the near-term line.

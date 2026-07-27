@@ -114,15 +114,26 @@ function renderMd(m) {
   for (const s of m.streetCred) { out.push(`| ${s.model} | ${fmtNum(s.peersOnly)} | ${fmtNum(s.withSelf)} |`); }
 
   out.push('\n## Findings by tier\n');
-  for (const t of TIER_ORDER) {
-    const group = m.findings.filter(f => f.tier === t);
-    if (!group.length) { continue; }
-    out.push(`### ${t}`);
-    for (const f of group) {
-      const dec = f.decision ? ` — ${f.decision}${f.applied ? ' (applied)' : ''}` : '';
-      out.push(`- **${f.id}** (${f.severity}, raiser ${f.raiser}) — a${f.basis.a}/d${f.basis.d}/n${f.basis.n}${dec}`);
+  // LC-10 fast-follow (review minor M3): m.findings can legitimately be EMPTY
+  // (every seat honestly reported nothing) — TIER_ORDER's four groups are then
+  // all empty too, and the loop below emits nothing, leaving this heading with
+  // no content beneath it before '## Cost'. Same heading-over-nothing class
+  // Task 3 closed in the Stage-2 prompts (buildJudgeBundle/buildChairPacket),
+  // human-facing here rather than model-facing. State the clean bench instead
+  // of leaving the heading to dangle.
+  if (!m.findings.length) {
+    out.push('_No findings were raised on this bench — a clean review is a valid review._\n');
+  } else {
+    for (const t of TIER_ORDER) {
+      const group = m.findings.filter(f => f.tier === t);
+      if (!group.length) { continue; }
+      out.push(`### ${t}`);
+      for (const f of group) {
+        const dec = f.decision ? ` — ${f.decision}${f.applied ? ' (applied)' : ''}` : '';
+        out.push(`- **${f.id}** (${f.severity}, raiser ${f.raiser}) — a${f.basis.a}/d${f.basis.d}/n${f.basis.n}${dec}`);
+      }
+      out.push('');
     }
-    out.push('');
   }
 
   // Defensive: never emit the heading unless at least one grouping has

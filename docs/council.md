@@ -123,6 +123,18 @@ Key semantics:
 - `--max-cost` is a **whole-run** ceiling checked before each paid stage launch (Stage-1 wave,
   repair solos, Stage-2 wave, chair). Hitting it mid-run stops launching and finalizes what
   exists; in-flight legs are never aborted for cost.
+- **It bounds KNOWN spend, and it never blocks a run.** A leg whose cost could not be
+  determined contributes nothing to the figure the ceiling is checked against, is never guessed
+  at, and never halts anything — the standing ruling is fail *loud*, not fail *closed*. The
+  measured consequence of the older, quieter version: `council-wsgate02` really spent
+  **$0.9859 against a $0.75 ceiling (131%)** while amicus believed $0.3720 — and exited `0`.
+  So when a ceiling is set **and** the run's total is inexact (`usage.costExact: false` — any
+  `unknownLegs` or `subtreeUnknownLegs`), the run **exits `2`**, through the same degrade
+  channel as a bench the ceiling shrank — the stages, verdict and usage block are untouched;
+  `exitCode` becomes `2` and `status` becomes `partial`, as for every other degradation, because
+  `0`/`complete` reads as "clean, and inside your ceiling" and a run publishing a floor has not
+  earned that. With **no** ceiling there is nothing to be inexact against and an unpriced leg
+  leaves the exit code (and status) alone.
 - Each launch is measured against the **remaining** allowance (ceiling − known spend −
   allowances already claimed by a wave that is launching right now). Stage 1 launches its seat
   wave and its critic/lens waves concurrently, so the claim is atomic — two waves can never
@@ -131,6 +143,17 @@ Key semantics:
   aborted for cost. The refusal is printed as a `Notice:` naming the wave and its models,
   recorded on `run.json` as `budgetRefusals[]`, and degrades the exit code to `2`. If it takes
   the bench below two reviews, the usual `COUNCIL_QUORUM` failure (exit 1) applies.
+- A run starts **one** OpenCode server and threads it through every wave (two concurrent
+  starts race on OpenCode's SQLite). Whether that worked is always on the record, in the
+  affirmative as well as the negative — exactly one of these two keys is present:
+  - `sharedServer` `{acquired: true, at, goPid, models}` — the run got its shared server and
+    every wave rode it. `goPid` is the server's pid; no wave writes a `goPid` into its own
+    `metadata.json` while riding an injected server, so this is direct evidence rather than
+    an inference drawn from a `goPid` appearing where it should not.
+  - `sharedServerUnavailable` `{error, at}` — the server could not start and the run **still
+    proceeded** on one server per wave, the configuration that races. Also printed as a
+    `Notice:`. It does not change the exit code; treat its presence as "expect degraded
+    results".
 - Chair failure recovery: one retry of the same chair → promote the highest peers-only
   street-cred model (from `amicus council stats`) that is not a bench seat → give up and write
   the verdict with `overallVerdict: null`.
@@ -152,6 +175,7 @@ Key semantics:
 | Cost ceiling hit after the tally exists | verdict written (no chair), `overallVerdict:null` | 2 |
 | Cost ceiling hit before the tally | stop; error doc `COST_EXCEEDED` | 1 |
 | Cost ceiling refused a wave at pre-flight | partial bench; `Notice:` + `run.json` `budgetRefusals[]` | 2 |
+| `--max-cost` set and `usage.costExact:false` | stages/verdict/usage untouched; `run.json` `status` becomes `partial` — the total is a floor, so it is not reported as clean | 2 |
 | Aborted | `run.json` status `aborted` | 130/143 |
 
 **The run directory** (durable state; skill-compatible layout):
@@ -331,8 +355,9 @@ you're ready.
 **Degraded states are rendered honestly, never hidden:** a run whose `run.json` can't be parsed at
 all shows an "unreadable" banner with the error and the run directory path; a run written by a
 different amicus schema version shows a schema-mismatch banner instead of guessing at a rendering;
-a tally with fewer than 2 completed judges shows an explicit "tally is peers-reduced" note instead
-of an adjudication matrix that looks more authoritative than the underlying data supports; and a
+a tally with fewer than 2 completed judges shows an explicit "tally is peers-reduced" note **above**
+the adjudication matrix — the matrix still renders over the surviving judges, and the note is what
+stops it being read as more authoritative than the underlying data supports; and a
 chair-less verdict (retry + fallback promotion both failed, or the cost ceiling was hit before the
 chair ran) shows "no chair verdict" plus the engine's own reason, never a blank panel.
 
@@ -358,10 +383,39 @@ fenced block) against the findings-block contract, without calling a model. Thin
 - A ` ```json ` fenced block exists (last one in the file wins if there are several) —
   `NO_FENCED_BLOCK` if not.
 - It parses as JSON — `NOT_PARSEABLE` if not.
-- `findings` is a non-empty array — `EMPTY_FINDINGS` if not.
+- `findings` is present and is an array — `EMPTY_FINDINGS` if it is missing or is some other
+  type. **An array that is present and empty is valid**, provided `overall` is a non-empty
+  string; `EMPTY_FINDINGS` if the array is empty *and* `overall` is missing, blank, or not a
+  string. See "A clean review is a valid review" below.
 - Every finding has a **sequential integer `id`** starting at 1 (`NON_SEQUENTIAL_ID` /
   `DUPLICATE_ID` otherwise), a `severity` in `{blocker, major, minor, nit}` (`BAD_SEVERITY`
   otherwise), and non-empty string `claim`, `location`, `rationale` (`MISSING_FIELD` otherwise).
+
+**A clean review is a valid review.** A reviewer that read the material, found nothing wrong,
+and said so passes validation with `"findings": []` — it is not sent to a repair re-prompt and
+its seat is recorded `conformance: clean`, exactly like any other well-formed review. Three
+things make that safe:
+
+- A **broken** emit is a different outcome with its own code: no fenced block at all is
+  `NO_FENCED_BLOCK`, and a block that does not parse is `NOT_PARSEABLE`. Both return before the
+  empty-set rule is ever reached, so "my output broke" is never mistaken for "I found nothing".
+- **`overall` is what carries the claim.** An empty findings array with a blank, missing, or
+  non-string `overall` is a hollow shell, not a judgement, and stays `EMPTY_FINDINGS`. The
+  Stage-1 briefing states the same rule to the model: `overall` is always required, `findings`
+  may be `[]`, and a finding is never to be invented to fill it.
+- A **missing** `findings` key is not a declaration of zero and stays an error. Only an array
+  that is present and empty counts as "I found nothing" — the same line `countAttemptedFindings`
+  draws when it checks a repair against the count the original declared.
+
+This closes a contradiction that used to be shipped in every run: the anti-sycophancy clause in
+each Stage-1 briefing says "An empty severity category is a valid result", while the validator
+rejected exactly that answer — so the only way for a reviewer to satisfy the schema was to
+produce a finding. Downstream, an all-clean bench degrades cleanly rather than silently: Stage 2
+still runs (the peer **ranking** — and therefore street-cred — is unaffected by an empty findings
+pool, only the adjudication half is vacuous), the judge bundle and chair packet state the empty
+findings index explicitly instead of rendering a heading over nothing, `tierCounts` comes out
+all-zeros, per-model `confirmRate`/`factErrorRate` are `null` (no denominator to divide by), and
+a `--debate` run records `debate.outcome: "nothing-to-debate"` on `run.json`.
 
 **Exit codes are a tri-state contract, not the usual 0/1:**
 

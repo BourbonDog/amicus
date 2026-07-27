@@ -13,6 +13,11 @@ class CdpClient {
     this.ws = null;
     this._nextId = 1;
     this._pending = new Map();
+    // v4.4.1 TST-6: CDP *events* (frames with no `id`) used to be dropped on the floor —
+    // only command replies were routed. Buffer them so a suite can assert on what the page
+    // logged, which is the only way to see a Content-Security-Policy violation from outside
+    // the renderer.
+    this._events = [];
   }
 
   /**
@@ -60,7 +65,9 @@ class CdpClient {
           clearTimeout(pending.timer);
           pending.resolve(msg);
           this._pending.delete(msg.id);
+          return;
         }
+        if (msg.id === undefined && msg.method) { this._events.push(msg); }
       });
     });
   }
@@ -135,6 +142,44 @@ class CdpClient {
     const base = { key, code: key, windowsVirtualKeyCode, nativeVirtualKeyCode: windowsVirtualKeyCode };
     await this._send('Input.dispatchKeyEvent', { type: 'keyDown', ...base });
     await this._send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
+  }
+
+  /**
+   * Turn on the two domains that report page-level diagnostics.
+   *
+   * `Log.enable` is the load-bearing one: per the CDP contract it REPLAYS every entry
+   * collected so far, so violations emitted while the page was booting — long before this
+   * client could connect — still arrive. Content-Security-Policy refusals land here with
+   * `source: 'security'`, which is why a CSP assertion needs the Log domain and not just
+   * console output.
+   * @returns {Promise<void>}
+   */
+  async enableLogging() {
+    await this._send('Log.enable');
+    await this._send('Runtime.enable');
+  }
+
+  /**
+   * Everything the page reported since enableLogging(), flattened to {source, level, text}.
+   * Covers Log entries (CSP/security/network), console.* calls, and uncaught exceptions.
+   * @returns {Array<{source: string, level: string, text: string}>}
+   */
+  consoleMessages() {
+    const out = [];
+    for (const evt of this._events) {
+      const p = evt.params || {};
+      if (evt.method === 'Log.entryAdded' && p.entry) {
+        out.push({ source: p.entry.source || 'log', level: p.entry.level || 'info', text: String(p.entry.text || '') });
+      } else if (evt.method === 'Runtime.consoleAPICalled') {
+        const text = (p.args || [])
+          .map((a) => (a.value !== undefined ? String(a.value) : (a.description || '')))
+          .join(' ');
+        out.push({ source: 'console', level: p.type || 'log', text });
+      } else if (evt.method === 'Runtime.exceptionThrown' && p.exceptionDetails) {
+        out.push({ source: 'exception', level: 'error', text: String(p.exceptionDetails.text || '') });
+      }
+    }
+    return out;
   }
 
   /**
@@ -220,7 +265,9 @@ class CdpClient {
     while (Date.now() - start < timeoutMs) {
       try {
         const target = await cdp.findTarget(t => t.type === 'page' && t.url && t.url.startsWith('file://'));
-        if (target) { await cdp.connect(target.id); return cdp; }
+        // TST-6: logging is enabled for the workspace target only — the toolbar/content
+        // factories are left byte-identical so no existing suite changes behaviour.
+        if (target) { await cdp.connect(target.id); await cdp.enableLogging(); return cdp; }
       } catch { /* not ready */ }
       await new Promise(r => setTimeout(r, 500));
     }

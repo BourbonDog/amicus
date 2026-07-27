@@ -1,3 +1,39 @@
-# Shell installers must stay LF so `curl … | sh` works regardless of a
-# contributor's core.autocrlf setting (a CRLF install.sh breaks under sh).
+# Normalize every text file to LF, in the object database AND the working tree,
+# on every platform.
+#
+# Why this file exists: lint-staged captures a command's stderr INTO its stdout
+# (node_modules/lint-staged/lib/gitWorkflow.js:272 -> execGit.js) and feeds the
+# result to `git rev-parse --short <hash>`. A file with no explicit line-ending
+# attribute lets core.autocrlf act on it, so `git stash create` prints
+#   warning: in the working copy of 'X', LF will be replaced by CRLF
+# on stderr, that warning lands in the captured "hash", and rev-parse fails with
+# `fatal: Needed a single revision` -- naming neither line endings nor the file.
+# An explicit declaration settles the question and the warning never fires.
+#
+# WHY eol=lf AND NOT eol=crlf: `eol=` is platform-independent -- it forces that
+# ending in the working tree on Linux and macOS too, not just Windows. Under
+# eol=crlf every executable text file needs a carve-out or it ships with a CRLF
+# shebang: the kernel then looks for an interpreter named `node\r` and the
+# program dies with "bad interpreter". This was not hypothetical -- the first
+# cut of this task used eol=crlf and would have published bin/amicus.js (the
+# `amicus`/`am` entrypoint, shipped via package.json files[]) with a CRLF
+# shebang from publish.yml's ubuntu-latest runner, breaking the CLI for every
+# Linux and macOS npm consumer. eol=lf needs no carve-outs at all.
+* text=auto eol=lf
+
+# Redundant under eol=lf, kept as explicit documentation of a hard requirement:
+# `curl … | sh` breaks on a CRLF install.sh, and the husky hooks are bash
+# scripts with no .sh extension, so a future change to the rule above must not
+# silently reclaim them.
 *.sh text eol=lf
+.husky/* text eol=lf
+
+# Binary assets: never touched. Keep this list complete -- text=auto's content
+# sniffing usually catches an unlisted binary type, but "usually" is not the
+# guarantee this block claims.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

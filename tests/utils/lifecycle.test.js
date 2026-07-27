@@ -1,5 +1,5 @@
 'use strict';
-const { isOneShotCommand, armExitWatchdog } = require('../../src/utils/lifecycle');
+const { isOneShotCommand, armExitWatchdog, exitReaping } = require('../../src/utils/lifecycle');
 
 describe('isOneShotCommand', () => {
   test('start/continue/resume/list/read/abort/fanout are one-shot', () => {
@@ -42,5 +42,40 @@ describe('armExitWatchdog', () => {
     expect(typeof captured.unref).toBe('function');
     expect(captured.unref).toHaveBeenCalled();
     stSpy.mockRestore();
+  });
+});
+
+// v4.4.1 fix wave, F3: a wave running on an INJECTED server never closes it —
+// so a force-exit would leave the OpenCode process orphaned, still holding the
+// SQLite lock the shared server exists to stop contending on.
+describe('exitReaping', () => {
+  test('SIGTERMs the injected server\'s Go pid, then exits with the code', () => {
+    const kill = jest.fn();
+    const exit = jest.fn();
+    exitReaping({ goPid: 4242 }, { kill, exit })(130);
+    expect(kill).toHaveBeenCalledWith(4242, 'SIGTERM');
+    expect(exit).toHaveBeenCalledWith(130);
+  });
+
+  test('the exit still happens when the kill throws (pid already gone)', () => {
+    const exit = jest.fn();
+    const kill = jest.fn(() => { throw new Error('ESRCH'); });
+    exitReaping({ goPid: 4242 }, { kill, exit })(143);
+    expect(exit).toHaveBeenCalledWith(143);
+  });
+
+  test('no pid, or no server at all, exits without signalling anything', () => {
+    const kill = jest.fn(); const exit = jest.fn();
+    exitReaping({ goPid: null }, { kill, exit })(0);
+    exitReaping(null, { kill, exit })(0);
+    expect(kill).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledTimes(2);
+  });
+
+  test('never signals THIS process', () => {
+    const kill = jest.fn(); const exit = jest.fn();
+    exitReaping({ goPid: process.pid }, { kill, exit })(0);
+    expect(kill).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(0);
   });
 });

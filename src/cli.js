@@ -598,12 +598,14 @@ Options for 'spend':
 `,
   watch: `
 Options for 'watch':
-  <id>                          A fan-out wave id, council run id, or session id
+  <id>                          A fan-out wave id, council run id, or session id.
+                                Optional with --ui: bare 'amicus watch --ui' opens the
+                                project's Council Workspace run list
   --project <path>              Project the run was launched in (default cwd)
   --interval <sec>              Refresh interval (default 2, floor 0.5)
   --plain                       Milestone log lines instead of the refresh table
   --json                        NDJSON: tailed events + composed doc on change + final doc
-  --ui                          Open the Council Workspace window (v4.4; interactive-only)
+  --ui                          Open the Council Workspace window (interactive-only)
 `,
   setup: `
 Options for 'setup':

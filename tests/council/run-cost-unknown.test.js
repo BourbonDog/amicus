@@ -61,12 +61,50 @@ function scriptWithUnknownSeat() {
   return s;
 }
 
+/**
+ * scriptWithUnknownSeat, plus a Stage 2 in which ALL THREE judges are unknown
+ * too. The unknown count therefore GROWS after the Stage-1 notice has already
+ * fired (1 → 4) — the shape v4.4.1 CA-3 was silent about.
+ */
+function scriptWithUnknownStage2() {
+  const s = scriptWithUnknownSeat();
+  s['abc123-s2'] = () => okWave([
+    unknownLeg('gemini', judgeOut(['Review B', 'Review C', 'Review A'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }])),
+    unknownLeg('gpt', judgeOut(['Review A', 'Review C', 'Review B'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'dispute' }])),
+    unknownLeg('qwen', judgeOut(['Review A', 'Review B', 'Review C'],
+      [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }, { id: 'C1', verdict: 'agree' }])),
+  ]);
+  return s;
+}
+
 describe('an unknown-cost leg never halts the run (fail LOUD, not CLOSED)', () => {
-  test('a run with an unknown leg and a generous ceiling still completes', async () => {
+  test('a run with an unknown leg and a generous ceiling still runs to the end', async () => {
     const { exitCode, run } = await runCouncil(
       baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(scriptWithUnknownSeat())));
+    // v4.4.1 CA-6: a ceiling over an inexact total degrades the EXIT CODE — it
+    // does not stop anything. Every stage still ran and there is no error.
+    expect(exitCode).toBe(2);
+    expect(run.status).toBe('partial');
+    expect(run.error).toBeNull();
+    expect(run.stages.every((s) => s.status !== 'skipped')).toBe(true);
+    expect(run.stages.find((s) => s.name === 'verdict').status).toBe('complete');
+  });
+
+  test('with NO ceiling the same inexact run still exits 0 — nothing to be inexact against', async () => {
+    const { exitCode, run } = await runCouncil(
+      baseOptions(tmp, { maxCost: null }), deps(scriptedLaunchers(scriptWithUnknownSeat())));
     expect(exitCode).toBe(0);
     expect(run.status).toBe('complete');
+    expect(run.usage.costExact).toBe(false);
+  });
+
+  test('an EXACT total under a ceiling still exits 0', async () => {
+    const { exitCode, run } = await runCouncil(
+      baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(happyScript())));
+    expect(exitCode).toBe(0);
+    expect(run.usage.costExact).toBe(true);
   });
 
   test('unknown legs alone never trip the ceiling — only KNOWN spend does', async () => {
@@ -86,8 +124,22 @@ describe('an unknown-cost leg never halts the run (fail LOUD, not CLOSED)', () =
     };
     const { exitCode, run } = await runCouncil(
       baseOptions(tmp, { maxCost: 0.01 }), deps(scriptedLaunchers(allUnknown)));
-    expect(exitCode).toBe(0);
+    // THE GUARDRAIL ON THE STANDING RULING — this must stay green forever. A
+    // fully-unpriced bench under a $0.01 ceiling runs every stage to completion:
+    // no COST_EXCEEDED, nothing skipped. CA-6 only degrades the exit code (2).
     expect(run.error).toBeNull();
+    expect(run.stages.every((s) => s.status !== 'skipped')).toBe(true);
+    expect(run.stages.find((s) => s.name === 'verdict').status).toBe('complete');
+    expect(exitCode).toBe(2);
+  });
+
+  test('CA-6 degrades the code but NEVER the record: stderr says so and run.json is intact', async () => {
+    const { exitCode, run } = await runCouncil(
+      baseOptions(tmp, { maxCost: 0.75 }), deps(scriptedLaunchers(scriptWithUnknownSeat())));
+    expect(exitCode).toBe(2);
+    expect(run.usage.costExact).toBe(false);
+    expect(stderrText()).toMatch(/--max-cost/);
+    expect(stderrText()).toMatch(/exit degraded \(2\)/);
   });
 
   test('the ceiling still trips on KNOWN spend crossing it (regression guard)', async () => {
@@ -144,5 +196,15 @@ describe('the run announces unknown spend on stderr', () => {
     await runCouncil(baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(scriptWithUnknownSeat())));
     const hits = stderrText().match(/cost is UNKNOWN/gi) || [];
     expect(hits).toHaveLength(1);
+  });
+
+  // v4.4.1 CA-3: the Stage-1 gate announces "1 council leg"; the notice used to
+  // memoize on a sticky boolean, so the three unknown Stage-2 judges were never
+  // announced at all. run.json still carried 4 — only the announcement lied.
+  test('unknown legs appearing AFTER stage 1 are announced too, with the grown count', async () => {
+    await runCouncil(baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(scriptWithUnknownStage2())));
+    const hits = stderrText().match(/cost is UNKNOWN/gi) || [];
+    expect(hits.length).toBeGreaterThan(1);
+    expect(stderrText()).toMatch(/4 council leg\(s\) reported NO usage/);
   });
 });

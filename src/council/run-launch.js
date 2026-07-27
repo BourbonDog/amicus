@@ -18,6 +18,20 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Did a launch exit because a SIGNAL killed it (130 = SIGINT, 143 = SIGTERM)
+ * rather than because the work failed? Every stage loop short-circuits on this
+ * instead of treating the wave as a normal failure.
+ *
+ * It lives HERE, with the module that produces those exit codes, because every
+ * stage loop needs it — including run-stage2.js. Defining it in run-stages.js and
+ * importing it back from its own child made the two mutually circular, which is
+ * why runStage2 could not be re-exported from run-stages.js (v4.4.1 review F5).
+ * @param {number} code
+ * @returns {boolean}
+ */
+function isAbortExit(code) { return code === 130 || code === 143; }
+
+/**
  * @param {{fanoutFn?: Function, remainingBudget?: () => number|null,
  *   reserveBudget?: (waveId: string, estimate: number) => boolean,
  *   onBudgetRefusal?: (info: {waveId, models, message}) => void}} [deps]
@@ -32,6 +46,11 @@ const path = require('path');
  *   synchronously, with the estimate it just computed; see run-budget.js.
  *   onBudgetRefusal: notified when the ceiling refuses a wave, so a seat that
  *   never launched can never vanish silently.
+ *   sharedServer (v4.4.1 Task 0.5): a GETTER returning the run's single
+ *   {serverClient, server} pair, or null. A getter (not a value) because run.js
+ *   builds the launchers before it acquires the server — see ./run-server for
+ *   why one server per run, and why `_scratch` isolation survives it. Returning
+ *   null leaves the transport call byte-identical: the wave owns its own server.
  * @returns {{launchWave: Function, launchSolo: Function}}
  */
 function createLaunchers(deps = {}) {
@@ -39,6 +58,7 @@ function createLaunchers(deps = {}) {
   const remainingBudget = deps.remainingBudget || null;
   const reserveBudget = deps.reserveBudget || null;
   const onBudgetRefusal = deps.onBudgetRefusal || null;
+  const sharedServer = deps.sharedServer || null;
 
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
@@ -61,8 +81,14 @@ function createLaunchers(deps = {}) {
     // provider or no ceiling, so the transport call is byte-identical for
     // non-council callers and for `--max-cost`-less runs.
     const remaining = remainingBudget ? remainingBudget() : null;
+    // v4.4.1 Task 0.5: every launch in the run rides the SAME OpenCode server.
+    // NOT `client` — that key is fanout's client TYPE string; the SDK client is
+    // `serverClient` (see the seam comment in fanout.js). Absent → the wave
+    // starts and closes its own server, exactly as before.
+    const shared = sharedServer ? sharedServer() : null;
     const { wave, exitCode, errorDoc } = await fanoutFn({
       ...(typeof remaining === 'number' ? { maxCost: remaining } : {}),
+      ...(shared ? { serverClient: shared.serverClient, server: shared.server } : {}),
       // v4.4 cost-council finding 1: `maxCost` above is a READ taken before the
       // transport resolved routing; a concurrently launching sibling can claim
       // part of that allowance in the meantime. This is the CLAIM that settles
@@ -173,4 +199,6 @@ function materializeDebate(runDir, legs, prefix) {
   return out;
 }
 
-module.exports = { createLaunchers, materializeReviews, materializeDebate, sanitizeName };
+module.exports = {
+  createLaunchers, materializeReviews, materializeDebate, sanitizeName, isAbortExit,
+};

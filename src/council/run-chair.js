@@ -129,7 +129,10 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
   if (chairText && !overallVerdict && !overBudget()) {
     runState.appendStageWave(o.runDir, 'chair', `${o.runId}-ch4`);
     const repair = await launchers.launchSolo({
-      model: actualChair, prompt: stage2.buildChairRepairPrompt(),
+      // ⚠️ LC-12: the synthesis rides along. The chair leg SUCCEEDED — only the
+      // VERDICT line is missing — so a fresh repair session that cannot see the
+      // synthesis is picking a verdict on an artifact it has never read.
+      model: actualChair, prompt: stage2.buildChairRepairPrompt({ synthesis: chairText }),
       project: o.runDir, waveId: `${o.runId}-ch4`,
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
       noCostGate: o.noCostGate,

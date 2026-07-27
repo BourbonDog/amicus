@@ -41,6 +41,53 @@ describe('structured-output contract', () => {
   });
 });
 
+describe('LC-10: the briefing and the validator finally say the same thing', () => {
+  // The contradiction this closes: every Stage-1 briefing has always shipped the
+  // anti-sycophancy clause's "An empty severity category is a valid result" while
+  // validateFindings rejected exactly that answer (EMPTY_FINDINGS) — so the only
+  // way to satisfy the schema was to produce a finding. The clause is not the fix
+  // on its own; the OUTPUT CONTRACT is what a model reads when it writes the block.
+  const { validateFindings } = require('../../src/council/findings');
+
+  test.each(['buildSeatBriefing', 'buildCriticBriefing'])(
+    '%s tells the model an empty findings array is acceptable', (fn) => {
+      const text = b[fn](ARGS);
+      expect(text).toContain('emit [] and say so in "overall"');
+      expect(text).toMatch(/[Nn]ever invent a finding/);
+    });
+
+  test('every Stage-1 briefing requires a non-empty "overall"', () => {
+    for (const text of [
+      b.buildSeatBriefing(ARGS),
+      b.buildCriticBriefing(ARGS),
+      b.buildLensBriefing({ ...ARGS, lens: 'security architect' }),
+    ]) {
+      expect(text).toContain('"overall" — a non-empty string');
+    }
+  });
+
+  test('the answer the briefing describes actually VALIDATES', () => {
+    // The linkage, not a restatement: the briefing promises `[]` + a real
+    // `overall` is acceptable, so the validator must accept it. If either side
+    // ever moves alone, this fails.
+    expect(b.buildSeatBriefing(ARGS)).toContain('emit [] and say so in "overall"');
+    expect(validateFindings('Prose.\n```json\n{"overall":"I read the material and '
+      + 'found nothing to report.","findings":[]}\n```').ok).toBe(true);
+  });
+
+  test('the repair prompt\'s empty-response branch describes a VALID answer too', () => {
+    // briefings.js's "your previous response was empty" branch tells the model to
+    // emit an empty findings array and say so in "overall". While EMPTY_FINDINGS
+    // stood, a model that complied burned its repair attempt and still landed
+    // 'unstructured' — the instruction and the validator disagreed on the ONE
+    // case where nothing else can guard the spend.
+    const p = b.buildFindingsRepairPrompt({ errors: [{ code: 'NO_FENCED_BLOCK', detail: 'none' }] });
+    expect(p).toMatch(/emit an empty "findings" array/);
+    expect(validateFindings('```json\n{"overall":"My previous response was empty; I have '
+      + 'nothing to report.","findings":[]}\n```').ok).toBe(true);
+  });
+});
+
 describe('critic brief (four passes)', () => {
   test('names all four passes', () => {
     const text = b.buildCriticBriefing(ARGS);
@@ -127,6 +174,72 @@ describe('findings repair prompt', () => {
     const long = `${'x'.repeat(40000)}\n\n\`\`\`json\n{"findings":[]}\n\`\`\``;
     const text = b.buildFindingsRepairPrompt({ errors: [], review: long });
     expect(text).toContain(long);
+  });
+});
+
+describe('repair prompts carry the artifact being repaired', () => {
+  // LC-12: buildFindingsRepairPrompt was fixed in f2f554b; these four builders had
+  // the identical omission (buildChairRepairPrompt took no arguments at all). A
+  // repair leg is a FRESH session with no memory of the turn it is repairing.
+  const stage2 = require('../../src/council/briefings-stage2');
+  const dbrief = require('../../src/council/briefings-debate');
+  const errors = [{ code: 'BAD_SEVERITY', detail: "bad severity 'huge' on id 1" }];
+
+  test('buildJudgeRepairPrompt embeds the judgement verbatim', () => {
+    const judgement = 'RANKING: C, A, B\nF1: agree — the fence is real.';
+    const p = stage2.buildJudgeRepairPrompt({ errors, judgement });
+    expect(p).toContain(judgement);
+    expect(p).toContain('BAD_SEVERITY');
+  });
+
+  test('buildJudgeRepairPrompt states the absent case instead of papering over it', () => {
+    const p = stage2.buildJudgeRepairPrompt({ errors, judgement: '' });
+    expect(p).toMatch(/no prior|was empty/i);
+    expect(p).not.toMatch(/--- YOUR PREVIOUS/);
+  });
+
+  test('buildChairRepairPrompt embeds the synthesis it must verdict on', () => {
+    const synthesis = 'The bench converged on three blockers.';
+    const p = stage2.buildChairRepairPrompt({ synthesis });
+    expect(p).toContain(synthesis);
+    expect(p).toContain('VERDICT: Ship it');
+  });
+
+  test('buildChairRepairPrompt still works with no synthesis', () => {
+    expect(() => stage2.buildChairRepairPrompt({})).not.toThrow();
+    expect(() => stage2.buildChairRepairPrompt()).not.toThrow();
+    expect(stage2.buildChairRepairPrompt({})).toContain('VERDICT: Ship it');
+    expect(stage2.buildChairRepairPrompt({})).not.toContain('YOUR SYNTHESIS');
+  });
+
+  test('buildDefenseRepairPrompt embeds the defense', () => {
+    const defense = 'F3: amend — the reviewer is right about the ordering.';
+    expect(dbrief.buildDefenseRepairPrompt({ errors, defense })).toContain(defense);
+  });
+
+  test('buildRevoteRepairPrompt embeds the re-vote', () => {
+    const revote = 'F3: hold dispute.';
+    expect(dbrief.buildRevoteRepairPrompt({ errors, revote })).toContain(revote);
+  });
+
+  test('the debate builders state the absent case rather than opening an empty block', () => {
+    for (const p of [dbrief.buildDefenseRepairPrompt({ errors }),
+      dbrief.buildRevoteRepairPrompt({ errors, revote: '   ' })]) {
+      expect(p).not.toContain('YOUR PREVIOUS DEFENSE');
+      expect(p).not.toContain('YOUR PREVIOUS RE-VOTE');
+      expect(p).toMatch(/was empty/i);
+      expect(p).toMatch(/do not invent/i);
+    }
+  });
+
+  test('no repair builder truncates the artifact, however long it is', () => {
+    // glm's wsgate04 review was 35 KB. A silent cap recreates the defect in a
+    // subtler form: repairing an artifact the model can only half see.
+    const long = 'y'.repeat(40000);
+    expect(stage2.buildJudgeRepairPrompt({ errors, judgement: long })).toContain(long);
+    expect(stage2.buildChairRepairPrompt({ synthesis: long })).toContain(long);
+    expect(dbrief.buildDefenseRepairPrompt({ errors, defense: long })).toContain(long);
+    expect(dbrief.buildRevoteRepairPrompt({ errors, revote: long })).toContain(long);
   });
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "4.4.0",
+  "version": "4.4.1",
   "mcpName": "io.github.BourbonDog/amicus",
   "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "keywords": [
@@ -43,6 +43,7 @@
     "commands/",
     ".claude-plugin/",
     "CHANGELOG.md",
+    "docs/*.md",
     "scripts/postinstall.js",
     "scripts/setup-hooks.js"
   ],
@@ -50,11 +51,11 @@
     "start": "node --experimental-top-level-await --experimental-vm-modules bin/amicus.js",
     "test": "jest",
     "test:integration": "node scripts/run-integration-keyless.js",
-    "test:integration:live": "jest --testPathIgnorePatterns='worktrees' --testMatch='**/tests/**/*.integration.test.js'",
+    "test:integration:live": "jest --runInBand --testPathIgnorePatterns='worktrees' --testMatch='**/tests/**/*.integration.test.js'",
     "test:all": "jest --testPathIgnorePatterns='/node_modules/' --testPathIgnorePatterns='worktrees' && node scripts/mark-test-passed.js",
     "test:e2e:mcp": "jest tests/mcp-repomix-e2e.integration.test.js --testTimeout=180000 --forceExit",
     "posttest": "node scripts/mark-test-passed.js",
-    "lint": "eslint src/",
+    "lint": "eslint src/ electron/",
     "postinstall": "node scripts/postinstall.js",
     "test:thinking": "node scripts/benchmark-thinking.js",
     "test:thinking:quick": "MODELS=gemini node scripts/benchmark-thinking.js",
@@ -88,6 +89,7 @@
     "ajv": "^8.20.0",
     "chrome-remote-interface": "^0.33.3",
     "eslint": "^8.0.0",
+    "espree": "^9.6.1",
     "jest": "^29.0.0",
     "lint-staged": "^16.3.2",
     "puppeteer": "^24.36.0",
@@ -99,6 +101,9 @@
   },
   "lint-staged": {
     "src/**/*.js": [
+      "eslint --fix"
+    ],
+    "electron/**/*.js": [
       "eslint --fix"
     ]
   }

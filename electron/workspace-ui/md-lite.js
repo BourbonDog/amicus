@@ -15,16 +15,49 @@
   var UL_RE = /^\s*[-*]\s+/;
   var OL_RE = /^\s*\d+[.)]\s+/;
 
+  /**
+   * Split one line into literal / inline-code segments in a SINGLE linear pass.
+   *
+   * ⚠️ v4.4.1 A1/D1 (Confirmed 4/4), with its SEVERITY CLAIM CORRECTED. The
+   * previous form re-`exec`ed a freshly sliced `rest` each iteration
+   * (`rest = rest.slice(...)`) — quadratic as WRITTEN, but not as it ran. V8's
+   * `String.prototype.slice` returns a SlicedString (parent pointer + offset),
+   * not a copy, so the old code measured ~8 ms at artifact-guard.js's 200 KB cap
+   * and scaled LINEARLY (~2x per doubling out to 2.4 MB). A deliberately-copying
+   * control took 78,232 ms at that same 200 KB — that is the freeze the finding
+   * described, and it is not what shipped. Numbers:
+   * `.superpowers/sdd/task-10-report.md:127-148`.
+   *
+   * What the rewrite removes is therefore a silent dependence on an undocumented
+   * engine optimisation that nothing here states or tests — a latent PORTABILITY
+   * hazard on any engine without sliced strings — and not a live performance
+   * defect or an exploitable-DoS-that-was. The `lastIndex` cursor walks the
+   * ORIGINAL string once and never copies a tail, so linearity is now a property
+   * of the algorithm rather than of the engine.
+   *
+   * Output is identical to the old function for every input: the pattern is
+   * context-free — no `^`, `\b`, lookaround or backreference — so a /g scan
+   * resuming at `lastIndex` lands on exactly the same match positions that
+   * re-`exec`ing the remainder did. The three boundary cases match too: no
+   * match at all yields one literal segment, a trailing match yields no empty
+   * tail segment, and empty input yields [].
+   *
+   * The regex is constructed per call and deliberately NOT hoisted to module
+   * scope: a /g regex carries mutable `lastIndex`, so one shared instance would
+   * leak cursor state between calls and silently drop spans.
+   */
   function parseInline(text) {
     var out = [];
-    var rest = String(text);
-    while (rest.length) {
-      var m = /`([^`\n]+)`/.exec(rest);
-      if (!m) { out.push({ code: false, text: rest }); break; }
-      if (m.index > 0) { out.push({ code: false, text: rest.slice(0, m.index) }); }
+    var s = String(text);
+    var re = /`([^`\n]+)`/g;
+    var pos = 0;
+    var m;
+    while ((m = re.exec(s)) !== null) {
+      if (m.index > pos) { out.push({ code: false, text: s.slice(pos, m.index) }); }
       out.push({ code: true, text: m[1] });
-      rest = rest.slice(m.index + m[0].length);
+      pos = re.lastIndex;
     }
+    if (pos < s.length) { out.push({ code: false, text: s.slice(pos) }); }
     return out;
   }
 
@@ -43,7 +76,11 @@
         continue;
       }
       var h = H_RE.exec(line);
-      if (h) { blocks.push({ t: 'h', level: h[1].length, text: h[2] }); i += 1; continue; }
+      // ⚠️ v4.4.1 D3: trim the heading text. H_RE's `\s+` eats the run of
+      // whitespace after the hashes, but `(.*)$` keeps everything to end of
+      // line — so `# Title   ` rendered a heading with trailing blanks baked
+      // into its text node.
+      if (h) { blocks.push({ t: 'h', level: h[1].length, text: h[2].trim() }); i += 1; continue; }
       if (UL_RE.test(line)) {
         var ul = [];
         while (i < lines.length && UL_RE.test(lines[i])) { ul.push(lines[i].replace(UL_RE, '')); i += 1; }
@@ -91,7 +128,14 @@
       var b = blocks[i];
       var el;
       if (b.t === 'h') {
-        el = d.createElement('h' + Math.min(6, b.level + 2));
+        // ⚠️ v4.4.1 D4: the `Math.min(6, …)` that used to wrap this was
+        // unreachable — H_RE's `#{1,4}` bounds level to 1–4, so the tag is
+        // always h3–h6 and the clamp could never fire. Dead defensive code is
+        // worse than none here: it made the h6 ceiling look enforced when the
+        // real guarantee lives in H_RE. If that `#{1,4}` is ever widened, THIS
+        // line must widen with it — h7 is not an element. The
+        // `'#'.repeat(4) + ' X'` → h6 test pins the true boundary.
+        el = d.createElement('h' + (b.level + 2));
         applyInline(el, parseInline(b.text), d);
       } else if (b.t === 'code') {
         el = d.createElement('pre');

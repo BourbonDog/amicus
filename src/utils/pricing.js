@@ -63,24 +63,37 @@ function lookupPricing(modelId) {
 }
 
 /**
- * Did we actually OBSERVE any token usage for this leg? (v4.4 B2)
+ * Did we actually OBSERVE tokens THIS MODULE'S ESTIMATE CAN PRICE? (v4.4 B2,
+ * narrowed by v4.4.1 CA-7)
  *
  * This is the predicate that separates "the provider billed us for a $0 tier"
  * from "we never saw a usage payload at all" — a distinction the old
  * `pricing && tokens` guard could not make, because it only inspected the
- * PRICE. Accepts both the normalized totals shape (cacheRead/cacheWrite, as
- * produced by sumPerMessageUsage) and OpenCode's raw per-message shape
- * (`cache: {read, write}`), so callers holding either can ask one question.
+ * PRICE. It reads the normalized totals shape (input/output, as produced by
+ * sumPerMessageUsage) and OpenCode's raw per-message shape alike, because both
+ * carry `input`/`output` at the top level.
+ *
+ * ⚠️ CA-7: deliberately narrower than "did we see any token count at all". The
+ * estimate in resolveLegCost prices input/output ONLY, so accepting
+ * cacheRead/cacheWrite — and `reasoning`, which this predicate also used to
+ * accept and which the estimate likewise never prices — let a leg observed with
+ * none of input/output pass the observation gate and resolve to `estimated $0`:
+ * the same false-zero class the v4.4 observed-tokens fix exists to kill, in the
+ * one corner its predicate did not cover. Such a leg is now `unknown`, which is
+ * true, rather than free, which is not. Pricing cache or reasoning tokens
+ * properly needs catalog fields that may not exist; when they do, widen this and
+ * the estimate together, never one alone.
+ *
+ * Live-validated 2026-07-26: a real local leg reports `input: 25953, output: 3`,
+ * so the shipped v4.2 free-local `$0` promise (a local seat costs nothing but
+ * still reports real input/output) is untouched — tests/pricing-local.test.js
+ * is the standing guard on that.
  * @param {object|null|undefined} tokens
  * @returns {boolean}
  */
 function hasObservedTokens(tokens) {
   if (!tokens || typeof tokens !== 'object') { return false; }
-  const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {};
-  const cacheRead = tokens.cacheRead || cache.read || 0;
-  const cacheWrite = tokens.cacheWrite || cache.write || 0;
-  return (tokens.input || 0) > 0 || (tokens.output || 0) > 0
-    || (tokens.reasoning || 0) > 0 || cacheRead > 0 || cacheWrite > 0;
+  return (tokens.input || 0) > 0 || (tokens.output || 0) > 0;
 }
 
 /** @returns {{amount:number|null, currency:'USD', source:'reported'|'estimated'|'unknown'}} */
@@ -96,7 +109,10 @@ function resolveLegCost({ reportedCost, tokens, pricing }) {
   // The v4.2 §4.5 free-local-tier carve-out is DELIBERATELY preserved: a local
   // Ollama/LM Studio seat legitimately costs $0 but still reports tokens, so
   // hasObservedTokens() is true for it and it still resolves to `estimated $0`.
-  // Only a leg where we observed no tokens at all falls through to `unknown`.
+  // v4.4.1 CA-7: a leg with no input/output falls through to `unknown` even when
+  // it reported cache or reasoning tokens — those are real observations, but not
+  // ones THIS estimate can turn into a price, so calling the result $0 would be
+  // the same fabrication one corner over. See hasObservedTokens above.
   if (pricing && hasObservedTokens(tokens)) {
     const est = (tokens.input || 0) * pricing.prompt + (tokens.output || 0) * pricing.completion;
     if (est >= 0) { return { amount: est, currency: 'USD', source: 'estimated' }; }

@@ -22,7 +22,7 @@ const ALIAS_GROUPS = [
  * @returns {string} HTML fragment with search, groups, rows, and add button
  */
 function buildAliasEditorHTML(aliases) {
-  const searchInput = `<input type="text" id="alias-search" class="alias-search" placeholder="Search aliases..." autocomplete="off" spellcheck="false">`;
+  const searchInput = '<input type="text" id="alias-search" class="alias-search" placeholder="Search aliases..." autocomplete="off" spellcheck="false">';
 
   const groups = ALIAS_GROUPS.map(group => {
     const rows = group.keys
@@ -31,10 +31,10 @@ function buildAliasEditorHTML(aliases) {
         const model = aliases[key];
         return `<div class="alias-row" data-alias="${key}">` +
           `<span class="alias-name">${key}</span>` +
-          `<span class="alias-arrow">\u2192</span>` +
+          '<span class="alias-arrow">\u2192</span>' +
           `<span class="alias-model">${model}</span>` +
           `<button class="alias-delete" data-alias="${key}">\u00d7</button>` +
-          `</div>`;
+          '</div>';
       }).join('\n        ');
 
     const count = group.keys.filter(key => aliases[key] !== undefined).length;
@@ -51,9 +51,9 @@ function buildAliasEditorHTML(aliases) {
   const exampleModel = aliases[exampleAlias] || 'openrouter/google/gemini-3.1-flash-lite-preview';
 
   // SVG icons for the example box
-  const terminalIcon = `<svg class="alias-icon-accent" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="12" rx="2" stroke-width="1.5"/><path d="M4 6l2.5 2L4 10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 10H11" class="alias-icon-faint-path" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-  const arrowIcon = `<svg class="alias-icon-accent" width="20" height="12" viewBox="0 0 20 12" fill="none"><path d="M2 6h14" stroke-width="1.5" stroke-linecap="round"/><path d="M13 2l4 4-4 4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  const modelIcon = `<svg class="alias-icon-ok" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke-width="1.5"/><path d="M8 8v3" stroke-width="1.5" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke-width="1.2"/><circle cx="8" cy="13" r="1.5" stroke-width="1.2"/><circle cx="12" cy="13" r="1.5" stroke-width="1.2"/><path d="M4 11.5L8 11M8 11l4 .5" stroke-width="1" stroke-linecap="round"/></svg>`;
+  const terminalIcon = '<svg class="alias-icon-accent" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="12" rx="2" stroke-width="1.5"/><path d="M4 6l2.5 2L4 10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 10H11" class="alias-icon-faint-path" stroke-width="1.5" stroke-linecap="round"/></svg>';
+  const arrowIcon = '<svg class="alias-icon-accent" width="20" height="12" viewBox="0 0 20 12" fill="none"><path d="M2 6h14" stroke-width="1.5" stroke-linecap="round"/><path d="M13 2l4 4-4 4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const modelIcon = '<svg class="alias-icon-ok" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke-width="1.5"/><path d="M8 8v3" stroke-width="1.5" stroke-linecap="round"/><circle cx="4" cy="13" r="1.5" stroke-width="1.2"/><circle cx="8" cy="13" r="1.5" stroke-width="1.2"/><circle cx="12" cy="13" r="1.5" stroke-width="1.2"/><path d="M4 11.5L8 11M8 11l4 .5" stroke-width="1" stroke-linecap="round"/></svg>';
 
   const exampleBox = `<div class="routing-example">
         <div class="example-label">How it works</div>

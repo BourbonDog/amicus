@@ -318,6 +318,27 @@ describe('runDebate — one bounded repair per defense solo', () => {
     expect(bundle).toContain('**AMENDED**');
     expect(bundle).toContain('retry caps at 5');
   });
+
+  test('LC-12: the defense repair solo carries the defense it is repairing', async () => {
+    // A repair solo is a FRESH session. Shipping only the validation errors asked
+    // the raiser to correct a defense it had never seen.
+    const tmp = mkTmp('run-debate-repair-artifact-');
+    const input = provisionalInput();
+    const bad = 'I defend A1 at length in prose, but I never emitted a json block.';
+    const good = defenseOut([{ id: 'A1', action: 'defend', argument: 'measured' }]);
+    const prompts = {};
+    await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        prompts[opts.waveId] = opts.prompt;
+        const summary = opts.waveId === 'r-d1' ? bad : good;
+        return { wave: wave([leg('gemini', summary)]), leg: leg('gemini', summary), exitCode: 0 };
+      },
+      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]))]), exitCode: 0 }),
+    }), { provisionalRecord: tally(input), tallyInput: input });
+
+    expect(prompts['r-d1r']).toContain(bad);
+    expect(prompts['r-d1r']).toContain('YOUR PREVIOUS DEFENSE');
+  });
 });
 
 // ---- re-vote repair branch (run-debate.js:138-152) — an ALIVE-but-unparseable judge leg is
@@ -359,6 +380,12 @@ describe('runDebate — re-vote repair branch', () => {
 
     test('the repair waveId is registered on debate-revote BEFORE the repair leg goes in flight', () => {
       expect(midRepairStage.waveIds).toContain('r-rv-gptr');
+    });
+
+    test('LC-12: the repair solo carries the unparseable re-vote it is repairing', () => {
+      const repairCall = launched.find(o => o.waveId === 'r-rv-gptr');
+      expect(repairCall.prompt).toContain('prose only, no json block');
+      expect(repairCall.prompt).toContain('YOUR PREVIOUS RE-VOTE');
     });
 
     test("the repaired leg's conformance is 'repaired', and the round is not degraded", () => {

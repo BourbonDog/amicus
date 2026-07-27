@@ -337,3 +337,252 @@ strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`
 - [ ] **MODEL-NOTES fold-back still deferred** — now carried through 4.0.0, 4.0.1, 4.1.0, 4.1.1 and
   4.1.2. The machine-local copy is staler than the shipped one in places, so a bulk port would
   regress the repo; it needs a per-section diff, not a copy. [S]
+
+## v4.4.1 fast-follow (2026-07-26 → 2026-07-27)
+
+**Provenance.** The five paid gate councils run against the shipped v4.4.0 Council Workspace
+(`wsgate01`–`wsgate04`, `costgate01`) produced a 61-item verified inventory,
+`.superpowers/sdd/v44/v4.4.1-backlog.md`. That inventory was re-verified against the release commit
+and dispositioned in **`.superpowers/sdd/v441/backlog-and-proposal.md`**, which is the authoritative
+scope record for this release — task decomposition, rulings, and the reason each item was taken or
+left. Neither file is duplicated here: a duplicate that drifts is worse than a pointer.
+
+> ⚠️ **Before filing anything new against this release, read the v44 backlog's Appendix A
+> ("settled, do not re-litigate") and Appendix B ("known false positives").** Both exist because
+> these specific findings get re-raised on reputation, and re-arguing one costs more than the
+> finding is worth. Appendix C lists items already fixed — do not carry those forward either.
+
+### The three owner rulings (Christian, 2026-07-26)
+
+Three product calls were taken on the spot, and each **pulled an item into the patch that the
+"no behaviour changes in a patch" bar would otherwise have excluded**. Recorded here because a
+ruling that lives only in a session transcript gets re-argued.
+
+| # | Item | Ruling | What it changed |
+|---|---|---|---|
+| **D5a** | **CA-6** — a fully-unpriced council could never trip `--max-cost`, so a ceiling silently bounded nothing | **Degrade the exit code.** When a ceiling is set *and* the total is inexact, the run exits `2` — mirroring what `budgetRefusals[]` already does for a shrunken bench. Docs tightened to "`--max-cost` bounds **known** spend." | **It never blocks a run.** The standing ruling — unknown cost must not halt a run, a ceiling must not stop us solving real problems — holds unchanged. |
+| **D5b** | **LC-2** — the tool-settle grace ceiling completed the leg but left its OpenCode session billing for output nobody would read | **Abort the session at the ceiling.** Leg completion and partial output are unchanged; only the child session is stopped, and whether the abort landed is recorded as `toolSettleAborted`. | Sequenced **after** v4.4.0's child-session walk, or subtree cost attribution would have been lost. |
+| **D5c** | **LC-10** — `EMPTY_FINDINGS` was a hard error, which structurally pressured a model to invent a finding, directly contradicting the shipped anti-sycophancy clause | **Accept a well-formed empty set.** `findings: []` is VALID when the block parsed cleanly and `overall` is a non-empty string — that distinguishes "I read it and found nothing" from "my output broke," which `NO_FENCED_BLOCK`/`NOT_PARSEABLE` already separate. | The larger half of the work was making the tally, street-cred and chair **degrade gracefully on an all-clean bench** rather than render headings over nothing. This one changes what a council *means* when every seat comes back clean. |
+
+Two smaller rulings on the same release: **D1** — delete RN-8's unwired `legsTotal`/`legsComplete`
+promise rather than implement it (a documented feature that does not exist is worse than neither).
+**D3** — ENV-5 stops at **config + errors only** (see the deferral below). Both are written up in
+`backlog-and-proposal.md` §4b.
+
+### Closed by v4.4.0 itself — do not carry these forward
+
+Five of the inventory's own top-of-theme entries were closed by commits that landed between the
+inventory's compile point and the v4.4.0 tag: **CA-1** (child-session spend unattributed — the
+`$0.492506` item) and **LC-7** by `b848e6f`; **SEC-1** (unfenced pointer-derived `runDir`, including
+a *write* primitive) and **SEC-2** by `1b9ea9e`; **LC-6** (a repair wave carrying no review to
+repair) by `f2f554b`.
+
+### Closed by v4.4.1
+
+Recorded by theme; per-item detail is in the inventory and per-task detail in
+`.superpowers/sdd/task-*-report.md`.
+
+- **Cost truthfulness** — CA-2 (`subtreeUnknown` now reaches the spend ledger, so `amicus spend`
+  stops contradicting `council run`), CA-3 (the unknown-spend notice is no longer sticky), CA-6,
+  CA-7 (a cache-only leg reports `unknown`, not a falsely free `$0`), CA-8 (the free-local `$0`
+  path verified end to end against a live LM Studio leg).
+- **The repair path, whole** — LC-12★ (all four remaining repair-prompt builders now carry the
+  artifact they are repairing; one took no arguments at all) and LC-11 (a repaired review no longer
+  keeps the original prose while taking the repair's findings).
+- **Correctness** — LC-2, LC-3 (a failed leg no longer renders in the GUI with a green check),
+  LC-4, LC-8, LC-9, LC-10.
+- **Renderer** — RN-3 (+DOC-6), RN-4, RN-7, RN-8, RN-9, RN-10 (a permission failure is no longer
+  reported as "not written yet", which had been producing a silent chairless fold reporting
+  `{ok: true}`), RN-12.
+- **Environment / release** — ENV-2 and ENV-3 (both diagnosed as **environmental, not code** — the
+  `haiku` 404 is a `/v1`-less `ANTHROPIC_BASE_URL`, so the inventory's "fix or remove the alias"
+  framing would have broken a working alias), ENV-4 (line endings settled repo-wide), ENV-5,
+  ENV-6, REL-1.
+- **Security / tests** — SEC-3, SEC-4 (the uncertified `md-lite.js` finally reviewed by a real
+  council, which also surfaced two live council-engine parser bugs), TST-4 (the read-only-workspace
+  invariant test), TST-5, TST-6, TST-8, TST-9, TST-10.
+- **Docs** — DOC-1 through DOC-5 and DOC-7, plus `docs/ROADMAP.md` (which still said v4.4 was
+  "NEXT") and this section.
+- **Not on the inventory, found during execution** — NEW-1 (a council run started one OpenCode
+  server per wave and concurrent waves raced each other's SQLite open, making `--critic` a coin
+  flip) and NEW-2 (a wave that died before its legs wrote no `wave.json`).
+
+### Deferred out of v4.4.1 into v4.5
+
+The `M`+ items and the ones needing data or a design decision — **CA-4, CA-5, LC-1, LC-5, RN-1,
+RN-2, RN-5, RN-11, REL-2, TST-1/2/3/7** — are tabulated with their reasons in `docs/ROADMAP.md`
+under "Deferred out of v4.4.1 into v4.5". **ENV-1** is not among them: it is a decision record
+("eleven `Number(env) || default` sites"), not a task, and a blanket migration would introduce six
+new defects to fix one. The two items below are deferrals *created* by this release rather than
+carried by it, so they are written out in full.
+
+### Refuted findings — do NOT re-file (v4.4.1)
+
+- [-] **RN-6 · "the Abort button never re-hides"** — **WONTFIX, refuted with evidence.**
+  **OWNER RULING 2026-07-27: closed as refuted, not deferred.** Both halves of the premise are
+  false, verified against source: `renderDetail` already runs `abort-btn.hidden = isTerminal` on
+  every run-open (pinned by an existing test), and `startLiveLoop` returns early for a terminal
+  run — so the stalled branch's `hidden = false` is a **no-op on every path that can reach it**.
+  Implementing the prescribed fix would **hide Abort on the tick a momentary stall recovers**,
+  leaving a live, healthy council with no way to abort it until the next run-open.
+  Shipped instead: behaviour unchanged, the reasoning documented in place, and a regression test
+  asserting the real invariant — *a live run must stay abortable* — which fails the moment anyone
+  implements RN-6 as written. Detail: `.superpowers/sdd/task-8-report.md` §2.
+  ⚠️ **Provenance, and why this recurs:** raised independently by `wsgate01` C7 and `wsgate02` A7,
+  both of which were briefed on `workspace-verbs.js` **without** `workspace-app.js` — the same
+  incomplete-briefing failure recorded as **Appendix B-1** in
+  `.superpowers/sdd/v44/v4.4.1-backlog.md`. A bench cannot certify what it has not seen, and it
+  cannot refute what it has not seen either. **When re-briefing a council on the workspace verbs,
+  include `workspace-app.js`.**
+
+### Closed at the v4.4.1 release cut (2026-07-27)
+
+- [x] **ENV-7 · Unexplained test-count drift** — **CLOSED. Did not recur; the one deviation seen
+  this release was fully explained.**
+  ENV-7 was filed during the v4.4 cycle after Task 19 measured a **+1** test count that no commit
+  in the range accounted for. It was carried into v4.4.1 as a standing warning, not a task: the
+  failure mode it exists to catch is *someone bisecting a phantom*, so the standing instruction was
+  to bisect a genuinely unexplained drift and to close the item if none appeared.
+  - The only deviation observed during v4.4.1 was the **+2** at Task 0, and it was **not** drift:
+    it came from comparing against the v4.4.0 release-prep figure (5,317 / 5,324, measured at
+    `eaf441b`), while this branch's merge-base `ce8216a` had since added a two-case `test.each`.
+    Against the correct merge-base baseline the delta was **0**. A stale baseline, not a ghost.
+  - At the release cut the full suite measured **446 suites / 5,711 passed / 5,718 total**, which
+    matches the last measured state of the branch exactly. **Every test added on this branch is
+    attributable to the commit that added it.** No unexplained delta at any point in the release.
+  - ⚠️ **The durable lesson is the one worth keeping, and it is not about a flaky test.** Both
+    incidents — the original +1 and this release's +2 — are consistent with *a baseline compared
+    against the wrong commit*, which is the cheaper explanation and the one that fits the evidence.
+    **Always re-measure the baseline at the branch's own merge-base before calling a delta drift.**
+    A figure carried forward from a previous release's report is stale by construction the moment
+    anything lands after it.
+
+### v4.4.1 lint-gate deferrals (ENV-5, 2026-07-27)
+
+v4.4.1 put `electron/` under the lint gate (`npm run lint` is now `eslint src/ electron/`, and
+`lint-staged` globs `electron/**/*.js`). Owner ruling for that task was **config + errors only** —
+265 errors were resolved, and the one style class below was deliberately left alone rather than
+turned into a large untested rewrite inside a patch release. It is written down here so the
+deferral is a decision with a number attached rather than a silent config line.
+
+- [ ] **Integration-suite handle leaks beyond ENV-6 — a NAMED leak, not vague flakiness** — [S–M]
+  **Filed 2026-07-27 by owner ruling**, after v4.4.1's Task 12.5 fixed ENV-6 and found the live
+  rail still warns from *different* suites. Start from this evidence rather than re-deriving it:
+  - `tests/mcp-protocol.integration.test.js:68` — `request()` arms a 10 s response timer and never
+    `clearTimeout`s it on the resolve path (`:47`). **11 leaked `Timeout`s in one run.** The
+    identical helper is at `mcp-headless-e2e:73`. `electron-toolbar-e2e` also warns.
+  - ⚠️ **Fixing that obvious timer in all three suites produced NO measurable improvement**, and the
+    change was deliberately reverted rather than shipped unverifiable. So the response timer is real
+    but is **not the whole story** — expect a second holder.
+  - ⚠️ **`--detectOpenHandles` CANNOT diagnose this class**, verified against jest v29.7.0:
+    `jest-cli/build/run.js:219` gates the "did not exit" warning behind
+    `!globalConfig.detectOpenHandles`, so the flag *suppresses the very message it is meant to
+    explain*; and `collectHandles`'s `stackIsFromUser()` only recognises synchronous circus frames,
+    so a timer armed after an `await` is invisible to it. **This is almost certainly why ENV-6 sat
+    in triage for a full release as unexplained "flakiness."** Use a timer-stack probe instead.
+  - **Impact is bounded, contrary to how ENV-6 was framed**: jest's warning timer is `.unref()`d and
+    jest issues no force-exit on that path, so a leaked timer costs only its own duration. The live
+    rail finished in 166 s, exit 0. A 45-minute hang needs a handle that *never* clears.
+  - **Verifiable for $0** — `mcp-protocol` is keyless.
+
+- [ ] **`no-var` is OFF for `electron/workspace-ui/**` — 159 declarations to modernise** — [M]
+  **OWNER RULING (Christian, 2026-07-27): do the rewrite, as its OWN task immediately AFTER
+  Task 14 (the v4.4.1 release cut) — not deferred to v4.5, and not folded into the patch.**
+  So 4.4.1 ships with the exemption in place; the rewrite is a separate reviewed change on a
+  green tree, where a 159-site diff can be judged on its own merits instead of competing with
+  a release.
+  The renderer is served raw to a sandboxed page under a strict CSP with **no build step and no
+  transpiler**, and is written in ES5 IIFE style throughout. Per file:
+  `workspace-matrix.js` 35 · `workspace-panels.js` 30 · `md-lite.js` 26 · `workspace-render.js` 26 ·
+  `workspace-verbs.js` 20 · `workspace-app.js` 15 · `live-model.js` 7.
+  Electron 43 ships Chromium, so `let`/`const` are safe at runtime — this is style, not
+  compatibility. But it is a 159-site diff across a GUI with no lint history and thin renderer
+  test coverage, so it wants its own task with a real smoke pass, not a `--fix` run.
+  ⚠️ **Do not "fix" this by setting the rule to `warn`.** `lint-staged` runs `eslint --fix`, which
+  auto-fixes warnings as well as errors, so `warn` would perform the whole rewrite silently at
+  commit time, spread across whatever unrelated files someone happened to stage. Either do the
+  conversion deliberately in one reviewed commit, or leave the rule off.
+
+  Not backlog, recorded so the next reader does not re-litigate them: `no-console` is **off** for
+  `electron/workspace-ui/**` (5 sites in `workspace-verbs.js` — the renderer cannot reach
+  `src/utils/logger.js`; console goes to DevTools) and for `electron/main.js` + `electron/ipc-guard.js`
+  (3 sites — last-resort crash reporting inside the stdout-error and `uncaughtException` handlers,
+  i.e. exactly where routing through a logger that writes to the failed stream is unsafe). Both are
+  permanent, justified exemptions, not deferrals.
+
+### Filed at the v4.4.1 final whole-branch review (2026-07-27)
+
+Three items the v4.4.1 session ledgers recorded but this file did not. A deferral that exists only
+in session scratch is not deferred, it is lost — so they are written out here in full, with the
+evidence needed to act on them without re-deriving it. None blocks the v4.4.1 tag.
+
+- [ ] **FR-1 · `runHeadless`'s three early `return`s carry A3's stale-progress defect** — [S]
+  **OVERDUE: a reviewer asked for this ticket two tasks ago (task-8 report §5 "Known remaining hole,
+  NOT in A3's scope", repeated as open item 9.4) and it was never filed.**
+  A3 fixed `runHeadless`'s outer `catch` so a failed run stamps a terminal stage into
+  `progress.json` instead of leaving the last non-terminal one. Three `return`s bypass that fix, in
+  `src/headless.js`:
+  - `:290-298` — the server-start failure. It returns from the server-start `catch`, which sits
+    **before** the outer `try` at `:307` entirely, so A3's handler was never in scope for it.
+    Leaves `'initializing'` (`:247`) on disk.
+  - `:315-323` — the `!serverReady` bail. Returns from **inside** the outer `try`, so the outer
+    `catch` never sees it. Leaves `'server_ready'` (`:313`) on disk.
+  - `:351-360` — the `createSession` failure. Same shape. Leaves `'server_ready'` (`:326`) on disk.
+  - ⚠️ **`:351-360` is the reachable one on a council run.** Under T0.5's shared server
+    (`externalServer` truthy) the `if (!externalServer)` guards at `:275` and `:308` skip the other
+    two paths outright, so the createSession return is the only one a council leg can hit — and when
+    it does, the Workspace reads a non-terminal `'server_ready'` and shows that seat **perpetually
+    live** while `metadata.json` says `'error'`. That is the same progress/metadata disagreement A3
+    and LC-3 were filed to end.
+  - **Do it the way A3 did**: derive the stage from `resolveTerminalState({ error })` (the single
+    source of truth LC-3 established), and **read the prior `usage` back and re-attach it** —
+    `writeProgress` *rebuilds* `progress.json` rather than merging, so a bare terminal write silently
+    deletes whatever spend the last flush recorded, trading a stale stage for a cost under-report on
+    exactly the legs that failed. Wrap it in its own `try`/swallow so it can never mask the original
+    error. Model the tests on `tests/observe/premature-completion.test.js`.
+  - Compounds with **FR-3**: a `createSession` lock race is one way to *reach* `:351-360`.
+
+- [ ] **FR-2 · `repairCanHonorContract` is now INERT — a deletion hazard, not a live guard** — [S]
+  **Self-inversion was the design; the consequence still needs recording.** The predicate asks the
+  validator rather than hard-coding an answer precisely so that LC-10 would switch it off on its own
+  the day it landed. LC-10 has landed, so `validateFindings(EMPTY_SET_REPAIR_PROBE).ok` is now
+  `true` and the function **returns `true` for every input** (verified: `null`, `0`, `1`, `7`,
+  `undefined`, `-1` all → `true`). Therefore `run-stages.js:189`'s `repairable &&` can no longer
+  short-circuit anything, and the paid-leg protection it represents has **no live path**.
+  - ⚠️ **`tests/council/run-stages.test.js:315` — "an original declaring ZERO findings never pays
+    for a repair" — now passes for a DIFFERENT REASON THAN ITS NAME.** The original it feeds in
+    simply *validates* post-LC-10, so `!res.ok` is false and the loop is never entered; `repairable`
+    is never consulted. The test's own comment predicted this ("Task-3-proof on purpose … which is
+    why it is not asserted here"), which is why it is not a bug — but it does mean **nothing in the
+    suite currently fails if `repairCanHonorContract` is deleted**.
+  - **The hazard is deletion, not the inertness.** A future reader running a coverage or dead-code
+    pass will find a predicate that is constant-`true` with no failing test behind it and remove it —
+    silently re-arming the deadlock F2 was filed for, the moment anyone tightens the validator on
+    empty sets again.
+  - **Decide, don't drift.** Either (a) keep it and add a test that pins the *linkage* by
+    constructing a validator state where an empty set is rejected, so the predicate is exercised in
+    both positions; or (b) remove it deliberately, with the F2 reasoning moved into a comment at
+    `run-stages.js:189` so the next person to tighten `validateFindings` reads it.
+
+- [ ] **FR-3 · T0.5 moved the lock contention and `retryOnLockRace` did not follow** — [S–M]
+  ⚠️ **HYPOTHESIS, NOT AN OBSERVED FAILURE. Say so in any commit that touches it.** The T0.5
+  acceptance run `v441plan04` launched **5 legs clean** (2026-07-26), and nothing since has
+  reproduced this. It is filed because the *reasoning* that justified the retry now points at an
+  unprotected call, not because a run has died.
+  - `retryOnLockRace` (`src/utils/server-setup.js:136`) wraps **server start only**: two call sites,
+    `src/headless.js:285` and `src/sidecar/session-utils.js:263`.
+  - `createSession` has none — `src/headless.js:350` → `src/opencode-client.js:143`.
+  - T0.5 made a council run share **one** OpenCode server, which removed the concurrent-*start*
+    race that cost `v441plan01` four of five seats in 736 ms to `database is locked`. But Stage 1
+    still launches the seat wave and the critic solo under a single `Promise.all`
+    (`src/council/run-stages.js:81`), so **N near-simultaneous `session.create` calls now land on
+    one OpenCode SQLite** — the same lock class, one layer down, unretried.
+  - **Before writing any retry, get evidence**: instrument `createSession` and launch a wide council
+    (≥6 seats + critic) against a cold server; a lock-class rejection there confirms it, and its
+    absence over several runs is worth recording as a negative result. Keep any fix to the same
+    bounded policy the existing retry uses (5 attempts, lock-class messages only, final failure
+    rethrown unchanged).
+  - Compounds with **FR-1**: today a `createSession` failure returns via `src/headless.js:351-360`,
+    which is exactly the path that leaves a seat showing as perpetually live in the Workspace. Fixing
+    FR-1 makes any occurrence of FR-3 *visible* instead of silent, which is the cheaper order to do
+    them in.

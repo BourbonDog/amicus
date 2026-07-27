@@ -7,6 +7,7 @@ describe('CdpClient', () => {
   let wss;
   let serverPort;
   let dispatchedKeyEvents;
+  let sentCommands;
 
   beforeAll((done) => {
     mockServer = http.createServer((req, res) => {
@@ -52,6 +53,19 @@ describe('CdpClient', () => {
     wss.on('connection', (ws) => {
       ws.on('message', (data) => {
         const msg = JSON.parse(data.toString());
+        sentCommands.push(msg.method);
+        if (msg.method === 'Log.enable') {
+          // Real CDP semantics (v4.4.1 TST-6): Log.enable REPLAYS every entry collected so
+          // far as `Log.entryAdded` notifications, THEN answers the command. A CSP refusal
+          // arrives on this channel with source 'security' — that ordering is what lets a
+          // client connected after page load still observe a boot-time violation.
+          ws.send(JSON.stringify({
+            method: 'Log.entryAdded',
+            params: { entry: { source: 'security', level: 'error', text: 'Refused to execute inline script because it violates the following Content Security Policy directive' } },
+          }));
+          ws.send(JSON.stringify({ id: msg.id, result: {} }));
+          return;
+        }
         if (msg.method === 'Runtime.evaluate') {
           ws.send(JSON.stringify({
             id: msg.id,
@@ -62,6 +76,11 @@ describe('CdpClient', () => {
           ws.send(JSON.stringify({ id: msg.id, result: { data: pngBase64 } }));
         } else if (msg.method === 'Input.dispatchKeyEvent') {
           dispatchedKeyEvents.push(msg.params);
+          ws.send(JSON.stringify({ id: msg.id, result: {} }));
+        } else {
+          // A real CDP endpoint answers EVERY command. Without this catch-all the mock
+          // silently drops unknown methods and the client hangs on its 10s _send timeout —
+          // which is exactly what a new domain command (Runtime.enable) did here.
           ws.send(JSON.stringify({ id: msg.id, result: {} }));
         }
       });
@@ -83,7 +102,7 @@ describe('CdpClient', () => {
     });
   });
 
-  beforeEach(() => { dispatchedKeyEvents = []; });
+  beforeEach(() => { dispatchedKeyEvents = []; sentCommands = []; });
 
   it('pressKey sends a keyDown then a keyUp Input.dispatchKeyEvent pair', async () => {
     const cdp = new CdpClient(serverPort);
@@ -186,6 +205,71 @@ describe('CdpClient', () => {
       const result = await cdp.evaluate('1+1');
       expect(result).toBeDefined();
       cdp.close();
+    });
+
+    it('CdpClient.workspace turns the diagnostic domains on; toolbar/content do not', async () => {
+      // TST-6 wires enableLogging() into the workspace factory only, so no existing suite
+      // changes behaviour. Pinned both ways.
+      const ws = await CdpClient.workspace(serverPort);
+      expect(sentCommands).toEqual(expect.arrayContaining(['Log.enable', 'Runtime.enable']));
+      ws.close();
+
+      sentCommands = [];
+      const tb = await CdpClient.toolbar(serverPort);
+      expect(sentCommands).not.toContain('Log.enable');
+      tb.close();
+    });
+  });
+
+  /**
+   * v4.4.1 TST-6. CDP *events* (frames with no `id`) used to be dropped: the message
+   * handler only routed command replies, so nothing the page reported was observable from a
+   * test. A CSP violation is reported as a `Log.entryAdded` with source 'security' — not as
+   * a console.* call — which is why the CSP regression guard needs this buffer.
+   */
+  describe('event buffering / consoleMessages', () => {
+    it('captures the Log.entryAdded replay that Log.enable triggers, CSP text intact', async () => {
+      const cdp = await CdpClient.workspace(serverPort);
+      const messages = cdp.consoleMessages();
+      cdp.close();
+      expect(messages).toEqual([
+        expect.objectContaining({
+          source: 'security',
+          level: 'error',
+          text: expect.stringContaining('Content Security Policy'),
+        }),
+      ]);
+    });
+
+    it('normalizes console API calls and thrown exceptions alongside log entries', async () => {
+      const cdp = new CdpClient(serverPort);
+      await cdp.connect('workspace-page-id');
+      // Drive the buffer directly: these two shapes are emitted by a real page, and the mock
+      // server has no way to provoke them.
+      cdp._events.push({
+        method: 'Runtime.consoleAPICalled',
+        params: { type: 'warn', args: [{ value: 'lazy panel' }, { description: 'Object' }] },
+      });
+      cdp._events.push({
+        method: 'Runtime.exceptionThrown',
+        params: { exceptionDetails: { text: 'Uncaught TypeError: x is not a function' } },
+      });
+      cdp._events.push({ method: 'Network.requestWillBeSent', params: {} }); // ignored shape
+      const messages = cdp.consoleMessages();
+      cdp.close();
+      expect(messages).toEqual([
+        { source: 'console', level: 'warn', text: 'lazy panel Object' },
+        { source: 'exception', level: 'error', text: 'Uncaught TypeError: x is not a function' },
+      ]);
+    });
+
+    it('a command reply is never mistaken for an event', async () => {
+      const cdp = new CdpClient(serverPort);
+      await cdp.connect('toolbar-page-id');
+      await cdp.evaluate('1+1');
+      const messages = cdp.consoleMessages();
+      cdp.close();
+      expect(messages).toEqual([]);
     });
   });
 });

@@ -194,6 +194,113 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
     expect(jest.getTimerCount()).toBe(1);
   });
 
+  // ---- TST-5: the three cadence listeners ------------------------------------
+  // workspace-verbs.js registers `visibilitychange` on document and `blur`/`focus` on
+  // window (F42), and until now NOTHING dispatched any of them: the harness's
+  // `window.addEventListener` was a bare no-op, so the two window listeners were not
+  // even reachable from a test. (Task 16 had extended only `document.addEventListener`
+  // to capture; `window` was still the stub. Both now record their callbacks.)
+  //
+  // What these pin is the F42 contract: each flip RE-ENTERS startLiveLoop, which is only
+  // safe because startLiveLoop calls stopLiveLoop first — so the cadence is re-derived
+  // from the new visibility/focus state without ever forking a second poll chain. And
+  // the `if (A.state.liveTimer)` guard means a flip on a TERMINAL run starts nothing.
+  describe('cadence listeners re-enter the loop without forking it', () => {
+    const fireDocument = (type) => global.document._listeners[type].forEach((fn) => fn());
+    const fireWindow = (type) => global.window._listeners[type].forEach((fn) => fn());
+
+    test('all three are registered on the surface that actually emits them', () => {
+      expect(global.document._listeners.visibilitychange).toHaveLength(1);
+      expect(global.window._listeners.blur).toHaveLength(1);
+      // Two on focus: the cadence re-enter here plus workspace-app.js's run-list refresh.
+      expect(global.window._listeners.focus).toHaveLength(2);
+    });
+
+    test.each([
+      ['visibilitychange', () => fireDocument('visibilitychange')],
+      ['blur', () => fireWindow('blur')],
+      ['focus', () => fireWindow('focus')],
+    ])('%s restarts the live loop in place — one timer, one epoch bump', async (_name, fire) => {
+      await global.window.AmicusApp.openRun('aaaa1111');
+      expect(jest.getTimerCount()).toBe(1);
+      const epochBefore = global.window.AmicusApp.state.liveEpoch;
+
+      fire();
+
+      expect(jest.getTimerCount()).toBe(1); // restarted, never stacked
+      expect(global.window.AmicusApp.state.liveEpoch).toBe(epochBefore + 1);
+    });
+
+    test.each([
+      ['visibilitychange', () => fireDocument('visibilitychange')],
+      ['blur', () => fireWindow('blur')],
+      ['focus', () => fireWindow('focus')],
+    ])('%s starts nothing when no loop is running (terminal run)', async (_name, fire) => {
+      invokeMock.mockImplementation((channel, ...args) => {
+        if (channel === 'workspace:get-run') { return Promise.resolve(buildFixtureDetail(args[0], 'complete')); }
+        return defaultInvoke(channel, ...args);
+      });
+      await global.window.AmicusApp.openRun('aaaa1111');
+      expect(jest.getTimerCount()).toBe(0);
+      invokeMock.mockClear();
+
+      fire();
+
+      // The `if (A.state.liveTimer)` guard: a flip must never resurrect a finished run's poll.
+      expect(jest.getTimerCount()).toBe(0);
+      expect(invokeMock).not.toHaveBeenCalledWith('workspace:get-live', expect.anything());
+    });
+
+    test('the restart re-derives the cadence from the NEW state (1.5s focused -> 5s blurred)', async () => {
+      await global.window.AmicusApp.openRun('aaaa1111');
+      jest.advanceTimersByTime(0); // first tick at the visible+focused cadence
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      expect(jest.getTimerCount()).toBe(1);
+
+      global.document.hasFocus = () => false; // the window really did lose focus…
+      fireWindow('blur');                     // …and the listener is what tells the loop
+      jest.advanceTimersByTime(0);            // the restarted immediate tick
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+      invokeMock.mockClear();
+      jest.advanceTimersByTime(1500); // the OLD cadence — must no longer fire anything
+      await Promise.resolve();
+      expect(invokeMock).not.toHaveBeenCalledWith('workspace:get-live', expect.anything());
+      jest.advanceTimersByTime(3500); // …the blurred 5s cadence does
+      await Promise.resolve(); await Promise.resolve();
+      expect(invokeMock).toHaveBeenCalledWith('workspace:get-live', 'aaaa1111');
+    });
+
+    test('F42: a tick in flight across a flip is DROPPED, not forked into a second chain', async () => {
+      let resolveHung;
+      let calls = 0;
+      invokeMock.mockImplementation((channel, ...args) => {
+        if (channel === 'workspace:get-run') { return Promise.resolve(buildFixtureDetail(args[0])); }
+        if (channel === 'workspace:get-live') {
+          calls += 1;
+          if (calls === 1) { return new Promise((resolve) => { resolveHung = resolve; }); }
+          return Promise.resolve(liveDoc());
+        }
+        return defaultInvoke(channel, ...args);
+      });
+      await global.window.AmicusApp.openRun('aaaa1111');
+      jest.advanceTimersByTime(0); // tick 1 fires and hangs on the pending invoke
+      await Promise.resolve();
+      expect(jest.getTimerCount()).toBe(0); // nothing scheduled while it is in flight
+
+      fireWindow('focus');         // the flip bumps liveEpoch and schedules a fresh chain
+      jest.advanceTimersByTime(0);
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      expect(jest.getTimerCount()).toBe(1); // exactly the new chain's reschedule
+
+      resolveHung(liveDoc());      // the pre-flip tick finally answers
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      // Without the epoch bump this would be 2 — the orphaned chain rescheduling itself
+      // forever alongside the live one, with no stop able to reach it.
+      expect(jest.getTimerCount()).toBe(1);
+    });
+  });
+
   // ---- stale-chain / epoch guard --------------------------------------------
   test('switching runs mid-flight drops the stale chain\'s result instead of painting it into the new run', async () => {
     let resolveStale;
@@ -429,5 +536,31 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
   test('renderDetail shows the abort button for a non-terminal (running) run', async () => {
     await global.window.AmicusApp.openRun('aaaa1111');
     expect(global.document.getElementById('abort-btn').hidden).toBe(false);
+  });
+
+  // ⚠️ v4.4.1 RN-6 — ARBITRATED, and this test is the arbitration made executable.
+  //
+  // RN-6 asked for a `hidden = true` in applyLive's banner-clearing arm, on the premise that the
+  // stalled branch's `hidden = false` is what puts the Abort button on screen and therefore
+  // latches it there once a momentary stall clears. The test directly above disproves the
+  // premise: renderDetail already does `$('abort-btn').hidden = isTerminal` on every run-open
+  // (workspace-app.js:128), so the button is visible for the WHOLE life of any non-terminal run,
+  // by design — and startLiveLoop only ever runs on a non-terminal run, so applyLive's assignment
+  // is a no-op on every path that can reach it. Adding the proposed clearing-arm assignment would
+  // hide the Abort button the moment a stall recovered, leaving a live, healthy, still-running
+  // council with no way to abort it for the rest of the session: the inverse defect, and worse.
+  //
+  // This test fails the moment anyone implements RN-6 as originally written.
+  test('RN-6: the Abort button survives a stall -> recover cycle — a live run must stay abortable', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const abortBtn = global.document.getElementById('abort-btn');
+    expect(abortBtn.hidden).toBe(false); // renderDetail: visible for the whole non-terminal run
+
+    global.window.AmicusVerbs.applyLive(liveDoc({ flags: { crashed: false, stalled: true, stalledForSeconds: 180 } }));
+    expect(abortBtn.hidden).toBe(false);
+
+    global.window.AmicusVerbs.applyLive(liveDoc()); // activity resumes; the live banner clears
+    expect(global.document.getElementById('banner').hidden).toBe(true); // the diagnosis DID clear
+    expect(abortBtn.hidden).toBe(false);            // …and the remedy is still reachable
   });
 });

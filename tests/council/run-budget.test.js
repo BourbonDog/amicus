@@ -117,6 +117,50 @@ describe('noticeUnknownSpend', () => {
     b.noticeUnknownSpend();
     expect((b.written().match(/UNKNOWN/g) || [])).toHaveLength(1);
   });
+
+  /**
+   * v4.4.1 CA-3 (TST-9). The guard used to be a sticky `noticed` boolean, so the
+   * FIRST unknown leg was announced and every one created afterwards — Stage 2,
+   * the repair loops, the debate, the chair — was silently swallowed. run.json
+   * kept the correct final count, so the data was right and only the
+   * announcement was wrong: precisely the failure the fail-loud posture exists
+   * to prevent. The guard is now the count that was last announced, so a GROWING
+   * total re-announces while an unchanged one stays quiet.
+   */
+  test('a later stage\'s unknown legs are announced too — the guard is a count, not a flag', () => {
+    const out = [];
+    const b = createBudget({ allLegs: [], maxCost: 1, write: (s) => out.push(s) });
+    b.addWave({ waveId: 'w1', legs: [unknown()] });               // stage 1
+    b.noticeUnknownSpend();
+    b.addWave({ waveId: 'w2', legs: [unknown(), unknown()] });    // stage 2 / repairs / chair
+    b.noticeUnknownSpend();
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatch(/1 council leg\(s\)/);
+    expect(out[out.length - 1]).toMatch(/3 council leg\(s\)/);    // not the stale "1"
+  });
+
+  test('a growing subtree-unknown count re-announces on the same rule', () => {
+    const out = [];
+    const subtree = () => ({ usage: { tokens: {}, cost: { amount: 0.01, source: 'reported' }, subtreeUnknown: true } });
+    const b = createBudget({ allLegs: [], maxCost: null, write: (s) => out.push(s) });
+    b.addWave({ legs: [subtree()] });
+    b.noticeUnknownSpend();
+    b.addWave({ legs: [subtree()] });
+    b.noticeUnknownSpend();
+    expect(out).toHaveLength(2);
+    expect(out[out.length - 1]).toMatch(/2 council leg\(s\) spawned a subagent/);
+  });
+
+  test('waves that add no NEW unknowns stay quiet — no notice per priced wave', () => {
+    const out = [];
+    const b = createBudget({ allLegs: [], maxCost: null, write: (s) => out.push(s) });
+    b.addWave({ legs: [unknown()] });
+    b.noticeUnknownSpend();
+    b.addWave({ legs: [priced(0.02), priced(0.03)] }); // paid, but nothing new is unknown
+    b.noticeUnknownSpend();
+    b.noticeUnknownSpend();
+    expect(out).toHaveLength(1);
+  });
 });
 
 describe('usageBlock is what run.json publishes', () => {
@@ -140,5 +184,63 @@ describe('usageBlock is what run.json publishes', () => {
     expect(u.costExact).toBe(true);
     expect(u.unknownLegs).toBe(0);
     expect(u.cost.amount).toBeNull();
+  });
+});
+
+/**
+ * v4.4.1 CA-6 (owner ruling). A ceiling never BLOCKS — that is absolute and
+ * `overBudget` is untouched. What changes is only what the run claims on the way
+ * out: exit 0 reads as "clean, and inside your ceiling", and a run publishing a
+ * total it knows is a floor has not earned that. See run-finalize.js's
+ * resolveTerminalExit for where the flag becomes the code.
+ */
+describe('inexactUnderCeiling — the CA-6 degrade condition', () => {
+  const subtree = () => ({ usage: { tokens: {}, cost: { amount: 0.01, currency: 'USD', source: 'reported' }, subtreeUnknown: true } });
+
+  test('a ceiling over an inexact total is the degrade case', () => {
+    expect(mk([priced(0.372), unknown()], 0.75).inexactUnderCeiling()).toBe(true);
+  });
+
+  test('an UNATTRIBUTED SUBTREE counts too — costExact means "this is the whole bill"', () => {
+    expect(mk([priced(0.372), subtree()], 0.75).inexactUnderCeiling()).toBe(true);
+  });
+
+  test('an exact total under a ceiling is NOT degraded', () => {
+    expect(mk([priced(0.372), priced(0.1)], 0.75).inexactUnderCeiling()).toBe(false);
+  });
+
+  test('no ceiling → never degraded, however inexact (nothing to be inexact against)', () => {
+    expect(mk([unknown(), unknown()], null).inexactUnderCeiling()).toBe(false);
+    expect(mk([unknown(), unknown()], undefined).inexactUnderCeiling()).toBe(false);
+  });
+
+  test('a ceiling of exactly 0 is still a ceiling', () => {
+    expect(mk([unknown()], 0).inexactUnderCeiling()).toBe(true);
+  });
+
+  test('it is a pure READ — asking never trips the ceiling or mutates anything', () => {
+    const b = mk([unknown(), unknown(), unknown()], 0.01);
+    expect(b.inexactUnderCeiling()).toBe(true);
+    expect(b.overBudget()).toBe(false);        // unknown legs still cannot halt a run
+    expect(b.remainingBudget()).toBeCloseTo(0.01, 8);
+    expect(b.written()).toBe('');              // and it announces nothing of its own
+  });
+
+  test('the notice says WHY the run will exit 2 — but only when a ceiling is set', () => {
+    const withCeiling = mk([priced(0.372), unknown()], 0.75);
+    withCeiling.noticeUnknownSpend();
+    expect(withCeiling.written()).toMatch(/exit degraded \(2\)/);
+    expect(withCeiling.written()).toMatch(/never halts a run/);
+    const without = mk([priced(0.372), unknown()], null);
+    without.noticeUnknownSpend();
+    expect(without.written()).not.toMatch(/degraded/);
+  });
+
+  // v4.4.1 A3: "1 council leg(s)…" then "4 council leg(s)…" reads as two findings
+  // a user can add up to five. The counts are cumulative and must say so.
+  test('the notice marks its counts as running totals, not increments', () => {
+    const b = mk([unknown()], null);
+    b.noticeUnknownSpend();
+    expect(b.written()).toMatch(/so far this run, 1 council leg\(s\)/);
   });
 });

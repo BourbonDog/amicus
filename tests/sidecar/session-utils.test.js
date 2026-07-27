@@ -507,7 +507,11 @@ describe('startOpenCodeServer client passthrough', () => {
     jest.mock('../../src/utils/path-setup', () => ({
       ensureNodeModulesBinInPath: jest.fn()
     }));
+    // Keep the REAL retryOnLockRace (v4.4.1 Task 0.5) — only ensurePortAvailable
+    // is stubbed. A bare object mock would make startOpenCodeServer throw
+    // 'retryOnLockRace is not a function' instead of exercising the real path.
     jest.mock('../../src/utils/server-setup', () => ({
+      ...jest.requireActual('../../src/utils/server-setup'),
       ensurePortAvailable: jest.fn()
     }));
     jest.mock('../../src/headless', () => ({
@@ -573,7 +577,11 @@ describe('startOpenCodeServer not-ready close() rejection guard', () => {
     jest.mock('../../src/utils/path-setup', () => ({
       ensureNodeModulesBinInPath: jest.fn()
     }));
+    // Keep the REAL retryOnLockRace (v4.4.1 Task 0.5) — only ensurePortAvailable
+    // is stubbed. A bare object mock would make startOpenCodeServer throw
+    // 'retryOnLockRace is not a function' instead of exercising the real path.
     jest.mock('../../src/utils/server-setup', () => ({
+      ...jest.requireActual('../../src/utils/server-setup'),
       ensurePortAvailable: jest.fn()
     }));
     jest.mock('../../src/headless', () => ({
@@ -609,5 +617,122 @@ describe('startOpenCodeServer not-ready close() rejection guard', () => {
     } finally {
       process.off('unhandledRejection', unhandled);
     }
+  });
+
+  // A not-ready health check is NOT lock-class, so it must not be retried —
+  // one start attempt, one close, one throw.
+  it('does not retry a not-ready failure', async () => {
+    mockClose.mockClear();
+    await expect(startOpenCodeServer(null, { retryDelayMs: 1 })).rejects.toThrow(
+      'OpenCode server failed to become ready'
+    );
+    expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * v4.4.1 Task 0.5 — bounded retry on a LOCK-CLASS start failure.
+ *
+ * OpenCode opens one shared SQLite database at startup. The per-run shared
+ * server removes the races a single amicus process creates; this covers the
+ * ones it cannot (two amicus processes, or a CLI run beside a live MCP server).
+ * Deliberately narrow: a missing binary / bad key / busy port is deterministic,
+ * and retrying it only triples the latency before the same failure.
+ */
+describe('startOpenCodeServer lock-class start retry', () => {
+  let startOpenCodeServer;
+  let mockStartServer;
+  let mockWarn;
+
+  const okPair = () => ({
+    client: { config: { get: jest.fn() } },
+    server: { url: 'http://127.0.0.1:3456', close: jest.fn() }
+  });
+
+  beforeAll(() => {
+    jest.resetModules();
+
+    mockWarn = jest.fn();
+    jest.mock('../../src/utils/logger', () => ({
+      logger: { info: jest.fn(), warn: (...a) => mockWarn(...a), error: jest.fn(), debug: jest.fn() }
+    }));
+    jest.mock('../../src/utils/path-setup', () => ({
+      ensureNodeModulesBinInPath: jest.fn()
+    }));
+    jest.mock('../../src/utils/server-setup', () => ({
+      ...jest.requireActual('../../src/utils/server-setup'),
+      ensurePortAvailable: jest.fn()
+    }));
+    jest.mock('../../src/headless', () => ({
+      waitForServer: jest.fn(async () => true)
+    }));
+
+    mockStartServer = jest.fn();
+    jest.mock('../../src/opencode-client', () => ({
+      startServer: (...args) => mockStartServer(...args),
+      checkHealth: jest.fn(async () => true)
+    }));
+
+    ({ startOpenCodeServer } = require('../../src/sidecar/session-utils'));
+  });
+
+  beforeEach(() => {
+    mockStartServer.mockReset();
+    mockWarn.mockClear();
+  });
+
+  // The measured failure: "Server exited with code 1 / Server output: Error:
+  // Unexpected error\n\ndatabase is locked" (run v441plan01, four dead seats).
+  it('retries a "database is locked" start failure and can succeed', async () => {
+    mockStartServer
+      .mockRejectedValueOnce(new Error('Server exited with code 1\nServer output: Error: Unexpected error\n\ndatabase is locked'))
+      .mockImplementationOnce(async () => okPair());
+
+    const pair = await startOpenCodeServer({}, { retryDelayMs: 1 });
+
+    expect(mockStartServer).toHaveBeenCalledTimes(2);
+    expect(pair.server).toBeDefined();
+    expect(mockWarn).toHaveBeenCalled(); // a degraded start is never silent
+  });
+
+  it('retries SQLITE_BUSY too', async () => {
+    mockStartServer
+      .mockRejectedValueOnce(new Error('SQLITE_BUSY: database is busy'))
+      .mockImplementationOnce(async () => okPair());
+    await startOpenCodeServer({}, { retryDelayMs: 1 });
+    expect(mockStartServer).toHaveBeenCalledTimes(2);
+  });
+
+  // 5, not 3: Step 10.5 widened the window to ~3.75s after run v441plan02
+  // exhausted the old ~750ms one and the council degraded to per-wave servers.
+  it('gives up after 5 attempts and rethrows the lock error unchanged', async () => {
+    mockStartServer.mockRejectedValue(new Error('database is locked'));
+    await expect(startOpenCodeServer({}, { retryDelayMs: 1 })).rejects.toThrow(/database is locked/);
+    expect(mockStartServer).toHaveBeenCalledTimes(5); // bounded: never unbounded
+  });
+
+  it('does NOT retry a missing binary', async () => {
+    mockStartServer.mockRejectedValue(new Error('ENOENT: opencode not found'));
+    await expect(startOpenCodeServer({}, { retryDelayMs: 1 })).rejects.toThrow(/ENOENT/);
+    expect(mockStartServer).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry an auth failure', async () => {
+    mockStartServer.mockRejectedValue(new Error('401 Unauthorized: invalid API key'));
+    await expect(startOpenCodeServer({}, { retryDelayMs: 1 })).rejects.toThrow(/Unauthorized/);
+    expect(mockStartServer).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry a port conflict', async () => {
+    mockStartServer.mockRejectedValue(new Error('EADDRINUSE: address already in use 127.0.0.1:4096'));
+    await expect(startOpenCodeServer({}, { retryDelayMs: 1 })).rejects.toThrow(/EADDRINUSE/);
+    expect(mockStartServer).toHaveBeenCalledTimes(1);
+  });
+
+  it('a clean start still takes exactly one attempt and never warns', async () => {
+    mockStartServer.mockImplementation(async () => okPair());
+    await startOpenCodeServer({}, { retryDelayMs: 1 });
+    expect(mockStartServer).toHaveBeenCalledTimes(1);
+    expect(mockWarn).not.toHaveBeenCalled();
   });
 });

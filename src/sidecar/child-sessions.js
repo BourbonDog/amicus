@@ -42,7 +42,7 @@
 
 const { getChildren, getMessages } = require('../opencode-client');
 const { createMirrorState, mirrorUsageOnly } = require('./conversation-mirror');
-const { sumPerMessageUsage, hasObservedTokens } = require('../utils/pricing');
+const { sumPerMessageUsage } = require('../utils/pricing');
 
 /**
  * Bounds. Hard constants rather than env knobs: they exist to stop a pathological
@@ -88,7 +88,6 @@ function usageOfSession(messages) {
     // what they are. A session with neither tokens nor cost is not free either:
     // we saw nothing, and nothing is not zero.
     priced: totals.costReported > 0,
-    observed: hasObservedTokens(totals.tokens),
   };
 }
 

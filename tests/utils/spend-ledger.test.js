@@ -57,6 +57,34 @@ describe('appendSpend', () => {
     expect(readSpendRows(dir)[0].waveId).toBeNull();
   });
 
+  // v4.4.1 CA-2. A leg whose OWN cost resolved but whose subagent child session
+  // could not be priced writes a fully PRICED row — so `unpricedRows` never sees
+  // it and `amicus spend` reads as a complete measurement while `council run`
+  // says `costExact: false` about the same dollars. The row has to say so itself.
+  it('a subtree-unknown leg writes a row that says so', () => {
+    const dir = mkTmpDir();
+    appendSpend({
+      taskId: 't1', model: 'openrouter/x/y', mode: 'leg',
+      usage: {
+        tokens: { input: 10, output: 5 },
+        cost: { amount: 0.01, currency: 'USD', source: 'reported' },
+        subtreeUnknown: true,
+      },
+    }, { dir });
+    const [row] = readSpendRows(dir);
+    expect(row.cost.amount).toBe(0.01); // the leg's own cost is still exact…
+    expect(row.subtreeUnknown).toBe(true); // …and the row no longer claims it is the whole bill
+  });
+
+  it('an ordinary leg omits the field entirely (pre-4.4.1 rows stay byte-identical)', () => {
+    const dir = mkTmpDir();
+    appendSpend({
+      taskId: 't2', model: 'm', mode: 'leg',
+      usage: { tokens: {}, cost: { amount: 0.02, currency: 'USD', source: 'reported' } },
+    }, { dir });
+    expect(Object.keys(readSpendRows(dir)[0])).not.toContain('subtreeUnknown');
+  });
+
   it('is a no-op (never throws) when usage is null — nothing priced to record', () => {
     const dir = mkTmpDir();
     expect(() => appendSpend({ taskId: 't1', model: 'opus', mode: 'headless', usage: null }, { dir })).not.toThrow();
@@ -96,5 +124,29 @@ describe('readSpendRows', () => {
     const rows = readSpendRows(dir);
     expect(rows).toHaveLength(2);
     expect(rows.map(r => r.taskId)).toEqual(['ok1', 'ok2']);
+  });
+
+  /**
+   * v4.4.1 A2. A line that PARSES but is not a row is corrupt too. These used to
+   * survive `filter(Boolean)` and be treated as rows: aggregateSpend counted each
+   * in `runs` and scored it into `unpricedRows`/`sourceMix.unknown` off its absent
+   * cost block, inflating exactly the counters that exist to say how much of the
+   * total is unmeasured — and `--rows` echoed them into a published document whose
+   * schema says rows are objects.
+   */
+  it('skips valid JSON that is not a row object (a scalar or array line)', () => {
+    const dir = mkTmpDir();
+    appendSpend({
+      taskId: 'ok1', model: 'opus', mode: 'headless',
+      usage: { tokens: { input: 1, output: 1 }, cost: { amount: 0.001, currency: 'USD', source: 'estimated' } },
+    }, { dir });
+    fs.appendFileSync(path.join(dir, SPEND_LEDGER_FILE), '"foo"\n42\n[1,2]\ntrue\nnull\n');
+    const rows = readSpendRows(dir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].taskId).toBe('ok1');
+
+    const { aggregateSpend } = require('../../src/cli-handlers-spend');
+    expect(aggregateSpend(rows).total.runs).toBe(1);
+    expect(aggregateSpend(rows).total.unpricedRows).toBe(0);
   });
 });

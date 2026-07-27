@@ -25,6 +25,9 @@ const {
   isPortInUse,
   killPortProcess,
   ensurePortAvailable,
+  isLockClassStartFailure,
+  retryOnLockRace,
+  LOCK_RETRY_DELAYS_MS,
   DEFAULT_PORT
 } = require('../src/utils/server-setup');
 
@@ -188,5 +191,123 @@ describe('server-setup', () => {
       killSpy.mockImplementation(() => { throw new Error('EPERM'); });
       expect(ensurePortAvailable(4096)).toBe(false);
     });
+  });
+});
+
+/**
+ * v4.4.1 Step 10.5 — the lock-race retry window, WIDENED.
+ *
+ * The first cut was 3 attempts at 250/500ms (~750ms). Run v441plan02 exhausted
+ * it: the shared-server acquisition failed, the council silently dropped back to
+ * one server per wave, and lost four of five seats to `database is locked`. The
+ * window is now 5 attempts with exponential backoff to ~3.75s. These pin the
+ * shape itself, so a future edit cannot quietly narrow it back.
+ */
+describe('lock-race retry window (Step 10.5)', () => {
+  it('is 5 attempts — 4 backoffs — not 3', () => {
+    expect(LOCK_RETRY_DELAYS_MS).toHaveLength(4);
+  });
+
+  it('backs off exponentially and totals ~3.75s, comfortably inside ~4s', () => {
+    expect(LOCK_RETRY_DELAYS_MS).toEqual([250, 500, 1000, 2000]);
+    for (let i = 1; i < LOCK_RETRY_DELAYS_MS.length; i += 1) {
+      expect(LOCK_RETRY_DELAYS_MS[i]).toBe(LOCK_RETRY_DELAYS_MS[i - 1] * 2);
+    }
+    const total = LOCK_RETRY_DELAYS_MS.reduce((a, b) => a + b, 0);
+    expect(total).toBe(3750);
+    expect(total).toBeLessThanOrEqual(4000);
+    // …and >4x the ~750ms window that was measured as too thin.
+    expect(total).toBeGreaterThan(3000);
+  });
+
+  /**
+   * ⚠️ Finding D5: everything above pins the exported CONSTANT, and every other
+   * retry test in the repo passes `retryDelayMs` (a test seam that collapses the
+   * whole schedule to one value) — so nothing pinned the delays `retryOnLockRace`
+   * ACTUALLY SLEEPS. "5 attempts with exponential backoff to ~4s" is satisfied by
+   * 250/500/1000/2000 (3.75s), by 250/500/1000/2000/4000 (7.75s) and by
+   * 100/200/400/800/1600 (3.1s) alike; a green suite distinguished none of them,
+   * and an implementation that ignored the constant outright would still pass.
+   *
+   * This one observes the real schedule — no `retryDelayMs` override — by
+   * intercepting setTimeout and recording the requested durations (firing the
+   * callback immediately, so the test itself never sleeps).
+   */
+  it('the delays it actually SLEEPS are exactly 250/500/1000/2000 — the seam is not used here', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      const attempt = jest.fn(async () => { throw new Error('database is locked'); });
+      await expect(retryOnLockRace(attempt)).rejects.toThrow('database is locked');
+      // 5 attempts ⇒ 4 sleeps, in this order and no other.
+      expect(slept).toEqual([250, 500, 1000, 2000]);
+      expect(attempt).toHaveBeenCalledTimes(5);
+      expect(slept.reduce((a, b) => a + b, 0)).toBe(3750);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('a deterministic failure sleeps ZERO times, not merely fewer', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      const attempt = jest.fn(async () => { throw new Error('EADDRINUSE: port busy'); });
+      await expect(retryOnLockRace(attempt)).rejects.toThrow(/EADDRINUSE/);
+      expect(slept).toEqual([]);
+      expect(attempt).toHaveBeenCalledTimes(1);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('a start that recovers on attempt 3 sleeps only the first two delays', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      let n = 0;
+      const attempt = jest.fn(async () => {
+        n += 1;
+        if (n < 3) { throw new Error('database is locked'); }
+        return 'started';
+      });
+      await expect(retryOnLockRace(attempt)).resolves.toBe('started');
+      expect(slept).toEqual([250, 500]);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('retries a lock-class failure exactly 5 times, then rethrows unchanged', async () => {
+    const attempt = jest.fn(async () => { throw new Error('database is locked'); });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 }))
+      .rejects.toThrow('database is locked');
+    expect(attempt).toHaveBeenCalledTimes(5);
+  });
+
+  // Widening the window must NOT widen what it applies to: a deterministic
+  // failure still costs exactly one attempt and zero added latency.
+  it('still never retries a deterministic failure', async () => {
+    const attempt = jest.fn(async () => { throw new Error('ENOENT: opencode not found'); });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 })).rejects.toThrow(/ENOENT/);
+    expect(attempt).toHaveBeenCalledTimes(1);
+    expect(isLockClassStartFailure(new Error('ENOENT: opencode not found'))).toBe(false);
+  });
+
+  it('a start that recovers on the 5th attempt still succeeds', async () => {
+    let n = 0;
+    const attempt = jest.fn(async () => {
+      n += 1;
+      if (n < 5) { throw new Error('SQLITE_BUSY: database is busy'); }
+      return 'started';
+    });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 })).resolves.toBe('started');
+    expect(attempt).toHaveBeenCalledTimes(5);
   });
 });

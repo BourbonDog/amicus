@@ -12,6 +12,18 @@
     "updatedAt": { "type": "string", "format": "date-time" },
     "messagesReceived": { "type": "number" },
     "latestTool": { "type": "string" },
+    "toolSettleTimedOut": {
+      "description": "v4.4 B4. The leg was completed while at least one tool call was still non-terminal, after AMICUS_TOOL_SETTLE_GRACE_MS elapsed. Its partial output was kept and it was NOT failed, but its reported cost is a floor. Present only when true.",
+      "const": true
+    },
+    "unsettledToolCalls": {
+      "description": "How many tool calls were still live when the settle grace was exceeded. A count here (progress.json is a compact snapshot); the full list rides the runHeadless result. Present only alongside toolSettleTimedOut.",
+      "type": "number"
+    },
+    "toolSettleAborted": {
+      "description": "v4.4.1 LC-2. Whether the leg's OpenCode session was successfully aborted at the settle ceiling so it would stop billing. `false` means the abort was attempted and failed — the session may still be billing. Present only alongside toolSettleTimedOut.",
+      "type": "boolean"
+    },
     "usage": {
       "type": "object",
       "properties": {

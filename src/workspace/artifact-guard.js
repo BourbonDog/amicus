@@ -24,6 +24,9 @@ const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md',
 // `artifact not allowed: <name>`. Writers: tally-provisional.json = src/council/run.js:199;
 // revote-bundle.md = run-debate.js:119; debate.json = run-debate.js:261; the per-seat
 // rebuttal-/revote- pair = materializeDebate (run-launch.js:127-136).
+// ⚠️ FIVE KINDS, THREE ENTRIES — that is not a miscount (v4.4.1 DOC-7, re-verified). This const
+// holds only the three RUN-LEVEL names; the last two of the five, the rebuttal-/revote- pair, are
+// per BENCH MODEL and are appended inside artifactAllowlist below, next to review-/judge-.
 const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
@@ -167,7 +170,25 @@ function readRunArtifact(project, runId, name, deps = {}) {
 
   let realTarget;
   try { realTarget = realpathSync(path.join(ptr.runDir, name)); }
-  catch { return { error: `not written yet: ${name}` }; }
+  catch (err) {
+    // ⚠️ v4.4.1 RN-10: this catch used to answer `not written yet: <name>` for ANY realpath
+    // failure — ENOENT, EACCES, EPERM, EIO, ELOOP, a dangling symlink — so a permission problem
+    // was indistinguishable from a file the council simply has not produced yet. That is not a
+    // cosmetic conflation: electron/ipc-workspace.js's workspace:fold reads chair-output.md
+    // through this function, and on a permission error it produced a silent CHAIRLESS fold that
+    // still reported {ok: true}. The logger.warn it now emits was the mitigation — but it logged
+    // this string, so the log said "not written yet" about a file that was right there.
+    //
+    // ⚠️ Keep the sanitization. Do NOT re-interpolate `err.message`: a realpath failure's message
+    // embeds the full resolved path it tried to open, which round 4 deliberately stopped handing
+    // back over IPC (see the run.json catch above). `err.code` is a bare symbolic errno with no
+    // path in it, and it is the one piece an operator reading the fold warning actually needs —
+    // whitelisted to the errno character class so nothing else can ever ride out through here.
+    const code = err && typeof err.code === 'string' && /^[A-Z][A-Z0-9_]{1,15}$/.test(err.code)
+      ? err.code : 'unknown';
+    if (code === 'ENOENT') { return { error: `not written yet: ${name}` }; }
+    return { error: `artifact unreadable (${code}): ${name}` };
+  }
   if (!isRealpathContained(realDir, realTarget)) {
     return { error: 'artifact escapes run directory' };
   }

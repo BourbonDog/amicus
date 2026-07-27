@@ -348,7 +348,13 @@ describe('B3: a terminal progress write carries the settled usage', () => {
 
     expect(result.completed).toBe(false);
     const writes = progressWrites();
-    expect(writes[writes.length - 1].stage).toBe('complete');
+    // ⚠️ v4.4.1 LC-3: this used to assert stage 'complete' — it was pinning the
+    // defect. The write is unconditional (that IS what this test guards), but
+    // the record no longer claims a failed leg finished cleanly: the live GUI
+    // reads progress.json directly, so 'complete' here put a green check on a
+    // leg that errored. The stage is now derived from resolveTerminalState, the
+    // same function that stamps metadata.json's status.
+    expect(writes[writes.length - 1].stage).toBe('error');
     expect(writes[writes.length - 1].usage).toBeDefined();
   }, 20000);
 });

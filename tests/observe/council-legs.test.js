@@ -160,6 +160,252 @@ describe('buildLegRows', () => {
       const { rows } = buildLegRows(runDir, ['leg-unknown'], RUN_CTX);
       expect(rows[0].usage.cost).toEqual({ amount: null, currency: 'USD', source: 'unknown' });
     });
+
+    // ⚠️ v4.4.1 A1, second reachable consequence. The metadata-preference branch above is gated on
+    // `TERMINAL.has(row.status)` (src/observe/council-legs.js:162) reading a leg's metadata.status
+    // — which for a timed-out leg is 'timed-out' (session-finalize.js resolveTerminalState), a
+    // spelling the TERMINAL set did not contain. So a timed-out leg fell through to the stale
+    // 'receiving' progress snapshot and reported an under-counted cost: exactly the B3 defect,
+    // still live on one status.
+    test("A1: a 'timed-out' leg prefers metadata usage too, not the stale progress snapshot", () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-a1');
+      const d = legDir(runDir, 'leg-tmo');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-tmo', status: 'timed-out', model: 'openrouter/minimax/minimax-m2.7',
+        modelInput: 'gemini',
+        usage: {
+          tokens: { input: 39000, output: 1189, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+          cost: { amount: 0.0126, currency: 'USD', source: 'reported' },
+        },
+      }));
+      fs.writeFileSync(path.join(d, 'progress.json'), JSON.stringify({
+        schemaVersion: 1, type: 'progress', stage: 'receiving',
+        stageLabel: 'Generating response...', updatedAt: new Date().toISOString(),
+        usage: { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0 },
+      }));
+
+      const { rows } = buildLegRows(runDir, ['leg-tmo'], RUN_CTX);
+      expect(rows[0].usage.cost.amount).toBeCloseTo(0.0126, 8); // pre-fix: the all-zero snapshot
+      expect(rows[0].usage.tokens.input).toBe(39000);
+    });
+  });
+
+  /**
+   * v4.4.1 LC-4. `legRole` is evaluated for every leg on every status poll, and
+   * it feeds THREE surfaces off one file: `amicus status`, the amicus_status MCP
+   * tool, and `amicus watch`. roleFor's lens branch does
+   * `o.models.indexOf(alias)` (src/council/run-stages.js:132), so a run.json
+   * with truthy `lenses` and a missing or non-array `bench` threw a TypeError
+   * that escaped buildLegRow entirely — it ran outside both of its try blocks.
+   * The whole-branch review called it "closest of the deferred set to a real
+   * bug"; it was unreachable only because src/council/run.js:72 writes `bench`
+   * and `lenses` together, an argument that rests on one writer never changing.
+   */
+  describe('LC-4: a malformed run.json degrades the Role column, it does not take out three surfaces', () => {
+    function oneLeg(runDir) {
+      const d = legDir(runDir, 'leg-1');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-1', status: 'running', model: 'openai/gpt-5', modelInput: 'gpt',
+      }));
+      return runDir;
+    }
+
+    test('THE HAZARD: roleFor itself still throws on lenses-without-bench (the guard is load-bearing)', () => {
+      const { roleFor } = require('../../src/council/run-stages');
+      expect(() => roleFor({ models: undefined, critic: null, lenses: ['security'] }, 'gpt'))
+        .toThrow(TypeError);
+    });
+
+    test.each([
+      ['bench undefined', undefined],
+      ['bench null', null],
+      ['bench a non-array object', { gpt: true }],
+      ['bench a string', 'gpt'],
+    ])('run.json with lenses and %s does not throw; the role degrades to null', (_name, bench) => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = oneLeg(path.join(projectDir, 'run-lc4'));
+
+      let out;
+      expect(() => {
+        out = buildLegRows(runDir, ['leg-1'], { bench, critic: null, lenses: ['security'], stageName: 'stage1' });
+      }).not.toThrow();
+
+      // Truthful null (an em-dash in the Role column), never a guessed role…
+      expect(out.rows[0].role).toBeNull();
+      // …and every other field the row could still tell the truth about survives.
+      expect(out.rows[0].taskId).toBe('leg-1');
+      expect(out.rows[0].status).toBe('running');
+      expect(out.rows[0].modelInput).toBe('gpt');
+    });
+
+    test('the guard is scoped to the lens branch — a normal run still resolves roles exactly', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = oneLeg(path.join(projectDir, 'run-lc4b'));
+
+      // No lenses: roleFor never touches `models`, so a missing bench is harmless
+      // and the critic comparison is still exact.
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: undefined, critic: 'gpt', lenses: null, stageName: 'stage1',
+      }).rows[0].role).toBe('critic');
+
+      // A well-formed lens run is unchanged.
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: ['gemini', 'gpt'], critic: null, lenses: ['security', 'perf'], stageName: 'stage1',
+      }).rows[0].role).toBe('lens:perf');
+
+      // The chair short-circuit still wins before any of it.
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: undefined, critic: null, lenses: ['security'], stageName: 'chair',
+      }).rows[0].role).toBe('chair');
+    });
+
+    // ⚠️ v4.4.1 A2. LC-4 guarded `bench` and took `lenses` on trust — but roleFor's lens branch
+    // indexes BOTH (`o.lenses[o.models.indexOf(alias)]`). Neither surviving shape THROWS, because
+    // slug() coerces with String(), so instead of a crash they produced a confident lie in the
+    // Role column. The lens/bench length pairing is an enforced invariant, not an assumption:
+    // src/cli-handlers-council-run.js:170 refuses `--lenses` unless it has exactly one lens per
+    // seat. A run.json that breaks it is malformed, and the honest answer is LC-4's same null.
+    test.each([
+      ['lenses a bare string (indexes the STRING: used to read "lens:s")', 'security', ['gpt']],
+      ['lenses an object (used to read "lens:undefined")', { 0: 'security' }, ['gpt']],
+      ['lenses SHORTER than bench (used to read "lens:undefined" for the tail seat)', ['security'], ['gemini', 'gpt']],
+      ['lenses LONGER than bench (a pairing nothing can justify)', ['security', 'perf', 'ux'], ['gemini', 'gpt']],
+    ])('run.json with %s degrades the role to null rather than inventing one', (_name, lenses, bench) => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = oneLeg(path.join(projectDir, 'run-a2'));
+      let out;
+      expect(() => {
+        out = buildLegRows(runDir, ['leg-1'], { bench, critic: null, lenses, stageName: 'stage1' });
+      }).not.toThrow();
+      expect(out.rows[0].role).toBeNull();
+      expect(out.rows[0].modelInput).toBe('gpt'); // the rest of the row still tells the truth
+    });
+
+    test('A2 did not narrow the happy path: a matched lens/bench pair still resolves exactly', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = oneLeg(path.join(projectDir, 'run-a2b'));
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: ['gemini', 'gpt'], critic: null, lenses: ['security', 'perf'], stageName: 'stage1',
+      }).rows[0].role).toBe('lens:perf');
+      // A one-seat lens run is a matched pair too.
+      expect(buildLegRows(runDir, ['leg-1'], {
+        bench: ['gpt'], critic: null, lenses: ['security'], stageName: 'stage1',
+      }).rows[0].role).toBe('lens:security');
+    });
+
+    test('a leg with no modelInput is still null, not a guess (pre-existing contract)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-lc4c');
+      const d = legDir(runDir, 'leg-noalias');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-noalias', status: 'running', model: 'openai/gpt-5',
+      }));
+      expect(buildLegRows(runDir, ['leg-noalias'], RUN_CTX).rows[0].role).toBeNull();
+    });
+  });
+
+  /**
+   * v4.4.1 LC-9. Both catches discarded everything, so a corrupt metadata.json,
+   * an EACCES on the leg dir, and "the file doesn't exist yet" were
+   * indistinguishable and all silent: a leg with corrupt metadata rendered as a
+   * just-started leg forever, with nothing in any log to say otherwise.
+   *
+   * ⚠️ The all-or-nothing catch is a DELIBERATE decision on the record
+   * (Appendix A-9) — it mirrors the wave branch. These tests therefore assert
+   * BOTH halves: the log now exists, AND the control flow is byte-for-byte the
+   * behaviour it was before.
+   */
+  describe('LC-9: a swallowed read is logged, and ONLY logged', () => {
+    let debug;
+    beforeEach(() => {
+      debug = jest.fn();
+      jest.doMock('../../src/utils/logger', () => ({
+        logger: { debug, info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      }));
+    });
+    // Both unmocks live here, NOT at the end of a test body: a failing assertion
+    // would skip an in-body dontMock and leak the stubbed module into every test
+    // after it (observed while red-checking this suite — the mocked readProgress
+    // escaped and broke the unrelated stalled-rollup tests below).
+    afterEach(() => {
+      jest.dontMock('../../src/utils/logger');
+      jest.dontMock('../../src/sidecar/progress');
+    });
+
+    test('a CORRUPT metadata.json is logged with its failure code, not silently swallowed', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-lc9a');
+      const d = legDir(runDir, 'leg-corrupt');
+      fs.writeFileSync(path.join(d, 'metadata.json'), '{ not json at all');
+
+      const { rows } = buildLegRows(runDir, ['leg-corrupt'], RUN_CTX);
+
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringMatching(/metadata/i),
+        expect.objectContaining({ legId: 'leg-corrupt', error: expect.any(String) }),
+      );
+      // CONTROL FLOW UNCHANGED: still the all-or-nothing empty-meta row.
+      expect(rows[0]).toMatchObject({ taskId: 'leg-corrupt', model: null, status: 'unknown', modelInput: null });
+    });
+
+    test('an ABSENT metadata.json is distinguishable from a corrupt one by `code`', () => {
+      // The whole point of LC-9: ENOENT is the ordinary just-started leg;
+      // anything else is a real fault. Before, both were the same silence.
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-lc9b');
+      legDir(runDir, 'leg-fresh'); // dir exists, no metadata.json
+
+      buildLegRows(runDir, ['leg-fresh'], RUN_CTX);
+
+      const ctx = debug.mock.calls.find((c) => /metadata/i.test(c[0]))[1];
+      expect(ctx.code).toBe('ENOENT');
+    });
+
+    test('a leg whose PROGRESS read throws is logged, and the row keeps its base fields', () => {
+      // readProgress swallows a malformed progress.json itself, so reaching this
+      // catch means the leg dir could not be read at all (EACCES, a vanished
+      // session dir) — never "hasn't started yet".
+      jest.doMock('../../src/sidecar/progress', () => {
+        const actual = jest.requireActual('../../src/sidecar/progress');
+        return {
+          ...actual,
+          readProgress: () => { const e = new Error('permission denied'); e.code = 'EACCES'; throw e; },
+        };
+      });
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const runDir = path.join(projectDir, 'run-lc9c');
+      const d = legDir(runDir, 'leg-eacces');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-eacces', status: 'running', model: 'openai/gpt-5', modelInput: 'gpt',
+      }));
+
+      const { rows } = buildLegRows(runDir, ['leg-eacces'], RUN_CTX);
+
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringMatching(/progress/i),
+        expect.objectContaining({ legId: 'leg-eacces', code: 'EACCES' }),
+      );
+      // CONTROL FLOW UNCHANGED: base fields only, no progress fields invented.
+      expect(rows[0]).toMatchObject({ taskId: 'leg-eacces', status: 'running', role: 'seat' });
+      expect(rows[0].stage).toBeUndefined();
+      expect(rows[0].messages).toBeUndefined();
+      expect(rows[0].stalled).toBeUndefined();
+    });
+
+    test('a HEALTHY leg logs nothing (no debug spam on the common path)', () => {
+      const { buildLegRows } = require('../../src/observe/council-legs');
+      const { writeProgress } = require('../../src/sidecar/progress');
+      const runDir = path.join(projectDir, 'run-lc9d');
+      const d = legDir(runDir, 'leg-ok');
+      fs.writeFileSync(path.join(d, 'metadata.json'), JSON.stringify({
+        taskId: 'leg-ok', status: 'running', model: 'openai/gpt-5', modelInput: 'gpt',
+      }));
+      writeProgress(d, 'receiving');
+
+      buildLegRows(runDir, ['leg-ok'], RUN_CTX);
+      expect(debug).not.toHaveBeenCalled();
+    });
   });
 
   describe('run-level stalled rollup: "every still-running leg is stalled", not "any leg"', () => {

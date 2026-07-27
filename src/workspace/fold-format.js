@@ -2,9 +2,16 @@
  * Council Workspace — fold payload builder (v4.4 §7).
  *
  * MIRRORS the shipped fold-header builder `formatFoldOutput`
- * (src/headless.js:775-789, exported at :797, re-exported from src/index.js:20)
- * — byte-for-byte the same 8-line head. src/headless.js is the SOURCE OF
- * TRUTH; keep the head in sync with it. The duplication is deliberate:
+ * (src/headless.js `formatFoldOutput`, exported from src/headless.js and
+ * re-exported from src/index.js) — byte-for-byte the same **7-line** head:
+ * marker, Model, Session, Client, CWD, Mode, `---`. ⚠️ v4.4.1 DOC-5: this said
+ * "8-line" for two releases. Line 8 (`VERDICT:`) is council's OWN addition and
+ * has no counterpart in formatFoldOutput, whose 8th element is the summary
+ * body. Only the first 7 lines are the shared contract; anyone changing the
+ * shared format must sync those and leave `VERDICT:` alone.
+ * src/headless.js is the SOURCE OF TRUTH; keep the head in sync with it.
+ * (Line numbers deliberately omitted — the previous `:775-789`/`:797` citation
+ * had drifted by ~500 lines.) The duplication is deliberate:
  * requiring headless.js transitively pulls opencode-client / progress /
  * conversation-mirror at require time (src/headless.js:8-17), which
  * src/workspace/ must stay free of.
@@ -79,7 +86,29 @@ function buildFoldText(o) {
   } else {
     head.push(`Run: ${run.status || 'unknown'} — ${stageSummary(run)}`);
   }
-  head.push(`Cost: ${formatCost(cost)}${cost && cost.source ? ` (${cost.source})` : ''}`);
+  // ⚠️ v4.4.1 DOC-5: this used to append ` (${cost.source})` for EVERY source,
+  // on top of a glyph formatCost had already spent on the same fact —
+  // `~$0.0100 (estimated)`, `? (unknown)`. formatCost (src/utils/pricing.js)
+  // prefixes `~` for both 'estimated' and 'mixed', and returns a bare `?` when
+  // the source is 'unknown'. So for 'estimated' and 'unknown' the word was pure
+  // repetition and is gone.
+  //
+  // Two sources still spell themselves out, because the glyph vocabulary cannot
+  // express them:
+  //   - `reported` — a plain `$0.4321` is also what an unrecognised/absent
+  //     source renders as, so the absence of a glyph cannot mean "exact".
+  //   - `mixed` — `~` encodes *inexact*, not *which kind of inexact*. Collapsing
+  //     'mixed' into a bare `~$…` makes it indistinguishable from 'estimated',
+  //     and the two are not the same claim: 'mixed' means some legs reported
+  //     real usage and some were estimated, i.e. part of this number is
+  //     measured. That is strictly more information than 'estimated', and this
+  //     is the fold line of a release whose theme is cost truthfulness.
+  // Each thing is still said exactly once — the `~` says "inexact", the word
+  // says "which kind", and neither restates the other.
+  const costSourceLabel = cost && (cost.source === 'reported' || cost.source === 'mixed')
+    ? ` (${cost.source})`
+    : '';
+  head.push(`Cost: ${formatCost(cost)}${costSourceLabel}`);
 
   // Review follow-up #1: strip FIRST, then test emptiness on the STRIPPED
   // result — not the raw one. A chair body consisting solely of a marker

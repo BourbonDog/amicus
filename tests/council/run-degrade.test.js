@@ -94,3 +94,114 @@ describe('repaired judge does NOT degrade the run', () => {
     expect(gemini.conformance).toBe('repaired');   // worst-wins merge into the seat row
   });
 });
+
+// ---------------------------------------------------------------------------
+// v4.4.1 fix wave, F6 — a Stage-1 sub-wave that dies BEFORE its legs.
+//
+// The wave contributes no leg documents at all, so `deadLegs` (which filters
+// legs that DID exist) cannot see it. Run v441plan01 therefore recorded stage1
+// 'complete' with four seats missing. In LENS mode every seat is its own wave,
+// so a run could lose seats and still exit 0 — the quorum gate only catches the
+// single non-lens seat wave. Never aborts: it reports loudly and degrades.
+// ---------------------------------------------------------------------------
+
+/** A wave that died at server start: real status, real reason, zero legs. */
+const deadWave = (reason = 'Failed to start server: database is locked') =>
+  ({ wave: { status: 'error', legs: [], reason }, exitCode: 1 });
+
+const twoJudges = () => okWave([
+  mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+    [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+  mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+    [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+]);
+const chairOk = () => okWave([mkLeg('deepseek', 'Synthesis.\n\nVERDICT: Ship it', 'complete', 0.03)]);
+
+const stageOf = (run, name) => (run.stages || []).find(s => s.name === name);
+
+describe('a Stage-1 wave that dies before its legs (F6)', () => {
+  let stderr;
+  beforeEach(() => { stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true); });
+  afterEach(() => stderr.mockRestore());
+  const emitted = () => stderr.mock.calls.map(c => String(c[0])).join('');
+
+  test('LENS mode: a dead lens solo degrades the run to 2 instead of exiting 0', async () => {
+    const script = {
+      'abc123-l1': () => okWave([mkLeg('gemini', review('gemini'))]),
+      'abc123-l2': () => okWave([mkLeg('gpt', review('gpt'))]),
+      'abc123-l3': () => deadWave(),
+      'abc123-s2': twoJudges,
+      'abc123-ch1': chairOk,
+    };
+    const opts = baseOptions(tmp, { lenses: ['security', 'performance', 'ux'] });
+    const { exitCode, run } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+
+    expect(exitCode).toBe(2);                       // was 0: the seat vanished silently
+    expect(run.status).toBe('partial');
+    // The stage says so on disk, and names what was lost.
+    const stage = stageOf(run, 'stage1');
+    expect(stage.status).toBe('partial');
+    expect(stage.deadWaves).toEqual([
+      { waveId: 'abc123-l3', models: ['qwen'],
+        reason: 'Failed to start server: database is locked' },
+    ]);
+    // …and it is impossible to miss on the way past.
+    expect(emitted()).toMatch(/Stage-1 wave abc123-l3 \(qwen\) produced NO legs/);
+    expect(emitted()).toMatch(/database is locked/);
+    expect(emitted()).toMatch(/exit degraded \(2\)/);
+  });
+
+  test('NON-LENS: a dead critic solo degrades too — quorum only guards the seat wave', async () => {
+    const script = {
+      'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
+      'abc123-c1': () => deadWave('Failed to start server: SQLITE_BUSY'),
+      'abc123-s2': twoJudges,
+      'abc123-ch1': chairOk,
+    };
+    const opts = baseOptions(tmp, { critic: 'qwen' });
+    const { exitCode, run } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+
+    expect(exitCode).toBe(2);
+    expect(stageOf(run, 'stage1').deadWaves).toEqual([
+      { waveId: 'abc123-c1', models: ['qwen'], reason: 'Failed to start server: SQLITE_BUSY' },
+    ]);
+    expect(emitted()).toMatch(/Stage-1 wave abc123-c1 \(qwen\) produced NO legs/);
+  });
+
+  test('a dead LEG (not a dead wave) marks the stage partial too, with no deadWaves', async () => {
+    const script = happyScript();
+    script['abc123-s1'] = () => okWave([
+      mkLeg('gemini', review('gemini')), mkLeg('gpt', review('gpt')), mkLeg('qwen', '', 'error'),
+    ], 2, 'partial');
+    script['abc123-s2'] = twoJudges;
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), deps(scriptedLaunchers(script)));
+    expect(exitCode).toBe(2);
+    const stage = stageOf(run, 'stage1');
+    expect(stage.status).toBe('partial');
+    expect(stage.deadWaves).toBeUndefined();       // the leg existed; it is not a dead WAVE
+  });
+
+  test('a healthy Stage 1 is still `complete` and carries no deadWaves key', async () => {
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), deps(scriptedLaunchers(happyScript())));
+    expect(exitCode).toBe(0);
+    expect(stageOf(run, 'stage1').status).toBe('complete');
+    expect(stageOf(run, 'stage1').deadWaves).toBeUndefined();
+    expect(emitted()).not.toMatch(/produced NO legs/);
+  });
+
+  // A ceiling refusal is already announced, checkpointed and degraded by
+  // run-budget.noteBudgetRefusal (via the REAL launcher). Claiming it here too
+  // would report the same lost seat twice, in two different vocabularies.
+  test('a budget refusal is NOT re-reported as a dead wave', async () => {
+    const script = {
+      'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
+      'abc123-c1': () => ({ wave: null, exitCode: 1,
+        errorDoc: { code: 'BUDGET_EXCEEDED', message: 'ceiling reached' } }),
+      'abc123-s2': twoJudges,
+      'abc123-ch1': chairOk,
+    };
+    const { run } = await runCouncil(baseOptions(tmp, { critic: 'qwen' }), deps(scriptedLaunchers(script)));
+    expect(stageOf(run, 'stage1').deadWaves).toBeUndefined();
+    expect(emitted()).not.toMatch(/produced NO legs/);
+  });
+});

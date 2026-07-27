@@ -175,20 +175,57 @@
     return chairHost;
   }
 
-  /** Wrap every text-node occurrence of needle in <mark> (DOM-safe highlight). */
+  /**
+   * Wrap EVERY occurrence of `needle` in a `<mark>` (DOM-safe: splitText + replaceChild,
+   * never innerHTML).
+   *
+   * ⚠️ v4.4.1 RN-3 + DOC-6: this used to do exactly ONE `indexOf`/`splitText` per collected
+   * text node, so a finding id mentioned twice inside a single text node was highlighted once
+   * — and the reader, drilling in from a dispute cell, believed they had seen every reference
+   * to it in that judge's prose. This docblock nonetheless promised "every occurrence" (DOC-6),
+   * which is what made two `wsgate04` reviewers file the same bug from opposite directions.
+   * Behaviour and doc now agree.
+   *
+   * The rescan continues from `tail`, not from `cursor`, because `splitText` MUTATES the node
+   * being walked: the first call truncates `cursor` to the text BEFORE the match and returns the
+   * match-plus-remainder; the second peels the remainder off into a NEW node the TreeWalker's
+   * already-collected list does not contain. Advancing to that new node is what makes the loop
+   * both complete (it can reach later matches) and terminating (it can never re-find the match
+   * it just replaced).
+   *
+   * NOT idempotent — a second call re-walks the text nodes inside the marks this one created and
+   * nests a second `<mark>`. drillIntoJudge (workspace-panels.js) calls clearHighlight() first
+   * for exactly that reason.
+   *
+   * ⚠️ v4.4.1 M1: clearHighlight() (below) unwraps each `<mark>` back into a plain text node but
+   * never calls `normalize()`, so the sibling text nodes either side of the old mark are left
+   * un-merged — the drill-clear-drill cycle fragments the prose a little more every time. Because
+   * the scan above only ever calls `.indexOf`/`.splitText` on ONE text node at a time, a needle
+   * whose match now straddles one of those leftover boundaries is invisible to it — silently
+   * under-marking on a re-drilled panel, the opposite of this docblock's "every occurrence"
+   * promise. `container.normalize()` below re-merges adjacent text nodes before every scan, so
+   * highlightText is robust to fragmentation regardless of how the container got that way.
+   */
   function highlightText(container, needle) {
-    if (!needle) { return; }
+    if (!needle) { return; }  // also the loop's termination guard: a 0-length needle never advances
+    // v4.4.1 M1: undo any un-merged fragmentation clearHighlight() left behind (it does not
+    // normalize) — without this, a needle whose match spans a leftover node boundary is missed.
+    container.normalize();
     var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
     var nodes = [];
     while (walker.nextNode()) { nodes.push(walker.currentNode); }
     nodes.forEach(function (node) {
-      var idx = node.nodeValue.indexOf(needle);
-      if (idx === -1) { return; }
-      var after = node.splitText(idx);
-      after.splitText(needle.length);
-      var mark = document.createElement('mark');
-      mark.textContent = needle;
-      after.parentNode.replaceChild(mark, after);
+      var cursor = node;
+      for (;;) {
+        var idx = cursor.nodeValue.indexOf(needle);
+        if (idx === -1) { return; }
+        var match = cursor.splitText(idx);            // `match` now starts with the needle
+        var tail = match.splitText(needle.length);    // `tail` is everything after it
+        var mark = document.createElement('mark');
+        mark.textContent = needle;
+        match.parentNode.replaceChild(mark, match);
+        cursor = tail;
+      }
     });
   }
 

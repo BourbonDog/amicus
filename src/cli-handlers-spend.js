@@ -50,15 +50,22 @@ function parseSinceDays(since) {
  * the arithmetic actually saw. It exists so the renderers can say "$X plus N
  * unknown" instead of coercing null→0 and printing a measured-looking $0.0000
  * (diagnosis §8, final paragraph).
+ *
+ * v4.4.1 CA-2: `unattributedSubtreeRows` is its sibling for the OTHER way the
+ * figure understates. Such a row is fully priced — it is in `amount`, it is in
+ * the `r` bucket, `unpricedRows` never sees it — but the leg spawned a child
+ * session whose spend the walk could not determine, which is exactly what makes
+ * `council run` report `costExact: false` about the same dollars. Without this
+ * counter `amicus spend` disagreed with `council run` and looked complete.
  * @param {Array<object>} rows
  */
 function aggregateSpend(rows) {
-  const total = { amount: 0, tokens: emptyTokens(), runs: rows.length, unpricedRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } };
+  const total = { amount: 0, tokens: emptyTokens(), runs: rows.length, unpricedRows: 0, unattributedSubtreeRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } };
   const byModelMap = new Map();
   for (const r of rows) {
     const model = r.model || 'unknown';
     if (!byModelMap.has(model)) {
-      byModelMap.set(model, { model, amount: 0, tokens: emptyTokens(), runs: 0, unpricedRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } });
+      byModelMap.set(model, { model, amount: 0, tokens: emptyTokens(), runs: 0, unpricedRows: 0, unattributedSubtreeRows: 0, sourceMix: { reported: 0, estimated: 0, unknown: 0 } });
     }
     const bucket = byModelMap.get(model);
     bucket.runs += 1;
@@ -68,6 +75,8 @@ function aggregateSpend(rows) {
     const priced = typeof cost.amount === 'number';
     const amount = priced ? cost.amount : 0;
     if (!priced) { bucket.unpricedRows += 1; total.unpricedRows += 1; }
+    // Beside, never instead of: a row can be both unpriced and subtree-unknown.
+    if (r.subtreeUnknown) { bucket.unattributedSubtreeRows += 1; total.unattributedSubtreeRows += 1; }
     bucket.amount += amount;
     total.amount += amount;
     // Any source string outside {reported,estimated} buckets as unknown —
@@ -177,6 +186,15 @@ function renderHuman({ total, byModel, windowDays, credit, wasted }) {
   if (total.unpricedRows > 0) {
     out += `${total.unpricedRows} unpriced row(s) — cost unknown and NOT in the total; `
       + 'real spend is at least this much.\n';
+  }
+  // v4.4.1 CA-2: a DIFFERENT statement from the line above, and deliberately
+  // worded as one. "We could not see this leg at all" (unpriced) vs "we saw this
+  // leg, and its own cost IS in the total, but not what it spawned" — the second
+  // is why `council run` reports costExact:false on a row that looks complete
+  // here. Both lines can appear at once; a row can be in both counts.
+  if (total.unattributedSubtreeRows > 0) {
+    out += `${total.unattributedSubtreeRows} row(s) spawned a subagent whose CHILD session `
+      + 'spend could NOT be determined — real spend is HIGHER than this total.\n';
   }
   if (wasted && wasted.runs > 0) {
     out += `Wasted (failed runs): ${formatCost({ amount: wasted.amount, source: 'mixed' })} across ${wasted.runs} rows — see amicus spend --failed\n`;

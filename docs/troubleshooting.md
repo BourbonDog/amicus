@@ -42,6 +42,91 @@ Your keys and past sessions are not deleted by this swap, but v2.0.0 no longer r
 
 ---
 
+## Every Direct Anthropic Model Fails with `"Not Found"`
+
+**Symptom:** Any model on the `anthropic/…` **direct** route — `haiku`, `sonnet`, `claude`, `opus`,
+or an explicit `anthropic/claude-…` id — errors with exactly `Not Found` after ~2 s, with **zero
+tokens** and no cost. The same model reached through OpenRouter
+(`openrouter/anthropic/claude-haiku-4.5`) works normally. `amicus models --check` reports the alias
+as valid, and `amicus doctor` reports the Anthropic key as valid, because both of those talk to
+`api.anthropic.com` themselves rather than through the engine.
+
+In a council this is worse than a plain failure: **a dead seat does not stop a run, it shrinks
+one.** The council degrades around the missing model — the chair silently falls back, the bench
+collapses from 3 seats to 2, and every finding comes back `confidence: "thin"` because it only ever
+had one peer corroborator. Nothing in `verdict.json` records that the roster changed.
+
+**Cause:** an `ANTHROPIC_BASE_URL` environment variable that is missing the `/v1` path segment.
+The OpenCode engine passes it straight through to `@ai-sdk/anthropic` as the SDK `baseURL`, and the
+SDK appends only `/messages` to it. With `ANTHROPIC_BASE_URL=https://api.anthropic.com` the engine
+therefore posts to `https://api.anthropic.com/messages` instead of
+`https://api.anthropic.com/v1/messages`. That URL returns HTTP **404 with an empty body**, so the AI
+SDK has no error payload to report and surfaces the bare HTTP status text — `Not Found`. The model
+id, the alias, and the API key are all fine; only the URL is wrong.
+
+Some hosts set this variable for you. Notably, running `amicus` from a shell spawned by Claude Code
+inherits `ANTHROPIC_BASE_URL=https://api.anthropic.com` (no `/v1`) from the host process, so amicus
+can fail this way on a machine where nothing in the amicus config is wrong.
+
+**Confirm it in one command** (no key needed for the first line):
+
+```bash
+echo "$ANTHROPIC_BASE_URL"          # if this prints a URL with no /v1 suffix, that's the cause
+amicus start --model openrouter/anthropic/claude-haiku-4.5 --prompt hi --no-ui   # works
+amicus start --model haiku --prompt hi --no-ui                                    # "Not Found"
+```
+
+**Fix** — pick one:
+- Add the missing segment: `export ANTHROPIC_BASE_URL=https://api.anthropic.com/v1`
+- Or unset it entirely and let the SDK use its own default:
+  `unset ANTHROPIC_BASE_URL` (PowerShell: `Remove-Item Env:\ANTHROPIC_BASE_URL`)
+- Or route Anthropic models through OpenRouter for the run: `--gateway openrouter`.
+
+Either of the first two makes `amicus start --model haiku …` complete normally. **Before spending
+money on a council, run one throwaway `amicus start` against each configured seat** — a
+`Not Found` there costs nothing, whereas discovering it mid-council costs a degraded verdict.
+
+---
+
+## `Model 'X' is unverified against the direct catalog; attempting anyway`
+
+**Symptom:** a launch-time notice on stderr naming a model that really does exist, e.g.
+`Model 'deepseek/deepseek-v4-pro' is unverified against the direct catalog; attempting anyway.`
+The run proceeds and may even succeed, so the notice is easy to scroll past.
+
+**Cause:** the notice is not a claim that the model is wrong — it means amicus **could not check**.
+`classifyModel()` is tri-state: `valid` / `invalid` / `unknown`, and `unknown` never blocks a
+launch. It returns `unknown` when the cached catalog holds **no rows at all** for that vendor's
+direct namespace, which happens when the direct fetch for that provider failed — most often because
+the key amicus has stored for it is stale, truncated, or simply a different key from the one the
+engine uses.
+
+That split is the trap. Amicus resolves keys in the order listed under
+[Auth / 401 Errors](#auth--401-errors), and the OpenCode engine keeps its own credential store in
+`~/.local/share/opencode/auth.json`. If `~/.config/amicus/.env` holds a **bad** key for a provider
+while `auth.json` holds a **good** one, amicus's catalog fetch 401s (→ empty namespace → the
+notice) while the engine still runs the model successfully with the other key. You get a permanent
+warning about a model that works, and no warning at all that one of your two stored keys is dead.
+
+**Diagnose:**
+```bash
+amicus key                 # lists configured providers
+amicus models --refresh    # re-fetches every keyed provider; watch for a provider that stays empty
+amicus models --check      # audits every pinned alias route against the catalog
+```
+Then check the provider's own listing endpoint with the stored key (DeepSeek:
+`GET https://api.deepseek.com/models`; Anthropic: `GET https://api.anthropic.com/v1/models`).
+A `401` identifies the bad key.
+
+**Fix:** re-save the working key so both stores agree — `amicus key <provider> <apikey>` (or
+`amicus setup`) — then `amicus models --refresh`. The notice disappears once the vendor's direct
+namespace has live rows again.
+
+**If the model genuinely is retired,** the notice is the only warning you get before the launch
+attempt: verify against the vendor's catalog and update the model id or drop the seat.
+
+---
+
 ## OpenRouter 402 / "Payment Required" on First Call
 
 **Symptom:** `amicus setup` and `amicus key openrouter <key>` both report the key as valid, but the first council review / `start` / `fanout` call against an OpenRouter model fails with `402 Payment Required`. (The `amicus council` subcommand itself is deterministic math and never calls a model, so it can't trigger this.)

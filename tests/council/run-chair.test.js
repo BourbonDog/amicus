@@ -131,6 +131,24 @@ describe('chair VERDICT-line repair (one re-prompt)', () => {
     expect(ch4).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council' });
   });
 
+  test('LC-12: the -ch4 repair carries the synthesis it must verdict on', async () => {
+    // buildChairRepairPrompt took NO arguments at all, so a fresh repair session
+    // was asked to pick a verdict on a synthesis it had never read. The chair leg
+    // SUCCEEDED here — only the VERDICT line is missing.
+    const synthesis = 'The bench converged on three blockers in the migration plan.';
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', synthesis, 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'VERDICT: Fix these first')]);
+    const launchers = scriptedLaunchers(script);
+    await runCouncil(baseOptions(tmp), {
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    const ch4 = launchers.calls.find(c => c.waveId === 'abc123-ch4');
+    expect(ch4.prompt).toContain(synthesis);
+    expect(ch4.prompt).toContain('YOUR SYNTHESIS');
+    expect(ch4.prompt).toContain('VERDICT: Ship it');   // the three-way choice survives
+  });
+
   test('missing VERDICT → repair -ch4 supplies it → exit 0', async () => {
     const script = happyScript();
     script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Great synthesis, no verdict line.', 'complete', 0.03)]);

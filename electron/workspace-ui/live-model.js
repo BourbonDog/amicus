@@ -11,7 +11,10 @@
   // or idle-timed-out run would poll forever and never flip to its terminal rendering.
   // Must stay byte-identical to src/workspace/run-detail.js TERMINAL_STATUSES, which itself
   // mirrors the shipped src/observe/live-doc.js TERMINAL set. A drift pin asserts this.
-  var TERMINAL_STATUSES = ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'idle-timeout'];
+  // ⚠️ v4.4.1 A1: 'timed-out' added alongside 'timeout'. Both spellings are real and are written
+  // by different producers — see src/observe/live-doc.js:18. Inert for the workspace (a council
+  // run.json's status vocabulary is aborted|complete|error|partial), carried for byte-identity.
+  var TERMINAL_STATUSES = ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'timed-out', 'idle-timeout'];
 
   // ⚠️ DE-ROT (F41): STAGE_LABELS must be mirrored here too. The live loop labels stages that
   // START AFTER the run was opened, and those names are absent from the frozen derived.stageRail,
@@ -54,6 +57,14 @@
     // leg (terminal rows from runStats are already alias-only, so the fallback is exact there).
     var alias = seat.modelInput || seat.model;
     var label = labelOf ? labelOf(alias) : null;
+    // ⚠️ v4.4.1 RN-9: this hand-rolled flip is LOAD-BEARING — do NOT "fix" it into
+    // AmicusRender.display({model: seat.model, label: label}, blindOn). The other two copies
+    // (workspace-panels.js's review/judge titles) were routed through display() because their
+    // pair's `model` IS the identity they must print. Here it is not: the seat's printable
+    // identity is the council ALIAS resolved on the line above (F36 — a live leg's `seat.model`
+    // is the RESOLVED executable id, e.g. `google/gemini-2.5-pro`, which labelMap never keys on),
+    // so display()'s blind-OFF arm would print the resolved id and undo F36. This module is also
+    // node-tested with NO DOM and no window.AmicusRender to call. Deliberate third copy.
     var name = blindOn && label ? label : alias;
     var tokens = (seat.tokensIn === null || seat.tokensIn === undefined) &&
                  (seat.tokensOut === null || seat.tokensOut === undefined)

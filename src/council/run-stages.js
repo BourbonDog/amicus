@@ -3,31 +3,25 @@
 
 /**
  * @module council/run-stages
- * Stage-1 (independent reviews) and Stage-2 (anonymized cross-review) loops
- * for the headless council engine — launch, materialize, validate, bounded
- * repair. Split from run.js for the 300-line gate. All model calls go through
- * ctx.launchers (DI); the whole-run cost ceiling is consulted via
- * ctx.overBudget() before every paid repair launch (spec §4).
+ * Stage-1 (independent reviews) loop for the headless council engine — launch,
+ * materialize, validate, bounded repair. Split from run.js for the 300-line
+ * gate; Stage 2 lives in ./run-stage2.js for the same reason (v4.4.1 Task 2) and
+ * is RE-EXPORTED from here, so this module is the single import surface for both
+ * stage loops. All model calls go through ctx.launchers (DI); the whole-run cost
+ * ceiling is consulted via ctx.overBudget() before every paid repair launch
+ * (spec §4).
  *
- * Headless adaptations (vs SKILL.md):
- *  - A review still malformed after 2 repair re-prompts is KEPT with
- *    conformance 'unstructured' and zero findings entries (the skill's Claude
- *    hand-parse fallback has no headless equivalent; the review still gets
- *    ranked in Stage 2).
- *  - A judge still malformed after 2 repairs is dropped from rankings and
- *    adjudications (ok:false) and recorded conformance 'unstructured' (spec §5).
+ * Headless adaptation (vs SKILL.md): a review still malformed after 2 repair
+ * re-prompts is KEPT with conformance 'unstructured' and zero findings entries
+ * (the skill's Claude hand-parse fallback has no headless equivalent; the
+ * review still gets ranked in Stage 2).
  */
 
-const fs = require('fs');
-const path = require('path');
-const { validateFindings } = require('./findings');
+const { validateFindings, countAttemptedFindings, repairCanHonorContract } = require('./findings');
 const briefings = require('./briefings');
-const stage2 = require('./briefings-stage2');
-const { parseJudgeOutput } = require('./parse-stage2');
-const { materializeReviews, sanitizeName } = require('./run-launch');
+const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
-
-function isAbortExit(code) { return code === 130 || code === 143; }
+const { runStage2 } = require('./run-stage2');
 
 function slug(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -50,6 +44,7 @@ async function launchStage1(ctx) {
     fallback: o.fallback, catalog: o.catalog,
   };
   const launches = [];
+  const seated = []; // parallel to `launches`: what each one was SUPPOSED to seat
   // Record every sub-wave BEFORE it launches: `amicus abort` cascades over
   // stages[].waveIds, so an id written after the launch leaves that leg
   // reachable only by the pid kill (no per-leg abort marker).
@@ -58,6 +53,7 @@ async function launchStage1(ctx) {
     o.models.forEach((m, i) => {
       const waveId = `${o.runId}-l${i + 1}`;
       record(waveId);
+      seated.push({ waveId, models: [m] });
       launches.push(launchers.launchSolo({
         ...common, model: m, waveId,
         prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
@@ -67,6 +63,7 @@ async function launchStage1(ctx) {
     const seats = o.models.filter(m => m !== o.critic);
     if (seats.length > 0) {
       record(`${o.runId}-s1`);
+      seated.push({ waveId: `${o.runId}-s1`, models: seats.slice() });
       launches.push(launchers.launchWave({
         ...common, models: seats, waveId: `${o.runId}-s1`,
         prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
@@ -74,6 +71,7 @@ async function launchStage1(ctx) {
     }
     if (o.critic) {
       record(`${o.runId}-c1`);
+      seated.push({ waveId: `${o.runId}-c1`, models: [o.critic] });
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`,
         prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
@@ -83,12 +81,49 @@ async function launchStage1(ctx) {
   const results = await Promise.all(launches);
   let aborted = null;
   const legs = [];
-  for (const r of results) {
+  const deadWaves = [];
+  results.forEach((r, i) => {
     ctx.addWave(r.wave);
-    if (isAbortExit(r.exitCode)) { aborted = r.exitCode; }
-    if (r.wave && Array.isArray(r.wave.legs)) { legs.push(...r.wave.legs); }
+    const abort = isAbortExit(r.exitCode);
+    if (abort) { aborted = r.exitCode; }
+    const got = (r.wave && Array.isArray(r.wave.legs)) ? r.wave.legs : [];
+    legs.push(...got);
+    // ⚠️ Step 10's uncovered half. A wave that died BEFORE its legs (the server
+    // never started; `database is locked`) contributes NOTHING to `legs`, so
+    // deadLegs cannot see it either — which is how run v441plan01 recorded
+    // stage1 'complete' with four seats missing and no trace of them. In lens
+    // mode every seat is its own wave, so a run could lose seats and still exit
+    // 0; the quorum gate only catches the non-lens seat wave. A budget refusal
+    // has its own louder channel already (run-budget.noteBudgetRefusal) and
+    // must not be double-counted here.
+    if (got.length > 0 || abort) { return; }
+    if (r.errorDoc && r.errorDoc.code === 'BUDGET_EXCEEDED') { return; }
+    deadWaves.push({
+      waveId: seated[i].waveId, models: seated[i].models,
+      reason: (r.wave && (r.wave.reason || r.wave.error))
+        || (r.errorDoc && r.errorDoc.message) || 'the wave produced no legs',
+    });
+  });
+  return { aborted, legs, deadWaves };
+}
+
+/**
+ * Announce Stage-1 sub-waves that never produced a leg.
+ *
+ * POLICY (the standing "never fail closed on availability" ruling, applied the
+ * same way run-budget.js applies it to cost): the run CONTINUES with the bench
+ * that did launch. What it must never do is lose the seats SILENTLY — so every
+ * dead wave is announced on stderr, kept on run.json's stage entry (run.js) and
+ * degrades the run's exit code to 2.
+ * @param {Array<{waveId: string, models: string[], reason: string}>} deadWaves
+ * @param {(s: string) => void} [write] stderr seam
+ */
+function reportDeadStage1Waves(deadWaves, write = (s) => process.stderr.write(s)) {
+  for (const d of deadWaves) {
+    write(`Notice: Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs `
+      + `— ${d.reason}. Those seats are NOT in this council. The run continues with the bench that `
+      + 'did launch and will exit degraded (2).\n');
   }
-  return { aborted, legs };
 }
 
 /** Role of a seat by its input alias. */
@@ -102,12 +137,21 @@ function roleFor(o, alias) {
 
 /**
  * Stage 1: independent reviews + findings validation + bounded repair.
- * @returns {Promise<{aborted: number|null, reviews: Array, deadLegs: Array}>}
+ * @returns {Promise<{aborted: number|null, reviews: Array, deadLegs: Array,
+ *   deadWaves: Array, degraded: boolean}>} `degraded` covers BOTH ways a seat
+ *   can go missing: a leg that ran and died (deadLegs) and a whole sub-wave that
+ *   died before its legs existed (deadWaves). A pushed review carries
+ *   `findingsUnverified: true` (LC-11) when its findings came from a repair whose
+ *   contract could not be checked — the original block was absent or unparseable,
+ *   so there was no finding count to compare against — and `repairRefused:
+ *   {code, detail}` (review F1) when the contract WAS checked and broken, which is
+ *   what separates a refused repair from a seat that never emitted JSON.
  */
 async function runStage1(ctx) {
   const { o } = ctx;
-  const { aborted, legs } = await launchStage1(ctx);
-  if (aborted) { return { aborted, reviews: [], deadLegs: [] }; }
+  const { aborted, legs, deadWaves } = await launchStage1(ctx);
+  if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false }; }
+  reportDeadStage1Waves(deadWaves);
 
   const materialized = materializeReviews(o.runDir, legs);
   const alive = new Set(materialized.map(m => m.leg));
@@ -130,7 +174,19 @@ async function runStage1(ctx) {
     // repaired. An empty/dead repair leg leaves it on the last real text
     // (there is no newer artifact to name).
     let repairing = m.text;
-    while (!res.ok && attempts < 2 && !ctx.overBudget()) {
+    // ⚠️ LC-11: the count the repair is contractually forbidden from changing.
+    // Captured from the ORIGINAL block, because that is the generation m.text's
+    // prose actually narrates. null = absent/unparseable, so unverifiable — see
+    // the push below.
+    const attemptedCount = countAttemptedFindings(m.text);
+    // ⚠️ Review F2: never pay for a repair whose every outcome is already decided.
+    // An original declaring ZERO findings can only honor the contract by returning
+    // zero — so while the validator rejects an empty set (EMPTY_FINDINGS), a
+    // compliant repair fails validation and a non-compliant one is refused on the
+    // count below. Predicate, not a constant: Task 3 (LC-10) flips that validator
+    // rule, and this guard stops firing on its own when it does.
+    const repairable = repairCanHonorContract(attemptedCount);
+    while (!res.ok && repairable && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
       const waveId = `${o.runId}-p${repairSeq}`;
@@ -144,99 +200,64 @@ async function runStage1(ctx) {
         fallback: o.fallback, catalog: o.catalog,
       });
       ctx.addWave(solo.wave);
-      if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, reviews, deadLegs }; }
+      if (isAbortExit(solo.exitCode)) {
+        return { aborted: solo.exitCode, reviews, deadLegs, deadWaves, degraded: false };
+      }
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);
       if (res.ok) { conformance = 'repaired'; }
     }
     if (!res.ok) { conformance = 'unstructured'; }
+    // ⚠️ LC-11. `text` below is ALWAYS the seat's own prose — never the repair's
+    // output, which is a bare JSON block by design (briefings.js:19-26
+    // deliberately omits the two-part prose framing from repair prompts).
+    // Substituting it would hand the judges a narrative-free review and render a
+    // JSON dump into bundle-stage2.md as "what the judges saw".
+    //
+    // Instead the repair's CONTRACT is enforced: "the same findings, fixed — do
+    // not add or remove findings". A repair that changed the count produced a
+    // findings set this prose does not narrate, so it is refused rather than
+    // adjudicated.
+    //
+    // ⚠️ Review F4 — what this check is and is NOT. It does NOT catch costgate01:
+    // that leg emitted no fenced block at all, so attemptedCount is null, the
+    // repair is ACCEPTED and merely marked findingsUnverified. LC-12 (handing the
+    // repair prompt the artifact) is what addresses that incident. And the check
+    // deliberately over-refuses one honest case: a repair that legitimately merges
+    // a DUPLICATE_ID pair changes the count too, and is refused with it.
+    //
+    // ⚠️ Review F1: the refusal RIDES the review (repairRefused) and the runStats
+    // row, because 'unstructured' alone is indistinguishable from a seat that never
+    // emitted JSON at all — the weaker, unverifiable case would then be the only
+    // one on the record.
+    let unverified = false;
+    let repairRefused = null;
+    if (conformance === 'repaired') {
+      if (attemptedCount === null) {
+        unverified = true;               // nothing to compare; say so, don't imply a check
+      } else if (res.findings.length !== attemptedCount) {
+        conformance = 'unstructured';
+        repairRefused = { code: 'REPAIR_CHANGED_FINDING_COUNT',
+          detail: `repair returned ${res.findings.length} findings, original attempted ${attemptedCount}` };
+        res = { ok: false, findings: [], errors: [repairRefused] };
+      }
+    }
     reviews.push({
       model: m.modelInput, modelInput: m.modelInput, role: roleFor(o, m.modelInput),
       text: m.text, findings: res.ok ? res.findings : [], conformance, leg: m.leg,
+      ...(unverified ? { findingsUnverified: true } : {}),
+      ...(repairRefused ? { repairRefused } : {}),
     });
   }
-  return { aborted: null, reviews, deadLegs };
+  return { aborted: null, reviews, deadLegs, deadWaves,
+    degraded: deadLegs.length > 0 || deadWaves.length > 0 };
 }
 
-/**
- * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
- * @param {object} ctx
- * @param {{reviews: Array, labels: {entries, labelMap}, globalFindings: Array,
- *   extraLabeled?: Array<{label: string, text: string}>}} args
- *   `extraLabeled` (v4.1 §4.4) are labeled reviews sourced from a FILE rather than
- *   a leg (the Claude review): they join the judged BUNDLE, never the judge ROSTER.
- * @returns {Promise<{aborted: number|null, judgeResults: Array}>}
- */
-async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = [] }) {
-  const { o } = ctx;
-  const { rankingToOrder } = require('./anonymize');
-  fs.mkdirSync(ctx.scratchDir, { recursive: true, mode: 0o700 });
-
-  // Zip off `reviews` (never off `labels.entries`, which may be one longer than
-  // reviews when a file-sourced review is present) and append the extras.
-  const labeled = reviews
-    .map((r, i) => ({ label: labels.entries[i].label, text: r.text }))
-    .concat(extraLabeled);
-  const bundle = stage2.buildJudgeBundle({ reviews: labeled, findings: globalFindings, date: o.date });
-  fs.writeFileSync(path.join(o.runDir, 'bundle-stage2.md'), bundle, { mode: 0o600 });
-
-  // ROSTER, not bundle: derived ONLY from legs that actually ran, so a file-sourced
-  // review is judged but never judges (v4.1 §4.4). Do not widen with extraLabeled.
-  const judges = reviews.map(r => r.modelInput);
-  const parseCtx = {
-    labels: labels.entries.map(e => e.label),
-    findingIds: globalFindings.map(f => f.id),
-  };
-  runState.appendStageWave(o.runDir, 'stage2', `${o.runId}-s2`);
-  const { wave, exitCode } = await ctx.launchers.launchWave({
-    models: judges, prompt: bundle, project: ctx.scratchDir, waveId: `${o.runId}-s2`,
-    timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
-    noCostGate: o.noCostGate,
-    councilRunId: o.runId, councilName: o.councilName,
-    fallback: o.fallback, catalog: o.catalog,
-  });
-  ctx.addWave(wave);
-  if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [] }; }
-
-  const judgeResults = [];
-  let repairSeq = 0;
-  for (const leg of (wave && wave.legs) || []) {
-    const judge = leg.modelInput || leg.model;
-    if (leg.status === 'complete' && leg.summary) {
-      fs.writeFileSync(path.join(o.runDir, `judge-${sanitizeName(judge)}.md`), leg.summary, { mode: 0o600 });
-    }
-    let conformance = 'clean';
-    let parsed = (leg.status === 'complete' && leg.summary)
-      ? parseJudgeOutput(leg.summary, parseCtx)
-      : { ok: false, errors: [{ code: 'DEAD_LEG', detail: leg.error || leg.status }] };
-    let attempts = 0;
-    while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget()) {
-      attempts += 1;
-      repairSeq += 1;
-      const waveId = `${o.runId}-q${repairSeq}`;
-      runState.appendStageWave(o.runDir, 'stage2', waveId);
-      const solo = await ctx.launchers.launchSolo({
-        model: judge, prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors }),
-        project: ctx.scratchDir, waveId, timeout: o.timeout,
-        gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
-        councilRunId: o.runId, councilName: o.councilName,
-        fallback: o.fallback, catalog: o.catalog,
-      });
-      ctx.addWave(solo.wave);
-      if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, judgeResults }; }
-      parsed = parseJudgeOutput((solo.leg && solo.leg.summary) || '', parseCtx);
-      if (parsed.ok) { conformance = 'repaired'; }
-    }
-    if (!parsed.ok) {
-      judgeResults.push({ judge, ok: false, order: null, adjudications: null,
-        conformance: leg.status === 'complete' ? 'unstructured' : 'clean' });
-      continue;
-    }
-    const { order } = rankingToOrder(parsed.ranking, labels.labelMap);
-    judgeResults.push({ judge, ok: true, order, adjudications: parsed.adjudications, conformance });
-  }
-  return { aborted: null, judgeResults };
-}
-
-module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor };
+// runStage2 lives in ./run-stage2.js (300-line gate) but is re-exported here so
+// this module stays the single import surface for the stage loops. The cycle that
+// once blocked that is gone: isAbortExit was hoisted into run-launch.js — the
+// module that produces the exit codes — so the child no longer imports from its
+// parent (v4.4.1 review F5). isAbortExit is still re-exported for run-chair.js
+// and run-debate.js, which have always taken it from here.
+module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor, reportDeadStage1Waves };

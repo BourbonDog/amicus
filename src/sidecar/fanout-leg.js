@@ -162,6 +162,12 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     // OpenCode session may have kept working (and billing) afterwards. Travels
     // with the leg so it is readable long after the run's stderr is gone.
     toolSettleTimedOut: (result && result.toolSettleTimedOut) || undefined,
+    // v4.4.1 LC-2: whether the ceiling's abort landed. Deliberately NOT
+    // `|| undefined` like the flag above — a `false` here is the whole point
+    // ("we tried to stop it and could not; it may still be billing") and must
+    // survive onto disk. runHeadless sets it only when the ceiling was hit, so
+    // passing it through unchanged keeps a clean leg carrying neither field.
+    toolSettleAborted: result ? result.toolSettleAborted : undefined,
   };
   let finalMeta = legPatch;
   if (legDir) {

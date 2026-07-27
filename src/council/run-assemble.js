@@ -40,13 +40,26 @@ function worseConformance(a, b) {
  * leg doc yields durationMs/usage null (never invent a value). `model` (the
  * council alias) overrides leg.model (the resolved executable id) so ledger
  * rows join meta.models by exact string (ledger.js:20-24).
+ *
+ * ⚠️ LC-11 / review F1: `findingsUnverified` and `repairRefused` are the same
+ * class of fact as `conformance` and ride the same row. They are the two halves
+ * of the repair contract's outcome: `findingsUnverified` marks a 'repaired' seat
+ * whose contract could NOT be checked (the original block was absent or
+ * unparseable, so there was no finding count to compare), and `repairRefused`
+ * ({code, detail}) marks the stronger case — the contract WAS checked and broken,
+ * which is otherwise indistinguishable from a seat that never emitted JSON at
+ * all. Both are additive and present only when set, so a run without either is
+ * byte-for-byte unchanged.
  */
-function buildRunStatsEntry({ leg, model, role, wasChair, conformance }) {
+function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
+  repairRefused }) {
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
     wasChair: !!wasChair,
     conformance: conformance || 'clean',
+    ...(findingsUnverified ? { findingsUnverified: true } : {}),
+    ...(repairRefused ? { repairRefused } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,
@@ -139,6 +152,7 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
+    findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused,
   }));
   if (claudeReview) {
     meta.models.push(CLAUDE_SEAT);      // last, mirroring its review-N+1 label
@@ -176,7 +190,34 @@ function writeVerdictFiles({ runDir, record, overallVerdict, chairText }) {
   return verdict;
 }
 
+/**
+ * Build the chair packet and persist it as `chair-packet.md`. Lifted verbatim
+ * out of run.js for the 300-line gate (v4.4.1 Task 0.5) — same composition,
+ * same debate addendum, same file write.
+ * @param {{runDir: string, reviews: Array, claudeReview: object|null,
+ *   tallyInput: object, record: object, debateOutcomes: Array|null, date: string}} args
+ *   `tallyInput`/`record` are the DEBATED ones when --debate ran, the
+ *   provisional pair otherwise (run.js keeps that sequencing).
+ * @returns {string} the packet text (run.js hands it straight to runChair)
+ */
+function buildChairPacketFile({ runDir, reviews, claudeReview, tallyInput, record, debateOutcomes, date }) {
+  const { buildChairPacket } = require('./briefings-stage2');
+  const { buildDebateAddendum } = require('./briefings-debate');
+  const packet = buildChairPacket({
+    // §4.4: the chair sees Claude's de-anonymized review like any other; it casts
+    // no rankings/adjudications, so it appears ONLY as one more review block.
+    reviews: reviews.map(r => ({ model: r.model, text: r.text }))
+      .concat(claudeReview ? [{ model: 'claude', text: claudeReview.text }] : []),
+    rankings: tallyInput.rankings,
+    adjudications: tallyInput.adjudications,
+    tierCounts: record.tierCounts, date,
+  }) + (debateOutcomes ? '\n\n' + buildDebateAddendum({ outcomes: debateOutcomes }) : '');
+  fs.writeFileSync(path.join(runDir, 'chair-packet.md'), packet, { mode: 0o600 });
+  return packet;
+}
+
 module.exports = {
   buildRunStatsEntry, worseConformance, buildTallyInput, writeTallyFiles, writeVerdictFiles,
+  buildChairPacketFile,
   preflightClaudeReview, labelClaudeReview, claudeRunStatsRow, CLAUDE_SEAT,
 };

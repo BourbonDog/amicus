@@ -78,6 +78,69 @@ describe('buildFoldText', () => {
     expect(text).toContain('(no chair output — tally summary above)');
   });
 
+  /**
+   * TST-10b — stripFoldMarkers has TWO branches and TWO marker spellings, and this suite
+   * only ever exercised one cell of that 2x2: a NONCED marker ALONE on its own line.
+   *
+   * The other cells are the ones that matter for untrusted chair prose. A chair asked to
+   * summarise a council whose subject is amicus itself will write the marker mid-sentence,
+   * and #BL-7's whole point is that the BARE `[SIDECAR_FOLD]` spelling (no nonce) still
+   * exists in the wild — echoed instructions, a prior sidecar summary, scraped content. If
+   * either leaked through, chair prose could truncate or spoof the fold block it is embedded
+   * in, which is the exact hazard the per-run nonce closure exists for.
+   */
+  describe('marker stripping covers both branches and both spellings', () => {
+    const foldWithChair = (chairText) => {
+      const run = load('council-run-complete', 'run.json');
+      const tally = load('council-run-complete', 'tally.json');
+      const verdict = load('council-run-complete', 'verdict.json');
+      return buildFoldText({ nonce: NONCE, project: '/p', run, tally, verdict, chairText });
+    };
+    /** Everything after the 10-line head — the embedded chair body. */
+    const bodyOf = (text) => text.split('\n').slice(10).join('\n');
+
+    test('a NONCED marker mid-line is removed in place, keeping the rest of the sentence', () => {
+      const text = foldWithChair('Findings: [SIDECAR_FOLD:deadbeefdeadbeef] and three more.');
+      expect(text).not.toContain('deadbeefdeadbeef');
+      expect(bodyOf(text)).toBe('Findings:  and three more.');
+      // …and the real marker is still the only one in the block, exactly once.
+      expect(text.split(buildFoldMarker(NONCE)).length).toBe(2);
+    });
+
+    test('a BARE [SIDECAR_FOLD] mid-line is removed too — the pre-nonce spelling still counts', () => {
+      const text = foldWithChair('See [SIDECAR_FOLD] for the older wire format.');
+      expect(text).not.toContain('[SIDECAR_FOLD]');
+      expect(bodyOf(text)).toBe('See  for the older wire format.');
+    });
+
+    test('a BARE [SIDECAR_FOLD] alone on its own line takes the line terminator with it', () => {
+      const text = foldWithChair('before\n[SIDECAR_FOLD]\nafter');
+      expect(text).not.toContain('[SIDECAR_FOLD]');
+      expect(bodyOf(text)).toBe('before\nafter'); // no blank line left behind
+    });
+
+    test('an INDENTED marker line is still a marker-only line (leading whitespace tolerated)', () => {
+      const text = foldWithChair('before\n   [SIDECAR_FOLD:deadbeefdeadbeef]   \nafter');
+      expect(text).not.toContain('deadbeefdeadbeef');
+      expect(bodyOf(text)).toBe('before\nafter');
+    });
+
+    test('a chair body that is only a BARE marker falls back to the no-chair label, not a blank body', () => {
+      // The nonced spelling of this is covered above; the bare one is the #BL-7 case and
+      // strips to '' just the same, so the emptiness check must run on the STRIPPED text.
+      const text = foldWithChair('[SIDECAR_FOLD]\n');
+      expect(bodyOf(text)).toBe('(no chair output — tally summary above)');
+    });
+
+    test('several markers of both spellings in one body are ALL removed', () => {
+      const text = foldWithChair('[SIDECAR_FOLD]\nkeep me [SIDECAR_FOLD:aaaabbbbccccdddd] too\n[SIDECAR_FOLD:eeeeffff00001111]\ntail');
+      expect(text).not.toContain('[SIDECAR_FOLD]');
+      expect(text).not.toContain('aaaabbbbccccdddd');
+      expect(text).not.toContain('eeeeffff00001111');
+      expect(bodyOf(text)).toBe('keep me  too\ntail');
+    });
+  });
+
   // Review follow-up #2: overallVerdict is embedded from verdict.json, which
   // this module does not re-validate (the MCP path types it as a bare
   // nullable string — mcp-tools.js:428). Defense-in-depth: newlines are
@@ -98,5 +161,56 @@ describe('buildFoldText', () => {
   // previously only asserted in a comment.
   test('missing nonce throws (v4.0 §9 guard)', () => {
     expect(() => buildFoldText({ run: {} })).toThrow(TypeError);
+  });
+
+  /**
+   * v4.4.1 DOC-5 — the Cost line said the same thing twice. `formatCost`
+   * (src/utils/pricing.js) already encodes inexactness as a leading `~` for both
+   * 'estimated' and 'mixed', and returns a bare `?` for 'unknown'; appending the
+   * source name on top produced `~$0.0100 (estimated)` and `? (unknown)`. Those
+   * two words are gone.
+   *
+   * Two sources keep their word, because the glyph vocabulary cannot express
+   * them: `reported`, because a plain `$0.4321` is also what an unrecognised
+   * source renders as (pinned by the full-fold test above); and `mixed`,
+   * because `~` says *inexact* without saying *which kind* — a bare `~$0.3720`
+   * cannot be told apart from 'estimated', yet 'mixed' asserts that part of the
+   * number is genuinely measured. Release-cut ruling, 2026-07-27.
+   */
+  describe('the Cost line labels inexactness once, not twice (DOC-5)', () => {
+    const foldWithCost = (cost) => {
+      const run = load('council-run-complete', 'run.json');
+      run.usage = { ...run.usage, cost };
+      return buildFoldText({ nonce: NONCE, project: '/p', run, tally: null, verdict: null, chairText: null });
+    };
+    const costLine = (text) => text.split('\n').find((l) => l.startsWith('Cost: '));
+
+    test("a 'mixed' total keeps its label — `~` cannot say WHICH kind of inexact", () => {
+      const text = foldWithCost({ amount: 0.37202345, currency: 'USD', source: 'mixed' });
+      expect(costLine(text)).toBe('Cost: ~$0.3720 (mixed)');
+    });
+
+    test("an 'estimated' total is `~$…` with no trailing (estimated)", () => {
+      const text = foldWithCost({ amount: 0.01, currency: 'USD', source: 'estimated' });
+      expect(costLine(text)).toBe('Cost: ~$0.0100');
+      expect(text).not.toContain('(estimated)');
+    });
+
+    test("'mixed' and 'estimated' do not collide — the whole point of keeping one word", () => {
+      const mixed = costLine(foldWithCost({ amount: 0.372, currency: 'USD', source: 'mixed' }));
+      const estimated = costLine(foldWithCost({ amount: 0.372, currency: 'USD', source: 'estimated' }));
+      expect(mixed).not.toBe(estimated);
+    });
+
+    test("an 'unknown' total is a bare `?` with no trailing (unknown)", () => {
+      const text = foldWithCost({ amount: null, currency: 'USD', source: 'unknown' });
+      expect(costLine(text)).toBe('Cost: ?');
+      expect(text).not.toContain('(unknown)');
+    });
+
+    test("a 'reported' total keeps its label — the glyph vocabulary cannot express exactness", () => {
+      const text = foldWithCost({ amount: 0.4321, currency: 'USD', source: 'reported' });
+      expect(costLine(text)).toBe('Cost: $0.4321 (reported)');
+    });
   });
 });

@@ -122,8 +122,22 @@ const USAGE_SETTLE_CALL_TIMEOUT_MS = envNumber('AMICUS_USAGE_SETTLE_CALL_TIMEOUT
  * ON EXCEEDING IT the leg COMPLETES anyway — never fails — carrying
  * `toolSettleTimedOut` on the result, the terminal progress record and the
  * error log channel. Owner's standing ruling: fail LOUD, not fail CLOSED.
+ *
+ * v4.4.1 LC-2 (owner ruling, 2026-07-26): the leg's completion and its partial
+ * output are unchanged, but its OpenCode session is now ABORTED at the ceiling
+ * (see the finalization block) so it stops billing for work nobody will read.
  */
 const TOOL_SETTLE_GRACE_MS = envNumber('AMICUS_TOOL_SETTLE_GRACE_MS', 300000);
+/**
+ * v4.4.1 LC-2 — how long the ceiling's abort call may take before we stop
+ * waiting on it. A hard constant rather than an env knob (the same disposition
+ * as src/sidecar/child-sessions.js's bounds): it exists to stop a pathological
+ * hang, not to be tuned. The leg is already complete and already paid for when
+ * this runs, so an unbounded wait here would hold a finished answer hostage to a
+ * best-effort cost optimization — exactly the trade A-8 forbids. Injectable via
+ * `options.toolSettleAbortTimeoutMs` so the bound itself is testable.
+ */
+const TOOL_SETTLE_ABORT_TIMEOUT_MS = 5000;
 
 /**
  * Race a promise against a timeout. Returns the promise's result, or rejects with
@@ -258,7 +272,18 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       if (options.mcp) {
         serverOptions.mcp = options.mcp;
       }
-      const result = await startServer(serverOptions);
+      // v4.4.1 fix wave (F5): this is the OTHER server-start site. It calls
+      // startServer directly rather than going through startOpenCodeServer, so
+      // the lock-class retry added for the concurrent-start race never covered
+      // it — a plain `amicus start` that lost the race still died on the first
+      // `database is locked`. "Two separate amicus processes contending" is half
+      // that retry's stated justification, and this is one of the two processes.
+      // Same bounded, narrow policy: 5 attempts (Step 10.5 widened it from 3),
+      // lock-class messages only, final failure rethrown unchanged into the
+      // degrade path below.
+      const { retryOnLockRace } = require('./utils/server-setup');
+      const result = await retryOnLockRace(() => startServer(serverOptions),
+        { retryDelayMs: options.retryDelayMs });
       client = result.client;
       server = result.server;
       logger.debug('Server started', { url: server.url });
@@ -457,6 +482,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // `=== undefined` rather than `||`: 0 is meaningful (disable the deferral).
     const toolSettleGraceMs = options.toolSettleGraceMs === undefined
       ? TOOL_SETTLE_GRACE_MS : options.toolSettleGraceMs;
+    const toolSettleAbortTimeoutMs = options.toolSettleAbortTimeoutMs === undefined
+      ? TOOL_SETTLE_ABORT_TIMEOUT_MS : options.toolSettleAbortTimeoutMs;
     let consecutivePollFailures = 0;
     let pollFailureBail = false;
     let lastAssistantMsgId = null;
@@ -478,6 +505,7 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     let toolSettleDeferredSince = null; // ms timestamp of the first deferral, or null
     let toolSettleTimedOut = false;     // the grace ceiling was exceeded
     let unsettledAtCeiling = [];        // what was still live when it was exceeded
+    let toolSettleAborted = false;      // LC-2: the ceiling's abort landed (see finalization)
 
     /**
      * Should this poll's completion signal be DEFERRED because a tool call has
@@ -917,6 +945,54 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       }
     }
 
+    // ---- v4.4.1 LC-2: stop paying for a session nobody will read -------------
+    // OWNER RULING (2026-07-26). The leg is complete and runHeadless is returning,
+    // so nothing will ever read further session output — the outcome was already
+    // discarded by completing. Aborting here does not truncate an answer that
+    // would have been used; it stops paying for work nobody will read. The
+    // original objection ("stops the bleeding at the cost of truncating a
+    // possibly-healthy call") applied to aborting ON the completion route, where
+    // the call might still have mattered. Here it cannot.
+    //
+    // ORDER IS LOAD-BEARING, on BOTH sides:
+    //   AFTER the child-session walk above — aborting first risks losing the
+    //     subtree cost data v4.4.0 exists to capture, trading one silent
+    //     under-report for another.
+    //   BEFORE server.close() below — the abort is an SDK call and needs a live
+    //     server. It is not redundant with close(): on a SHARED server (every
+    //     council run) close() is never called here, and the session would go on
+    //     billing against a server that outlives this leg.
+    //
+    // A-8 APPLIES: "never lose the answer" outranks "never report inaccurate
+    // usage". This is an optimization layered on an already-successful,
+    // already-paid-for leg, so every failure — rejection, hang, or a missing
+    // session id — is logged and dropped. Nothing here may alter `completed`,
+    // `summary`, `usage` or `error`. `toolSettleAborted: false` is the honest
+    // record of "we tried and could not; it may still be billing".
+    if (toolSettleTimedOut && sessionId) {
+      try {
+        const { abortSession } = require('./opencode-client');
+        await withTimeout(
+          abortSession(client, sessionId, ...dirArgs),
+          toolSettleAbortTimeoutMs,
+          'abortSession(tool-settle)',
+        );
+        toolSettleAborted = true;
+        // Task 6 review X2: a LANDED abort is the good outcome of a condition
+        // that is already logged at `error` (the ceiling itself). Logging the
+        // remedy at `warn` reads as a second problem; `info` reads honestly.
+        // The FAILED abort below stays at `warn` — that one really is a problem
+        // ("it may still be billing").
+        logger.info('Aborted the OpenCode session after the tool-settle ceiling', {
+          taskId, sessionId, unsettled: unsettledAtCeiling.length,
+        });
+      } catch (abortErr) {
+        toolSettleAborted = false;
+        logger.warn('Could not abort the session after the tool-settle ceiling — it may '
+          + 'still be billing', { taskId, sessionId, error: abortErr.message });
+      }
+    }
+
     if (!externalServer) { await server.close(); }
     if (mirror.toolCalls.length > 0) {
       logger.info('Tool calls summary', {
@@ -958,8 +1034,13 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // live GUI reads this file (src/observe/live-doc.js). `unsettledToolCalls` is
     // a COUNT here (progress.json is a compact snapshot); the full list is on the
     // returned result for the caller's metadata.
+    //
+    // v4.4.1 LC-2: `toolSettleAborted` rides alongside it — `true` = the session
+    // was told to stop, `false` = it may still be billing. Both are meaningful
+    // ONLY when the ceiling was hit, so neither appears on a clean leg.
     const settleFlags = toolSettleTimedOut
-      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling.length }
+      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling.length,
+        toolSettleAborted }
       : {};
     // v4.4 B4 (Task 2) + v4.4.1 CA-1: a leg that made a SUBAGENT call has spend
     // in a CHILD OpenCode session that is billed separately and is NOT rolled
@@ -981,15 +1062,46 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         : {}),
       ...(subtree.unknown ? { subtreeUnknown: true } : {}) }
       : (subagentToolCalls.length > 0 ? { subtreeUnknown: true } : {});
-    try { writeProgress(sessionDir, 'complete', { usage: { ...usage, ...subtreeProgress }, ...settleFlags }); }
+    // ---- v4.4.1 LC-3: the terminal stage is DERIVED, never hardcoded ---------
+    // This write sits above BOTH returns below, so EVERY terminal path reaches
+    // it — the external-abort break, the --timeout, the poll-failure bail, the
+    // tool-call wedge — and it used to stamp 'complete' on all of them. The live
+    // workspace reads progress.json directly (src/observe/live-doc.js
+    // enrichLegUsage), so an aborted or errored leg rendered with a green check
+    // until metadata.json landed. Fix the WRITER: src/observe/council-legs.js
+    // already prefers metadata.json for a terminal leg and is NOT the problem.
+    //
+    // resolveTerminalState is the codebase's single source of truth for the
+    // (completed, timedOut, aborted, error) → status mapping, and it is what
+    // start.js / continue.js / resume.js / finalizeHeadlessResult will run on
+    // THIS function's return value to stamp metadata.json. Deriving the stage
+    // from it — rather than re-deriving a second, hand-rolled expression here —
+    // is what guarantees progress.json's stage and metadata.json's status cannot
+    // disagree. It also covers the two cases a hand-rolled `aborted ? … :
+    // sessionError ? …` would get wrong: a TIMED-OUT leg (which would still have
+    // read 'complete'), and the F1 case where a session error arrived alongside
+    // usable output and the leg legitimately returns completed (which would have
+    // read a false 'error').
+    //
+    // `failedWithNoUsableOutput` is hoisted out of the `if` below so the stage
+    // and the returned shape are decided by ONE predicate and cannot drift.
+    const failedWithNoUsableOutput = !!(sessionError && (!mirror.output || pollFailureBail || toolStalled));
+    const { resolveTerminalState } = require('./sidecar/session-finalize');
+    const terminalStage = resolveTerminalState({
+      completed,
+      timedOut,
+      aborted,
+      error: failedWithNoUsableOutput ? sessionError : null,
+    }).status;
+    try { writeProgress(sessionDir, terminalStage, { usage: { ...usage, ...subtreeProgress }, ...settleFlags }); }
     catch (progressErr) {
       logger.debug('terminal progress write failed (best-effort)', { taskId, error: progressErr.message });
     }
     const settleResult = toolSettleTimedOut
-      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling }
+      ? { toolSettleTimedOut: true, unsettledToolCalls: unsettledAtCeiling, toolSettleAborted }
       : {};
 
-    if (sessionError && (!mirror.output || pollFailureBail || toolStalled)) {
+    if (failedWithNoUsableOutput) {
       return {
         summary: mirror.output ? extractSummary(mirror.output, foldNonce) : '',
         completed: false,
@@ -1036,7 +1148,64 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
     if (watchdog) { watchdog.cancel(); }
     if (uninstallSignals) { uninstallSignals(); }
-    if (!externalServer) { await server.close(); }
+    // ⚠️ v4.4.1 M2: guarded — this used to be a bare `await server.close()` sitting directly
+    // above A3's terminal-write block, OUTSIDE any try, in the one place a close failure is
+    // least affordable: the error handler. A rejection here would have skipped the terminal
+    // progress write below entirely AND replaced the original `error` (the one A3 exists to
+    // preserve) with this close failure instead. `close()` has already done its job of freeing
+    // the port by the time we get here; a failure to close cleanly is not this handler's
+    // problem to propagate, so it is logged and swallowed, same discipline as every other
+    // best-effort close in this file (see the signal handler above).
+    if (!externalServer) {
+      try { await server.close(); } catch (closeErr) {
+        logger.debug('server.close() failed in the outer exception handler (best-effort)', {
+          taskId, error: closeErr.message,
+        });
+      }
+    }
+    // ⚠️ v4.4.1 A3 — the last hole in LC-3's story. LC-3 made the SUCCESS path's terminal
+    // progress write derive its stage from resolveTerminalState instead of hardcoding 'complete',
+    // so an aborted/errored/timed-out leg stopped rendering with a green check. This path — the
+    // outer exception handler — wrote NO terminal progress record at all, so progress.json kept
+    // whatever non-terminal stage the last flush left on it (usually 'receiving') while the
+    // caller's finalizeHeadlessResult stamped metadata.json 'error' off the return value below.
+    // The live workspace and `amicus watch` read progress.json DIRECTLY (live-doc.js
+    // enrichLegUsage, council-legs.js), so a leg that exploded rendered as still-streaming
+    // forever: exactly the stale-state class LC-3 closed one path over.
+    //
+    // ⚠️ This runs INSIDE an error handler: it must never throw and must never mask the original
+    // error, so the whole thing sits in its own try and its failure is a debug line, exactly like
+    // the success path's write. The stage comes from the same single source of truth that path
+    // uses, so progress.json's stage and metadata.json's status still cannot disagree.
+    //
+    // ⚠️ The prior `usage` is READ BACK and re-attached deliberately. writeProgress REBUILDS
+    // progress.json from `{stage, stageLabel, updatedAt, ...extra}` — it does not merge — so a
+    // bare terminal write would silently delete whatever real spend the last 'receiving' flush had
+    // already recorded, trading a stale-stage bug for a cost-under-report on exactly the legs that
+    // failed. There are no settled totals on this path (that is what the exception cost us), so
+    // carrying the last known usage forward unchanged is the honest maximum.
+    //
+    // v4.4.1 M3 — scope of "the last known ones": `usage` ONLY. That same 'receiving' flush also
+    // wrote `p.extra` (e.g. `messagesReceived`), and that is deliberately left to drop here, not
+    // carried forward too — the same call LC-3's success-path terminal write already made (see
+    // that block's comment above): readProgress() derives `messages` from conversation.jsonl's
+    // assistant entries directly and only falls back to `messagesReceived` when there are none, so
+    // restating a stale count on an exception — where conversation.jsonl is the more truthful,
+    // already-mirrored source — could only disagree with the file it exists to summarize.
+    try {
+      let priorUsage = null;
+      try {
+        const prior = JSON.parse(fs.readFileSync(path.join(sessionDir, 'progress.json'), 'utf-8'));
+        if (prior && prior.usage) { priorUsage = prior.usage; }
+      } catch { /* no readable prior record: write the terminal stage without usage */ }
+      const { resolveTerminalState } = require('./sidecar/session-finalize');
+      const stage = resolveTerminalState({ error: error.message }).status;
+      writeProgress(sessionDir, stage, priorUsage ? { usage: priorUsage } : {});
+    } catch (progressErr) {
+      logger.debug('terminal progress write failed after exception (best-effort)', {
+        taskId, error: progressErr.message,
+      });
+    }
     const { emptyUsageTotals } = require('./utils/pricing');
     return {
       summary: '',

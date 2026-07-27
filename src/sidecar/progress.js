@@ -19,7 +19,14 @@ const STAGE_LABELS = {
   session_created: 'Session created',
   prompt_sent: 'Briefing delivered, waiting for response...',
   receiving: 'Generating response...',
-  complete: 'Complete'
+  complete: 'Complete',
+  // v4.4.1 LC-3: the terminal record is no longer always 'complete' — headless.js
+  // derives it from resolveTerminalState, so these three are now reachable. Without
+  // a label, readProgress's `latest` (which falls back to stageLabel when the leg
+  // has no assistant messages yet) would read the raw id: "aborted", not "Aborted".
+  aborted: 'Aborted',
+  error: 'Failed',
+  'timed-out': 'Timed out'
 };
 
 /**
