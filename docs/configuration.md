@@ -35,6 +35,16 @@ Per vendor, the bare form's direct key is: `google/...` → `GOOGLE_GENERATIVE_A
 `openai/...` → `OPENAI_API_KEY`, `anthropic/...` → `ANTHROPIC_API_KEY`, `deepseek/...` →
 `DEEPSEEK_API_KEY`.
 
+**Inherited provider base URLs.** Amicus does not define or read `*_BASE_URL` variables for the
+hosted vendors above, but it does pass the whole environment through to the OpenCode engine, which
+hands them to the underlying provider SDK. `ANTHROPIC_BASE_URL` is the one that bites: the SDK
+appends only `/messages` to it, so it must include the `/v1` path segment. A value of
+`https://api.anthropic.com` (**no** `/v1`) makes every direct `anthropic/…` model fail with a bare
+`Not Found` at zero tokens, while the same models still work through OpenRouter. Some hosts set
+this for you — a shell spawned by Claude Code inherits the `/v1`-less form. Either export
+`https://api.anthropic.com/v1` or unset the variable. See
+[troubleshooting § Every Direct Anthropic Model Fails with `"Not Found"`](./troubleshooting.md#every-direct-anthropic-model-fails-with-not-found).
+
 ---
 
 ## Routing
