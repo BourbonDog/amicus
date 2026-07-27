@@ -22,7 +22,21 @@ const CHAIR_VERDICT_VALUES = ['Ship it', 'Fix these first', 'Fundamental rethink
 /** Shared date line (spec §4.3) — prepended to every model-facing briefing. */
 function dateLine(date) { return `Today's date is ${date}.`; }
 
-/** Stage-2 headless output contract (spec §5, embedded in the judge bundle). */
+/**
+ * Stage-2 headless output contract (spec §5, embedded in the judge bundle).
+ *
+ * ⚠️ LC-10 fast-follow (review minor M1): on a clean bench, JUDGE_TASK_B_NO_FINDINGS
+ * tells the judge to emit `"adjudications": []` — but this contract immediately
+ * follows it, and its worked example still shows `{"id":"A1"...},{"id":"B2"...}`.
+ * "One entry per listed finding id" is satisfied by zero entries, so it is not a
+ * contradiction, but the example is the last remaining incentive to invent an id:
+ * inventing one fails `UNKNOWN_FINDING_ID` (parse-stage2.js) and buys up to two
+ * paid repair solos per judge. The trailing bullet below states the zero case
+ * explicitly so the empty findings index has its own answer, not just an example
+ * that happens to allow it. It is unconditional (shown on every bench, including
+ * the ordinary and repair paths) because it is inert when findings exist and the
+ * repair prompt has no findings-state argument to swap on.
+ */
 const JUDGE_OUTPUT_CONTRACT = [
   'End your response with a trailing fenced ```json block — no text after it — in',
   'exactly this shape:',
@@ -41,6 +55,8 @@ const JUDGE_OUTPUT_CONTRACT = [
   '  Ties: use a nested array for tied labels, e.g. [["Review A", "Review B"], "Review C"].',
   '- "adjudications": one entry per listed finding id; "verdict" is one of:',
   '  agree | dispute | neutral. An "I missed this — it\'s valid" counts as agree.',
+  '- If the FINDINGS INDEX below is empty, "adjudications" must be exactly `[]` — do',
+  '  not invent a finding id merely to have something to adjudicate.',
 ].join('\n');
 
 /** Task B when there is something to adjudicate (the ordinary case). */
@@ -155,19 +171,37 @@ const VERDICT_SCALE_ADDENDUM = [
   '   VERDICT line itself — that line carries the phrase and nothing else.',
 ].join('\n');
 
+/** The chair's opening instruction when there is something to weigh (the ordinary case). */
+const CHAIR_TASK =
+  'You are the council chair. Write the synthesized verdict across the reviews, ' +
+  'rankings, and adjudications below. Weigh each reviewer\'s findings by their ' +
+  'peer-validated standing (rank position and adjudication pattern), distinguish ' +
+  'findings the bench broadly endorsed from contested or singleton claims, and ' +
+  'arrive at an overall assessment of the material.';
+
 /**
- * What the chair is told when the bench raised nothing at all (LC-10).
+ * The chair's opening instruction when the bench raised nothing at all (LC-10
+ * fast-follow, review minor M2).
  *
- * Without this the packet asks the chair to "distinguish findings the bench broadly
- * endorsed from contested or singleton claims" over an empty tier table and two bare
- * section headings — an instruction whose only satisfiable reading is to invent
- * material. The clean bench is stated as the finding it is.
+ * Task 3 fixed this by keeping CHAIR_TASK unchanged and appending a correcting note
+ * — asymmetric with buildJudgeBundle, which swaps JUDGE_TASK_B for
+ * JUDGE_TASK_B_NO_FINDINGS outright. The un-swapped CHAIR_TASK asks the chair to
+ * "distinguish findings the bench broadly endorsed from contested or singleton
+ * claims" over an empty tier table and two bare section headings — an instruction
+ * whose only satisfiable reading is to invent material — and the chair reads that
+ * unfollowable directive FIRST, the correction second. This constant replaces
+ * CHAIR_TASK entirely on a clean bench instead: it never asks for a distinction
+ * that cannot exist, and the clean-bench framing (still stated, not just implied)
+ * is now the only instruction the chair sees, not an amendment to a bad one.
  */
-const CHAIR_CLEAN_BENCH_NOTE =
-  'NOTE: this bench raised NO findings. Every reviewer read the material and reported ' +
-  'nothing to fix, which is a valid outcome — not a failed run. Synthesize on that ' +
-  'basis: say what the reviews actually establish and where the bench\'s agreement is ' +
-  'thin, and do not manufacture concerns to fill the sections below.';
+const CHAIR_TASK_NO_FINDINGS =
+  'You are the council chair. Write the synthesized verdict across the reviews and ' +
+  'rankings below. Weigh each reviewer\'s standing by rank position, and arrive at ' +
+  'an overall assessment of the material. NOTE: this bench raised NO findings. ' +
+  'Every reviewer read the material and reported nothing to fix, which is a valid ' +
+  'outcome — not a failed run. Synthesize on that basis: say what the reviews ' +
+  'actually establish and where the bench\'s agreement is thin, and do not ' +
+  'manufacture concerns to fill the sections below.';
 
 /** A section body, or an explicit reason it is empty — never a heading over nothing. */
 function orNone(text, none) {
@@ -200,14 +234,7 @@ function buildChairPacket({ reviews, rankings, adjudications, tierCounts, date }
   const tiers = JSON.stringify(tierCounts);
   const parts = [CHAIR_NO_TOOLS_PREAMBLE];
   if (date) { parts.push(dateLine(date)); }
-  parts.push(
-    'You are the council chair. Write the synthesized verdict across the reviews, ' +
-    'rankings, and adjudications below. Weigh each reviewer\'s findings by their ' +
-    'peer-validated standing (rank position and adjudication pattern), distinguish ' +
-    'findings the bench broadly endorsed from contested or singleton claims, and ' +
-    'arrive at an overall assessment of the material.',
-  );
-  if (raisedCount === 0) { parts.push(CHAIR_CLEAN_BENCH_NOTE); }
+  parts.push(raisedCount === 0 ? CHAIR_TASK_NO_FINDINGS : CHAIR_TASK);
   parts.push(
     `Deterministic tier counts (peers-only cascade): ${tiers}`,
     '--- STAGE-1 REVIEWS (de-anonymized) ---',
@@ -254,6 +281,7 @@ function buildChairRepairPrompt({ synthesis } = {}) {
 module.exports = {
   JUDGE_NO_TOOLS_PREAMBLE, CHAIR_NO_TOOLS_PREAMBLE, CHAIR_VERDICT_VALUES,
   JUDGE_OUTPUT_CONTRACT, VERDICT_SCALE_ADDENDUM, dateLine,
-  JUDGE_TASK_B, JUDGE_TASK_B_NO_FINDINGS, NO_FINDINGS_INDEX, CHAIR_CLEAN_BENCH_NOTE,
+  JUDGE_TASK_B, JUDGE_TASK_B_NO_FINDINGS, NO_FINDINGS_INDEX,
+  CHAIR_TASK, CHAIR_TASK_NO_FINDINGS,
   buildJudgeBundle, buildJudgeRepairPrompt, buildChairPacket, buildChairRepairPrompt,
 };

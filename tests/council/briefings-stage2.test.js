@@ -1,6 +1,7 @@
 // tests/council/briefings-stage2.test.js
 'use strict';
 const s2 = require('../../src/council/briefings-stage2');
+const { parseJudgeOutput } = require('../../src/council/parse-stage2');
 
 const REVIEWS = [
   { label: 'Review A', text: 'A prose review.' },
@@ -81,6 +82,44 @@ describe('judge bundle — an all-clean bench (LC-10)', () => {
   });
 });
 
+describe('JUDGE_OUTPUT_CONTRACT — review minor M1: the exemplar no longer tempts an invented id', () => {
+  // Task B already tells the judge to emit "adjudications": [] on a clean bench
+  // (JUDGE_TASK_B_NO_FINDINGS), but the contract that immediately follows it used
+  // to show only the ids-present example ({"id":"A1"...},{"id":"B2"...}) — the
+  // exact shape a judge with nothing to adjudicate would be tempted to invent.
+  // Inventing one fails UNKNOWN_FINDING_ID and buys up to two paid repair solos.
+  test('states the empty-index case explicitly, not just via a satisfiable rule', () => {
+    expect(s2.JUDGE_OUTPUT_CONTRACT).toMatch(/adjudications.*must be exactly `\[\]`/);
+    expect(s2.JUDGE_OUTPUT_CONTRACT).toMatch(/do\s+not invent a finding id/);
+  });
+
+  test('the clean-bench bundle carries the line (it sits right below Task B)', () => {
+    const bundle = s2.buildJudgeBundle({ reviews: REVIEWS, findings: [] });
+    expect(bundle).toContain('"adjudications": []');
+    expect(bundle).toContain('must be exactly `[]`');
+  });
+
+  test('linkage: the answer the contract now names for a clean bench actually validates', () => {
+    // Not a restatement — parse-stage2.parseJudgeOutput is the validator a judge's
+    // trailing JSON block is checked against. If the contract's clean-bench line
+    // ever drifted from what the validator accepts, this fails.
+    const text = 'Ranking done.\n```json\n'
+      + '{"ranking":["Review A","Review B"],"adjudications":[]}\n```';
+    const result = parseJudgeOutput(text, { labels: ['Review A', 'Review B'], findingIds: [] });
+    expect(result.ok).toBe(true);
+    expect(result.adjudications).toEqual([]);
+  });
+
+  test('an INVENTED id on an empty findings index is exactly what the line guards against', () => {
+    // The failure mode the fix removes the incentive for: UNKNOWN_FINDING_ID.
+    const text = '```json\n{"ranking":["Review A"],"adjudications":'
+      + '[{"id":"A1","verdict":"agree"}]}\n```';
+    const result = parseJudgeOutput(text, { labels: ['Review A'], findingIds: [] });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some(e => e.code === 'UNKNOWN_FINDING_ID')).toBe(true);
+  });
+});
+
 describe('chair packet — an all-clean bench (LC-10)', () => {
   const packet = s2.buildChairPacket({
     reviews: [{ model: 'deepseek', text: 'DS review.' }, { model: 'gemini', text: 'G review.' }],
@@ -125,6 +164,23 @@ describe('chair packet — an all-clean bench (LC-10)', () => {
     expect(noJudges).toContain('(none — no judge produced a usable ranking)');
     expect(noJudges).toContain('(none — no judge produced a usable adjudication)');
     expect(noJudges).not.toContain('raised NO findings');
+  });
+
+  test('review minor M2: the clean bench SWAPS the directive, matching buildJudgeBundle, ' +
+    'rather than appending a correction after an unfollowable one', () => {
+    // The un-swapped directive told the chair to "distinguish findings the bench
+    // broadly endorsed from contested or singleton claims" — unfollowable when
+    // raisedCount is 0. It must not appear at all on a clean bench now; the
+    // clean-bench framing must be the ONLY instruction, not a second paragraph
+    // patched on after it.
+    expect(packet).not.toContain('distinguish findings the bench broadly endorsed');
+    expect(packet).not.toContain('peer-validated standing (rank position and adjudication pattern)');
+  });
+
+  test('review minor M2: exported constants mirror the judge\'s Task-B pair', () => {
+    expect(s2.CHAIR_TASK).toContain('distinguish findings the bench broadly endorsed');
+    expect(s2.CHAIR_TASK_NO_FINDINGS).toContain('this bench raised NO findings');
+    expect(s2.CHAIR_TASK_NO_FINDINGS).not.toContain('distinguish findings the bench broadly endorsed');
   });
 });
 

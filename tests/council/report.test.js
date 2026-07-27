@@ -87,6 +87,43 @@ describe('buildReport guards', () => {
   });
 });
 
+describe('buildReport markdown — an all-clean bench (review minor M3, LC-10 fast-follow)', () => {
+  // Task 3 disclosed and deliberately left this one: on a run where every seat
+  // honestly reported nothing, m.findings is [], so every TIER_ORDER group is
+  // empty and the old code emitted '## Findings by tier' with nothing beneath
+  // it before '## Cost' — the same heading-over-nothing class Task 3 closed in
+  // the Stage-2 prompts, human-facing here instead of model-facing.
+  const cleanVerdict = {
+    runType: 'review', runId: 'clean-bench', date: '2026-07-26', chair: 'chair-model',
+    council: ['gemini', 'gpt'], claudeInCouncil: false,
+    tierCounts: { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 },
+    findings: [], streetCred: [{ model: 'gemini', peersOnly: 1, withSelf: 1 }], runStats: [],
+  };
+  const md = buildReport({ verdict: cleanVerdict }, { format: 'md' });
+
+  test('states the clean bench instead of leaving the heading to dangle', () => {
+    expect(md).toContain('## Findings by tier');
+    expect(md).toContain('No findings were raised on this bench');
+    expect(md).toMatch(/clean review is a valid review/);
+  });
+
+  test('the heading is never immediately followed by the next heading with nothing between', () => {
+    const tierIdx = md.indexOf('## Findings by tier');
+    const costIdx = md.indexOf('## Cost');
+    expect(tierIdx).toBeGreaterThan(-1);
+    expect(costIdx).toBeGreaterThan(tierIdx);
+    const between = md.slice(tierIdx + '## Findings by tier'.length, costIdx).trim();
+    expect(between.length).toBeGreaterThan(0);
+    expect(between).not.toMatch(/^#{1,6}\s/); // not itself a bare heading straight into the next
+  });
+
+  test('a bench that raised findings is unaffected (no clean-bench text, tier groups still render)', () => {
+    const ordinary = buildReport({ verdict: verdictFixture() }, { format: 'md' });
+    expect(ordinary).not.toContain('No findings were raised on this bench');
+    expect(ordinary).toContain('### Disputed');
+  });
+});
+
 const { renderHtml } = require('../../src/council/report-html');
 
 describe('report tier palette ↔ design tokens', () => {
