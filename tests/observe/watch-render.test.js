@@ -71,6 +71,18 @@ describe('renderTable', () => {
     expect(table).toContain('gpt');
     expect(table).toContain('⏳stalled');
   });
+
+  // v4.4.1 F6: a stage can now finish DEGRADED. Without its own mark it fell
+  // through to `pending` and read as "not started yet".
+  test("a 'partial' stage renders as ⚠, not as pending", () => {
+    const table = renderTable({
+      taskId: 'c1', type: 'council-run', runId: 'c1', status: 'running',
+      stages: [{ name: 'stage1', status: 'partial' }, { name: 'stage2', status: 'running' }],
+      elapsed: '0m 5s',
+    });
+    expect(table).toContain('⚠ stage1');
+    expect(table).not.toContain('· stage1');
+  });
   // Finding 1: buildCouncilStatusPayload (src/mcp-council-awareness.js) inits
   // legsTotal/legsComplete to `null` and legitimately keeps them null through
   // any stage with no active sub-wave (e.g. a lens stage1). A `!== undefined`

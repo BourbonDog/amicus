@@ -125,13 +125,21 @@ async function runCouncil(options, deps = {}) {
     });
     emitStageStarted(o.runDir, o.runId, 'stage1', o.lenses ? null : `${o.runId}-s1`, o.follow);
     const s1 = await runStage1(ctx);
+    // Step 10's other half: a Stage 1 that lost seats is NOT 'complete'. It was
+    // checkpointed 'complete' unconditionally, so run v441plan01 recorded a clean
+    // stage with four dead seats — and in lens mode (one solo per seat) the run
+    // could exit 0 outright, since only the non-lens seat wave meets the quorum
+    // gate. Never aborts: it reports and degrades (standing ruling).
+    const s1Status = s1.degraded ? 'partial' : 'complete';
+    const deadWaves = s1.deadWaves || [];
     runState.updateStage(o.runDir, 'stage1', {
-      status: 'complete', completedAt: now(),
+      status: s1Status, completedAt: now(),
       taskIds: s1.reviews.map(r => (r.leg && r.leg.taskId)).filter(Boolean),
+      ...(deadWaves.length ? { deadWaves } : {}),
     });
-    emitStageTerminal(o.runDir, o.runId, 'stage1', 'complete', o.lenses ? null : `${o.runId}-s1`, o.follow);
+    emitStageTerminal(o.runDir, o.runId, 'stage1', s1Status, o.lenses ? null : `${o.runId}-s1`, o.follow);
     if (signalled || s1.aborted) { return finalize(s1.aborted || signalled); }
-    if (s1.deadLegs.length > 0) { degraded.value = true; } // bench shrank → never a "full run"
+    if (s1.degraded) { degraded.value = true; } // bench shrank → never a "full run"
     if (s1.reviews.length < 2) {
       return finalize(1, {
         code: 'COUNCIL_QUORUM',

@@ -50,6 +50,7 @@ async function launchStage1(ctx) {
     fallback: o.fallback, catalog: o.catalog,
   };
   const launches = [];
+  const seated = []; // parallel to `launches`: what each one was SUPPOSED to seat
   // Record every sub-wave BEFORE it launches: `amicus abort` cascades over
   // stages[].waveIds, so an id written after the launch leaves that leg
   // reachable only by the pid kill (no per-leg abort marker).
@@ -58,6 +59,7 @@ async function launchStage1(ctx) {
     o.models.forEach((m, i) => {
       const waveId = `${o.runId}-l${i + 1}`;
       record(waveId);
+      seated.push({ waveId, models: [m] });
       launches.push(launchers.launchSolo({
         ...common, model: m, waveId,
         prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
@@ -67,6 +69,7 @@ async function launchStage1(ctx) {
     const seats = o.models.filter(m => m !== o.critic);
     if (seats.length > 0) {
       record(`${o.runId}-s1`);
+      seated.push({ waveId: `${o.runId}-s1`, models: seats.slice() });
       launches.push(launchers.launchWave({
         ...common, models: seats, waveId: `${o.runId}-s1`,
         prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
@@ -74,6 +77,7 @@ async function launchStage1(ctx) {
     }
     if (o.critic) {
       record(`${o.runId}-c1`);
+      seated.push({ waveId: `${o.runId}-c1`, models: [o.critic] });
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`,
         prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
@@ -83,12 +87,49 @@ async function launchStage1(ctx) {
   const results = await Promise.all(launches);
   let aborted = null;
   const legs = [];
-  for (const r of results) {
+  const deadWaves = [];
+  results.forEach((r, i) => {
     ctx.addWave(r.wave);
-    if (isAbortExit(r.exitCode)) { aborted = r.exitCode; }
-    if (r.wave && Array.isArray(r.wave.legs)) { legs.push(...r.wave.legs); }
+    const abort = isAbortExit(r.exitCode);
+    if (abort) { aborted = r.exitCode; }
+    const got = (r.wave && Array.isArray(r.wave.legs)) ? r.wave.legs : [];
+    legs.push(...got);
+    // ⚠️ Step 10's uncovered half. A wave that died BEFORE its legs (the server
+    // never started; `database is locked`) contributes NOTHING to `legs`, so
+    // deadLegs cannot see it either — which is how run v441plan01 recorded
+    // stage1 'complete' with four seats missing and no trace of them. In lens
+    // mode every seat is its own wave, so a run could lose seats and still exit
+    // 0; the quorum gate only catches the non-lens seat wave. A budget refusal
+    // has its own louder channel already (run-budget.noteBudgetRefusal) and
+    // must not be double-counted here.
+    if (got.length > 0 || abort) { return; }
+    if (r.errorDoc && r.errorDoc.code === 'BUDGET_EXCEEDED') { return; }
+    deadWaves.push({
+      waveId: seated[i].waveId, models: seated[i].models,
+      reason: (r.wave && (r.wave.reason || r.wave.error))
+        || (r.errorDoc && r.errorDoc.message) || 'the wave produced no legs',
+    });
+  });
+  return { aborted, legs, deadWaves };
+}
+
+/**
+ * Announce Stage-1 sub-waves that never produced a leg.
+ *
+ * POLICY (the standing "never fail closed on availability" ruling, applied the
+ * same way run-budget.js applies it to cost): the run CONTINUES with the bench
+ * that did launch. What it must never do is lose the seats SILENTLY — so every
+ * dead wave is announced on stderr, kept on run.json's stage entry (run.js) and
+ * degrades the run's exit code to 2.
+ * @param {Array<{waveId: string, models: string[], reason: string}>} deadWaves
+ * @param {(s: string) => void} [write] stderr seam
+ */
+function reportDeadStage1Waves(deadWaves, write = (s) => process.stderr.write(s)) {
+  for (const d of deadWaves) {
+    write(`Notice: Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs `
+      + `— ${d.reason}. Those seats are NOT in this council. The run continues with the bench that `
+      + 'did launch and will exit degraded (2).\n');
   }
-  return { aborted, legs };
 }
 
 /** Role of a seat by its input alias. */
@@ -102,12 +143,16 @@ function roleFor(o, alias) {
 
 /**
  * Stage 1: independent reviews + findings validation + bounded repair.
- * @returns {Promise<{aborted: number|null, reviews: Array, deadLegs: Array}>}
+ * @returns {Promise<{aborted: number|null, reviews: Array, deadLegs: Array,
+ *   deadWaves: Array, degraded: boolean}>} `degraded` covers BOTH ways a seat
+ *   can go missing: a leg that ran and died (deadLegs) and a whole sub-wave that
+ *   died before its legs existed (deadWaves).
  */
 async function runStage1(ctx) {
   const { o } = ctx;
-  const { aborted, legs } = await launchStage1(ctx);
-  if (aborted) { return { aborted, reviews: [], deadLegs: [] }; }
+  const { aborted, legs, deadWaves } = await launchStage1(ctx);
+  if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false }; }
+  reportDeadStage1Waves(deadWaves);
 
   const materialized = materializeReviews(o.runDir, legs);
   const alive = new Set(materialized.map(m => m.leg));
@@ -144,7 +189,9 @@ async function runStage1(ctx) {
         fallback: o.fallback, catalog: o.catalog,
       });
       ctx.addWave(solo.wave);
-      if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, reviews, deadLegs }; }
+      if (isAbortExit(solo.exitCode)) {
+        return { aborted: solo.exitCode, reviews, deadLegs, deadWaves, degraded: false };
+      }
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);
@@ -156,7 +203,8 @@ async function runStage1(ctx) {
       text: m.text, findings: res.ok ? res.findings : [], conformance, leg: m.leg,
     });
   }
-  return { aborted: null, reviews, deadLegs };
+  return { aborted: null, reviews, deadLegs, deadWaves,
+    degraded: deadLegs.length > 0 || deadWaves.length > 0 };
 }
 
 /**
@@ -239,4 +287,4 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   return { aborted: null, judgeResults };
 }
 
-module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor };
+module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor, reportDeadStage1Waves };

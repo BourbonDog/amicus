@@ -29,7 +29,10 @@ const legCost = (leg) => (leg.usage && leg.usage.cost ? formatCost(leg.usage.cos
 const legTokens = (leg) => (leg.usage && leg.usage.tokens ? `${leg.usage.tokens.input || 0}/${leg.usage.tokens.output || 0}` : DASH);
 const truncate = (s, n) => { const t = String(s || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 
-const STAGE_MARK = { complete: '✓', running: '▶', pending: '·' };
+// `partial` (v4.4.1 F6): a stage that FINISHED but lost seats. Without its own
+// mark it fell through to `pending`, so a degraded Stage 1 rendered as if it had
+// not started — the opposite of reporting loudly.
+const STAGE_MARK = { complete: '✓', running: '▶', partial: '⚠', pending: '·' };
 
 /** The in-place refresh block for a composed wave/council/solo doc. */
 function renderTable(doc, width = 100) {
