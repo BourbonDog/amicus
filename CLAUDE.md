@@ -110,6 +110,7 @@ src/
 │   ├── run-budget.js
 │   ├── run-chair.js
 │   ├── run-debate.js
+│   ├── run-finalize.js
 │   ├── run-launch.js
 │   ├── run-server.js
 │   ├── run-stages.js
@@ -157,6 +158,7 @@ src/
 │   ├── fanout-leg.js
 │   ├── fanout-output.js
 │   ├── fanout-retry.js
+│   ├── fanout-signals.js
 │   ├── fanout-validate.js
 │   ├── fanout-wave-io.js
 │   ├── fanout.js
@@ -449,6 +451,7 @@ evals/
 | `council/run-budget.js` |  | `createBudget()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
+| `council/run-finalize.js` |  | `statusForExit()`, `writeRunTerminal()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
@@ -481,6 +484,7 @@ evals/
 | `sidecar/fanout-leg.js` |  | `legStatusFromResult()`, `writeLegPatch()`, `runLeg()`, `buildRoutingFailureLeg()`, `runSingleAttempt()` |
 | `sidecar/fanout-output.js` |  | `formatWaveHuman()`, `fmtDuration()` |
 | `sidecar/fanout-retry.js` |  | `ELIGIBLE_RETRY()`, `parseInitialContext()`, `buildRetryPlan()`, `retryFailedWave()` |
+| `sidecar/fanout-signals.js` |  | `installWaveAbort()`, `WAVE_FORCE_EXIT_MS()` |
 | `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
 | `sidecar/fanout-wave-io.js` |  | `writeWaveMetadata()`, `writeWaveDoc()`, `finishWave()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
@@ -541,7 +545,7 @@ evals/
 | `utils/idle-watchdog.js` | IdleWatchdog - BUSY/IDLE state machine with self-terminating timer. | `IdleWatchdog()`, `resolveTimeout()` |
 | `utils/input-validators.js` |  | `validateStartInputs()`, `levenshteinDistance()`, `suggestCommand()` |
 | `utils/legacy-mcp-migration.js` |  | `claudeCodeConfigPath()`, `claudeDesktopConfigPath()`, `inspectLegacySidecarEntry()`, `removeLegacySidecarEntry()`, `inspectAllLegacySidecarEntries()` |
-| `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `ONE_SHOT_COMMANDS()` |
+| `utils/lifecycle.js` |  | `isOneShotCommand()`, `armExitWatchdog()`, `exitReaping()`, `ONE_SHOT_COMMANDS()` |
 | `utils/local-probe.js` |  | `probeLocalProvider()`, `listLocalModels()` |
 | `utils/local-providers.js` |  | `getLocalProviders()`, `isLocalProvider()`, `deriveKeyEnv()`, `validateProviderEntry()`, `resolveLocalRouteInputs()` |
 | `utils/logger.js` | Structured Logger Module | `logger()`, `LOG_LEVELS()` |

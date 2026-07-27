@@ -251,6 +251,69 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     expect(pair.server.close).toHaveBeenCalledTimes(1);
   });
 
+  // F4: the GENUINE signal terminal path. Every other close-once test above runs
+  // with `installSignalAbortFn: noSignals`, so the path the brief's Step 9 named
+  // — a real signal landing mid-run — was unexercised at the council level.
+  describe('a real signal mid-run', () => {
+    /** Capture run.js's handler so the test can fire it deterministically. */
+    const capturing = (box) => ({ onAbort }) => { box.fire = onAbort; return jest.fn(); };
+
+    const signalDuringStage1 = async (signal) => {
+      const box = {};
+      const s1 = script['abc123-s1'];
+      script['abc123-s1'] = (o) => { box.fire(signal); return s1(o); };
+      return run({}, { installSignalAbortFn: capturing(box) });
+    };
+
+    test('SIGINT: exit 130, run.json aborted, shared server closed exactly ONCE', async () => {
+      const { exitCode } = await signalDuringStage1('SIGINT');
+      expect(exitCode).toBe(130);
+      expect(pair.server.close).toHaveBeenCalledTimes(1);
+      const doc = JSON.parse(fs.readFileSync(path.join(baseOptions(tmp).runDir, 'run.json'), 'utf-8'));
+      expect(doc.status).toBe('aborted');
+      expect(doc.exitCode).toBe(130);
+      // …and nothing paid launched after the signal.
+      expect(mockRunFanout.mock.calls.some(([o]) => o.waveId === 'abc123-s2')).toBe(false);
+    });
+
+    test('SIGTERM: exit 143, shared server closed exactly ONCE', async () => {
+      const { exitCode } = await signalDuringStage1('SIGTERM');
+      expect(exitCode).toBe(143);
+      expect(pair.server.close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // F2: finalize must survive its own failure.
+  //
+  // ⚠️ Correction to the review's stated mechanism: run.js's `return finalize(…)`
+  // sites are BARE returns of a promise, so by async semantics a rejecting
+  // finalize does NOT route through the enclosing catch — it never re-entered.
+  // What it did instead was worse: it escaped runCouncil as a REJECTION, past
+  // the module's own "never rejects for run errors" contract, after the shared
+  // server had already been released and with no result for the caller. The
+  // close is now claimed (so any future re-entry closes nothing twice) and the
+  // bookkeeping is guarded (so the run still resolves).
+  test('finalize surviving its own failure: run resolves, server still closed exactly once', async () => {
+    const runState = require('../../src/council/run-state');
+    const realCheckpoint = runState.checkpoint;
+    let exploded = false;
+    const spy = jest.spyOn(runState, 'checkpoint').mockImplementation((dir, patch) => {
+      // Only the TERMINAL checkpoint (the one finalize writes) explodes.
+      if (patch && patch.exitCode !== undefined) { exploded = true; throw new Error('run.json checkpoint exploded'); }
+      return realCheckpoint(dir, patch);
+    });
+    const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const res = await run(); // must RESOLVE, not reject
+      expect(exploded).toBe(true);
+      expect(res.exitCode).toBe(0);
+      // The returned doc still carries authoritative terminal fields.
+      expect(res.run).toMatchObject({ status: 'complete', exitCode: 0 });
+      expect(pair.server.close).toHaveBeenCalledTimes(1);
+      expect(stderr.mock.calls.map(c => String(c[0])).join('')).toMatch(/bookkeeping failed at finalize/);
+    } finally { spy.mockRestore(); stderr.mockRestore(); }
+  });
+
   // Standing ruling: never fail closed on availability. A shared server that
   // cannot start is a NOTICE — the run continues with one server per wave.
   test('a shared-server start failure degrades to per-wave servers, it does not abort the run', async () => {

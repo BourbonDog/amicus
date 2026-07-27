@@ -30,8 +30,8 @@ const runDebateMod = require('./run-debate');
 const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { createBudget } = require('./run-budget');
-const { emitRunStarted, emitRunTerminal, emitStageStarted, emitStageTerminal } = require('../observe/events');
-const { fireCouncilOnComplete } = require('../observe/on-complete');
+const { emitRunStarted, emitStageStarted, emitStageTerminal } = require('../observe/events');
+const { writeRunTerminal } = require('./run-finalize');
 
 const SIGNAL_EXIT = { SIGINT: 130, SIGTERM: 143, SIGBREAK: 143 };
 
@@ -85,18 +85,16 @@ async function runCouncil(options, deps = {}) {
   const finalize = async (exitCode, error) => {
     uninstall();
     // ONE close site: finalize is the single path every terminal outcome takes.
-    await require('./run-server').releaseRunServer(sharedServer);
+    // ⚠️ …and it CLAIMS the handle before releasing it, so no re-entry (present
+    // or future) can close the same server twice. A double close is worse than a
+    // duplicate start: it tears the server out from under anything still in
+    // flight. Everything downstream of here is guarded in ./run-finalize —
+    // bookkeeping must never sink a run that already finished.
+    const claimed = sharedServer;
+    sharedServer = null;
+    await require('./run-server').releaseRunServer(claimed);
     const code = signalled || exitCode;
-    const status = (code === 130 || code === 143) ? 'aborted'
-      : code === 0 ? 'complete' : code === 1 ? 'error' : 'partial';
-    noticeUnknownSpend(); // v4.4: never finish a run silently short (run-budget.js)
-    const run = runState.checkpoint(o.runDir, {
-      status, exitCode: code, error: error || null,
-      usage: usageBlock(),
-      completedAt: now(),
-    });
-    emitRunTerminal(o.runDir, o.runId, status, code, o.follow);
-    await fireCouncilOnComplete(o.onComplete, run, { runId: o.runId, runDir: o.runDir, exitCode: code, project: o.project }, o.onCompleteDeps);
+    const run = await writeRunTerminal({ o, code, error, noticeUnknownSpend, usageBlock });
     return { exitCode: code, run };
   };
 
