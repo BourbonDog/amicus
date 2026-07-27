@@ -84,6 +84,17 @@ async function handleWatch(args) {
     // at the wrong directory when a run was launched elsewhere.
     const project = args.project || args.cwd || process.cwd();
     const runId = args._[1] ? String(args._[1]) : '';
+    // ⚠️ v4.4.1 DOC-3: validate HERE, not by moving the branch. The branch's
+    // POSITION above the `id is required` gate is load-bearing (bare `--ui`
+    // opens the run-list landing and must keep working), so the runId check is
+    // pushed inside it and made conditional on a runId actually being supplied.
+    // Without this, `amicus watch <typo> --ui` skipped validateTaskId entirely
+    // and surfaced whatever getRunDetail produced — a vaguer error than the
+    // identical typo gets on the terminal path.
+    if (runId) {
+      const uiCheck = validateTaskId(runId);
+      if (!uiCheck.valid) { process.stderr.write(`${uiCheck.error}\n`); return 1; }
+    }
     const { launchWorkspaceWindow } = require('./sidecar/workspace-window');
     const res = await launchWorkspaceWindow({ project, runId });
     if (res.error) { process.stderr.write(`${res.error}\n`); }

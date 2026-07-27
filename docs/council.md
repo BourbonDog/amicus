@@ -355,8 +355,9 @@ you're ready.
 **Degraded states are rendered honestly, never hidden:** a run whose `run.json` can't be parsed at
 all shows an "unreadable" banner with the error and the run directory path; a run written by a
 different amicus schema version shows a schema-mismatch banner instead of guessing at a rendering;
-a tally with fewer than 2 completed judges shows an explicit "tally is peers-reduced" note instead
-of an adjudication matrix that looks more authoritative than the underlying data supports; and a
+a tally with fewer than 2 completed judges shows an explicit "tally is peers-reduced" note **above**
+the adjudication matrix — the matrix still renders over the surviving judges, and the note is what
+stops it being read as more authoritative than the underlying data supports; and a
 chair-less verdict (retry + fallback promotion both failed, or the cost ceiling was hit before the
 chair ran) shows "no chair verdict" plus the engine's own reason, never a blank panel.
 

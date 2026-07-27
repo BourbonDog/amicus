@@ -24,6 +24,9 @@ const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md',
 // `artifact not allowed: <name>`. Writers: tally-provisional.json = src/council/run.js:199;
 // revote-bundle.md = run-debate.js:119; debate.json = run-debate.js:261; the per-seat
 // rebuttal-/revote- pair = materializeDebate (run-launch.js:127-136).
+// ⚠️ FIVE KINDS, THREE ENTRIES — that is not a miscount (v4.4.1 DOC-7, re-verified). This const
+// holds only the three RUN-LEVEL names; the last two of the five, the rebuttal-/revote- pair, are
+// per BENCH MODEL and are appended inside artifactAllowlist below, next to review-/judge-.
 const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 

@@ -3,6 +3,12 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+// v4.4.1 DOC-3: the `--ui` branch spawns Electron. Stub the launcher so the
+// ordering guardrail can assert on what it was (or was not) called with,
+// without provisioning a ~100 MB binary or opening a window in the suite.
+jest.mock('../src/sidecar/workspace-window', () => ({ launchWorkspaceWindow: jest.fn() }));
+const { launchWorkspaceWindow } = require('../src/sidecar/workspace-window');
 const { resolveWatchTarget, handleWatch } = require('../src/cli-handlers-watch');
 
 function project() { return fs.mkdtempSync(path.join(os.tmpdir(), 'watch-')); }
@@ -115,5 +121,41 @@ describe('handleWatch (command entry)', () => {
       handleWatch({ _: ['watch', 'bad id with spaces'], project: tmpDir }));
     expect(code).toBe(1);
     expect(err.length).toBeGreaterThan(0);
+  });
+
+  // v4.4.1 DOC-3. The `--ui` branch sits ABOVE the `id is required` gate and
+  // above validateTaskId, deliberately — bare `amicus watch --ui` must open the
+  // run-list landing. That ordering used to mean a malformed runId with `--ui`
+  // skipped validation entirely and got whatever getRunDetail produced. The fix
+  // validates INSIDE the branch, only when a runId was supplied. The second
+  // test is the guardrail: it pins the ordering that must not move.
+  describe('--ui runId validation (DOC-3)', () => {
+    beforeEach(() => {
+      launchWorkspaceWindow.mockReset();
+      launchWorkspaceWindow.mockResolvedValue({ code: 0 });
+    });
+
+    test('a malformed runId with --ui gets validateTaskId\'s message, and never launches', async () => {
+      const { code, err } = await capture(() =>
+        handleWatch({ _: ['watch', '../etc/passwd'], project: tmpDir, ui: true }));
+      expect(code).toBe(1);
+      expect(err).toMatch(/Invalid task ID format/);
+      expect(launchWorkspaceWindow).not.toHaveBeenCalled();
+    });
+
+    test('bare --ui with no runId still opens the run-list landing', async () => {
+      const { code, err } = await capture(() =>
+        handleWatch({ _: ['watch'], project: tmpDir, ui: true }));
+      expect(code).toBe(0);
+      expect(err).toBe('');
+      expect(launchWorkspaceWindow).toHaveBeenCalledWith({ project: tmpDir, runId: '' });
+    });
+
+    test('a well-formed runId with --ui is passed through to the workspace launcher', async () => {
+      const { code } = await capture(() =>
+        handleWatch({ _: ['watch', 'wsgate03'], project: tmpDir, ui: true }));
+      expect(code).toBe(0);
+      expect(launchWorkspaceWindow).toHaveBeenCalledWith({ project: tmpDir, runId: 'wsgate03' });
+    });
   });
 });

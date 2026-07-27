@@ -162,4 +162,44 @@ describe('buildFoldText', () => {
   test('missing nonce throws (v4.0 §9 guard)', () => {
     expect(() => buildFoldText({ run: {} })).toThrow(TypeError);
   });
+
+  /**
+   * v4.4.1 DOC-5 — the Cost line said the same thing twice. `formatCost`
+   * (src/utils/pricing.js) already encodes inexactness as a leading `~` for both
+   * 'estimated' and 'mixed', and returns a bare `?` for 'unknown'; appending the
+   * source name on top produced `~$0.3720 (mixed)`. `reported` stays spelled out
+   * because a plain `$0.4321` is also what an unrecognised source renders as, so
+   * the glyph alone cannot carry it (pinned by the full-fold test above).
+   */
+  describe('the Cost line labels inexactness once, not twice (DOC-5)', () => {
+    const foldWithCost = (cost) => {
+      const run = load('council-run-complete', 'run.json');
+      run.usage = { ...run.usage, cost };
+      return buildFoldText({ nonce: NONCE, project: '/p', run, tally: null, verdict: null, chairText: null });
+    };
+    const costLine = (text) => text.split('\n').find((l) => l.startsWith('Cost: '));
+
+    test("a 'mixed' total is `~$…` with no trailing (mixed)", () => {
+      const text = foldWithCost({ amount: 0.37202345, currency: 'USD', source: 'mixed' });
+      expect(costLine(text)).toBe('Cost: ~$0.3720');
+      expect(text).not.toContain('(mixed)');
+    });
+
+    test("an 'estimated' total is `~$…` with no trailing (estimated)", () => {
+      const text = foldWithCost({ amount: 0.01, currency: 'USD', source: 'estimated' });
+      expect(costLine(text)).toBe('Cost: ~$0.0100');
+      expect(text).not.toContain('(estimated)');
+    });
+
+    test("an 'unknown' total is a bare `?` with no trailing (unknown)", () => {
+      const text = foldWithCost({ amount: null, currency: 'USD', source: 'unknown' });
+      expect(costLine(text)).toBe('Cost: ?');
+      expect(text).not.toContain('(unknown)');
+    });
+
+    test("a 'reported' total keeps its label — the glyph vocabulary cannot express exactness", () => {
+      const text = foldWithCost({ amount: 0.4321, currency: 'USD', source: 'reported' });
+      expect(costLine(text)).toBe('Cost: $0.4321 (reported)');
+    });
+  });
 });
