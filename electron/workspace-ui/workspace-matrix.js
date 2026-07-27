@@ -175,20 +175,45 @@
     return chairHost;
   }
 
-  /** Wrap every text-node occurrence of needle in <mark> (DOM-safe highlight). */
+  /**
+   * Wrap EVERY occurrence of `needle` in a `<mark>` (DOM-safe: splitText + replaceChild,
+   * never innerHTML).
+   *
+   * ⚠️ v4.4.1 RN-3 + DOC-6: this used to do exactly ONE `indexOf`/`splitText` per collected
+   * text node, so a finding id mentioned twice inside a single text node was highlighted once
+   * — and the reader, drilling in from a dispute cell, believed they had seen every reference
+   * to it in that judge's prose. This docblock nonetheless promised "every occurrence" (DOC-6),
+   * which is what made two `wsgate04` reviewers file the same bug from opposite directions.
+   * Behaviour and doc now agree.
+   *
+   * The rescan continues from `tail`, not from `cursor`, because `splitText` MUTATES the node
+   * being walked: the first call truncates `cursor` to the text BEFORE the match and returns the
+   * match-plus-remainder; the second peels the remainder off into a NEW node the TreeWalker's
+   * already-collected list does not contain. Advancing to that new node is what makes the loop
+   * both complete (it can reach later matches) and terminating (it can never re-find the match
+   * it just replaced).
+   *
+   * NOT idempotent — a second call re-walks the text nodes inside the marks this one created and
+   * nests a second `<mark>`. drillIntoJudge (workspace-panels.js) calls clearHighlight() first
+   * for exactly that reason.
+   */
   function highlightText(container, needle) {
-    if (!needle) { return; }
+    if (!needle) { return; }  // also the loop's termination guard: a 0-length needle never advances
     var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
     var nodes = [];
     while (walker.nextNode()) { nodes.push(walker.currentNode); }
     nodes.forEach(function (node) {
-      var idx = node.nodeValue.indexOf(needle);
-      if (idx === -1) { return; }
-      var after = node.splitText(idx);
-      after.splitText(needle.length);
-      var mark = document.createElement('mark');
-      mark.textContent = needle;
-      after.parentNode.replaceChild(mark, after);
+      var cursor = node;
+      for (;;) {
+        var idx = cursor.nodeValue.indexOf(needle);
+        if (idx === -1) { return; }
+        var match = cursor.splitText(idx);            // `match` now starts with the needle
+        var tail = match.splitText(needle.length);    // `tail` is everything after it
+        var mark = document.createElement('mark');
+        mark.textContent = needle;
+        match.parentNode.replaceChild(mark, match);
+        cursor = tail;
+      }
     });
   }
 

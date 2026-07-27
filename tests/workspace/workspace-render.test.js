@@ -229,6 +229,31 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       const subText = container.children[0].children[1].textContent;
       expect(subText).toContain('chair gpt');
     });
+
+    // ⚠️ v4.4.1 RN-12. scanCouncilRuns' contract is "never throws on bad input — degrade to a
+    // row instead". renderRunList paints EVERY row, so an unguarded `String(row.bench.length)`
+    // meant one row without a bench array threw a TypeError that blanked the whole list, and the
+    // data layer's guarantee died one layer up. Both shapes below are refused pre-fix.
+    test('a row whose bench is missing entirely does not throw, and reads 0 seats', () => {
+      const container = document.createElement('ul');
+      const bad = [{ runId: 'bbbb2222', status: 'unknown', startedAt: null, chair: null }];
+      expect(() => AmicusRender.renderRunList(container, bad, null, () => {}, false, () => null)).not.toThrow();
+      expect(container.children[0].children[1].textContent).toContain('0 seats');
+    });
+
+    test('a non-array bench does not throw either, and one bad row never blanks the good rows', () => {
+      const container = document.createElement('ul');
+      const mixed = [
+        // A STRING bench is the nastier half: it has a `.length`, so it never throws — it
+        // silently reports the character count as a seat count ("6 seats" for 'gemini').
+        { runId: 'bbbb2222', status: 'unknown', startedAt: null, bench: 'gemini', chair: null },
+        ...rows,
+      ];
+      expect(() => AmicusRender.renderRunList(container, mixed, null, () => {}, false, () => null)).not.toThrow();
+      expect(container.children.length).toBe(2);
+      expect(container.children[0].children[1].textContent).toContain('0 seats');
+      expect(container.children[1].children[1].textContent).toContain('2 seats');
+    });
   });
 
   describe('el() — every painter funnels through this, so one test proves textContent-only discipline file-wide', () => {

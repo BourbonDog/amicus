@@ -134,19 +134,30 @@
     // than new).
     var artifacts = A.state.detail.artifacts || {};
     function present(name) { return !!(artifacts[name] && artifacts[name].present); }
+    // ⚠️ v4.4.1 RN-9: these two titles used to hand-roll `A.state.blind && label ? label : m`
+    // inline. Both now go through AmicusRender.display() — the single blind-flip definition the
+    // re-vote title below already used — so the next blind-mode ruling lands in one place instead
+    // of being re-applied by hand in every file that happens to render an identity.
     loaders['reviews-panel'] = { bodyId: 'reviews-body', files: function () {
       return bench.map(function (m) {
         var label = A.state.labelByModel[m];
-        return { name: 'review-' + sanitizeName(m) + '.md', title: (A.state.blind && label ? label : m) };
+        return { name: 'review-' + sanitizeName(m) + '.md', title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
       }).filter(function (f) { return present(f.name); });
     } };
     loaders['bundle-panel'] = { bodyId: 'bundle-body', files: function () {
-      return [{ name: 'bundle-stage2.md', title: 'bundle-stage2.md (verbatim)' }];
+      // ⚠️ v4.4.1 RN-4: the presence filter is NOT optional here either. Without it, a run whose
+      // Stage 2 never ran (a one-seat bench, an abort before the cross-review, a cost ceiling)
+      // requested a file the manifest already knows is absent and rendered readRunArtifact's raw
+      // error string in the panel — "absolute host path and all", per this file's own round-2
+      // note above `present()`. reviews-panel and judges-panel have always filtered; this was the
+      // odd one out.
+      return [{ name: 'bundle-stage2.md', title: 'bundle-stage2.md (verbatim)' }]
+        .filter(function (f) { return present(f.name); });
     } };
     loaders['judges-panel'] = { bodyId: 'judges-body', files: function () {
       var files = bench.map(function (m) {
         var label = A.state.labelByModel[m];
-        return { name: 'judge-' + sanitizeName(m) + '.md', title: 'Judge ' + (A.state.blind && label ? label : m) };
+        return { name: 'judge-' + sanitizeName(m) + '.md', title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
       });
       if (debated) {
         // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose

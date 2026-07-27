@@ -157,6 +157,28 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     expect(foldBtn.disabled).toBe(true);
   });
 
+  // ⚠️ v4.4.1 LC-8: doFold's invoke chain had no rejection handler. workspace:fold's IPC handler
+  // catches its own errors and answers {ok:false, error}, so a REJECTION means the channel itself
+  // failed — and the button simply sat in its pre-click state with no explanation while the
+  // renderer logged an unhandled rejection (which jest-circus fails the running test on).
+  test('LC-8: a rejected workspace:fold explains itself on the button instead of failing silently', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:fold') { return Promise.reject(new Error('channel closed')); }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const foldBtn = global.document.getElementById('verdict-body').querySelector('#fold-btn');
+    foldBtn._listeners.click[0]();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+    expect(foldBtn.textContent).toBe('Fold to Claude Code'); // not falsely marked folded
+    expect(foldBtn.disabled).toBeFalsy();                    // still retryable
+    expect(foldBtn.title).toContain('channel is unavailable');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
   test('switching runs does not leak a stale toggle listener: the panel requests the NEW run\'s own artifact names, and the listener is registered exactly once (⚠️ DE-ROT F09)', async () => {
     await global.window.AmicusApp.openRun('aaaa1111'); // bench ['gemini', 'gpt']
     await global.window.AmicusApp.openRun('bbbb2222'); // bench ['claude']
@@ -359,6 +381,80 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     expect(revoteCalls.length).toBe(0);
     const judgeCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && String(c[2]).indexOf('judge-') === 0);
     expect(judgeCalls.length).toBe(2);
+  });
+
+  // ⚠️ v4.4.1 RN-4: reviews-panel and judges-panel have always `.filter(present)`-ed against the
+  // artifact manifest before requesting files; bundle-panel was the odd one out. On a run whose
+  // Stage 2 never produced a bundle (a one-seat bench, an abort before the cross-review, a cost
+  // ceiling), opening the Bundle panel requested a file the manifest already knew was absent and
+  // painted readRunArtifact's raw error string — "absolute host path and all", per this file's
+  // sibling note. The default fixture manifest carries no 'bundle-stage2.md' entry at all, which
+  // is exactly the absent case.
+  test('bundle-panel does not request bundle-stage2.md when the manifest reports it absent (RN-4)', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const panel = global.document.getElementById('bundle-panel');
+    panel.open = true;
+    panel._listeners.toggle[0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    const bundleCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'bundle-stage2.md');
+    expect(bundleCalls.length).toBe(0);
+    // …and the panel shows nothing rather than a host path — no raw error text made it in.
+    expect(global.document.getElementById('bundle-body').textContent).toBe('');
+  });
+
+  test('bundle-panel still requests bundle-stage2.md when the manifest reports it present (RN-4 does not break the normal run)', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:get-run') {
+        const d = buildFixtureDetail(args[0]);
+        d.artifacts['bundle-stage2.md'] = { present: true, bytes: 4096 };
+        return Promise.resolve(d);
+      }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const panel = global.document.getElementById('bundle-panel');
+    panel.open = true;
+    panel._listeners.toggle[0]();
+    await Promise.resolve();
+    await Promise.resolve();
+    const bundleCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'bundle-stage2.md');
+    expect(bundleCalls.length).toBe(1);
+  });
+
+  // ⚠️ v4.4.1 RN-9: the review/judge panel TITLES used to hand-roll `A.state.blind && label ?
+  // label : m` inline — two of the three surviving copies of the blind flip in files that
+  // already had AmicusRender.display() available. Routed through display() so the next blind
+  // ruling lands once. This proves the routing preserved the behaviour in both directions.
+  describe('panel titles mask through the shared display() (RN-9)', () => {
+    async function openBlind(blind) {
+      await global.window.AmicusApp.openRun('aaaa1111'); // bench ['gemini','gpt'], labels Review A/B
+      global.window.AmicusApp.state.blind = blind;
+      global.window.AmicusPanels.wireLazyPanels(); // re-evaluate the loaders under this blind state
+      ['reviews-panel', 'judges-panel'].forEach((id) => {
+        const p = global.document.getElementById(id);
+        p.open = true;
+        p._listeners.toggle[0]();
+      });
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    }
+
+    // Titles only — the fixture's PROSE body deliberately echoes the raw filename, which is a
+    // read of the artifact's contents, not an identity surface.
+    const titles = (id) => global.document.getElementById(id)
+      .querySelectorAll('h3').map((h) => h.textContent);
+
+    test('blind ON titles the sections by label, never by model id', async () => {
+      await openBlind(true);
+      expect(titles('reviews-body')).toEqual(['Review A', 'Review B']);
+      expect(titles('judges-body')).toEqual(['Judge Review A', 'Judge Review B']);
+    });
+
+    test('blind OFF titles the sections by model id, exactly as before', async () => {
+      await openBlind(false);
+      expect(titles('reviews-body')).toEqual(['gemini', 'gpt']);
+      expect(titles('judges-body')).toEqual(['Judge gemini', 'Judge gpt']);
+    });
   });
 
   test('a review-<model>.md the manifest reports absent is never requested by the reviews panel either', async () => {

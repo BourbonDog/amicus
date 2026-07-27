@@ -93,7 +93,13 @@
         ]),
         el('div', { className: 'run-row-sub' }, [
           relTime(row.startedAt),
-          String(row.bench.length) + ' seats',
+          // ⚠️ v4.4.1 RN-12: `String(row.bench.length)` was unguarded. scanCouncilRuns is written
+          // to "never throw on bad input" and degrade to a row instead — but this painter draws
+          // EVERY row, so one row arriving without a `bench` array threw a TypeError that blanked
+          // the entire run list, killing the data layer's degrade-never-throw guarantee one layer
+          // up. (scanCouncilRuns' own error rows take the early return above; this guards the
+          // contract with any OTHER row source, which is what the guarantee is actually worth.)
+          (Array.isArray(row.bench) ? row.bench.length : 0) + ' seats',
           'chair ' + displayModel(row.chair, blindOn, labelOf),
           row.overallVerdict || '',
           row.costDisplay || '',

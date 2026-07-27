@@ -20,6 +20,13 @@
   function doFold() {
     var A = window.AmicusApp;
     var btn = A.$('fold-btn');
+    // ⚠️ v4.4.1 LC-8: this chain had NO rejection handler. workspace:fold's IPC handler catches
+    // its own errors and answers {ok:false, error}, so a REJECTION means the channel itself failed
+    // — and the user saw the Fold button sitting in its pre-click state with no explanation, while
+    // the renderer logged an unhandled rejection (which jest-circus fails the running test on).
+    // Two-argument .then(onFulfilled, onRejected), NOT .then().catch() — see the long note in
+    // startLiveLoop below: with a trailing .catch, a THROW inside onFulfilled would be routed here
+    // too and misreported as a channel failure.
     A.invoke('workspace:fold', A.state.runId).then(function (res) {
       if (res.ok) {
         btn.textContent = 'Folded ✓';
@@ -28,6 +35,9 @@
       } else {
         btn.title = res.error || 'fold failed';
       }
+    }, function (err) {
+      console.error('workspace fold: workspace:fold failed', err);
+      btn.title = 'fold failed — the workspace channel is unavailable' + (err && err.message ? ': ' + err.message : '');
     });
   }
 
@@ -180,6 +190,17 @@
       R.renderBanner(A.$('banner'),
         'No leg activity' + (mins ? ' for ' + mins + 'm' : '') + ' — the run may be dead. Abort to reclaim it; everything on disk stays browsable.',
         'live');
+      // ⚠️ v4.4.1 RN-6 — ARBITRATED, and deliberately NOT fixed as the backlog proposed. RN-6
+      // asked for a matching `hidden = true` in the clearing arm below, believing this line is
+      // what puts the Abort button on screen. It is not: workspace-app.js's renderDetail already
+      // sets `$('abort-btn').hidden = isTerminal` on every run-open (:128), and startLiveLoop only
+      // runs on a non-terminal run — so the button is ALREADY visible for the whole life of a live
+      // run, by design, and this assignment is a no-op on every path that reaches it. The proposed
+      // clearing-arm write would HIDE the button the moment a momentary stall recovered, leaving a
+      // healthy, still-running council with no way to abort it: the inverse defect, and worse.
+      // Full reasoning + the regression pin: "the Abort button survives a stall -> recover cycle"
+      // in tests/workspace/live-loop.test.js. Kept as belt-and-braces for the one non-redundant
+      // path — a run that dies WHILE stalled, whose terminal openRun() refresh then rejects.
       A.$('abort-btn').hidden = false; // the remedy ships beside the diagnosis (Task 16 wires it)
     } else if (A.$('banner').classList.contains('live')) {
       // Restores whatever the DURABLE banner actually says (nothing, a schemaVersion mismatch,
@@ -216,7 +237,27 @@
         return;
       }
       stopLiveLoop();
-      A.openRun(A.state.runId); // re-read: status flips to aborted, grey chip, no live poll
+      // ⚠️ v4.4.1 LC-8: the re-read was fire-and-forget (wsgate01 C5) — inconsistent with the
+      // live loop's terminal branch above, which was explicitly given this same handler for this
+      // same reason. If the re-read fails, the status chip never leaves 'running' and the UI shows
+      // a live run that isn't. `.catch` (not the two-argument form) is EXACTLY equivalent here and
+      // matches the sibling at the terminal branch above: there is no onFulfilled for a trailing
+      // .catch to swallow a throw out of, which is the only thing the two-argument form buys.
+      A.openRun(A.state.runId).catch(function (err) { // re-read: status flips to aborted, grey chip, no live poll
+        console.error('workspace abort: post-abort get-run refresh failed', err);
+        window.AmicusRender.renderBanner(A.$('banner'),
+          'Abort succeeded, but refreshing the run failed — reopen the run to see its final state.', '');
+      });
+    }, function (err) {
+      // ⚠️ v4.4.1 LC-8 (same handler, same class): a REJECTED invoke() left `btn.disabled = true`
+      // and the dialog open forever — the confirm button wedged with no way back — plus an
+      // unhandled rejection. workspace:abort-run's IPC handler answers {ok:false} on its own
+      // errors, so reaching here means the channel failed, not the abort.
+      console.error('workspace abort: workspace:abort-run failed', err);
+      btn.disabled = false;
+      $('dialog-abort').hidden = true;
+      window.AmicusRender.renderBanner(A.$('banner'),
+        'Abort failed: the workspace channel is unavailable' + (err && err.message ? ' — ' + err.message : ''), '');
     });
   });
 

@@ -430,4 +430,30 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
     await global.window.AmicusApp.openRun('aaaa1111');
     expect(global.document.getElementById('abort-btn').hidden).toBe(false);
   });
+
+  // ⚠️ v4.4.1 RN-6 — ARBITRATED, and this test is the arbitration made executable.
+  //
+  // RN-6 asked for a `hidden = true` in applyLive's banner-clearing arm, on the premise that the
+  // stalled branch's `hidden = false` is what puts the Abort button on screen and therefore
+  // latches it there once a momentary stall clears. The test directly above disproves the
+  // premise: renderDetail already does `$('abort-btn').hidden = isTerminal` on every run-open
+  // (workspace-app.js:128), so the button is visible for the WHOLE life of any non-terminal run,
+  // by design — and startLiveLoop only ever runs on a non-terminal run, so applyLive's assignment
+  // is a no-op on every path that can reach it. Adding the proposed clearing-arm assignment would
+  // hide the Abort button the moment a stall recovered, leaving a live, healthy, still-running
+  // council with no way to abort it for the rest of the session: the inverse defect, and worse.
+  //
+  // This test fails the moment anyone implements RN-6 as originally written.
+  test('RN-6: the Abort button survives a stall -> recover cycle — a live run must stay abortable', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111');
+    const abortBtn = global.document.getElementById('abort-btn');
+    expect(abortBtn.hidden).toBe(false); // renderDetail: visible for the whole non-terminal run
+
+    global.window.AmicusVerbs.applyLive(liveDoc({ flags: { crashed: false, stalled: true, stalledForSeconds: 180 } }));
+    expect(abortBtn.hidden).toBe(false);
+
+    global.window.AmicusVerbs.applyLive(liveDoc()); // activity resumes; the live banner clears
+    expect(global.document.getElementById('banner').hidden).toBe(true); // the diagnosis DID clear
+    expect(abortBtn.hidden).toBe(false);            // …and the remedy is still reachable
+  });
 });

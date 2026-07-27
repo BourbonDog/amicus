@@ -187,6 +187,52 @@ describe('Abort verb (Task 16: confirm dialog -> workspace:abort-run)', () => {
     expect(abortCalls.length).toBe(1); // still exactly one, after settling
   });
 
+  // ⚠️ v4.4.1 LC-8. Two chains in this handler had no rejection handler at all (wsgate01 C5).
+  // Both matter, and jest-circus fails the running test on any unhandled rejection, so they were
+  // latent suite instability as well as UI bugs.
+  test('LC-8: a REJECTED workspace:abort-run un-wedges the confirm button, hides the dialog, and says so', async () => {
+    invokeMock.mockImplementation((channel, ...args) => {
+      // A rejection, not an {ok:false} answer: the IPC handler catches its own errors, so this
+      // is the channel itself failing (dead handler, window torn down mid-abort).
+      if (channel === 'workspace:abort-run') { return Promise.reject(new Error('channel closed')); }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    clickAbort();
+    clickConfirm();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+    expect(confirmBtn().disabled).toBe(false); // pre-fix: stuck true forever, no way back
+    expect(dialog().hidden).toBe(true);        // pre-fix: stuck open
+    expect(global.document.getElementById('banner').textContent).toContain('channel is unavailable');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  test('LC-8: a rejected post-abort re-read leaves an honest banner instead of an unhandled rejection', async () => {
+    let opened = 0;
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:abort-run') { return Promise.resolve({ ok: true }); }
+      if (channel === 'workspace:get-run') {
+        opened += 1;
+        // The abort succeeded; the re-read then fails (run folder vanished, IPC died). Pre-fix
+        // this was fire-and-forget: the status chip never left 'running', so the UI showed a
+        // live run that had already been aborted.
+        if (opened > 1) { return Promise.reject(new Error('run folder vanished')); }
+        return Promise.resolve(buildFixtureDetail(args[0], 'running'));
+      }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    clickAbort();
+    clickConfirm();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+    expect(dialog().hidden).toBe(true);
+    expect(global.document.getElementById('banner').textContent)
+      .toContain('Abort succeeded, but refreshing the run failed');
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
   test('Escape dismisses the open dialog without invoking workspace:abort-run (Task 13 handler, proven live here)', async () => {
     await global.window.AmicusApp.openRun('aaaa1111');
     clickAbort();

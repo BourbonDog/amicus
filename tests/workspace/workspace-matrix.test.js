@@ -235,18 +235,47 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
   });
 
   describe('highlightText', () => {
-    test('wraps the first occurrence of the needle in a <mark>, DOM-safe (no innerHTML)', () => {
+    // ⚠️ v4.4.1 RN-3 + DOC-6: this test's title used to read "wraps the FIRST occurrence" —
+    // it pinned the defect. The implementation did one indexOf/splitText per collected text
+    // node, so the second "A1" in this very fixture went unmarked while the docblock above it
+    // promised "every occurrence". Drilling into a dispute cell therefore highlighted the first
+    // mention of a finding in the judge's prose and silently skipped the rest.
+    test('wraps EVERY occurrence of the needle in a <mark>, DOM-safe (no innerHTML)', () => {
       const container = document.createElement('div');
       const p = document.createElement('p');
       p.appendChild(document.createTextNode('The finding A1 appears in this sentence about A1 twice.'));
       container.appendChild(p);
       AmicusMatrix.highlightText(container, 'A1');
-      const mark = container.querySelector('mark');
-      expect(mark).toBeTruthy();
-      expect(mark.textContent).toBe('A1');
+      const marks = container.querySelectorAll('mark');
+      expect(marks.length).toBe(2);                       // ← 1 pre-fix
+      expect(marks[0].textContent).toBe('A1');
+      expect(marks[1].textContent).toBe('A1');
       // DOM-safe: reconstructing the full text must still read identically (split/replace,
       // not string surgery on markup).
       expect(container.textContent).toBe('The finding A1 appears in this sentence about A1 twice.');
+    });
+
+    test('marks every occurrence across SEVERAL text nodes, including repeats within each', () => {
+      const container = document.createElement('div');
+      ['A1 then A1', 'nothing here', 'A1 once'].forEach((t) => {
+        const p = document.createElement('p');
+        p.appendChild(document.createTextNode(t));
+        container.appendChild(p);
+      });
+      AmicusMatrix.highlightText(container, 'A1');
+      expect(container.querySelectorAll('mark').length).toBe(3);
+      expect(container.textContent).toBe('A1 then A1nothing hereA1 once');
+    });
+
+    test('adjacent and back-to-back occurrences terminate (the splitText tail is what is rescanned)', () => {
+      // The loop advances onto the NEW node splitText leaves behind. Rescanning `cursor`
+      // instead would re-find the text it just replaced and spin forever — this is the
+      // shape that would hang.
+      const container = document.createElement('div');
+      container.appendChild(document.createTextNode('A1A1A1'));
+      AmicusMatrix.highlightText(container, 'A1');
+      expect(container.querySelectorAll('mark').length).toBe(3);
+      expect(container.textContent).toBe('A1A1A1');
     });
 
     test('a needle that does not appear leaves the tree untouched, no throw', () => {
