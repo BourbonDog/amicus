@@ -35,7 +35,15 @@ function parseJudgeOutput(text, { labels, findingIds }) {
   const errors = [];
   const known = new Set(labels);
   const flat = [];
-  if (!Array.isArray(parsed.ranking) || parsed.ranking.length === 0) {
+  // ⚠️ v4.4.1 FINAL-REVIEW C. `JSON.parse('null')` SUCCEEDS — it returns null and
+  // throws nothing — so a body of literal `null` sailed past the catch above and
+  // `parsed.ranking` threw `TypeError: Cannot read properties of null`. parseDebateDefense
+  // (:129) and parseRevote (:167) below already carried this `!parsed` guard; the judge
+  // path and findings.js's validateFindings did not, which made it an asymmetry among
+  // five consumers of one extractor rather than a new rule. Guarded on BOTH derefs so
+  // a `null` body reports exactly what a keyless `{}` body already reported —
+  // BAD_RANKING + BAD_ADJUDICATIONS — and no new error code enters a repair prompt.
+  if (!parsed || !Array.isArray(parsed.ranking) || parsed.ranking.length === 0) {
     errors.push({ code: 'BAD_RANKING', detail: 'ranking must be a non-empty array of review labels' });
   } else {
     for (const slot of parsed.ranking) {
@@ -52,7 +60,7 @@ function parseJudgeOutput(text, { labels, findingIds }) {
   }
 
   const knownIds = new Set(findingIds);
-  if (!Array.isArray(parsed.adjudications)) {
+  if (!parsed || !Array.isArray(parsed.adjudications)) {   // see the `!parsed` note above
     errors.push({ code: 'BAD_ADJUDICATIONS', detail: 'adjudications must be an array' });
   } else {
     for (const a of parsed.adjudications) {

@@ -237,21 +237,53 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
    * truncated string that JSON.parse throws on. The regex is no longer choosing — parse
    * success is. Simulated on both shapes before the ruling was issued.
    *
-   * WHAT THESE TESTS ARE STILL THE TRIPWIRE ON. Not the anchor's strictness any more, but
-   * its PRIMACY: the last assertion below fails the moment anything reorders the readings so
-   * the same-line one is tried first, which is the edit that resurrects contract 1.
+   * ⚠️ WHAT THESE TESTS ACTUALLY GUARANTEE — corrected by the v4.4.1 FINAL WHOLE-BRANCH
+   * REVIEW, which measured the claim that stood here and found it false. The old text
+   * said the last assertion below "fails the moment anything reorders the readings so the
+   * same-line one is tried first." It does not. Mutating `bodyReadings`
+   * (`src/council/findings.js:30-37`) to `return out.reverse()` leaves the ENTIRE suite
+   * green — the reviewer measured 5,712/5,712 at the release cut, and the mutation was
+   * re-run here against these three council parser suites (87/87) before this comment
+   * was rewritten.
+   *
+   * That is not a hole in these tests. Reading order is unobservable BY CONSTRUCTION, and
+   * the reason is worth writing down because it is what makes consulting the sloppy
+   * reading safe at all. The same-line reading stops at the first ``` ANYWHERE; the
+   * anchored one stops at a line-START fence. Where the two disagree materially, the
+   * same-line body ends before a fence that is *not* at a line start — one sitting inside
+   * the body's own content, which in well-formed JSON means inside a string — and a body
+   * cut mid-string never parses. The only way BOTH readings can parse is when they differ
+   * by nothing but trailing spaces/tabs, and then they parse to the same value. So at most
+   * one reading of an opener is ever complete JSON, ties are semantically identical, and
+   * `JSON.parse` cannot tell which was tried first. No assertion resting on parse
+   * arbitration can either — including the ones below.
+   *
+   * WHAT THEY DO PIN, which is worth having: that the same-line reading EXISTS. Delete it
+   * from `bodyReadings` and both tests in this pair go red (measured) — and that deletion
+   * is exactly what would put a lone same-line-closed block back on a PAID repair leg.
+   *
+   * ⚠️ WHERE TRAP 1's REAL PROTECTION LIVES — read these before touching the extractor.
+   * A findings body that CONTAINS a fence is guarded by NINE assertions, none of which
+   * depends on reading order and all of which depend on the ANCHORED reading existing:
+   * this file at :176, :185, :193, the `quoting` line inside the first test below, the
+   * "sloppy block first AND a fence inside the good body" test, and the REAL paid-run
+   * regression fixture at the end of this describe; plus `tests/council/parse-stage2.test.js`
+   * at :134, :147 and :157, covering the judge, debate-defense and re-vote consumers.
    */
   test('a closing fence SHARING A LINE with body content DOES close the block (owner ruling)', () => {
     // The canonical single-line emit. Well-formed JSON — under contract 2 this was null.
     expect(lastJsonBlock(`${F}json\n{"a":1}${F}`)).toBe('{"a":1}');
     // …and trailing prose after the fence does not disturb it.
     expect(lastJsonBlock(`${F}json\n{"a":1}${F} done`)).toBe('{"a":1}');
-    // The anchored reading is still PRIMARY, not merely available: with a newline before
-    // the fence the body keeps its trailing \n, which only the anchored reading produces.
+    // A newline before the fence. NOT an ordering probe, despite what this line used to
+    // claim: the first ``` here IS the line-start ```, so both readings produce the very
+    // same '{"a":1}\n'. What it pins is that the trailing newline is kept, i.e. that a
+    // body is sliced at the fence and not trimmed.
     expect(lastJsonBlock(`${F}json\n{"a":1}\n${F}`)).toBe('{"a":1}\n');
-    // ⚠️ THE TRIPWIRE. Same opener, both readings available, and they DISAGREE: the anchored
-    // one is the whole object, the same-line one truncates inside the string. Reorder the
-    // readings and this goes red — it is contract 1's defect in one line.
+    // Trap 1 in one line: same opener, both readings available, and they DISAGREE — the
+    // anchored one is the whole object, the same-line one truncates inside the string.
+    // Only the anchored reading parses, so it wins whichever order they are tried in;
+    // this goes red if the ANCHORED reading is ever dropped, not if it is reordered.
     const quoting = `${F}json\n{"claim":"a fence ${F} inside a string"}\n${F}`;
     expect(JSON.parse(lastJsonBlock(quoting)).claim).toContain(F);
   });
@@ -304,9 +336,21 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
    * fixed because changing the extractor is a product decision, not a test-task one.
    *
    * The owner ruled: generate candidates under BOTH closing-fence readings and return
-   * the last one that `JSON.parse`s. The pin's purpose survives inverted — it still goes
-   * red the moment the extractor stops considering the same-line reading, which is the
-   * one edit that re-opens this trap.
+   * the last one that `JSON.parse`s. The pin's purpose survives inverted — but NOT in the
+   * way this comment used to claim.
+   *
+   * ⚠️ CORRECTED by the v4.4.1 FINAL WHOLE-BRANCH REVIEW, which measured it. The old text
+   * said this test "goes red the moment the extractor stops considering the same-line
+   * reading." It does not: drop the same-line reading from `bodyReadings`
+   * (`src/council/findings.js:30-37`) and this test stays GREEN. The good block is still
+   * reached, because its own opener's ANCHORED body parses on its own terms. (Measured:
+   * that same mutation turns only the two same-line-closer tests above red.)
+   *
+   * WHAT IT ACTUALLY PINS is move 1 of the algorithm — that openers are enumerated
+   * INDEPENDENTLY rather than by one left-to-right scan whose cursor resumes after each
+   * match. That is what rescues this shape: the sloppy predecessor's run-on anchored body
+   * swallows the good block's opener, so a resuming scan never offers it as a candidate at
+   * all. Re-introduce a resuming scan, however the close is written, and this goes red.
    */
   test('a sloppy same-line block BEFORE a good one no longer swallows it (owner ruling)', () => {
     const sloppy = `${F}json\n{"overall":"decoy","findings":[]}${F}`;
@@ -439,5 +483,69 @@ describe('repairCanHonorContract (review F2: do not buy a repair that cannot suc
     const emptySetIsValid = validateFindings(
       '```json\n{"overall":"nothing found","findings":[]}\n```').ok;
     expect(repairCanHonorContract(0)).toBe(emptySetIsValid);
+  });
+});
+
+/**
+ * ⚠️ v4.4.1 FINAL WHOLE-BRANCH REVIEW, finding C — a body of literal `null`.
+ *
+ * `JSON.parse('null')` SUCCEEDS and returns `null`. So a block whose body is `null`
+ * sailed straight past validateFindings' try/catch and every dereference of `parsed`
+ * below it threw `TypeError: Cannot read properties of null (reading 'findings')`.
+ *
+ * Why it was worth fixing on release eve rather than deferring: the call site is
+ * `run-stages.js:164`, which sits inside `run.js`'s try/catch — so ONE seat emitting
+ * a `null` body aborted an entire PAID council as exit 1 instead of degrading that one
+ * seat. That is exactly the fail-closed shape this release exists to remove.
+ *
+ * It was an asymmetry, not a new design: of the five consumers of `lastJsonBlock`,
+ * `parse-stage2.js`'s parseDebateDefense (`:129`) and parseRevote (`:167`) already
+ * carried the `!parsed` guard. validateFindings and parseJudgeOutput did not.
+ */
+describe('a JSON body of literal `null` degrades instead of throwing (review C)', () => {
+  const { lastJsonBlock, countAttemptedFindings, repairCanHonorContract } =
+    require('../../src/council/findings');
+  const nullBody = `${F}json\nnull\n${F}`;
+
+  test('the extractor itself was never the problem — it returns the body', () => {
+    // Both readings agree here, and `null` is valid JSON, so lastJsonBlock hands
+    // back a body and reports success. The crash was strictly downstream of it.
+    expect(lastJsonBlock(nullBody)).toBe('null\n');
+  });
+
+  test('validateFindings reports NOT_PARSEABLE instead of throwing TypeError', () => {
+    expect(() => validateFindings(nullBody)).not.toThrow();
+    const res = validateFindings(nullBody);
+    expect(res.ok).toBe(false);
+    expect(res.findings).toEqual([]);
+    expect(res.errors).toHaveLength(1);
+    // The code a malformed emit ALREADY takes — deliberately not a new one, and
+    // deliberately not NO_FENCED_BLOCK: the model emitted something, and the repair
+    // prompt is told which of those two stories is true.
+    expect(res.errors[0].code).toBe('NOT_PARSEABLE');
+    expect(res.errors[0].detail).toContain('null');
+  });
+
+  test('the other contentless scalar bodies join it; a truthy scalar does not move', () => {
+    // `!parsed` is the guard the two already-guarded consumers use, so it also picks
+    // up 0 / false / "" — bodies that carry no object at all. Every one of them was
+    // ok:false before (EMPTY_FINDINGS) and is ok:false now; only the code changed, to
+    // the more truthful one. Recorded here so the widening is a decision, not a slip.
+    for (const body of ['0', 'false', '""']) {
+      const res = validateFindings(`${F}json\n${body}\n${F}`);
+      expect(res.ok).toBe(false);
+      expect(res.errors[0].code).toBe('NOT_PARSEABLE');
+    }
+    // A truthy scalar never crashed and is left exactly where it was. The guard
+    // widens nothing beyond the falsy set.
+    expect(validateFindings(`${F}json\n123\n${F}`).errors[0].code).toBe('EMPTY_FINDINGS');
+  });
+
+  test('countAttemptedFindings stays null (unverifiable) and NEVER 0', () => {
+    // Load-bearing: repairCanHonorContract reads null as "nothing to compare, so a
+    // repair is worth buying" and 0 as "the original declared an empty set". A `null`
+    // body declared nothing at all, so it must answer null.
+    expect(countAttemptedFindings(nullBody)).toBeNull();
+    expect(repairCanHonorContract(countAttemptedFindings(nullBody))).toBe(true);
   });
 });

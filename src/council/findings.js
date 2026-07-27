@@ -139,6 +139,31 @@ function validateFindings(jsonText) {
   try { parsed = JSON.parse(body); }
   catch (e) { return { ok: false, findings: [], errors: [{ code: 'NOT_PARSEABLE', detail: e.message }] }; }
 
+  // ⚠️ v4.4.1 FINAL-REVIEW C — a body that parses to nothing usable.
+  // `JSON.parse('null')` SUCCEEDS: it returns null and throws nothing, so the catch
+  // above never sees it and every `parsed.<key>` below threw
+  // `TypeError: Cannot read properties of null`. Because run-stages.js:164 calls this
+  // from inside run.js's try/catch, ONE seat emitting a `null` body aborted an entire
+  // PAID council as exit 1 rather than degrading that seat — the fail-closed shape
+  // this release exists to remove.
+  //
+  // Same guard parse-stage2.js:129 and :167 already carried; this was an asymmetry
+  // among five consumers of one extractor, not a new rule. `!parsed` (their idiom)
+  // rather than `parsed === null`, so the other contentless bodies — 0, false, "" —
+  // land here too: each carries no object at all, each was already ok:false via
+  // EMPTY_FINDINGS, and NOT_PARSEABLE is the truer story to hand the repair prompt.
+  // A truthy scalar (123, "text") never crashed and is left on its existing path.
+  //
+  // NOT_PARSEABLE, not NO_FENCED_BLOCK: the distinction is load-bearing. The model
+  // emitted something broken, not nothing — and countAttemptedFindings must keep
+  // answering null (unverifiable) rather than 0 (a declared empty set), because
+  // repairCanHonorContract reads exactly that difference. It does: its own JSON.parse
+  // succeeds on `null`, and `Array.isArray(null.findings)` throws into its catch.
+  if (!parsed) {
+    return { ok: false, findings: [], errors: [{ code: 'NOT_PARSEABLE',
+      detail: `block body is ${JSON.stringify(parsed)}, not an object` }] };
+  }
+
   // ⚠️ LC-10 (owner ruling, 2026-07-26). A review that read the material and found
   // nothing is a VALID review — the anti-sycophancy clause shipped in every Stage-1
   // briefing says so verbatim ("An empty severity category is a valid result"), and
