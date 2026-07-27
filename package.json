@@ -43,6 +43,7 @@
     "commands/",
     ".claude-plugin/",
     "CHANGELOG.md",
+    "docs/*.md",
     "scripts/postinstall.js",
     "scripts/setup-hooks.js"
   ],

@@ -338,7 +338,99 @@ strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`
   4.1.2. The machine-local copy is staler than the shipped one in places, so a bulk port would
   regress the repo; it needs a per-section diff, not a copy. [S]
 
-## v4.4.1 lint-gate deferrals (ENV-5, 2026-07-27)
+## v4.4.1 fast-follow (2026-07-26 → 2026-07-27)
+
+**Provenance.** The five paid gate councils run against the shipped v4.4.0 Council Workspace
+(`wsgate01`–`wsgate04`, `costgate01`) produced a 61-item verified inventory,
+`.superpowers/sdd/v44/v4.4.1-backlog.md`. That inventory was re-verified against the release commit
+and dispositioned in **`.superpowers/sdd/v441/backlog-and-proposal.md`**, which is the authoritative
+scope record for this release — task decomposition, rulings, and the reason each item was taken or
+left. Neither file is duplicated here: a duplicate that drifts is worse than a pointer.
+
+> ⚠️ **Before filing anything new against this release, read the v44 backlog's Appendix A
+> ("settled, do not re-litigate") and Appendix B ("known false positives").** Both exist because
+> these specific findings get re-raised on reputation, and re-arguing one costs more than the
+> finding is worth. Appendix C lists items already fixed — do not carry those forward either.
+
+### The three owner rulings (Christian, 2026-07-26)
+
+Three product calls were taken on the spot, and each **pulled an item into the patch that the
+"no behaviour changes in a patch" bar would otherwise have excluded**. Recorded here because a
+ruling that lives only in a session transcript gets re-argued.
+
+| # | Item | Ruling | What it changed |
+|---|---|---|---|
+| **D5a** | **CA-6** — a fully-unpriced council could never trip `--max-cost`, so a ceiling silently bounded nothing | **Degrade the exit code.** When a ceiling is set *and* the total is inexact, the run exits `2` — mirroring what `budgetRefusals[]` already does for a shrunken bench. Docs tightened to "`--max-cost` bounds **known** spend." | **It never blocks a run.** The standing ruling — unknown cost must not halt a run, a ceiling must not stop us solving real problems — holds unchanged. |
+| **D5b** | **LC-2** — the tool-settle grace ceiling completed the leg but left its OpenCode session billing for output nobody would read | **Abort the session at the ceiling.** Leg completion and partial output are unchanged; only the child session is stopped, and whether the abort landed is recorded as `toolSettleAborted`. | Sequenced **after** v4.4.0's child-session walk, or subtree cost attribution would have been lost. |
+| **D5c** | **LC-10** — `EMPTY_FINDINGS` was a hard error, which structurally pressured a model to invent a finding, directly contradicting the shipped anti-sycophancy clause | **Accept a well-formed empty set.** `findings: []` is VALID when the block parsed cleanly and `overall` is a non-empty string — that distinguishes "I read it and found nothing" from "my output broke," which `NO_FENCED_BLOCK`/`NOT_PARSEABLE` already separate. | The larger half of the work was making the tally, street-cred and chair **degrade gracefully on an all-clean bench** rather than render headings over nothing. This one changes what a council *means* when every seat comes back clean. |
+
+Two smaller rulings on the same release: **D1** — delete RN-8's unwired `legsTotal`/`legsComplete`
+promise rather than implement it (a documented feature that does not exist is worse than neither).
+**D3** — ENV-5 stops at **config + errors only** (see the deferral below). Both are written up in
+`backlog-and-proposal.md` §4b.
+
+### Closed by v4.4.0 itself — do not carry these forward
+
+Five of the inventory's own top-of-theme entries were closed by commits that landed between the
+inventory's compile point and the v4.4.0 tag: **CA-1** (child-session spend unattributed — the
+`$0.492506` item) and **LC-7** by `b848e6f`; **SEC-1** (unfenced pointer-derived `runDir`, including
+a *write* primitive) and **SEC-2** by `1b9ea9e`; **LC-6** (a repair wave carrying no review to
+repair) by `f2f554b`.
+
+### Closed by v4.4.1
+
+Recorded by theme; per-item detail is in the inventory and per-task detail in
+`.superpowers/sdd/task-*-report.md`.
+
+- **Cost truthfulness** — CA-2 (`subtreeUnknown` now reaches the spend ledger, so `amicus spend`
+  stops contradicting `council run`), CA-3 (the unknown-spend notice is no longer sticky), CA-6,
+  CA-7 (a cache-only leg reports `unknown`, not a falsely free `$0`), CA-8 (the free-local `$0`
+  path verified end to end against a live LM Studio leg).
+- **The repair path, whole** — LC-12★ (all four remaining repair-prompt builders now carry the
+  artifact they are repairing; one took no arguments at all) and LC-11 (a repaired review no longer
+  keeps the original prose while taking the repair's findings).
+- **Correctness** — LC-2, LC-3 (a failed leg no longer renders in the GUI with a green check),
+  LC-4, LC-8, LC-9, LC-10.
+- **Renderer** — RN-3 (+DOC-6), RN-4, RN-7, RN-8, RN-9, RN-10 (a permission failure is no longer
+  reported as "not written yet", which had been producing a silent chairless fold reporting
+  `{ok: true}`), RN-12.
+- **Environment / release** — ENV-2 and ENV-3 (both diagnosed as **environmental, not code** — the
+  `haiku` 404 is a `/v1`-less `ANTHROPIC_BASE_URL`, so the inventory's "fix or remove the alias"
+  framing would have broken a working alias), ENV-4 (line endings settled repo-wide), ENV-5,
+  ENV-6, REL-1.
+- **Security / tests** — SEC-3, SEC-4 (the uncertified `md-lite.js` finally reviewed by a real
+  council, which also surfaced two live council-engine parser bugs), TST-4 (the read-only-workspace
+  invariant test), TST-5, TST-6, TST-8, TST-9, TST-10.
+- **Docs** — DOC-1 through DOC-5 and DOC-7, plus `docs/ROADMAP.md` (which still said v4.4 was
+  "NEXT") and this section.
+- **Not on the inventory, found during execution** — NEW-1 (a council run started one OpenCode
+  server per wave and concurrent waves raced each other's SQLite open, making `--critic` a coin
+  flip) and NEW-2 (a wave that died before its legs wrote no `wave.json`).
+
+### Deferred out of v4.4.1 into v4.5
+
+The `M`+ items and the ones needing data or a design decision — **CA-4, CA-5, LC-1, LC-5, RN-1,
+RN-2, RN-5, RN-11, REL-2, TST-1/2/3/7** — are tabulated with their reasons in `docs/ROADMAP.md`
+under "Deferred out of v4.4.1 into v4.5". **ENV-1** is not among them: it is a decision record
+("eleven `Number(env) || default` sites"), not a task, and a blanket migration would introduce six
+new defects to fix one. The two items below are deferrals *created* by this release rather than
+carried by it, so they are written out in full.
+
+### Open arbitration — needs a ruling
+
+- [ ] **RN-6 · the Abort button "never re-hides" — the prescribed fix is a regression** — [S]
+  The inventory asks for `abort-btn.hidden = true` in `applyLive`'s banner-clearing arm, on the
+  premise that the stalled branch's `hidden = false` is what puts the button on screen. Both halves
+  of that premise are false: `renderDetail` already runs `hidden = isTerminal` on every run-open
+  (pinned by an existing test), and `startLiveLoop` returns early for a terminal run, so the
+  stalled branch's assignment is a no-op on every path that can reach it. Implementing it as
+  written would **hide Abort on the tick a momentary stall recovers**, with nothing repainting it
+  until the next run-open — leaving a live, healthy council with no way to abort it. Shipped
+  instead: behaviour unchanged, the finding documented in place, and a regression test that fails
+  the moment anyone implements RN-6 as written. **Ruling wanted:** close as WONTFIX-with-evidence,
+  or state the intended behaviour. Detail: `.superpowers/sdd/task-8-report.md` §2.
+
+### v4.4.1 lint-gate deferrals (ENV-5, 2026-07-27)
 
 v4.4.1 put `electron/` under the lint gate (`npm run lint` is now `eslint src/ electron/`, and
 `lint-staged` globs `electron/**/*.js`). Owner ruling for that task was **config + errors only** —
