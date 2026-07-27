@@ -132,6 +132,29 @@ function makeFakeDom() {
       this.parentNode = null;
     }
   };
+  // v4.4.1 M1: highlightText() now calls container.normalize() before scanning, to undo the
+  // un-merged fragmentation clearHighlight() leaves behind (it unwraps <mark> but never
+  // normalizes). Real DOM semantics: merge every run of adjacent Text-node siblings into one,
+  // dropping any that end up empty, recursively through the whole subtree.
+  FakeElement.prototype.normalize = function () {
+    var merged = [];
+    this.childNodes.forEach(function (node) {
+      if (isTextNode(node)) {
+        if (node.data === '') { node.parentNode = null; return; } // dropped, matches real normalize()
+        var prev = merged[merged.length - 1];
+        if (prev && isTextNode(prev)) {
+          prev.data += node.data;
+          node.parentNode = null;
+          return;
+        }
+      }
+      merged.push(node);
+    });
+    this.childNodes = merged;
+    this.childNodes.forEach(function (node) {
+      if (node instanceof FakeElement) { node.normalize(); }
+    });
+  };
   FakeElement.prototype.scrollIntoView = function () { /* no-op: jsdom-free harness */ };
   // Task 16: openAbortDialog() focuses the dialog's Cancel button (so Esc/Enter both
   // behave). A no-op-with-a-trace-flag is enough for tests to assert focus WAS requested

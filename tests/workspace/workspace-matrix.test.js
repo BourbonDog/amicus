@@ -291,5 +291,48 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       AmicusMatrix.highlightText(container, '');
       expect(container.querySelector('mark')).toBeNull();
     });
+
+    // ⚠️ v4.4.1 M1: clearHighlight() unwraps <mark> back to a plain text node but never
+    // normalizes, so the sibling text nodes either side of the old mark are left un-merged.
+    // Drilling into finding "B3" first incidentally matches the "B3" PREFIX of the unrelated
+    // "B31" mention right next to it (plain indexOf substring match — exactly what makes this
+    // reachable with real finding ids), splitting "B31" into a "B3" node and a "1..." node.
+    // clearHighlight() leaves those two un-merged. Re-drilling into "B31" itself then has to
+    // find a needle that SPANS that leftover boundary — which a single-text-node .indexOf scan
+    // can never do — so pre-fix this finds nothing at all, even though "B31" plainly still
+    // reads correctly in container.textContent.
+    test('a second drill still finds a needle that straddles a fragment boundary left by a previous drill+clear cycle', () => {
+      const container = document.createElement('div');
+      container.appendChild(document.createTextNode('See B31 for details, not B3 alone.'));
+
+      AmicusMatrix.highlightText(container, 'B3'); // matches the real "B3 alone" AND the "B3" prefix of "B31"
+      AmicusMatrix.clearHighlight(container); // unwraps both marks, does NOT re-merge the tree
+
+      AmicusMatrix.highlightText(container, 'B31'); // the second, different drill
+
+      const marks = container.querySelectorAll('mark');
+      expect(marks.length).toBe(1); // 0 pre-fix: "B31" is invisible once "B3"/"1..." are split apart
+      expect(marks[0].textContent).toBe('B31');
+      expect(container.textContent).toBe('See B31 for details, not B3 alone.');
+    });
+
+    // Same fix, the literal case the brief describes: drilling into the SAME finding twice in a
+    // row (clear in between) must still find every occurrence on the second pass, even after the
+    // tree has been fragmented by drill cycles for OTHER findings sharing the same prose panel
+    // (drillIntoJudge's cached, never-rebuilt prose — see clearHighlight's docblock).
+    test('drilling the same finding twice in a row (with an unrelated drill in between) still finds every occurrence on the second pass', () => {
+      const container = document.createElement('div');
+      container.appendChild(document.createTextNode('B31 mentions B3 twice: see B3 and B31 again.'));
+
+      AmicusMatrix.highlightText(container, 'B31'); // first drill: finding B31
+      AmicusMatrix.clearHighlight(container);
+      AmicusMatrix.highlightText(container, 'B3'); // an unrelated drill into a different finding, B3 — fragments the B31 mentions too (substring match)
+      AmicusMatrix.clearHighlight(container);
+
+      AmicusMatrix.highlightText(container, 'B31'); // re-drilling the SAME finding, B31, a second time
+      const marks = container.querySelectorAll('mark');
+      expect(marks.length).toBe(2); // both "B31" mentions, not just whichever one avoided fragmentation
+      marks.forEach((m) => expect(m.textContent).toBe('B31'));
+    });
   });
 });

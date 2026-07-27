@@ -804,4 +804,63 @@ describe('A3: the exception path writes a terminal progress record too', () => {
       expect.objectContaining({ taskId: 'a3wfail' }),
     );
   }, 20000);
+
+  /**
+   * v4.4.1 M2 — review minor. `if (!externalServer) { await server.close(); }` sat directly
+   * above this whole block, OUTSIDE any try. A rejecting close() would have skipped the
+   * terminal-write block entirely (never reached) AND replaced `result.error` with the close
+   * failure instead of the original exception — silently losing both halves of what A3 exists
+   * to guarantee. Now guarded: a close failure is logged and swallowed, same as every other
+   * best-effort close in this file.
+   */
+  test('M2: a server.close() rejection in the exception path does not mask the original error or skip the terminal write', async () => {
+    // The PRECEDING test overrides fs.writeFileSync with a throwing implementation that
+    // jest.clearAllMocks() (in beforeEach) does not remove — only mockReset()/resetAllMocks()
+    // clears an implementation, and this suite only clears calls. Restore the harness default
+    // (a bare no-op) so this test observes ITS OWN scenario, not the previous test's.
+    fs.writeFileSync.mockImplementation(() => {});
+    mockStartServer.mockResolvedValue({
+      client: {},
+      server: { url: 'http://127.0.0.1:1', close: jest.fn(async () => { throw new Error('close blew up'); }) },
+    });
+    mockSendPromptAsync.mockRejectedValue(new Error('the real failure'));
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'm2close', '/proj', 60000, 'build', OPTS);
+
+    expect(result.error).toBe('the real failure'); // NOT replaced by the close() rejection
+    expect(result.completed).toBe(false);
+    expect(lastProgress().stage).toBe('error');     // the terminal write still ran
+    expect(lastProgress().stageLabel).toBe('Failed');
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'server.close() failed in the outer exception handler (best-effort)',
+      expect.objectContaining({ taskId: 'm2close', error: 'close blew up' }),
+    );
+  }, 20000);
+
+  /**
+   * v4.4.1 M3 — review minor. The comment above the `usage` read-back used to say "carrying the
+   * last known ones forward", which reads as "whatever the last flush wrote". The last
+   * 'receiving' flush's `p.extra` also carried `messagesReceived` (src/sidecar/conversation-
+   * mirror.js), and that is NOT carried onto the exception path's terminal record — only `usage`
+   * is. This pins the actual (unchanged) scope so the comment and the code cannot drift apart
+   * again: readProgress() only ever falls back to `messagesReceived` when conversation.jsonl has
+   * no assistant entries, so dropping it here (where the leg blew up, not where it never
+   * started) costs nothing real.
+   */
+  test('M3: only `usage` survives onto the exception terminal record — other prior extras (e.g. messagesReceived) are dropped, by design', async () => {
+    // See the M2 test above for why this reset is needed: a preceding test's writeFileSync
+    // mock implementation otherwise leaks in (clearAllMocks() does not clear implementations).
+    fs.writeFileSync.mockImplementation(() => {});
+    const priorUsage = { tokens: { input: 10, output: 2 }, costReported: 0.0001 };
+    fs.readFileSync.mockImplementation((p) => (String(p).includes('progress.json')
+      ? JSON.stringify({ schemaVersion: 1, type: 'progress', stage: 'receiving', messagesReceived: 7, usage: priorUsage })
+      : JSON.stringify({ status: 'running' })));
+    mockSendPromptAsync.mockRejectedValue(new Error('boom'));
+
+    await runHeadless(MODEL, 'sys', 'user', 'm3extra', '/proj', 60000, 'build', OPTS);
+
+    const last = lastProgress();
+    expect(last.usage).toEqual(priorUsage);
+    expect(last).not.toHaveProperty('messagesReceived');
+  }, 20000);
 });

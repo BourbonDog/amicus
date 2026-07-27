@@ -199,9 +199,14 @@
       // clearing-arm write would HIDE the button the moment a momentary stall recovered, leaving a
       // healthy, still-running council with no way to abort it: the inverse defect, and worse.
       // Full reasoning + the regression pin: "the Abort button survives a stall -> recover cycle"
-      // in tests/workspace/live-loop.test.js. Kept as belt-and-braces for the one non-redundant
-      // path — a run that dies WHILE stalled, whose terminal openRun() refresh then rejects.
-      A.$('abort-btn').hidden = false; // the remedy ships beside the diagnosis (Task 16 wires it)
+      // in tests/workspace/live-loop.test.js.
+      //
+      // v4.4.1 M4: this line is NOT "the remedy" (that framing, from Task 16, is what this note
+      // corrects) — it is redundant on every path except one: a run that dies WHILE stalled,
+      // whose terminal openRun() refresh then rejects. On THAT path it leaves Abort visible on a
+      // run that is already dead — a false affordance, not a working safety net. Kept anyway
+      // because it is harmless: aborting a dead run is a no-op.
+      A.$('abort-btn').hidden = false;
     } else if (A.$('banner').classList.contains('live')) {
       // Restores whatever the DURABLE banner actually says (nothing, a schemaVersion mismatch,
       // run.error, …) instead of just blanking it — a live-layer banner (info-unavailable or

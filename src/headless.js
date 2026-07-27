@@ -1148,7 +1148,21 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     }
     if (watchdog) { watchdog.cancel(); }
     if (uninstallSignals) { uninstallSignals(); }
-    if (!externalServer) { await server.close(); }
+    // ⚠️ v4.4.1 M2: guarded — this used to be a bare `await server.close()` sitting directly
+    // above A3's terminal-write block, OUTSIDE any try, in the one place a close failure is
+    // least affordable: the error handler. A rejection here would have skipped the terminal
+    // progress write below entirely AND replaced the original `error` (the one A3 exists to
+    // preserve) with this close failure instead. `close()` has already done its job of freeing
+    // the port by the time we get here; a failure to close cleanly is not this handler's
+    // problem to propagate, so it is logged and swallowed, same discipline as every other
+    // best-effort close in this file (see the signal handler above).
+    if (!externalServer) {
+      try { await server.close(); } catch (closeErr) {
+        logger.debug('server.close() failed in the outer exception handler (best-effort)', {
+          taskId, error: closeErr.message,
+        });
+      }
+    }
     // ⚠️ v4.4.1 A3 — the last hole in LC-3's story. LC-3 made the SUCCESS path's terminal
     // progress write derive its stage from resolveTerminalState instead of hardcoding 'complete',
     // so an aborted/errored/timed-out leg stopped rendering with a green check. This path — the
@@ -1169,7 +1183,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // bare terminal write would silently delete whatever real spend the last 'receiving' flush had
     // already recorded, trading a stale-stage bug for a cost-under-report on exactly the legs that
     // failed. There are no settled totals on this path (that is what the exception cost us), so
-    // carrying the last known ones forward unchanged is the honest maximum.
+    // carrying the last known usage forward unchanged is the honest maximum.
+    //
+    // v4.4.1 M3 — scope of "the last known ones": `usage` ONLY. That same 'receiving' flush also
+    // wrote `p.extra` (e.g. `messagesReceived`), and that is deliberately left to drop here, not
+    // carried forward too — the same call LC-3's success-path terminal write already made (see
+    // that block's comment above): readProgress() derives `messages` from conversation.jsonl's
+    // assistant entries directly and only falls back to `messagesReceived` when there are none, so
+    // restating a stale count on an exception — where conversation.jsonl is the more truthful,
+    // already-mirrored source — could only disagree with the file it exists to summarize.
     try {
       let priorUsage = null;
       try {

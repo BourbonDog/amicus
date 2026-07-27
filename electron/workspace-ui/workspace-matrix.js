@@ -196,9 +196,21 @@
    * NOT idempotent — a second call re-walks the text nodes inside the marks this one created and
    * nests a second `<mark>`. drillIntoJudge (workspace-panels.js) calls clearHighlight() first
    * for exactly that reason.
+   *
+   * ⚠️ v4.4.1 M1: clearHighlight() (below) unwraps each `<mark>` back into a plain text node but
+   * never calls `normalize()`, so the sibling text nodes either side of the old mark are left
+   * un-merged — the drill-clear-drill cycle fragments the prose a little more every time. Because
+   * the scan above only ever calls `.indexOf`/`.splitText` on ONE text node at a time, a needle
+   * whose match now straddles one of those leftover boundaries is invisible to it — silently
+   * under-marking on a re-drilled panel, the opposite of this docblock's "every occurrence"
+   * promise. `container.normalize()` below re-merges adjacent text nodes before every scan, so
+   * highlightText is robust to fragmentation regardless of how the container got that way.
    */
   function highlightText(container, needle) {
     if (!needle) { return; }  // also the loop's termination guard: a 0-length needle never advances
+    // v4.4.1 M1: undo any un-merged fragmentation clearHighlight() left behind (it does not
+    // normalize) — without this, a needle whose match spans a leftover node boundary is missed.
+    container.normalize();
     var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
     var nodes = [];
     while (walker.nextNode()) { nodes.push(walker.currentNode); }
