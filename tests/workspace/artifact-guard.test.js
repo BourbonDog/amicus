@@ -130,9 +130,18 @@ describe('artifactAllowlist', () => {
     // 'vendor?a' (question mark, U+003F) by code point, so 'vendor a' keeps the bare
     // sanitized name and the other two get ~2/~3 in that sorted order (Task 18 / RN-1).
     expect(list.artifactsByModel).toEqual({
-      'vendor a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
-      'vendor/a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
-      'vendor?a': { review: 'review-vendor-a~3.md', judge: 'judge-vendor-a~3.md' },
+      'vendor a': {
+        review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+        rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+      },
+      'vendor/a': {
+        review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+        rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+      },
+      'vendor?a': {
+        review: 'review-vendor-a~3.md', judge: 'judge-vendor-a~3.md',
+        rebuttal: 'rebuttal-vendor-a~3.md', revote: 'revote-vendor-a~3.md',
+      },
     });
   });
 
@@ -152,23 +161,49 @@ describe('artifactAllowlist', () => {
     ]));
     expect(list.collisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
     expect(list.artifactsByModel).toEqual({
-      'vendor/a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
-      'vendor?a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
+      'vendor/a': {
+        review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+        rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+      },
+      'vendor?a': {
+        review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+        rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+      },
     });
   });
 
   test('artifactsByModel is the identity mapping (no suffixes) when no bench entries collide', () => {
     const list = artifactAllowlist({ bench: ['gemini', 'gpt'] });
     expect(list.artifactsByModel).toEqual({
-      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md' },
-      gpt: { review: 'review-gpt.md', judge: 'judge-gpt.md' },
+      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md', rebuttal: 'rebuttal-gemini.md', revote: 'revote-gemini.md' },
+      gpt: { review: 'review-gpt.md', judge: 'judge-gpt.md', rebuttal: 'rebuttal-gpt.md', revote: 'revote-gpt.md' },
     });
   });
 
   test('repeated identical bench entries collapse to one artifactsByModel row with NO suffix', () => {
     const list = artifactAllowlist({ bench: ['gemini', 'gemini'] });
     expect(list.artifactsByModel).toEqual({
-      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md' },
+      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md', rebuttal: 'rebuttal-gemini.md', revote: 'revote-gemini.md' },
+    });
+  });
+
+  // ⚠️ Task 18 fix-wave (review finding 3): a bench mixing a genuine duplicate WITH a colliding
+  // distinct entry was untested — duplicates must collapse via the raw-value Set BEFORE the
+  // collision scan ever runs (so 'vendor/a' appearing twice never counts as a collision with
+  // itself), and the surviving distinct pair must still disambiguate exactly as the two-model
+  // collision case above.
+  test('a duplicate raw entry alongside a colliding distinct entry: duplicates collapse first, then the collision suffixes normally', () => {
+    const list = artifactAllowlist({ bench: ['vendor/a', 'vendor/a', 'vendor?a'] });
+    expect(list.collisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+    expect(list.artifactsByModel).toEqual({
+      'vendor/a': {
+        review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+        rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+      },
+      'vendor?a': {
+        review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+        rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+      },
     });
   });
 

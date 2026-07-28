@@ -186,9 +186,15 @@
         // judge- titles above, which mirror the brief verbatim), so it goes through
         // AmicusRender.display() — the single blind-flip definition — rather than adding a
         // fourth hand-rolled copy of the same ternary.
+        // ⚠️ Task 18 fix-wave (RN-1, review finding 1): this name used to be recomputed via a
+        // bare sanitizeName(m) call, ignoring the disambiguation map entirely — for a colliding
+        // pair BOTH models resolved to the same bare revote-<sanitized>.md name, reintroducing
+        // for re-votes the exact cross-match bug Task 18 fixed for review-/judge-. Routed
+        // through resolveArtifactName(m, 'revote') like the other three sites; its built-in
+        // legacy fallback keeps older detail payloads (no artifactsByModel map) correct too.
         files = files.concat(bench.map(function (m) {
           var label = A.state.labelByModel[m];
-          return { name: 'revote-' + sanitizeName(m) + '.md', title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+          return { name: resolveArtifactName(m, 'revote'), title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
         }));
       }
       return files.filter(function (f) { return present(f.name); });
@@ -212,8 +218,13 @@
       var rv = ((A.state.debate && A.state.debate.revotes) || []).find(function (r) {
         return r.judge === judgePair.model && r.id === findingId;
       });
+      // ⚠️ Task 18 fix-wave (RN-1, review finding 1): this branch used to recompute the name via
+      // bare sanitizeName(judgePair.model), independently of the (already-fixed) judge branch
+      // right below it — for a colliding pair, drilling a re-vote on the SECOND model resolved
+      // to the bare name and cross-matched the FIRST model's genuine revote section. Both arms
+      // of this ternary now go through the same disambiguation-aware helper.
       var artifactName = rv
-        ? 'revote-' + sanitizeName(judgePair.model) + '.md'
+        ? resolveArtifactName(judgePair.model, 'revote')
         : resolveArtifactName(judgePair.model, 'judge');
       var section = A.$('judges-body').querySelector('[data-artifact="' + artifactName + '"]');
       // A genuinely absent artifact is not an error here — the panel renders its own

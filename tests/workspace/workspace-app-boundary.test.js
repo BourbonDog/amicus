@@ -643,29 +643,46 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
   // artifactAllowlist) gives the SECOND (sorted) colliding model a `~2`-suffixed name that
   // deliberately does not exist on disk, so its manifest entry is absent and its panel/drill
   // renders the honest empty state instead of cross-matching the first model's real file.
-  function buildCollisionFixtureDetail() {
+  // ⚠️ Task 18 fix-wave (RN-1, review finding 1): `debated` (default falsy) extends this same
+  // fixture with the debate/re-vote shape instead of forking a sibling builder — the non-debate
+  // shape (run.debate: null, no revote-* artifacts) is byte-identical to what Task 18 shipped,
+  // so the two pre-existing tests below (which call this with no argument) keep exercising
+  // exactly what they always did. `artifactsByModel` is always the FULL {review,judge,rebuttal,
+  // revote} shape regardless of `debated` — that mirrors real getRunDetail output, where the map
+  // itself is unconditional and only the underlying files' existence (tracked in `artifacts`)
+  // depends on whether the run actually debated.
+  function buildCollisionFixtureDetail(debated) {
     const bench = ['vendor/a', 'vendor?a'];
     const labelMap = { 'Review A': 'vendor/a', 'Review B': 'vendor?a' };
+    // Only 'vendor/a' (the first, sorted) has real files — the collision means the run
+    // directory never held a second set for 'vendor?a' under a distinct name. The ~2 names
+    // are the disambiguated names Task 18 assigns; they are absent here on purpose.
+    const artifacts = {
+      'chair-output.md': { present: false, bytes: 0 },
+      'report.html': { present: true, bytes: 512 },
+      'review-vendor-a.md': { present: true, bytes: 100 },
+      'judge-vendor-a.md': { present: true, bytes: 100 },
+      'review-vendor-a~2.md': { present: false, bytes: 0 },
+      'judge-vendor-a~2.md': { present: false, bytes: 0 },
+    };
+    if (debated) {
+      // Same rationale as the review-/judge- pair above: only the first (sorted) colliding
+      // model's re-vote was ever actually written under a distinct name; the ~2 name is
+      // disambiguated but absent on purpose.
+      artifacts['revote-vendor-a.md'] = { present: true, bytes: 80 };
+      artifacts['revote-vendor-a~2.md'] = { present: false, bytes: 0 };
+    }
     return {
       runId: 'cccc3333',
       runDir: '/fake/run/cccc3333',
       run: {
         status: 'complete', schemaVersion: 2, bench, chair: bench[bench.length - 1],
         stages: [{ name: 'stage1', status: 'complete', startedAt: 't0', completedAt: 't1' }],
-        labelMap, usage: { cost: { amount: 0.43 } }, options: { maxCost: 2 }, error: null, debate: null,
+        labelMap, usage: { cost: { amount: 0.43 } }, options: { maxCost: 2 }, error: null,
+        debate: debated ? { outcome: 'ran' } : null,
       },
       tally: {}, verdict: {},
-      // Only 'vendor/a' (the first, sorted) has real files — the collision means the run
-      // directory never held a second set for 'vendor?a' under a distinct name. The ~2 names
-      // are the disambiguated names Task 18 assigns; they are absent here on purpose.
-      artifacts: {
-        'chair-output.md': { present: false, bytes: 0 },
-        'report.html': { present: true, bytes: 512 },
-        'review-vendor-a.md': { present: true, bytes: 100 },
-        'judge-vendor-a.md': { present: true, bytes: 100 },
-        'review-vendor-a~2.md': { present: false, bytes: 0 },
-        'judge-vendor-a~2.md': { present: false, bytes: 0 },
-      },
+      artifacts,
       derived: {
         schemaSupported: true,
         names: Object.entries(labelMap).map(([label, model]) => ({ label, model })),
@@ -689,8 +706,14 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
         verdictPanel: { present: true, overallVerdict: 'Fix these first', tierCounts: { Confirmed: 1 }, streetCred: [], decisions: [], reason: null },
         artifactCollisions: [{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }],
         artifactsByModel: {
-          'vendor/a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
-          'vendor?a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
+          'vendor/a': {
+            review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+            rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+          },
+          'vendor?a': {
+            review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+            rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+          },
         },
       },
     };
@@ -743,6 +766,78 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
 
       const judgesBody = global.document.getElementById('judges-body');
       const section = judgesBody.querySelector('[data-artifact="judge-vendor-a.md"]');
+      expect(section).toBeTruthy();
+      expect(section.querySelectorAll('mark')).toHaveLength(1);
+      expect(section.querySelector('mark').textContent).toBe('A1');
+    });
+  });
+
+  function collisionRevoteInvoke(channel, ...args) {
+    if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+    if (channel === 'workspace:get-run') { return Promise.resolve(buildCollisionFixtureDetail(true)); }
+    if (channel === 'workspace:read-artifact') {
+      const name = args[1];
+      if (name === 'debate.json') {
+        return Promise.resolve({
+          text: JSON.stringify({
+            revotes: [
+              { judge: 'vendor/a', id: 'A1', reason: 'First model reconsidered.' },
+              { judge: 'vendor?a', id: 'A1', reason: 'Second model reconsidered.' },
+            ],
+          }),
+        });
+      }
+      if (name === 'review-vendor-a.md' || name === 'judge-vendor-a.md' || name === 'revote-vendor-a.md') {
+        return Promise.resolve({ text: 'Prose about A1 for ' + name + '.' });
+      }
+      // The ~2 names are absent per the manifest above; wireLazyPanels' presence filter must
+      // keep a correct implementation from ever reaching this branch (asserted below).
+      return Promise.resolve({ error: 'not written yet: ' + name });
+    }
+    return Promise.resolve(null);
+  }
+
+  // ⚠️ Task 18 fix-wave (RN-1, review finding 1): the collision tests above cover the
+  // review-/judge- lookups (already routed through resolveArtifactName by Task 18 itself) — the
+  // revote- lookups (judges-panel's debate branch + drillIntoJudge's revote branch) were left on
+  // the legacy bare sanitizeName(model) computation, so a --debate run with a colliding bench
+  // reintroduces, for re-votes, the exact cross-match bug Task 18 fixed for reviews/judges.
+  describe('collided artifact names on a --debate run (RN-1 fix-wave): revote drills never cross-match either', () => {
+    test("the second (colliding) model's revote drill targets the ~2 name, finds no section, and does NOT highlight the first model's real revote section", async () => {
+      const invokeMock2 = jest.fn(collisionRevoteInvoke);
+      global.window.amicusWorkspace.invoke = invokeMock2;
+      await global.window.AmicusApp.openRun('cccc3333');
+      await Promise.resolve();
+      await Promise.resolve(); // let the fire-and-forget debate.json fetch land before the drill-in
+
+      await global.window.AmicusPanels.drillIntoJudge({ model: 'vendor?a', label: null }, 'A1');
+
+      // No misattribution: the ~2 revote artifact was never requested (presence-filtered out of
+      // the judges-panel file list), so no section exists for it and drillIntoJudge early-returns.
+      const collidedCalls = invokeMock2.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'revote-vendor-a~2.md');
+      expect(collidedCalls).toHaveLength(0);
+      const judgesBody = global.document.getElementById('judges-body');
+      expect(judgesBody.querySelector('[data-artifact="revote-vendor-a~2.md"]')).toBeNull();
+      // The critical assertion: the FIRST model's real revote section must stay untouched — the
+      // legacy sanitizeName(model) computation (ignoring the collision) resolves BOTH models to
+      // 'revote-vendor-a.md', so the buggy code finds and highlights this section instead.
+      const realSection = judgesBody.querySelector('[data-artifact="revote-vendor-a.md"]');
+      expect(realSection).toBeTruthy();
+      expect(realSection.querySelectorAll('mark')).toHaveLength(0);
+      expect(realSection.dataset.drilledFinding).toBeUndefined();
+    });
+
+    test("the first model's revote drill still resolves and highlights its own section normally", async () => {
+      const invokeMock2 = jest.fn(collisionRevoteInvoke);
+      global.window.amicusWorkspace.invoke = invokeMock2;
+      await global.window.AmicusApp.openRun('cccc3333');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      await global.window.AmicusPanels.drillIntoJudge({ model: 'vendor/a', label: null }, 'A1');
+
+      const judgesBody = global.document.getElementById('judges-body');
+      const section = judgesBody.querySelector('[data-artifact="revote-vendor-a.md"]');
       expect(section).toBeTruthy();
       expect(section.querySelectorAll('mark')).toHaveLength(1);
       expect(section.querySelector('mark').textContent).toBe('A1');

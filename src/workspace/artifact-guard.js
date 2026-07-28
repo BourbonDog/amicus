@@ -141,8 +141,17 @@ function artifactAllowlist(run) {
   // Consumed by workspace-panels.js (wireLazyPanels' file lists + drillIntoJudge's artifact
   // lookup), which prefers this map over re-deriving names via sanitizeName(model) directly —
   // that re-derivation is exactly what would ignore the suffixing above and misattribute prose.
+  // ⚠️ Fix-wave (review finding 1) residual limit this map cannot close: the BARE (unsuffixed)
+  // name is still exactly ONE physical file on disk, and its actual bytes belong to whichever
+  // colliding model's writer ran LAST — no map can recover which one that was. The guarantee
+  // delivered here is narrower than "attribution is fully sound": at most the sorted-first
+  // model can still be misattributed under the bare name; artifactCollisions (the run-integrity
+  // banner rendered by workspace-app.js's renderBanners) is what covers that residual case.
   list.artifactsByModel = Object.fromEntries(
-    [...nameFor].map(([m, s]) => [m, { review: `review-${s}.md`, judge: `judge-${s}.md` }]),
+    [...nameFor].map(([m, s]) => [m, {
+      review: `review-${s}.md`, judge: `judge-${s}.md`,
+      rebuttal: `rebuttal-${s}.md`, revote: `revote-${s}.md`,
+    }]),
   );
   return list;
 }

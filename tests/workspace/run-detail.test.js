@@ -259,6 +259,16 @@ describe('getRunDetail', () => {
     registerPointer(project, 'aaaa1111', runDir);
     const d = getRunDetail(project, 'aaaa1111');
     expect(d.derived.artifactCollisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+    // ⚠️ Task 18 fix-wave (review finding 2): the threading of artifact-guard.js's
+    // artifactsByModel map through getRunDetail's `derived` (run-detail.js's one-line addition)
+    // had no direct test anywhere — only the low-level map (artifact-guard.test.js) and the
+    // fake-DOM renderer (workspace-app-boundary.test.js, hand-built fixtures) were covered, with
+    // nothing pinning the wiring in the middle. toMatchObject (not toEqual) so this only pins the
+    // shape this fixture's collision produces, not every key artifactAllowlist happens to add.
+    expect(d.derived.artifactsByModel).toMatchObject({
+      'vendor/a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
+      'vendor?a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
+    });
   });
 
   test('artifactCollisions is empty when bench models sanitize to distinct names', () => {
