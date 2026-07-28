@@ -89,10 +89,21 @@ const SOLO_TEST_PACK = () => ({
   description: 'x', model: 'vendorx/solo-model',
   options: { noUi: true, agent: 'Plan' }, briefing: {},
 });
-const COUNCIL_ORPHAN_PACK = () => ({
-  schemaVersion: 1, type: 'pack', name: 'council-orphan-pack', version: '1.0.0', kind: 'council',
+// v4.5 HOLD-gate decision 2: agent is no longer a valid council pack option, so
+// this fixture (used only for the lenses round-trip below) no longer sets it —
+// renamed from COUNCIL_ORPHAN_PACK since it is no longer an orphan-knob vehicle.
+const COUNCIL_LENSES_PACK = () => ({
+  schemaVersion: 1, type: 'pack', name: 'council-lenses-pack', version: '1.0.0', kind: 'council',
   description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], chair: 'vendorx/pack-chair',
-  critic: null, lenses: ['lensA', 'lensB'], options: { agent: 'Plan' }, briefing: {},
+  critic: null, lenses: ['lensA', 'lensB'], options: {}, briefing: {},
+});
+// v4.5 HOLD-gate decision 2: a council pack that still carries a dropped option
+// (agent/thinking/summaryLength) now fails validation outright — it can no
+// longer reach the orphan-notice code path at all.
+const COUNCIL_DROPPED_OPTION_PACK = () => ({
+  schemaVersion: 1, type: 'pack', name: 'council-dropped-option-pack', version: '1.0.0', kind: 'council',
+  description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], chair: 'vendorx/pack-chair',
+  critic: null, lenses: null, options: { agent: 'Plan' }, briefing: {},
 });
 
 describe('amicus_council_run pack param', () => {
@@ -350,10 +361,10 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
   });
 
   test('lenses array -> CSV -> array round trip when the pack fills an absent lenses key', () => {
-    store().writePack(COUNCIL_ORPHAN_PACK()); // lenses: ['lensA', 'lensB']
+    store().writePack(COUNCIL_LENSES_PACK()); // lenses: ['lensA', 'lensB']
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'council-orphan-pack', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+      packRef: 'council-lenses-pack', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.lenses).toEqual(['lensA', 'lensB']);
@@ -457,16 +468,16 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     expect(input.contextMaxTokens).toBeUndefined();
   });
 
-  test("orphan-knob notice: a council pack's agent has no MCP destination and is reported", () => {
-    store().writePack(COUNCIL_ORPHAN_PACK()); // options.agent: 'Plan'
+  // ---- v4.5 HOLD-gate decision 2: a dropped council option fails resolution outright ----
+  test('a council pack carrying a dropped option (agent) now fails PACK_INVALID — it can no longer reach the orphan-notice path', () => {
+    store().writePack(COUNCIL_DROPPED_OPTION_PACK()); // options.agent: 'Plan'
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'council-orphan-pack', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+      packRef: 'council-dropped-option-pack', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
     });
-    expect(res.error).toBeUndefined();
-    const notice = res.notices.find((n) => n.includes('agent'));
-    expect(notice).toBeDefined();
-    expect(notice).toContain('amicus_council_run');
+    expect(res.error).toBeDefined();
+    expect(res.error.code).toBe(ERROR_CODES.PACK_INVALID);
+    expect(res.error.message).toContain("unknown option 'agent'");
   });
 
   test('kind mismatch returns a structured PACK_KIND_MISMATCH error naming both kinds', () => {

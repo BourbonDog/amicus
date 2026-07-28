@@ -33,13 +33,15 @@ const resolve = () => require('../../src/pack/pack-resolve').applyPackToArgs;
 const store = () => require('../../src/pack/pack-store');
 
 // ---- fixtures (kind-complete: every knob in the Task-11 table gets a real value) ----
+// v4.5 HOLD-gate decision 2: agent/thinking/summaryLength were dropped from
+// KIND_OPTIONS.council (inert on every council surface) — this fixture no
+// longer carries them. Coverage of the shared agent/thinking/summaryLength
+// fill mechanism (COMMON_OPTION_KNOBS + the dedicated agent-fill code) is
+// unaffected: FANOUT_PACK/SOLO_PACK below exercise the identical shared code.
 const COUNCIL_PACK = () => ({
   schemaVersion: 1, type: 'pack', name: 'sec-review', version: '1.0.0', kind: 'council',
   description: 'x', bench: ['deepseek', 'qwen-coder'], chair: 'gpt', critic: 'deepseek', lenses: null,
-  options: {
-    timeout: 10, maxCost: 2.5, gateway: 'direct', agent: 'code', thinking: 'high',
-    summaryLength: 'verbose', debate: true,
-  },
+  options: { timeout: 10, maxCost: 2.5, gateway: 'direct', debate: true },
   briefing: { template: 'review' },
 });
 const COUNCIL_PACK_LENSES = () => ({
@@ -100,9 +102,12 @@ describe('applyPackToArgs: council — pack fills every knob when not explicit (
     expect(args.timeout).toBe(10); // overwrote the DEFAULTS-seeded 15
     expect(args['max-cost']).toBe(2.5);
     expect(args.gateway).toBe('direct');
-    expect(args.agent).toBe('code');
-    expect(args.thinking).toBe('high');
-    expect(args['summary-length']).toBe('verbose'); // overwrote the DEFAULTS-seeded 'normal'
+    // v4.5 HOLD-gate decision 2: council packs can no longer carry
+    // agent/thinking/summaryLength — the DEFAULTS-seeded values survive
+    // untouched (there is nothing left in the pack to fill them with).
+    expect(args.agent).toBeUndefined();
+    expect(args.thinking).toBeUndefined();
+    expect(args['summary-length']).toBe('normal'); // DEFAULTS-seeded, unchanged
     expect(args.debate).toBe(true);
     expect(args.template).toBe('review');
     expect(args.models).toBe('deepseek,qwen-coder'); // array bench -> csv
@@ -113,6 +118,11 @@ describe('applyPackToArgs: council — pack fills every knob when not explicit (
 describe('applyPackToArgs: council — explicit CLI flag wins over every knob', () => {
   test('typed flags are never overwritten by the pack, including the seeded-defaults-trap direction', () => {
     store().writePack(COUNCIL_PACK());
+    // --agent/--thinking/--summary-length are still typed here even though the
+    // pack itself no longer carries those three (v4.5 HOLD-gate decision 2) —
+    // proves typing them on a council run is harmless (they simply have no pack
+    // value to compete with); the "explicit beats pack" case for these knobs is
+    // still covered on fanout/solo below, where the pack genuinely sets them.
     const args = parseArgs(['council', 'run',
       '--chair', 'claude', '--critic', 'qwen-coder', '--lenses', 'x,y',
       '--timeout', '30', '--max-cost', '9.9', '--gateway', 'openrouter',
@@ -128,9 +138,6 @@ describe('applyPackToArgs: council — explicit CLI flag wins over every knob', 
     expect(args.timeout).toBe(30); // explicit 30 beats pack's 10
     expect(args['max-cost']).toBe(9.9);
     expect(args.gateway).toBe('openrouter');
-    expect(args.agent).toBe('chat');
-    expect(args.thinking).toBe('low');
-    expect(args['summary-length']).toBe('brief'); // explicit beats pack's 'verbose'
     expect(args.debate).toBe(true);
     expect(args.template).toBe('mine');
     expect(args.models).toBe('a,b'); // explicit beats the bench array fill

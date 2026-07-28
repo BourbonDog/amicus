@@ -294,11 +294,11 @@ Then invoke it with `--pack <name|path>` on `start` / `fanout` / `council run` �
 
 | Kind | Bench field | Kind-specific fields | Allowed `options.*` |
 |---|---|---|---|
-| `council` | `bench` (a saved council name, or an array of ≥2 members) | `chair`, `critic`, `lenses` | `timeout`, `maxCost`, `gateway`, `agent`†, `thinking`†, `summaryLength`†, `debate` |
+| `council` | `bench` (a saved council name, or an array of ≥2 members) | `chair`, `critic`, `lenses` | `timeout`, `maxCost`, `gateway`, `debate` |
 | `fanout` | `bench` (a saved council name, or an array of ≥2 members) | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noContext`, `contextTurns`, `contextMaxTokens` |
 | `solo` | `model` | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noUi`, `noContext`, `contextTurns`, `contextMaxTokens` |
 
-† Reserved, currently inert on all surfaces for `council` packs: accepted and recorded in the pack, but not yet applied to a council run — the CLI path fills them from the pack and silently drops them, exactly like MCP (see below).
+`council` packs do **not** accept `agent`, `thinking`, or `summaryLength` — they were inert on every surface (no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes agent `Plan`/summaryLength `verbose`), so they were dropped before release rather than shipped as dead weight a pack author would reasonably expect to work. A `council` pack that still sets one fails `pack save` with `PACK_INVALID`, naming the key. They remain valid, and functional, on `fanout`/`solo` packs.
 
 Every kind may also carry `description`, `version` (semver, default `1.0.0`), and `briefing.template` (a template **reference**, not rendered text — a pack never captures briefing prose).
 
@@ -315,12 +315,12 @@ Every kind may also carry `description`, `version` (semver, default `1.0.0`), an
 | Situation | Code |
 |---|---|
 | `pack show <missing>` | `PACK_NOT_FOUND` |
-| `pack rm <missing>` | `BAD_ARGS` |
+| `pack rm <missing>` | `PACK_NOT_FOUND` |
 | `pack save` fails validation | `PACK_INVALID` (hard-fail; non-fatal warnings still print to stderr) |
 | `--pack <name>` at run time is the wrong `kind` (e.g. a `solo` pack passed to `council run`) | `PACK_KIND_MISMATCH` |
 | `pack save --from-run <unknown id>` | `BAD_SESSION` |
 
-**Over MCP, pack resolution happens entirely in-process** — `amicus_start`/`amicus_fanout`/`amicus_council_run` never spawn a child with `--pack`; the pack's values are merged onto that call's own input before validation, exactly as they would be for a typed param. A pack knob with nowhere to land in a given tool's own MCP schema is never silently dropped — it comes back as an explicit `Notice: pack '<name>' sets <key>, which <tool> does not support over MCP — ignored.` content block. Concretely: `briefing.template` and `options.maxCost` have no MCP destination on either `amicus_start` or `amicus_fanout` (both trigger the notice on both tools), and `amicus_fanout` additionally has none for `options.contextTurns`/`options.contextMaxTokens`. `amicus_council_run`'s case is different in kind, not just in surface: `options.agent`, `options.thinking`, and `options.summaryLength` are reserved, currently inert on all surfaces (accepted and recorded in the pack, not yet applied to council runs) — the CLI path dead-fills them the same way MCP does, so giving them an MCP destination would not by itself make them functional. MCP still has no schema destination for these three and surfaces the same notice, for consistency with the other orphan cases above.
+**Over MCP, pack resolution happens entirely in-process** — `amicus_start`/`amicus_fanout`/`amicus_council_run` never spawn a child with `--pack`; the pack's values are merged onto that call's own input before validation, exactly as they would be for a typed param. Two knobs get special handling for CLI parity: a pack's `options.maxCost` and `briefing.template` have no schema param of their own on `amicus_start`/`amicus_fanout` (neither tool exposes either directly), but they still apply — forwarded to the spawned CLI child's argv as `--max-cost`/`--template` (`amicus_fanout` always spawns; `amicus_start`'s spawn-fallback path does the same), or, on `amicus_start`'s in-process shared-server path, applied via the same budget-gate/template-render code the CLI itself uses, before any session is created. (`amicus_council_run` already has real MCP params for both, so this forwarding never triggers there.) Any *other* pack knob with nowhere to land in a given tool's own MCP schema is never silently dropped either — it comes back as an explicit `Notice: pack '<name>' sets <key>, which <tool> does not support over MCP — ignored.` content block, naming the pack's own camelCase option key (e.g. `contextTurns`, never the CLI's `context-turns`). Concretely, `amicus_fanout` has no MCP destination for `options.contextTurns`/`options.contextMaxTokens` (both notice); `amicus_start` has real `contextTurns`/`contextMaxTokens` params, so no notice there. `council` packs cannot carry `agent`/`thinking`/`summaryLength` at all (see above), so there is nothing left to orphan on that surface.
 
 ### Worked example — save, inspect, invoke
 

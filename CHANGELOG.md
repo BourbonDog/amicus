@@ -22,20 +22,28 @@ shareable, and the flagship Council Workspace stops being opt-in on its best cli
   `wave.json`, or council `run.json`. Precedence throughout: **flag > pack > config default >
   built-in default**. A pack is validated on save (hard-fail — `PACK_INVALID` — with any
   non-fatal warnings printed to stderr) and again whenever it's used to launch a run; `pack show`
-  never fails on an invalid pack, only reports what's wrong with it. New
-  `schemas/pack.schema.json`.
+  never fails on an invalid pack, only reports what's wrong with it; `pack show` and `pack rm` both
+  return `PACK_NOT_FOUND` for a missing pack. New `schemas/pack.schema.json`.
 - **MCP pack semantics.** Over MCP, `pack` resolves entirely **in-process**, on the same call that
-  reads it — a resolved pack is never forwarded as `--pack` to a spawned child. A pack knob with no
-  destination in a given tool's own MCP input schema is never silently dropped: it surfaces as an
-  explicit `Notice: pack '<name>' sets <key>, which <tool> does not support over MCP — ignored.`
-  content block instead. Concretely, `amicus_start` and `amicus_fanout` have no MCP param for a
-  pack's `briefing.template` or `options.maxCost` (both trigger the notice on either tool), and
-  `amicus_fanout` additionally has none for `options.contextTurns` / `options.contextMaxTokens`.
-  `amicus_council_run` is a different case, not just the same gap on another surface: a council
-  pack's `options.agent`, `options.thinking`, and `options.summaryLength` are reserved, currently
-  inert on all surfaces — accepted and recorded in the pack, but not yet applied to a council run
-  by the CLI path either. MCP still has no schema destination for these three and surfaces the
-  identical notice, but closing that MCP gap alone would not make them functional.
+  reads it — a resolved pack is never forwarded as `--pack` to a spawned child. Two knobs get
+  special-cased handling for CLI parity: a pack's `options.maxCost` and `briefing.template` have no
+  MCP schema param of their own on `amicus_start`/`amicus_fanout`, but they still apply — forwarded
+  to the spawned CLI child's argv as `--max-cost`/`--template` (`amicus_fanout` always spawns;
+  `amicus_start`'s spawn-fallback path does the same), or, on `amicus_start`'s in-process
+  shared-server path, applied via the same budget-gate/template-render code the CLI itself uses,
+  before any session is created — so a shared pack's spend cap and briefing template never silently
+  vanish over MCP. (`amicus_council_run` already has real MCP params for both.) Any *other* pack
+  knob with no destination in a tool's own MCP input schema is never silently dropped either: it
+  surfaces as an explicit `Notice: pack '<name>' sets <key>, which <tool> does not support over
+  MCP — ignored.` content block, naming the pack's own camelCase option key (e.g. `contextTurns`,
+  never the CLI's `context-turns`). Concretely, `amicus_fanout` has no MCP destination for
+  `options.contextTurns` / `options.contextMaxTokens` (both notice); `amicus_start` has real params
+  for both, so neither does.
+- **Council packs do not accept `agent`/`thinking`/`summaryLength`.** They were inert on every
+  surface — no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes
+  agent `Plan`/summaryLength `verbose` regardless of what a pack says — so `KIND_OPTIONS.council`
+  never accepted them; a council pack that sets one fails `pack save` (`PACK_INVALID`), naming the
+  offending key. They remain valid, and functional, on `fanout`/`solo` packs.
 - **Briefing templates.** `amicus template list|show`, plus `--template <name|path>` / `--artifact
   <file>` / `--var <k=v>` (repeatable) on `start` / `fanout` / `council run`, render a
   `{{variable}}` briefing before it's sent. Templates are Markdown files in

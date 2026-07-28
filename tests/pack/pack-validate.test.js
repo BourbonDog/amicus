@@ -117,6 +117,40 @@ describe('validatePack: options allowlist', () => {
     expect(res.ok).toBe(false);
     expect(res.errors.join(' | ')).toContain("unknown option 'frobnicate' for kind 'council'");
   });
+
+  // v4.5 HOLD-gate decision 2 (final-review F1): agent/thinking/summaryLength
+  // were inert on every council surface (the CLI dead-fills them, never reads
+  // them; the engine hardcodes agent 'Plan'/summaryLength 'verbose') — dropped
+  // from KIND_OPTIONS.council pre-release rather than shipped as dead weight.
+  // A council pack that still carries one now fails save-validation, same as
+  // any other unknown option for the kind.
+  test.each(['agent', 'thinking', 'summaryLength'])(
+    "dropped council option '%s' is rejected as unknown (v4.5 HOLD-gate decision 2)",
+    (key) => {
+      const { validatePack } = load();
+      const res = validatePack({ ...PACK(), options: { ...PACK().options, [key]: 'x' } }, { mode: 'save' });
+      expect(res.ok).toBe(false);
+      expect(res.errors.join(' | ')).toContain(`unknown option '${key}' for kind '${'council'}'`);
+    }
+  );
+
+  // Regression lock: the drop is council-only — fanout/solo genuinely apply
+  // these knobs and must keep accepting them.
+  test('fanout pack may still carry agent/thinking/summaryLength (council-only drop)', () => {
+    const { validatePack } = load();
+    const res = validatePack({
+      ...FANOUT_PACK(), options: { ...FANOUT_PACK().options, agent: 'Plan', thinking: 'high', summaryLength: 'brief' },
+    }, { mode: 'save' });
+    expect(res).toEqual({ ok: true, warnings: [] });
+  });
+
+  test('solo pack may still carry agent/thinking/summaryLength (council-only drop)', () => {
+    const { validatePack } = load();
+    const res = validatePack({
+      ...SOLO_PACK(), options: { ...SOLO_PACK().options, agent: 'Plan', thinking: 'high', summaryLength: 'brief' },
+    }, { mode: 'save' });
+    expect(res).toEqual({ ok: true, warnings: [] });
+  });
 });
 
 describe('validatePack: bench member resolution', () => {
