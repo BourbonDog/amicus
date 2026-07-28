@@ -5,7 +5,7 @@
  * on MCP council runs from Claude Desktop. Returns the decision and reason.
  *
  * Decision order (spec §6 guard 4):
- * 1. uiParam === false → 'param-suppressed' (explicit user request beats everything except hard guards)
+ * 1. uiParam === false → 'param-suppressed' (explicit user request beats everything, checked first)
  * 2. Hard guards (always checked, beat even explicit true):
  *    - !electronUsable → 'electron-absent'
  *    - platform === 'linux' && !env.DISPLAY → 'no-display'
@@ -31,7 +31,7 @@ function shouldAutoOpenWorkspace({
   autoOpenConfig,
   uiParam,
 }) {
-  // Step 1: uiParam === false beats everything except hard guards
+  // Step 1: uiParam === false beats everything (checked first)
   if (uiParam === false) {
     return { open: false, reason: 'param-suppressed' };
   }

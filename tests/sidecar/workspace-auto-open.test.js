@@ -20,6 +20,7 @@ describe('shouldAutoOpenWorkspace', () => {
     [{}, true, 'ok'],
     [{ uiParam: false }, false, 'param-suppressed'],
     [{ uiParam: false, autoOpenConfig: false }, false, 'param-suppressed'],
+    [{ uiParam: false, electronUsable: false }, false, 'param-suppressed'],
     [{ autoOpenConfig: false }, false, 'config-disabled'],
     [{ autoOpenConfig: false, uiParam: true }, true, 'ok'],
     [{ client: 'cowork' }, false, 'client-not-code-local'],
