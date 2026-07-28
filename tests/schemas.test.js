@@ -179,6 +179,8 @@ describe('published council-family schemas validate real builder output (v4.0 §
       options: { maxCost: 2, timeoutMinutes: 10, gateway: 'auto' },
       // v4.5 Task 12 (B7/F5): additive — present only when the run was launched via --pack.
       pack: { name: 'sec-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
+      // v4.5 Task 5 (F3): template metadata — present only when the run was launched via --template.
+      template: { name: 'x', hash: 'abcdef123456' },
       usage: { cost: { amount: 1.1, source: 'reported' } },
       exitCode: 0
     };

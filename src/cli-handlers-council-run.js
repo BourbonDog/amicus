@@ -119,11 +119,12 @@ async function handleCouncilRun(args) {
   // block, so a pack-filled args.template renders through that single
   // existing application point exactly like a typed --template.
   let packRecord = null;
+  const explicitKeys = args.__explicit || new Set();
   if (args.pack !== undefined) {
     const { applyPackToArgs } = require('./pack/pack-resolve');
     const pr = applyPackToArgs({
       packRef: args.pack, expectedKind: 'council', args,
-      explicit: args.__explicit || new Set(), useJson,
+      explicit: explicitKeys, useJson,
     });
     if (pr.error) { return failJson(useJson, pr.error); }
     for (const n of pr.notices) { process.stderr.write(n + '\n'); }
@@ -132,7 +133,7 @@ async function handleCouncilRun(args) {
   // 2026-07-28 ruling (Task-11 review): attribute a pre-flight failure to the
   // pack that supplied the failing value — ONLY when the pack filled it (an
   // explicit flag always wins and is never "blamed" on the pack).
-  const packSuffix = (key) => (packRecord && !(args.__explicit || new Set()).has(key))
+  const packSuffix = (key) => (packRecord && args[key] !== undefined && !explicitKeys.has(key))
     ? ` (set by pack '${packRecord.name}')` : '';
 
   // --prompt-file required; inline --prompt rejected (councils always have

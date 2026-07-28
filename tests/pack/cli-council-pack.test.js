@@ -102,6 +102,13 @@ const CRITIC_LENSES_CONFLICT_PACK = () => ({
   description: 'x', bench: 'trio', chair: null, critic: 'alpha', lenses: ['x', 'y'],
   options: {}, briefing: {},
 });
+// F2 (v4.5 Task 12): array bench with default-chair collision, no chair field.
+// The pack never fills `args.chair`, so the default 'deepseek' is NOT blamed on it.
+const DEFAULT_CHAIR_COLLISION_PACK = () => ({
+  schemaVersion: 1, type: 'pack', name: 'default-chair-collision', version: '1.0.0', kind: 'council',
+  description: 'x', bench: ['deepseek', 'gpt'], chair: undefined, critic: null, lenses: null,
+  options: {}, briefing: {},
+});
 
 describe('--pack reaches runCouncil (happy path)', () => {
   test('no --models: pack bench/chair/options + opts.pack all reach runCouncil', async () => {
@@ -211,6 +218,21 @@ describe('pack-attributed pre-flight errors (2026-07-28 ruling a)', () => {
     expect(code).toBe(1);
     const doc = JSON.parse(out.mock.calls[0][0]);
     expect(doc.error.message).toContain("chair 'beta' is a bench seat");
+    expect(doc.error.message).not.toContain('set by pack');
+  });
+
+  test('the DEFAULT chair colliding with a pack bench is NOT blamed on the pack', async () => {
+    // v4.5 Task 12 F2 (2026-07-28 ruling): packSuffix requires the pack to have
+    // actually filled the key. A pack with bench=['deepseek','gpt'] and NO chair
+    // field never fills args.chair; the handler's CHAIR_DEFAULT ('deepseek')
+    // collides with the bench. The error must NOT append " (set by pack '...')"
+    // because the pack did not set the chair — the default did. Uses real CLI
+    // arg parsing with --pack and --prompt-file, nothing else typed.
+    store().writePack(DEFAULT_CHAIR_COLLISION_PACK());
+    const code = await handleCouncilRun(runArgs(['--pack', 'default-chair-collision']));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out.mock.calls[0][0]);
+    expect(doc.error.message).toContain("chair 'deepseek' is a bench seat");
     expect(doc.error.message).not.toContain('set by pack');
   });
 });
