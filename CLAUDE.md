@@ -141,6 +141,7 @@ src/
 │   └── watch-render.js
 ├── pack/
 │   ├── pack-cli.js
+│   ├── pack-forward.js
 │   ├── pack-resolve.js
 │   ├── pack-store.js
 │   └── pack-validate.js
@@ -483,6 +484,7 @@ evals/
 | `observe/on-complete.js` |  | `buildHookEnv()`, `runOnComplete()`, `fireWaveOnComplete()`, `fireCouncilOnComplete()`, `HOOK_TIMEOUT_MS()` |
 | `observe/watch-render.js` |  | `renderTable()`, `renderPlainLines()`, `mapExitCode()`, `emitJsonChange()`, `runWatchLoop()` |
 | `pack/pack-cli.js` |  | `applyPackOrExit()` |
+| `pack/pack-forward.js` |  | `prepareForward()` |
 | `pack/pack-resolve.js` |  | `applyPackToArgs()`, `applyPackToMcpInput()` |
 | `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
 | `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |

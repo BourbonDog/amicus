@@ -271,6 +271,19 @@ function spawnSidecarProcess(args, sessionDir) {
   return child;
 }
 
+/** v4.5 Wave-1 review fix (I1/I2): validates/dry-runs a pack-forwarded
+ * maxCost/template (see src/pack/pack-forward.js) — a no-op when the pack
+ * forwarded neither knob. Shared by amicus_fanout and amicus_start (both
+ * build their OWN error response below; the two tools use different shapes). */
+function checkPackForward(packForward, packRecord, prompt, project) {
+  if (packForward.maxCost === undefined && packForward.template === undefined) {
+    return { notices: [] };
+  }
+  return require('./pack/pack-forward').prepareForward({
+    forward: packForward, packRef: packRecord.name, prompt, project,
+  });
+}
+
 /** Tool handler implementations */
 const handlers = {
   async amicus_start(input, project, mcpServer) {
@@ -355,6 +368,15 @@ const handlers = {
     const resolvedModel = routeResult.executableId;
 
     const cwd = project || getProjectDir(input.project);
+
+    // v4.5 Wave-1 review fix (I1/I2): validated ONCE, before EITHER downstream
+    // path does anything spend-adjacent — parity holds BY CONSTRUCTION.
+    const fwd = checkPackForward(packForward, packRecord, input.prompt, cwd);
+    if (fwd.error) {
+      const { buildErrorDoc } = require('./utils/error-doc');
+      return { isError: true, content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(fwd.error)) }] };
+    }
+
     const { generateTaskId } = require('./sidecar/start');
     const taskId = generateTaskId();
 
@@ -407,38 +429,22 @@ const handlers = {
       // Shared server path: headless only, delegates to runHeadless()
       let sessionId;
       try {
-        // v4.5 HOLD-gate decision 1 (parity): apply a pack-forwarded
-        // template/maxCost on THIS path too, before any session/spend action —
-        // "behavior parity between the two amicus_start paths is a hard
-        // requirement", so a pack must not behave differently depending on
-        // which one fired. Mirrors the CLI's own ordering (cli-handlers-run.js
-        // applies --template, then the budget gate, both before startAmicus)
-        // and the council MCP path's template pre-render (mcp-council-run.js's
-        // template block). Notices collected LOCALLY, not into the shared
-        // packNotices: if ensureServer/createSession below throws and this
-        // whole branch falls through to the spawn-fallback catch, a stray
-        // notice from this abandoned attempt must never leak into the
-        // spawn-fallback's own response.
-        const inProcessNotices = [];
-        let renderedPrompt = input.prompt;
-        if (packForward.template !== undefined) {
-          const { applyTemplate } = require('./template/apply');
-          const t = applyTemplate({ templateRef: packForward.template, prompt: input.prompt, project: cwd });
-          if (t.error) {
-            const { buildErrorDoc } = require('./utils/error-doc');
-            return { isError: true, content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(t.error)) }] };
-          }
-          renderedPrompt = t.prompt;
-          inProcessNotices.push(...t.notices);
-        }
+        // v4.5 decision 1 + Wave-1 fix (I1/I2): the template was already
+        // rendered by the shared prepareForward call above — reuse its text
+        // instead of rendering again. Notices stay LOCAL (not packNotices):
+        // a fall-through to the spawn-fallback catch must never leak one.
+        const inProcessNotices = [...fwd.notices];
+        const renderedPrompt = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
         if (packForward.maxCost !== undefined) {
+          // fwd.maxCost is already validated (I2); the ceiling gate itself
+          // stays here (needs resolvedModel/pricing, unavailable to pack-forward.js).
           const { lookupPricing } = require('./utils/pricing');
           const { checkBudget, formatBudgetError } = require('./sidecar/budget');
           const { loadConfig } = require('./utils/config');
           const cfg = loadConfig() || {};
           const soloLeg = { modelInput: input.model || resolvedModel, model: resolvedModel, pricing: lookupPricing(resolvedModel) };
           const budget = checkBudget([soloLeg], {
-            maxCostPerMtok: cfg.maxCostPerMtok, maxCost: packForward.maxCost,
+            maxCostPerMtok: cfg.maxCostPerMtok, maxCost: fwd.maxCost,
             promptChars: (renderedPrompt && renderedPrompt.length) || 0,
           });
           if (!budget.ok) {
@@ -1224,6 +1230,12 @@ const handlers = {
       packNotices.push(...pr.notices);
       packForward = pr.forward;
     }
+    // v4.5 Wave-1 review fix (I1/I2): validated HERE, before any wave dir /
+    // metadata write — never blind. Same posture as the pack-error branch
+    // above (plain text + appended hint; this handler is born-fenced, not JSON).
+    const fwd = checkPackForward(packForward, packRecord, input.prompt, cwd);
+    if (fwd.error) { return textResult(fwd.error.message + (fwd.error.hint ? `\n${fwd.error.hint}` : ''), true); }
+    packNotices.push(...fwd.notices);
 
     // Resolve a single effective models list (council OR models), validated
     // BEFORE any wave dir / metadata is written so a bad request never strands

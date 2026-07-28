@@ -289,7 +289,50 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     expect(fallbackSection).toContain("'--template'");
   });
 
-  test('amicus_start\'s in-process shared-server path applies packForward.template (render) and packForward.maxCost (budget gate) BEFORE createSession — parity with the spawn-fallback path', () => {
+  // v4.5 Wave-1 REVIEW FIX (I1/I2): superseded the single test that used to
+  // live here ("...in-process shared-server path applies packForward.template
+  // (render) and packForward.maxCost (budget gate) BEFORE createSession").
+  // That test pinned the OLD (buggy) shape — a SECOND, un-validated
+  // applyTemplate call inline in this branch. The fix moves validation/dry-run
+  // of BOTH knobs into ONE upfront `prepareForward` call shared by both of
+  // this handler's downstream paths (see src/pack/pack-forward.js); the two
+  // tests below assert the new, stronger shape directly instead of freezing
+  // the obsoleted one (same precedent as this branch's own Wave-1 report:
+  // "tests/mcp-start-metadata.test.js's ... asserted the literal briefing:
+  // input.prompt — broke once briefing became renderedPrompt — fixed to
+  // assert the new literal").
+  test('mcp-server.js defines a shared checkPackForward helper that delegates to pack-forward.js\'s prepareForward', () => {
+    const fnStart = src.indexOf('function checkPackForward(');
+    expect(fnStart).toBeGreaterThan(-1);
+    const fnEnd = src.indexOf('\n}\n', fnStart);
+    const fn = src.slice(fnStart, fnEnd);
+    expect(fn).toContain("require('./pack/pack-forward')");
+    expect(fn).toContain('prepareForward');
+    // Defined once, outside (before) both handlers — never re-derived per call site.
+    expect(fnStart).toBeLessThan(src.indexOf('async amicus_start('));
+  });
+
+  test('amicus_start validates/dry-runs a pack-forwarded maxCost/template via checkPackForward ONCE, before EITHER downstream path (the shared-server branch or the spawn-fallback)', () => {
+    const start = src.indexOf('async amicus_start(');
+    const end = src.indexOf('async amicus_status(', start);
+    const handler = src.slice(start, end);
+    const prepareIdx = handler.indexOf('checkPackForward(');
+    expect(prepareIdx).toBeGreaterThan(-1);
+    expect(prepareIdx).toBeLessThan(handler.indexOf('sharedServer.enabled && input.noUi'));
+    expect(prepareIdx).toBeLessThan(handler.indexOf('spawnSidecarProcess'));
+  });
+
+  test('amicus_fanout validates/dry-runs a pack-forwarded maxCost/template via checkPackForward before any wave dir / metadata write', () => {
+    const start = src.indexOf('async amicus_fanout(');
+    const end = src.indexOf('async amicus_council_tally(', start);
+    const handler = src.slice(start, end);
+    const prepareIdx = handler.indexOf('checkPackForward(');
+    expect(prepareIdx).toBeGreaterThan(-1);
+    expect(prepareIdx).toBeLessThan(handler.indexOf("'metadata.json'"));
+    expect(prepareIdx).toBeLessThan(handler.indexOf('spawnSidecarProcess'));
+  });
+
+  test('amicus_start\'s in-process shared-server path reuses the pre-validated fwd.renderedPrompt/fwd.maxCost (no second template render) BEFORE createSession — parity with the spawn-fallback path', () => {
     const start = src.indexOf('async amicus_start(');
     const end = src.indexOf('async amicus_status(', start);
     const handler = src.slice(start, end);
@@ -298,10 +341,15 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     const createSessionIdx = handler.indexOf('await createSession(', sharedIdx);
     expect(createSessionIdx).toBeGreaterThan(sharedIdx);
     const preSpend = handler.slice(sharedIdx, createSessionIdx);
-    expect(preSpend).toContain('applyTemplate');
+    // The ceiling GATE itself (needs resolvedModel/pricing, unavailable to the
+    // pack-domain pack-forward.js module) still runs here, fed the
+    // already-validated fwd.maxCost; the template is NOT rendered a second
+    // time (that already happened once, in the shared prepareForward call
+    // above, before sharedIdx).
     expect(preSpend).toContain('checkBudget');
-    expect(preSpend).toMatch(/packForward\.template/);
-    expect(preSpend).toMatch(/packForward\.maxCost/);
+    expect(preSpend).toMatch(/fwd\.maxCost/);
+    expect(preSpend).toMatch(/fwd\.renderedPrompt/);
+    expect(preSpend).not.toContain("require('./template/apply')");
   });
 });
 
@@ -490,5 +538,115 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     expect(res.error.code).toBe(ERROR_CODES.PACK_KIND_MISMATCH);
     expect(res.error.message).toContain('fanout');
     expect(res.error.message).toContain('council');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Wave-1 review fix wave (I1/I2/I3): pack-forwarded maxCost/template must be
+// validated BEFORE any spawn or state write on amicus_fanout, never blind.
+// ---------------------------------------------------------------------------
+
+describe('amicus_fanout: pre-spend validation of pack-forwarded maxCost/template', () => {
+  const FANOUT_TEMPLATE_NEEDS_ARTIFACT_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'fanout-review-template-pack', version: '1.0.0', kind: 'fanout',
+    description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: {}, briefing: { template: 'review' },
+  });
+  const FANOUT_STRING_MAXCOST_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'fanout-string-maxcost-pack', version: '1.0.0', kind: 'fanout',
+    description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: { maxCost: '2.00' }, briefing: {},
+  });
+
+  // child_process.spawn has no DI seam (Wave-1 report: confirmed no injectable
+  // spawn seam) — mocked per-call via jest.isolateModulesAsync + jest.doMock,
+  // the same idiom tests/mcp-start-metadata.test.js already established for
+  // exercising a REAL handler call without launching a real child process.
+  async function callFanoutWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length };
+  }
+
+  function waveDirCount(project) {
+    const sessBase = path.join(project, '.claude', 'amicus_sessions');
+    return fs.existsSync(sessBase) ? fs.readdirSync(sessBase).length : 0;
+  }
+
+  test('I1: a pack template needing an artifact (review) fails pre-spend — isError, NO wave dir, NO spawn (never strands a pid-less running wave)', async () => {
+    store().writePack(FANOUT_TEMPLATE_NEEDS_ARTIFACT_PACK());
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { pack: 'fanout-review-template-pack', prompt: 'Review this.' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/artifact/);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('I2: a pack with a non-numeric (string) maxCost fails pre-spend — isError, NO wave dir, NO spawn (never runs uncapped)', async () => {
+    store().writePack(FANOUT_STRING_MAXCOST_PACK());
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { pack: 'fanout-string-maxcost-pack', prompt: 'Do the thing.' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('fanout-string-maxcost-pack');
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('valid forwarded maxCost/template still spawn normally (no regression)', async () => {
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'fanout-valid-forward-pack', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: { maxCost: 5 }, briefing: {},
+    });
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { pack: 'fanout-valid-forward-pack', prompt: 'Do the thing.' }, tmp);
+    expect(result.isError).toBeUndefined();
+    expect(spawnCallCount).toBe(1);
+    expect(waveDirCount(tmp)).toBe(1);
+  });
+});
+
+describe('amicus_start spawn-fallback: pre-spend validation of pack-forwarded maxCost/template', () => {
+  const SOLO_TEMPLATE_NEEDS_ARTIFACT_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'solo-review-template-pack', version: '1.0.0', kind: 'solo',
+    description: 'x', model: 'vendorx/solo-model', options: {}, briefing: { template: 'review' },
+  });
+
+  // Same idiom as the amicus_fanout describe block above, plus a route-launch
+  // stub (mirrors tests/mcp-start-metadata.test.js's file-level mock) — model
+  // routing runs BEFORE this handler's pack-forward validation and would
+  // otherwise need a real catalog/API key to resolve.
+  async function callStartWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      jest.doMock('../../src/utils/route-launch', () => ({
+        resolveRouteForLaunch: jest.fn(async ({ model }) => ({
+          kind: 'resolved', gateway: 'direct', executableId: model, provenance: {},
+        })),
+      }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_start(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length };
+  }
+
+  function sessionDirCount(project) {
+    const sessBase = path.join(project, '.claude', 'amicus_sessions');
+    return fs.existsSync(sessBase) ? fs.readdirSync(sessBase).length : 0;
+  }
+
+  test('I1: a pack template needing an artifact (review) fails pre-spend on the spawn-fallback path — isError, NO session dir, NO spawn', async () => {
+    store().writePack(SOLO_TEMPLATE_NEEDS_ARTIFACT_PACK());
+    const { result, spawnCallCount } = await callStartWithMockedSpawn(
+      { pack: 'solo-review-template-pack', prompt: 'Review this.', model: 'vendorx/solo-model' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/artifact/);
+    expect(spawnCallCount).toBe(0);
+    expect(sessionDirCount(tmp)).toBe(0);
   });
 });
