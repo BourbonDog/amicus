@@ -650,6 +650,11 @@ Options for 'init':
   Runs skill install + MCP registration on demand (for plugin-channel /
   --ignore-scripts installs, a failed postinstall, or repairing deleted
   ~/.claude state). No flags registers both Claude Code and Claude Desktop.
+`,
+  template: `
+Options for 'template':
+  amicus template list [--json]           List templates (built-ins marked)
+  amicus template show <name|path> [--json]  Print a template
 `
 };
 

@@ -293,6 +293,7 @@ src/
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
 ├── cli-handlers-spend.js
 ├── cli-handlers-status.js  # `amicus status <task_id>` — one-shot human/JSON status for a session or wave.
+├── cli-handlers-template.js
 ├── cli-handlers-watch.js
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
@@ -417,6 +418,7 @@ evals/
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
 | `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()`, `filterRows()` |
 | `cli-handlers-status.js` | `amicus status <task_id>` — one-shot human/JSON status for a session or wave. | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()`, `formatCouncilHuman()` |
+| `cli-handlers-template.js` |  | `handleTemplate()` |
 | `cli-handlers-watch.js` |  | `handleWatch()`, `resolveWatchTarget()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `DEFAULTS()` |
