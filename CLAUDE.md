@@ -183,7 +183,8 @@ src/
 │   ├── wave-progress.js
 │   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 ├── template/
-│   └── render.js
+│   ├── render.js
+│   └── store.js
 ├── utils/
 │   ├── abort-coordinator.js
 │   ├── abort-result.js  # The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
@@ -512,6 +513,7 @@ evals/
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
+| `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |
 | `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |
