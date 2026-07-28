@@ -71,12 +71,12 @@ function getTools() {
         'files of interest, success criteria.'
       ),
       agent: z.enum(['Chat', 'Plan', 'Build']).optional()
-        .default('Chat').describe(
+        .describe(
           'Agent mode. Chat (interactive default; headless runs auto-convert ' +
           'to Build): reads auto, writes ask permission. Plan: read-only ' +
           'analysis. Build: full auto (all operations approved).'
         ),
-      noUi: z.boolean().optional().default(false).describe(
+      noUi: z.boolean().optional().describe(
         'Run headless without GUI. Default false (opens Electron window).'
       ),
       thinking: z.enum([
@@ -101,7 +101,7 @@ function getTools() {
         'Fold summary verbosity. brief: key findings only. normal (default): full ' +
         'structured output. verbose: maximum detail.'
       ),
-      includeContext: z.boolean().optional().default(true).describe(
+      includeContext: z.boolean().optional().describe(
         'Whether to include parent conversation history as context. '
         + 'Default: true. Set to false when the briefing is self-contained '
         + 'and does not depend on prior conversation. See amicus_guide for guidance.'
@@ -351,8 +351,9 @@ function getTools() {
       summaryLength: z.enum(['brief', 'normal', 'verbose']).optional().describe(
         'Summary verbosity for every leg.'
       ),
-      includeContext: z.boolean().optional().default(true).describe(
-        'Include parent conversation context (built once, shared by all legs). Set false for self-contained briefings.'
+      includeContext: z.boolean().optional().describe(
+        'Include parent conversation context (built once, shared by all legs). ' +
+        'Default: true. Set false for self-contained briefings.'
       ),
       coworkProcess: z.string().optional().describe(
         'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +

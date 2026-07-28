@@ -366,8 +366,14 @@ const handlers = {
     // resolvedModel is always defined here — a routing failure already
     // returned above — and is the router's executableId, not the raw alias.
     args.push('--model', resolvedModel);
-    const agent = (input.noUi && (!input.agent || input.agent.toLowerCase() === 'chat'))
-      ? 'build' : input.agent;
+    // v4.5 Task 15 fix wave 2 (Finding 1): agent/noUi no longer carry a Zod
+    // .default() (see mcp-tools.js) — an omitted key is now genuinely absent
+    // here, so a pack can fill it. Preserve today's effective default ('Chat')
+    // at this READ site instead: the resolved value is identical whether the
+    // key was never set, or a caller/pack explicitly wrote 'Chat'.
+    const agentInput = input.agent || 'Chat';
+    const agent = (input.noUi && agentInput.toLowerCase() === 'chat')
+      ? 'build' : agentInput;
     if (agent) { args.push('--agent', agent); }
     if (input.noUi) { args.push('--no-ui'); }
     if (input.thinking) { args.push('--thinking', input.thinking); }

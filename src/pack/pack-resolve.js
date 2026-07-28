@@ -34,6 +34,8 @@ const CONTEXT_OPTION_KNOBS = [
 ];
 /** Concrete command name per pack kind, for the KIND_MISMATCH message (never "this command"). */
 const COMMAND_NAME_BY_KIND = { council: 'council run', fanout: 'fanout', solo: 'start' };
+/** MCP tool name per pack kind, for the Finding-2 (Task 15 review) orphan-knob notice below. */
+const MCP_TOOL_NAME_BY_KIND = { council: 'amicus_council_run', fanout: 'amicus_fanout', solo: 'amicus_start' };
 
 /**
  * council/fanout only: `bench` fills `args.council` (by-name) or `args.models`
@@ -176,6 +178,15 @@ function fromArgValue(argKey, value) {
  * pack-resolve is exactly the mistake a prior review caught (progress.md,
  * Task-12 entry: "packSuffix is council-local; if fanout/solo need attribution,
  * centralize 'pack-filled' in pack-resolve rather than re-deriving").
+ *
+ * Fix wave 2 (Task 15 review, Finding 2): a pack knob `applyPackToArgs` fills
+ * but `paramMap` has no MCP destination for (e.g. council's `agent`/`thinking`/
+ * `summary-length`, fanout/solo's `max-cost`/`template`) would otherwise be a
+ * silent dead-fill — written into the local `args` bridge, then dropped on the
+ * floor because the write-back loop below only ever visits `paramMap` entries.
+ * Made loud instead: every `args` key with no `paramMap` destination becomes one
+ * notice, naming the pack, the knob, and the MCP tool. Still never forwarded to
+ * a spawned child argv (that question is deliberately deferred to the human).
  * @param {{packRef: string, expectedKind: 'council'|'fanout'|'solo',
  *   input: object, paramMap: Object<string, string|{argKey: string, invert: true}>}} opts
  *   `paramMap` maps each MCP input key a tool exposes to the CLI arg-key name
@@ -203,6 +214,21 @@ function applyPackToMcpInput({ packRef, expectedKind, input, paramMap }) {
   const pr = applyPackToArgs({ packRef, expectedKind, args, explicit });
   if (pr.error) { return { error: pr.error }; }
 
+  // Finding 2: diff every key applyPackToArgs touched (explicit bridge seeds +
+  // pack fills) against paramMap's own destination argKeys. The bridging loop
+  // above only ever seeds `args` from a paramMap destination, so anything left
+  // over here was added by a pack fill, never a caller value — always a
+  // genuine dead-fill, never a false positive on an explicit param.
+  const destArgKeys = new Set(
+    Object.values(paramMap).map((entry) => (typeof entry === 'string' ? entry : entry.argKey))
+  );
+  const notices = [...pr.notices];
+  const toolName = MCP_TOOL_NAME_BY_KIND[expectedKind] || `amicus (${expectedKind})`;
+  for (const argKey of Object.keys(args)) {
+    if (destArgKeys.has(argKey)) { continue; }
+    notices.push(`Notice: pack '${pr.packRecord.name}' sets ${argKey}, which ${toolName} does not support over MCP — ignored.`);
+  }
+
   for (const [mcpKey, entry] of Object.entries(paramMap)) {
     const argKey = typeof entry === 'string' ? entry : entry.argKey;
     if (explicit.has(argKey) || !(argKey in args)) { continue; }
@@ -210,7 +236,7 @@ function applyPackToMcpInput({ packRef, expectedKind, input, paramMap }) {
     input[mcpKey] = invert ? !args[argKey] : fromArgValue(argKey, args[argKey]);
   }
 
-  return { packRecord: pr.packRecord, notices: pr.notices };
+  return { packRecord: pr.packRecord, notices };
 }
 
 module.exports = { applyPackToArgs, applyPackToMcpInput };
