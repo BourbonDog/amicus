@@ -222,7 +222,10 @@ async function handlePack(args) {
     const name = args._[2];
     if (!name) { return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: pack rm needs a <name>' }); }
     const res = rmPack(name);
-    if (!res.removed) { return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: pack '${name}' not found` }); }
+    // v4.5 HOLD-gate decision 3: unified with `pack show`'s missing-pack code
+    // (same hint idiom) — was BAD_ARGS, so a script switching on error.code got
+    // two different answers for the identical "no such pack" condition.
+    if (!res.removed) { return failJson(useJson, { code: ERROR_CODES.PACK_NOT_FOUND, message: `Error: pack '${name}' not found`, hint: 'amicus pack list' }); }
     const doc = { schemaVersion: SCHEMA_VERSION, type: 'pack-rm', name, removed: true };
     process.stdout.write(useJson ? JSON.stringify(doc, null, 2) + '\n' : `Removed pack '${name}'.\n`);
     return 0;

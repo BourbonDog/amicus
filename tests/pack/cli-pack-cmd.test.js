@@ -343,11 +343,15 @@ describe('handlePack: show missing pack -> PACK_NOT_FOUND', () => {
   });
 });
 
-describe('handlePack: rm nonexistent pack -> BAD_ARGS', () => {
-  test('exit 1', async () => {
+describe('handlePack: rm nonexistent pack -> PACK_NOT_FOUND (v4.5 HOLD-gate decision 3)', () => {
+  // Was BAD_ARGS — unified with `pack show`'s missing-pack code (same hint
+  // idiom) so a script switching on error.code gets one answer, not two, for
+  // the identical "no such pack" condition. One-way door closed pre-release.
+  test('exit 1, hint points at pack list', async () => {
     const code = await handlePack(pa(['rm', 'never-existed']));
     expect(code).toBe(1);
     expect(stderr()).toContain("pack 'never-existed' not found");
+    expect(stderr()).toContain('amicus pack list');
   });
 });
 
