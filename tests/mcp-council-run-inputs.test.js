@@ -72,6 +72,13 @@ test('the three inputs are declared on the amicus_council_run schema; tool count
     expect.arrayContaining(['debate', 'claudeReviewFile', 'noCostGate']));
 });
 
+// v4.5 Task 15 (B7/F5): `pack?` added to all three run tools — see
+// tests/pack/mcp-pack-params.test.js for the full behavioral/wiring contract.
+test('the pack input is declared on the amicus_council_run schema', () => {
+  const tool = getTools().find(t => t.name === 'amicus_council_run');
+  expect(Object.keys(tool.inputSchema)).toEqual(expect.arrayContaining(['pack']));
+});
+
 // v4.3 Task 3 (spec §7.1): a `council` preset input reaches the spawned CLI
 // child as the internal `--council-name` passthrough — resolveBenchInput
 // already expands the preset into `--models` (bench.join(',')), so without

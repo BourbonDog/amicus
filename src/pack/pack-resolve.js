@@ -144,4 +144,73 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
   };
 }
 
-module.exports = { applyPackToArgs };
+/** argKeys whose CLI-side value is a comma-joined string but whose MCP-side
+ * value is an array (`models`, `lenses`) — the two shapes multi-value knobs
+ * have always used on their respective sides, round-tripped by the bridge
+ * below so `applyPackToArgs`'s tables never need to know about MCP shapes. */
+const CSV_ARG_KEYS = new Set(['models', 'lenses']);
+
+function toArgValue(argKey, value) {
+  return (CSV_ARG_KEYS.has(argKey) && Array.isArray(value)) ? value.join(',') : value;
+}
+function fromArgValue(argKey, value) {
+  return (CSV_ARG_KEYS.has(argKey) && typeof value === 'string')
+    ? value.split(',').map((s) => s.trim()).filter(Boolean)
+    : value;
+}
+
+/**
+ * MCP entry point (Task 15, B7/F5): the same merge as `applyPackToArgs`, for a
+ * caller whose knobs live on an `input` object with MCP-shaped key names
+ * (camelCase, some renamed/inverted vs. the CLI's kebab-case arg keys) rather
+ * than parsed CLI `args`. Builds an args-shaped bridge object via `paramMap`,
+ * reuses `applyPackToArgs` UNCHANGED (same knob tables, same precedence, same
+ * notices), then copies pack-filled values back onto `input` under their
+ * MCP-facing names. An mcpKey already present on `input` is never touched
+ * (explicit wins) — `explicit` is built from the caller's OWN `Object.keys(input)`,
+ * mapped through `paramMap`, mirroring `args.__explicit` on the CLI side.
+ *
+ * Deliberately contains NO pack-domain knowledge (no knob names, no bench/chair/
+ * timeout logic) beyond the key-renaming in `paramMap` — that stays entirely in
+ * `applyPackToArgs`'s tables above. Re-deriving "is this pack-filled" outside
+ * pack-resolve is exactly the mistake a prior review caught (progress.md,
+ * Task-12 entry: "packSuffix is council-local; if fanout/solo need attribution,
+ * centralize 'pack-filled' in pack-resolve rather than re-deriving").
+ * @param {{packRef: string, expectedKind: 'council'|'fanout'|'solo',
+ *   input: object, paramMap: Object<string, string|{argKey: string, invert: true}>}} opts
+ *   `paramMap` maps each MCP input key a tool exposes to the CLI arg-key name
+ *   the same knob uses in the tables above (e.g. council's `timeoutMinutes` →
+ *   `'timeout'`, plain string = same-polarity rename/identity). An
+ *   `{argKey, invert: true}` entry flips a boolean both ways (fanout/solo's
+ *   `includeContext` vs. the CLI/pack-side `no-context` polarity). An MCP key
+ *   with no pack-fillable knob (e.g. `briefingFile`, `project`) is simply
+ *   omitted from `paramMap` and left untouched by this function.
+ * @returns {{packRecord: {name, version, hash, source}, notices: string[]}
+ *   | {error: {code, message, hint}}}
+ */
+function applyPackToMcpInput({ packRef, expectedKind, input, paramMap }) {
+  const args = {};
+  const explicit = new Set();
+  for (const mcpKey of Object.keys(input)) {
+    const entry = paramMap[mcpKey];
+    if (!entry) { continue; }
+    const argKey = typeof entry === 'string' ? entry : entry.argKey;
+    const invert = typeof entry === 'object' && !!entry.invert;
+    args[argKey] = invert ? !input[mcpKey] : toArgValue(argKey, input[mcpKey]);
+    explicit.add(argKey);
+  }
+
+  const pr = applyPackToArgs({ packRef, expectedKind, args, explicit });
+  if (pr.error) { return { error: pr.error }; }
+
+  for (const [mcpKey, entry] of Object.entries(paramMap)) {
+    const argKey = typeof entry === 'string' ? entry : entry.argKey;
+    if (explicit.has(argKey) || !(argKey in args)) { continue; }
+    const invert = typeof entry === 'object' && !!entry.invert;
+    input[mcpKey] = invert ? !args[argKey] : fromArgValue(argKey, args[argKey]);
+  }
+
+  return { packRecord: pr.packRecord, notices: pr.notices };
+}
+
+module.exports = { applyPackToArgs, applyPackToMcpInput };

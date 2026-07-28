@@ -120,6 +120,7 @@ function getTools() {
           'right (default): flush against the right edge. ' +
           'left: flush against the left edge. center: centered.'
         ),
+      pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -366,6 +367,7 @@ function getTools() {
         'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
         'commands are NOT accepted over MCP.'
       ),
+      pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -497,6 +499,7 @@ function getTools() {
         'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
         'commands are NOT accepted over MCP.'
       ),
+      pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
