@@ -95,7 +95,7 @@ function bodyReadings(rest) {
  * it has one) body is returned rather than null — deliberately. A malformed emit must
  * not look like an absent one: callers key off that distinction (validateFindings
  * reports NOT_PARSEABLE with a real body instead of NO_FENCED_BLOCK;
- * countAttemptedFindings returns null vs 0, which repairCanHonorContract then reads).
+ * countAttemptedFindings returns null vs 0, a distinction downstream callers key off).
  *
  * Every Stage-1/Stage-2 extractor funnels through here — validateFindings,
  * countAttemptedFindings, and parse-stage2's parseJudgeOutput / parseDebateDefense
@@ -156,9 +156,9 @@ function validateFindings(jsonText) {
   //
   // NOT_PARSEABLE, not NO_FENCED_BLOCK: the distinction is load-bearing. The model
   // emitted something broken, not nothing — and countAttemptedFindings must keep
-  // answering null (unverifiable) rather than 0 (a declared empty set), because
-  // repairCanHonorContract reads exactly that difference. It does: its own JSON.parse
-  // succeeds on `null`, and `Array.isArray(null.findings)` throws into its catch.
+  // answering null (unverifiable) rather than 0 (a declared empty set): its own
+  // JSON.parse succeeds on `null`, and `Array.isArray(null.findings)` throws into
+  // its catch.
   if (!parsed) {
     return { ok: false, findings: [], errors: [{ code: 'NOT_PARSEABLE',
       detail: `block body is ${JSON.stringify(parsed)}, not an object` }] };
@@ -234,42 +234,6 @@ function countAttemptedFindings(text) {
 }
 
 /**
- * A canonical repair that HONORS the contract for a review which declared zero
- * findings: the same (empty) set, with a real `overall`. Probe only — it is never
- * sent to a model.
- */
-const EMPTY_SET_REPAIR_PROBE =
-  '```json\n{"overall":"I read the material and found nothing to report.","findings":[]}\n```';
-
-/**
- * Can a repair that honors the count contract pass validation at all, given the
- * count the ORIGINAL declared?
- *
- * ⚠️ v4.4.1 review F2. The repair prompt's contract is "the same findings, fixed —
- * do not add or remove findings", and run-stages.js refuses a repair that changed
- * the count. When the original declared ZERO findings, the only contract-honoring
- * repair is another empty set — so if the validator rejects an empty set, every
- * outcome of that repair wave is predetermined: a compliant repair fails
- * validation, a non-compliant one is refused on the count. Up to two PAID solo
- * legs whose only reachable end state is 'unstructured'. Don't buy it.
- *
- * The answer is ASKED of the validator instead of hard-coded so the two rules can
- * never drift. Task 3 (LC-10) makes a well-formed empty set valid; the day it
- * lands this predicate starts returning true on its own, and the malformed empty
- * original (blank or missing `overall`) enters the repair loop again — where a
- * repair can now succeed by re-emitting zero findings with a real `overall`.
- *
- * @param {number|null} attemptedCount countAttemptedFindings(originalText)
- * @returns {boolean} false ⇒ skip the repair loop; the spend cannot buy an outcome.
- *   null (nothing to compare) is always repairable — that is the wave's main
- *   legitimate use.
- */
-function repairCanHonorContract(attemptedCount) {
-  if (attemptedCount !== 0) { return true; }
-  return validateFindings(EMPTY_SET_REPAIR_PROBE).ok;
-}
-
-/**
  * v4.0 §7: stamp the council v2 envelope onto a validateFindings result
  * (additive — ok/findings/errors stay top-level; existing key-readers keep
  * working). Used by `amicus council validate --json`.
@@ -283,5 +247,4 @@ function buildValidateDoc(result) {
 
 module.exports = {
   validateFindings, buildValidateDoc, SEVERITIES, lastJsonBlock, countAttemptedFindings,
-  repairCanHonorContract,
 };

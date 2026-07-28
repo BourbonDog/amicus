@@ -313,16 +313,10 @@ describe('runStage1', () => {
   });
 
   test('review F2: an original declaring ZERO findings never pays for a repair', async () => {
-    // The deadlock: EMPTY_FINDINGS puts this review into the repair loop, but the
-    // only contract-honoring repair is another empty set — which the validator
-    // rejects — while any repair that validates has ≥1 finding and is refused on
-    // the count. Two PAID solo legs with one reachable outcome. So the loop is
-    // skipped while that validator rule stands.
-    //
-    // Task-3-proof on purpose: LC-10 makes this same original VALID (findings []
-    // with a real `overall`), which also launches no solo — so the assertion below
-    // holds before and after. Only the conformance label moves ('unstructured'
-    // today, 'clean' after LC-10), which is why it is not asserted here.
+    // v4.5 FR-2: the repairCanHonorContract guard this test once exercised was
+    // deleted (constant-true post-LC-10). The behavior it pinned still holds for
+    // a simpler reason: this original VALIDATES (empty set + real overall), so
+    // the repair loop is never entered. solos === 0 remains the invariant.
     const original = 'I read it and found nothing.\n```json\n{"overall":"o","findings":[]}\n```';
     let solos = 0;
     const ctx = makeCtx({
@@ -360,9 +354,9 @@ describe('runStage1', () => {
 
   test('LC-10: an empty set with a BLANK overall still repairs — and can now succeed', async () => {
     // The other half of the flip. A hollow shell stays invalid, so it re-enters the
-    // repair loop that review F2's guard had closed off (repairCanHonorContract now
-    // returns true for a zero-finding original) — and the contract-honoring repair,
-    // another empty set with a real `overall`, now VALIDATES instead of being a
+    // repair loop (the review F2 guard that once skipped it for a zero-finding
+    // original is gone — v4.5 FR-2) — and the contract-honoring repair, another
+    // empty set with a real `overall`, now VALIDATES instead of being a
     // predetermined 'unstructured'. One paid leg that can actually buy an outcome.
     const original = 'Prose.\n```json\n{"overall":"","findings":[]}\n```';
     const repaired = '```json\n{"overall":"I read the material and found nothing.","findings":[]}\n```';

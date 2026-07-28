@@ -158,7 +158,7 @@ describe('lastJsonBlock (exported for parse-stage2)', () => {
  * lost the seat. Measured on a real paid run: 3 of 4 seats, 11 findings.
  */
 describe('lastJsonBlock — a fence INSIDE the body must not close the block', () => {
-  const { lastJsonBlock, countAttemptedFindings, repairCanHonorContract } = require('../../src/council/findings');
+  const { lastJsonBlock, countAttemptedFindings } = require('../../src/council/findings');
 
   const fencedClaims = {
     overall: 'The renderer discusses markdown, so the prose quotes fences.',
@@ -296,12 +296,7 @@ describe('lastJsonBlock — a fence INSIDE the body must not close the block', (
     expect(res.ok).toBe(true);
     expect(res.errors).toEqual([]);
     expect(res.findings).toEqual([]);
-    // countAttemptedFindings now answers 0 (a declared empty set) rather than null
-    // (unverifiable) — the difference repairCanHonorContract keys off. Zero still tracks
-    // the validator rather than short-circuiting: nothing about that linkage changed.
     expect(countAttemptedFindings(sameLine)).toBe(0);
-    expect(repairCanHonorContract(0)).toBe(validateFindings(
-      `${F}json\n{"overall":"nothing found","findings":[]}\n${F}`).ok);
   });
 
   /**
@@ -463,29 +458,6 @@ describe('countAttemptedFindings (LC-11: the repair contract is checked by cardi
   });
 });
 
-describe('repairCanHonorContract (review F2: do not buy a repair that cannot succeed)', () => {
-  const { repairCanHonorContract } = require('../../src/council/findings');
-
-  test('a real count is always repairable', () => {
-    expect(repairCanHonorContract(1)).toBe(true);
-    expect(repairCanHonorContract(7)).toBe(true);
-  });
-
-  test('null (nothing to compare) is repairable — the wave\'s main legitimate use', () => {
-    expect(repairCanHonorContract(null)).toBe(true);
-  });
-
-  test('zero TRACKS the validator rather than hard-coding an answer', () => {
-    // The only contract-honoring repair of a zero-finding original is another
-    // empty set, so this predicate must be exactly "does the validator accept an
-    // empty set?". Asserted as a linkage, not as today's value: Task 3 (LC-10)
-    // flips the validator, and this test must keep passing when it does.
-    const emptySetIsValid = validateFindings(
-      '```json\n{"overall":"nothing found","findings":[]}\n```').ok;
-    expect(repairCanHonorContract(0)).toBe(emptySetIsValid);
-  });
-});
-
 /**
  * ⚠️ v4.4.1 FINAL WHOLE-BRANCH REVIEW, finding C — a body of literal `null`.
  *
@@ -503,8 +475,7 @@ describe('repairCanHonorContract (review F2: do not buy a repair that cannot suc
  * carried the `!parsed` guard. validateFindings and parseJudgeOutput did not.
  */
 describe('a JSON body of literal `null` degrades instead of throwing (review C)', () => {
-  const { lastJsonBlock, countAttemptedFindings, repairCanHonorContract } =
-    require('../../src/council/findings');
+  const { lastJsonBlock, countAttemptedFindings } = require('../../src/council/findings');
   const nullBody = `${F}json\nnull\n${F}`;
 
   test('the extractor itself was never the problem — it returns the body', () => {
@@ -542,10 +513,6 @@ describe('a JSON body of literal `null` degrades instead of throwing (review C)'
   });
 
   test('countAttemptedFindings stays null (unverifiable) and NEVER 0', () => {
-    // Load-bearing: repairCanHonorContract reads null as "nothing to compare, so a
-    // repair is worth buying" and 0 as "the original declared an empty set". A `null`
-    // body declared nothing at all, so it must answer null.
     expect(countAttemptedFindings(nullBody)).toBeNull();
-    expect(repairCanHonorContract(countAttemptedFindings(nullBody))).toBe(true);
   });
 });

@@ -17,7 +17,7 @@
  * review still gets ranked in Stage 2).
  */
 
-const { validateFindings, countAttemptedFindings, repairCanHonorContract } = require('./findings');
+const { validateFindings, countAttemptedFindings } = require('./findings');
 const briefings = require('./briefings');
 const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
@@ -179,14 +179,17 @@ async function runStage1(ctx) {
     // prose actually narrates. null = absent/unparseable, so unverifiable — see
     // the push below.
     const attemptedCount = countAttemptedFindings(m.text);
-    // ⚠️ Review F2: never pay for a repair whose every outcome is already decided.
-    // An original declaring ZERO findings can only honor the contract by returning
-    // zero — so while the validator rejects an empty set (EMPTY_FINDINGS), a
-    // compliant repair fails validation and a non-compliant one is refused on the
-    // count below. Predicate, not a constant: Task 3 (LC-10) flips that validator
-    // rule, and this guard stops firing on its own when it does.
-    const repairable = repairCanHonorContract(attemptedCount);
-    while (!res.ok && repairable && attempts < 2 && !ctx.overBudget()) {
+    // ⚠️ Review F2 (RESOLVED — deleted v4.5, owner-ruled 2026-07-27): a
+    // repairCanHonorContract predicate used to sit here so a review declaring
+    // ZERO findings never paid for a repair while EMPTY_FINDINGS rejected empty
+    // sets — every outcome of that wave was predetermined. LC-10 (v4.4.1) made a
+    // well-formed empty set VALID, which flipped the predicate constant-true by
+    // its own design, so it was removed rather than left as a dead guard someone
+    // deletes silently later. ⚠️ If you ever make validateFindings reject empty
+    // sets again, you are re-arming the F2 deadlock: restore a repairability
+    // check here first. tests/council/run-stages.test.js "never pays for a
+    // repair" pins the observable behavior.
+    while (!res.ok && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
       const waveId = `${o.runId}-p${repairSeq}`;
