@@ -132,9 +132,47 @@ describe('handlePack: list with no packs', () => {
     expect(code).toBe(0);
     expect(stdout()).toBe('No packs.\n');
   });
+
+  test('corrupt pack file: exits 0, shows "No packs." AND warning', async () => {
+    const packsDir = store().packsDir();
+    fs.mkdirSync(packsDir, { recursive: true });
+    fs.writeFileSync(path.join(packsDir, 'broken.json'), 'not json at all');
+    const code = await handlePack(pa(['list']));
+    expect(code).toBe(0);
+    const output = stdout();
+    expect(output).toContain('No packs.');
+    expect(output).toContain('Warning:');
+    expect(output).toContain('broken.json');
+  });
 });
 
 // ---- --json doc shapes ----
+describe('handlePack: list with nameless pack entry', () => {
+  test('JSON-valid pack with no name key alongside good pack: renders both without throwing', async () => {
+    // Save a good pack first
+    let code = await handlePack(pa([
+      'save', 'good-pack', '--kind', 'solo', '--model', 'alpha',
+    ]));
+    expect(code).toBe(0);
+    out.mockClear();
+
+    // Manually write a JSON-valid pack with missing name key
+    const packsDir = store().packsDir();
+    fs.writeFileSync(path.join(packsDir, 'nameless.json'), JSON.stringify({
+      schemaVersion: 1, type: 'pack', version: '1.0.0', kind: 'solo', model: 'alpha',
+    }));
+
+    code = await handlePack(pa(['list']));
+    expect(code).toBe(0);
+    const output = stdout();
+    // Should render both packs (one good, one unnamed)
+    expect(output).toContain('Packs:');
+    expect(output).toContain('good-pack');
+    expect(output).toContain('(unnamed)');
+    expect(output).toContain('[solo]');
+  });
+});
+
 describe('handlePack: --json doc shapes', () => {
   test('save/list/show/rm each emit their documented schemaVersion + type', async () => {
     let code = await handlePack(pa(['save', 'json-pack', '--kind', 'solo', '--model', 'alpha', '--json']));

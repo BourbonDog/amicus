@@ -131,12 +131,19 @@ function buildPackFromRun(name, id, project, args) {
 }
 
 function renderPackList(doc) {
-  if (doc.packs.length === 0) { return 'No packs.\n'; }
-  const lines = doc.packs.map((p) => {
-    const desc = p.description ? ` — ${p.description}` : '';
-    return `  ${p.name.padEnd(20)} [${p.kind}] v${p.version}${desc}`;
-  });
-  let text = 'Packs:\n' + lines.join('\n') + '\n';
+  let text = '';
+  if (doc.packs.length === 0) {
+    text = 'No packs.\n';
+  } else {
+    const lines = doc.packs.map((p) => {
+      const name = String(p.name || '(unnamed)').padEnd(20);
+      const kind = String(p.kind || '(unknown)');
+      const version = String(p.version || '0.0.0');
+      const desc = p.description ? ` — ${p.description}` : '';
+      return `  ${name} [${kind}] v${version}${desc}`;
+    });
+    text = 'Packs:\n' + lines.join('\n') + '\n';
+  }
   for (const w of doc.warnings) { text += `Warning: ${w}\n`; }
   return text;
 }
