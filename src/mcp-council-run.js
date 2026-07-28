@@ -71,7 +71,8 @@ function resolveBenchInput(input) {
  * {runId, runDir} immediately (fenced).
  * @param {object} input tool input
  * @param {string} project resolved project dir
- * @param {{spawnFn: Function, clientName: string}} helpers injected by mcp-server
+ * @param {{spawnFn: Function, clientName: string, autoOpen?: {decide: Function, launch: Function}}} helpers
+ *   injected by mcp-server; `autoOpen` is a v4.5 test seam (real modules used when absent)
  */
 async function handleCouncilRunTool(input, project, helpers) {
   // Task 15 (spec §5.3): validate onComplete FIRST, before any run dir is
@@ -219,11 +220,42 @@ async function handleCouncilRunTool(input, project, helpers) {
   // the only code that later sees this council run reach terminal state.
   if (oc.mode === 'mcp-notify') { requestMcpNotify(runId); }
 
+  // ★ v4.5 auto-open (spec §6): decide via the pure helper, launch detached,
+  // never await, never fail the run. helpers.autoOpen is a test seam.
+  const ao = helpers.autoOpen || {
+    decide: (ctx) => require('./sidecar/workspace-auto-open').shouldAutoOpenWorkspace(ctx),
+    launch: (opts) => require('./sidecar/workspace-window').launchWorkspaceWindowDetached(opts),
+  };
+  let workspaceOpened = false;
+  let workspaceOpenReason = null;
+  try {
+    const { isElectronUsable } = require('./sidecar/electron-install');
+    const { getWorkspaceAutoOpen } = require('./utils/config');
+    const decision = ao.decide({
+      client: helpers.clientName,
+      electronUsable: isElectronUsable(),
+      platform: process.platform,
+      env: process.env,
+      autoOpenConfig: getWorkspaceAutoOpen(),
+      uiParam: input.ui,
+    });
+    if (decision.open) {
+      ao.launch({ project, runId });
+      workspaceOpened = true;
+    } else {
+      workspaceOpenReason = decision.reason;
+    }
+  } catch (err) {
+    workspaceOpenReason = `auto-open-failed: ${err.message}`;
+  }
+
   const body = JSON.stringify({
     schemaVersion: 2, type: 'council-run', runId, runDir, status: 'running',
     message: 'Council run started. Preferred: call amicus_wait with the runId — one blocking ' +
       'call replaces polling; re-call it while it returns timedOut: true. Fallback: poll ' +
       'amicus_status with the runId. Artifacts land in runDir (verdict.json, report.html).',
+    workspaceOpened,
+    ...(workspaceOpenReason ? { workspaceOpenReason } : {}),
   });
   // Born-fenced (spec §8): council MCP tool text is wrapped like amicus_read.
   const content = [{ type: 'text', text: fenceSidecarOutput(body) }];

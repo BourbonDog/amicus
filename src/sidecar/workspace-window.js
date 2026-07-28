@@ -59,4 +59,42 @@ async function launchWorkspaceWindow({ project, runId = '' }, deps = {}) {
   });
 }
 
-module.exports = { launchWorkspaceWindow };
+/**
+ * v4.5 auto-open: fire-and-forget Workspace launch for the MCP path.
+ * DELIBERATELY different from launchWorkspaceWindow above:
+ * - never provisions (isElectronUsable check only — ensureElectron can
+ *   DOWNLOAD Electron, which auto-open guard 3 forbids);
+ * - no stdout relay (the caller may be an MCP stdio server whose stdout IS
+ *   the JSON-RPC channel — relaying would corrupt the protocol);
+ * - detached + unref, returns immediately (the sibling's promise resolves
+ *   only when the window CLOSES, which no request path may wait on).
+ * @param {{project: string, runId?: string}} opts
+ * @param {{isElectronUsable?: Function, resolveElectronBinary?: Function, spawn?: Function}} [deps]
+ * @returns {{launched: boolean, reason?: string}}
+ */
+function launchWorkspaceWindowDetached({ project, runId = '' }, deps = {}) {
+  const usable = deps.isElectronUsable || require('./electron-install').isElectronUsable;
+  const resolveExe = deps.resolveElectronBinary || require('./electron-install').resolveElectronBinary;
+  const spawnFn = deps.spawn || spawn;
+  if (!usable()) { return { launched: false, reason: 'electron-absent' }; }
+  const electronPath = resolveExe() || getElectronPath();
+  const mainPath = path.join(__dirname, '..', '..', 'electron', 'main.js');
+  const env = {
+    ...process.env,
+    AMICUS_MODE: 'council-workspace',
+    AMICUS_PROJECT: project,
+    AMICUS_RUN_ID: runId || '',
+    AMICUS_FOLD_NONCE: generateFoldNonce(),
+  };
+  try {
+    const proc = spawnFn(electronPath, [mainPath], { env, detached: true, stdio: 'ignore' });
+    proc.unref();
+    logger.info('Auto-opened council workspace (detached)', { runId: runId || '(run list)' });
+    return { launched: true };
+  } catch (err) {
+    logger.debug('Workspace auto-open spawn failed (best-effort)', { error: err.message });
+    return { launched: false, reason: `spawn-failed: ${err.message}` };
+  }
+}
+
+module.exports = { launchWorkspaceWindow, launchWorkspaceWindowDetached };
