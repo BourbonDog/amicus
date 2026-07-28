@@ -31,7 +31,9 @@ shareable, and the flagship Council Workspace stops being opt-in on its best cli
   content block instead. Concretely, `amicus_start` and `amicus_fanout` have no MCP param for a
   pack's `briefing.template` or `options.maxCost` (both trigger the notice on either tool), and
   `amicus_fanout` additionally has none for `options.contextTurns` / `options.contextMaxTokens`.
-  `amicus_council_run` has no such gaps for the knobs its own schema exposes.
+  `amicus_council_run` has its own version of the same gap: a council pack's `options.agent`,
+  `options.thinking`, and `options.summaryLength` are valid pack fields with no destination in its
+  MCP schema, so they trigger the identical notice.
 - **Briefing templates.** `amicus template list|show`, plus `--template <name|path>` / `--artifact
   <file>` / `--var <k=v>` (repeatable) on `start` / `fanout` / `council run`, render a
   `{{variable}}` briefing before it's sent. Templates are Markdown files in
