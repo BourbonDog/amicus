@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/BourbonDog/amicus/schemas/progress.schema.json",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/progress.schema.json",
   "title": "Amicus leg/solo progress snapshot (progress.json)",
   "type": "object",
   "required": ["schemaVersion", "type", "stage", "updatedAt"],

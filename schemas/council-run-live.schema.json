@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/BourbonDog/amicus/schemas/council-run-live.schema.json",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/council-run-live.schema.json",
   "title": "Amicus composed live council-run doc (amicus_status/buildCouncilStatusPayload, view:'live')",
   "type": "object",
   "required": ["taskId", "type", "runId", "runDir", "status", "currentStage", "stages", "legsTotal", "legsComplete", "elapsed", "exitCode", "version"],
