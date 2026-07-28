@@ -240,8 +240,12 @@ async function handleCouncilRunTool(input, project, helpers) {
       uiParam: input.ui,
     });
     if (decision.open) {
-      ao.launch({ project, runId });
-      workspaceOpened = true;
+      const r = ao.launch({ project, runId });
+      if (r && r.launched === false) {
+        workspaceOpenReason = r.reason;
+      } else {
+        workspaceOpened = true;
+      }
     } else {
       workspaceOpenReason = decision.reason;
     }

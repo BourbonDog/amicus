@@ -88,6 +88,13 @@ function launchWorkspaceWindowDetached({ project, runId = '' }, deps = {}) {
   };
   try {
     const proc = spawnFn(electronPath, [mainPath], { env, detached: true, stdio: 'ignore' });
+    // Node emits spawn failures (ENOENT/EACCES/corrupt binary) as an async
+    // 'error' event on the child; an unlistened ChildProcess 'error' is an
+    // uncaught exception. The MCP server (`amicus mcp`) installs no
+    // uncaughtException handler (bin/amicus.js only does that for
+    // start/continue), so that would kill the JSON-RPC channel. Best-effort:
+    // just log it, matching the fire-and-forget contract of this function.
+    proc.on('error', (err) => logger.debug('Workspace auto-open child failed (best-effort)', { error: err.message }));
     proc.unref();
     logger.info('Auto-opened council workspace (detached)', { runId: runId || '(run list)' });
     return { launched: true };

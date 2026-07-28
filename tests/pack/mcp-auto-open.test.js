@@ -104,6 +104,23 @@ describe('amicus_council_run auto-open wiring', () => {
     expect(body.workspaceOpenReason).toMatch(/^auto-open-failed:/);
   });
 
+  // Review fix (wave 2): ao.launch's {launched:false, reason} return was being
+  // discarded, so a synchronous spawn-throw-turned-return still reported
+  // workspaceOpened:true — contradicting the field's meaning ("the spawn was
+  // issued"). This is distinct from the throw case above: launch() RETURNS a
+  // failure value here instead of throwing.
+  test('launch returning {launched:false, reason} is honored: workspaceOpened stays false and the reason is not overwritten to true', async () => {
+    const autoOpen = {
+      decide: () => ({ open: true, reason: 'ok' }),
+      launch: () => ({ launched: false, reason: 'spawn-failed: boom' }),
+    };
+    const res = await handleCouncilRunTool(input(), tmp, helpers({ autoOpen }));
+    expect(res.isError).toBeUndefined();
+    const body = parseFenced(res);
+    expect(body.workspaceOpened).toBe(false);
+    expect(body.workspaceOpenReason).toBe('spawn-failed: boom');
+  });
+
   test('no injected autoOpen (real wiring): a non-code-local client never opens, but the body still carries both fields', async () => {
     const res = await handleCouncilRunTool(input(), tmp, helpers());
     expect(res.isError).toBeUndefined();
@@ -111,6 +128,11 @@ describe('amicus_council_run auto-open wiring', () => {
     expect(body.workspaceOpened).toBe(false);
     expect(typeof body.workspaceOpenReason).toBe('string');
     expect(body.workspaceOpenReason.length).toBeGreaterThan(0);
+    // A broken require in the real fallback modules (helpers.autoOpen absent)
+    // would satisfy both assertions above via the outer catch's
+    // 'auto-open-failed: Cannot find module...' — pin that this is a genuine
+    // decide() reason (e.g. client-not-code-local), not a swallowed wiring bug.
+    expect(body.workspaceOpenReason).not.toMatch(/^auto-open-failed:/);
   });
 });
 
@@ -136,12 +158,16 @@ describe('amicus_council_run schema gains ui; tool count stays 16', () => {
 
 describe('launchWorkspaceWindowDetached', () => {
   const { launchWorkspaceWindowDetached } = require('../../src/sidecar/workspace-window');
+  // No drive-letter literals in tests (plan global) — build via path.join,
+  // matching the idiom already used across tests/utils/*-install*.test.js etc.
+  const FAKE_ELECTRON_PATH = path.join('C:', 'electron.exe');
+  const FAKE_PROJECT = path.join('C:', 'proj');
 
   test('not usable -> {launched:false, reason:"electron-absent"}, spawn never called', () => {
     const spawn = jest.fn();
     const res = launchWorkspaceWindowDetached({ project: '/p', runId: 'r1' }, {
       isElectronUsable: () => false,
-      resolveElectronBinary: () => 'C:\\electron.exe',
+      resolveElectronBinary: () => FAKE_ELECTRON_PATH,
       spawn,
     });
     expect(res).toEqual({ launched: false, reason: 'electron-absent' });
@@ -150,30 +176,34 @@ describe('launchWorkspaceWindowDetached', () => {
 
   test('usable -> spawns detached/ignore with the workspace env contract and unrefs the child', () => {
     const unref = jest.fn();
-    const spawn = jest.fn(() => ({ unref }));
-    const res = launchWorkspaceWindowDetached({ project: 'C:\\proj', runId: 'aaaa1111' }, {
+    const spawn = jest.fn(() => ({ unref, on: jest.fn() }));
+    const res = launchWorkspaceWindowDetached({ project: FAKE_PROJECT, runId: 'aaaa1111' }, {
       isElectronUsable: () => true,
-      resolveElectronBinary: () => 'C:\\electron.exe',
+      resolveElectronBinary: () => FAKE_ELECTRON_PATH,
       spawn,
     });
     expect(res).toEqual({ launched: true });
     expect(spawn).toHaveBeenCalledTimes(1);
     const [bin, args, opts] = spawn.mock.calls[0];
-    expect(bin).toBe('C:\\electron.exe');
+    expect(bin).toBe(FAKE_ELECTRON_PATH);
     expect(args[args.length - 1]).toMatch(/electron[\\/]+main\.js$/);
     expect(opts.detached).toBe(true);
     expect(opts.stdio).toBe('ignore');
     expect(opts.env).toMatchObject({
       AMICUS_MODE: 'council-workspace',
-      AMICUS_PROJECT: 'C:\\proj',
+      AMICUS_PROJECT: FAKE_PROJECT,
       AMICUS_RUN_ID: 'aaaa1111',
     });
+    // Env contract: the fold nonce must actually be a non-empty value, not
+    // just present-and-undefined-tolerant via toMatchObject's shallow check.
+    expect(typeof opts.env.AMICUS_FOLD_NONCE).toBe('string');
+    expect(opts.env.AMICUS_FOLD_NONCE.length).toBeGreaterThan(0);
     expect(unref).toHaveBeenCalledTimes(1);
   });
 
   test('empty runId still launches (run-list landing), AMICUS_RUN_ID is the empty string', () => {
     const unref = jest.fn();
-    const spawn = jest.fn(() => ({ unref }));
+    const spawn = jest.fn(() => ({ unref, on: jest.fn() }));
     const res = launchWorkspaceWindowDetached({ project: '/p' }, {
       isElectronUsable: () => true,
       resolveElectronBinary: () => 'electron',
@@ -192,6 +222,50 @@ describe('launchWorkspaceWindowDetached', () => {
     });
     expect(res.launched).toBe(false);
     expect(res.reason).toMatch(/^spawn-failed: ENOENT/);
+  });
+
+  // Review fix (wave 2, Fix 1): the spawned child previously got no 'error'
+  // listener. Node emits spawn failures (ENOENT/EACCES/corrupt binary) as an
+  // async 'error' event; an unlistened ChildProcess 'error' is an uncaught
+  // exception, and the MCP server (`amicus mcp`) installs no
+  // uncaughtException handler — that would kill the JSON-RPC channel.
+  test("attaches an 'error' listener to the detached child before unref, and the listener swallows the error instead of rethrowing", () => {
+    const order = [];
+    const onCalls = [];
+    const proc = {
+      on: (event, handler) => { order.push(`on:${event}`); onCalls.push({ event, handler }); },
+      unref: () => { order.push('unref'); },
+    };
+    const spawn = jest.fn(() => proc);
+    const res = launchWorkspaceWindowDetached({ project: '/p', runId: 'r1' }, {
+      isElectronUsable: () => true,
+      resolveElectronBinary: () => 'electron',
+      spawn,
+    });
+    expect(res).toEqual({ launched: true });
+    expect(onCalls).toHaveLength(1);
+    expect(onCalls[0].event).toBe('error');
+    expect(typeof onCalls[0].handler).toBe('function');
+    expect(order).toEqual(['on:error', 'unref']);
+    // Best-effort: invoking the handler (simulating the async spawn failure)
+    // must not throw — that's what stands between it and an uncaught exception.
+    expect(() => onCalls[0].handler(new Error('ENOENT'))).not.toThrow();
+  });
+
+  // Review fix (wave 2, Fix 1 pin): never-provisions guard, source-text idiom
+  // (matches the CLI pin below). The module legitimately imports
+  // ensureElectron for the sibling launchWorkspaceWindow, so the assertion is
+  // scoped to just this function's body, not the whole file.
+  test('source-text pin: the function body never mentions ensureElectron (never provisions Electron)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../../src/sidecar/workspace-window.js'), 'utf-8');
+    const marker = 'function launchWorkspaceWindowDetached';
+    const start = src.indexOf(marker);
+    expect(start).toBeGreaterThan(-1);
+    const rest = src.slice(start + marker.length);
+    const stops = [rest.indexOf('function '), rest.indexOf('module.exports')].filter((i) => i !== -1);
+    expect(stops.length).toBeGreaterThan(0);
+    const slice = rest.slice(0, Math.min(...stops));
+    expect(slice).not.toContain('ensureElectron');
   });
 });
 
