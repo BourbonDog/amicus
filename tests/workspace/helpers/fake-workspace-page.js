@@ -103,9 +103,27 @@ function makeFakeDom() {
     else if (isTextNode(node)) { node.parentNode = this; }
     return node;
   };
+  // v4.5 final-review T20-m1: ported from workspace-render.test.js's local FakeElement
+  // (that file's own comment has the full leftward-move counterexample) — the version
+  // this replaced resolved `ref`'s index (or decided to append) BEFORE removing `node`
+  // from wherever it already sat, so a same-parent move DUPLICATED node instead of
+  // relocating it (no current consumer moves an attached node, so this was latent, not
+  // yet a live bug). Real DOM move semantics: detach `node` FIRST, then resolve the
+  // insertion point against the post-removal list.
   FakeElement.prototype.insertBefore = function (node, ref) {
-    var idx = ref ? this.childNodes.indexOf(ref) : -1;
-    if (idx === -1) { return this.appendChild(node); }
+    var willAppend = ref === null || ref === undefined;
+    if (!willAppend && this.childNodes.indexOf(ref) === -1) {
+      // ref isn't actually a child here — real DOM throws NotFoundError; this shim
+      // no-ops instead, same convention as workspace-render.test.js's harness.
+      return node;
+    }
+    var oldParent = node instanceof FakeElement ? node.parentElement : (isTextNode(node) ? node.parentNode : null);
+    if (oldParent) {
+      var oldIdx = oldParent.childNodes.indexOf(node);
+      if (oldIdx !== -1) { oldParent.childNodes.splice(oldIdx, 1); }
+    }
+    if (willAppend) { return this.appendChild(node); }
+    var idx = this.childNodes.indexOf(ref);
     this.childNodes.splice(idx, 0, node);
     if (node instanceof FakeElement) { node.parentElement = this; node.parentNode = this; }
     else if (isTextNode(node)) { node.parentNode = this; }
