@@ -29,7 +29,15 @@ function applyTemplate({ templateRef, prompt, artifactFile, varList, project }) 
   }
 
   const vars = {};
-  for (const entry of varList || []) {
+  // F4 (Task-5 review): parseArgs' inline `--var=k=v` form takes the single-value
+  // branch, not the array-accumulation one, so varList arrives as a bare string
+  // instead of a one-element array — wrap it rather than let `for..of` iterate
+  // its characters. parseArgs itself is unchanged (plan-mandated, shared with
+  // --exclude-mcp); this coercion is the seam that absorbs both shapes.
+  const varArr = Array.isArray(varList)
+    ? varList
+    : (varList !== undefined && varList !== null) ? [varList] : [];
+  for (const entry of varArr) {
     const eq = String(entry).indexOf('=');
     if (eq < 1) {
       return { error: { code: ERROR_CODES.BAD_ARGS, message: `Error: --var expects key=value, got '${entry}'`, hint: null } };

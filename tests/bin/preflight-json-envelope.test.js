@@ -1,9 +1,30 @@
 'use strict';
 const path = require('path');
 
+// F2 (Task-5 review): the two TEMPLATE_NOT_FOUND "engine never invoked" cases below
+// (in the --template describe block) assert that directly rather than just claiming
+// it in the title. Real exports pass through via requireActual — only the engine
+// entry points the handlers would reach are replaced with spies. Same idiom as
+// tests/council/run-single-server.test.js and tests/template/cli-wiring.test.js.
+jest.mock('../../src/index', () => ({
+  ...jest.requireActual('../../src/index'),
+  startAmicus: jest.fn(),
+}));
+jest.mock('../../src/sidecar/fanout', () => ({
+  ...jest.requireActual('../../src/sidecar/fanout'),
+  runFanout: jest.fn(),
+}));
+
 // Import the bin module's handlers via the new extracted file.
 // handleStart/handleFanout live in src/cli-handlers-run.js (extracted from bin/amicus.js).
 const { handleStart, handleFanout } = require('../../src/cli-handlers-run');
+const { startAmicus } = require('../../src/index');
+const { runFanout } = require('../../src/sidecar/fanout');
+
+beforeEach(() => {
+  startAmicus.mockClear();
+  runFanout.mockClear();
+});
 
 function captureStdout(fn) {
   const out = [];
@@ -85,6 +106,7 @@ describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', 
     }));
     const doc = JSON.parse(out);
     expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
+    expect(startAmicus).not.toHaveBeenCalled();
   });
 
   it('start --json --artifact without --template → BAD_ARGS envelope', async () => {
@@ -106,5 +128,6 @@ describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', 
     }));
     const doc = JSON.parse(out);
     expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
+    expect(runFanout).not.toHaveBeenCalled();
   });
 });

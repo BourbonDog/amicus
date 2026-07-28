@@ -105,6 +105,25 @@ describe('run.json init + checkpoint', () => {
   });
 });
 
+// F1 (Task-5 review): initCouncilRun's `...(o.template ? { template: o.template } : {})`
+// seed (line 106) had zero direct coverage — pin both the present and absent cases.
+describe('initCouncilRun template seeding (F9 v4.5)', () => {
+  const baseOpts = () => ({
+    runId: 'abc123', runDir: runDirOf(), project: tmp,
+    models: ['gemini', 'gpt'], chair: 'deepseek', critic: null, lenses: null,
+  });
+
+  test('o.template present -> readRun(runDir).template deep-equals it', () => {
+    rs.initCouncilRun({ ...baseOpts(), template: { name: 'x', hash: 'abcdef123456' } });
+    expect(rs.readRun(runDirOf()).template).toEqual({ name: 'x', hash: 'abcdef123456' });
+  });
+
+  test('o.template absent -> "template" key is absent from run.json, not null', () => {
+    rs.initCouncilRun(baseOpts());
+    expect('template' in rs.readRun(runDirOf())).toBe(false);
+  });
+});
+
 /**
  * v4.4.1 council finding D6 — `checkpoint()` is a READ-MERGE-WRITE, pinned.
  *

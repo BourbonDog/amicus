@@ -34,6 +34,7 @@ async function handleStart(args) {
     const promptRes = resolvePromptSource(args);
     if (promptRes.error) { process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error })); }
     args.prompt = promptRes.prompt;
+    // Drop --prompt-file post-resolve or validateStartArgs re-trips its XOR guard.
     delete args['prompt-file'];
   }
   if (args.template !== undefined) {

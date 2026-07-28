@@ -75,4 +75,14 @@ describe('applyTemplate', () => {
     expect(bad.error.code).toBe('BAD_ARGS');
     expect(bad.error.message).toMatch(/--var expects key=value/);
   });
+
+  // F4 (Task-5 review): parseArgs' inline `--var=a=1` form yields a bare string,
+  // not a one-element array — applyTemplate must coerce rather than iterate it
+  // char-by-char.
+  test('--var= inline form: a bare string varList still renders {{var.*}}', () => {
+    userTemplate('t6', '{{var.a}}');
+    const res = load().applyTemplate({ templateRef: 't6', varList: 'a=1', project: '/p' });
+    expect(res.error).toBeUndefined();
+    expect(res.prompt).toBe('1');
+  });
 });
