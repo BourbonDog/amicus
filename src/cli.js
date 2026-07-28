@@ -678,8 +678,10 @@ Options for 'pack':
                                                          saved council name
                                 --model <model>          solo kind only
                                 --chair/--critic/--lenses    council kind only
-                                --timeout/--max-cost/--gateway/--agent/--thinking/
-                                --summary-length         shared run options
+                                --timeout/--max-cost/--gateway   shared run
+                                                         options
+                                --agent/--thinking/--summary-length   fanout/
+                                                         solo kind only
                                 --debate / --no-debate   council kind only
                                 --template <name|path>   briefing template
                                                          reference (not rendered)

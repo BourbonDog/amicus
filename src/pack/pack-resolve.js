@@ -166,13 +166,17 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
 const CSV_ARG_KEYS = new Set(['models', 'lenses']);
 
 /** Reverse of the knob tables above (argKey -> pack's own camelCase option
- * key), used ONLY in notice text (v4.5 decision 1b, T15-m10): a pack author
- * writes `contextTurns`, not the CLI's `context-turns` — naming the arg-key
- * in a notice is confusing at the exact moment it matters. Bespoke (non-table)
- * knobs — chair/critic/lenses/agent/debate/no-ui — already match on both
- * sides, so the plain-argKey fallback below is correct for them too. */
-const ARG_KEY_TO_OPT_KEY = Object.fromEntries(
-  [...COMMON_OPTION_KNOBS, ...CONTEXT_OPTION_KNOBS].map(([optKey, argKey]) => [argKey, optKey])
+ * key), used ONLY in notice text (v4.5 decision 1b, T15-m10) — naming a
+ * pack's own key is less confusing than the CLI's kebab-case arg-key. Most
+ * bespoke (non-table) knobs — chair/critic/lenses/agent/debate — share their
+ * argKey/option-key spelling, so the plain-argKey fallback is correct for
+ * them; `no-ui` does NOT (pack-side `noUi`) and is listed explicitly. `bench`
+ * fills EITHER args.council or args.models (never an argKey of its own) —
+ * accepted because both always have a real MCP destination, so a
+ * bench-derived value never actually reaches the notice path. */
+const ARG_KEY_TO_OPT_KEY = Object.assign(
+  Object.fromEntries([...COMMON_OPTION_KNOBS, ...CONTEXT_OPTION_KNOBS].map(([optKey, argKey]) => [argKey, optKey])),
+  { 'no-ui': 'noUi' },
 );
 
 /** argKeys forwarded instead of notice'd when a tool's paramMap has no
