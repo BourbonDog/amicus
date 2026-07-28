@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const liveModel = require('../../electron/workspace-ui/live-model');
 
 /**
@@ -74,19 +76,32 @@ function makeFakeDoc() {
     }
   };
   FakeElement.prototype.insertBefore = function insertBefore(node, referenceNode) {
-    if (referenceNode === null || referenceNode === undefined) {
+    var willAppend = referenceNode === null || referenceNode === undefined;
+    if (!willAppend && this.childNodes.indexOf(referenceNode) === -1) {
+      // referenceNode isn't actually a child here — real DOM throws NotFoundError; this shim
+      // no-ops instead, same as before this fix (untested, unreached by any current caller).
+      return node;
+    }
+    // Real DOM move semantics: detach `node` from wherever it currently sits FIRST, THEN
+    // resolve the insertion point. The bug this fixes: the old code resolved
+    // `referenceNode`'s index (or decided to append) BEFORE removing `node` — fine when
+    // `node` sits AFTER `referenceNode` (removing it later in the list doesn't shift
+    // anything earlier), but wrong for a "leftward" move, where `node` sits BEFORE
+    // `referenceNode`. Concretely: children [X, Y, Z], insertBefore(X, Z) — the old code
+    // computed idx-of-Z as 2 against the pre-removal array, then removed X (shifting Y and Z
+    // down by one, so Z is really now at 1), then spliced X in at the STALE idx 2 — landing
+    // AFTER Z ([Y, Z, X]) instead of the real-DOM result ([Y, X, Z]). Removing `node` first
+    // means the reference index is always computed against the list `node` is no longer in.
+    if (node.parentElement) {
+      var oldIdx = node.parentElement.childNodes.indexOf(node);
+      if (oldIdx !== -1) { node.parentElement.childNodes.splice(oldIdx, 1); }
+    }
+    if (willAppend) {
       this.appendChild(node);
     } else {
       var idx = this.childNodes.indexOf(referenceNode);
-      if (idx !== -1) {
-        // Remove node from its current parent if it has one
-        if (node.parentElement) {
-          var oldIdx = node.parentElement.childNodes.indexOf(node);
-          if (oldIdx !== -1) { node.parentElement.childNodes.splice(oldIdx, 1); }
-        }
-        this.childNodes.splice(idx, 0, node);
-        if (node instanceof FakeElement) { node.parentElement = this; }
-      }
+      this.childNodes.splice(idx, 0, node);
+      if (node instanceof FakeElement) { node.parentElement = this; }
     }
     return node;
   };
@@ -288,6 +303,32 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
     });
   });
 
+  // Direct test of the fake-DOM harness's insertBefore, not of workspace-render.js — pins the
+  // shim's own move semantics so a future edit to it can't silently reintroduce the
+  // stale-index bug described in its implementation comment above. renderSeats' actual caller
+  // never exercises this exact scenario (its moves are always "rightward" — the row being
+  // moved always sits AFTER the reference row in the pre-move list — so the bug this test
+  // pins never fires via renderSeats itself); this test exists so the shim is faithful to
+  // real DOM on its own terms, independent of how any one caller happens to use it today.
+  describe('fake DOM insertBefore shim — must resolve the reference index AFTER detaching the moved node, not before', () => {
+    test('a leftward move ([X, Y, Z] + insertBefore(X, Z)) yields [Y, X, Z], matching real DOM — not [Y, Z, X]', () => {
+      const parent = document.createElement('tbody');
+      const x = document.createElement('tr');
+      const y = document.createElement('tr');
+      const z = document.createElement('tr');
+      parent.appendChild(x);
+      parent.appendChild(y);
+      parent.appendChild(z);
+
+      parent.insertBefore(x, z);
+
+      expect(parent.children.length).toBe(3);
+      expect(parent.children[0]).toBe(y);
+      expect(parent.children[1]).toBe(x);
+      expect(parent.children[2]).toBe(z);
+    });
+  });
+
   describe('renderSeats — the only stateful painter, and where the key-escaping bug lived', () => {
     test('a second render with a changed field updates the existing row in place (no duplication)', () => {
       const tbody = document.createElement('tbody');
@@ -383,24 +424,53 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       expect(tbody.children[2]).toBe(rowAFirstRef);
     });
 
-    test('RN-11: className is re-applied on update for numeric and stalled-flag columns', () => {
+    // RN-11 update-branch className fix — WHAT THIS TEST ACTUALLY PINS: source-text parity
+    // between the create and update branches' className expressions, not a runtime
+    // regression. Review finding: live-model.js's seatCells() always returns a FIXED
+    // 9-element array in a fixed column order (see live-model.js:73-86) — every seat's cells
+    // differ only in per-slot TEXT, never in array length or slot order. Since the create
+    // branch's className is a pure function of the column index `i` (never of seat data,
+    // see workspace-render.js's create branch a few lines above the update branch below),
+    // and indices never change across renders, the className applied at CREATE time is never
+    // invalidated by anything else in this file — there is no seat-data sequence that can
+    // make a td's className drift, so no runtime scenario can turn this test red. It passes
+    // identically whether or not the update branch re-applies className at all. The only
+    // assertion below that CAN go red on a future edit is the source-parity check: it fails
+    // the instant the create and update branches' className expressions diverge (e.g.
+    // someone tweaks the numeric-column range in one branch but not the other).
+    test('RN-11: create and update branches derive className from the IDENTICAL source expression (branch-parity pin — see comment: no runtime scenario can make className drift)', () => {
+      const src = fs.readFileSync(
+        path.join(__dirname, '../../electron/workspace-ui/workspace-render.js'),
+        'utf8'
+      );
+      const fnStart = src.indexOf('function renderSeats(');
+      const fnEnd = src.indexOf('\n  function renderBanner(', fnStart);
+      expect(fnStart).not.toBe(-1);
+      expect(fnEnd).toBeGreaterThan(fnStart);
+      const fnSrc = src.slice(fnStart, fnEnd);
+
+      // Create branch: el('td', { className: <EXPR> }, [c]) — the `[c]` fingerprint is
+      // unique to this cell (renderCost's td cells never bind a bare `c`).
+      const createMatch = fnSrc.match(/el\('td',\s*\{\s*className:\s*([\s\S]+?)\s*\},\s*\[c\]\)/);
+      // Update branch: td.className = <EXPR>;
+      const updateMatch = fnSrc.match(/td\.className\s*=\s*([\s\S]+?);/);
+      expect(createMatch).not.toBeNull();
+      expect(updateMatch).not.toBeNull();
+      expect(updateMatch[1]).toBe(createMatch[1]);
+
+      // Runtime renders kept for documentation value (they show the resulting classes are
+      // correct after both create and update), not as a regression guard — per the comment
+      // above, this half cannot be made to fail by any seat-data change.
       const tbody = document.createElement('tbody');
       const seatA = { id: 'a', model: 'model-a', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.01' };
 
-      // First render
       AmicusRender.renderSeats(tbody, [seatA], false, () => null);
-      const numTd = tbody.children[0].children[5]; // tokens column (5) should have 'num' class
-      const stalledTd = tbody.children[0].children[8]; // stalled-flag column (8)
-      expect(numTd.className).toBe('num');
-      expect(stalledTd.className).toBe('stalled-flag');
+      expect(tbody.children[0].children[5].className).toBe('num'); // tokens column (5)
+      expect(tbody.children[0].children[8].className).toBe('stalled-flag'); // stalled-flag column (8)
 
-      // Second render: update the same seat
       AmicusRender.renderSeats(tbody, [{ ...seatA, stalled: true }], false, () => null);
-      const updatedNumTd = tbody.children[0].children[5];
-      const updatedStalledTd = tbody.children[0].children[8];
-      // className should be re-applied on update (not lost)
-      expect(updatedNumTd.className).toBe('num');
-      expect(updatedStalledTd.className).toBe('stalled-flag');
+      expect(tbody.children[0].children[5].className).toBe('num');
+      expect(tbody.children[0].children[8].className).toBe('stalled-flag');
     });
   });
 });
