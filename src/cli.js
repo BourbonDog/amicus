@@ -668,6 +668,36 @@ Options for 'init':
 Options for 'template':
   amicus template list [--json]           List templates (built-ins marked)
   amicus template show <name|path> [--json]  Print a template
+`,
+  pack: `
+Options for 'pack':
+  amicus pack save <name> --kind council|fanout|solo [flags]
+                                Save a pack built from flags:
+                                --bench <a,b,c|name>    council/fanout: comma-
+                                                         separated members, or a
+                                                         saved council name
+                                --model <model>          solo kind only
+                                --chair/--critic/--lenses    council kind only
+                                --timeout/--max-cost/--gateway/--agent/--thinking/
+                                --summary-length         shared run options
+                                --debate / --no-debate   council kind only
+                                --template <name|path>   briefing template
+                                                         reference (not rendered)
+                                --version <semver>       default 1.0.0 (an
+                                                         unchanged re-save is a
+                                                         no-op; a changed one
+                                                         auto-bumps the patch)
+                                --description <text>
+  amicus pack save <name> --from-run <id>
+                                Build a pack from an existing council run /
+                                fanout wave / solo session instead of flags
+                                (models, options, and a template REFERENCE only
+                                — briefing text is never captured)
+  amicus pack list [--json]    List saved packs
+  amicus pack show <name|path> [--json]
+                                Print a pack plus its validation report (never
+                                fails on an invalid pack — see 'validation')
+  amicus pack rm <name> [--json]   Remove a saved pack
 `
 };
 

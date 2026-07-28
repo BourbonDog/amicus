@@ -56,7 +56,8 @@ function runSave(name, modelsArg, useJson) {
 
 function renderSave(doc) {
   const notice = doc.overwritten ? ' (overwritten)' : '';
-  return `Saved council '${doc.name}'${notice}: ${doc.models.join(', ')}\n`;
+  return `Saved council '${doc.name}'${notice}: ${doc.models.join(', ')}\n` +
+    "  for full run configuration — chair, options, templates — see 'amicus pack'\n";
 }
 
 /**
