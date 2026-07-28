@@ -11,7 +11,9 @@ Amicus is at **v4.4.1** (2026-07-27), the fast-follow patch on v4.4.0 (tagged 20
 4.x rev below leads with the benefit, not the plumbing.
 
 **Status:** v4.0 through **v4.4.1** have **shipped** — everything down to the v4.5 heading is a
-record of what landed, not a plan. **v4.5 (policy packs + composition) is the next rev.** v5.0
+record of what landed, not a plan. **v4.5 (packs + templates + auto-open) is the next rev**, with
+**v4.6 (composition + tagging + GUI ergonomics)** behind it — the former combined v4.5 scope,
+split 2026-07-27 (design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-design.md`). v5.0
 remains forward-looking.
 
 > 📁 **Reading this from an npm install?** Some references below point at working documents that
@@ -85,18 +87,38 @@ and a review that honestly finds nothing stops being an error.
 > repo's working notes (`.superpowers/sdd/v441/backlog-and-proposal.md`, local-only) and in the
 > repo's root `BACKLOG.md` — neither ships in the npm package; see the note at the top.
 
-## v4.5 — "Save, share, and compose your councils"
-**Benefit:** complex councils become one-command, repeatable, and chainable.
+## v4.5 — "Save and share your councils" *(scope split 2026-07-27 — composition moved to v4.6)*
+**Benefit:** complex councils become one-command, repeatable, and shareable — and the flagship GUI
+stops hiding. Design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-design.md`.
 - **★ Auto-open the Council Workspace on a council run (Christian, 2026-07-26)** — when a council is
   invoked from Claude Desktop and Electron is already present, the Workspace window opens by
   default instead of requiring a separate `amicus watch <runId> --ui`. Today the GUI is opt-in and
   discoverable only from `watch --help`, so the flagship v4.4 surface goes unseen on the very
   client best able to show it. *(S–M; the pieces exist — see the design notes below.)*
 - **Council policy packs + full run-profiles** (bench + lenses + options + briefing template, invoke by name) — B7/F5 *(M)*
-- **Composable/chained waves** (`--input-from <waveId>` / pipe) for generate→critique→refine — F6 *(M)*
-- **Briefing templates + library** (F9), **session/wave tagging + `--search` + grouped history** (F8), **GUI power ergonomics** (F10) *(S–M)*
-- **README + docs update** — policy packs, chained waves, and the briefing-template library in `README.md` and `docs/` *(S)*
-> Why here: velocity multipliers that only pay off once councils are a command (v4.0) and observable (v4.3/v4.4).
+- **Briefing templates + library** (F9) *(S–M)* — the foundation packs reference; the `{{input}}`
+  chaining variable and the `critique`/`refine` built-ins arrive with v4.6
+- **Ride-along fixes** — FR-1 (a failed council seat can render perpetually live), the FR-2 ruling,
+  RN-1/RN-5/RN-11 Workspace renderer fixes, TST-3 real-CDP abort pass *(S each; dispositions for
+  all 17 open items are tabled in the design doc's §8)*
+- **README + docs update** — policy packs, the template library, and auto-open in `README.md` and `docs/` *(S)*
+> Why here: save/share velocity multipliers that only pay off once councils are a command (v4.0)
+> and observable (v4.3/v4.4); auto-open makes the v4.4 surface discoverable on its best client.
+
+## v4.6 — "Compose your councils" *(specced after v4.5 ships — anti-rot rule)*
+**Benefit:** councils chain — generate → critique → refine with no manual copy-paste — and history
+becomes navigable.
+- **Composable/chained waves** (`--input-from <id>` / `--prompt-file -` pipe + per-source digests) —
+  F6 *(M)* — brings the `{{input}}` template variable + the `critique`/`refine` built-ins
+- **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)*
+- **GUI power ergonomics** (F10: focus-follows fold hotkey, distinguishable window titles, tiling
+  presets) *(S each)*
+- Deferred-item candidates per the v4.5 design doc's §8: RN-2, TST-1/TST-2, REL-2, CA-4, LC-5,
+  remainder of TST-7
+- **README + docs update** *(S)*
+> The 2026-07-19 combined spec (`2026-07-19-v4.5-policy-packs-composition-design.md`) holds the
+> approved chaining/tagging/F10 design detail and is the primary input to the v4.6 brainstorm; it
+> is NOT executed as-written — v4.6 gets its own spec + fresh plan once v4.5 ships.
 
 ### Deferred out of v4.4.1 into v4.5 (2026-07-27)
 
@@ -106,6 +128,10 @@ live in the repo's local-only working notes — `.superpowers/sdd/v44/v4.4.1-bac
 disposition that put them here in `.superpowers/sdd/v441/backlog-and-proposal.md`. **If you have
 those notes, read that backlog's Appendix A (settled decisions) and Appendix B (known false
 positives) before re-filing anything from this list.**
+
+**Disposition update (2026-07-27):** every item below (plus FR-1/2/3 from `BACKLOG.md`) now carries
+a proposed disposition — v4.5 ride-along / v4.6 / backlog — tabled for ruling in §8 of
+`docs/superpowers/specs/2026-07-27-v4.5-save-and-share-design.md`.
 
 | ID | What | Why not 4.4.1 |
 |---|---|---|
