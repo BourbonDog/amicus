@@ -75,7 +75,7 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
     return {
       error: {
         code: ERROR_CODES.PACK_KIND_MISMATCH,
-        message: `Error: pack '${pack.name}' is kind '${pack.kind}' — ${COMMAND_NAME_BY_KIND[expectedKind]} accepts kind '${expectedKind}'; make two packs if you want both shapes`,
+        message: `Error: pack '${pack.name}' is kind '${pack.kind}' — ${COMMAND_NAME_BY_KIND[expectedKind] || 'this command'} accepts kind '${expectedKind}'; make two packs if you want both shapes`,
         hint: null,
       },
     };

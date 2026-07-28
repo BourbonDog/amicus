@@ -175,6 +175,15 @@ describe('applyPackToArgs: council — falsy pack values still fill (guard is nu
     expect(args.debate).toBe(false); // strictly false, not undefined — every other false-carrying
     // fixture in this file pairs the false with a typed flag, exercising only the skip path
   });
+
+  test('shared fill() guard pins falsy 0: pack maxCost fills when untyped (spec §5.4: 0 fills here, then handler pre-flight rejects)', () => {
+    const pack = { ...COUNCIL_PACK(), name: 'maxcost-zero', options: { ...COUNCIL_PACK().options, maxCost: 0 } };
+    store().writePack(pack);
+    const args = parseArgs(['council', 'run']); // nothing typed
+    const res = resolve()({ packRef: 'maxcost-zero', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args['max-cost']).toBe(0); // strictly 0, pinning the shared fill guard's null/undefined check
+  });
 });
 
 describe('applyPackToArgs: council — lenses (array pack field) comma-joins into the string arg', () => {
@@ -387,14 +396,14 @@ describe('applyPackToArgs: error triple', () => {
   });
 
   test('PACK_KIND_MISMATCH names both kinds and the concrete command, not "this command"', () => {
-    store().writePack(COUNCIL_PACK());
-    const args = parseArgs(['fanout']);
-    const res = resolve()({ packRef: 'sec-review', expectedKind: 'fanout', args, explicit: args.__explicit, useJson: false });
+    store().writePack(SOLO_PACK());
+    const args = parseArgs(['council', 'run']);
+    const res = resolve()({ packRef: 'solo-review', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
     expect(res.packRecord).toBeUndefined();
     expect(res.error.code).toBe(ERROR_CODES.PACK_KIND_MISMATCH);
+    expect(res.error.message).toContain("kind 'solo'");
     expect(res.error.message).toContain("kind 'council'");
-    expect(res.error.message).toContain("kind 'fanout'");
-    expect(res.error.message).toContain("— fanout accepts kind 'fanout'"); // concrete command name
+    expect(res.error.message).toContain("— council run accepts kind 'council'"); // concrete command name, unforgeable
     expect(res.error.message).not.toContain('this command');
     expect(res.error.message).toContain('make two packs if you want both shapes');
   });
