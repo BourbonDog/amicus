@@ -27,9 +27,13 @@
                      // null on a non-debate run, an aborted/skipped debate, or a parse failure —
                      // drillIntoJudge's judge-*.md fallback covers all three.
     blind: false,
-    detailRunId: null, // Task 19 (RN-5): the run renderDetail() last computed state.blind's
-                        // default for — gates the recompute in renderDetail() to run CHANGES
-                        // only (a same-run re-render, e.g. the blind toggle, keeps it as-is).
+    // Task 19 (RN-5) + fix-wave (RN-5 amendment): the (run id, status) pair renderDetail() last
+    // computed state.blind's default for. Together they gate the recompute (in renderDetail(),
+    // below) to a run CHANGE or a STATUS change only: a same-run/same-status re-render (the
+    // blind toggle) keeps the user's own choice, while a same-run/CHANGED-status re-render (the
+    // live loop's running -> terminal refresh, or the abort-confirm re-read) still auto-reveals.
+    detailRunId: null,
+    detailRunStatus: null,
     labelByModel: {},
     listTimer: null,
     liveTimer: null, // LIVE (Task 15)
@@ -106,15 +110,22 @@
       return;
     }
 
-    // blind default: computed from status (resolution 9) — only on a run CHANGE. Task 19
-    // (RN-5): a same-run re-render (renderDetail_preserveBlind, below, calls straight back in
-    // here on every blind toggle) must keep the user's own choice instead of recomputing the
-    // status default every call — recomputing unconditionally is what forced the old code to
-    // paint twice (render once with the wrong default, then restore + repaint) and, via
+    // blind default: computed from status (resolution 9) — only on a run CHANGE or a STATUS
+    // change for the same run. Task 19 (RN-5): a same-run/same-status re-render
+    // (renderDetail_preserveBlind, below, calls straight back in here on every blind toggle)
+    // must keep the user's own choice instead of recomputing the default every call —
+    // recomputing unconditionally is what forced the old code to paint twice and, via
     // wireLazyPanels() a few lines down, collapse any lazy panel the user had open.
-    if (state.detailRunId !== d.runId) {
+    // ⚠️ Fix-wave (RN-5 amendment, controller ruling): run id ALONE also suppressed the
+    // pre-existing running -> terminal auto-reveal, since the live loop's terminal refresh
+    // (workspace-verbs.js's startLiveLoop tick) and the abort-confirm re-read both call
+    // openRun() on the SAME run id — same run, but a real status transition. Keying on run id
+    // AND status recomputes (auto-reveals) on that transition while still preserving a same-
+    // run/same-status call (the blind toggle).
+    if (state.detailRunId !== d.runId || state.detailRunStatus !== d.run.status) {
       state.blind = window.AmicusLive.defaultBlind(d.run.status);
       state.detailRunId = d.runId;
+      state.detailRunStatus = d.run.status;
     }
     $('blind-toggle').checked = state.blind;
     state.labelByModel = {};
@@ -206,11 +217,12 @@
     // for the first call having painted with the wrong (default) blind state — a double
     // paint, and (via wireLazyPanels(), called inside that first renderDetail()) a collapse
     // of any lazy panel the user had open. Fixed at the root instead of compensated for:
-    // renderDetail() now recomputes the blind default only on a run CHANGE
-    // (state.detailRunId, above), so this same-run call keeps state.blind exactly as the
-    // change listener above just set it, and workspace-panels.js's wireLazyPanels() (its own
-    // same-run guard, `lastWiredRunId`) leaves any open panel alone. One renderDetail() call
-    // now paints correctly the first time — nothing left to restore or repaint.
+    // renderDetail() now recomputes the blind default only on a run CHANGE or a STATUS change
+    // (state.detailRunId/state.detailRunStatus, above) — this call changes neither, so it
+    // keeps state.blind exactly as the change listener above just set it, and
+    // workspace-panels.js's wireLazyPanels() (its own same-run guard, `lastWiredRunId`)
+    // refreshes any open panel in place rather than collapsing it (fix-wave, Fix 1). One
+    // renderDetail() call now paints correctly the first time — nothing left to restore.
     renderDetail();
   }
 
@@ -236,7 +248,8 @@
 
   // ⚠️ PRE-FLIGHT (P4) + DE-ROT (F09): register the three prose `toggle` listeners exactly ONCE,
   // here at boot. wireLazyPanels() (called from renderDetail, on every run-open and blind-toggle)
-  // only rewrites the per-run `loaders` spec map from now on — it never adds a listener.
+  // rewrites the per-run `loaders` spec map every call and — fix-wave, Fix 1 — refreshes any
+  // already-open lazy panel in place on a same-run call; it never adds a listener.
   P.proseLoader('reviews-panel');
   P.proseLoader('bundle-panel');
   P.proseLoader('judges-panel');

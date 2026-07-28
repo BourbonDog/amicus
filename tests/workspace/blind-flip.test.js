@@ -132,7 +132,7 @@ describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () 
     expect(panel.dataset.loaded).toBe('1');
 
     // The flip under test: blind back ON, on the SAME run.
-    const renderSeatsSpy = jest.spyOn(window.AmicusRender, 'renderSeats');
+    const renderSeatsSpy = jest.spyOn(global.window.AmicusRender, 'renderSeats');
     flipBlind(true);
 
     expect(global.window.AmicusApp.state.blind).toBe(true);
@@ -155,5 +155,72 @@ describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () 
     expect(global.window.AmicusApp.state.blind).toBe(false);
     expect(panel.open).toBe(false);
     expect(panel.dataset.loaded).toBe('0');
+  });
+
+  // ---- Fix-wave (Task 19 review) Fix 1: open panels re-mask on a blind change ------------
+  //
+  // The deleted reset in wireLazyPanels() used to be the ONLY path that re-rendered an open
+  // reviews/judges panel when blind changed — loadPanel() early-returns on its cached promise
+  // (workspace-panels.js:94), and only fires again via the panel's own `toggle` listener, which
+  // does not fire just because state.blind changed underneath an already-open panel. Left as
+  // Task 19 shipped it, flipping Blind ON leaves an open panel showing raw model ids while
+  // everything else masks — violating RN-9 (blind ON titles every section by label, never by
+  // model id).
+  test('an open reviews-panel re-masks (and stays open, with no duplicate sections) when blind flips on a same-run call', async () => {
+    // bbbb2222 is the shared TERMINAL fixture (status 'complete', defaultBlind false per
+    // resolution 9) — start blind OFF here, the opposite of the running-fixture flip test above.
+    await global.window.AmicusApp.openRun('bbbb2222');
+    expect(global.window.AmicusApp.state.blind).toBe(false);
+
+    const panel = reviewsPanel();
+    panel.open = true;
+    panel._listeners.toggle[0]();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(panel.dataset.loaded).toBe('1');
+
+    function sectionTitles() {
+      return global.document.getElementById('reviews-body').children.map((s) => s.children[0].textContent);
+    }
+    // Blind OFF: sections are titled by raw model id.
+    expect(sectionTitles()).toEqual(['gemini', 'gpt']);
+
+    flipBlind(true);
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+    // Never collapsed — the panel the user had open must survive the flip.
+    expect(panel.open).toBe(true);
+    expect(panel.dataset.loaded).toBe('1');
+    // Re-masked — RN-9 requires blind ON to title every section by label, never by model id.
+    // Pre-fix this stays ['gemini', 'gpt'] (RED): nothing re-renders an already-loaded panel.
+    expect(sectionTitles()).toEqual(['Review A', 'Review B']);
+    // Refreshed in place, not appended to — one section per bench model, never duplicated.
+    expect(global.document.getElementById('reviews-body').children.length).toBe(2);
+  });
+
+  // ---- Fix-wave Fix 2: a running -> terminal refresh on the SAME run id auto-reveals ------
+  //
+  // The gate keyed on run id alone, so the live loop's terminal refresh (workspace-verbs.js's
+  // startLiveLoop tick calling A.openRun(sameRunId) once the run finishes) skipped the
+  // recompute and left a just-completed run blinded — pre-existing auto-reveal behavior Task 19
+  // never intended to remove. Amending the gate to key on run id AND status recomputes on that
+  // transition while still preserving a same-run/same-status call (the blind toggle, covered by
+  // the flip test above, which continues to pass unchanged after this amendment).
+  test('a running -> terminal refresh on the SAME run id auto-reveals the blind default (fix-wave, Fix 2)', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111'); // running fixture -> blind default ON
+    expect(global.window.AmicusApp.state.blind).toBe(true);
+
+    // Simulate the live loop's terminal refresh: workspace-verbs.js's startLiveLoop tick calls
+    // A.openRun(runId) with the SAME run id once workspace:get-live reports terminal — the
+    // refetched workspace:get-run reply is the only thing that changes, from 'running' to a
+    // terminal status.
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:get-run') { return Promise.resolve(buildFixtureDetail(args[0], 'complete')); }
+      return defaultInvoke(channel, ...args);
+    });
+    await global.window.AmicusApp.openRun('aaaa1111'); // SAME run id, CHANGED status
+
+    // Pre-fix (gate keyed on run id alone) this stays `true` (RED): d.runId === state.detailRunId
+    // so the recompute never runs, and a completed run is stranded blinded.
+    expect(global.window.AmicusApp.state.blind).toBe(false);
   });
 });

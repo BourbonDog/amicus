@@ -78,15 +78,15 @@
   // ⚠️ PRE-FLIGHT (P4): the load is AWAITABLE — drillIntoJudge needs to know when it has
   // settled (the old code guessed with setTimeout(render, 300), which could fire before an
   // unbounded N-artifact IPC round trip finished and silently render nothing). loadPanel()
-  // is idempotent per panel id and returns its in-flight promise; both the promise cache
-  // (`loading`) and the per-run spec (`loaders`) are keyed by panel id and cleared/overwritten
-  // by wireLazyPanels() on every run-open — that clearing is what stops F09's stale-run
-  // artifact requests.
+  // is idempotent per panel id and returns its in-flight promise; the promise cache
+  // (`loading`) and the per-run spec (`loaders`) are both keyed by panel id, but only
+  // `loading` is cleared by wireLazyPanels() — on a run CHANGE only (Task 19, RN-5) — and
+  // that clearing is what stops F09's stale-run artifact requests.
   var loaders = {};  // panelId -> {bodyId, files}  (rewritten per run by wireLazyPanels)
   var loading = {};  // panelId -> Promise           (cleared per run by wireLazyPanels)
   // Task 19 (RN-5): the run wireLazyPanels() last reset panels/loading for — gates the reset
-  // below to run CHANGES only, so a same-run call (renderDetail() runs this on every blind
-  // toggle too, not just a run-open) leaves whatever the user already has open alone.
+  // below to run CHANGES only. A same-run call (renderDetail() runs this on every blind toggle
+  // too, and on the live loop's terminal refresh) instead refreshes any open panel (Fix 1).
   var lastWiredRunId = null;
 
   function loadPanel(panelId, bodyId, files) {
@@ -129,23 +129,30 @@
   }
 
   /**
-   * Rewrites the per-run spec map on every call. Resets panel open/loaded state and drops the
-   * previous run's cached load promises ONLY on a run CHANGE (tracked via the module-level
-   * `lastWiredRunId`, above) — that is exactly what F09's stale-run protection needs: the
-   * cached promises, and whatever the user already has open, are still good for a same-run
-   * re-render (Task 19, RN-5: renderDetail() calls this on every blind toggle too, not just a
-   * run-open). Registers no listeners itself.
+   * Rewrites the per-run spec map on every call. On a run CHANGE (tracked via the module-level
+   * `lastWiredRunId`, above), resets panel open/loaded state and drops the previous run's
+   * cached load promises — exactly what F09's stale-run protection needs. On a SAME-run call
+   * (Task 19, RN-5: renderDetail() calls this on every blind toggle too, and the live loop's
+   * terminal refresh) any panel the user already has open is instead refreshed in place — see
+   * Fix 1 below — never left showing stale-blind content, never collapsed. Registers no
+   * listeners itself.
    */
   function wireLazyPanels() {
     var A = window.AmicusApp;
-    if (A.state.runId !== lastWiredRunId) {
+    // ⚠️ Fix-wave (Fix 4): keyed off `A.state.detail.runId`, not `A.state.runId` — the latter is
+    // set synchronously at the top of openRun(), before its workspace:get-run reply lands, so an
+    // out-of-order reply could make the two diverge. workspace-app.js's own run-change gate
+    // (renderDetail(), above `d.runId`) reads off the SAME `state.detail.runId`, so the two
+    // provably agree on whether this is a run change.
+    var sameRun = A.state.detail.runId === lastWiredRunId;
+    if (!sameRun) {
       ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
         var p = A.$(id);
         p.dataset.loaded = '0';
         p.open = false;
         delete loading[id];
       });
-      lastWiredRunId = A.state.runId;
+      lastWiredRunId = A.state.detail.runId;
     }
     var bench = A.state.detail.run.bench || [];
     var debated = !!A.state.detail.run.debate;
@@ -209,6 +216,18 @@
       }
       return files.filter(function (f) { return present(f.name); });
     } };
+    // ⚠️ Fix-wave (Fix 1, RN-9): a same-run call (the blind toggle, or the live loop's
+    // running -> terminal refresh) must re-render any panel the user already has open, or it
+    // keeps showing content painted under the PREVIOUS blind state. renderProseSections()
+    // (workspace-render.js) clears its container before repainting, so this replaces sections
+    // in place rather than appending duplicates. Drop the cached promise first so loadPanel()
+    // actually re-fetches instead of returning its already-settled one.
+    if (sameRun) {
+      ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
+        var p = A.$(id);
+        if (p.open) { delete loading[id]; loadPanel(id, loaders[id].bodyId, loaders[id].files); }
+      });
+    }
   }
 
   // ⚠️ DE-ROT (F38): on a --debate run the FINAL tally.json is rebuilt from the debate's
