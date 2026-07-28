@@ -165,6 +165,18 @@ describe('applyPackToArgs: council — debate skip rule covers both negation for
   });
 });
 
+describe('applyPackToArgs: council — falsy pack values still fill (guard is null/undefined, not truthiness)', () => {
+  test('a pack value of FALSE fills (the guard is null/undefined, not truthiness)', () => {
+    const pack = { ...COUNCIL_PACK(), name: 'debate-false-untyped', options: { ...COUNCIL_PACK().options, debate: false } };
+    store().writePack(pack);
+    const args = parseArgs(['council', 'run']); // nothing debate-related typed
+    const res = resolve()({ packRef: 'debate-false-untyped', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.debate).toBe(false); // strictly false, not undefined — every other false-carrying
+    // fixture in this file pairs the false with a typed flag, exercising only the skip path
+  });
+});
+
 describe('applyPackToArgs: council — lenses (array pack field) comma-joins into the string arg', () => {
   test('fills as a comma-joined string when not explicit; critic stays untouched (pack critic is null)', () => {
     store().writePack(COUNCIL_PACK_LENSES());
@@ -180,6 +192,27 @@ describe('applyPackToArgs: council — lenses (array pack field) comma-joins int
     const args = parseArgs(['council', 'run', '--lenses', 'x,y,z']);
     resolve()({ packRef: 'lens-review', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
     expect(args.lenses).toBe('x,y,z');
+  });
+});
+
+describe('applyPackToArgs: council — critic/lenses XOR suppression (2026-07-28 ruling)', () => {
+  test('pack critic does not fill when --lenses is explicit (no error, no notice)', () => {
+    store().writePack(COUNCIL_PACK()); // critic: 'deepseek'
+    const args = parseArgs(['council', 'run', '--lenses', 'a,b']);
+    const res = resolve()({ packRef: 'sec-review', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.critic).toBeUndefined(); // suppressed: --lenses was explicit, not the pack's critic
+    expect(args.lenses).toBe('a,b'); // the typed value, untouched
+    expect(res.notices).toEqual([]);
+  });
+
+  test('pack lenses does not fill when --critic is explicit', () => {
+    store().writePack(COUNCIL_PACK_LENSES()); // lenses: ['sec', 'perf']
+    const args = parseArgs(['council', 'run', '--critic', 'x']);
+    const res = resolve()({ packRef: 'lens-review', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.lenses).toBeUndefined(); // suppressed: --critic was explicit, not the pack's lenses
+    expect(args.critic).toBe('x'); // the typed value, untouched
   });
 });
 
@@ -353,7 +386,7 @@ describe('applyPackToArgs: error triple', () => {
     expect(res.error.message).toMatch(/ghost-pack-does-not-exist/);
   });
 
-  test('PACK_KIND_MISMATCH names both kinds', () => {
+  test('PACK_KIND_MISMATCH names both kinds and the concrete command, not "this command"', () => {
     store().writePack(COUNCIL_PACK());
     const args = parseArgs(['fanout']);
     const res = resolve()({ packRef: 'sec-review', expectedKind: 'fanout', args, explicit: args.__explicit, useJson: false });
@@ -361,6 +394,8 @@ describe('applyPackToArgs: error triple', () => {
     expect(res.error.code).toBe(ERROR_CODES.PACK_KIND_MISMATCH);
     expect(res.error.message).toContain("kind 'council'");
     expect(res.error.message).toContain("kind 'fanout'");
+    expect(res.error.message).toContain("— fanout accepts kind 'fanout'"); // concrete command name
+    expect(res.error.message).not.toContain('this command');
     expect(res.error.message).toContain('make two packs if you want both shapes');
   });
 

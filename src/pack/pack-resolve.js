@@ -32,6 +32,8 @@ const COMMON_OPTION_KNOBS = [
 const CONTEXT_OPTION_KNOBS = [
   ['noContext', 'no-context'], ['contextTurns', 'context-turns'], ['contextMaxTokens', 'context-max-tokens'],
 ];
+/** Concrete command name per pack kind, for the KIND_MISMATCH message (never "this command"). */
+const COMMAND_NAME_BY_KIND = { council: 'council run', fanout: 'fanout', solo: 'start' };
 
 /**
  * council/fanout only: `bench` fills `args.council` (by-name) or `args.models`
@@ -73,7 +75,7 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
     return {
       error: {
         code: ERROR_CODES.PACK_KIND_MISMATCH,
-        message: `Error: pack '${pack.name}' is kind '${pack.kind}' — this command accepts kind '${expectedKind}'; make two packs if you want both shapes`,
+        message: `Error: pack '${pack.name}' is kind '${pack.kind}' — ${COMMAND_NAME_BY_KIND[expectedKind]} accepts kind '${expectedKind}'; make two packs if you want both shapes`,
         hint: null,
       },
     };
@@ -100,8 +102,6 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
 
   if (pack.kind === 'council') {
     fill('chair', pack.chair);
-    fill('critic', pack.critic);
-    fill('lenses', Array.isArray(pack.lenses) ? pack.lenses.join(',') : pack.lenses);
   }
   if (pack.kind === 'solo') {
     fill('model', pack.model);
@@ -116,6 +116,14 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
     const debateExplicit = explicit.has('debate') || explicit.has('no-debate');
     if (!debateExplicit && opts.debate !== undefined && opts.debate !== null) {
       args.debate = opts.debate;
+    }
+    // 2026-07-28 ruling: skip filling pack critic when --lenses is explicit —
+    // it would trip the handler's critic/lenses mutual-exclusion pre-flight.
+    if (!explicit.has('lenses')) { fill('critic', pack.critic); }
+    // 2026-07-28 ruling: skip filling pack lenses when --critic is explicit —
+    // same mutual-exclusion pre-flight, mirrored direction.
+    if (!explicit.has('critic')) {
+      fill('lenses', Array.isArray(pack.lenses) ? pack.lenses.join(',') : pack.lenses);
     }
   }
 
