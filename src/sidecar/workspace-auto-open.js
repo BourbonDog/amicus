@@ -2,7 +2,7 @@
  * Workspace Auto-Open Decision Helper
  *
  * Pure helper to determine whether the Council Workspace should auto-open
- * on MCP council runs from Claude Desktop. Returns the decision and reason.
+ * on MCP council runs from Claude Code (local). Returns the decision and reason.
  *
  * Decision order (spec §6 guard 4):
  * 1. uiParam === false → 'param-suppressed' (explicit user request beats everything, checked first)

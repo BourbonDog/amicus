@@ -505,7 +505,7 @@ function hasTierOnboarded() {
 
 /**
  * v4.5 auto-open (spec §6 guard 4): the Workspace auto-opens on MCP council
- * runs from Claude Desktop unless config.workspace.autoOpen === false. Only an
+ * runs from Claude Code (local) unless config.workspace.autoOpen === false. Only an
  * explicit false disables — absent/junk values stay ON (opt-out semantics).
  * @returns {boolean}
  */

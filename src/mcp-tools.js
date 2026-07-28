@@ -503,7 +503,7 @@ function getTools() {
       pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       ui: z.boolean().optional().describe(
         'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +
-        'Claude Desktop, Electron is installed, a display exists, and config workspace.autoOpen is ' +
+        'Claude Code (local), Electron is installed, a display exists, and config workspace.autoOpen is ' +
         'not false. false: never open. true: open even for other clients (still requires Electron + ' +
         'a display; never installs).'
       ),
