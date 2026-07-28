@@ -123,9 +123,26 @@ async function handleCouncilRun(args) {
       hint: 'write the briefing to a file and pass --prompt-file <path>' });
   }
   const { resolvePromptSource } = require('./utils/prompt-source');
-  const promptRes = resolvePromptSource(args);
-  if (promptRes.error) {
-    return failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error });
+  // F9 (v4.5): with --template and no {{prompt}} slot, --prompt-file may be
+  // absent (mirrors handleFanout's guard); byte-identical without --template.
+  let promptRes;
+  if (args.prompt !== undefined || args['prompt-file'] !== undefined || args.template === undefined) {
+    promptRes = resolvePromptSource(args);
+    if (promptRes.error) { return failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error }); }
+  } else {
+    promptRes = { prompt: undefined, promptMeta: null };
+  }
+  let templateMeta = null;
+  if (args.template !== undefined) {
+    const { applyTemplate } = require('./template/apply');
+    const t = applyTemplate({ templateRef: args.template, prompt: promptRes.prompt,
+      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
+    if (t.error) { return failJson(useJson, t.error); }
+    for (const n of t.notices) { process.stderr.write(n + '\n'); }
+    promptRes = { prompt: t.prompt, promptMeta: t.promptMeta };
+    templateMeta = t.promptMeta.template;
+  } else if (args.artifact !== undefined || args.var !== undefined) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' });
   }
 
   const benchRes = resolveBench(args, useJson);
@@ -211,6 +228,7 @@ async function handleCouncilRun(args) {
     noValidateModel: !!args['no-validate-model'],
     date: new Date().toISOString().slice(0, 10),
     councilName,
+    template: templateMeta, // F9 (v4.5): null when no --template; additive on the run.json seed (run-state.js).
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and
     // 'claude may not chair' guards live there on purpose so MCP, the GitHub

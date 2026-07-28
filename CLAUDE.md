@@ -183,6 +183,7 @@ src/
 │   ├── wave-progress.js
 │   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
 ├── template/
+│   ├── apply.js
 │   ├── render.js
 │   └── store.js
 ├── utils/
@@ -512,6 +513,7 @@ evals/
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
 | `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()` |
+| `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
 | `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
 | `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |

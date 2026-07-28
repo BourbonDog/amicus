@@ -101,6 +101,9 @@ function initCouncilRun(o) {
     // "no debate key" contract and fail the object-typed schema), and with a VALID
     // outcome from the first write so a run killed mid-debate stays schema-valid.
     ...(o.debate ? { debate: { enabled: true, outcome: 'nothing-to-debate' } } : {}),
+    // F9 (v4.5): additive-only — absent (not null) without --template; the MCP
+    // seed (mcp-council-run.js, initRun directly) never sets this in v4.5.
+    ...(o.template ? { template: o.template } : {}),
     options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
     usage: null, pid: process.pid, createdAt: new Date().toISOString(),
   });

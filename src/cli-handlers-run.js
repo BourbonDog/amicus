@@ -27,15 +27,25 @@ async function handleStart(args) {
   const useJson = !!args.json;
 
   // F4: --prompt-file support (XOR --prompt) and --json gating
+  // F9 (v4.5): --template renders {{prompt}}/{{artifact}}/{{var.*}} into the prompt; byte-identical without it.
+  let templateMeta = null;
   if (args.prompt !== undefined || args['prompt-file'] !== undefined) {
     const { resolvePromptSource } = require('./utils/prompt-source');
     const promptRes = resolvePromptSource(args);
     if (promptRes.error) { process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error })); }
     args.prompt = promptRes.prompt;
-    // Drop --prompt-file now that it's resolved: validateStartArgs' self-contained
-    // guard would otherwise re-run resolvePromptSource with both prompt and
-    // prompt-file set and trip its mutually-exclusive branch.
     delete args['prompt-file'];
+  }
+  if (args.template !== undefined) {
+    const { applyTemplate } = require('./template/apply');
+    const t = applyTemplate({ templateRef: args.template, prompt: args.prompt,
+      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
+    if (t.error) { process.exit(failJson(useJson, t.error)); }
+    for (const n of t.notices) { process.stderr.write(n + '\n'); }
+    args.prompt = t.prompt;
+    templateMeta = t.promptMeta.template;
+  } else if (args.artifact !== undefined || args.var !== undefined) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' }));
   }
   requireNoUiForJson(args, useJson);
 
@@ -105,6 +115,7 @@ async function handleStart(args) {
     position: args.position,
     json: !!args.json,
     modelInput: alias || null,
+    template: templateMeta, // F9 (v4.5): startSidecar ignores unknown keys; inert until a future task reads it.
   });
 }
 
@@ -140,9 +151,22 @@ async function handleFanout(args) {
   }
 
   const { resolvePromptSource } = require('./utils/prompt-source');
-  const promptRes = resolvePromptSource(args);
-  if (promptRes.error) {
-    process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error }));
+  let promptRes;
+  if (args.prompt !== undefined || args['prompt-file'] !== undefined || args.template === undefined) {
+    promptRes = resolvePromptSource(args);
+    if (promptRes.error) { process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error })); }
+  } else {
+    promptRes = { prompt: undefined, promptMeta: null };
+  }
+  if (args.template !== undefined) {
+    const { applyTemplate } = require('./template/apply');
+    const t = applyTemplate({ templateRef: args.template, prompt: promptRes.prompt,
+      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
+    if (t.error) { process.exit(failJson(useJson, t.error)); }
+    for (const n of t.notices) { process.stderr.write(n + '\n'); }
+    promptRes = { prompt: t.prompt, promptMeta: t.promptMeta };
+  } else if (args.artifact !== undefined || args.var !== undefined) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' }));
   }
   // Council preset: expand a saved council into args.models (mutually exclusive with --models).
   const hasModels = typeof args.models === 'string' && args.models.trim();

@@ -75,3 +75,36 @@ describe('--max-cost validation emits BAD_ARGS envelope on stdout', () => {
     }
   });
 });
+
+describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', () => {
+  // A `.md`-suffixed ref takes resolveTemplate's path branch (never touches
+  // AMICUS_CONFIG_DIR), so this stays hermetic without any tmp-dir setup.
+  it('start --json --template <missing path> → TEMPLATE_NOT_FOUND envelope, engine never invoked', async () => {
+    const out = await captureStdout(() => handleStart({
+      json: true, 'no-ui': true, prompt: 'hi', template: 'definitely-not-a-real-template-xyz.md',
+    }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
+  });
+
+  it('start --json --artifact without --template → BAD_ARGS envelope', async () => {
+    const out = await captureStdout(() => handleStart({ json: true, 'no-ui': true, prompt: 'hi', artifact: __filename }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(doc.error.message).toMatch(/--artifact\/--var require --template/);
+  });
+
+  it('start --json --var without --template → BAD_ARGS envelope', async () => {
+    const out = await captureStdout(() => handleStart({ json: true, 'no-ui': true, prompt: 'hi', var: ['a=1'] }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+  });
+
+  it('fanout --json --template <missing path> → TEMPLATE_NOT_FOUND envelope, engine never invoked', async () => {
+    const out = await captureStdout(() => handleFanout({
+      json: true, models: 'a,b', template: 'definitely-not-a-real-template-xyz.md',
+    }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
+  });
+});

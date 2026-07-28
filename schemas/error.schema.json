@@ -13,7 +13,7 @@
       "type": "object",
       "required": ["code", "message"],
       "properties": {
-        "code": { "enum": ["BAD_ARGS", "MISSING_PROMPT", "BAD_MODEL", "MISSING_KEY", "BAD_SESSION", "BUDGET_EXCEEDED", "INTERNAL", "COUNCIL_QUORUM", "COST_EXCEEDED", "COUNCIL_CLAUDE_REVIEW_INVALID"] },
+        "code": { "enum": ["BAD_ARGS", "MISSING_PROMPT", "BAD_MODEL", "MISSING_KEY", "BAD_SESSION", "BUDGET_EXCEEDED", "INTERNAL", "COUNCIL_QUORUM", "COST_EXCEEDED", "COUNCIL_CLAUDE_REVIEW_INVALID", "TEMPLATE_NOT_FOUND", "TEMPLATE_RENDER"] },
         "message": { "type": "string" },
         "hint": { "type": ["string", "null"] },
         "command": { "type": ["string", "null"] }

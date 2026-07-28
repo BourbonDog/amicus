@@ -49,7 +49,7 @@ const { writeRunTerminal, resolveTerminalExit, SIGNAL_EXIT } = require('./run-fi
  */
 async function runCouncil(options, deps = {}) {
   const o = { critic: null, lenses: null, maxCost: null, debate: false, claudeReviewFile: null,
-    noCostGate: false, councilName: null, ...options };
+    noCostGate: false, councilName: null, template: null, ...options };
   o.follow = o.follow ? require('../observe/follow').createFollowPrinter({ json: o.json }) : null; // Task 13: stderr mirror
   const appendRunFn = deps.appendRunFn || require('./ledger').appendRun;
   const statsFn = deps.statsFn || require('./ledger').deriveReliability;

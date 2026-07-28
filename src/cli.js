@@ -73,9 +73,9 @@ function parseArgs(argv) {
       }
 
       // Array accumulation flags
-      if (key === 'exclude-mcp' && next && !next.startsWith('--')) {
-        result['exclude-mcp'] = result['exclude-mcp'] || [];
-        result['exclude-mcp'].push(next);
+      if ((key === 'exclude-mcp' || key === 'var') && next && !next.startsWith('--')) {
+        result[key] = result[key] || [];
+        result[key].push(next);
         i++;
         continue;
       }
@@ -428,6 +428,9 @@ Options for 'start':
   --no-validate-model          Skip model-catalog validation before launch
   --gateway <mode>             Routing: auto (direct-first), direct, or openrouter
   --position <pos>             Window position: right (default), left, center
+  --template <name|path>       Render a briefing template ({{prompt}}, {{artifact}}, {{var.*}})
+  --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
+  --var <k=v>                  Template variable, repeatable (needs --template)
 `,
   fanout: `
 Options for 'fanout':
@@ -459,6 +462,9 @@ Options for 'fanout':
                                 RESULT_FILE/EVENTS_FILE/COST/PROJECT), never model
                                 text. Child stdout/stderr go to amicus stderr.
                                 Never changes the wave's exit code, docs, or events.
+  --template <name|path>       Render a briefing template ({{prompt}}, {{artifact}}, {{var.*}})
+  --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
+  --var <k=v>                  Template variable, repeatable (needs --template)
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -545,6 +551,7 @@ Subcommands for 'council':
       [--gateway auto|direct|openrouter] [--no-validate-model]
       [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
       [--fallback] [--no-fallback] [--on-complete <cmd>]
+      [--template <name|path>] [--artifact <file>] [--var <k=v>]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -567,6 +574,10 @@ Subcommands for 'council':
                                 EVENTS_FILE/COST/PROJECT), never model text. Child
                                 stdout/stderr go to amicus stderr. Never changes
                                 the run's exit code, docs, or events.
+                                --template <name|path> renders a briefing from
+                                {{prompt}}, {{artifact}}, {{var.*}}; --artifact
+                                fills {{artifact}} (256 KB cap); --var sets
+                                {{var.*}} (repeatable). Both require --template.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output
