@@ -73,6 +73,23 @@ function makeFakeDoc() {
       this.parentElement = null;
     }
   };
+  FakeElement.prototype.insertBefore = function insertBefore(node, referenceNode) {
+    if (referenceNode === null || referenceNode === undefined) {
+      this.appendChild(node);
+    } else {
+      var idx = this.childNodes.indexOf(referenceNode);
+      if (idx !== -1) {
+        // Remove node from its current parent if it has one
+        if (node.parentElement) {
+          var oldIdx = node.parentElement.childNodes.indexOf(node);
+          if (oldIdx !== -1) { node.parentElement.childNodes.splice(oldIdx, 1); }
+        }
+        this.childNodes.splice(idx, 0, node);
+        if (node instanceof FakeElement) { node.parentElement = this; }
+      }
+    }
+    return node;
+  };
   FakeElement.prototype.querySelector = function querySelector(selector) {
     var tag = String(selector).replace(/[.#[].*$/, '').trim().toUpperCase();
     for (const child of this.childNodes) {
@@ -318,6 +335,72 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       AmicusRender.renderSeats(tbody, [{ ...seat, costDisplay: '$0.09' }], false, () => null);
       expect(tbody.children.length).toBe(1);
       expect(tbody.children[0].children[6].textContent).toBe('$0.09');
+    });
+
+    test('RN-11: render [A, B] then [B, A] reorders rows in place by moving them (no duplication)', () => {
+      const tbody = document.createElement('tbody');
+      const seatA = { id: 'a', model: 'model-a', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.01' };
+      const seatB = { id: 'b', model: 'model-b', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.02' };
+
+      // First render: [A, B]
+      AmicusRender.renderSeats(tbody, [seatA, seatB], false, () => null);
+      expect(tbody.children.length).toBe(2);
+      expect(tbody.children[0].dataset.key).toBe('a');
+      expect(tbody.children[1].dataset.key).toBe('b');
+      const rowAFirstRef = tbody.children[0];
+      const rowBFirstRef = tbody.children[1];
+
+      // Second render: [B, A]
+      AmicusRender.renderSeats(tbody, [seatB, seatA], false, () => null);
+      expect(tbody.children.length).toBe(2);
+      expect(tbody.children[0].dataset.key).toBe('b');
+      expect(tbody.children[1].dataset.key).toBe('a');
+      // Verify the SAME nodes were moved, not duplicated
+      expect(tbody.children[0]).toBe(rowBFirstRef);
+      expect(tbody.children[1]).toBe(rowAFirstRef);
+    });
+
+    test('RN-11: render [A, B] then [B, C, A] reorders and inserts C in place', () => {
+      const tbody = document.createElement('tbody');
+      const seatA = { id: 'a', model: 'model-a', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.01' };
+      const seatB = { id: 'b', model: 'model-b', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.02' };
+      const seatC = { id: 'c', model: 'model-c', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.03' };
+
+      // First render: [A, B]
+      AmicusRender.renderSeats(tbody, [seatA, seatB], false, () => null);
+      expect(tbody.children.length).toBe(2);
+      const rowAFirstRef = tbody.children[0];
+      const rowBFirstRef = tbody.children[1];
+
+      // Second render: [B, C, A]
+      AmicusRender.renderSeats(tbody, [seatB, seatC, seatA], false, () => null);
+      expect(tbody.children.length).toBe(3);
+      expect(tbody.children[0].dataset.key).toBe('b');
+      expect(tbody.children[1].dataset.key).toBe('c');
+      expect(tbody.children[2].dataset.key).toBe('a');
+      // B and A should be the same nodes, moved; C is new
+      expect(tbody.children[0]).toBe(rowBFirstRef);
+      expect(tbody.children[2]).toBe(rowAFirstRef);
+    });
+
+    test('RN-11: className is re-applied on update for numeric and stalled-flag columns', () => {
+      const tbody = document.createElement('tbody');
+      const seatA = { id: 'a', model: 'model-a', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.01' };
+
+      // First render
+      AmicusRender.renderSeats(tbody, [seatA], false, () => null);
+      const numTd = tbody.children[0].children[5]; // tokens column (5) should have 'num' class
+      const stalledTd = tbody.children[0].children[8]; // stalled-flag column (8)
+      expect(numTd.className).toBe('num');
+      expect(stalledTd.className).toBe('stalled-flag');
+
+      // Second render: update the same seat
+      AmicusRender.renderSeats(tbody, [{ ...seatA, stalled: true }], false, () => null);
+      const updatedNumTd = tbody.children[0].children[5];
+      const updatedStalledTd = tbody.children[0].children[8];
+      // className should be re-applied on update (not lost)
+      expect(updatedNumTd.className).toBe('num');
+      expect(updatedStalledTd.className).toBe('stalled-flag');
     });
   });
 });
