@@ -27,6 +27,9 @@
                      // null on a non-debate run, an aborted/skipped debate, or a parse failure —
                      // drillIntoJudge's judge-*.md fallback covers all three.
     blind: false,
+    detailRunId: null, // Task 19 (RN-5): the run renderDetail() last computed state.blind's
+                        // default for — gates the recompute in renderDetail() to run CHANGES
+                        // only (a same-run re-render, e.g. the blind toggle, keeps it as-is).
     labelByModel: {},
     listTimer: null,
     liveTimer: null, // LIVE (Task 15)
@@ -103,8 +106,16 @@
       return;
     }
 
-    // blind default: computed ONCE per run-open from status (resolution 9)
-    state.blind = window.AmicusLive.defaultBlind(d.run.status);
+    // blind default: computed from status (resolution 9) — only on a run CHANGE. Task 19
+    // (RN-5): a same-run re-render (renderDetail_preserveBlind, below, calls straight back in
+    // here on every blind toggle) must keep the user's own choice instead of recomputing the
+    // status default every call — recomputing unconditionally is what forced the old code to
+    // paint twice (render once with the wrong default, then restore + repaint) and, via
+    // wireLazyPanels() a few lines down, collapse any lazy panel the user had open.
+    if (state.detailRunId !== d.runId) {
+      state.blind = window.AmicusLive.defaultBlind(d.run.status);
+      state.detailRunId = d.runId;
+    }
     $('blind-toggle').checked = state.blind;
     state.labelByModel = {};
     d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; });
@@ -178,7 +189,6 @@
   });
 
   function renderDetail_preserveBlind() {
-    var keep = state.blind;
     // ⚠️ Fix-wave item 1: renderDetail() itself early-returns safely for an unreadable run
     // (!d || d.error || !d.derived) — but this wrapper used to run past that guard
     // unconditionally, dereferencing the (nonexistent) derived model via renderSeatsPanel()
@@ -187,22 +197,21 @@
     // the error branch unhides #run-view before the derived-model guard, so the Blind
     // checkbox is live with nothing behind it.
     if (!state.detail || state.detail.error || !state.detail.derived) {
-      $('blind-toggle').checked = keep;
+      $('blind-toggle').checked = state.blind;
       return;
     }
+    // ⚠️ Task 19 (RN-5): this used to call renderDetail() (which unconditionally stomped
+    // state.blind back to the run's status default), restore the user's pre-call value,
+    // and then re-paint header chips/seats/matrix/verdict/cost a SECOND time to compensate
+    // for the first call having painted with the wrong (default) blind state — a double
+    // paint, and (via wireLazyPanels(), called inside that first renderDetail()) a collapse
+    // of any lazy panel the user had open. Fixed at the root instead of compensated for:
+    // renderDetail() now recomputes the blind default only on a run CHANGE
+    // (state.detailRunId, above), so this same-run call keeps state.blind exactly as the
+    // change listener above just set it, and workspace-panels.js's wireLazyPanels() (its own
+    // same-run guard, `lastWiredRunId`) leaves any open panel alone. One renderDetail() call
+    // now paints correctly the first time — nothing left to restore or repaint.
     renderDetail();
-    state.blind = keep;
-    $('blind-toggle').checked = keep;
-    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderDetail() (just
-    // called above) resets state.blind to the run's DEFAULT before this function restores the
-    // user's chosen `keep` value — renderHeaderChips was painted during that inner call with
-    // the (temporarily wrong) default blind state and, unlike seats/matrix/verdict/cost below,
-    // was never repainted afterward. Re-render it here too, now that state.blind is correct.
-    window.AmicusRender.renderHeaderChips($('run-chips'), state.detail.run, state.blind, labelOf);
-    P.renderSeatsPanel();
-    P.renderMatrixPanel();
-    P.renderVerdictPanel();
-    window.AmicusRender.renderCost($('cost-body'), state.detail.derived.cost, state.blind, labelOf);
   }
 
   $('run-list').addEventListener('keydown', function (e) {

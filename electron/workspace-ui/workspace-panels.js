@@ -84,6 +84,10 @@
   // artifact requests.
   var loaders = {};  // panelId -> {bodyId, files}  (rewritten per run by wireLazyPanels)
   var loading = {};  // panelId -> Promise           (cleared per run by wireLazyPanels)
+  // Task 19 (RN-5): the run wireLazyPanels() last reset panels/loading for — gates the reset
+  // below to run CHANGES only, so a same-run call (renderDetail() runs this on every blind
+  // toggle too, not just a run-open) leaves whatever the user already has open alone.
+  var lastWiredRunId = null;
 
   function loadPanel(panelId, bodyId, files) {
     var A = window.AmicusApp;
@@ -125,18 +129,24 @@
   }
 
   /**
-   * Rewrites the per-run spec map and drops the previous run's cached load promises — this
-   * is precisely what stops F09's stale-run artifact requests. Safe to call on every
-   * renderDetail() (run-open and blind-toggle alike); it registers no listeners itself.
+   * Rewrites the per-run spec map on every call. Resets panel open/loaded state and drops the
+   * previous run's cached load promises ONLY on a run CHANGE (tracked via the module-level
+   * `lastWiredRunId`, above) — that is exactly what F09's stale-run protection needs: the
+   * cached promises, and whatever the user already has open, are still good for a same-run
+   * re-render (Task 19, RN-5: renderDetail() calls this on every blind toggle too, not just a
+   * run-open). Registers no listeners itself.
    */
   function wireLazyPanels() {
     var A = window.AmicusApp;
-    ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
-      var p = A.$(id);
-      p.dataset.loaded = '0';
-      p.open = false;
-      delete loading[id];
-    });
+    if (A.state.runId !== lastWiredRunId) {
+      ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
+        var p = A.$(id);
+        p.dataset.loaded = '0';
+        p.open = false;
+        delete loading[id];
+      });
+      lastWiredRunId = A.state.runId;
+    }
     var bench = A.state.detail.run.bench || [];
     var debated = !!A.state.detail.run.debate;
     // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
