@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/BourbonDog/amicus/schemas/pack.schema.json",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/pack.schema.json",
   "title": "Amicus policy pack",
   "type": "object",
   "required": ["schemaVersion", "type", "name", "version", "kind"],
