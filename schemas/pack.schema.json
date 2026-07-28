@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BourbonDog/amicus/schemas/pack.schema.json",
+  "title": "Amicus policy pack",
+  "type": "object",
+  "required": ["schemaVersion", "type", "name", "version", "kind"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "type": { "const": "pack" },
+    "name": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$" },
+    "version": { "type": "string" },
+    "kind": { "enum": ["council", "fanout", "solo"] },
+    "description": { "type": "string" },
+    "bench": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" }, "minItems": 2 }
+      ]
+    },
+    "model": { "type": "string" },
+    "chair": { "type": ["string", "null"] },
+    "critic": { "type": ["string", "null"] },
+    "lenses": { "type": ["array", "null"], "items": { "type": "string" } },
+    "options": { "type": "object" },
+    "briefing": {
+      "type": "object",
+      "properties": { "template": { "type": ["string", "null"] } }
+    }
+  }
+}

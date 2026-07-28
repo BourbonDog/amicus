@@ -184,8 +184,67 @@ describe('published council-family schemas validate real builder output (v4.0 §
   });
 });
 
+describe('published pack-family schemas validate policy packs (v4.5)', () => {
+  test('pack.schema.json accepts council pack shape', () => {
+    const validate = compile('pack');
+    const councilPack = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'sec-review',
+      version: '1.0.0',
+      kind: 'council',
+      description: 'x',
+      bench: ['deepseek', 'qwen-coder'],
+      chair: 'gpt',
+      critic: null,
+      lenses: null,
+      options: { timeout: 10 },
+      briefing: { template: 'review' },
+    };
+    expectValid(validate, councilPack);
+  });
+
+  test('pack.schema.json accepts solo pack shape', () => {
+    const validate = compile('pack');
+    const soloPack = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'quick-check',
+      version: '1.0.0',
+      kind: 'solo',
+      model: 'gpt-4o',
+    };
+    expectValid(validate, soloPack);
+  });
+
+  test('pack.schema.json rejects invalid kind', () => {
+    const validate = compile('pack');
+    const invalid = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'bad-pack',
+      version: '1.0.0',
+      kind: 'nope',
+    };
+    expect(validate(invalid)).toBe(false);
+  });
+
+  test('pack.schema.json rejects bench array with fewer than 2 items', () => {
+    const validate = compile('pack');
+    const invalid = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'single-bench',
+      version: '1.0.0',
+      kind: 'council',
+      bench: ['only-one'],
+    };
+    expect(validate(invalid)).toBe(false);
+  });
+});
+
 describe('schema publishing (v4.0 §7)', () => {
-  test('exactly the 18 published schema files exist', () => {
+  test('exactly the 19 published schema files exist', () => {
     const files = fs.readdirSync(SCHEMAS_DIR).filter((f) => f.endsWith('.schema.json')).sort();
     // Lexicographic sort: '-' (0x2D) < '.' (0x2E), so every "-live" variant
     // sorts BEFORE its base name (council-run-live < council-run, etc.) —
@@ -196,7 +255,7 @@ describe('schema publishing (v4.0 §7)', () => {
       'council-stats.schema.json', 'council-tally.schema.json',
       'council-validate.schema.json', 'council-verdict.schema.json',
       'doctor.schema.json', 'error.schema.json', 'event.schema.json',
-      'model-catalog.schema.json', 'progress.schema.json',
+      'model-catalog.schema.json', 'pack.schema.json', 'progress.schema.json',
       'run-live.schema.json', 'run.schema.json', 'spend.schema.json',
       'wave-live.schema.json', 'wave.schema.json',
     ]);
