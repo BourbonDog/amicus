@@ -44,6 +44,7 @@ function parseArgs(argv) {
     _: [],
     ...DEFAULTS
   };
+  result.__explicit = new Set();
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -63,12 +64,14 @@ function parseArgs(argv) {
       // Boolean flags (no value expected)
       if (isBooleanFlag(key)) {
         result[key] = true;
+        result.__explicit.add(key);
         continue;
       }
 
       // If --key=value was used, use the inline value directly
       if (inlineValue !== undefined) {
         result[key] = parseValue(key, inlineValue);
+        result.__explicit.add(key);
         continue;
       }
 
@@ -76,6 +79,7 @@ function parseArgs(argv) {
       if ((key === 'exclude-mcp' || key === 'var') && next && !next.startsWith('--')) {
         result[key] = result[key] || [];
         result[key].push(next);
+        result.__explicit.add(key);
         i++;
         continue;
       }
@@ -85,6 +89,7 @@ function parseArgs(argv) {
       // boolean so it can never swallow the following positional as a value.
       if (key.startsWith('no-')) {
         result[key] = true;
+        result.__explicit.add(key);
         continue;
       }
 
@@ -95,6 +100,7 @@ function parseArgs(argv) {
       } else {
         result[key] = true;
       }
+      result.__explicit.add(key);
     } else if (arg === '-o') {
       // Single short-flag alias, scoped to exactly '-o' (council verdict's
       // --out shorthand). No general short-flag support is implemented —
@@ -106,6 +112,7 @@ function parseArgs(argv) {
       } else {
         result.out = true;
       }
+      result.__explicit.add('out');
     } else {
       result._.push(arg);
     }
