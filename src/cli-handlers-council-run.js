@@ -115,6 +115,26 @@ function renderRunHuman(run) {
 async function handleCouncilRun(args) {
   const useJson = !!args.json;
 
+  // v4.5 Task 12 (B7/F5): resolve --pack FIRST, above the Task-5 template
+  // block, so a pack-filled args.template renders through that single
+  // existing application point exactly like a typed --template.
+  let packRecord = null;
+  if (args.pack !== undefined) {
+    const { applyPackToArgs } = require('./pack/pack-resolve');
+    const pr = applyPackToArgs({
+      packRef: args.pack, expectedKind: 'council', args,
+      explicit: args.__explicit || new Set(), useJson,
+    });
+    if (pr.error) { return failJson(useJson, pr.error); }
+    for (const n of pr.notices) { process.stderr.write(n + '\n'); }
+    packRecord = pr.packRecord;
+  }
+  // 2026-07-28 ruling (Task-11 review): attribute a pre-flight failure to the
+  // pack that supplied the failing value — ONLY when the pack filled it (an
+  // explicit flag always wins and is never "blamed" on the pack).
+  const packSuffix = (key) => (packRecord && !(args.__explicit || new Set()).has(key))
+    ? ` (set by pack '${packRecord.name}')` : '';
+
   // --prompt-file required; inline --prompt rejected (councils always have
   // real briefings — same rationale as MCP fanout's briefing-via-file).
   if (args.prompt !== undefined) {
@@ -170,19 +190,19 @@ async function handleCouncilRun(args) {
     ? args.chair.trim() : CHAIR_DEFAULT;
   if (bench.includes(chair)) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
-      message: `Error: chair '${chair}' is a bench seat — the chair must not review`,
+      message: `Error: chair '${chair}' is a bench seat — the chair must not review${packSuffix('chair')}`,
       hint: `pick a chair outside --models (default: ${CHAIR_DEFAULT}), or remove '${chair}' from the bench` });
   }
   const critic = (typeof args.critic === 'string' && args.critic.trim()) ? args.critic.trim() : null;
   if (critic && !bench.includes(critic)) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
-      message: `Error: critic '${critic}' must be one of the bench seats`,
+      message: `Error: critic '${critic}' must be one of the bench seats${packSuffix('critic')}`,
       hint: `--critic swaps one seat's brief; pass one of: ${bench.join(', ')}` });
   }
   const lenses = (typeof args.lenses === 'string' && args.lenses.trim()) ? parseList(args.lenses) : null;
   if (critic && lenses) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
-      message: 'Error: --critic and --lenses are mutually exclusive in v4.0' });
+      message: `Error: --critic and --lenses are mutually exclusive in v4.0${packSuffix('critic') || packSuffix('lenses')}` });
   }
   if (lenses && lenses.length !== bench.length) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
@@ -229,6 +249,7 @@ async function handleCouncilRun(args) {
     date: new Date().toISOString().slice(0, 10),
     councilName,
     template: templateMeta, // F9 (v4.5): null when no --template; additive on the run.json seed (run-state.js).
+    pack: packRecord, // v4.5 Task 12 (B7/F5): null when no --pack; additive on the run.json seed (run-state.js).
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and
     // 'claude may not chair' guards live there on purpose so MCP, the GitHub

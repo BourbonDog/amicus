@@ -32,6 +32,7 @@
     "lenses": { "type": ["array", "null"], "items": { "type": "string" } },
     "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
     "options": { "type": "object" },
+    "pack": { "type": "object" },
     "usage": { "type": "object" },
     "exitCode": { "type": ["number", "null"] },
     "budgetRefusals": {

@@ -177,6 +177,8 @@ describe('published council-family schemas validate real builder output (v4.0 §
       lenses: null,
       labelMap: { 'Review A': 'gemini', 'Review B': 'gpt', 'Review C': 'mistral' },
       options: { maxCost: 2, timeoutMinutes: 10, gateway: 'auto' },
+      // v4.5 Task 12 (B7/F5): additive — present only when the run was launched via --pack.
+      pack: { name: 'sec-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
       usage: { cost: { amount: 1.1, source: 'reported' } },
       exitCode: 0
     };

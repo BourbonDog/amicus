@@ -104,6 +104,10 @@ function initCouncilRun(o) {
     // F9 (v4.5): additive-only — absent (not null) without --template; the MCP
     // seed (mcp-council-run.js, initRun directly) never sets this in v4.5.
     ...(o.template ? { template: o.template } : {}),
+    // v4.5 Task 12 (B7/F5): additive-only — absent (not null) without --pack.
+    // Preserved across a later MCP-child initRun whose own seed omits it —
+    // mergeRun's plain shallow merge never drops a key patch doesn't mention.
+    ...(o.pack ? { pack: o.pack } : {}),
     options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
     usage: null, pid: process.pid, createdAt: new Date().toISOString(),
   });
