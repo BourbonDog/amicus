@@ -220,6 +220,8 @@ Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/confi
 | `sessions-index.json` | `session-index.js` (`recordSession`, written at session start) | A **global** map of `taskId → project path`, consulted only when a per-project session lookup misses (e.g. an MCP server whose cwd differs from where the session was created). Navigation aid only, never authoritative — a corrupt index degrades to "no entry," never a crash. |
 | `council-ledger.jsonl` | `src/council/ledger.js` (`appendRun`), on every `council tally` | One row per council model per run — findings raised, severity breakdown, street-cred, conformance. Read back by `amicus council stats`. |
 | `spend-ledger.jsonl` | `src/utils/spend-ledger.js` (`appendSpend`), new in Phase 16 | One row per completed run/leg — tokens + resolved cost. Read back by `amicus spend` for the cross-run rollup. Append is best-effort and can never fail the run it's recording; safe to delete (starts fresh, loses history only). |
+| `packs/<name>.json` (v4.5) | `amicus pack save` (`src/pack/pack-store.js`) | One JSON file per saved policy pack — bench/model, chair/critic/lenses, options, and a briefing-template *reference*. Peer directory of `templates/` below. Safe to inspect, hand-edit, or delete individually; see [Policy packs](./usage.md#policy-packs). |
+| `templates/<name>.md` (v4.5) | You, by hand (your editor is the manager) | User-authored briefing templates; a file here shadows a built-in of the same name. Amicus itself never writes into this directory — there is no `template save`/`rm`. See [Briefing templates](./usage.md#briefing-templates). |
 
 **Tmp-file pattern.** Several writers (`model-catalog.json`, `sessions-index.json`, session
 metadata) use an atomic write: a temp file named `.<target>.<pid>.<random>.tmp` is written
@@ -328,6 +330,16 @@ level includes everything above it.
       "apiKeyEnv": "VLLM_LAB_API_KEY",
       "pricing": { "prompt": 0.0000005, "completion": 0.0000015 }
     }
+  },
+
+  // v4.5: opt out of auto-opening the Council Workspace window on an
+  // MCP-invoked `amicus_council_run` from Claude Code (local). Absent, null,
+  // or anything other than a literal `false` leaves auto-open ON — only an
+  // explicit `false` here disables it. See docs/council.md's Council
+  // Workspace section for the full decision order (the `ui` MCP param and
+  // the hard guards both take precedence over this key either way).
+  "workspace": {
+    "autoOpen": false
   }
 }
 ```
@@ -336,6 +348,18 @@ A provider id may not shadow one of the five built-in vendors — `openrouter`, 
 
 An alias whose value is missing, `null`, or not a string is stripped on the next `saveConfig()`
 call, with a notice printed to stderr — `config.json` never accumulates dead aliases silently.
+
+**Policy pack precedence.** A saved [policy pack](./usage.md#policy-packs) sits between your flags
+and whatever this repo's existing default logic already was for a given knob — the resolution
+order everywhere a pack applies is **flag > pack > config default > built-in default.** A pack only
+fills in a value you did not type explicitly on the command line; everything below that layer is
+unchanged from before packs existed. `--gateway` is the clearest example with all four tiers live
+today: an explicit `--gateway` wins, then a pack's `options.gateway`, then `routing.prefer` in
+`config.json` (this section, above), then the hard-coded `"auto"` fallback. Most other pack-fillable
+options (`timeout`, `maxCost`, `agent`, `thinking`, …) have no `config.json`-level default yet — just
+a hard-coded built-in (`DEFAULTS` in `src/cli.js`) — so for those the chain is effectively **flag >
+pack > built-in** today. See [Policy packs](./usage.md#policy-packs) for the full per-kind field
+reference.
 
 ### Uninstall instructions
 

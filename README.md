@@ -52,7 +52,7 @@ One install delivers six things that work together:
 - **The `amicus` CLI (with an `am` alias) and an MCP server.** The engine underneath both skills: launches sessions, shares context, runs parallel waves, and exposes the same surface to Claude as MCP tools.
 - **A self-updating model catalog.** Aliases and validation resolve against a live catalog fetched from provider APIs (cached locally), so model names stay current without a hard-coded table.
 - **Observability.** `amicus watch <id>` renders any live or finished run (fan-out or council) from any terminal; `--follow` streams milestones as they happen; `--on-complete` fires a hook when a run lands; `--retry-failed` plus opt-in cheaper-model fallbacks recover dead legs without relaunching the whole wave; `amicus spend` answers "what did this cost, and where" with per-run attribution.
-- **Council Workspace.** `amicus watch <runId> --ui`: a window that shows a council *thinking* — live seats, the anonymized judge packet, the adjudication matrix, dissent drill-in, chair verdict, and cost-by-seat — for both live and historical runs.
+- **Council Workspace.** `amicus watch <runId> --ui`: a window that shows a council *thinking* — live seats, the anonymized judge packet, the adjudication matrix, dissent drill-in, chair verdict, and cost-by-seat — for both live and historical runs. It also **auto-opens** on an MCP-invoked council run from Claude Code (local), so you no longer have to remember the flag (see [The Council](#the-council)).
 
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
@@ -267,6 +267,17 @@ The `amicus_fanout` MCP tool takes the same `council` parameter, and the `second
 
 **Council presets.** Save your own named member lists with `amicus council save <name> --models a,b,c` (≥2 resolvable aliases or `provider/model` IDs), then run them with `--council <name>` anywhere a council runs. `amicus council list` shows saved presets plus three built-in benches that work with no setup at all — `free` (the same zero-cost dynamic pick described above, used when you haven't seeded `councils.free`), `budget` (cheap workhorses, one per vendor family), and `frontier` (premium flagships, one per vendor family). `amicus council show <name>` resolves any of them (saved or built-in) and reports which members are currently usable. A saved council always shadows a built-in of the same name — exactly how the wizard's `councils.free` seeding already worked.
 
+**Policy packs (v4.5).** A council preset only saves the bench. A **pack** saves the whole run — bench, chair, critic/lenses, cost/timeout options, and a briefing template — as one named, shareable JSON file:
+
+```bash
+amicus pack save review-bench --kind council --bench gemini,deepseek,gpt --chair opus --timeout 20 --max-cost 2
+amicus council run --pack review-bench --prompt-file plan.md --json
+```
+
+Any flag you also type on that second line overrides just that value — a pack only fills in what you didn't say explicitly, and it's recorded on the run either way. Packs work the same way on `fanout`/`start` and on the `amicus_fanout`/`amicus_start`/`amicus_council_run` MCP tools. `amicus pack list`/`show`/`rm` manage them, and `--from-run <id>` builds one from a run you already liked instead of typing flags at all. Full reference: [docs/usage.md § Policy packs](./docs/usage.md#policy-packs).
+
+**Briefing templates (v4.5).** `--template <name> --artifact <file>` (plus repeatable `--var k=v`) renders a `{{prompt}}`/`{{artifact}}`-style Markdown template before it's sent, on `start`/`fanout`/`council run` alike — templates live in `~/.config/amicus/templates/`, and a pack's `briefing.template` is how one reaches an MCP-invoked run (MCP has no template param of its own). `amicus template list|show` manage them; v4.5 ships one built-in, `review`. Full reference: [docs/usage.md § Briefing templates](./docs/usage.md#briefing-templates).
+
 ---
 
 ## The parallel window
@@ -323,6 +334,8 @@ amicus update
 | `amicus provider` | Add/list/test/remove local, OpenAI-compatible providers (LM Studio, Ollama, vLLM) — configured with `--preset` or `--url`, at **$0** marginal cost (`--json` on every subcommand). |
 | `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
 | `amicus council run` | The headless council engine: Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Add `--debate` for a Stage-2.5 rebuttal round (raisers defend/amend/withdraw, disputing judges re-vote) and `--claude-review <file>` to enter Claude's own review as judged review N+1. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
+| `amicus pack` | Save a full run configuration — bench, chair/critic/lenses, options, briefing template — and invoke it by name: `save <name> --kind council\|fanout\|solo [flags]` (or `--from-run <id>`), `list`, `show <name>`, `rm <name>`. `--pack <name>` on `start`/`fanout`/`council run` loads one; explicit flags always override it. See [docs/usage.md § Policy packs](./docs/usage.md#policy-packs). |
+| `amicus template` | `list`/`show <name>` a briefing template. `--template <name> [--artifact <file>] [--var k=v]` on `start`/`fanout`/`council run` renders one before the briefing is sent. See [docs/usage.md § Briefing templates](./docs/usage.md#briefing-templates). |
 | `amicus abort` | Abort a running session (or `--all`). |
 | `amicus setup` | Configure default model, API keys, and aliases. |
 | `amicus update` | Update to the latest version. |

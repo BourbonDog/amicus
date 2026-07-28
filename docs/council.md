@@ -23,6 +23,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 - [`amicus council run`](#amicus-council-run)
   - [Debate mode](#debate-mode)
 - [Council Workspace (GUI)](#council-workspace-gui)
+  - [Auto-open on `amicus_council_run` (v4.5)](#auto-open-on-amicus_council_run-v45)
 - [`amicus council validate`](#amicus-council-validate)
 - [`amicus council tally`](#amicus-council-tally)
 - [`amicus council verdict`](#amicus-council-verdict)
@@ -103,6 +104,8 @@ amicus council run --prompt-file <briefing.md>
     [--out-dir <dir>]                       # default ./council-<runId>/
     [--json] [--max-cost <usd>] [--timeout <min>]
     [--gateway auto|direct|openrouter] [--no-validate-model]
+    [--template <name|path>] [--artifact <file>] [--var k=v]  # v4.5, see docs/usage.md#briefing-templates
+    [--pack <name|path>]                                       # v4.5, see docs/usage.md#policy-packs
 ```
 
 **The headless engine (v4.0).** Everything the `second-opinion` skill orchestrates by hand in
@@ -118,6 +121,12 @@ Key semantics:
 - `--prompt-file` is **required** — councils always have real briefings (no inline `--prompt`).
 - Seat/chair/critic/lens validation happens **pre-flight** and fails through the error envelope
   (exit 1) before any spend. The chair must not be a bench seat.
+- **`--pack <name|path>` (v4.5)** loads a saved bench/chair/critic/lenses/options/template as this
+  run's defaults — any flag you also typed always overrides the pack's value for that field, and
+  the pack is recorded on `run.json` (`pack: {name, version, hash, source}`) either way. When a
+  pre-flight error names a value the pack supplied (e.g. "chair is a bench seat"), the message adds
+  `(set by pack '<name>')` so a pack-caused failure is never mistaken for a typo in your own flags.
+  Full reference: [docs/usage.md § Policy packs](./usage.md#policy-packs).
 - `--timeout` is the **per-leg** timeout (existing fanout semantics); there is no run-level
   watchdog in v4.0 — bound the aggregate with your CI job timeout.
 - `--max-cost` is a **whole-run** ceiling checked before each paid stage launch (Stage-1 wave,
@@ -366,6 +375,45 @@ in the app: full `sandbox`/`contextIsolation`, a minimal preload exposing exactl
 gated by a 7-channel allowlist, a CSP with **no network directive at all** (`default-src 'none'`),
 and every model-derived string reaches the DOM through `textContent`/`createTextNode` only —
 never `innerHTML`, enforced by a static source scan in the test suite.
+
+### Auto-open on `amicus_council_run` (v4.5)
+
+The window above no longer needs a separate `amicus watch <runId> --ui` call every time. When the
+**MCP tool** `amicus_council_run` is invoked from **Claude Code (local)**, Amicus launches this same
+Council Workspace window automatically, detached, right after the run starts — the flagship v4.4
+surface is no longer opt-in on the client best able to show it. The plain CLI `amicus council run`
+is unaffected: `detectClient` (`src/utils/client-detect.js`) only resolves from the MCP `initialize`
+handshake, so a terminal invocation has no client to detect and never auto-opens; use
+`amicus watch <runId> --ui` there as before.
+
+**Decision order** (`shouldAutoOpenWorkspace`, `src/sidecar/workspace-auto-open.js`) — read top to
+bottom, first match wins:
+
+1. The tool's `ui: false` param — **beats everything**, including every guard below.
+2. The hard guards, which beat even an explicit `ui: true`: Electron is not installed (this path
+   **never** installs it — that would be a surprise ~100 MB download on someone's first MCP council
+   run) → does not open; on Linux, no `DISPLAY` in the environment → does not open.
+3. The tool's `ui: true` param — overrides both the config key and the client check below (but
+   never a hard guard above).
+4. `workspace.autoOpen === false` in `config.json` (see
+   [Configuration § Config file format](./configuration.md#config-file-format)) → does not open.
+5. The caller isn't Claude Code (local) (i.e. `client !== 'code-local'` — Claude Desktop/Cowork and
+   Claude Code web are deliberately excluded from the default) → does not open.
+6. Otherwise → opens.
+
+**Response fields.** `amicus_council_run`'s result always carries `workspaceOpened: boolean`, and,
+**only when it did not open**, `workspaceOpenReason` — one of `param-suppressed`, `electron-absent`,
+`no-display`, `config-disabled`, `client-not-code-local`, or a `spawn-failed:`/`auto-open-failed:`
+detail if the decision said to open but the launch itself failed. The launch is fire-and-forget: it
+never blocks the tool's response, and a launch failure never fails the council run itself — the run
+proceeds exactly as it would with no Workspace at all, and `amicus watch <runId> --ui` still works
+as the manual fallback.
+
+**The `ui` param and the `workspace.autoOpen` config key are independent knobs, not aliases of each
+other** — `ui` is a **per-call** override (either direction), while `workspace.autoOpen` sets the
+**standing default** every call without an explicit `ui` falls back to. Turning the config default
+off does not stop you from asking for the window on one particular run with `ui: true`, and leaving
+the default on does not stop you from suppressing it on one noisy run with `ui: false`.
 
 ---
 
