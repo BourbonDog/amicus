@@ -151,8 +151,10 @@ describe('artifactAllowlist', () => {
   // model B's name is a SEPARATE, fixable defect. Deterministic disambiguation: per colliding
   // sanitized name, sort the raw models; the first (sorted) keeps the bare sanitized name, the
   // rest get `~2`, `~3`, ... The suffixed names deliberately do not exist on disk — the
-  // presence manifest (run-detail.js) marks them absent, so the second model's panel renders
-  // the honest "not written yet" empty state instead of the first model's prose.
+  // presence manifest (run-detail.js) marks them absent, so workspace-panels.js's presence
+  // filter drops the second model's row entirely instead of rendering an empty state for it or
+  // showing the first model's prose; the run-integrity banner (artifactCollisions) is what
+  // tells the user why that row is missing.
   test('artifactsByModel suffixes every colliding model but the first (sorted), and the allowlist carries both suffixed rows', () => {
     const list = artifactAllowlist({ bench: ['vendor/a', 'vendor?a'] });
     expect(list).toEqual(expect.arrayContaining([

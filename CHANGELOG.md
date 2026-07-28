@@ -31,9 +31,11 @@ shareable, and the flagship Council Workspace stops being opt-in on its best cli
   content block instead. Concretely, `amicus_start` and `amicus_fanout` have no MCP param for a
   pack's `briefing.template` or `options.maxCost` (both trigger the notice on either tool), and
   `amicus_fanout` additionally has none for `options.contextTurns` / `options.contextMaxTokens`.
-  `amicus_council_run` has its own version of the same gap: a council pack's `options.agent`,
-  `options.thinking`, and `options.summaryLength` are valid pack fields with no destination in its
-  MCP schema, so they trigger the identical notice.
+  `amicus_council_run` is a different case, not just the same gap on another surface: a council
+  pack's `options.agent`, `options.thinking`, and `options.summaryLength` are reserved, currently
+  inert on all surfaces — accepted and recorded in the pack, but not yet applied to a council run
+  by the CLI path either. MCP still has no schema destination for these three and surfaces the
+  identical notice, but closing that MCP gap alone would not make them functional.
 - **Briefing templates.** `amicus template list|show`, plus `--template <name|path>` / `--artifact
   <file>` / `--var <k=v>` (repeatable) on `start` / `fanout` / `council run`, render a
   `{{variable}}` briefing before it's sent. Templates are Markdown files in
@@ -72,8 +74,10 @@ shareable, and the flagship Council Workspace stops being opt-in on its best cli
   the first model's review/judge prose under the *second* model's panel — including, in a `--debate`
   run, the rebuttal/re-vote drill-in. Collided names now get a deterministic suffix (`~2`, `~3`,
   …), and every Workspace file lookup consults the resulting name map instead of recomputing a bare
-  sanitized name — the second colliding model's panel now honestly renders "not written yet"
-  instead of showing the wrong model's text.
+  sanitized name — the second colliding model's row is now correctly dropped by the existing
+  presence filter (its suffixed name was never physically written) instead of showing the wrong
+  model's text, and a run-integrity banner names the collision so the gap reads as a known
+  limitation rather than missing data.
 - **A blind-mode toggle no longer collapses every open prose panel or repaints twice.** Flipping
   Blind mid-run used to unconditionally recompute the blind default, forcing one paint with the
   wrong value, a restore, and a second compensating repaint — and reset every lazy-loaded panel's
