@@ -163,6 +163,17 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     expect(metaWrite.slice(0, 700)).toContain('packRecord');
   });
 
+  test('amicus_start records the pack on the spawn-fallback pre-seed metadata write', () => {
+    const start = src.indexOf('async amicus_start(');
+    const end = src.indexOf('async amicus_status(', start);
+    const handler = src.slice(start, end);
+    // Locate the spawn-fallback pre-seed write by searching from the spawn invocation onward
+    const spawnIdx = handler.indexOf('spawnSidecarProcess');
+    const preSpawnSection = handler.slice(spawnIdx);
+    const metaWrite = preSpawnSection.slice(preSpawnSection.indexOf("'metadata.json'"));
+    expect(metaWrite.slice(0, 600)).toContain('packRecord');
+  });
+
   test('the MCP bridge is imported from pack/pack-resolve, never re-deriving the knob tables', () => {
     expect(src).toContain("require('./pack/pack-resolve')");
   });

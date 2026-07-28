@@ -588,6 +588,8 @@ const handlers = {
           // CLI child's createSessionMetadata overwrite (or if it crashes first).
           mode: input.noUi ? 'headless' : 'interactive',
           briefing: input.prompt,
+          // v4.5 Task 15: additive-only — absent (not null) without a pack.
+          ...(packRecord ? { pack: packRecord } : {}),
         }, null, 2), { mode: 0o600 });
       }
     }
