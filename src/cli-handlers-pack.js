@@ -118,16 +118,24 @@ function buildPackFromRun(name, id, project, args) {
 
   const ptr = runState.readPointer(project, id); // {runId, runDir}|null (run-state.js:156)
   const run = ptr ? runState.readRun(ptr.runDir) : null;
-  if (run && run.type === 'council-run') { return packFromCouncilRun(name, version, run); }
-
-  const fs = require('fs');
-  const path = require('path');
-  const { getSessionDir } = require('./session-manager');
-  let meta = null;
-  try { meta = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, id), 'metadata.json'), 'utf-8')); }
-  catch { return { error: `Session ${id} not found` }; }
-
-  return meta.type === 'wave' ? packFromWave(name, version, project, meta) : packFromSolo(name, version, meta);
+  let pack;
+  if (run && run.type === 'council-run') {
+    pack = packFromCouncilRun(name, version, run);
+  } else {
+    const fs = require('fs');
+    const path = require('path');
+    const { getSessionDir } = require('./session-manager');
+    let meta = null;
+    try { meta = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, id), 'metadata.json'), 'utf-8')); }
+    catch { return { error: `Session ${id} not found` }; }
+    pack = meta.type === 'wave' ? packFromWave(name, version, project, meta) : packFromSolo(name, version, meta);
+  }
+  // T14-m4 (final-review): buildPackFromFlags honors --description (line ~27
+  // above); this --from-run path threaded `version` the same way but silently
+  // dropped --description. Honor it here too, regardless of which branch
+  // (council/wave/solo) produced the pack.
+  if (args.description) { pack.description = String(args.description); }
+  return pack;
 }
 
 function renderPackList(doc) {

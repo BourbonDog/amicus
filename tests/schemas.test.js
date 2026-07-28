@@ -86,6 +86,21 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(compile('wave'), doc);
   });
 
+  // v4.5 final-review F5: wave.schema.json's pack was typed ["object","null"]
+  // — the only nullable-pack schema among the three siblings (run.schema.json/
+  // council-run.schema.json are both object-only) — but every emitter uses
+  // the absent-not-null idiom (never emits pack:null), so the "null" branch
+  // was dead. Tightened to object-only; this locks it against regression.
+  test('wave.schema.json rejects an explicit pack:null (every emitter is absent-not-null, matching run/council-run siblings)', () => {
+    const doc = buildWaveResult({
+      waveId: 'sch-wave-3', legs: [runDoc],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    doc.pack = null; // simulates a hand-rolled/legacy doc; buildWaveResult itself never does this
+    expect(compile('wave')(doc)).toBe(false);
+  });
+
   test('abort.schema.json accepts buildAbortResult output', () => {
     expectValid(compile('abort'), buildAbortResult({ scope: 'session', taskId: 't1', aborted: ['t1'] }));
     expectValid(compile('abort'), buildAbortResult({ scope: 'all', taskId: null, aborted: [] }));

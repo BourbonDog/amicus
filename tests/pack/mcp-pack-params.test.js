@@ -151,6 +151,33 @@ describe('amicus_council_run pack param', () => {
   });
 });
 
+describe('pack-error hint parity over MCP (T15-m1, final-review)', () => {
+  // Before the fix, council/fanout's pack-error branch forwarded only
+  // pr.error.message, dropping pr.error.hint — amicus_start's own pack-error
+  // branch (mcp-server.js:289-291) keeps it via buildErrorDoc. A mistyped
+  // pack name is PACK_NOT_FOUND, which DOES carry a hint ('amicus pack
+  // list') — the scenario that exposes the drop. Both handlers return this
+  // error BEFORE ever spawning a child (pack resolution runs first), so a
+  // real behavioral call is safe here — no spawn to mock.
+  test('amicus_council_run: a mistyped pack name response contains the recovery hint', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      { briefingFile, pack: 'totally-not-a-real-pack' }, tmp, helpers(calls));
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('not found');
+    expect(res.content[0].text).toContain('amicus pack list');
+    expect(calls).toHaveLength(0);
+  });
+
+  test('amicus_fanout: a mistyped pack name response contains the recovery hint', async () => {
+    const { handlers } = require('../../src/mcp-server');
+    const res = await handlers.amicus_fanout({ pack: 'totally-not-a-real-pack' }, tmp);
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('not found');
+    expect(res.content[0].text).toContain('amicus pack list');
+  });
+});
+
 describe('the pack param is declared on all three run-tool schemas; tool count stays 16', () => {
   test('getTools()', () => {
     const tools = getTools();

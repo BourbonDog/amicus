@@ -23,10 +23,11 @@ const { readPack } = require('./pack-store');
 const { validatePack } = require('./pack-validate');
 const { ERROR_CODES } = require('../utils/error-doc');
 
-/** `options.*` knobs shared by every kind that defines them (council/fanout/solo). */
+/** `options.*` knobs shared by every kind that defines them (council/fanout/solo).
+ * `agent` is deliberately NOT in this table — see the dedicated fill below. */
 const COMMON_OPTION_KNOBS = [
   ['timeout', 'timeout'], ['maxCost', 'max-cost'], ['gateway', 'gateway'],
-  ['agent', 'agent'], ['thinking', 'thinking'], ['summaryLength', 'summary-length'],
+  ['thinking', 'thinking'], ['summaryLength', 'summary-length'],
 ];
 /** `options.*` knobs shared by fanout + solo only (v4.5 F4 context controls). */
 const CONTEXT_OPTION_KNOBS = [
@@ -111,6 +112,18 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
   }
 
   for (const [optKey, argKey] of COMMON_OPTION_KNOBS) { fill(argKey, opts[optKey]); }
+
+  // v4.5 final-review F4: cli-handlers-run.js normalizes a legacy --mode flag
+  // into args.agent AFTER this merge runs (`args.agent = args.agent ||
+  // args.mode`, handleStart/handleFanout only — council has no --mode flag).
+  // A typed --mode with no --agent lands 'mode' in `explicit` but not 'agent',
+  // so the generic fill() above would silently overwrite a pack's
+  // options.agent onto args.agent before that fallback ever sees args.mode —
+  // the user's typed value loses to the pack, invisibly. Count --mode as
+  // agent-explicit too (same shape as the debate/no-debate negation check
+  // below, which also treats an alternate typed form as full explicitness).
+  const agentExplicit = explicit.has('agent') || explicit.has('mode');
+  if (!agentExplicit && opts.agent !== undefined && opts.agent !== null) { args.agent = opts.agent; }
 
   if (pack.kind === 'council') {
     // Task 10 ruling: negations record only the literal typed key, so a

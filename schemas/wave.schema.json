@@ -29,6 +29,6 @@
     "durationMs": { "type": ["number", "null"] },
     "usage": { "type": "object" },
     "notices": { "type": "array", "items": { "type": "string" } },
-    "pack": { "type": ["object", "null"] }
+    "pack": { "type": "object" }
   }
 }

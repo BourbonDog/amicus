@@ -1134,7 +1134,13 @@ const handlers = {
       const pr = applyPackToMcpInput({
         packRef: input.pack, expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
       });
-      if (pr.error) { return textResult(pr.error.message, true); }
+      // v4.5 final-review T15-m1: amicus_start's own pack-error branch above
+      // keeps code+hint via buildErrorDoc's JSON envelope; amicus_fanout's
+      // error surface is plain text, so the hint (e.g. PACK_NOT_FOUND's
+      // 'amicus pack list') is appended to the message instead of being
+      // converted into a JSON envelope, which would change this tool's
+      // established response shape.
+      if (pr.error) { return textResult(pr.error.message + (pr.error.hint ? `\n${pr.error.hint}` : ''), true); }
       packRecord = pr.packRecord;
       packNotices.push(...pr.notices);
     }

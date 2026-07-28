@@ -788,6 +788,64 @@ describe('runFanout orchestrator', () => {
       expect(openrouterRow).toMatchObject({ gateway: 'openrouter' });
     });
   });
+
+  // v4.5 final-review F2: an MCP-spawned child fanout process never receives
+  // --pack (single-resolution rule) — mcp-server.js resolves the pack
+  // in-process and pre-seeds waveDir/metadata.json with it BEFORE spawning
+  // the child. runFanout must inherit that pre-seeded pack onto wave.json
+  // when its OWN options.pack is absent, at BOTH buildWaveResult call sites
+  // (the all-legs-unroutable short-circuit and normal completion).
+  describe('pack inheritance from pre-seeded metadata.json (F2, final-review)', () => {
+    const PACK_RECORD = { name: 'fanout-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' };
+
+    function preSeedMetadataWithPack(waveId) {
+      const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', waveId);
+      fsReal.mkdirSync(waveDir, { recursive: true });
+      fsReal.writeFileSync(pathReal.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: waveId, type: 'wave', status: 'running', pack: PACK_RECORD,
+      }, null, 2));
+      return waveDir;
+    }
+
+    it('normal completion: wave.json inherits the pre-seeded pack when options.pack is absent (mirrors mcp-server.js pre-seed)', async () => {
+      preSeedMetadataWithPack('cafepack1');
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafepack1' });
+      expect(wave.pack).toEqual(PACK_RECORD);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafepack1', 'wave.json'), 'utf-8'));
+      expect(stored.pack).toEqual(PACK_RECORD);
+    });
+
+    it('all-legs-unroutable short-circuit: wave.json inherits the pre-seeded pack when options.pack is absent', async () => {
+      preSeedMetadataWithPack('cafepack2');
+      const routingFailure = async () => ({
+        kind: 'error', type: 'model_route_error', field: 'model', requested: 'x',
+        reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [],
+      });
+      mockResolveRouteForLaunch.mockImplementationOnce(routingFailure).mockImplementationOnce(routingFailure);
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafepack2' });
+      expect(wave.status).toBe('error');
+      expect(wave.pack).toEqual(PACK_RECORD);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafepack2', 'wave.json'), 'utf-8'));
+      expect(stored.pack).toEqual(PACK_RECORD);
+    });
+
+    it('an explicitly-passed options.pack still wins (precedence holds even if metadata.json seeded differently)', async () => {
+      preSeedMetadataWithPack('cafepack3');
+      const EXPLICIT_PACK = { name: 'explicit-pack', version: '2.0.0', hash: 'deadbeefcafe', source: 'dir' };
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafepack3', pack: EXPLICIT_PACK });
+      expect(wave.pack).toEqual(EXPLICIT_PACK);
+    });
+
+    it('no pack anywhere: wave.json has NO pack key (absent, not null)', async () => {
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafepack4' });
+      expect('pack' in wave).toBe(false);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafepack4', 'wave.json'), 'utf-8'));
+      expect('pack' in stored).toBe(false);
+    });
+  });
 });
 
 // 15a.1/B07: writeWaveMetadata must not let an in-flight init/finalize patch

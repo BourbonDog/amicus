@@ -103,7 +103,13 @@ async function handleCouncilRunTool(input, project, helpers) {
     const pr = applyPackToMcpInput({
       packRef: input.pack, expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
     });
-    if (pr.error) { return textResult(pr.error.message, true); }
+    // v4.5 final-review T15-m1: amicus_start's own pack-error branch
+    // (mcp-server.js) keeps code+hint via buildErrorDoc's JSON envelope; this
+    // handler's error surface is plain text (born-fenced, not JSON), so the
+    // hint (e.g. PACK_NOT_FOUND's 'amicus pack list') is appended to the
+    // message instead of being converted into a JSON envelope, which would
+    // change this tool's established response shape.
+    if (pr.error) { return textResult(pr.error.message + (pr.error.hint ? `\n${pr.error.hint}` : ''), true); }
     packRecord = pr.packRecord;
     notices.push(...pr.notices);
   }

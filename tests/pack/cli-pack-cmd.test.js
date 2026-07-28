@@ -399,6 +399,26 @@ describe('handlePack: save --from-run (council pointer + run.json)', () => {
     expect('critic' in saved).toBe(false);
     expect('lenses' in saved).toBe(false);
   });
+
+  // T14-m4 (final-review): buildPackFromRun threaded `version` but silently
+  // dropped `--description`, unlike buildPackFromFlags (line ~27 above), which
+  // honors it. Fixed to honor it here too, regardless of which --from-run
+  // branch (council/wave/solo) produced the pack.
+  test('--description is honored on the --from-run path, same as the flags path (T14-m4)', async () => {
+    const runDir = path.join(project, 'council-ck3');
+    runState.initCouncilRun({
+      runId: 'ck3', runDir, project,
+      models: ['alpha', 'beta'], chair: 'chairmodel', critic: null, lenses: null,
+      timeout: 20, maxCost: 2.5, gateway: 'direct', debate: true,
+    });
+
+    const code = await handlePack(pa([
+      'save', 'from-council-desc', '--from-run', 'ck3', '--cwd', project, '--description', 'nightly review',
+    ]));
+    expect(code).toBe(0);
+    const saved = store().readPack('from-council-desc').pack;
+    expect(saved.description).toBe('nightly review');
+  });
 });
 
 // ---- --from-run: wave/fanout ----

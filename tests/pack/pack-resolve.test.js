@@ -165,6 +165,40 @@ describe('applyPackToArgs: council — debate skip rule covers both negation for
   });
 });
 
+describe('applyPackToArgs: fanout/solo — a typed --mode counts as agent-explicit (F4, final-review)', () => {
+  // cli-handlers-run.js normalizes a legacy --mode flag into args.agent AFTER
+  // this merge runs (`args.agent = args.agent || args.mode`, handleStart:62 /
+  // handleFanout:232) — but only 'mode' lands in `explicit` when the caller
+  // typed --mode without --agent. Before the fix, the generic COMMON_OPTION_KNOBS
+  // fill saw args.agent still undefined and explicit.has('agent') === false, so
+  // it clobbered args.agent with the pack's options.agent BEFORE the handler's
+  // fallback ever got a chance to read args.mode — the typed --mode silently lost.
+  test('--mode typed (no --agent) is NOT overwritten by the pack\'s options.agent — the handler\'s --mode fallback must see args.mode untouched', () => {
+    store().writePack(FANOUT_PACK()); // options.agent: 'code'
+    const args = parseArgs(['fanout', '--mode', 'chat']);
+    const res = resolve()({ packRef: 'fanout-review', expectedKind: 'fanout', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.agent).toBeUndefined(); // NOT filled with the pack's 'code'
+    expect(args.mode).toBe('chat'); // untouched, so `args.agent || args.mode` resolves to 'chat'
+  });
+
+  test('explicit --agent still beats the pack even when --mode is ALSO typed', () => {
+    store().writePack(FANOUT_PACK());
+    const args = parseArgs(['fanout', '--mode', 'chat', '--agent', 'plan']);
+    const res = resolve()({ packRef: 'fanout-review', expectedKind: 'fanout', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.agent).toBe('plan'); // typed --agent wins over both --mode and the pack
+  });
+
+  test('agent still fills from the pack when neither --agent nor --mode is typed (no false pack-attribution regression)', () => {
+    store().writePack(FANOUT_PACK());
+    const args = parseArgs(['fanout']);
+    const res = resolve()({ packRef: 'fanout-review', expectedKind: 'fanout', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.agent).toBe('code');
+  });
+});
+
 describe('applyPackToArgs: council — falsy pack values still fill (guard is null/undefined, not truthiness)', () => {
   test('a pack value of FALSE fills (the guard is null/undefined, not truthiness)', () => {
     const pack = { ...COUNCIL_PACK(), name: 'debate-false-untyped', options: { ...COUNCIL_PACK().options, debate: false } };
