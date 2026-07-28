@@ -504,6 +504,17 @@ function hasTierOnboarded() {
 }
 
 /**
+ * v4.5 auto-open (spec §6 guard 4): the Workspace auto-opens on MCP council
+ * runs from Claude Desktop unless config.workspace.autoOpen === false. Only an
+ * explicit false disables — absent/junk values stay ON (opt-out semantics).
+ * @returns {boolean}
+ */
+function getWorkspaceAutoOpen() {
+  const config = loadConfig() || {};
+  return !(config.workspace && config.workspace.autoOpen === false);
+}
+
+/**
  * Persist the one-time onboarding-notice flag, preserving any other routing
  * keys (prefer, tier, migration_notified). Best-effort: swallows any
  * saveConfig failure so a persistence hiccup never breaks the command that
@@ -571,4 +582,5 @@ module.exports = {
   setCostTier,
   hasTierOnboarded,
   markTierOnboarded,
+  getWorkspaceAutoOpen,
 };
