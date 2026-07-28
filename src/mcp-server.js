@@ -281,6 +281,12 @@ const handlers = {
     // --pack — this is the only place the pack is resolved.
     let packRecord = null;
     const packNotices = [];
+    // v4.5 HOLD-gate decision 1: pack-filled maxCost/template have no MCP
+    // schema param of their own (see SOLO_PACK_PARAM_MAP above) but must still
+    // apply for CLI parity, on BOTH of this handler's paths (spawn-fallback
+    // below; the in-process shared-server branch further down) — a pack must
+    // not behave differently depending on which path fired.
+    let packForward = {};
     if (input.pack !== undefined) {
       const { applyPackToMcpInput } = require('./pack/pack-resolve');
       const pr = applyPackToMcpInput({
@@ -292,6 +298,7 @@ const handlers = {
       }
       packRecord = pr.packRecord;
       packNotices.push(...pr.notices);
+      packForward = pr.forward;
     }
 
     // Validate non-model inputs (prompt/timeout/agent) before any session creation.
@@ -386,12 +393,66 @@ const handlers = {
     if (input.coworkProcess)    { args.push('--cowork-process', input.coworkProcess); }
     if (input.parentSession)    { args.push('--session-id', input.parentSession); }
     if (input.windowPosition)   { args.push('--position', input.windowPosition); }
+    // v4.5 HOLD-gate decision 1: forward a pack-filled maxCost/template as
+    // plain CLI flags on the spawn-fallback path — neither has an MCP schema
+    // param of its own, but CLI parity requires them to apply anyway. Never
+    // pushed when the pack didn't fill them. The in-process shared-server
+    // branch below applies the SAME two knobs via its own mechanism (budget
+    // gate / template pre-render) for parity between the two paths.
+    if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
+    if (packForward.template !== undefined) { args.push('--template', packForward.template); }
     args.push('--cwd', cwd);
 
     if (sharedServer.enabled && input.noUi) {
       // Shared server path: headless only, delegates to runHeadless()
       let sessionId;
       try {
+        // v4.5 HOLD-gate decision 1 (parity): apply a pack-forwarded
+        // template/maxCost on THIS path too, before any session/spend action —
+        // "behavior parity between the two amicus_start paths is a hard
+        // requirement", so a pack must not behave differently depending on
+        // which one fired. Mirrors the CLI's own ordering (cli-handlers-run.js
+        // applies --template, then the budget gate, both before startAmicus)
+        // and the council MCP path's template pre-render (mcp-council-run.js's
+        // template block). Notices collected LOCALLY, not into the shared
+        // packNotices: if ensureServer/createSession below throws and this
+        // whole branch falls through to the spawn-fallback catch, a stray
+        // notice from this abandoned attempt must never leak into the
+        // spawn-fallback's own response.
+        const inProcessNotices = [];
+        let renderedPrompt = input.prompt;
+        if (packForward.template !== undefined) {
+          const { applyTemplate } = require('./template/apply');
+          const t = applyTemplate({ templateRef: packForward.template, prompt: input.prompt, project: cwd });
+          if (t.error) {
+            const { buildErrorDoc } = require('./utils/error-doc');
+            return { isError: true, content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(t.error)) }] };
+          }
+          renderedPrompt = t.prompt;
+          inProcessNotices.push(...t.notices);
+        }
+        if (packForward.maxCost !== undefined) {
+          const { lookupPricing } = require('./utils/pricing');
+          const { checkBudget, formatBudgetError } = require('./sidecar/budget');
+          const { loadConfig } = require('./utils/config');
+          const cfg = loadConfig() || {};
+          const soloLeg = { modelInput: input.model || resolvedModel, model: resolvedModel, pricing: lookupPricing(resolvedModel) };
+          const budget = checkBudget([soloLeg], {
+            maxCostPerMtok: cfg.maxCostPerMtok, maxCost: packForward.maxCost,
+            promptChars: (renderedPrompt && renderedPrompt.length) || 0,
+          });
+          if (!budget.ok) {
+            const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
+            return {
+              isError: true,
+              content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
+                code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run',
+                hint: formatBudgetError(budget),
+              })) }],
+            };
+          }
+        }
+
         const { server, client } = await sharedServer.ensureServer();
         const { createSession } = require('./opencode-client');
         const { buildContext } = require('./sidecar/context-builder');
@@ -427,7 +488,10 @@ const handlers = {
           // so without them status/list/read show a briefing-less, mode-less run.
           mode: 'headless',
           agent: agent || 'build',
-          briefing: input.prompt,
+          // v4.5 HOLD-gate decision 1: the RENDERED prompt (byte-identical to
+          // input.prompt when no pack template applied) — parity with the CLI,
+          // whose briefing.md on disk is always the rendered text (spec §4).
+          briefing: renderedPrompt,
           // v4.5 Task 15: additive-only — absent (not null) without a pack.
           ...(packRecord ? { pack: packRecord } : {}),
         }, null, 2), { mode: 0o600 });
@@ -451,9 +515,13 @@ const handlers = {
         // 15b.3: one nonce per run, generated before prompt construction.
         const foldNonce = generateFoldNonce();
 
-        // Build prompts (same as CLI path in start.js)
+        // Build prompts (same as CLI path in start.js). renderedPrompt is the
+        // pack-template-rendered text when packForward.template was set above
+        // (byte-identical to input.prompt otherwise) — this is the ONE place
+        // the built prompt reaches the model, so rendering has no effect
+        // unless it is threaded in here.
         const { system: systemPrompt, userMessage } = buildPrompts(
-          input.prompt, context, cwd, true, agent, input.summaryLength, undefined, foldNonce
+          renderedPrompt, context, cwd, true, agent, input.summaryLength, undefined, foldNonce
         );
 
         // Register session with idle eviction
@@ -557,6 +625,11 @@ const handlers = {
         // v4.5 Task 15: pack notices (e.g. a bench-override) are non-fatal —
         // surfaced as extra content blocks, same precedent as routeResult.notice above.
         for (const n of packNotices) { sharedServerContent.push({ type: 'text', text: n }); }
+        // v4.5 HOLD-gate decision 1: template-render notices (e.g. an unused
+        // --var-equivalent), merged only now that the in-process path has
+        // actually succeeded — see the try block's opening comment for why
+        // these are not in the shared packNotices array.
+        for (const n of inProcessNotices) { sharedServerContent.push({ type: 'text', text: n }); }
         sharedServerContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
         return { content: sharedServerContent };
       } catch (err) {
@@ -1129,6 +1202,12 @@ const handlers = {
     // pack is resolved.
     let packRecord = null;
     const packNotices = [];
+    // v4.5 HOLD-gate decision 1: pack-filled maxCost/template have no MCP
+    // schema param of their own (see FANOUT_PACK_PARAM_MAP above) but must
+    // still apply for CLI parity — applyPackToMcpInput hands them back here
+    // instead of turning them into an ignore-notice; this handler forwards
+    // them to the spawned CLI child's argv below.
+    let packForward = {};
     if (input.pack !== undefined) {
       const { applyPackToMcpInput } = require('./pack/pack-resolve');
       const pr = applyPackToMcpInput({
@@ -1143,6 +1222,7 @@ const handlers = {
       if (pr.error) { return textResult(pr.error.message + (pr.error.hint ? `\n${pr.error.hint}` : ''), true); }
       packRecord = pr.packRecord;
       packNotices.push(...pr.notices);
+      packForward = pr.forward;
     }
 
     // Resolve a single effective models list (council OR models), validated
@@ -1217,6 +1297,14 @@ const handlers = {
     // so context-inheriting fanout launched from Cowork resolves the right parent.
     if (input.coworkProcess) { args.push('--cowork-process', input.coworkProcess); }
     if (input.parentSession) { args.push('--session-id', input.parentSession); }
+    // v4.5 HOLD-gate decision 1: forward a pack-filled maxCost/template as
+    // plain CLI flags — neither has an MCP schema param of its own, but CLI
+    // parity requires them to apply anyway (a shared pack's spend cap and
+    // briefing template must not silently vanish over MCP). Never pushed when
+    // the pack didn't fill them; single-resolution rule unaffected (--pack
+    // itself is never forwarded, only the two knobs it resolved to).
+    if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
+    if (packForward.template !== undefined) { args.push('--template', packForward.template); }
 
     try { spawnSidecarProcess(args, waveDir); } catch (err) {
       // Best-effort: never leave a pid-less wave record claiming 'running'

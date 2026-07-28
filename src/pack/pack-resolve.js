@@ -165,6 +165,24 @@ function applyPackToArgs({ packRef, expectedKind, args, explicit }) {
  * below so `applyPackToArgs`'s tables never need to know about MCP shapes. */
 const CSV_ARG_KEYS = new Set(['models', 'lenses']);
 
+/** Reverse of the knob tables above (argKey -> pack's own camelCase option
+ * key), used ONLY in notice text (v4.5 decision 1b, T15-m10): a pack author
+ * writes `contextTurns`, not the CLI's `context-turns` — naming the arg-key
+ * in a notice is confusing at the exact moment it matters. Bespoke (non-table)
+ * knobs — chair/critic/lenses/agent/debate/no-ui — already match on both
+ * sides, so the plain-argKey fallback below is correct for them too. */
+const ARG_KEY_TO_OPT_KEY = Object.fromEntries(
+  [...COMMON_OPTION_KNOBS, ...CONTEXT_OPTION_KNOBS].map(([optKey, argKey]) => [argKey, optKey])
+);
+
+/** argKeys forwarded instead of notice'd when a tool's paramMap has no
+ * destination for them (v4.5 decision 1): a pack's maxCost/template must
+ * still apply on `amicus_fanout`/`amicus_start` for CLI parity, even with no
+ * schema param for either. `amicus_council_run` already has real destinations
+ * for both (COUNCIL_PACK_PARAM_MAP), so it never reaches this path. Context
+ * knobs are deliberately excluded — ruled notice-only, out of scope. */
+const FORWARDABLE_ARG_KEYS = new Set(['max-cost', 'template']);
+
 function toArgValue(argKey, value) {
   return (CSV_ARG_KEYS.has(argKey) && Array.isArray(value)) ? value.join(',') : value;
 }
@@ -193,13 +211,22 @@ function fromArgValue(argKey, value) {
  * centralize 'pack-filled' in pack-resolve rather than re-deriving").
  *
  * Fix wave 2 (Task 15 review, Finding 2): a pack knob `applyPackToArgs` fills
- * but `paramMap` has no MCP destination for (e.g. council's `agent`/`thinking`/
- * `summary-length`, fanout/solo's `max-cost`/`template`) would otherwise be a
- * silent dead-fill — written into the local `args` bridge, then dropped on the
- * floor because the write-back loop below only ever visits `paramMap` entries.
- * Made loud instead: every `args` key with no `paramMap` destination becomes one
- * notice, naming the pack, the knob, and the MCP tool. Still never forwarded to
- * a spawned child argv (that question is deliberately deferred to the human).
+ * but `paramMap` has no MCP destination for (e.g. fanout's `contextTurns`/
+ * `contextMaxTokens`) would otherwise be a silent dead-fill — written into the
+ * local `args` bridge, then dropped on the floor because the write-back loop
+ * below only ever visits `paramMap` entries. Made loud instead: every `args`
+ * key with no `paramMap` destination becomes one notice, naming the pack, the
+ * knob (by the pack's own camelCase option key — v4.5 HOLD-gate decision 1b,
+ * T15-m10), and the MCP tool.
+ *
+ * v4.5 decision 1: two otherwise-orphaned knobs — maxCost/template — are NOT
+ * turned into a notice on `amicus_fanout`/`amicus_start` (no schema param for
+ * either); CLI parity requires them to still apply, so their pack-filled
+ * values come back on `forward` instead, for the caller (mcp-server.js) to
+ * apply itself: forwarded to a spawned child's argv as plain flags, or (the
+ * in-process shared-server path) via the same budget-gate/template-render
+ * code the CLI uses. `amicus_council_run` already has real destinations for
+ * both, so `forward` is always `{}` there.
  * @param {{packRef: string, expectedKind: 'council'|'fanout'|'solo',
  *   input: object, paramMap: Object<string, string|{argKey: string, invert: true}>}} opts
  *   `paramMap` maps each MCP input key a tool exposes to the CLI arg-key name
@@ -209,8 +236,8 @@ function fromArgValue(argKey, value) {
  *   `includeContext` vs. the CLI/pack-side `no-context` polarity). An MCP key
  *   with no pack-fillable knob (e.g. `briefingFile`, `project`) is simply
  *   omitted from `paramMap` and left untouched by this function.
- * @returns {{packRecord: {name, version, hash, source}, notices: string[]}
- *   | {error: {code, message, hint}}}
+ * @returns {{packRecord: {name, version, hash, source}, notices: string[],
+ *   forward: {maxCost?: number, template?: string}} | {error: {code, message, hint}}}
  */
 function applyPackToMcpInput({ packRef, expectedKind, input, paramMap }) {
   const args = {};
@@ -237,9 +264,20 @@ function applyPackToMcpInput({ packRef, expectedKind, input, paramMap }) {
   );
   const notices = [...pr.notices];
   const toolName = MCP_TOOL_NAME_BY_KIND[expectedKind] || `amicus (${expectedKind})`;
+  // v4.5 HOLD-gate decision 1: maxCost/template have no MCP schema destination
+  // on fanout/start, but must still apply (CLI parity) — collected here for the
+  // caller to apply itself, instead of turned into an ignore-notice. Council
+  // already has real destinations for both (destArgKeys.has(argKey) is true
+  // there), so this loop never adds to `forward` for council calls.
+  const forward = {};
   for (const argKey of Object.keys(args)) {
     if (destArgKeys.has(argKey)) { continue; }
-    notices.push(`Notice: pack '${pr.packRecord.name}' sets ${argKey}, which ${toolName} does not support over MCP — ignored.`);
+    if (FORWARDABLE_ARG_KEYS.has(argKey)) {
+      forward[ARG_KEY_TO_OPT_KEY[argKey] || argKey] = args[argKey];
+      continue;
+    }
+    const optKey = ARG_KEY_TO_OPT_KEY[argKey] || argKey;
+    notices.push(`Notice: pack '${pr.packRecord.name}' sets ${optKey}, which ${toolName} does not support over MCP — ignored.`);
   }
 
   for (const [mcpKey, entry] of Object.entries(paramMap)) {
@@ -249,7 +287,7 @@ function applyPackToMcpInput({ packRef, expectedKind, input, paramMap }) {
     input[mcpKey] = invert ? !args[argKey] : fromArgValue(argKey, args[argKey]);
   }
 
-  return { packRecord: pr.packRecord, notices };
+  return { packRecord: pr.packRecord, notices, forward };
 }
 
 module.exports = { applyPackToArgs, applyPackToMcpInput };

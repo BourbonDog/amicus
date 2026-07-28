@@ -228,7 +228,11 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
     const end = src.indexOf('async amicus_status(', start);
     const handler = src.slice(start, end);
     const metaWrite = handler.slice(handler.indexOf('opencodeSessionId: sessionId'));
-    expect(metaWrite.slice(0, 700)).toContain('packRecord');
+    // Window widened 700->950 (v4.5 HOLD-gate decision 1): the renderedPrompt
+    // doc comment above `briefing:` pushed packRecord further into the slice
+    // (T15-m4 already flags this fixed-offset idiom as brittle; not
+    // re-litigated here, just re-measured).
+    expect(metaWrite.slice(0, 950)).toContain('packRecord');
   });
 
   test('amicus_start records the pack on the spawn-fallback pre-seed metadata write', () => {
@@ -244,6 +248,49 @@ describe('amicus_fanout / amicus_start pack wiring (source-text assertions, test
 
   test('the MCP bridge is imported from pack/pack-resolve, never re-deriving the knob tables', () => {
     expect(src).toContain("require('./pack/pack-resolve')");
+  });
+
+  // ---- v4.5 HOLD-gate decision 1: pack-forwarded maxCost/template (source-text) ----
+
+  test('amicus_fanout conditionally forwards pack.forward.maxCost/.template as CLI flags, never unconditionally, never --pack', () => {
+    const start = src.indexOf('async amicus_fanout(');
+    const end = src.indexOf('async amicus_council_tally(', start);
+    const handler = src.slice(start, end);
+    expect(handler).toMatch(/if\s*\(\s*packForward\.maxCost\s*!==\s*undefined\s*\)/);
+    expect(handler).toMatch(/if\s*\(\s*packForward\.template\s*!==\s*undefined\s*\)/);
+    expect(handler).toContain("'--max-cost'");
+    expect(handler).toContain("'--template'");
+    expect(handler).not.toContain("'--pack'");
+    // pack resolution (and its forward capture) must precede the spawn call.
+    expect(handler.indexOf('applyPackToMcpInput')).toBeLessThan(handler.indexOf('spawnSidecarProcess'));
+  });
+
+  test('amicus_start\'s spawn-fallback path conditionally forwards pack.forward.maxCost/.template as CLI flags', () => {
+    const start = src.indexOf('async amicus_start(');
+    const end = src.indexOf('async amicus_status(', start);
+    const handler = src.slice(start, end);
+    // Scope to the spawn-fallback half (after the shared-server branch closes).
+    const spawnIdx = handler.indexOf('spawnSidecarProcess');
+    const fallbackSection = handler.slice(0, spawnIdx);
+    expect(fallbackSection).toMatch(/if\s*\(\s*packForward\.maxCost\s*!==\s*undefined\s*\)/);
+    expect(fallbackSection).toMatch(/if\s*\(\s*packForward\.template\s*!==\s*undefined\s*\)/);
+    expect(fallbackSection).toContain("'--max-cost'");
+    expect(fallbackSection).toContain("'--template'");
+  });
+
+  test('amicus_start\'s in-process shared-server path applies packForward.template (render) and packForward.maxCost (budget gate) BEFORE createSession — parity with the spawn-fallback path', () => {
+    const start = src.indexOf('async amicus_start(');
+    const end = src.indexOf('async amicus_status(', start);
+    const handler = src.slice(start, end);
+    const sharedIdx = handler.indexOf('sharedServer.enabled && input.noUi');
+    expect(sharedIdx).toBeGreaterThan(-1);
+    const createSessionIdx = handler.indexOf('await createSession(', sharedIdx);
+    expect(createSessionIdx).toBeGreaterThan(sharedIdx);
+    const preSpend = handler.slice(sharedIdx, createSessionIdx);
+    expect(preSpend).toContain('applyTemplate');
+    expect(preSpend).toContain('checkBudget');
+    expect(preSpend).toMatch(/packForward\.template/);
+    expect(preSpend).toMatch(/packForward\.maxCost/);
   });
 });
 
@@ -343,19 +390,71 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     expect(input.agent).toBe('Plan');
   });
 
-  test("orphan-knob notice: a fanout pack's maxCost has no MCP destination and is reported, not silently dropped", () => {
+  // ---- v4.5 HOLD-gate decision 1: maxCost/template forward instead of orphan-notice ----
+  test("forward (decision 1): a fanout pack's maxCost has no MCP schema param but is forwarded via res.forward, never silently dropped and never an ignore-notice", () => {
     store().writePack(FANOUT_TEST_PACK()); // options.maxCost: 5
     const input = {};
     const res = applyPackToMcpInput({
       packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
-    const notice = res.notices.find((n) => n.includes('max-cost'));
-    expect(notice).toBeDefined();
-    expect(notice).toContain("pack 'fanout-direct-pack'");
-    expect(notice).toContain('amicus_fanout');
-    expect(notice).toContain('does not support over MCP');
-    expect(input.maxCost).toBeUndefined(); // never forwarded — the human decides
+    expect(res.forward).toEqual(expect.objectContaining({ maxCost: 5 }));
+    expect(input.maxCost).toBeUndefined(); // still no MCP schema destination — never written onto input
+    expect(res.notices.find((n) => /max-?[Cc]ost/.test(n))).toBeUndefined(); // applied, not ignored
+  });
+
+  test('forward (decision 1): a fanout pack with no maxCost/template forwards nothing', () => {
+    store().writePack({ ...FANOUT_TEST_PACK(), options: { noContext: true, gateway: 'openrouter' } });
+    const input = {};
+    const res = applyPackToMcpInput({
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+    });
+    expect(res.error).toBeUndefined();
+    expect(res.forward).toEqual({});
+  });
+
+  test('forward (decision 1): a solo pack briefing.template has no MCP schema param but is forwarded via res.forward', () => {
+    store().writePack({ ...SOLO_TEST_PACK(), briefing: { template: 'review' } });
+    const input = {};
+    const res = applyPackToMcpInput({
+      packRef: 'solo-direct-pack', expectedKind: 'solo', input, paramMap: TEST_SOLO_PARAM_MAP,
+    });
+    expect(res.error).toBeUndefined();
+    expect(res.forward.template).toBe('review');
+    expect(input.template).toBeUndefined();
+    expect(res.notices.find((n) => n.includes('template'))).toBeUndefined();
+  });
+
+  test('forward (decision 1): council already has real paramMap destinations for maxCost/template — forward stays empty', () => {
+    store().writePack(COUNCIL_PACK()); // no maxCost/template set in this fixture's options, but destinations exist either way
+    const input = { maxCost: 3, template: 'review' };
+    const res = applyPackToMcpInput({
+      packRef: 'sec-review', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+    });
+    expect(res.error).toBeUndefined();
+    expect(res.forward).toEqual({});
+  });
+
+  // ---- v4.5 HOLD-gate decision 1b (T15-m10): remaining orphan notices name the pack's own camelCase option key ----
+  test('notice wording (decision 1b): a fanout pack\'s contextTurns/contextMaxTokens stay notice-only, named by their camelCase pack option key', () => {
+    store().writePack({
+      ...FANOUT_TEST_PACK(),
+      options: { contextTurns: 20, contextMaxTokens: 5000 },
+    });
+    const input = {};
+    const res = applyPackToMcpInput({
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+    });
+    expect(res.error).toBeUndefined();
+    const turnsNotice = res.notices.find((n) => n.includes('contextTurns'));
+    const tokensNotice = res.notices.find((n) => n.includes('contextMaxTokens'));
+    expect(turnsNotice).toBeDefined();
+    expect(tokensNotice).toBeDefined();
+    // Never the CLI kebab-case arg-key form — that's the exact bug being fixed.
+    expect(res.notices.some((n) => n.includes('context-turns'))).toBe(false);
+    expect(res.notices.some((n) => n.includes('context-max-tokens'))).toBe(false);
+    expect(input.contextTurns).toBeUndefined();
+    expect(input.contextMaxTokens).toBeUndefined();
   });
 
   test("orphan-knob notice: a council pack's agent has no MCP destination and is reported", () => {
