@@ -650,3 +650,45 @@ describe('amicus_start spawn-fallback: pre-spend validation of pack-forwarded ma
     expect(sessionDirCount(tmp)).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave-1 review fix (I4): fanout wave pre-seed records child pid so
+// pre-creation deaths (e.g., budget gate failPre) are reapable by crash
+// detection, which probes pid-bearing records only.
+// ---------------------------------------------------------------------------
+
+describe('I4: amicus_fanout wave metadata pre-seed includes child pid', () => {
+  async function callFanoutWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnMock };
+  }
+
+  test('fanout wave metadata.json pre-seed includes pid as a number matching the spawned child pid', async () => {
+    const { result, spawnMock } = await callFanoutWithMockedSpawn(
+      { models: ['model-a', 'model-b'], prompt: 'Test.' }, tmp);
+
+    expect(result.isError).toBeUndefined();
+    expect(spawnMock.mock.calls.length).toBe(1);
+
+    // Extract the waveId from the response
+    const responseText = result.content[0].text;
+    const waveIdMatch = responseText.match(/"waveId"\s*:\s*"([^"]+)"/);
+    expect(waveIdMatch).toBeTruthy();
+    const waveId = waveIdMatch[1];
+
+    // Read the wave metadata
+    const waveDir = path.join(tmp, '.claude', 'amicus_sessions', waveId);
+    const metaPath = path.join(waveDir, 'metadata.json');
+    expect(fs.existsSync(metaPath)).toBe(true);
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    expect(meta.pid).toBe(4242);
+    expect(typeof meta.pid).toBe('number');
+  });
+});

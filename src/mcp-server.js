@@ -1318,7 +1318,8 @@ const handlers = {
     if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
     if (packForward.template !== undefined) { args.push('--template', packForward.template); }
 
-    try { spawnSidecarProcess(args, waveDir); } catch (err) {
+    let child;
+    try { child = spawnSidecarProcess(args, waveDir); } catch (err) {
       // Best-effort: never leave a pid-less wave record claiming 'running'
       // forever (crash detection only probes records WITH a pid).
       try {
@@ -1327,6 +1328,16 @@ const handlers = {
         writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
       } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
+    }
+
+    // v4.5 Wave-1 fix (I4): merge the child pid into the pre-seeded wave metadata
+    // so crash detection can probe pid-bearing records (absent pid = unreapable phantom).
+    if (child && child.pid) {
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
+        Object.assign(m, { pid: child.pid });
+        writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
+      } catch { /* best-effort: metadata already has no pid */ }
     }
     // Task 15 (spec §5.3): the run is now known-launched under waveId — mark
     // it for a best-effort terminal notify. runWait's poll loop (mcp-wait.js)
