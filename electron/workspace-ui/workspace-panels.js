@@ -19,6 +19,24 @@
   // inverted back to the model id that keys state.labelByModel, so blind labels would break.
   function sanitizeName(model) { return String(model).replace(/[^a-zA-Z0-9._-]/g, '-'); }
 
+  // ⚠️ Task 18 (RN-1): review-/judge- filenames used to be recomputed here via a bare
+  // sanitizeName(model) call, which is NOT injective — two distinct bench models that sanitize
+  // to the same name would both resolve to the SAME filename, so drillIntoJudge's
+  // `[data-artifact="..."]` lookup handed back whichever section matched first (model A's prose
+  // rendered under model B's name). derived.artifactsByModel (src/workspace/artifact-guard.js's
+  // artifactAllowlist, threaded through by run-detail.js) already carries the disambiguated
+  // (possibly `~2`/`~3`-suffixed) name per raw model — consult it FIRST. Fall back to the legacy
+  // computation only when the map itself is absent: older detail payloads (pre-v4.5 runs,
+  // live-doc consumers not yet updated to build the map) never carry it, and re-deriving via
+  // sanitizeName is exactly what those payloads always did, so it stays correct for them too.
+  function resolveArtifactName(model, kind) {
+    var A = window.AmicusApp;
+    var map = A.state.detail.derived && A.state.detail.derived.artifactsByModel;
+    var entry = map && map[model];
+    if (entry && entry[kind]) { return entry[kind]; }
+    return kind + '-' + sanitizeName(model) + '.md';
+  }
+
   function renderSeatsPanel() {
     var A = window.AmicusApp;
     var d = A.state.detail;
@@ -141,7 +159,7 @@
     loaders['reviews-panel'] = { bodyId: 'reviews-body', files: function () {
       return bench.map(function (m) {
         var label = A.state.labelByModel[m];
-        return { name: 'review-' + sanitizeName(m) + '.md', title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+        return { name: resolveArtifactName(m, 'review'), title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
       }).filter(function (f) { return present(f.name); });
     } };
     loaders['bundle-panel'] = { bodyId: 'bundle-body', files: function () {
@@ -157,7 +175,7 @@
     loaders['judges-panel'] = { bodyId: 'judges-body', files: function () {
       var files = bench.map(function (m) {
         var label = A.state.labelByModel[m];
-        return { name: 'judge-' + sanitizeName(m) + '.md', title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+        return { name: resolveArtifactName(m, 'judge'), title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
       });
       if (debated) {
         // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose
@@ -196,7 +214,7 @@
       });
       var artifactName = rv
         ? 'revote-' + sanitizeName(judgePair.model) + '.md'
-        : 'judge-' + sanitizeName(judgePair.model) + '.md';
+        : resolveArtifactName(judgePair.model, 'judge');
       var section = A.$('judges-body').querySelector('[data-artifact="' + artifactName + '"]');
       // A genuinely absent artifact is not an error here — the panel renders its own
       // "<file> not written yet" empty state (spec §9, last row).

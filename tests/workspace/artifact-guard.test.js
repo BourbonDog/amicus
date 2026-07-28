@@ -126,6 +126,50 @@ describe('artifactAllowlist', () => {
     expect(list.collisions).toEqual([
       { sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a', 'vendor a'] },
     ]);
+    // Sorted raw models -> 'vendor a' (space, U+0020) < 'vendor/a' (slash, U+002F) <
+    // 'vendor?a' (question mark, U+003F) by code point, so 'vendor a' keeps the bare
+    // sanitized name and the other two get ~2/~3 in that sorted order (Task 18 / RN-1).
+    expect(list.artifactsByModel).toEqual({
+      'vendor a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
+      'vendor/a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
+      'vendor?a': { review: 'review-vendor-a~3.md', judge: 'judge-vendor-a~3.md' },
+    });
+  });
+
+  // ⚠️ Task 18 (RN-1, R4 council review's own recommendation): the collision above is a real
+  // run-integrity defect (the run directory physically holds ONE file for two colliding
+  // sanitized names) that no renderer can undo — but a renderer showing model A's prose under
+  // model B's name is a SEPARATE, fixable defect. Deterministic disambiguation: per colliding
+  // sanitized name, sort the raw models; the first (sorted) keeps the bare sanitized name, the
+  // rest get `~2`, `~3`, ... The suffixed names deliberately do not exist on disk — the
+  // presence manifest (run-detail.js) marks them absent, so the second model's panel renders
+  // the honest "not written yet" empty state instead of the first model's prose.
+  test('artifactsByModel suffixes every colliding model but the first (sorted), and the allowlist carries both suffixed rows', () => {
+    const list = artifactAllowlist({ bench: ['vendor/a', 'vendor?a'] });
+    expect(list).toEqual(expect.arrayContaining([
+      'review-vendor-a.md', 'judge-vendor-a.md',
+      'review-vendor-a~2.md', 'judge-vendor-a~2.md',
+    ]));
+    expect(list.collisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+    expect(list.artifactsByModel).toEqual({
+      'vendor/a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
+      'vendor?a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
+    });
+  });
+
+  test('artifactsByModel is the identity mapping (no suffixes) when no bench entries collide', () => {
+    const list = artifactAllowlist({ bench: ['gemini', 'gpt'] });
+    expect(list.artifactsByModel).toEqual({
+      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md' },
+      gpt: { review: 'review-gpt.md', judge: 'judge-gpt.md' },
+    });
+  });
+
+  test('repeated identical bench entries collapse to one artifactsByModel row with NO suffix', () => {
+    const list = artifactAllowlist({ bench: ['gemini', 'gemini'] });
+    expect(list.artifactsByModel).toEqual({
+      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md' },
+    });
   });
 
   test('FIXED_ARTIFACTS and DEBATE_ARTIFACTS are frozen against consumer mutation', () => {

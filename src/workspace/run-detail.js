@@ -209,6 +209,12 @@ function getRunDetail(project, runId) {
       // would otherwise silently misattribute prose. Surfaced here (rather than only inside
       // the low-level allowlist helper) so the renderer can warn the user directly.
       artifactCollisions: artifactNames.collisions || [],
+      // ⚠️ Task 18 (RN-1): the de-collision map itself (raw model -> {review, judge} filename),
+      // built once in artifactAllowlist alongside `collisions` above. `|| null` (absent, not an
+      // empty object) so workspace-panels.js can tell "no map at all" (older detail payloads —
+      // pre-v4.5 runs, live-doc consumers not yet updated) apart from a real map, and fall back
+      // to its legacy sanitizeName(model) computation only in the former case.
+      artifactsByModel: artifactNames.artifactsByModel || null,
     };
   }
 

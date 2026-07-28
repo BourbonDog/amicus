@@ -635,4 +635,117 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     await global.window.AmicusApp.openRun('badid');
     expect(global.document.getElementById('abort-btn').hidden).toBe(true);
   });
+
+  // ⚠️ Task 18 (RN-1): a colliding sanitized name is a real run-integrity defect (the run
+  // directory physically holds ONE file for two models) that no renderer can undo — but a
+  // renderer showing model A's prose under model B's name is a separate, fixable defect.
+  // run-detail.js's `derived.artifactsByModel` (built in artifact-guard.js's
+  // artifactAllowlist) gives the SECOND (sorted) colliding model a `~2`-suffixed name that
+  // deliberately does not exist on disk, so its manifest entry is absent and its panel/drill
+  // renders the honest empty state instead of cross-matching the first model's real file.
+  function buildCollisionFixtureDetail() {
+    const bench = ['vendor/a', 'vendor?a'];
+    const labelMap = { 'Review A': 'vendor/a', 'Review B': 'vendor?a' };
+    return {
+      runId: 'cccc3333',
+      runDir: '/fake/run/cccc3333',
+      run: {
+        status: 'complete', schemaVersion: 2, bench, chair: bench[bench.length - 1],
+        stages: [{ name: 'stage1', status: 'complete', startedAt: 't0', completedAt: 't1' }],
+        labelMap, usage: { cost: { amount: 0.43 } }, options: { maxCost: 2 }, error: null, debate: null,
+      },
+      tally: {}, verdict: {},
+      // Only 'vendor/a' (the first, sorted) has real files — the collision means the run
+      // directory never held a second set for 'vendor?a' under a distinct name. The ~2 names
+      // are the disambiguated names Task 18 assigns; they are absent here on purpose.
+      artifacts: {
+        'chair-output.md': { present: false, bytes: 0 },
+        'report.html': { present: true, bytes: 512 },
+        'review-vendor-a.md': { present: true, bytes: 100 },
+        'judge-vendor-a.md': { present: true, bytes: 100 },
+        'review-vendor-a~2.md': { present: false, bytes: 0 },
+        'judge-vendor-a~2.md': { present: false, bytes: 0 },
+      },
+      derived: {
+        schemaSupported: true,
+        names: Object.entries(labelMap).map(([label, model]) => ({ label, model })),
+        stageRail: [{ name: 'stage1', label: 'Stage 1 — independent review', status: 'complete', startedAt: 't0', completedAt: 't1' }],
+        matrix: {
+          judges: bench.map((m) => ({ model: m, label: null })),
+          rows: [{
+            id: 'A1', severity: 'high', tier: 'Confirmed', thin: false, tierOverride: null, debate: null,
+            raiser: { model: bench[0], label: null }, basis: { a: 1, d: 0, n: 0 },
+            cells: bench.map((m, i) => ({
+              judge: { model: m, label: null }, verdict: i === bench.length - 1 ? 'dispute' : 'agree',
+              sym: i === bench.length - 1 ? '✗' : '✓', isRaiser: i === 0,
+            })),
+          }],
+          tierCounts: { Confirmed: 1 }, judged: true,
+        },
+        cost: {
+          rows: bench.map((m) => ({ model: m, role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.20' })),
+          totalDisplay: '$0.43', costAmount: 0.43, maxCost: 2,
+        },
+        verdictPanel: { present: true, overallVerdict: 'Fix these first', tierCounts: { Confirmed: 1 }, streetCred: [], decisions: [], reason: null },
+        artifactCollisions: [{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }],
+        artifactsByModel: {
+          'vendor/a': { review: 'review-vendor-a.md', judge: 'judge-vendor-a.md' },
+          'vendor?a': { review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md' },
+        },
+      },
+    };
+  }
+
+  function collisionInvoke(channel, ...args) {
+    if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+    if (channel === 'workspace:get-run') { return Promise.resolve(buildCollisionFixtureDetail()); }
+    if (channel === 'workspace:read-artifact') {
+      const name = args[1];
+      if (name === 'review-vendor-a.md' || name === 'judge-vendor-a.md') {
+        return Promise.resolve({ text: 'Prose about A1 for ' + name + '.' });
+      }
+      // The ~2 names are absent per the manifest above; wireLazyPanels' presence filter must
+      // keep this task from ever being reached in a correct implementation (asserted below).
+      return Promise.resolve({ error: 'not written yet: ' + name });
+    }
+    return Promise.resolve(null);
+  }
+
+  describe('collided artifact names (RN-1): drillIntoJudge never cross-matches a suffixed name', () => {
+    test("the second (colliding) model's drill targets the ~2 name, finds no section, and does NOT highlight the first model's real section", async () => {
+      const invokeMock2 = jest.fn(collisionInvoke);
+      global.window.amicusWorkspace.invoke = invokeMock2;
+      await global.window.AmicusApp.openRun('cccc3333');
+
+      await global.window.AmicusPanels.drillIntoJudge({ model: 'vendor?a', label: null }, 'A1');
+
+      // No misattribution: the ~2 artifact was never requested (presence-filtered out of the
+      // judges-panel file list), so no section exists for it and drillIntoJudge early-returns.
+      const collidedCalls = invokeMock2.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'judge-vendor-a~2.md');
+      expect(collidedCalls).toHaveLength(0);
+      const judgesBody = global.document.getElementById('judges-body');
+      expect(judgesBody.querySelector('[data-artifact="judge-vendor-a~2.md"]')).toBeNull();
+      // The critical assertion: the FIRST model's real section must stay untouched — a legacy
+      // sanitizeName(model) computation (ignoring the collision) would have resolved BOTH
+      // models to 'judge-vendor-a.md' and incorrectly highlighted this section instead.
+      const realSection = judgesBody.querySelector('[data-artifact="judge-vendor-a.md"]');
+      expect(realSection).toBeTruthy();
+      expect(realSection.querySelectorAll('mark')).toHaveLength(0);
+      expect(realSection.dataset.drilledFinding).toBeUndefined();
+    });
+
+    test("the first model's drill still resolves and highlights its own section normally", async () => {
+      const invokeMock2 = jest.fn(collisionInvoke);
+      global.window.amicusWorkspace.invoke = invokeMock2;
+      await global.window.AmicusApp.openRun('cccc3333');
+
+      await global.window.AmicusPanels.drillIntoJudge({ model: 'vendor/a', label: null }, 'A1');
+
+      const judgesBody = global.document.getElementById('judges-body');
+      const section = judgesBody.querySelector('[data-artifact="judge-vendor-a.md"]');
+      expect(section).toBeTruthy();
+      expect(section.querySelectorAll('mark')).toHaveLength(1);
+      expect(section.querySelector('mark').textContent).toBe('A1');
+    });
+  });
 });
