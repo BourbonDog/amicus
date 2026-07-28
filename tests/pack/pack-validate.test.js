@@ -120,7 +120,7 @@ describe('validatePack: options allowlist', () => {
 });
 
 describe('validatePack: bench member resolution', () => {
-  test('unresolvable bench member is named, with an empty alias table', () => {
+  test('unresolvable bench member is named; no user aliases (shipped defaults still merge in)', () => {
     fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({ aliases: {} }));
     const { validatePack } = load();
     const pack = { ...PACK(), bench: ['notanalias', 'openai/gpt-5.3'] };
@@ -128,6 +128,15 @@ describe('validatePack: bench member resolution', () => {
     expect(res.ok).toBe(false);
     expect(res.errors.join(' | ')).toMatch(/unresolvable/);
     expect(res.errors.join(' | ')).toContain('notanalias');
+  });
+  test('a USER-configured alias (not a shipped default) resolves through the config merge', () => {
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({
+      aliases: { 'zz-custom': 'vendor/model-x', deepseek: 'deepseek/deepseek-chat', 'qwen-coder': 'qwen/qwen3-coder', gpt: 'openai/gpt-5.3' },
+    }));
+    const { validatePack } = load();
+    const pack = { ...PACK(), bench: ['zz-custom', 'deepseek'], chair: 'gpt' };
+    const res = validatePack(pack, { mode: 'save' });
+    expect(res).toEqual({ ok: true, warnings: [] });
   });
   test('a vendor/model bench member resolves without an alias lookup', () => {
     const { validatePack } = load();
