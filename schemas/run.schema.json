@@ -21,6 +21,7 @@
     "durationMs": { "type": ["number", "null"] },
     "sessionDir": { "type": ["string", "null"] },
     "opencodeSessionId": { "type": ["string", "null"] },
-    "usage": { "type": ["object", "null"] }
+    "usage": { "type": ["object", "null"] },
+    "pack": { "type": "object" }
   }
 }

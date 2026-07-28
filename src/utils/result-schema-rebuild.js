@@ -90,6 +90,7 @@ function buildWaveResultFromSession(project, waveId) {
     waveId,
     legs,
     promptMeta: meta.promptMeta || null,
+    ...(meta.pack ? { pack: meta.pack } : {}), // v4.5 Task 13: absent-not-null, mirrors promptMeta's sourcing above.
     createdAt: meta.createdAt || null,
     completedAt: meta.completedAt || null,
   });

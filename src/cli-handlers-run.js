@@ -25,7 +25,7 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
  */
 async function handleStart(args) {
   const useJson = !!args.json;
-
+  const packRecord = require('./pack/pack-cli').applyPackOrExit(args, 'solo', useJson);
   // F4: --prompt-file support (XOR --prompt) and --json gating
   // F9 (v4.5): --template renders {{prompt}}/{{artifact}}/{{var.*}} into the prompt; byte-identical without it.
   let templateMeta = null;
@@ -117,6 +117,7 @@ async function handleStart(args) {
     json: !!args.json,
     modelInput: alias || null,
     template: templateMeta, // F9 (v4.5): startSidecar ignores unknown keys; inert until a future task reads it.
+    pack: packRecord, // v4.5 Task 13: null when no --pack; additively recorded on solo session metadata.
   });
 }
 
@@ -142,6 +143,7 @@ async function handleFanout(args) {
     if (errorDoc && useJson) { process.stdout.write(JSON.stringify(errorDoc) + '\n'); }
     return exitCode;
   }
+  const packRecord = require('./pack/pack-cli').applyPackOrExit(args, 'fanout', useJson);
 
   // FIX 4 (#61 whole-branch review, cheap parity): handleStart validates
   // --gateway via validateStartArgs (cli.js) — fanout never did, so a typo'd
@@ -215,7 +217,7 @@ async function handleFanout(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --models must contain at least one non-empty entry' }));
   }
 
-  // Direct require — the src/index.js public re-export is added later (Task 13)
+  // Direct require (fanout stays internal — no src/index.js public re-export).
   const { runFanout } = require('./sidecar/fanout');
   const { loadConfig, resolveGatewayMode } = require('./utils/config');
   const { resolveFallbackConfig } = require('./sidecar/fallback-chains');
@@ -262,6 +264,7 @@ async function handleFanout(args) {
       config: cfg,
     }),
     catalog: (readCache() || {}).models || [],
+    pack: packRecord, // v4.5 Task 13: null when no --pack; additive on wave metadata.json + wave.json.
   });
   return exitCode;
 }

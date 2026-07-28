@@ -35,7 +35,7 @@ function generateTaskId() {
 
 /** Create session directory and save metadata */
 function createSessionMetadata(taskId, project, options) {
-  const { model, prompt, briefing, noUi, headless, agent, thinking } = options;
+  const { model, prompt, briefing, noUi, headless, agent, thinking, pack } = options;
 
   const sessionDir = SessionPaths.sessionDir(project, taskId);
   fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
@@ -65,7 +65,8 @@ function createSessionMetadata(taskId, project, options) {
     thinking: thinking || 'medium',
     status: 'running',
     pid: existing.pid || process.pid,
-    createdAt: existing.createdAt || new Date().toISOString()
+    createdAt: existing.createdAt || new Date().toISOString(),
+    ...(pack ? { pack } : {}), // v4.5 Task 13: absent-not-null; ...existing above preserves a prior write when this call omits pack.
   };
 
   writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
@@ -153,7 +154,7 @@ async function startSidecar(options) {
     contextMaxTokens = 80000, noUi, headless = false, timeout = 15,
     agent, mcp, mcpConfig, summaryLength = 'normal', thinking,
     client, sessionDir, noMcp, excludeMcp, opencodePort, coworkProcess, includeContext = true,
-    position = 'right', json = false, modelInput = null
+    position = 'right', json = false, modelInput = null, pack = null
   } = options;
 
   const effectivePrompt = prompt || briefing;
@@ -182,7 +183,7 @@ async function startSidecar(options) {
   );
 
   const sessDir = createSessionMetadata(taskId, effectiveProject, {
-    model, prompt: effectivePrompt, noUi: effectiveHeadless, agent, thinking
+    model, prompt: effectivePrompt, noUi: effectiveHeadless, agent, thinking, pack
   });
   saveInitialContext(sessDir, systemPrompt, userMessage);
   acquireLock(sessDir, effectiveHeadless ? 'headless' : 'interactive');

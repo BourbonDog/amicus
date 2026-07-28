@@ -28,6 +28,7 @@
     "completedAt": { "type": ["string", "null"] },
     "durationMs": { "type": ["number", "null"] },
     "usage": { "type": "object" },
-    "notices": { "type": "array", "items": { "type": "string" } }
+    "notices": { "type": "array", "items": { "type": "string" } },
+    "pack": { "type": ["object", "null"] }
   }
 }

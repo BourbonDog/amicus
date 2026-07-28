@@ -54,10 +54,33 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(compile('run'), runDoc);
   });
 
+  // v4.5 Task 13: additive — present only when the solo session was launched via --pack.
+  test('run.schema.json accepts buildRunResult output with a recorded pack', () => {
+    const doc = buildRunResult({
+      taskId: 'sch-run-2',
+      metadata: {
+        model: 'openrouter/deepseek/deepseek-v4', status: 'complete',
+        pack: { name: 'quick-check', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
+      },
+    });
+    expectValid(compile('run'), doc);
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],
       promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    expectValid(compile('wave'), doc);
+  });
+
+  // v4.5 Task 13: additive — present only when the wave was launched via --pack.
+  test('wave.schema.json accepts buildWaveResult output with a recorded pack', () => {
+    const doc = buildWaveResult({
+      waveId: 'sch-wave-2', legs: [runDoc],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      pack: { name: 'fanout-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
       createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
     });
     expectValid(compile('wave'), doc);
