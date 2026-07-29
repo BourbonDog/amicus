@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.5.0] - 2026-07-28
 
 "Save and share your councils" — complex run configurations become one command, repeatable and
 shareable, and the flagship Council Workspace stops being opt-in on its best client.
