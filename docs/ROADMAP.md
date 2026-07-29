@@ -7,14 +7,12 @@ major jump, gated on funding/cofounder. The observability arc is split so the **
 first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
 preview dropped to the backlog.
 
-Amicus is at **v4.4.1** (2026-07-27), the fast-follow patch on v4.4.0 (tagged 2026-07-26). Each
-4.x rev below leads with the benefit, not the plumbing.
+Amicus is at **v4.5.0** (tagged 2026-07-28). Each 4.x rev below leads with the benefit, not the
+plumbing.
 
-**Status:** v4.0 through **v4.4.1** have **shipped** — everything down to the v4.5 heading is a
-record of what landed, not a plan. **v4.5 (packs + templates + auto-open) is the next rev**, with
-**v4.6 (composition + tagging + GUI ergonomics)** behind it — the former combined v4.5 scope,
-split 2026-07-27 (design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-design.md`). v5.0
-remains forward-looking.
+**Status:** v4.0 through **v4.5.0** have **shipped** — everything down to the v4.6 heading is a
+record of what landed, not a plan. **v4.6 (composition + tagging + GUI ergonomics) is the next
+rev.** v5.0 remains forward-looking.
 
 > 📁 **Reading this from an npm install?** Some references below point at working documents that
 > live in the git repository and are deliberately **not** in the published package — anything under
@@ -87,7 +85,7 @@ and a review that honestly finds nothing stops being an error.
 > repo's working notes (`.superpowers/sdd/v441/backlog-and-proposal.md`, local-only) and in the
 > repo's root `BACKLOG.md` — neither ships in the npm package; see the note at the top.
 
-## v4.5 — "Save and share your councils" *(scope split 2026-07-27 — composition moved to v4.6)*
+## v4.5 — "Save and share your councils" *(scope split 2026-07-27 — composition moved to v4.6)* — ✅ SHIPPED v4.5.0, 2026-07-28
 **Benefit:** complex councils become one-command, repeatable, and shareable — and the flagship GUI
 stops hiding. Design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-design.md`.
 - **★ Auto-open the Council Workspace on a council run (Christian, 2026-07-26)** — when a council is

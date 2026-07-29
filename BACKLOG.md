@@ -586,3 +586,178 @@ evidence needed to act on them without re-deriving it. None blocks the v4.4.1 ta
     which is exactly the path that leaves a seat showing as perpetually live in the Workspace. Fixing
     FR-1 makes any occurrence of FR-3 *visible* instead of silent, which is the cheaper order to do
     them in.
+
+## v4.5.0 post-ship dispositions (2026-07-28)
+
+**Provenance.** v4.5.0 ("Save and share your councils") shipped 2026-07-28 — branch
+`feat/v4.5-save-and-share`, worktree `C:\Users\sendt\code\amicus-v45`, merged to `main` at `3a33c54`.
+Full task-by-task history, the final whole-branch review, and both post-HOLD waves live in that
+worktree's `.superpowers/sdd/progress.md` (local-only, not published). Every entry below is
+self-contained — read the ledger only for the reasoning behind a line, not to find out what's open.
+
+### v4.6 hard gates — resolve before/at v4.6 kickoff
+
+- [ ] **Tight-file extraction pass.** Five files sit at/near the 300-line size-gate ceiling at the
+  v4.5.0 tip (verified against the shipped tip): `src/cli-handlers-run.js` 300/300,
+  `src/cli-handlers-council-run.js` 298/300, `src/pack/pack-resolve.js` 297/300,
+  `src/mcp-council-run.js` 296/300, `electron/workspace-ui/workspace-panels.js` 295/300.
+  `src/pack/pack-forward.js` (96 lines) is the natural receiving module for pack-domain spillover out
+  of the first three. **Any v4.6 task, or any hotfix, touching one of these five files must extract
+  from it FIRST**, before adding anything.
+- [ ] **KNOWN_VARIABLES single-source (T3-m2).** `src/template/render.js:45` hand-maintains two
+  copies of the known-template-variable set — `KNOWN_VARIABLES` and a separate inline validation
+  array. Consistent today; v4.6's `{{input}}` chaining variable (composable waves, F6) adds a third
+  variable to both, and an edit that updates one copy but not the other fails silently. Single-source
+  them **before** `{{input}}` lands — hard gate, not a nice-to-have.
+
+### Fix-sized carries
+
+- [ ] **errorWave pack-inherit** (`src/sidecar/fanout.js`). The `errorWave` helper (defined `:88`,
+  sole call site `:228`, the server-start-failure path) builds its error wave doc with
+  `pack: options.pack` — unlike this file's other two `buildWaveResult` call sites (`:174`, `:285`),
+  it doesn't fall back to `metaPack` (the pack pre-seeded onto an MCP-spawned child's
+  `metadata.json` when `options.pack` itself is absent). One-line fix:
+  `pack: options.pack || metaPack`, matching the other two sites. **TDZ caveat:** `metaPack` is
+  declared (`const`, `:163`) after `errorWave` is defined (`:88`) but before its only current call
+  (`:228`), so today's ordering is safe — but a future caller that invokes `errorWave` before `:163`
+  executes (an early-validation "pre-creation" path) would hit the `const` temporal dead zone and
+  throw `ReferenceError` on a naive reference to `metaPack` inside the closure. Guard for that if
+  `errorWave` ever grows an earlier call site.
+- [ ] **T19-m5 — stale-reply guard missing on `openRun`'s `workspace:get-run` reply.** The debate
+  fetch in `workspace-app.js` already guards against a stale reply; `openRun`'s `get-run` reply
+  doesn't — same F09/unreadable-run class this release closed twice elsewhere. Consequence:
+  `loadPanel` can pair one run's file names with a different run's identity if two opens race.
+  Pre-existing, out of scope for v4.5 — carried as-is.
+- [ ] **T15-m5 — export the three MCP paramMaps.** `tests/mcp-pack-params.test.js`'s
+  `TEST_COUNCIL_PARAM_MAP` is a hand-copied mirror of production and has already diverged once (it
+  omits `template`). Export the real council/fanout/start paramMaps from their source modules and
+  import them in the tests instead of re-typing them.
+- [ ] **T15-m2 — MCP council path drops template provenance (now council-only).**
+  `mcp-council-run.js`'s template path (`:117-123`) discards `promptMeta` — `run.json` records pack
+  provenance but no template `{name,hash}`, unlike the CLI path's `run.template`. Wave 1's D1
+  (forward maxCost+template on MCP fanout/start) closed this for fanout/start; the council MCP path
+  is the only one left. Trivial when wanted: pre-seed it in `mcp-council-run.js`'s `initRun` — the
+  handler already holds `t.promptMeta` at that point.
+- [ ] **droppedMembers reason strings are a closed two-value set.** The additive
+  `droppedMembers: [{ref, reason}]` on `run.json` (Post-HOLD wave 2) currently only ever produces two
+  `reason` values. Fine as long as nothing branches on the string; revisit whether `reason` should
+  become a coded enum instead of free text if a third reason is ever added.
+
+### Minor findings riding to v4.6 (one line each; full reasoning is in the ledger)
+
+- [ ] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
+  comment in a sibling edit; restore a reworded version.
+- [ ] **T3-m1** — `{{var.}}` empty-key template error message has a cosmetic hole
+  (`--var =<value>`); fails safe.
+- [ ] **T5-m1** — `preflight-json-envelope.test.js` engine mocks return `undefined`, swallowed by
+  `captureStdout`; add `mockResolvedValue({exitCode:0})` in `beforeEach` before any success-path test
+  lands.
+- [ ] **T5-m2** — run-state absent-case test should pass `template: null` (real production shape),
+  not omit the key.
+- [ ] **T5-m3** — template block + `BAD_ARGS` string verbatim-triplicated across the three CLI
+  handlers; a shared `applyTemplateForArgs` would collapse the drift risk.
+- [ ] **T5-m4** — `{{project}}` isn't path-normalized (unlike `artifact_path`); `TEMPLATE_RENDER`
+  errors carry `hint: null`.
+- [ ] **T5-m5** — guard-matrix gaps: fanout×`--artifact`, fanout×`--var`, council×`--var`, positive
+  council `{{prompt}}`-slot case, all untested.
+- [ ] **T5-m6** — fanout help-text wraps at column 31 vs. neighbors' 32; cosmetic.
+- [ ] **T11-a** — `PACK_NOT_FOUND` catches four distinct `readPack` failure modes; `PACK_INVALID` is
+  reserved for structural failures only.
+- [ ] **T11-b** — `packRecord` tests don't round-trip hash against `canonicalHash`/`readPack`;
+  `source:'path'` (`--pack ./x.json`) branch unexercised.
+- [ ] **T11-c** — string bench tested only on council kind; fanout by-name bench → `args.council`
+  consumption unverified; typing both `--models`+`--council` produces a notice naming only
+  `--models`.
+- [ ] **T11-d** — a council pack with both `critic`+`lenses` and a by-name bench survives run-mode
+  validation; the handler's mutual-exclusion error can name a flag the user never typed — narrow
+  sibling of the closed XOR case.
+- [ ] **T13-m1** — `pack-cli.js:33-34` iterates `pr.notices` on an unreachable-in-prod error branch;
+  add else/early-return before a future test stub `TypeError`s there.
+- [ ] **T13-m2** — kind-mismatch test assertion is non-discriminating (fixture name happens to
+  contain `'fanout'`); assert the full phrase against a neutral fixture.
+- [ ] **T13-m3** — `--retry-failed` + `--pack` silently ignores the pack (deliberate, file-wide
+  precedent); add a code comment at `cli-handlers-run.js:146` recording it.
+- [ ] **T13-m4** — the pack-cli helper's notice branch (fanout bench-override) is untested through
+  the newer code path; Task 12 only covered council's copy.
+- [ ] **T14-m1** — `pack list` warnings print to stdout, `pack save` warnings to stderr (both say
+  "Warning:"); `pack list | grep` mixes diagnostics into data. `--json` unaffected.
+- [ ] **T14-m2** — `cli-pack-cmd.test.js`'s `---- --json doc shapes ----` banner sits two lines above
+  where a fix-wave insertion should have moved it.
+- [ ] **T14-m3** — `renderPackList`'s `(unknown)` kind / `0.0.0` version fallbacks are unasserted
+  (only `(unnamed)` covered); neither can throw.
+- [ ] **T14-m5** — 7 usage-block flags
+  (`--template/--timeout/--max-cost/--gateway/--agent/--thinking/--summary-length`) lack positive
+  mapping tests; one table-driven test closes it.
+- [ ] **T14-m6** — the `pack` usage block in `cli.js` (~:672) is 30 lines vs. siblings' 4-11;
+  compress to match.
+- [ ] **T14-m7** — duplicate lazy `fs`/`path`/`session-manager` requires in `cli-handlers-pack.js`
+  (:77-79, :123-125); hoist to module top.
+- [ ] **T16-m1** — workspace-auto-open helper throws if `env` is undefined on a Linux call, though
+  the contract documents `env` as always an object; optional hardening.
+- [ ] **T18-m1** — fake-DOM debate tests sequence the fire-and-forget `debate.json` fetch by
+  counting microtask hops (2×`await Promise.resolve()`); sturdier fix is to expose/await the real
+  fetch promise.
+- [ ] **T19-m1** — a sub-round-trip double blind-toggle can leave a panel on stale masking
+  (`loadPanel`'s completion guard fences on run id only); self-heals on next toggle. Fix: capture
+  `A.state.blind` at issue time, bail on mismatch, beside `workspace-panels.js:111`.
+- [ ] **T19-m2** — RN-5's fix wave added a second uncaught `loadPanel()` call site; a rejected invoke
+  leaves `loading[id]` cached and the panel broken until the run changes (pre-existing at `:127`, now
+  hit more often).
+- [ ] **T19-m3** — the terminal-refresh test drives `openRun(sameId)` directly rather than the
+  live-tick seam (`workspace-verbs.js:95`).
+- [ ] **T19-m4** — a blind-flip test reads titles via `children[0]` instead of the house pattern
+  `querySelectorAll('h3')` (boundary test `:444`).
+- [ ] **T20-m2** — the seat-reorder pass is O(n²) (`find()` per seat); immaterial at real council
+  seat counts.
+- [ ] **T20-m3** — reorder runs before the departed-row removal pass; the combined reorder+removal
+  render is untested (hand-traced correct).
+- [ ] **T21-m1** — a new test's comment says the F09/unreadable-run tests sit "above" in the file;
+  they sit below (right facts, wrong direction).
+- [ ] **T21-m2** — the new abort e2e test uses a 600ms post-confirm wait vs. the file's 400ms
+  convention elsewhere; unexplained magic number.
+- [ ] **T22-m1** — the docs' worked `run.json` excerpt elides `version` from the pack record while
+  the prose states a 4-key shape (dodges the docs-quick-sync version-regex).
+- [ ] **T22-m2** — v4.6 is named "`--input-from`" in `render.js`'s docblock vs. "composable waves"
+  in the docs; same feature, two names.
+- [ ] **W1-M4** — the wave-1 pack pre-seed's briefing is raw, not rendered, until the child
+  re-renders it; eventually consistent.
+- [ ] **W1-M5** — the budget-ceiling hint text is CLI-flavored even when the run came in over MCP;
+  pre-existing class.
+- [ ] **W1-M6 / W1-M7** — forward-notice plumbing for orphaned pack knobs is dead code on the
+  `start` spawn-fallback path today; wouldn't surface a notice if that path went live.
+- [ ] **resolveBench/resolveBenchInput parallel evolution** (`cli-handlers-council-run.js` /
+  `mcp-council-run.js`) — CLI and MCP each hand-roll their own XOR-validation wrapper around the
+  shared `resolveCouncilMembers`. Wave 2 unified the *dropped-members* signal between them via that
+  shared core, but the two outer wrappers still evolve independently — same drift shape as T15-m5's
+  paramMap divergence. Nothing wrong today; watch if one's validation rules change without the other
+  following.
+
+### Closed at ship — do not re-file
+
+- [x] **T20-m1** — the shared `insertBefore` bug in `tests/workspace/helpers/fake-workspace-page.js`
+  (a same-parent move duplicated the node instead of moving it) is fixed; ported into the shared
+  helper at `4991e7a`.
+- [x] **T14-m8** — `pack rm <missing>` now returns `PACK_NOT_FOUND`, unified with `pack show`'s
+  existing code (owner ruling — one-way door, taken pre-release).
+- [x] **T15-m10** — orphan pack-knob notices now name the pack's own camelCase option keys (e.g.
+  `maxCost`), not the CLI arg-key spelling (`max-cost`).
+- [x] **F1** — council pack `options.agent`/`thinking`/`summaryLength` were inert on every surface;
+  resolved by Decision 2 (Christian, post-HOLD wave 1) — council packs now reject those three keys at
+  save time (`PACK_INVALID`) instead of silently dead-filling.
+- [x] **F2** — an MCP-launched fanout's `wave.json` didn't inherit pack provenance (the child has no
+  `--pack` by the single-resolution rule; only `metadata.json` was pre-seeded); `runFanout` now
+  inherits from `metadata.json` when `options.pack` is absent, at its two `buildWaveResult` call
+  sites. (The separate `errorWave` call site was deliberately left out of this fix — see the
+  still-open errorWave carry above.)
+- [x] **F3** — CHANGELOG's RN-1 line claimed a "not written yet" empty state that doesn't exist;
+  clause fixed, with a surviving test comment recording why the idealized phrasing existed at all.
+- [x] **F4** — a typed `--mode` lost to a pack-filled `agent` (flag>pack violation); fixed (`--mode`
+  now counts as agent-explicitness). Its **"council agent" carry-note is RETIRED** — Decision 2
+  (council packs can no longer carry `agent` at all) mooted the "becomes load-bearing if council
+  agent is ever wired" concern.
+- [x] **F5** — `wave.schema.json`'s `pack` field was typed `["object","null"]` against object-only
+  siblings; tightened to `object`.
+- [x] **council-show anomaly** — `council show` reported catalog-delisted saved-council members as
+  healthy while the real run path silently dropped them (Task 23 smoke discovery). Fixed in
+  Post-HOLD wave 2 (`19c3768`): `show` now reuses the same extracted `classifyCouncilMembers` the
+  run path uses.
