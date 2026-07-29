@@ -163,6 +163,16 @@ Key semantics:
     proceeded** on one server per wave, the configuration that races. Also printed as a
     `Notice:`. It does not change the exit code; treat its presence as "expect degraded
     results".
+- **A `--council <preset>` member that resolution drops is recorded on `run.json`, not just
+  printed.** A preset member whose alias no longer resolves, or whose resolved id has fallen out
+  of the cached model catalog, is silently excluded from `bench` (the same graceful-degradation
+  `resolveCouncilMembers` applies everywhere) — human mode also prints a `Notice: dropped
+  unavailable council member(s): ...`, but `--json` mode (every scripted/MCP caller) printed
+  nothing at all. `run.json` now carries an additive `droppedMembers: [{member, reason}]` array —
+  present only when at least one member was actually dropped, reaching the `--json` envelope and
+  the `amicus_council_run` MCP response body for free, since both already just serialize this same
+  document. `amicus council show <name>` reports the identical resolved/dropped split (and the
+  same per-member reason) as a preview, before you spend anything.
 - Chair failure recovery: one retry of the same chair → promote the highest peers-only
   street-cred model (from `amicus council stats`) that is not a bench seat → give up and write
   the verdict with `overallVerdict: null`.

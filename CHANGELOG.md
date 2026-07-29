@@ -98,6 +98,22 @@ shareable, and the flagship Council Workspace stops being opt-in on its best cli
   update already added and removed rows on change but never moved one, so the table's row order
   froze at first render — visibly wrong once a repair solo or a new wave changed the underlying leg
   order mid-run. Existing rows are now moved into place at the end of every render pass.
+- **`amicus council show` no longer reports a catalog-delisted bench member as healthy, and a
+  dropped member is no longer invisible to scripted/MCP callers.** `show`'s resolved/dropped split
+  checked only whether a member's alias mapped to *some* id, never whether that id was still in
+  the cached catalog — so a preset member whose alias now resolves to a catalog-absent id (e.g. a
+  direct-vendor route with no matching cached row) read as fully healthy in `show` while the real
+  run path (`resolveCouncilMembers`) silently dropped it on every actual run. `show` now reuses
+  that exact check — alias resolution, then catalog membership, with the same local-provider/
+  offline-catalog rule that a catalog it cannot consult never blocks a member, only a non-empty
+  catalog that omits it does. Separately, `council run --json` already suppressed the human-mode
+  `Notice: dropped unavailable council member(s): ...` line, and `run.json` carried no field for
+  it at all — a JSON-mode or MCP caller had zero signal a bench member vanished short of diffing
+  `bench` against the preset's nominal member list. `run.json` now carries an additive
+  `droppedMembers: [{member, reason}]` array (present only when at least one member was actually
+  dropped), reaching the `--json` envelope and the `amicus_council_run` MCP response body for
+  free. Resolution behavior itself — which members run, exit codes, spend — is unchanged; this is
+  observability only.
 
 ### Changed
 

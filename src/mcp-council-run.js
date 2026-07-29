@@ -61,9 +61,11 @@ function resolveBenchInput(input) {
     const presetName = input.council.trim();
     const expanded = resolveCouncilMembers(presetName, catalog);
     if (expanded.error) { return { error: expanded.error }; }
-    return { bench: expanded.models, presetName };
+    // v4.5 Wave 2: the child never re-resolves (bench is spawned pre-expanded
+    // to --models) — the pre-seed below is the only place this is recorded.
+    return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
   }
-  return { bench: inputModels, presetName: null };
+  return { bench: inputModels, presetName: null, droppedMembers: [] };
 }
 
 /**
@@ -129,6 +131,7 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (benchRes.error) { return textResult(benchRes.error, true); }
   const bench = benchRes.bench;
   const presetName = benchRes.presetName;
+  const droppedMembers = benchRes.droppedMembers || [];
   if (bench.length < 2) { return textResult('A council needs at least 2 seats.', true); }
   const chair = (typeof input.chair === 'string' && input.chair.trim()) ? input.chair.trim() : CHAIR_DEFAULT;
   if (bench.includes(chair)) {
@@ -177,6 +180,9 @@ async function handleCouncilRunTool(input, project, helpers) {
       // plain shallow merge (run-state.js) preserves this pre-seeded value —
       // pinned behavior, Task 12.
       ...(packRecord ? { pack: packRecord } : {}),
+      // v4.5 Wave 2: additive, same preserved-across-the-child's-own-initRun
+      // precedent as `pack` above — absent (never []) when nothing dropped.
+      ...(droppedMembers.length ? { droppedMembers } : {}),
       usage: null, createdAt: new Date().toISOString(),
     });
     runState.writePointer(project, runId, runDir);
@@ -266,6 +272,8 @@ async function handleCouncilRunTool(input, project, helpers) {
       'amicus_status with the runId. Artifacts land in runDir (verdict.json, report.html).',
     workspaceOpened,
     ...(workspaceOpenReason ? { workspaceOpenReason } : {}),
+    // v4.5 Wave 2: otherwise invisible here short of separately reading run.json.
+    ...(droppedMembers.length ? { droppedMembers } : {}),
   });
   // Born-fenced (spec §8): council MCP tool text is wrapped like amicus_read.
   const content = [{ type: 'text', text: fenceSidecarOutput(body) }];

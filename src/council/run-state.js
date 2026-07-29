@@ -108,6 +108,16 @@ function initCouncilRun(o) {
     // Preserved across a later MCP-child initRun whose own seed omits it —
     // mergeRun's plain shallow merge never drops a key patch doesn't mention.
     ...(o.pack ? { pack: o.pack } : {}),
+    // v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): additive-only
+    // — absent (never an empty array) when nothing was dropped. Handler-computed
+    // (cli-handlers-council-run.js's resolveBench, via resolveCouncilMembers) so
+    // a scripted/--json/MCP caller has a signal a bench member vanished without
+    // diffing `bench` against the preset's nominal member list. Same
+    // preserved-across-a-later-MCP-child-seed precedent as `pack` above — the
+    // MCP handler pre-seeds this directly (mcp-council-run.js) before spawning
+    // the CLI child, whose own seed (bench already expanded to --models) never
+    // recomputes it and so never mentions the key.
+    ...(o.droppedMembers && o.droppedMembers.length ? { droppedMembers: o.droppedMembers } : {}),
     options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
     usage: null, pid: process.pid, createdAt: new Date().toISOString(),
   });

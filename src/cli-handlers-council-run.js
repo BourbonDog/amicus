@@ -71,9 +71,11 @@ function resolveBench(args, useJson) {
     if (expanded.dropped && expanded.dropped.length && !useJson) {
       process.stderr.write(`Notice: dropped unavailable council member(s): ${expanded.dropped.join(', ')}\n`);
     }
-    return { bench: expanded.models, presetName };
+    // v4.5 Wave 2: threaded into runCouncil's options — the ONLY prior signal
+    // was the stderr-only Notice above, which --json mode never even prints.
+    return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
   }
-  return { bench: parseList(args.models), presetName: null };
+  return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
 }
 
 function renderRunHuman(run) {
@@ -251,6 +253,7 @@ async function handleCouncilRun(args) {
     councilName,
     template: templateMeta, // F9 (v4.5): null when no --template; additive on the run.json seed (run-state.js).
     pack: packRecord, // v4.5 Task 12 (B7/F5): null when no --pack; additive on the run.json seed (run-state.js).
+    droppedMembers: benchRes.droppedMembers, // v4.5 Wave 2: [] when nothing dropped; additive on the run.json seed (run-state.js).
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and
     // 'claude may not chair' guards live there on purpose so MCP, the GitHub
