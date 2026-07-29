@@ -402,13 +402,56 @@ function getCouncilWithSource(name, catalog = []) {
 }
 
 /**
+ * Per-member alias/catalog classification — the SAME check `resolveCouncilMembers`
+ * (below) uses to decide the real run path's bench, extracted so `amicus council
+ * show` (council/presets-cli.js) can reuse it verbatim instead of re-deriving a
+ * parallel (and, pre-v4.5-Wave-2, drifted) check. Each member is resolved to its
+ * full model id (alias → id via effective aliases; a member containing '/' is
+ * taken as-is) and that id checked against the cached catalog. Tri-state catalog
+ * rule: an EMPTY catalog (offline / never fetched) never drops anything —
+ * "unknown" is not "delisted" — and a local-vendor member is never dropped on
+ * catalog absence either way (v4.2 §4.4: a local server may simply have been off
+ * at the last refresh; the leg itself fails pre-flight with the actionable
+ * local_endpoint_unreachable error if it is truly down). Only a NON-EMPTY
+ * catalog that omits the resolved id is a definitive drop.
+ * @param {string[]} members raw council members (aliases or provider/model ids)
+ * @param {Array<{id:string}>} [catalog]
+ * @returns {{models:string[], dropped:string[], droppedMembers:Array<{member:string, reason:string}>}}
+ *   `dropped` is the flat member-ref list (unchanged shape, pre-v4.5-Wave-2
+ *   callers keep working); `droppedMembers` additively pairs each with WHY.
+ */
+function classifyCouncilMembers(members, catalog = []) {
+  const aliases = getEffectiveAliases();
+  const known = new Set((Array.isArray(catalog) ? catalog : []).map(m => m && m.id).filter(Boolean));
+  const { isLocalProvider } = require('./local-providers');
+  const models = [];
+  const dropped = [];
+  const droppedMembers = [];
+  for (const member of members) {
+    const id = member.includes('/') ? member : aliases[member];
+    if (!id) { // alias no longer resolves
+      dropped.push(member);
+      droppedMembers.push({ member, reason: 'alias no longer resolves to a known model' });
+      continue;
+    }
+    const vendor = typeof id === 'string' ? id.split('/')[0] : '';
+    if (isLocalProvider(vendor)) { models.push(member); continue; }
+    if (known.size > 0 && !known.has(id)) { // delisted model
+      dropped.push(member);
+      droppedMembers.push({ member, reason: 'resolved id is not present in the cached model catalog' });
+      continue;
+    }
+    models.push(member);
+  }
+  return { models, dropped, droppedMembers };
+}
+
+/**
  * Expand a saved council into a runnable members list, degrading gracefully.
- * Each member is resolved to its full model id (alias → id via effective
- * aliases; a member containing '/' is taken as-is) and that id checked against
- * the cached catalog. Unresolvable aliases and delisted ids are dropped with a
- * warning rather than fail-fast-aborting the whole wave. The catalog check is
- * skipped when the catalog is empty (offline). Returns members RAW (alias or
- * id) — leg-time validation resolves them again.
+ * Unresolvable aliases and delisted ids are dropped with a warning rather than
+ * fail-fast-aborting the whole wave (classification: classifyCouncilMembers
+ * above). Returns members RAW (alias or id) — leg-time validation resolves
+ * them again.
  *
  * Resolution order: user config (`config.councils`) is checked first; when
  * `name` is absent there, the built-in benches (`free`/`budget`/`frontier`)
@@ -416,7 +459,7 @@ function getCouncilWithSource(name, catalog = []) {
  * shadows a built-in of the same name.
  * @param {string} name
  * @param {Array<{id:string}>} [catalog]
- * @returns {{models:string[], dropped:string[]} | {error:string}}
+ * @returns {{models:string[], dropped:string[], droppedMembers:Array<{member:string, reason:string}>} | {error:string}}
  */
 function resolveCouncilMembers(name, catalog = []) {
   const { members } = getCouncilWithSource(name, catalog);
@@ -426,23 +469,7 @@ function resolveCouncilMembers(name, catalog = []) {
   if (!Array.isArray(members) || members.length === 0) {
     return { error: `Council '${name}' is empty. Run 'amicus setup' to populate it.` };
   }
-  const aliases = getEffectiveAliases();
-  const known = new Set((Array.isArray(catalog) ? catalog : []).map(m => m && m.id).filter(Boolean));
-  const { isLocalProvider } = require('./local-providers');
-  const models = [];
-  const dropped = [];
-  for (const member of members) {
-    const id = member.includes('/') ? member : aliases[member];
-    if (!id) { dropped.push(member); continue; }                 // alias no longer resolves
-    const vendor = typeof id === 'string' ? id.split('/')[0] : '';
-    // v4.2 §4.4: a local server may simply have been off at the last catalog
-    // refresh — that is "unknown", not "delisted". Never drop a local-vendor
-    // member on catalog absence; the leg itself fails pre-flight with the
-    // actionable local_endpoint_unreachable error if the server is truly down.
-    if (isLocalProvider(vendor)) { models.push(member); continue; }
-    if (known.size > 0 && !known.has(id)) { dropped.push(member); continue; } // delisted model
-    models.push(member);
-  }
+  const { models, dropped, droppedMembers } = classifyCouncilMembers(members, catalog);
   if (models.length < 2) {
     return {
       error: `Council '${name}' has fewer than 2 usable members` +
@@ -450,7 +477,7 @@ function resolveCouncilMembers(name, catalog = []) {
         '. Run \'amicus setup\' to refresh it.',
     };
   }
-  return { models, dropped };
+  return { models, dropped, droppedMembers };
 }
 
 /** @returns {{prefer:'direct'|'openrouter', migration_notified:Object}} routing config with defaults */
@@ -573,6 +600,7 @@ module.exports = {
   getCouncils,
   getCouncil,
   getCouncilWithSource,
+  classifyCouncilMembers,
   resolveCouncilMembers,
   getRoutingConfig,
   resolveGatewayMode,

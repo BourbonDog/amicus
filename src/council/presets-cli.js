@@ -103,6 +103,16 @@ function renderList(entries) {
  * which fails outright below 2 usable members), `show` is diagnostic-only:
  * it always reports the full resolved/dropped split, even for a council
  * that currently has fewer than 2 usable members.
+ *
+ * v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): the resolved/
+ * dropped split now REUSES `classifyCouncilMembers` — the exact alias +
+ * catalog-membership + local-provider-tri-state check `resolveCouncilMembers`
+ * applies on every real run — instead of a parallel check that only asked
+ * "does the alias map to SOME id?" and never consulted the catalog at all
+ * (so a member whose alias resolved to a catalog-absent id read as healthy
+ * here while every real run silently dropped it). `droppedMembers` carries
+ * each dropped member's reason, distinguishing an unresolvable alias from a
+ * catalog-absent id — the same distinction `resolveCouncilMembers` computes.
  * @param {string|undefined} name
  * @param {boolean} useJson
  * @returns {number} exit code
@@ -112,7 +122,7 @@ function runShow(name, useJson) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'council show needs a <name>',
       hint: 'amicus council show <name> [--json]' });
   }
-  const { getCouncilWithSource, getEffectiveAliases } = require('../utils/config');
+  const { getCouncilWithSource, classifyCouncilMembers } = require('../utils/config');
   const { readCache } = require('../utils/model-catalog');
   const catalog = (readCache() || {}).models || [];
   const { members, builtin } = getCouncilWithSource(name, catalog);
@@ -120,14 +130,8 @@ function runShow(name, useJson) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Unknown council '${name}'`,
       hint: "'amicus council list' shows available councils, or 'amicus council save' to create one" });
   }
-  const aliases = getEffectiveAliases();
-  const resolved = [];
-  const dropped = [];
-  for (const member of members) {
-    const id = member.includes('/') ? member : aliases[member];
-    (id ? resolved : dropped).push(member);
-  }
-  const doc = { name, builtin, members, resolved, dropped };
+  const { models, dropped, droppedMembers } = classifyCouncilMembers(members, catalog);
+  const doc = { name, builtin, members, resolved: models, dropped, droppedMembers };
   process.stdout.write(useJson ? JSON.stringify(doc, null, 2) + '\n' : renderShow(doc));
   return 0;
 }
@@ -135,7 +139,14 @@ function runShow(name, useJson) {
 function renderShow(doc) {
   const tag = doc.builtin ? ' [built-in]' : '';
   let out = `Council '${doc.name}'${tag}\n  members: ${doc.members.join(', ')}\n  resolved: ${doc.resolved.join(', ')}\n`;
-  if (doc.dropped.length) { out += `  dropped: ${doc.dropped.join(', ')}\n`; }
+  if (doc.dropped.length) {
+    // Per-member reason (v4.5 Wave 2) when available; falls back to the bare
+    // ref list so this never throws on a hand-built doc missing the new field.
+    const detail = (doc.droppedMembers && doc.droppedMembers.length)
+      ? doc.droppedMembers.map(d => `${d.member} (${d.reason})`).join(', ')
+      : doc.dropped.join(', ');
+    out += `  dropped: ${detail}\n`;
+  }
   return out;
 }
 

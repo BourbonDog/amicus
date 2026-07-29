@@ -579,6 +579,38 @@ describe('council show', () => {
     expect(doc.resolved).toEqual(['opus']);
   });
 
+  // v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): `show`'s old
+  // resolved/dropped split only asked "does this alias map to SOME id?" —
+  // never "is that id still in the cached catalog?" — so a member whose
+  // alias resolves to a catalog-absent id (e.g. a direct-vendor route with no
+  // matching row in the cache) read as healthy here while the real run path
+  // (resolveCouncilMembers) silently drops it on every actual run. This is
+  // the live repro's shape: one bench member's resolved id present in the
+  // catalog, one absent — `show` must now agree with resolveCouncilMembers
+  // and report the catalog-absent one as dropped, not resolved.
+  test('reports a catalog-absent member as dropped, matching resolveCouncilMembers (not merely whether the alias maps to SOME id)', async () => {
+    seedAliases({ 'catalog-ghost': 'vendorx/ghost-model' });
+    await capture(() => handleCouncil({ _: ['council', 'save', 'delisted-check'], models: 'opus,catalog-ghost', json: true }));
+    const { getEffectiveAliases } = require('../../src/utils/config');
+    const opusId = getEffectiveAliases().opus;
+    // Catalog present (non-empty, so the tri-state "unknown never blocks" rule
+    // does NOT apply) but omits catalog-ghost's resolved id.
+    const catalogPath = path.join(ledgerDir, 'model-catalog.json');
+    fs.writeFileSync(catalogPath, JSON.stringify({
+      schemaVersion: 2, fetchedAt: Date.now(), models: [{ id: opusId }],
+    }));
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'delisted-check'], json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.resolved).toEqual(['opus']);
+    expect(doc.dropped).toEqual(['catalog-ghost']);
+    // Reason detail (the new additive field run.json's droppedMembers also
+    // uses) must distinguish this from an unresolvable-alias drop.
+    expect(doc.droppedMembers).toEqual([
+      { member: 'catalog-ghost', reason: expect.stringMatching(/catalog/i) },
+    ]);
+  });
+
   test('unknown name → BAD_ARGS error, exit 1', async () => {
     const { code, out } = await capture(() => handleCouncil({ _: ['council', 'show', 'ghost'], json: true }));
     expect(code).toBe(1);
