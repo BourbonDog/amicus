@@ -169,9 +169,10 @@ Key semantics:
   `resolveCouncilMembers` applies everywhere) — human mode also prints a `Notice: dropped
   unavailable council member(s): ...`, but `--json` mode (every scripted/MCP caller) printed
   nothing at all. `run.json` now carries an additive `droppedMembers: [{member, reason}]` array —
-  present only when at least one member was actually dropped, reaching the `--json` envelope and
-  the `amicus_council_run` MCP response body for free, since both already just serialize this same
-  document. `amicus council show <name>` reports the identical resolved/dropped split (and the
+  present only when at least one member was actually dropped. The `--json` envelope carries it
+  via the same run.json serialization; the `amicus_council_run` MCP response body includes it
+  via an explicit conditional spread (`...(droppedMembers.length ? { droppedMembers } : {})`),
+  hand-built separate from run.json. `amicus council show <name>` reports the identical resolved/dropped split (and the
   same per-member reason) as a preview, before you spend anything.
 - Chair failure recovery: one retry of the same chair → promote the highest peers-only
   street-cred model (from `amicus council stats`) that is not a bench seat → give up and write

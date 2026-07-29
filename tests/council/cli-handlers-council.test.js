@@ -630,4 +630,64 @@ describe('council show', () => {
     expect(out).toContain('opus');
     expect(out).toContain('gpt');
   });
+
+  // v4.5 Wave 2 tri-state lock: empty/offline catalog (no model-catalog.json) →
+  // no member drops, guaranteeing the rule at show's shared classifyCouncilMembers.
+  test('show with empty offline catalog reports NO dropped members', async () => {
+    const sandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-show-offline-'));
+    const prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    process.env.AMICUS_CONFIG_DIR = sandboxDir;
+    try {
+      jest.resetModules();
+      const { handleCouncil: HC } = require('../../src/cli-handlers-council');
+      seedAliases({ 'test-offline': 'openrouter/test/model-x' });
+      await capture(() => HC({ _: ['council', 'save', 'offline-test'], models: 'opus,test-offline', json: true }));
+      const { code, out } = await capture(() => HC({ _: ['council', 'show', 'offline-test'], json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.resolved.length).toBeGreaterThanOrEqual(1);
+      expect(doc.dropped).toEqual([]);
+      expect(doc.droppedMembers).toEqual([]);
+    } finally {
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+      jest.resetModules();
+      fs.rmSync(sandboxDir, { recursive: true, force: true });
+    }
+  });
+
+  // v4.5 Wave 2 tri-state lock: a local-provider member (e.g. ollama/...) is
+  // never dropped regardless of catalog state, guaranteeing the rule at show's
+  // shared classifyCouncilMembers.
+  test('show with local-provider member never reports it dropped', async () => {
+    const sandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-show-local-'));
+    const prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    process.env.AMICUS_CONFIG_DIR = sandboxDir;
+    try {
+      jest.resetModules();
+      jest.doMock('../../src/utils/local-providers', () => ({
+        isLocalProvider: (id) => id === 'ollama',
+        getLocalProviders: () => ({ ollama: { id: 'ollama' } }),
+      }));
+      const { handleCouncil: HC } = require('../../src/cli-handlers-council');
+      seedAliases({ 'gemini-alias': 'google/gemini-2.5-flash' });
+      await capture(() => HC({ _: ['council', 'save', 'local-test'], models: 'gemini-alias,ollama/llama3.3', json: true }));
+      // Write a catalog that includes only the cloud model, NOT the local one.
+      const catalogPath = path.join(sandboxDir, 'model-catalog.json');
+      fs.writeFileSync(catalogPath, JSON.stringify({
+        schemaVersion: 2, fetchedAt: Date.now(), models: [{ id: 'google/gemini-2.5-flash' }],
+      }));
+      const { code, out } = await capture(() => HC({ _: ['council', 'show', 'local-test'], json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.members).toContain('ollama/llama3.3');
+      expect(doc.resolved).toContain('ollama/llama3.3');
+      expect(doc.dropped).not.toContain('ollama/llama3.3');
+    } finally {
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+      jest.resetModules();
+      fs.rmSync(sandboxDir, { recursive: true, force: true });
+    }
+  });
 });
