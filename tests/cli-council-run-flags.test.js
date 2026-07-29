@@ -151,3 +151,95 @@ describe('council run threads councilName (v4.3 Task 3, spec §7.1)', () => {
     expect(opts.councilName).toBe('budget');
   });
 });
+
+// v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): the live repro
+// found `--council <preset>` silently dropping a member (whose alias resolves
+// to a catalog-absent id) with ZERO signal reaching `--json`/MCP callers —
+// only a stderr-only human-mode notice. resolveBench's droppedMembers (from
+// resolveCouncilMembers) must thread into runCouncil's options so the engine
+// can record them on run.json (see tests/council/run-schema.test.js for the
+// engine-side proof that they land there and survive to the terminal doc).
+//
+// Sandboxed against AMICUS_CONFIG_DIR — unlike the 'budget'-based describe
+// block above, which is resilient to (and never exercises) whatever this
+// machine's real catalog/config actually contains.
+describe('council run threads droppedMembers into runCouncil options (Wave 2 chip)', () => {
+  let cfgDir; let prevConfigDir;
+  beforeEach(() => {
+    prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-drop-cfg-'));
+    process.env.AMICUS_CONFIG_DIR = cfgDir;
+    const { saveConfig } = require('../src/utils/config');
+    // Two raw provider/model ids (need no alias) + one alias whose resolved id
+    // will be absent from the seeded catalog below — mirrors the live repro's
+    // shape (2 survivors, 1 dropped) without depending on any real alias table.
+    saveConfig({
+      aliases: { 'catalog-ghost': 'vendorx/ghost-model' },
+      councils: { droppy: ['vendorx/model-a', 'vendorx/model-b', 'catalog-ghost'] },
+    });
+    fs.writeFileSync(path.join(cfgDir, 'model-catalog.json'), JSON.stringify({
+      schemaVersion: 2, fetchedAt: Date.now(),
+      models: [{ id: 'vendorx/model-a' }, { id: 'vendorx/model-b' }], // omits ghost-model
+    }));
+  });
+  afterEach(() => {
+    if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+    else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+  });
+
+  test('a --council preset that drops a catalog-absent member threads droppedMembers (ref+reason) into runCouncil options', async () => {
+    const args = argsBase({ council: 'droppy', chair: 'opus' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.droppedMembers).toEqual([
+      { member: 'catalog-ghost', reason: expect.any(String) },
+    ]);
+  });
+
+  test('a --council preset with nothing dropped threads an empty droppedMembers (no false positives)', async () => {
+    // Widen the catalog so all three members resolve — nothing dropped.
+    fs.writeFileSync(path.join(cfgDir, 'model-catalog.json'), JSON.stringify({
+      schemaVersion: 2, fetchedAt: Date.now(),
+      models: [{ id: 'vendorx/model-a' }, { id: 'vendorx/model-b' }, { id: 'vendorx/ghost-model' }],
+    }));
+    const args = argsBase({ council: 'droppy', chair: 'opus' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.droppedMembers).toEqual([]);
+  });
+
+  test('--models (no preset) leaves droppedMembers empty — no resolution ever ran', async () => {
+    const code = await handleCouncilRun(argsBase());
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.droppedMembers).toEqual([]);
+  });
+
+  // Surface (b) from the wave-2 brief: the --json envelope IS the run doc
+  // runCouncil resolved — no separate serialization path to keep in sync.
+  // Once run.json carries droppedMembers (engine side, proved in
+  // tests/council/run-schema.test.js), this rides for free through the same
+  // `JSON.stringify(run, ...)` call every other run.json field already takes.
+  test('the --json envelope carries whatever droppedMembers runCouncil resolved onto the run doc', async () => {
+    runCouncil.mockResolvedValue({
+      exitCode: 0,
+      run: {
+        runId: 'r', status: 'complete', exitCode: 0,
+        droppedMembers: [{ member: 'catalog-ghost', reason: 'not present in the cached model catalog' }],
+      },
+    });
+    const args = argsBase({ council: 'droppy', chair: 'opus' });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const printed = JSON.parse(out.mock.calls[0][0]);
+    expect(printed.droppedMembers).toEqual([
+      { member: 'catalog-ghost', reason: 'not present in the cached model catalog' },
+    ]);
+  });
+});

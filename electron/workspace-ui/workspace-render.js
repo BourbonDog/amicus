@@ -205,7 +205,17 @@
       cells.forEach(function (c, i) {
         var td = row.children[i];
         if (td && td.textContent !== c) { td.textContent = c; }
+        if (td) { td.className = i >= 4 && i <= 6 ? 'num' : (i === 8 ? 'stalled-flag' : ''); }
       });
+    });
+    // RN-11 (v4.5): the keyed update added and removed rows but never MOVED
+    // them, so table order was frozen at first render — wrong the moment a
+    // repair solo or new wave changes the composed doc's leg order mid-run.
+    seats.forEach(function (seat, i) {
+      var key = String(seat.id || seat.model);
+      var current = tbody.children[i];
+      var target = Array.prototype.slice.call(tbody.children).find(function (r) { return r.dataset.key === key; });
+      if (target && target !== current) { tbody.insertBefore(target, current || null); }
     });
     Array.prototype.slice.call(tbody.children).forEach(function (row) {
       if (!seen[row.dataset.key]) { row.remove(); }

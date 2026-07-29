@@ -139,6 +139,12 @@ src/
 │   ├── live-doc.js
 │   ├── on-complete.js
 │   └── watch-render.js
+├── pack/
+│   ├── pack-cli.js
+│   ├── pack-forward.js
+│   ├── pack-resolve.js
+│   ├── pack-store.js
+│   └── pack-validate.js
 ├── prompts/
 │   └── cowork-agent-prompt.js  # Cowork Agent Prompt
 ├── sidecar/
@@ -181,7 +187,12 @@ src/
 │   ├── tool-part.js
 │   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
 │   ├── wave-progress.js
+│   ├── workspace-auto-open.js  # Workspace Auto-Open Decision Helper
 │   └── workspace-window.js  # Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern:
+├── template/
+│   ├── apply.js
+│   ├── render.js
+│   └── store.js
 ├── utils/
 │   ├── abort-coordinator.js
 │   ├── abort-result.js  # The abort-result document builder for `abort <taskId|--all> --json` (B21-rest).
@@ -284,11 +295,13 @@ src/
 ├── cli-handlers-doctor.js
 ├── cli-handlers-init.js  # `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the
 ├── cli-handlers-key-local.js  # amicus key <localId> — bearer lifecycle for a config-defined local /
+├── cli-handlers-pack.js
 ├── cli-handlers-provider.js  # `amicus provider add|list|test|remove` (v4.2 §4.6): configure local /
 ├── cli-handlers-resume-continue.js  # CLI Resume/Continue Handlers (B21-rest extraction)
 ├── cli-handlers-run.js  # CLI Run Handlers (WS-2 extraction)
 ├── cli-handlers-spend.js
 ├── cli-handlers-status.js  # `amicus status <task_id>` — one-shot human/JSON status for a session or wave.
+├── cli-handlers-template.js
 ├── cli-handlers-watch.js
 ├── cli-handlers.js  # CLI Command Handlers
 ├── cli.js  # CLI Argument Parser
@@ -408,11 +421,13 @@ evals/
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
 | `cli-handlers-init.js` | `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the | `handleInit()` |
 | `cli-handlers-key-local.js` | amicus key <localId> — bearer lifecycle for a config-defined local / | `handleLocalKey()`, `formatLocalKeyList()`, `maskKey()` |
+| `cli-handlers-pack.js` |  | `handlePack()` |
 | `cli-handlers-provider.js` | `amicus provider add|list|test|remove` (v4.2 §4.6): configure local / | `handleProvider()`, `isLoopbackUrl()`, `isPlaintextRemote()` |
 | `cli-handlers-resume-continue.js` | CLI Resume/Continue Handlers (B21-rest extraction) | `handleResume()`, `handleContinue()` |
 | `cli-handlers-run.js` | CLI Run Handlers (WS-2 extraction) | `handleStart()`, `handleFanout()`, `handleRead()` |
 | `cli-handlers-spend.js` |  | `handleSpend()`, `aggregateSpend()`, `buildSpendDoc()`, `parseSinceDays()`, `filterRows()` |
 | `cli-handlers-status.js` | `amicus status <task_id>` — one-shot human/JSON status for a session or wave. | `handleStatus()`, `formatRunHuman()`, `formatWaveHumanStatus()`, `formatCouncilHuman()` |
+| `cli-handlers-template.js` |  | `handleTemplate()` |
 | `cli-handlers-watch.js` |  | `handleWatch()`, `resolveWatchTarget()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `DEFAULTS()` |
@@ -468,6 +483,11 @@ evals/
 | `observe/live-doc.js` |  | `enrichLegUsage()`, `markLive()`, `rollupWaveUsage()`, `TERMINAL()` |
 | `observe/on-complete.js` |  | `buildHookEnv()`, `runOnComplete()`, `fireWaveOnComplete()`, `fireCouncilOnComplete()`, `HOOK_TIMEOUT_MS()` |
 | `observe/watch-render.js` |  | `renderTable()`, `renderPlainLines()`, `mapExitCode()`, `emitJsonChange()`, `runWatchLoop()` |
+| `pack/pack-cli.js` |  | `applyPackOrExit()` |
+| `pack/pack-forward.js` |  | `prepareForward()` |
+| `pack/pack-resolve.js` |  | `applyPackToArgs()`, `applyPackToMcpInput()` |
+| `pack/pack-store.js` |  | `packsDir()`, `canonicalHash()`, `resolvePackRef()`, `readPack()`, `writePack()` |
+| `pack/pack-validate.js` |  | `validatePack()`, `KIND_OPTIONS()`, `KINDS()` |
 | `prompts/cowork-agent-prompt.js` | Cowork Agent Prompt | `buildCoworkAgentPrompt()` |
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH()`, `SUBTREE_MAX_SESSIONS()` |
@@ -496,7 +516,7 @@ evals/
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `runInteractive()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
 | `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
-| `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `extractLatest()`, `computeLastActivity()`, `STAGE_LABELS()` |
+| `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `listSidecars()`, `readSidecar()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
@@ -508,7 +528,11 @@ evals/
 | `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES()`, `LIVE_TOOL_STATUSES()`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |
 | `sidecar/wave-progress.js` |  | `formatWaveProgress()`, `readLegState()`, `createWaveHeartbeat()`, `WAVE_HEARTBEAT_INTERVAL()` |
-| `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()` |
+| `sidecar/workspace-auto-open.js` | Workspace Auto-Open Decision Helper | `shouldAutoOpenWorkspace()` |
+| `sidecar/workspace-window.js` | Council Workspace launcher (v4.4 §4.3/§4.4) — setup-window.js pattern: | `launchWorkspaceWindow()`, `launchWorkspaceWindowDetached()` |
+| `template/apply.js` |  | `applyTemplate()`, `ARTIFACT_CAP_BYTES()` |
+| `template/render.js` |  | `renderTemplate()`, `KNOWN_VARIABLES()` |
+| `template/store.js` |  | `templatesDir()`, `resolveTemplate()`, `listTemplates()`, `BUILTIN_TEMPLATES()` |
 | `utils/abort-coordinator.js` |  | `abortGraceMs()`, `isAlive()`, `killPidBestEffort()`, `killPidHard()`, `waitThenKill()` |
 | `utils/abort-result.js` | The abort-result document builder for `abort <taskId|--all> --json` (B21-rest). | `buildAbortResult()` |
 | `utils/activity-poller.js` |  | `createActivityPoller()`, `killIfAlive()` |

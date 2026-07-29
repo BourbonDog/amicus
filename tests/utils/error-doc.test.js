@@ -24,6 +24,8 @@ describe('error-doc', () => {
     expect(new Set(Object.values(ERROR_CODES))).toEqual(new Set([
       'BAD_ARGS', 'MISSING_PROMPT', 'BAD_MODEL', 'MISSING_KEY', 'BAD_SESSION', 'BUDGET_EXCEEDED', 'INTERNAL',
       'COUNCIL_QUORUM', 'COST_EXCEEDED', 'COUNCIL_CLAUDE_REVIEW_INVALID',
+      'TEMPLATE_NOT_FOUND', 'TEMPLATE_RENDER',
+      'PACK_NOT_FOUND', 'PACK_INVALID', 'PACK_KIND_MISMATCH',
     ]));
   });
 });

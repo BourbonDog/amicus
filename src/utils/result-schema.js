@@ -44,7 +44,9 @@ function durationBetween(createdAt, completedAt) {
  * @param {string|null} [opts.modelInput] - What the caller typed (alias), if known
  * @param {string|null} [opts.sessionDir]
  * @param {string|null} [opts.waveId] - Explicit wave id (falls back to metadata.parentWave)
- * @returns {object} run document
+ * @returns {object} run document; `pack` (v4.5 Task 13) is additive — present only when
+ *   metadata.pack was recorded (solo session launched via --pack), sourced straight off
+ *   `metadata` like `usage`/`opencodeSessionId` already are (no new function parameter needed).
  */
 function buildRunResult({ taskId, metadata = {}, result = null, summary = null, modelInput = null, sessionDir = null, waveId = null, usage = null }) {
   const status = result ? statusFromResult(result) : (metadata.status || 'unknown');
@@ -68,6 +70,7 @@ function buildRunResult({ taskId, metadata = {}, result = null, summary = null, 
     sessionDir,
     opencodeSessionId: metadata.opencodeSessionId || null,
     usage: usage !== null ? usage : (metadata.usage || null),
+    ...(metadata.pack ? { pack: metadata.pack } : {}),
   };
 }
 
@@ -122,9 +125,11 @@ function waveExitCode(waveStatus) {
  * @param {string|null} [opts.completedAt]
  * @param {string|null} [opts.status] - Override (e.g. 'aborted' on signal); default aggregates legs
  * @param {string[]} [opts.notices] - Advisory per-leg migration notices (#61 FIX 2); never affects status/exitCode.
+ * @param {{name: string, version: string, hash: string, source: string}|null} [opts.pack] - v4.5 Task 13:
+ *   additive — present only when the wave was launched via --pack (absent, never null, otherwise).
  * @returns {object} wave document
  */
-function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null, notices = [] }) {
+function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = null, completedAt = null, status = null, notices = [], pack = null }) {
   const { sumWaveUsage } = require('./pricing');
   // Named buckets only (see "COUNTS REMAINDER RULE" above). 'crashed' and
   // 'idle-timeout' legs are intentionally NOT bucketed — they land in `total`
@@ -151,6 +156,7 @@ function buildWaveResult({ waveId, legs = [], promptMeta = null, createdAt = nul
     durationMs,
     usage: sumWaveUsage(legs),
     notices: Array.isArray(notices) ? notices.filter(Boolean) : [],
+    ...(pack ? { pack } : {}),
   };
 }
 

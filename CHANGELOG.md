@@ -3,6 +3,136 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.5.0] - 2026-07-28
+
+"Save and share your councils" — complex run configurations become one command, repeatable and
+shareable, and the flagship Council Workspace stops being opt-in on its best client.
+
+### Added
+
+- **Policy packs — save a full run configuration and invoke it by name.** `amicus pack save <name>
+  --kind council|fanout|solo [flags]` (or `--from-run <id>`, which captures an existing council
+  run / fanout wave / solo session instead of typing flags) writes one JSON file per pack to
+  `~/.config/amicus/packs/<name>.json`; `pack list` / `pack show` / `pack rm` manage them. `--pack
+  <name|path>` on `amicus start` / `fanout` / `council run` — and the new `pack` param on the
+  `amicus_start` / `amicus_fanout` / `amicus_council_run` MCP tools — loads a pack's bench,
+  chair/critic/lenses, options, and briefing template as this run's defaults. **Explicit flags
+  always override the pack's values, and the pack is recorded either way** — `pack: {name,
+  version, hash, source}` lands on the resulting session `metadata.json`, wave `metadata.json` /
+  `wave.json`, or council `run.json`. Precedence throughout: **flag > pack > config default >
+  built-in default**. A pack is validated on save (hard-fail — `PACK_INVALID` — with any
+  non-fatal warnings printed to stderr) and again whenever it's used to launch a run; `pack show`
+  never fails on an invalid pack, only reports what's wrong with it; `pack show` and `pack rm` both
+  return `PACK_NOT_FOUND` for a missing pack. New `schemas/pack.schema.json`.
+- **MCP pack semantics.** Over MCP, `pack` resolves entirely **in-process**, on the same call that
+  reads it — a resolved pack is never forwarded as `--pack` to a spawned child. Two knobs get
+  special-cased handling for CLI parity: a pack's `options.maxCost` and `briefing.template` have no
+  MCP schema param of their own on `amicus_start`/`amicus_fanout`, but they still apply — forwarded
+  to the spawned CLI child's argv as `--max-cost`/`--template` (`amicus_fanout` always spawns;
+  `amicus_start`'s spawn-fallback path does the same), or, on `amicus_start`'s in-process
+  shared-server path, applied via the same budget-gate/template-render code the CLI itself uses,
+  before any session is created — so a shared pack's spend cap and briefing template never silently
+  vanish over MCP. (`amicus_council_run` already has real MCP params for both.) Any *other* pack
+  knob with no destination in a tool's own MCP input schema is never silently dropped either: it
+  surfaces as an explicit `Notice: pack '<name>' sets <key>, which <tool> does not support over
+  MCP — ignored.` content block, naming the pack's own camelCase option key (e.g. `contextTurns`,
+  never the CLI's `context-turns`). Concretely, `amicus_fanout` has no MCP destination for
+  `options.contextTurns` / `options.contextMaxTokens` (both notice); `amicus_start` has real params
+  for both, so neither does.
+- **Council packs do not accept `agent`/`thinking`/`summaryLength`.** They were inert on every
+  surface — no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes
+  agent `Plan`/summaryLength `verbose` regardless of what a pack says — so `KIND_OPTIONS.council`
+  never accepted them; a council pack that sets one fails `pack save` (`PACK_INVALID`), naming the
+  offending key. They remain valid, and functional, on `fanout`/`solo` packs.
+- **Briefing templates.** `amicus template list|show`, plus `--template <name|path>` / `--artifact
+  <file>` / `--var <k=v>` (repeatable) on `start` / `fanout` / `council run`, render a
+  `{{variable}}` briefing before it's sent. Templates are Markdown files in
+  `~/.config/amicus/templates/` — a same-named user file shadows a built-in, the same precedent
+  saved councils already use — and v4.5 ships one built-in, `review`. Known variables: `{{prompt}}`,
+  `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.<key>}}`. Rendering is
+  strict by design: an unknown variable, a slot with no data behind it, or data passed with no slot
+  to receive it are all hard errors (`TEMPLATE_RENDER`) rather than a silently dropped value. MCP
+  has no `template` param of its own on any of the three run tools — a pack's `briefing.template` is
+  the only way a template reaches an MCP-invoked run.
+- **The Council Workspace auto-opens on `amicus_council_run` from Claude Code (local).** When the
+  MCP tool `amicus_council_run` is invoked from Claude Code (local), the same Electron window that
+  `amicus watch <runId> --ui` has always opened by hand now launches automatically, detached, right
+  after the run starts — no more separate `--ui` call to see the flagship v4.4 surface. The CLI
+  `amicus council run` is unaffected (there is no MCP client to detect on that path). Decision
+  order: an explicit `ui: false` param beats everything; the hard guards (Electron not installed —
+  this path never installs it; Linux with no `DISPLAY`) beat even an explicit `ui: true`; `ui: true`
+  then overrides both the new `workspace.autoOpen` config key and the client check; short of an
+  explicit param, `workspace.autoOpen === false` disables it, and any client other than Claude Code
+  (local) simply doesn't auto-open. New `workspace.autoOpen` config key (`config.json`, default on
+  — only an explicit `false` turns it off). The tool response carries `workspaceOpened: boolean`
+  and, only when it did not open, `workspaceOpenReason` (`param-suppressed`, `electron-absent`,
+  `no-display`, `config-disabled`, `client-not-code-local`, or a `spawn-failed:` /
+  `auto-open-failed:` detail).
+
+### Fixed
+
+- **A failed council seat no longer renders as perpetually live.** `createSession`'s early return
+  under a shared server bypassed the terminal `progress.json` write, leaving a stage marked
+  in-progress in `progress.json` after `metadata.json` had already recorded the error. The
+  terminal-write logic is now one shared helper (`writeTerminalProgressSafe`), called at all three
+  early-return sites plus the original one, so the paths can no longer drift apart.
+- **Collided artifact names no longer misattribute one model's prose to another's.** Two bench
+  models whose sanitized filenames collide (e.g. `vendor/a` and `vendor?a` both → `vendor-a`) share
+  one physical file on disk; the Council Workspace compounded that with a rendering bug that showed
+  the first model's review/judge prose under the *second* model's panel — including, in a `--debate`
+  run, the rebuttal/re-vote drill-in. Collided names now get a deterministic suffix (`~2`, `~3`,
+  …), and every Workspace file lookup consults the resulting name map instead of recomputing a bare
+  sanitized name — the second colliding model's row is now correctly dropped by the existing
+  presence filter (its suffixed name was never physically written) instead of showing the wrong
+  model's text, and a run-integrity banner names the collision so the gap reads as a known
+  limitation rather than missing data.
+- **A blind-mode toggle no longer collapses every open prose panel or repaints twice.** Flipping
+  Blind mid-run used to unconditionally recompute the blind default, forcing one paint with the
+  wrong value, a restore, and a second compensating repaint — and reset every lazy-loaded panel's
+  open/loaded state along the way, closing whatever the user had expanded. Blind state and
+  lazy-panel state now key off whether the run — and, separately, its status — actually changed
+  since the last render, so a same-run toggle updates in place and paints once without closing any
+  open panel; a run reaching its terminal status still recomputes the blind default and auto-reveals
+  exactly as before.
+- **`renderSeats` now reorders rows to match the composed run document.** The keyed seat-table
+  update already added and removed rows on change but never moved one, so the table's row order
+  froze at first render — visibly wrong once a repair solo or a new wave changed the underlying leg
+  order mid-run. Existing rows are now moved into place at the end of every render pass.
+- **`amicus council show` no longer reports a catalog-delisted bench member as healthy, and a
+  dropped member is no longer invisible to scripted/MCP callers.** `show`'s resolved/dropped split
+  checked only whether a member's alias mapped to *some* id, never whether that id was still in
+  the cached catalog — so a preset member whose alias now resolves to a catalog-absent id (e.g. a
+  direct-vendor route with no matching cached row) read as fully healthy in `show` while the real
+  run path (`resolveCouncilMembers`) silently dropped it on every actual run. `show` now reuses
+  that exact check — alias resolution, then catalog membership, with the same local-provider/
+  offline-catalog rule that a catalog it cannot consult never blocks a member, only a non-empty
+  catalog that omits it does. Separately, `council run --json` already suppressed the human-mode
+  `Notice: dropped unavailable council member(s): ...` line, and `run.json` carried no field for
+  it at all — a JSON-mode or MCP caller had zero signal a bench member vanished short of diffing
+  `bench` against the preset's nominal member list. `run.json` now carries an additive
+  `droppedMembers: [{member, reason}]` array (present only when at least one member was actually
+  dropped), reaching the `--json` envelope and the `amicus_council_run` MCP response body for
+  free. Resolution behavior itself — which members run, exit codes, spend — is unchanged; this is
+  observability only.
+
+### Changed
+
+- **`amicus_start` / `amicus_fanout`'s MCP schemas no longer declare a JSON-Schema `default` for
+  `agent`, `noUi`, or `includeContext`.** Client-visible metadata only — nothing behavioral: the
+  defaults are still applied at the same read sites they always were, and are still stated in each
+  param's own description. (`amicus_resume` / `amicus_continue`'s `noUi` keep their schema-level
+  default; they were not part of this pass.)
+
+### Removed
+
+- **The inert `repairCanHonorContract` guard.** 4.4.1's empty-findings acceptance flipped this
+  predicate permanently true by its own design, so `run-stages.js`'s `repairable &&` check could no
+  longer short-circuit on it and no test failed if the function were deleted outright — a
+  silent-deletion hazard that would otherwise re-arm the deadlock it used to guard against the day
+  empty-set validation tightens again. Removed deliberately instead: the underlying reasoning moved
+  to its call site, and the zero-findings regression test's comment now explains why the case it
+  covers still holds without the guard.
+
 ## [4.4.1] - 2026-07-27
 
 A fast-follow patch on 4.4.0. Every item is a correction to something already shipped, and almost all of it was measured against real paid council runs rather than reasoned about — the five gate councils that certified the Council Workspace are also what found these. Five behaviour changes ride along and are called out under **Changed**, because a user upgrading a patch should not discover them by surprise.

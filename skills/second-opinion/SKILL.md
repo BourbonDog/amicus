@@ -211,6 +211,11 @@ mangled alias (instant arg-parse failure). For a free council, swap `--models "<
 `--council free`. Run it in the background (`run_in_background: true`); you are notified on
 completion — do not poll.
 
+**Saved run configs (v4.5).** Every flag above this line can also come from a saved
+[policy pack](../../docs/usage.md#policy-packs) — `--pack <name>` loads its bench/chair/critic/
+lenses/options/template as defaults (an explicit flag still overrides it), the same on the
+`amicus_council_run`/`amicus_fanout`/`amicus_start` MCP tools' `pack` param.
+
 **Budget gate — one flag for the whole run.** By default the gate refuses any leg whose price
 exceeds the per-$/Mtok threshold (the o3/o3-pro guard). To run an intentionally expensive model the
 user asked for by name, pass `--no-cost-gate`; to raise only the total ceiling, pass

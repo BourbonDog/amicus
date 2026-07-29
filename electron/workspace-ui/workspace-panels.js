@@ -19,6 +19,24 @@
   // inverted back to the model id that keys state.labelByModel, so blind labels would break.
   function sanitizeName(model) { return String(model).replace(/[^a-zA-Z0-9._-]/g, '-'); }
 
+  // ⚠️ Task 18 (RN-1): review-/judge- filenames used to be recomputed here via a bare
+  // sanitizeName(model) call, which is NOT injective — two distinct bench models that sanitize
+  // to the same name would both resolve to the SAME filename, so drillIntoJudge's
+  // `[data-artifact="..."]` lookup handed back whichever section matched first (model A's prose
+  // rendered under model B's name). derived.artifactsByModel (src/workspace/artifact-guard.js's
+  // artifactAllowlist, threaded through by run-detail.js) already carries the disambiguated
+  // (possibly `~2`/`~3`-suffixed) name per raw model — consult it FIRST. Fall back to the legacy
+  // computation only when the map itself is absent: older detail payloads (pre-v4.5 runs,
+  // live-doc consumers not yet updated to build the map) never carry it, and re-deriving via
+  // sanitizeName is exactly what those payloads always did, so it stays correct for them too.
+  function resolveArtifactName(model, kind) {
+    var A = window.AmicusApp;
+    var map = A.state.detail.derived && A.state.detail.derived.artifactsByModel;
+    var entry = map && map[model];
+    if (entry && entry[kind]) { return entry[kind]; }
+    return kind + '-' + sanitizeName(model) + '.md';
+  }
+
   function renderSeatsPanel() {
     var A = window.AmicusApp;
     var d = A.state.detail;
@@ -60,12 +78,16 @@
   // ⚠️ PRE-FLIGHT (P4): the load is AWAITABLE — drillIntoJudge needs to know when it has
   // settled (the old code guessed with setTimeout(render, 300), which could fire before an
   // unbounded N-artifact IPC round trip finished and silently render nothing). loadPanel()
-  // is idempotent per panel id and returns its in-flight promise; both the promise cache
-  // (`loading`) and the per-run spec (`loaders`) are keyed by panel id and cleared/overwritten
-  // by wireLazyPanels() on every run-open — that clearing is what stops F09's stale-run
-  // artifact requests.
+  // is idempotent per panel id and returns its in-flight promise; the promise cache
+  // (`loading`) and the per-run spec (`loaders`) are both keyed by panel id, but only
+  // `loading` is cleared by wireLazyPanels() — on a run CHANGE only (Task 19, RN-5) — and
+  // that clearing is what stops F09's stale-run artifact requests.
   var loaders = {};  // panelId -> {bodyId, files}  (rewritten per run by wireLazyPanels)
   var loading = {};  // panelId -> Promise           (cleared per run by wireLazyPanels)
+  // Task 19 (RN-5): the run wireLazyPanels() last reset panels/loading for — gates the reset
+  // below to run CHANGES only. A same-run call (renderDetail() runs this on every blind toggle
+  // too, and on the live loop's terminal refresh) instead refreshes any open panel (Fix 1).
+  var lastWiredRunId = null;
 
   function loadPanel(panelId, bodyId, files) {
     var A = window.AmicusApp;
@@ -107,18 +129,31 @@
   }
 
   /**
-   * Rewrites the per-run spec map and drops the previous run's cached load promises — this
-   * is precisely what stops F09's stale-run artifact requests. Safe to call on every
-   * renderDetail() (run-open and blind-toggle alike); it registers no listeners itself.
+   * Rewrites the per-run spec map on every call. On a run CHANGE (tracked via the module-level
+   * `lastWiredRunId`, above), resets panel open/loaded state and drops the previous run's
+   * cached load promises — exactly what F09's stale-run protection needs. On a SAME-run call
+   * (Task 19, RN-5: renderDetail() calls this on every blind toggle too, and the live loop's
+   * terminal refresh) any panel the user already has open is instead refreshed in place — see
+   * Fix 1 below — never left showing stale-blind content, never collapsed. Registers no
+   * listeners itself.
    */
   function wireLazyPanels() {
     var A = window.AmicusApp;
-    ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
-      var p = A.$(id);
-      p.dataset.loaded = '0';
-      p.open = false;
-      delete loading[id];
-    });
+    // ⚠️ Fix-wave (Fix 4): keyed off `A.state.detail.runId`, not `A.state.runId` — the latter is
+    // set synchronously at the top of openRun(), before its workspace:get-run reply lands, so an
+    // out-of-order reply could make the two diverge. workspace-app.js's own run-change gate
+    // (renderDetail(), above `d.runId`) reads off the SAME `state.detail.runId`, so the two
+    // provably agree on whether this is a run change.
+    var sameRun = A.state.detail.runId === lastWiredRunId;
+    if (!sameRun) {
+      ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
+        var p = A.$(id);
+        p.dataset.loaded = '0';
+        p.open = false;
+        delete loading[id];
+      });
+      lastWiredRunId = A.state.detail.runId;
+    }
     var bench = A.state.detail.run.bench || [];
     var debated = !!A.state.detail.run.debate;
     // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
@@ -141,7 +176,7 @@
     loaders['reviews-panel'] = { bodyId: 'reviews-body', files: function () {
       return bench.map(function (m) {
         var label = A.state.labelByModel[m];
-        return { name: 'review-' + sanitizeName(m) + '.md', title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+        return { name: resolveArtifactName(m, 'review'), title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
       }).filter(function (f) { return present(f.name); });
     } };
     loaders['bundle-panel'] = { bodyId: 'bundle-body', files: function () {
@@ -157,7 +192,7 @@
     loaders['judges-panel'] = { bodyId: 'judges-body', files: function () {
       var files = bench.map(function (m) {
         var label = A.state.labelByModel[m];
-        return { name: 'judge-' + sanitizeName(m) + '.md', title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+        return { name: resolveArtifactName(m, 'judge'), title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
       });
       if (debated) {
         // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose
@@ -168,13 +203,31 @@
         // judge- titles above, which mirror the brief verbatim), so it goes through
         // AmicusRender.display() — the single blind-flip definition — rather than adding a
         // fourth hand-rolled copy of the same ternary.
+        // ⚠️ Task 18 fix-wave (RN-1, review finding 1): this name used to be recomputed via a
+        // bare sanitizeName(m) call, ignoring the disambiguation map entirely — for a colliding
+        // pair BOTH models resolved to the same bare revote-<sanitized>.md name, reintroducing
+        // for re-votes the exact cross-match bug Task 18 fixed for review-/judge-. Routed
+        // through resolveArtifactName(m, 'revote') like the other three sites; its built-in
+        // legacy fallback keeps older detail payloads (no artifactsByModel map) correct too.
         files = files.concat(bench.map(function (m) {
           var label = A.state.labelByModel[m];
-          return { name: 'revote-' + sanitizeName(m) + '.md', title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
+          return { name: resolveArtifactName(m, 'revote'), title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
         }));
       }
       return files.filter(function (f) { return present(f.name); });
     } };
+    // ⚠️ Fix-wave (Fix 1, RN-9): a same-run call (the blind toggle, or the live loop's
+    // running -> terminal refresh) must re-render any panel the user already has open, or it
+    // keeps showing content painted under the PREVIOUS blind state. renderProseSections()
+    // (workspace-render.js) clears its container before repainting, so this replaces sections
+    // in place rather than appending duplicates. Drop the cached promise first so loadPanel()
+    // actually re-fetches instead of returning its already-settled one.
+    if (sameRun) {
+      ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
+        var p = A.$(id);
+        if (p.open) { delete loading[id]; loadPanel(id, loaders[id].bodyId, loaders[id].files); }
+      });
+    }
   }
 
   // ⚠️ DE-ROT (F38): on a --debate run the FINAL tally.json is rebuilt from the debate's
@@ -194,9 +247,14 @@
       var rv = ((A.state.debate && A.state.debate.revotes) || []).find(function (r) {
         return r.judge === judgePair.model && r.id === findingId;
       });
+      // ⚠️ Task 18 fix-wave (RN-1, review finding 1): this branch used to recompute the name via
+      // bare sanitizeName(judgePair.model), independently of the (already-fixed) judge branch
+      // right below it — for a colliding pair, drilling a re-vote on the SECOND model resolved
+      // to the bare name and cross-matched the FIRST model's genuine revote section. Both arms
+      // of this ternary now go through the same disambiguation-aware helper.
       var artifactName = rv
-        ? 'revote-' + sanitizeName(judgePair.model) + '.md'
-        : 'judge-' + sanitizeName(judgePair.model) + '.md';
+        ? resolveArtifactName(judgePair.model, 'revote')
+        : resolveArtifactName(judgePair.model, 'judge');
       var section = A.$('judges-body').querySelector('[data-artifact="' + artifactName + '"]');
       // A genuinely absent artifact is not an error here — the panel renders its own
       // "<file> not written yet" empty state (spec §9, last row).

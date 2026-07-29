@@ -131,6 +131,39 @@ function writeProgress(sessionDir, stage, extra = {}) {
 }
 
 /**
+ * FR-1 (v4.5): stamp a TERMINAL stage into progress.json on a failure path,
+ * preserving previously recorded usage. Extracted from headless.js's A3 outer
+ * catch so the early-return paths and the exception path can never drift.
+ *
+ * writeProgress REBUILDS progress.json (no merge) — a bare terminal write would
+ * delete whatever real spend the last flush recorded, trading a stale-stage bug
+ * for a cost under-report on exactly the legs that failed. So the prior usage is
+ * read back and re-attached; `extra` fields beyond usage are deliberately
+ * dropped (readProgress derives message counts from conversation.jsonl).
+ *
+ * Runs on error paths: must never throw and never mask the original error.
+ *
+ * @param {string} sessionDir
+ * @param {string} errorMessage - the failure being recorded (stage derives from it)
+ * @returns {boolean} true if the terminal record was written
+ */
+function writeTerminalProgressSafe(sessionDir, errorMessage) {
+  try {
+    let priorUsage = null;
+    try {
+      const prior = JSON.parse(fs.readFileSync(path.join(sessionDir, 'progress.json'), 'utf-8'));
+      if (prior && prior.usage) { priorUsage = prior.usage; }
+    } catch { /* no readable prior record: write the terminal stage without usage */ }
+    const { resolveTerminalState } = require('./session-finalize');
+    const stage = resolveTerminalState({ error: errorMessage }).status;
+    writeProgress(sessionDir, stage, priorUsage ? { usage: priorUsage } : {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Read progress from a session's conversation.jsonl and progress.json files.
  *
  * @param {string} sessionDir - Path to the session directory
@@ -242,6 +275,7 @@ function readProgress(sessionDir) {
 module.exports = {
   readProgress,
   writeProgress,
+  writeTerminalProgressSafe,
   extractLatest,
   computeLastActivity,
   STAGE_LABELS,

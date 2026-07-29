@@ -42,6 +42,13 @@ amicus council run --prompt-file <b.md> --models a,b,c --chair <m> [--json]  # H
 amicus council save <name> --models a,b,c # Save a named council preset (>=2 resolvable members)
 amicus council list [--json]              # List saved councils + built-ins (free/budget/frontier)
 amicus council show <name> [--json]       # Resolve a council (saved or built-in) and show its members
+amicus template list [--json]              # List briefing templates (built-ins marked)
+amicus template show <name|path> [--json]  # Print a template's raw text
+amicus pack save <name> --kind council|fanout|solo [flags]  # Save a full run config (bench/options/template)
+amicus pack save <name> --from-run <id>    # ...or build one from an existing run/wave/session
+amicus pack list [--json]                  # List saved packs
+amicus pack show <name|path> [--json]      # Print a pack + its validation report
+amicus pack rm <name> [--json]             # Remove a saved pack
 ```
 
 ---
@@ -85,6 +92,10 @@ amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 | `--setup` | Force-open configuration before launching. Does **not** relax the `--prompt`/`--prompt-file` requirement — `start --setup` still fails fast with "Error: --prompt or --prompt-file is required" if neither is given. | |
 | `--no-validate-model` | Skip model-catalog validation before launch. | validation on |
 | `--gateway <mode>` | Routing override for this launch: `auto` (direct-first), `direct` (require a direct provider key), or `openrouter` (force OpenRouter). Overrides `routing.prefer` for one call. | `auto` |
+| `--pack <name\|path>` | Load a saved [policy pack](#policy-packs) — its `model`/options/template fill in for anything you didn't type explicitly. | |
+| `--template <name\|path>` | Render a [briefing template](#briefing-templates) (`{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.*}}`). | |
+| `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. | |
+| `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. | |
 
 > Agents: **Chat** auto-approves reads and asks before writes/bash (interactive default); **Build** has full tool access (headless default); **Plan** is read-only analysis. `--agent Chat` is interactive-only and incompatible with `--no-ui`.
 
@@ -119,6 +130,10 @@ amicus fanout --council free --prompt "Review this design" --json
 | `--no-cost-gate` | Disable the budget gate (per-$/Mtok threshold + ceiling) for this run. |
 | `--no-validate-model` | Skip catalog validation. |
 | `--gateway <mode>` | Routing override applied to every leg: `auto` (direct-first), `direct`, or `openrouter`. |
+| `--pack <name\|path>` | Load a saved [policy pack](#policy-packs) — its bench/options/template fill in for anything you didn't type explicitly. |
+| `--template <name\|path>` | Render a [briefing template](#briefing-templates) (`{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.*}}`), shared by every leg. |
+| `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. |
+| `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. |
 
 **Shared per-leg knobs.** Every leg in the wave also accepts the same per-leg options as `start`:
 `--agent`, `--thinking`, `--timeout`, `--summary-length`, `--no-context`, `--context-*`, `--mcp*`,
@@ -180,6 +195,10 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--debate` | Adds a Stage-2.5 rebuttal round (provisional tally → defense → re-vote → final tally) between cross-review and the final tally. |
 | `--claude-review <file>` | Enters Claude's own review from a file as judged review N+1 — no leg is ever launched for it; `claude` is a reserved seat name and may not also appear in `--models`, `--chair`, or `--critic` (pre-flight error). |
 | `--no-cost-gate` | Disable the per-leg price gate for the whole run (repairs + chair). |
+| `--pack <name\|path>` | Load a saved [policy pack](#policy-packs) — its bench/chair/critic/lenses/options/template fill in for anything you didn't type explicitly. |
+| `--template <name\|path>` | Render a [briefing template](#briefing-templates) (`{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.*}}`). |
+| `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. |
+| `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. |
 
 **Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
 `overallVerdict: null` — a cost ceiling hit after the tally, or a `--max-cost` ceiling set over a
@@ -191,6 +210,14 @@ finishes, use the MCP `amicus_wait` tool instead.
 Field-by-field run-directory contents, the degradation table, and `verdict.json`'s
 `overallVerdict` are documented in **[docs/council.md](./council.md#amicus-council-run)**. This is
 the command the repo's Council Review GitHub Action (v2) runs on labeled PRs.
+
+**Auto-open the Council Workspace (v4.5).** When this run is launched through the `amicus_council_run`
+**MCP tool** from Claude Code (local), the same Council Workspace window that `amicus watch <runId>
+--ui` opens by hand also opens automatically, detached, right after the run starts — no extra call
+needed to watch it live. The plain CLI invocation above is unaffected either way: there is no MCP client to
+detect on that path. Full decision order (the `ui` MCP param, the `workspace.autoOpen` config key,
+and the four guards) is in **[docs/council.md's Council Workspace
+section](./council.md#council-workspace-gui)**.
 
 ---
 
@@ -214,6 +241,129 @@ amicus council show budget [--json]                         # Works on built-ins
 | `frontier` | 3 premium flagship aliases across 3 distinct vendor families | Static — fixed aliases from the default alias table |
 
 **Precedence: user config always shadows a built-in of the same name.** If you `amicus setup` the wizard's free-OpenRouter-council flow, it seeds `councils.free` in your config — that saved list then wins over the built-in `free` bench (this is the pre-existing behavior, unchanged). The same shadowing applies if you `amicus council save budget --models ...`. `amicus council list` marks a built-in `shadowed: true` when a saved council of the same name exists.
+
+---
+
+## Briefing templates
+
+Render a `{{variable}}` briefing before it's sent — for `start`, `fanout`, and `council run` alike.
+
+```bash
+amicus template list [--json]              # Built-ins marked [built-in]; a same-named user file shadows one
+amicus template show review                # Print a template's raw text
+amicus start --model gemini --template review --artifact plan.md --var focus=performance --no-ui --json
+```
+
+**Known variables** (`src/template/render.js`): `{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}` (`YYYY-MM-DD`), `{{project}}`, `{{var.<key>}}` (from repeatable `--var key=value`). There is no `{{input}}` in v4.5 — that chaining variable, and the `critique`/`refine` built-ins that need it, arrive with v4.6's composable waves.
+
+**Strict by design — a typo fails loudly instead of silently dropping text:**
+
+| Situation | Result |
+|---|---|
+| Template uses `{{var.foo}}`, no `--var foo=...` given | Error (`TEMPLATE_RENDER`) |
+| `--var foo=...` given, template never uses `{{var.foo}}` | Notice (not an error) — printed to stderr |
+| Template uses `{{prompt}}`, no `--prompt`/`--prompt-file` given | Error |
+| `--prompt`/`--prompt-file` given, template has no `{{prompt}}` slot | Error — the text would be silently dropped |
+| Template uses `{{artifact}}`/`{{artifact_path}}`, no `--artifact` given | Error |
+| `--artifact` given, template has no `{{artifact}}`/`{{artifact_path}}` slot | Error |
+| An unrecognized `{{name}}` appears anywhere in the template | Error — lists the known variables |
+
+**Where templates live.** Markdown files in `~/.config/amicus/templates/<name>.md` — the name is the filename minus `.md`. A user file **shadows** a built-in of the same name (`amicus template list` marks it `[shadows built-in]`); there is no `template save`/`rm` — your editor is the manager. v4.5 ships one built-in, `review` (asks for a severity-tagged, artifact-grounded review ending in a one-paragraph verdict).
+
+**`--artifact <file>`** reads a file (256 KB cap) into `{{artifact}}` (its content) and `{{artifact_path}}` (its resolved path) — pass the plan/diff/design you want reviewed as a file instead of pasting it into `--prompt`.
+
+**MCP.** None of the three run tools (`amicus_start`, `amicus_fanout`, `amicus_council_run`) have a `template` param of their own — a [policy pack](#policy-packs)'s `briefing.template` is the only way a template reaches an MCP-invoked run, rendered against that call's own briefing text at the same single application point a typed `--template` would use.
+
+---
+
+## Policy packs
+
+Save a full run configuration — bench, chair/critic/lenses, options, briefing template — and invoke it by name instead of re-typing every flag.
+
+```bash
+amicus pack save <name> --kind council|fanout|solo [flags]   # build from flags
+amicus pack save <name> --from-run <id>                       # build from an existing run/wave/session
+amicus pack list [--json]
+amicus pack show <name|path> [--json]
+amicus pack rm <name> [--json]
+```
+
+Then invoke it with `--pack <name|path>` on `start` / `fanout` / `council run` — or the `pack` param on the `amicus_start` / `amicus_fanout` / `amicus_council_run` MCP tools.
+
+**What a pack can hold, per `kind`:**
+
+| Kind | Bench field | Kind-specific fields | Allowed `options.*` |
+|---|---|---|---|
+| `council` | `bench` (a saved council name, or an array of ≥2 members) | `chair`, `critic`, `lenses` | `timeout`, `maxCost`, `gateway`, `debate` |
+| `fanout` | `bench` (a saved council name, or an array of ≥2 members) | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noContext`, `contextTurns`, `contextMaxTokens` |
+| `solo` | `model` | — | `timeout`, `maxCost`, `gateway`, `agent`, `thinking`, `summaryLength`, `noUi`, `noContext`, `contextTurns`, `contextMaxTokens` |
+
+`council` packs do **not** accept `agent`, `thinking`, or `summaryLength` — they were inert on every surface (no council code path, CLI or MCP, ever reads a pack-filled one; the engine hardcodes agent `Plan`/summaryLength `verbose`), so they were dropped before release rather than shipped as dead weight a pack author would reasonably expect to work. A `council` pack that still sets one fails `pack save` with `PACK_INVALID`, naming the key. They remain valid, and functional, on `fanout`/`solo` packs.
+
+Every kind may also carry `description`, `version` (semver, default `1.0.0`), and `briefing.template` (a template **reference**, not rendered text — a pack never captures briefing prose).
+
+**Precedence: flag > pack > config default > built-in default.** A pack only fills in values you didn't type explicitly on the command line — anything you do pass always wins, and the pack is recorded on the run either way (see below), so a hand-tuned invocation of a saved pack is never ambiguous about what actually ran.
+
+**`--from-run <id>`** builds a pack from an existing council run, fanout wave, or solo session instead of flags — resolution order is council pointer → wave `metadata.json` → solo `metadata.json`. It captures the bench/model, chair/critic/lenses, and the run options that were actually used; **briefing text is never captured**, only a template *reference* when the source run recorded one.
+
+**Where packs live.** One JSON file per pack, `~/.config/amicus/packs/<name>.json`. Re-saving an unchanged pack is a no-op; saving a changed pack under an unchanged version string auto-bumps its patch version instead of silently overwriting history. Every pack also carries a content hash (sha256 of its canonical, sorted-key JSON form, first 12 hex chars) computed fresh on every read — a hand-edited pack whose `version` field you forgot to bump still gets a distinct hash on any run that used it.
+
+**Recorded on every run, whether or not any value was actually overridden:** `pack: {name, version, hash, source}` lands on the resulting solo session `metadata.json`, wave `metadata.json`/`wave.json`, or council `run.json` — `source` is `"dir"` for a saved pack invoked by name, `"path"` for one loaded by file path.
+
+**Error codes**, all through the standard `--json` error envelope:
+
+| Situation | Code |
+|---|---|
+| `pack show <missing>` | `PACK_NOT_FOUND` |
+| `pack rm <missing>` | `PACK_NOT_FOUND` |
+| `pack save` fails validation | `PACK_INVALID` (hard-fail; non-fatal warnings still print to stderr) |
+| `--pack <name>` at run time is the wrong `kind` (e.g. a `solo` pack passed to `council run`) | `PACK_KIND_MISMATCH` |
+| `pack save --from-run <unknown id>` | `BAD_SESSION` |
+
+**Over MCP, pack resolution happens entirely in-process** — `amicus_start`/`amicus_fanout`/`amicus_council_run` never spawn a child with `--pack`; the pack's values are merged onto that call's own input before validation, exactly as they would be for a typed param. Two knobs get special handling for CLI parity: a pack's `options.maxCost` and `briefing.template` have no schema param of their own on `amicus_start`/`amicus_fanout` (neither tool exposes either directly), but they still apply — forwarded to the spawned CLI child's argv as `--max-cost`/`--template` (`amicus_fanout` always spawns; `amicus_start`'s spawn-fallback path does the same), or, on `amicus_start`'s in-process shared-server path, applied via the same budget-gate/template-render code the CLI itself uses, before any session is created. (`amicus_council_run` already has real MCP params for both, so this forwarding never triggers there.) Any *other* pack knob with nowhere to land in a given tool's own MCP schema is never silently dropped either — it comes back as an explicit `Notice: pack '<name>' sets <key>, which <tool> does not support over MCP — ignored.` content block, naming the pack's own camelCase option key (e.g. `contextTurns`, never the CLI's `context-turns`). Concretely, `amicus_fanout` has no MCP destination for `options.contextTurns`/`options.contextMaxTokens` (both notice); `amicus_start` has real `contextTurns`/`contextMaxTokens` params, so no notice there. `council` packs cannot carry `agent`/`thinking`/`summaryLength` at all (see above), so there is nothing left to orphan on that surface.
+
+### Worked example — save, inspect, invoke
+
+Run end to end against the real CLI (a scratch config dir, so paths below are shown in their normal
+`~/.config/amicus` form rather than the test scratch path):
+
+```bash
+$ amicus pack save review-bench --kind council \
+    --bench gemini,deepseek,gpt --chair opus \
+    --timeout 20 --max-cost 2 --description "Standard 3-model review bench"
+Saved pack 'review-bench' v1.0.0 → ~/.config/amicus/packs/review-bench.json
+```
+
+```bash
+$ amicus pack show review-bench
+Pack 'review-bench' v1.0.0 [council] (dir: ~/.config/amicus/packs/review-bench.json)
+  hash: da084ba56162
+  description: Standard 3-model review bench
+  bench: gemini, deepseek, gpt
+  chair: opus
+  options: {"timeout":20,"maxCost":2}
+  validation: ok
+```
+
+```bash
+$ amicus council run --pack review-bench --prompt-file briefing.md --out-dir council-run --json
+```
+
+No `--models`/`--chair`/`--timeout`/`--max-cost` needed on that last line — they all came from the
+pack. Confirmed against the run's own `run.json` for this exact invocation (irrelevant keys elided):
+
+```json
+{
+  "bench": ["gemini", "deepseek", "gpt"],
+  "chair": "opus",
+  "pack": { "name": "review-bench", "hash": "da084ba56162", "source": "dir" },
+  "options": { "timeout": 20, "maxCost": 2, "gateway": "auto", "outDir": "..." }
+}
+```
+
+Adding an explicit flag overrides just that one value — `... --pack review-bench --chair gpt-pro`
+keeps the pack's bench and cost/timeout options but chairs with `gpt-pro` instead of `opus`, and the
+pack is still recorded on the run either way.
 
 ---
 
@@ -293,7 +443,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.4.1",
+  "version": "4.5.0",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }

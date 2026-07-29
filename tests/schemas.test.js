@@ -54,6 +54,18 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(compile('run'), runDoc);
   });
 
+  // v4.5 Task 13: additive — present only when the solo session was launched via --pack.
+  test('run.schema.json accepts buildRunResult output with a recorded pack', () => {
+    const doc = buildRunResult({
+      taskId: 'sch-run-2',
+      metadata: {
+        model: 'openrouter/deepseek/deepseek-v4', status: 'complete',
+        pack: { name: 'quick-check', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
+      },
+    });
+    expectValid(compile('run'), doc);
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],
@@ -61,6 +73,32 @@ describe('published result-family schemas validate real builder output (v4.0 §7
       createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
     });
     expectValid(compile('wave'), doc);
+  });
+
+  // v4.5 Task 13: additive — present only when the wave was launched via --pack.
+  test('wave.schema.json accepts buildWaveResult output with a recorded pack', () => {
+    const doc = buildWaveResult({
+      waveId: 'sch-wave-2', legs: [runDoc],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      pack: { name: 'fanout-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    expectValid(compile('wave'), doc);
+  });
+
+  // v4.5 final-review F5: wave.schema.json's pack was typed ["object","null"]
+  // — the only nullable-pack schema among the three siblings (run.schema.json/
+  // council-run.schema.json are both object-only) — but every emitter uses
+  // the absent-not-null idiom (never emits pack:null), so the "null" branch
+  // was dead. Tightened to object-only; this locks it against regression.
+  test('wave.schema.json rejects an explicit pack:null (every emitter is absent-not-null, matching run/council-run siblings)', () => {
+    const doc = buildWaveResult({
+      waveId: 'sch-wave-3', legs: [runDoc],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    doc.pack = null; // simulates a hand-rolled/legacy doc; buildWaveResult itself never does this
+    expect(compile('wave')(doc)).toBe(false);
   });
 
   test('abort.schema.json accepts buildAbortResult output', () => {
@@ -177,6 +215,10 @@ describe('published council-family schemas validate real builder output (v4.0 §
       lenses: null,
       labelMap: { 'Review A': 'gemini', 'Review B': 'gpt', 'Review C': 'mistral' },
       options: { maxCost: 2, timeoutMinutes: 10, gateway: 'auto' },
+      // v4.5 Task 12 (B7/F5): additive — present only when the run was launched via --pack.
+      pack: { name: 'sec-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
+      // v4.5 Task 5 (F3): template metadata — present only when the run was launched via --template.
+      template: { name: 'x', hash: 'abcdef123456' },
       usage: { cost: { amount: 1.1, source: 'reported' } },
       exitCode: 0
     };
@@ -184,8 +226,67 @@ describe('published council-family schemas validate real builder output (v4.0 §
   });
 });
 
+describe('published pack-family schemas validate policy packs (v4.5)', () => {
+  test('pack.schema.json accepts council pack shape', () => {
+    const validate = compile('pack');
+    const councilPack = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'sec-review',
+      version: '1.0.0',
+      kind: 'council',
+      description: 'x',
+      bench: ['deepseek', 'qwen-coder'],
+      chair: 'gpt',
+      critic: null,
+      lenses: null,
+      options: { timeout: 10 },
+      briefing: { template: 'review' },
+    };
+    expectValid(validate, councilPack);
+  });
+
+  test('pack.schema.json accepts solo pack shape', () => {
+    const validate = compile('pack');
+    const soloPack = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'quick-check',
+      version: '1.0.0',
+      kind: 'solo',
+      model: 'gpt-4o',
+    };
+    expectValid(validate, soloPack);
+  });
+
+  test('pack.schema.json rejects invalid kind', () => {
+    const validate = compile('pack');
+    const invalid = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'bad-pack',
+      version: '1.0.0',
+      kind: 'nope',
+    };
+    expect(validate(invalid)).toBe(false);
+  });
+
+  test('pack.schema.json rejects bench array with fewer than 2 items', () => {
+    const validate = compile('pack');
+    const invalid = {
+      schemaVersion: 1,
+      type: 'pack',
+      name: 'single-bench',
+      version: '1.0.0',
+      kind: 'council',
+      bench: ['only-one'],
+    };
+    expect(validate(invalid)).toBe(false);
+  });
+});
+
 describe('schema publishing (v4.0 §7)', () => {
-  test('exactly the 18 published schema files exist', () => {
+  test('exactly the 19 published schema files exist', () => {
     const files = fs.readdirSync(SCHEMAS_DIR).filter((f) => f.endsWith('.schema.json')).sort();
     // Lexicographic sort: '-' (0x2D) < '.' (0x2E), so every "-live" variant
     // sorts BEFORE its base name (council-run-live < council-run, etc.) —
@@ -196,7 +297,7 @@ describe('schema publishing (v4.0 §7)', () => {
       'council-stats.schema.json', 'council-tally.schema.json',
       'council-validate.schema.json', 'council-verdict.schema.json',
       'doctor.schema.json', 'error.schema.json', 'event.schema.json',
-      'model-catalog.schema.json', 'progress.schema.json',
+      'model-catalog.schema.json', 'pack.schema.json', 'progress.schema.json',
       'run-live.schema.json', 'run.schema.json', 'spend.schema.json',
       'wave-live.schema.json', 'wave.schema.json',
     ]);

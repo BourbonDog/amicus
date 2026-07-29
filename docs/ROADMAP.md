@@ -91,7 +91,7 @@ and a review that honestly finds nothing stops being an error.
 **Benefit:** complex councils become one-command, repeatable, and shareable — and the flagship GUI
 stops hiding. Design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-design.md`.
 - **★ Auto-open the Council Workspace on a council run (Christian, 2026-07-26)** — when a council is
-  invoked from Claude Desktop and Electron is already present, the Workspace window opens by
+  invoked from Claude Code (local) and Electron is already present, the Workspace window opens by
   default instead of requiring a separate `amicus watch <runId> --ui`. Today the GUI is opt-in and
   discoverable only from `watch --help`, so the flagship v4.4 surface goes unseen on the very
   client best able to show it. *(S–M; the pieces exist — see the design notes below.)*
@@ -180,9 +180,9 @@ rather than re-deriving them.
 | Is Electron usable | `src/sidecar/electron-install.js` `isElectronUsable` / `resolveElectronBinary` |
 | Current entry point | `amicus watch <runId> --ui` (`src/cli-handlers-watch.js:87`) |
 
-**"Claude Desktop" maps to `code-local`.** ⚠️ But `detectClient` reads the MCP client's
+**"Claude Code (local)" maps to `code-local`.** ⚠️ But `detectClient` reads the MCP client's
 `getClientVersion().name`, so it **only works on the MCP path** — `amicus_council_run`, which is
-exactly the Claude Desktop case. A `council run` typed into a terminal has no MCP server, so
+exactly the Claude Code (local) case. A `council run` typed into a terminal has no MCP server, so
 detection there falls through to the env override or the `cowork` status-quo default. Do not build
 this on the CLI path expecting detection to work; either gate it on the MCP entry point or thread
 an explicit client tag through. (Related: the Phase 12 backlog item about persisting the client tag

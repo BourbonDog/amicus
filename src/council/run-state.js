@@ -101,6 +101,23 @@ function initCouncilRun(o) {
     // "no debate key" contract and fail the object-typed schema), and with a VALID
     // outcome from the first write so a run killed mid-debate stays schema-valid.
     ...(o.debate ? { debate: { enabled: true, outcome: 'nothing-to-debate' } } : {}),
+    // F9 (v4.5): additive-only — absent (not null) without --template; the MCP
+    // seed (mcp-council-run.js, initRun directly) never sets this in v4.5.
+    ...(o.template ? { template: o.template } : {}),
+    // v4.5 Task 12 (B7/F5): additive-only — absent (not null) without --pack.
+    // Preserved across a later MCP-child initRun whose own seed omits it —
+    // mergeRun's plain shallow merge never drops a key patch doesn't mention.
+    ...(o.pack ? { pack: o.pack } : {}),
+    // v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): additive-only
+    // — absent (never an empty array) when nothing was dropped. Handler-computed
+    // (cli-handlers-council-run.js's resolveBench, via resolveCouncilMembers) so
+    // a scripted/--json/MCP caller has a signal a bench member vanished without
+    // diffing `bench` against the preset's nominal member list. Same
+    // preserved-across-a-later-MCP-child-seed precedent as `pack` above — the
+    // MCP handler pre-seeds this directly (mcp-council-run.js) before spawning
+    // the CLI child, whose own seed (bench already expanded to --models) never
+    // recomputes it and so never mentions the key.
+    ...(o.droppedMembers && o.droppedMembers.length ? { droppedMembers: o.droppedMembers } : {}),
     options: { timeout: o.timeout || null, maxCost: o.maxCost, gateway: o.gateway || 'auto', outDir: o.runDir },
     usage: null, pid: process.pid, createdAt: new Date().toISOString(),
   });

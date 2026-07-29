@@ -11,7 +11,7 @@ const { logger } = require('./utils/logger');
 const { ensureNodeModulesBinInPath } = require('./utils/path-setup');
 const { ensurePortAvailable } = require('./utils/server-setup');
 const { mapAgentToOpenCode } = require('./utils/agent-mapping');
-const { writeProgress } = require('./sidecar/progress');
+const { writeProgress, writeTerminalProgressSafe } = require('./sidecar/progress');
 const { writeFileAtomic } = require('./utils/atomic-write');
 const { createMirrorState, mirrorMessages, logMessage, getPendingToolCalls,
   getLiveToolCalls, mirrorUsageOnly, allAssistantUsagePresent } = require('./sidecar/conversation-mirror');
@@ -289,6 +289,11 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       logger.debug('Server started', { url: server.url });
     } catch (error) {
       logger.error('Failed to start OpenCode server', { error: error.message });
+      // FR-1: this return predates the outer try — A3's terminal write never ran
+      // for it, leaving 'initializing' on disk while metadata said 'error'.
+      if (!writeTerminalProgressSafe(sessionDir, `Failed to start server: ${error.message}`)) {
+        logger.debug('terminal progress write failed on server-start failure (best-effort)', { taskId });
+      }
       return {
         summary: '',
         completed: false,
@@ -314,6 +319,10 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
 
       if (!serverReady) {
         await server.close();
+        // FR-1: returns out of the outer try — the A3 catch never sees it.
+        if (!writeTerminalProgressSafe(sessionDir, 'OpenCode server failed to start')) {
+          logger.debug('terminal progress write failed on server-not-ready (best-effort)', { taskId });
+        }
         return {
           summary: '',
           completed: false,
@@ -351,6 +360,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       } catch (error) {
         if (watchdog) { watchdog.cancel(); }
         if (!externalServer) { await server.close(); }
+        // FR-1: the one path a council leg can hit under T0.5's shared server —
+        // pre-fix, the Workspace showed the seat perpetually live off a
+        // non-terminal 'server_ready' while metadata.json said 'error'.
+        if (!writeTerminalProgressSafe(sessionDir, error.message)) {
+          logger.debug('terminal progress write failed on createSession failure (best-effort)', { taskId });
+        }
         return {
           summary: '',
           completed: false,
@@ -1192,19 +1207,8 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // assistant entries directly and only falls back to `messagesReceived` when there are none, so
     // restating a stale count on an exception — where conversation.jsonl is the more truthful,
     // already-mirrored source — could only disagree with the file it exists to summarize.
-    try {
-      let priorUsage = null;
-      try {
-        const prior = JSON.parse(fs.readFileSync(path.join(sessionDir, 'progress.json'), 'utf-8'));
-        if (prior && prior.usage) { priorUsage = prior.usage; }
-      } catch { /* no readable prior record: write the terminal stage without usage */ }
-      const { resolveTerminalState } = require('./sidecar/session-finalize');
-      const stage = resolveTerminalState({ error: error.message }).status;
-      writeProgress(sessionDir, stage, priorUsage ? { usage: priorUsage } : {});
-    } catch (progressErr) {
-      logger.debug('terminal progress write failed after exception (best-effort)', {
-        taskId, error: progressErr.message,
-      });
+    if (!writeTerminalProgressSafe(sessionDir, error.message)) {
+      logger.debug('terminal progress write failed after exception (best-effort)', { taskId });
     }
     const { emptyUsageTotals } = require('./utils/pricing');
     return {

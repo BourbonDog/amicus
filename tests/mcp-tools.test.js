@@ -178,10 +178,16 @@ describe('MCP Tool Definitions', () => {
       expect(startTool.inputSchema).toHaveProperty('includeContext');
     });
 
-    test('includeContext defaults to true', () => {
+    test('includeContext has no Zod default — an omitted key stays absent so a pack can fill it (v4.5 Task 15 fix wave 2, Finding 1)', () => {
+      // Pre-fix, Zod's .default(true) materialized includeContext:true before
+      // applyPackToMcpInput ever ran, so a pack's includeContext/noContext
+      // value was silently never applied (Task 15 review Finding 1) — key
+      // presence, not the Zod default, must decide caller-explicitness. The
+      // effective default (true when absent) now lives at the handler's read
+      // site (mcp-server.js: `input.includeContext !== false`), not in the schema.
       const schema = startTool.inputSchema.includeContext;
-      expect(schema._def.typeName).toBe('ZodDefault');
-      expect(schema._def.defaultValue()).toBe(true);
+      expect(schema._def.typeName).toBe('ZodOptional');
+      expect(schema.isOptional()).toBe(true);
     });
 
     test('has parentSession in input schema', () => {

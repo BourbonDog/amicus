@@ -126,6 +126,87 @@ describe('artifactAllowlist', () => {
     expect(list.collisions).toEqual([
       { sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a', 'vendor a'] },
     ]);
+    // Sorted raw models -> 'vendor a' (space, U+0020) < 'vendor/a' (slash, U+002F) <
+    // 'vendor?a' (question mark, U+003F) by code point, so 'vendor a' keeps the bare
+    // sanitized name and the other two get ~2/~3 in that sorted order (Task 18 / RN-1).
+    expect(list.artifactsByModel).toEqual({
+      'vendor a': {
+        review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+        rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+      },
+      'vendor/a': {
+        review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+        rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+      },
+      'vendor?a': {
+        review: 'review-vendor-a~3.md', judge: 'judge-vendor-a~3.md',
+        rebuttal: 'rebuttal-vendor-a~3.md', revote: 'revote-vendor-a~3.md',
+      },
+    });
+  });
+
+  // ⚠️ Task 18 (RN-1, R4 council review's own recommendation): the collision above is a real
+  // run-integrity defect (the run directory physically holds ONE file for two colliding
+  // sanitized names) that no renderer can undo — but a renderer showing model A's prose under
+  // model B's name is a SEPARATE, fixable defect. Deterministic disambiguation: per colliding
+  // sanitized name, sort the raw models; the first (sorted) keeps the bare sanitized name, the
+  // rest get `~2`, `~3`, ... The suffixed names deliberately do not exist on disk — the
+  // presence manifest (run-detail.js) marks them absent, so workspace-panels.js's presence
+  // filter drops the second model's row entirely instead of rendering an empty state for it or
+  // showing the first model's prose; the run-integrity banner (artifactCollisions) is what
+  // tells the user why that row is missing.
+  test('artifactsByModel suffixes every colliding model but the first (sorted), and the allowlist carries both suffixed rows', () => {
+    const list = artifactAllowlist({ bench: ['vendor/a', 'vendor?a'] });
+    expect(list).toEqual(expect.arrayContaining([
+      'review-vendor-a.md', 'judge-vendor-a.md',
+      'review-vendor-a~2.md', 'judge-vendor-a~2.md',
+    ]));
+    expect(list.collisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+    expect(list.artifactsByModel).toEqual({
+      'vendor/a': {
+        review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+        rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+      },
+      'vendor?a': {
+        review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+        rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+      },
+    });
+  });
+
+  test('artifactsByModel is the identity mapping (no suffixes) when no bench entries collide', () => {
+    const list = artifactAllowlist({ bench: ['gemini', 'gpt'] });
+    expect(list.artifactsByModel).toEqual({
+      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md', rebuttal: 'rebuttal-gemini.md', revote: 'revote-gemini.md' },
+      gpt: { review: 'review-gpt.md', judge: 'judge-gpt.md', rebuttal: 'rebuttal-gpt.md', revote: 'revote-gpt.md' },
+    });
+  });
+
+  test('repeated identical bench entries collapse to one artifactsByModel row with NO suffix', () => {
+    const list = artifactAllowlist({ bench: ['gemini', 'gemini'] });
+    expect(list.artifactsByModel).toEqual({
+      gemini: { review: 'review-gemini.md', judge: 'judge-gemini.md', rebuttal: 'rebuttal-gemini.md', revote: 'revote-gemini.md' },
+    });
+  });
+
+  // ⚠️ Task 18 fix-wave (review finding 3): a bench mixing a genuine duplicate WITH a colliding
+  // distinct entry was untested — duplicates must collapse via the raw-value Set BEFORE the
+  // collision scan ever runs (so 'vendor/a' appearing twice never counts as a collision with
+  // itself), and the surviving distinct pair must still disambiguate exactly as the two-model
+  // collision case above.
+  test('a duplicate raw entry alongside a colliding distinct entry: duplicates collapse first, then the collision suffixes normally', () => {
+    const list = artifactAllowlist({ bench: ['vendor/a', 'vendor/a', 'vendor?a'] });
+    expect(list.collisions).toEqual([{ sanitized: 'vendor-a', models: ['vendor/a', 'vendor?a'] }]);
+    expect(list.artifactsByModel).toEqual({
+      'vendor/a': {
+        review: 'review-vendor-a.md', judge: 'judge-vendor-a.md',
+        rebuttal: 'rebuttal-vendor-a.md', revote: 'revote-vendor-a.md',
+      },
+      'vendor?a': {
+        review: 'review-vendor-a~2.md', judge: 'judge-vendor-a~2.md',
+        rebuttal: 'rebuttal-vendor-a~2.md', revote: 'revote-vendor-a~2.md',
+      },
+    });
   });
 
   test('FIXED_ARTIFACTS and DEBATE_ARTIFACTS are frozen against consumer mutation', () => {

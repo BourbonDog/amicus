@@ -27,6 +27,13 @@
                      // null on a non-debate run, an aborted/skipped debate, or a parse failure —
                      // drillIntoJudge's judge-*.md fallback covers all three.
     blind: false,
+    // Task 19 (RN-5) + fix-wave (RN-5 amendment): the (run id, status) pair renderDetail() last
+    // computed state.blind's default for. Together they gate the recompute (in renderDetail(),
+    // below) to a run CHANGE or a STATUS change only: a same-run/same-status re-render (the
+    // blind toggle) keeps the user's own choice, while a same-run/CHANGED-status re-render (the
+    // live loop's running -> terminal refresh, or the abort-confirm re-read) still auto-reveals.
+    detailRunId: null,
+    detailRunStatus: null,
     labelByModel: {},
     listTimer: null,
     liveTimer: null, // LIVE (Task 15)
@@ -103,8 +110,23 @@
       return;
     }
 
-    // blind default: computed ONCE per run-open from status (resolution 9)
-    state.blind = window.AmicusLive.defaultBlind(d.run.status);
+    // blind default: computed from status (resolution 9) — only on a run CHANGE or a STATUS
+    // change for the same run. Task 19 (RN-5): a same-run/same-status re-render
+    // (renderDetail_preserveBlind, below, calls straight back in here on every blind toggle)
+    // must keep the user's own choice instead of recomputing the default every call —
+    // recomputing unconditionally is what forced the old code to paint twice and, via
+    // wireLazyPanels() a few lines down, collapse any lazy panel the user had open.
+    // ⚠️ Fix-wave (RN-5 amendment, controller ruling): run id ALONE also suppressed the
+    // pre-existing running -> terminal auto-reveal, since the live loop's terminal refresh
+    // (workspace-verbs.js's startLiveLoop tick) and the abort-confirm re-read both call
+    // openRun() on the SAME run id — same run, but a real status transition. Keying on run id
+    // AND status recomputes (auto-reveals) on that transition while still preserving a same-
+    // run/same-status call (the blind toggle).
+    if (state.detailRunId !== d.runId || state.detailRunStatus !== d.run.status) {
+      state.blind = window.AmicusLive.defaultBlind(d.run.status);
+      state.detailRunId = d.runId;
+      state.detailRunStatus = d.run.status;
+    }
     $('blind-toggle').checked = state.blind;
     state.labelByModel = {};
     d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; });
@@ -178,7 +200,6 @@
   });
 
   function renderDetail_preserveBlind() {
-    var keep = state.blind;
     // ⚠️ Fix-wave item 1: renderDetail() itself early-returns safely for an unreadable run
     // (!d || d.error || !d.derived) — but this wrapper used to run past that guard
     // unconditionally, dereferencing the (nonexistent) derived model via renderSeatsPanel()
@@ -187,22 +208,22 @@
     // the error branch unhides #run-view before the derived-model guard, so the Blind
     // checkbox is live with nothing behind it.
     if (!state.detail || state.detail.error || !state.detail.derived) {
-      $('blind-toggle').checked = keep;
+      $('blind-toggle').checked = state.blind;
       return;
     }
+    // ⚠️ Task 19 (RN-5): this used to call renderDetail() (which unconditionally stomped
+    // state.blind back to the run's status default), restore the user's pre-call value,
+    // and then re-paint header chips/seats/matrix/verdict/cost a SECOND time to compensate
+    // for the first call having painted with the wrong (default) blind state — a double
+    // paint, and (via wireLazyPanels(), called inside that first renderDetail()) a collapse
+    // of any lazy panel the user had open. Fixed at the root instead of compensated for:
+    // renderDetail() now recomputes the blind default only on a run CHANGE or a STATUS change
+    // (state.detailRunId/state.detailRunStatus, above) — this call changes neither, so it
+    // keeps state.blind exactly as the change listener above just set it, and
+    // workspace-panels.js's wireLazyPanels() (its own same-run guard, `lastWiredRunId`)
+    // refreshes any open panel in place rather than collapsing it (fix-wave, Fix 1). One
+    // renderDetail() call now paints correctly the first time — nothing left to restore.
     renderDetail();
-    state.blind = keep;
-    $('blind-toggle').checked = keep;
-    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): renderDetail() (just
-    // called above) resets state.blind to the run's DEFAULT before this function restores the
-    // user's chosen `keep` value — renderHeaderChips was painted during that inner call with
-    // the (temporarily wrong) default blind state and, unlike seats/matrix/verdict/cost below,
-    // was never repainted afterward. Re-render it here too, now that state.blind is correct.
-    window.AmicusRender.renderHeaderChips($('run-chips'), state.detail.run, state.blind, labelOf);
-    P.renderSeatsPanel();
-    P.renderMatrixPanel();
-    P.renderVerdictPanel();
-    window.AmicusRender.renderCost($('cost-body'), state.detail.derived.cost, state.blind, labelOf);
   }
 
   $('run-list').addEventListener('keydown', function (e) {
@@ -227,7 +248,8 @@
 
   // ⚠️ PRE-FLIGHT (P4) + DE-ROT (F09): register the three prose `toggle` listeners exactly ONCE,
   // here at boot. wireLazyPanels() (called from renderDetail, on every run-open and blind-toggle)
-  // only rewrites the per-run `loaders` spec map from now on — it never adds a listener.
+  // rewrites the per-run `loaders` spec map every call and — fix-wave, Fix 1 — refreshes any
+  // already-open lazy panel in place on a same-run call; it never adds a listener.
   P.proseLoader('reviews-panel');
   P.proseLoader('bundle-panel');
   P.proseLoader('judges-panel');

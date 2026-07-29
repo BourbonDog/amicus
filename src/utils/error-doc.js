@@ -24,6 +24,11 @@ const ERROR_CODES = Object.freeze({
   COST_EXCEEDED: 'COST_EXCEEDED',   // council run: whole-run --max-cost ceiling hit pre-tally (v4.0 §4)
   // council run: --claude-review file unreadable/invalid, or --chair claude (v4.1 §4.4)
   COUNCIL_CLAUDE_REVIEW_INVALID: 'COUNCIL_CLAUDE_REVIEW_INVALID',
+  TEMPLATE_NOT_FOUND: 'TEMPLATE_NOT_FOUND', // --template name/path unresolvable at run time (v4.5 F9)
+  TEMPLATE_RENDER: 'TEMPLATE_RENDER',       // strict render rule violated: unknown var, slot/data mismatch (v4.5 F9)
+  PACK_NOT_FOUND: 'PACK_NOT_FOUND',         // --pack name not in packs dir / path unreadable (v4.5 B7/F5)
+  PACK_INVALID: 'PACK_INVALID',             // pack schema/structural/seat validation failure (v4.5 B7/F5)
+  PACK_KIND_MISMATCH: 'PACK_KIND_MISMATCH', // e.g. a council pack passed to fanout (v4.5 B7/F5)
 });
 
 /**

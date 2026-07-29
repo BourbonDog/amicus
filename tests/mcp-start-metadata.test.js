@@ -93,7 +93,12 @@ describe('shared-server path metadata keys (source contract)', () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const sharedWrite = src.slice(start, end);
-    expect(sharedWrite).toContain('briefing: input.prompt');
+    // v4.5 HOLD-gate decision 1 (parity): the shared-server path now renders a
+    // pack-forwarded template before recording `briefing`, so this records
+    // `renderedPrompt` (byte-identical to input.prompt when no pack template
+    // applied) rather than the raw input — matching the CLI's own on-disk
+    // briefing.md, which is always the rendered text.
+    expect(sharedWrite).toContain('briefing: renderedPrompt');
     expect(sharedWrite).toContain("mode: 'headless'");
     expect(sharedWrite).toContain("agent: agent || 'build'");
   });

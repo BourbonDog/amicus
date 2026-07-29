@@ -72,6 +72,13 @@ test('the three inputs are declared on the amicus_council_run schema; tool count
     expect.arrayContaining(['debate', 'claudeReviewFile', 'noCostGate']));
 });
 
+// v4.5 Task 15 (B7/F5): `pack?` added to all three run tools — see
+// tests/pack/mcp-pack-params.test.js for the full behavioral/wiring contract.
+test('the pack input is declared on the amicus_council_run schema', () => {
+  const tool = getTools().find(t => t.name === 'amicus_council_run');
+  expect(Object.keys(tool.inputSchema)).toEqual(expect.arrayContaining(['pack']));
+});
+
 // v4.3 Task 3 (spec §7.1): a `council` preset input reaches the spawned CLI
 // child as the internal `--council-name` passthrough — resolveBenchInput
 // already expands the preset into `--models` (bench.join(',')), so without
@@ -94,5 +101,89 @@ describe('council preset name reaches the spawned argv (v4.3 Task 3, spec §7.1)
     await handleCouncilRunTool(input(), tmp, helpers(calls));
     const args = calls[0].args;
     expect(args).not.toContain('--council-name');
+  });
+});
+
+// v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): a `council`
+// preset input whose resolution drops a catalog-absent member must record
+// droppedMembers on the pre-seeded run.json — mergeRun preserves it across
+// the spawned child's own initCouncilRun seed, the SAME precedent already
+// established for `pack` (see mcp-council-run.js's initRun call) — AND
+// surface it in the MCP response body, so a scripted/MCP caller gets the
+// signal without diffing run.json's bench against the preset's nominal
+// member list.
+//
+// Sandboxed against AMICUS_CONFIG_DIR — unlike the rest of this file, whose
+// 'budget'/'opus' inputs resolve via the DEFAULT alias table and are
+// resilient to (and never exercise a drop against) whatever this machine's
+// real cached catalog actually contains.
+describe('droppedMembers threads through the MCP council-preset resolution path (Wave 2 chip)', () => {
+  const parseFenced = (res) => {
+    const text = res.content[0].text;
+    expect(text).toContain('<untrusted_sidecar_output');
+    const m = text.match(/\{[\s\S]*\}/);
+    return JSON.parse(m[0]);
+  };
+
+  let cfgDir; let prevConfigDir;
+  beforeEach(() => {
+    prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-council-drop-cfg-'));
+    process.env.AMICUS_CONFIG_DIR = cfgDir;
+    const { saveConfig } = require('../src/utils/config');
+    saveConfig({
+      aliases: { 'catalog-ghost': 'vendorx/ghost-model' },
+      councils: { droppy: ['vendorx/model-a', 'vendorx/model-b', 'catalog-ghost'] },
+    });
+    fs.writeFileSync(path.join(cfgDir, 'model-catalog.json'), JSON.stringify({
+      schemaVersion: 2, fetchedAt: Date.now(),
+      models: [{ id: 'vendorx/model-a' }, { id: 'vendorx/model-b' }], // omits ghost-model
+    }));
+  });
+  afterEach(() => {
+    if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+    else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+  });
+
+  test('a council preset that drops a catalog-absent member pre-seeds run.json with droppedMembers and surfaces it in the response body', async () => {
+    const { readRun } = require('../src/council/run-state');
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      { briefingFile, council: 'droppy', chair: 'opus', outDir: 'run1' }, tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    const run = readRun(path.join(tmp, 'run1'));
+    expect(run.droppedMembers).toEqual([
+      { member: 'catalog-ghost', reason: expect.any(String) },
+    ]);
+    const body = parseFenced(res);
+    expect(body.droppedMembers).toEqual([
+      { member: 'catalog-ghost', reason: expect.any(String) },
+    ]);
+  });
+
+  test('a council preset with nothing dropped omits droppedMembers from both run.json and the response body', async () => {
+    fs.writeFileSync(path.join(cfgDir, 'model-catalog.json'), JSON.stringify({
+      schemaVersion: 2, fetchedAt: Date.now(),
+      models: [{ id: 'vendorx/model-a' }, { id: 'vendorx/model-b' }, { id: 'vendorx/ghost-model' }],
+    }));
+    const { readRun } = require('../src/council/run-state');
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      { briefingFile, council: 'droppy', chair: 'opus', outDir: 'run2' }, tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    const run = readRun(path.join(tmp, 'run2'));
+    expect('droppedMembers' in run).toBe(false);
+    const body = parseFenced(res);
+    expect('droppedMembers' in body).toBe(false);
+  });
+
+  test('a models-only input (no preset) never carries droppedMembers', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      { briefingFile, models: ['vendorx/model-a', 'vendorx/model-b'], outDir: 'run3' }, tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    const body = parseFenced(res);
+    expect('droppedMembers' in body).toBe(false);
   });
 });

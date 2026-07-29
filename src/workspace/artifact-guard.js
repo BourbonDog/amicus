@@ -96,14 +96,37 @@ function artifactAllowlist(run) {
     }
   }
 
+  // ⚠️ Task 18 (RN-1): the collision above is a real run-integrity defect — the run directory
+  // physically holds ONE file where two models' artifacts should be, and no renderer trick can
+  // recover both. What the renderer CAN stop doing is showing model A's prose under model B's
+  // name. Deterministic disambiguation: per colliding sanitized name, sort the RAW models
+  // (sorting, not insertion order, is what keeps this reproducible across processes/runs); the
+  // first (sorted) keeps the bare sanitized name, the rest get `~2`, `~3`, ... The suffixed
+  // names deliberately do not exist on disk — the presence manifest (run-detail.js, via
+  // fs.statSync over this same allowlist) marks them absent, so the renderer shows the honest
+  // "not written yet" empty state for every model but the first, instead of cross-matching.
+  const nameFor = new Map(); // raw model -> its (possibly suffixed) sanitized name
   for (const m of uniqueModels) {
-    names.push(`review-${sanitizeName(m)}.md`);
-    names.push(`judge-${sanitizeName(m)}.md`);
-    // rebuttal-/revote- are keyed on the same BENCH ALIAS through the same sanitizeName
-    // (materializeDebate is called with `d.raiser` / the revote leg's model — both aliases).
+    let s = sanitizeName(m);
+    const collision = collisionModels.get(s);
+    if (collision) {
+      const sortedRaw = [...collision].sort();
+      const index = sortedRaw.indexOf(m);
+      if (index > 0) { s = `${s}~${index + 1}`; }
+    }
+    nameFor.set(m, s);
+  }
+
+  for (const m of uniqueModels) {
+    const s = nameFor.get(m);
+    names.push(`review-${s}.md`);
+    names.push(`judge-${s}.md`);
+    // rebuttal-/revote- are keyed on the same BENCH ALIAS through the same (now possibly
+    // suffixed) name — materializeDebate is called with `d.raiser` / the revote leg's model
+    // (both aliases), so a colliding pair's debate artifacts are disambiguated the same way.
     if (debated) {
-      names.push(`rebuttal-${sanitizeName(m)}.md`);
-      names.push(`revote-${sanitizeName(m)}.md`);
+      names.push(`rebuttal-${s}.md`);
+      names.push(`revote-${s}.md`);
     }
   }
   // `uniqueModels` already collapsed genuinely-repeated bench entries, so this final Set is
@@ -115,6 +138,21 @@ function artifactAllowlist(run) {
       sanitized, models: [...models],
     }));
   }
+  // Consumed by workspace-panels.js (wireLazyPanels' file lists + drillIntoJudge's artifact
+  // lookup), which prefers this map over re-deriving names via sanitizeName(model) directly —
+  // that re-derivation is exactly what would ignore the suffixing above and misattribute prose.
+  // ⚠️ Fix-wave (review finding 1) residual limit this map cannot close: the BARE (unsuffixed)
+  // name is still exactly ONE physical file on disk, and its actual bytes belong to whichever
+  // colliding model's writer ran LAST — no map can recover which one that was. The guarantee
+  // delivered here is narrower than "attribution is fully sound": at most the sorted-first
+  // model can still be misattributed under the bare name; artifactCollisions (the run-integrity
+  // banner rendered by workspace-app.js's renderBanners) is what covers that residual case.
+  list.artifactsByModel = Object.fromEntries(
+    [...nameFor].map(([m, s]) => [m, {
+      review: `review-${s}.md`, judge: `judge-${s}.md`,
+      rebuttal: `rebuttal-${s}.md`, revote: `revote-${s}.md`,
+    }]),
+  );
   return list;
 }
 

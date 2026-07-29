@@ -30,8 +30,22 @@
     "chair": { "type": "string" },
     "critic": { "type": ["string", "null"] },
     "lenses": { "type": ["array", "null"], "items": { "type": "string" } },
+    "droppedMembers": {
+      "description": "Council preset members dropped during resolution before this run started (v4.5 Wave 2): an alias that no longer resolves, or a resolved id absent from a non-empty cached model catalog (a catalog-unknown/offline member is never dropped this way). Present only when at least one member was actually dropped; absent — never an empty array — otherwise. `bench` above already reflects the survivors only; this is purely an additional observability signal so a scripted/MCP caller can detect a shrunken bench without diffing `bench` against the preset's nominal member list.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["member", "reason"],
+        "properties": {
+          "member": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
     "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
     "options": { "type": "object" },
+    "pack": { "type": "object" },
+    "template": { "type": "object" },
     "usage": { "type": "object" },
     "exitCode": { "type": ["number", "null"] },
     "budgetRefusals": {

@@ -25,6 +25,22 @@ function textResult(text, isError) {
 }
 
 /**
+ * v4.5 Task 15 (B7/F5): maps amicus_council_run's MCP input keys to the CLI
+ * arg-key names applyPackToArgs's knob tables use (pack-resolve.js), so
+ * applyPackToMcpInput can reuse those tables unchanged. `template` has no
+ * Zod-declared counterpart on this tool (MCP has no template param of its
+ * own — template/apply.js's own docblock: "MCP has no template params of its
+ * own") — a pack's briefing.template is the ONLY way a template reaches this
+ * handler, carried through as a plain (non-schema) `input.template` property
+ * consumed by the render step below.
+ */
+const COUNCIL_PACK_PARAM_MAP = {
+  models: 'models', council: 'council', chair: 'chair', critic: 'critic', lenses: 'lenses',
+  debate: 'debate', timeoutMinutes: 'timeout', maxCost: 'max-cost', gateway: 'gateway',
+  template: 'template',
+};
+
+/**
  * Resolve the bench: models XOR council preset (amicus_fanout parity).
  * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed council
  * preset name when that branch was taken, else null — this handler always
@@ -45,9 +61,11 @@ function resolveBenchInput(input) {
     const presetName = input.council.trim();
     const expanded = resolveCouncilMembers(presetName, catalog);
     if (expanded.error) { return { error: expanded.error }; }
-    return { bench: expanded.models, presetName };
+    // v4.5 Wave 2: the child never re-resolves (bench is spawned pre-expanded
+    // to --models) — the pre-seed below is the only place this is recorded.
+    return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
   }
-  return { bench: inputModels, presetName: null };
+  return { bench: inputModels, presetName: null, droppedMembers: [] };
 }
 
 /**
@@ -55,7 +73,8 @@ function resolveBenchInput(input) {
  * {runId, runDir} immediately (fenced).
  * @param {object} input tool input
  * @param {string} project resolved project dir
- * @param {{spawnFn: Function, clientName: string}} helpers injected by mcp-server
+ * @param {{spawnFn: Function, clientName: string, autoOpen?: {decide: Function, launch: Function}}} helpers
+ *   injected by mcp-server; `autoOpen` is a v4.5 test seam (real modules used when absent)
  */
 async function handleCouncilRunTool(input, project, helpers) {
   // Task 15 (spec §5.3): validate onComplete FIRST, before any run dir is
@@ -74,10 +93,45 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (briefing.charCodeAt(0) === 0xFEFF) { briefing = briefing.slice(1); }
   if (!briefing.trim()) { return textResult(`briefingFile ${input.briefingFile} is empty.`, true); }
 
+  // v4.5 Task 15 (B7/F5): resolve `pack` IN-PROCESS, before bench/chair/etc
+  // resolution, so a pack-filled input.models/council/chair/critic/lenses/
+  // timeoutMinutes/maxCost/gateway/debate flows through the SAME validation
+  // below a typed value would (single-resolution rule: never spawn --pack —
+  // this is the only place the pack is resolved).
+  let packRecord = null;
+  const notices = [];
+  if (input.pack !== undefined) {
+    const { applyPackToMcpInput } = require('./pack/pack-resolve');
+    const pr = applyPackToMcpInput({
+      packRef: input.pack, expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
+    });
+    // v4.5 final-review T15-m1: amicus_start's own pack-error branch
+    // (mcp-server.js) keeps code+hint via buildErrorDoc's JSON envelope; this
+    // handler's error surface is plain text (born-fenced, not JSON), so the
+    // hint (e.g. PACK_NOT_FOUND's 'amicus pack list') is appended to the
+    // message instead of being converted into a JSON envelope, which would
+    // change this tool's established response shape.
+    if (pr.error) { return textResult(pr.error.message + (pr.error.hint ? `\n${pr.error.hint}` : ''), true); }
+    packRecord = pr.packRecord;
+    notices.push(...pr.notices);
+  }
+  // MCP has no template param of its own — a pack's briefing.template (merged
+  // onto input.template above) is the only way one reaches this handler.
+  // {{prompt}} = the briefingFile content; the RENDERED text is what lands in
+  // briefing.md below (mirrors the CLI's single template-application point).
+  if (input.template !== undefined) {
+    const { applyTemplate } = require('./template/apply');
+    const t = applyTemplate({ templateRef: input.template, prompt: briefing, project });
+    if (t.error) { return textResult(t.error.message, true); }
+    briefing = t.prompt;
+    notices.push(...t.notices);
+  }
+
   const benchRes = resolveBenchInput(input);
   if (benchRes.error) { return textResult(benchRes.error, true); }
   const bench = benchRes.bench;
   const presetName = benchRes.presetName;
+  const droppedMembers = benchRes.droppedMembers || [];
   if (bench.length < 2) { return textResult('A council needs at least 2 seats.', true); }
   const chair = (typeof input.chair === 'string' && input.chair.trim()) ? input.chair.trim() : CHAIR_DEFAULT;
   if (bench.includes(chair)) {
@@ -121,6 +175,14 @@ async function handleCouncilRunTool(input, project, helpers) {
         maxCost: (typeof input.maxCost === 'number') ? input.maxCost : null,
         gateway: input.gateway || 'auto', outDir: runDir,
       },
+      // v4.5 Task 15: additive-only — absent (not null) without a pack. The
+      // spawned child's own seed omits `pack` (never passed --pack); initRun's
+      // plain shallow merge (run-state.js) preserves this pre-seeded value —
+      // pinned behavior, Task 12.
+      ...(packRecord ? { pack: packRecord } : {}),
+      // v4.5 Wave 2: additive, same preserved-across-the-child's-own-initRun
+      // precedent as `pack` above — absent (never []) when nothing dropped.
+      ...(droppedMembers.length ? { droppedMembers } : {}),
       usage: null, createdAt: new Date().toISOString(),
     });
     runState.writePointer(project, runId, runDir);
@@ -170,14 +232,56 @@ async function handleCouncilRunTool(input, project, helpers) {
   // the only code that later sees this council run reach terminal state.
   if (oc.mode === 'mcp-notify') { requestMcpNotify(runId); }
 
+  // ★ v4.5 auto-open (spec §6): decide via the pure helper, launch detached,
+  // never await, never fail the run. helpers.autoOpen is a test seam.
+  const ao = helpers.autoOpen || {
+    decide: (ctx) => require('./sidecar/workspace-auto-open').shouldAutoOpenWorkspace(ctx),
+    launch: (opts) => require('./sidecar/workspace-window').launchWorkspaceWindowDetached(opts),
+  };
+  let workspaceOpened = false;
+  let workspaceOpenReason = null;
+  try {
+    const { isElectronUsable } = require('./sidecar/electron-install');
+    const { getWorkspaceAutoOpen } = require('./utils/config');
+    const decision = ao.decide({
+      client: helpers.clientName,
+      electronUsable: isElectronUsable(),
+      platform: process.platform,
+      env: process.env,
+      autoOpenConfig: getWorkspaceAutoOpen(),
+      uiParam: input.ui,
+    });
+    if (decision.open) {
+      const r = ao.launch({ project, runId });
+      if (r && r.launched === false) {
+        workspaceOpenReason = r.reason;
+      } else {
+        workspaceOpened = true;
+      }
+    } else {
+      workspaceOpenReason = decision.reason;
+    }
+  } catch (err) {
+    workspaceOpenReason = `auto-open-failed: ${err.message}`;
+  }
+
   const body = JSON.stringify({
     schemaVersion: 2, type: 'council-run', runId, runDir, status: 'running',
     message: 'Council run started. Preferred: call amicus_wait with the runId — one blocking ' +
       'call replaces polling; re-call it while it returns timedOut: true. Fallback: poll ' +
       'amicus_status with the runId. Artifacts land in runDir (verdict.json, report.html).',
+    workspaceOpened,
+    ...(workspaceOpenReason ? { workspaceOpenReason } : {}),
+    // v4.5 Wave 2: otherwise invisible here short of separately reading run.json.
+    ...(droppedMembers.length ? { droppedMembers } : {}),
   });
   // Born-fenced (spec §8): council MCP tool text is wrapped like amicus_read.
-  return textResult(fenceSidecarOutput(body));
+  const content = [{ type: 'text', text: fenceSidecarOutput(body) }];
+  // v4.5 Task 15: pack/template notices (e.g. a bench-override) are non-fatal —
+  // surfaced as extra unfenced content blocks, same precedent as
+  // mcp-server.js's routeResult.notice (amicus_start).
+  for (const n of notices) { content.push({ type: 'text', text: n }); }
+  return { content };
 }
 
 // The council-awareness helpers live in their own module; re-exported here so

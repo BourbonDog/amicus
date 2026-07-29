@@ -44,6 +44,7 @@ function parseArgs(argv) {
     _: [],
     ...DEFAULTS
   };
+  result.__explicit = new Set();
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -63,19 +64,22 @@ function parseArgs(argv) {
       // Boolean flags (no value expected)
       if (isBooleanFlag(key)) {
         result[key] = true;
+        result.__explicit.add(key);
         continue;
       }
 
       // If --key=value was used, use the inline value directly
       if (inlineValue !== undefined) {
         result[key] = parseValue(key, inlineValue);
+        result.__explicit.add(key);
         continue;
       }
 
       // Array accumulation flags
-      if (key === 'exclude-mcp' && next && !next.startsWith('--')) {
-        result['exclude-mcp'] = result['exclude-mcp'] || [];
-        result['exclude-mcp'].push(next);
+      if ((key === 'exclude-mcp' || key === 'var') && next && !next.startsWith('--')) {
+        result[key] = result[key] || [];
+        result[key].push(next);
+        result.__explicit.add(key);
         i++;
         continue;
       }
@@ -85,6 +89,7 @@ function parseArgs(argv) {
       // boolean so it can never swallow the following positional as a value.
       if (key.startsWith('no-')) {
         result[key] = true;
+        result.__explicit.add(key);
         continue;
       }
 
@@ -95,6 +100,7 @@ function parseArgs(argv) {
       } else {
         result[key] = true;
       }
+      result.__explicit.add(key);
     } else if (arg === '-o') {
       // Single short-flag alias, scoped to exactly '-o' (council verdict's
       // --out shorthand). No general short-flag support is implemented —
@@ -106,6 +112,7 @@ function parseArgs(argv) {
       } else {
         result.out = true;
       }
+      result.__explicit.add('out');
     } else {
       result._.push(arg);
     }
@@ -428,6 +435,10 @@ Options for 'start':
   --no-validate-model          Skip model-catalog validation before launch
   --gateway <mode>             Routing: auto (direct-first), direct, or openrouter
   --position <pos>             Window position: right (default), left, center
+  --template <name|path>       Render a briefing template ({{prompt}}, {{artifact}}, {{var.*}})
+  --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
+  --var <k=v>                  Template variable, repeatable (needs --template)
+  --pack <name|path>           Load a saved pack (model/options/template); explicit flags override it
 `,
   fanout: `
 Options for 'fanout':
@@ -459,6 +470,10 @@ Options for 'fanout':
                                 RESULT_FILE/EVENTS_FILE/COST/PROJECT), never model
                                 text. Child stdout/stderr go to amicus stderr.
                                 Never changes the wave's exit code, docs, or events.
+  --template <name|path>       Render a briefing template ({{prompt}}, {{artifact}}, {{var.*}})
+  --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
+  --var <k=v>                  Template variable, repeatable (needs --template)
+  --pack <name|path>           Load a saved pack (bench/options/template); explicit flags override it
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -545,6 +560,8 @@ Subcommands for 'council':
       [--gateway auto|direct|openrouter] [--no-validate-model]
       [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
       [--fallback] [--no-fallback] [--on-complete <cmd>]
+      [--template <name|path>] [--artifact <file>] [--var <k=v>]
+      [--pack <name|path>]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
@@ -567,6 +584,13 @@ Subcommands for 'council':
                                 EVENTS_FILE/COST/PROJECT), never model text. Child
                                 stdout/stderr go to amicus stderr. Never changes
                                 the run's exit code, docs, or events.
+                                --template <name|path> renders a briefing from
+                                {{prompt}}, {{artifact}}, {{var.*}}; --artifact
+                                fills {{artifact}} (256 KB cap); --var sets
+                                {{var.*}} (repeatable). Both require --template.
+                                --pack <name|path> loads a saved pack (bench,
+                                chair, critic/lenses, options, template);
+                                explicit flags always override the pack's values.
                                 Exit: 0 full run, 2 degraded, 1 quorum/cost/validation.
   save <name> --models a,b,c    Save a named council preset (>=2 resolvable members)
     --json                     Machine-readable output
@@ -639,6 +663,43 @@ Options for 'init':
   Runs skill install + MCP registration on demand (for plugin-channel /
   --ignore-scripts installs, a failed postinstall, or repairing deleted
   ~/.claude state). No flags registers both Claude Code and Claude Desktop.
+`,
+  template: `
+Options for 'template':
+  amicus template list [--json]           List templates (built-ins marked)
+  amicus template show <name|path> [--json]  Print a template
+`,
+  pack: `
+Options for 'pack':
+  amicus pack save <name> --kind council|fanout|solo [flags]
+                                Save a pack built from flags:
+                                --bench <a,b,c|name>    council/fanout: comma-
+                                                         separated members, or a
+                                                         saved council name
+                                --model <model>          solo kind only
+                                --chair/--critic/--lenses    council kind only
+                                --timeout/--max-cost/--gateway   shared run
+                                                         options
+                                --agent/--thinking/--summary-length   fanout/
+                                                         solo kind only
+                                --debate / --no-debate   council kind only
+                                --template <name|path>   briefing template
+                                                         reference (not rendered)
+                                --version <semver>       default 1.0.0 (an
+                                                         unchanged re-save is a
+                                                         no-op; a changed one
+                                                         auto-bumps the patch)
+                                --description <text>
+  amicus pack save <name> --from-run <id>
+                                Build a pack from an existing council run /
+                                fanout wave / solo session instead of flags
+                                (models, options, and a template REFERENCE only
+                                — briefing text is never captured)
+  amicus pack list [--json]    List saved packs
+  amicus pack show <name|path> [--json]
+                                Print a pack plus its validation report (never
+                                fails on an invalid pack — see 'validation')
+  amicus pack rm <name> [--json]   Remove a saved pack
 `
 };
 

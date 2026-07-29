@@ -25,17 +25,28 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
  */
 async function handleStart(args) {
   const useJson = !!args.json;
-
+  const packRecord = require('./pack/pack-cli').applyPackOrExit(args, 'solo', useJson);
   // F4: --prompt-file support (XOR --prompt) and --json gating
+  // F9 (v4.5): --template renders {{prompt}}/{{artifact}}/{{var.*}} into the prompt; byte-identical without it.
+  let templateMeta = null;
   if (args.prompt !== undefined || args['prompt-file'] !== undefined) {
     const { resolvePromptSource } = require('./utils/prompt-source');
     const promptRes = resolvePromptSource(args);
     if (promptRes.error) { process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error })); }
     args.prompt = promptRes.prompt;
-    // Drop --prompt-file now that it's resolved: validateStartArgs' self-contained
-    // guard would otherwise re-run resolvePromptSource with both prompt and
-    // prompt-file set and trip its mutually-exclusive branch.
+    // Drop --prompt-file post-resolve or validateStartArgs re-trips its XOR guard.
     delete args['prompt-file'];
+  }
+  if (args.template !== undefined) {
+    const { applyTemplate } = require('./template/apply');
+    const t = applyTemplate({ templateRef: args.template, prompt: args.prompt,
+      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
+    if (t.error) { process.exit(failJson(useJson, t.error)); }
+    for (const n of t.notices) { process.stderr.write(n + '\n'); }
+    args.prompt = t.prompt;
+    templateMeta = t.promptMeta.template;
+  } else if (args.artifact !== undefined || args.var !== undefined) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' }));
   }
   requireNoUiForJson(args, useJson);
 
@@ -105,6 +116,8 @@ async function handleStart(args) {
     position: args.position,
     json: !!args.json,
     modelInput: alias || null,
+    template: templateMeta, // F9 (v4.5): startSidecar ignores unknown keys; inert until a future task reads it.
+    pack: packRecord, // v4.5 Task 13: null when no --pack; additively recorded on solo session metadata.
   });
 }
 
@@ -130,6 +143,7 @@ async function handleFanout(args) {
     if (errorDoc && useJson) { process.stdout.write(JSON.stringify(errorDoc) + '\n'); }
     return exitCode;
   }
+  const packRecord = require('./pack/pack-cli').applyPackOrExit(args, 'fanout', useJson);
 
   // FIX 4 (#61 whole-branch review, cheap parity): handleStart validates
   // --gateway via validateStartArgs (cli.js) — fanout never did, so a typo'd
@@ -140,9 +154,22 @@ async function handleFanout(args) {
   }
 
   const { resolvePromptSource } = require('./utils/prompt-source');
-  const promptRes = resolvePromptSource(args);
-  if (promptRes.error) {
-    process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error }));
+  let promptRes;
+  if (args.prompt !== undefined || args['prompt-file'] !== undefined || args.template === undefined) {
+    promptRes = resolvePromptSource(args);
+    if (promptRes.error) { process.exit(failJson(useJson, { code: ERROR_CODES.MISSING_PROMPT, message: promptRes.error })); }
+  } else {
+    promptRes = { prompt: undefined, promptMeta: null };
+  }
+  if (args.template !== undefined) {
+    const { applyTemplate } = require('./template/apply');
+    const t = applyTemplate({ templateRef: args.template, prompt: promptRes.prompt,
+      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
+    if (t.error) { process.exit(failJson(useJson, t.error)); }
+    for (const n of t.notices) { process.stderr.write(n + '\n'); }
+    promptRes = { prompt: t.prompt, promptMeta: t.promptMeta };
+  } else if (args.artifact !== undefined || args.var !== undefined) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' }));
   }
   // Council preset: expand a saved council into args.models (mutually exclusive with --models).
   const hasModels = typeof args.models === 'string' && args.models.trim();
@@ -190,7 +217,7 @@ async function handleFanout(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --models must contain at least one non-empty entry' }));
   }
 
-  // Direct require — the src/index.js public re-export is added later (Task 13)
+  // Direct require (fanout stays internal — no src/index.js public re-export).
   const { runFanout } = require('./sidecar/fanout');
   const { loadConfig, resolveGatewayMode } = require('./utils/config');
   const { resolveFallbackConfig } = require('./sidecar/fallback-chains');
@@ -237,6 +264,7 @@ async function handleFanout(args) {
       config: cfg,
     }),
     catalog: (readCache() || {}).models || [],
+    pack: packRecord, // v4.5 Task 13: null when no --pack; additive on wave metadata.json + wave.json.
   });
   return exitCode;
 }

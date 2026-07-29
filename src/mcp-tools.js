@@ -71,12 +71,12 @@ function getTools() {
         'files of interest, success criteria.'
       ),
       agent: z.enum(['Chat', 'Plan', 'Build']).optional()
-        .default('Chat').describe(
+        .describe(
           'Agent mode. Chat (interactive default; headless runs auto-convert ' +
           'to Build): reads auto, writes ask permission. Plan: read-only ' +
           'analysis. Build: full auto (all operations approved).'
         ),
-      noUi: z.boolean().optional().default(false).describe(
+      noUi: z.boolean().optional().describe(
         'Run headless without GUI. Default false (opens Electron window).'
       ),
       thinking: z.enum([
@@ -101,7 +101,7 @@ function getTools() {
         'Fold summary verbosity. brief: key findings only. normal (default): full ' +
         'structured output. verbose: maximum detail.'
       ),
-      includeContext: z.boolean().optional().default(true).describe(
+      includeContext: z.boolean().optional().describe(
         'Whether to include parent conversation history as context. '
         + 'Default: true. Set to false when the briefing is self-contained '
         + 'and does not depend on prior conversation. See amicus_guide for guidance.'
@@ -120,6 +120,7 @@ function getTools() {
           'right (default): flush against the right edge. ' +
           'left: flush against the left edge. center: centered.'
         ),
+      pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -350,8 +351,9 @@ function getTools() {
       summaryLength: z.enum(['brief', 'normal', 'verbose']).optional().describe(
         'Summary verbosity for every leg.'
       ),
-      includeContext: z.boolean().optional().default(true).describe(
-        'Include parent conversation context (built once, shared by all legs). Set false for self-contained briefings.'
+      includeContext: z.boolean().optional().describe(
+        'Include parent conversation context (built once, shared by all legs). ' +
+        'Default: true. Set false for self-contained briefings.'
       ),
       coworkProcess: z.string().optional().describe(
         'Cowork VM process name (e.g., "modest-laughing-goodall"). ' +
@@ -366,6 +368,7 @@ function getTools() {
         'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
         'commands are NOT accepted over MCP.'
       ),
+      pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -496,6 +499,13 @@ function getTools() {
         'Advisory: send an MCP info notification carrying the terminal event doc when the run ' +
         'finishes (best-effort; amicus_wait remains the reliable completion mechanism). Exec ' +
         'commands are NOT accepted over MCP.'
+      ),
+      pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
+      ui: z.boolean().optional().describe(
+        'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +
+        'Claude Code (local), Electron is installed, a display exists, and config workspace.autoOpen is ' +
+        'not false. false: never open. true: open even for other clients (still requires Electron + ' +
+        'a display; never installs).'
       ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'

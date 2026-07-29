@@ -430,6 +430,52 @@ describeE2E('council workspace e2e (CDP)', () => {
     } finally { cdp.close(); await kill(child); }
   });
 
+  // TST-3 (v4.5): the confirm path through the REAL DOM. The fake-DOM abort test
+  // (tests/workspace/abort-verb.test.js) proves the handler logic; this proves the wiring —
+  // real dialog, real click listeners, real repaint — with the IPC edge stubbed in-page (a real
+  // abort against fixture pids would be aiming a kill at processes that do not exist).
+  //
+  // ⚠️ Deviates from the task-21-brief skeleton (disclosed in task-21-report.md): the brief
+  // stubs by reassigning `window.amicusWorkspace.invoke`, but that object is deep-frozen by
+  // contextBridge.exposeInMainWorld (confirmed live: Object.isFrozen === true, `invoke` is
+  // non-writable/non-configurable) — the exact fact the F09 test just above already documents,
+  // for the same reason. A sloppy-mode reassignment there silently no-ops, so the real,
+  // unstubbed invoke would fire a genuine workspace:abort-run at this fixture's fake pid on the
+  // confirm click. Stub instead at `window.AmicusApp.invoke`/`.openRun` — plain, non-frozen page
+  // globals workspace-app.js itself publishes (the test above this one already calls `.openRun`
+  // directly) — which reaches the same two effective boundaries the brief names (the abort IPC
+  // never reaches the real handler; the post-abort re-read's status is patched to terminal)
+  // through the one interception point actually reachable from page script. Verified harmless
+  // beforehand against a throwaway fixture copy: zero bytes of the real run.json change on disk,
+  // and only 'workspace:abort-run' ever reaches the wrapper — the real channel is never invoked.
+  test('abort confirm through the real DOM flips the run terminal and hides the verb', async () => {
+    const { child } = launchWorkspace(proj, 'cccc3333', displayInfo.display);
+    const cdp = await CdpClient.workspace(CDP_PORT);
+    try {
+      await cdp.waitForSelector('#abort-btn:not([hidden])'); // live run open
+      await cdp.evaluate(`(() => {
+        const A = window.AmicusApp;
+        const origInvoke = A.invoke;
+        const origOpenRun = A.openRun;
+        A.invoke = (channel, ...args) => {
+          if (channel === 'workspace:abort-run') { return Promise.resolve({ ok: true }); }
+          return origInvoke(channel, ...args);
+        };
+        A.openRun = (runId) => origOpenRun(runId).then(() => {
+          A.state.detail.run = Object.assign({}, A.state.detail.run, { status: 'aborted', exitCode: 130 });
+          A.renderDetail();
+        });
+      })()`);
+      await cdp.evaluate(`document.getElementById('abort-btn').click()`);
+      await new Promise((r) => setTimeout(r, 150));
+      expect(await cdp.evaluate(`document.getElementById('dialog-abort').hidden`)).toBe(false);
+      await cdp.evaluate(`document.getElementById('dialog-abort-confirm').click()`);
+      await new Promise((r) => setTimeout(r, 600));
+      expect(await cdp.evaluate(`document.getElementById('dialog-abort').hidden`)).toBe(true);
+      expect(await cdp.evaluate(`document.getElementById('abort-btn').hidden`)).toBe(true);
+    } finally { cdp.close(); await kill(child); }
+  });
+
   // ⚠️ Surface #5 (F09): reproduces the stale-artifact class of bug through the REAL run-switch
   // UI path (a click on a different run-list row + a real <details> toggle), not the fake-DOM
   // unit test's hand-invoked re-render. NOTE: `window.amicusWorkspace.invoke` cannot be

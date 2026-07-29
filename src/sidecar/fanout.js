@@ -42,6 +42,12 @@ function deriveLegIds(waveId, count) {
  *   stdout — tests), councilRunId? / councilName? (v4.3 §7.2: stamped onto legs),
  *   fallback? / catalog? (v4.3 Task 18 §6.2: opt-in substitution; off/absent unchanged),
  *   retryContexts? / retryOfWaveId? (v4.3 Task 19: --retry-failed relaunch seam; absent -> byte-identical),
+ *   pack? (v4.5 Task 13: {name,version,hash,source} record when launched via
+ *     --pack; absent/null -> omitted from wave metadata.json/wave.json, not stored as null.
+ *     v4.5 final-review F2: when absent, wave.json still inherits a pack the caller
+ *     pre-seeded onto this wave dir's metadata.json before calling runFanout — see
+ *     `metaPack` below. That is how an MCP-spawned child, which never receives
+ *     --pack itself, still ends up with the pack on its wave.json),
  *   server? + serverClient? (v4.4.1 Task 0.5: an ALREADY-STARTED OpenCode server
  *     to run this wave's legs on. Both or neither. When supplied this wave never
  *     starts a server and never closes one — see the seam comment in step 4.
@@ -80,7 +86,7 @@ async function runFanout(options) {
   // `reason` in metadata.json, no wave.json, and stage1 recorded 'complete'.
   // waveDir is optional (only the post-creation caller has one).
   const errorWave = (waveId, message, waveDir) => {
-    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, createdAt, completedAt: new Date().toISOString(), status: 'error' });
+    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack, createdAt, completedAt: new Date().toISOString(), status: 'error' });
     doc.error = message;
     doc.reason = message; // classifier alias, same as fanout-leg.js's run docs
     // best-effort: an unwritable wave dir must not mask the real error
@@ -137,13 +143,24 @@ async function runFanout(options) {
   const waveDir = getSessionDir(project, waveId);
   fs.mkdirSync(waveDir, { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(waveDir, 'briefing.md'), options.prompt, { mode: 0o600 });
-  writeWaveMetadata(waveDir, {
+  const waveMeta = writeWaveMetadata(waveDir, {
     taskId: waveId, type: 'wave', status: 'running', mode: 'headless',
     models: legs.map(l => (l.ok ? l.model : l.modelInput)), legs: legIds,
     briefing: String(options.prompt).slice(0, 200),
     promptMeta: options.promptMeta || null,
+    ...(options.pack ? { pack: options.pack } : {}), // v4.5 Task 13: absent-not-null.
     pid: process.pid, project, createdAt,
   });
+  // v4.5 final-review F2: an MCP-spawned child never gets --pack (single-
+  // resolution rule), but mcp-server.js pre-seeds THIS wave dir's
+  // metadata.json with the pack it already resolved in-process before
+  // spawning the child. writeWaveMetadata read-merges (fanout-wave-io.js),
+  // so its RETURN VALUE already carries that pre-seeded pack when
+  // options.pack is absent here — inherit from it below rather than
+  // re-reading the file (mirrors the inherit idiom in
+  // result-schema-rebuild.js:93, which reads meta.pack off a metadata.json
+  // it loaded for an unrelated reason).
+  const metaPack = waveMeta.pack;
   emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds, follow);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
@@ -154,7 +171,7 @@ async function runFanout(options) {
     const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
     const completedAt = new Date().toISOString();
     const wave = buildWaveResult({
-      waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt, notices,
+      waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, createdAt, completedAt, notices,
     });
     return finishWave({ wave, waveDir, waveId, project, completedAt, follow, emit,
       exitCode: waveExitCode(wave.status),
@@ -265,7 +282,7 @@ async function runFanout(options) {
   const completedAt = new Date().toISOString();
   const signalled = waveAbort.signal();
   const wave = buildWaveResult({
-    waveId, legs: legDocs, promptMeta: options.promptMeta || null, createdAt, completedAt,
+    waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, createdAt, completedAt,
     status: signalled ? 'aborted' : null, notices,
   });
   const exitCode = signalled

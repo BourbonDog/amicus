@@ -1,9 +1,30 @@
 'use strict';
 const path = require('path');
 
+// F2 (Task-5 review): the two TEMPLATE_NOT_FOUND "engine never invoked" cases below
+// (in the --template describe block) assert that directly rather than just claiming
+// it in the title. Real exports pass through via requireActual — only the engine
+// entry points the handlers would reach are replaced with spies. Same idiom as
+// tests/council/run-single-server.test.js and tests/template/cli-wiring.test.js.
+jest.mock('../../src/index', () => ({
+  ...jest.requireActual('../../src/index'),
+  startAmicus: jest.fn(),
+}));
+jest.mock('../../src/sidecar/fanout', () => ({
+  ...jest.requireActual('../../src/sidecar/fanout'),
+  runFanout: jest.fn(),
+}));
+
 // Import the bin module's handlers via the new extracted file.
 // handleStart/handleFanout live in src/cli-handlers-run.js (extracted from bin/amicus.js).
 const { handleStart, handleFanout } = require('../../src/cli-handlers-run');
+const { startAmicus } = require('../../src/index');
+const { runFanout } = require('../../src/sidecar/fanout');
+
+beforeEach(() => {
+  startAmicus.mockClear();
+  runFanout.mockClear();
+});
 
 function captureStdout(fn) {
   const out = [];
@@ -73,5 +94,40 @@ describe('--max-cost validation emits BAD_ARGS envelope on stdout', () => {
     if (doc && doc.error) {
       expect(doc.error.message).not.toMatch(/--max-cost must be a positive number/);
     }
+  });
+});
+
+describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', () => {
+  // A `.md`-suffixed ref takes resolveTemplate's path branch (never touches
+  // AMICUS_CONFIG_DIR), so this stays hermetic without any tmp-dir setup.
+  it('start --json --template <missing path> → TEMPLATE_NOT_FOUND envelope, engine never invoked', async () => {
+    const out = await captureStdout(() => handleStart({
+      json: true, 'no-ui': true, prompt: 'hi', template: 'definitely-not-a-real-template-xyz.md',
+    }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
+    expect(startAmicus).not.toHaveBeenCalled();
+  });
+
+  it('start --json --artifact without --template → BAD_ARGS envelope', async () => {
+    const out = await captureStdout(() => handleStart({ json: true, 'no-ui': true, prompt: 'hi', artifact: __filename }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(doc.error.message).toMatch(/--artifact\/--var require --template/);
+  });
+
+  it('start --json --var without --template → BAD_ARGS envelope', async () => {
+    const out = await captureStdout(() => handleStart({ json: true, 'no-ui': true, prompt: 'hi', var: ['a=1'] }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+  });
+
+  it('fanout --json --template <missing path> → TEMPLATE_NOT_FOUND envelope, engine never invoked', async () => {
+    const out = await captureStdout(() => handleFanout({
+      json: true, models: 'a,b', template: 'definitely-not-a-real-template-xyz.md',
+    }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
+    expect(runFanout).not.toHaveBeenCalled();
   });
 });

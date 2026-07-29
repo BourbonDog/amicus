@@ -27,6 +27,7 @@ Schemas leave `additionalProperties` open for exactly this reason — a doc with
 | [`error.schema.json`](../schemas/error.schema.json) | every `--json` pre-flight/validation/route failure (stdout, exit 1) and every MCP error tool-text |
 | [`spend.schema.json`](../schemas/spend.schema.json) | `spend --json` |
 | [`model-catalog.schema.json`](../schemas/model-catalog.schema.json) | `models --json` |
+| [`pack.schema.json`](../schemas/pack.schema.json) | policy pack configuration files (council, fanout, or solo) |
 | [`alias-audit.schema.json`](../schemas/alias-audit.schema.json) | `models --check --json` |
 | [`doctor.schema.json`](../schemas/doctor.schema.json) | `doctor --json` |
 | [`council-tally.schema.json`](../schemas/council-tally.schema.json) | `council tally --json`; `amicus_council_tally` |

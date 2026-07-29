@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/BourbonDog/amicus/schemas/run-live.schema.json",
+  "$id": "https://raw.githubusercontent.com/BourbonDog/amicus/main/schemas/run-live.schema.json",
   "title": "Amicus composed live single-session doc (amicus_status, view:'live')",
   "description": "amicus_status's single-session response always stamps type:'run' (stampEnvelope); documented here as a const rather than the brief's 'may be absent' guess to match real output.",
   "type": "object",

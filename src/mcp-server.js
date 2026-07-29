@@ -225,6 +225,27 @@ function computeNextPoll() {
 const HEADLESS_START_REMINDER = '<system-reminder>Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true. Fallback (no amicus_wait tool available): before calling amicus_status, you MUST run `sleep 25` in your shell first. This enforces the polling interval and prevents token waste. Do other useful work while waiting, or run `sleep 25` to block until the next poll window.</system-reminder>';
 const HEADLESS_STATUS_REMINDER = '<system-reminder>Preferred: call amicus_wait with this task ID instead — one blocking call replaces the sleep+status loop; re-call it while it returns timedOut: true. Fallback (no amicus_wait tool available): this session is still running. Before calling amicus_status again, you MUST run `sleep 25` in your shell first. Each premature poll wastes context tokens for zero benefit. Run `sleep 25` now, then check again.</system-reminder>';
 
+/**
+ * v4.5 Task 15 (B7/F5): map amicus_fanout / amicus_start's MCP input keys to
+ * the CLI arg-key names applyPackToArgs's knob tables use (pack-resolve.js),
+ * so applyPackToMcpInput can reuse those tables unchanged — see
+ * src/mcp-council-run.js's COUNCIL_PACK_PARAM_MAP for the sibling map and its
+ * fuller docblock. `includeContext` is the one inverted-polarity knob: the
+ * pack/CLI side is `no-context` (true = drop context), the MCP side is
+ * `includeContext` (true = keep context, default true).
+ */
+const FANOUT_PACK_PARAM_MAP = {
+  models: 'models', council: 'council', gateway: 'gateway', agent: 'agent', thinking: 'thinking',
+  timeout: 'timeout', summaryLength: 'summary-length',
+  includeContext: { argKey: 'no-context', invert: true },
+};
+const SOLO_PACK_PARAM_MAP = {
+  model: 'model', gateway: 'gateway', agent: 'agent', noUi: 'no-ui', thinking: 'thinking',
+  timeout: 'timeout', contextTurns: 'context-turns', contextMaxTokens: 'context-max-tokens',
+  summaryLength: 'summary-length',
+  includeContext: { argKey: 'no-context', invert: true },
+};
+
 /** Spawn an Amicus CLI process (fire-and-forget) */
 function spawnSidecarProcess(args, sessionDir) {
   const sidecarBin = path.join(__dirname, '..', 'bin', 'amicus.js');
@@ -250,9 +271,49 @@ function spawnSidecarProcess(args, sessionDir) {
   return child;
 }
 
+/** v4.5 Wave-1 review fix (I1/I2): validates/dry-runs a pack-forwarded
+ * maxCost/template (see src/pack/pack-forward.js) — a no-op when the pack
+ * forwarded neither knob. Shared by amicus_fanout and amicus_start (both
+ * build their OWN error response below; the two tools use different shapes). */
+function checkPackForward(packForward, packRecord, prompt, project) {
+  if (packForward.maxCost === undefined && packForward.template === undefined) {
+    return { notices: [] };
+  }
+  return require('./pack/pack-forward').prepareForward({
+    forward: packForward, packRef: packRecord.name, prompt, project,
+  });
+}
+
 /** Tool handler implementations */
 const handlers = {
   async amicus_start(input, project, mcpServer) {
+    // v4.5 Task 15 (B7/F5): resolve `pack` IN-PROCESS before any validation —
+    // mirrors handleStart's own ordering (cli-handlers-run.js resolves --pack
+    // before validateStartArgs), so a pack-filled value gets the SAME
+    // validation pass a typed one does. Single-resolution rule: never spawn
+    // --pack — this is the only place the pack is resolved.
+    let packRecord = null;
+    const packNotices = [];
+    // v4.5 HOLD-gate decision 1: pack-filled maxCost/template have no MCP
+    // schema param of their own (see SOLO_PACK_PARAM_MAP above) but must still
+    // apply for CLI parity, on BOTH of this handler's paths (spawn-fallback
+    // below; the in-process shared-server branch further down) — a pack must
+    // not behave differently depending on which path fired.
+    let packForward = {};
+    if (input.pack !== undefined) {
+      const { applyPackToMcpInput } = require('./pack/pack-resolve');
+      const pr = applyPackToMcpInput({
+        packRef: input.pack, expectedKind: 'solo', input, paramMap: SOLO_PACK_PARAM_MAP,
+      });
+      if (pr.error) {
+        const { buildErrorDoc } = require('./utils/error-doc');
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(pr.error)) }] };
+      }
+      packRecord = pr.packRecord;
+      packNotices.push(...pr.notices);
+      packForward = pr.forward;
+    }
+
     // Validate non-model inputs (prompt/timeout/agent) before any session creation.
     const { validateStartInputs } = require('./utils/input-validators');
     const validation = validateStartInputs(input);
@@ -307,6 +368,15 @@ const handlers = {
     const resolvedModel = routeResult.executableId;
 
     const cwd = project || getProjectDir(input.project);
+
+    // v4.5 Wave-1 review fix (I1/I2): validated ONCE, before EITHER downstream
+    // path does anything spend-adjacent — parity holds BY CONSTRUCTION.
+    const fwd = checkPackForward(packForward, packRecord, input.prompt, cwd);
+    if (fwd.error) {
+      const { buildErrorDoc } = require('./utils/error-doc');
+      return { isError: true, content: [{ type: 'text', text: JSON.stringify(buildErrorDoc(fwd.error)) }] };
+    }
+
     const { generateTaskId } = require('./sidecar/start');
     const taskId = generateTaskId();
 
@@ -325,8 +395,14 @@ const handlers = {
     // resolvedModel is always defined here — a routing failure already
     // returned above — and is the router's executableId, not the raw alias.
     args.push('--model', resolvedModel);
-    const agent = (input.noUi && (!input.agent || input.agent.toLowerCase() === 'chat'))
-      ? 'build' : input.agent;
+    // v4.5 Task 15 fix wave 2 (Finding 1): agent/noUi no longer carry a Zod
+    // .default() (see mcp-tools.js) — an omitted key is now genuinely absent
+    // here, so a pack can fill it. Preserve today's effective default ('Chat')
+    // at this READ site instead: the resolved value is identical whether the
+    // key was never set, or a caller/pack explicitly wrote 'Chat'.
+    const agentInput = input.agent || 'Chat';
+    const agent = (input.noUi && agentInput.toLowerCase() === 'chat')
+      ? 'build' : agentInput;
     if (agent) { args.push('--agent', agent); }
     if (input.noUi) { args.push('--no-ui'); }
     if (input.thinking) { args.push('--thinking', input.thinking); }
@@ -339,12 +415,50 @@ const handlers = {
     if (input.coworkProcess)    { args.push('--cowork-process', input.coworkProcess); }
     if (input.parentSession)    { args.push('--session-id', input.parentSession); }
     if (input.windowPosition)   { args.push('--position', input.windowPosition); }
+    // v4.5 HOLD-gate decision 1: forward a pack-filled maxCost/template as
+    // plain CLI flags on the spawn-fallback path — neither has an MCP schema
+    // param of its own, but CLI parity requires them to apply anyway. Never
+    // pushed when the pack didn't fill them. The in-process shared-server
+    // branch below applies the SAME two knobs via its own mechanism (budget
+    // gate / template pre-render) for parity between the two paths.
+    if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
+    if (packForward.template !== undefined) { args.push('--template', packForward.template); }
     args.push('--cwd', cwd);
 
     if (sharedServer.enabled && input.noUi) {
       // Shared server path: headless only, delegates to runHeadless()
       let sessionId;
       try {
+        // v4.5 decision 1 + Wave-1 fix (I1/I2): the template was already
+        // rendered by the shared prepareForward call above — reuse its text
+        // instead of rendering again. Notices stay LOCAL (not packNotices):
+        // a fall-through to the spawn-fallback catch must never leak one.
+        const inProcessNotices = [...fwd.notices];
+        const renderedPrompt = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
+        if (packForward.maxCost !== undefined) {
+          // fwd.maxCost is already validated (I2); the ceiling gate itself
+          // stays here (needs resolvedModel/pricing, unavailable to pack-forward.js).
+          const { lookupPricing } = require('./utils/pricing');
+          const { checkBudget, formatBudgetError } = require('./sidecar/budget');
+          const { loadConfig } = require('./utils/config');
+          const cfg = loadConfig() || {};
+          const soloLeg = { modelInput: input.model || resolvedModel, model: resolvedModel, pricing: lookupPricing(resolvedModel) };
+          const budget = checkBudget([soloLeg], {
+            maxCostPerMtok: cfg.maxCostPerMtok, maxCost: fwd.maxCost,
+            promptChars: (renderedPrompt && renderedPrompt.length) || 0,
+          });
+          if (!budget.ok) {
+            const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
+            return {
+              isError: true,
+              content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
+                code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run',
+                hint: formatBudgetError(budget),
+              })) }],
+            };
+          }
+        }
+
         const { server, client } = await sharedServer.ensureServer();
         const { createSession } = require('./opencode-client');
         const { buildContext } = require('./sidecar/context-builder');
@@ -380,7 +494,12 @@ const handlers = {
           // so without them status/list/read show a briefing-less, mode-less run.
           mode: 'headless',
           agent: agent || 'build',
-          briefing: input.prompt,
+          // v4.5 HOLD-gate decision 1: the RENDERED prompt (byte-identical to
+          // input.prompt when no pack template applied) — parity with the CLI,
+          // whose briefing.md on disk is always the rendered text (spec §4).
+          briefing: renderedPrompt,
+          // v4.5 Task 15: additive-only — absent (not null) without a pack.
+          ...(packRecord ? { pack: packRecord } : {}),
         }, null, 2), { mode: 0o600 });
 
         // Build context from parent conversation (unless --no-context)
@@ -402,9 +521,13 @@ const handlers = {
         // 15b.3: one nonce per run, generated before prompt construction.
         const foldNonce = generateFoldNonce();
 
-        // Build prompts (same as CLI path in start.js)
+        // Build prompts (same as CLI path in start.js). renderedPrompt is the
+        // pack-template-rendered text when packForward.template was set above
+        // (byte-identical to input.prompt otherwise) — this is the ONE place
+        // the built prompt reaches the model, so rendering has no effect
+        // unless it is threaded in here.
         const { system: systemPrompt, userMessage } = buildPrompts(
-          input.prompt, context, cwd, true, agent, input.summaryLength, undefined, foldNonce
+          renderedPrompt, context, cwd, true, agent, input.summaryLength, undefined, foldNonce
         );
 
         // Register session with idle eviction
@@ -505,6 +628,14 @@ const handlers = {
         // shared-server path (no CLI stderr exists for an MCP caller).
         const sharedServerContent = [{ type: 'text', text: body }];
         if (routeResult.notice) { sharedServerContent.push({ type: 'text', text: routeResult.notice }); }
+        // v4.5 Task 15: pack notices (e.g. a bench-override) are non-fatal —
+        // surfaced as extra content blocks, same precedent as routeResult.notice above.
+        for (const n of packNotices) { sharedServerContent.push({ type: 'text', text: n }); }
+        // v4.5 HOLD-gate decision 1: template-render notices (e.g. an unused
+        // --var-equivalent), merged only now that the in-process path has
+        // actually succeeded — see the try block's opening comment for why
+        // these are not in the shared packNotices array.
+        for (const n of inProcessNotices) { sharedServerContent.push({ type: 'text', text: n }); }
         sharedServerContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
         return { content: sharedServerContent };
       } catch (err) {
@@ -542,6 +673,8 @@ const handlers = {
           // CLI child's createSessionMetadata overwrite (or if it crashes first).
           mode: input.noUi ? 'headless' : 'interactive',
           briefing: input.prompt,
+          // v4.5 Task 15: additive-only — absent (not null) without a pack.
+          ...(packRecord ? { pack: packRecord } : {}),
         }, null, 2), { mode: 0o600 });
       }
     }
@@ -560,6 +693,7 @@ const handlers = {
     // resolved the route in-process above, so surface its notice here.
     const spawnContent = [{ type: 'text', text: body }];
     if (routeResult.notice) { spawnContent.push({ type: 'text', text: routeResult.notice }); }
+    for (const n of packNotices) { spawnContent.push({ type: 'text', text: n }); }
     if (isHeadless) {
       spawnContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
       return { content: spawnContent };
@@ -1068,6 +1202,41 @@ const handlers = {
     const { generateTaskId } = require('./sidecar/start');
     const { deriveLegIds, DEFAULT_MAX_LEGS } = require('./sidecar/fanout');
 
+    // v4.5 Task 15 (B7/F5): resolve `pack` IN-PROCESS before the models/council
+    // validation below, same single-resolution rule as amicus_start/
+    // amicus_council_run — never spawn --pack; this is the only place the
+    // pack is resolved.
+    let packRecord = null;
+    const packNotices = [];
+    // v4.5 HOLD-gate decision 1: pack-filled maxCost/template have no MCP
+    // schema param of their own (see FANOUT_PACK_PARAM_MAP above) but must
+    // still apply for CLI parity — applyPackToMcpInput hands them back here
+    // instead of turning them into an ignore-notice; this handler forwards
+    // them to the spawned CLI child's argv below.
+    let packForward = {};
+    if (input.pack !== undefined) {
+      const { applyPackToMcpInput } = require('./pack/pack-resolve');
+      const pr = applyPackToMcpInput({
+        packRef: input.pack, expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
+      });
+      // v4.5 final-review T15-m1: amicus_start's own pack-error branch above
+      // keeps code+hint via buildErrorDoc's JSON envelope; amicus_fanout's
+      // error surface is plain text, so the hint (e.g. PACK_NOT_FOUND's
+      // 'amicus pack list') is appended to the message instead of being
+      // converted into a JSON envelope, which would change this tool's
+      // established response shape.
+      if (pr.error) { return textResult(pr.error.message + (pr.error.hint ? `\n${pr.error.hint}` : ''), true); }
+      packRecord = pr.packRecord;
+      packNotices.push(...pr.notices);
+      packForward = pr.forward;
+    }
+    // v4.5 Wave-1 review fix (I1/I2): validated HERE, before any wave dir /
+    // metadata write — never blind. Same posture as the pack-error branch
+    // above (plain text + appended hint; this handler is born-fenced, not JSON).
+    const fwd = checkPackForward(packForward, packRecord, input.prompt, cwd);
+    if (fwd.error) { return textResult(fwd.error.message + (fwd.error.hint ? `\n${fwd.error.hint}` : ''), true); }
+    packNotices.push(...fwd.notices);
+
     // Resolve a single effective models list (council OR models), validated
     // BEFORE any wave dir / metadata is written so a bad request never strands
     // a pid-less 'running' orphan wave.
@@ -1110,6 +1279,8 @@ const handlers = {
       writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify({
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
         models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
+        // v4.5 Task 15: additive-only — absent (not null) without a pack.
+        ...(packRecord ? { pack: packRecord } : {}),
       }, null, 2), { mode: 0o600 });
       // #40: index the wave AND each leg so status/read of any leg resolves the
       // project even when the default later defaults to a different one.
@@ -1138,8 +1309,17 @@ const handlers = {
     // so context-inheriting fanout launched from Cowork resolves the right parent.
     if (input.coworkProcess) { args.push('--cowork-process', input.coworkProcess); }
     if (input.parentSession) { args.push('--session-id', input.parentSession); }
+    // v4.5 HOLD-gate decision 1: forward a pack-filled maxCost/template as
+    // plain CLI flags — neither has an MCP schema param of its own, but CLI
+    // parity requires them to apply anyway (a shared pack's spend cap and
+    // briefing template must not silently vanish over MCP). Never pushed when
+    // the pack didn't fill them; single-resolution rule unaffected (--pack
+    // itself is never forwarded, only the two knobs it resolved to).
+    if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
+    if (packForward.template !== undefined) { args.push('--template', packForward.template); }
 
-    try { spawnSidecarProcess(args, waveDir); } catch (err) {
+    let child;
+    try { child = spawnSidecarProcess(args, waveDir); } catch (err) {
       // Best-effort: never leave a pid-less wave record claiming 'running'
       // forever (crash detection only probes records WITH a pid).
       try {
@@ -1148,6 +1328,16 @@ const handlers = {
         writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
       } catch { /* best-effort */ }
       return textResult(`Failed to start fan-out: ${err.message}`, true);
+    }
+
+    // v4.5 Wave-1 fix (I4): merge the child pid into the pre-seeded wave metadata
+    // so crash detection can probe pid-bearing records (absent pid = unreapable phantom).
+    if (child && child.pid) {
+      try {
+        const m = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
+        Object.assign(m, { pid: child.pid });
+        writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify(m, null, 2), { mode: 0o600 });
+      } catch { /* best-effort: metadata already has no pid */ }
     }
     // Task 15 (spec §5.3): the run is now known-launched under waveId — mark
     // it for a best-effort terminal notify. runWait's poll loop (mcp-wait.js)
@@ -1160,7 +1350,13 @@ const handlers = {
         'replaces polling; re-call it while it returns timedOut: true. Fallback: poll amicus_status ' +
         'with the waveId. Either way, amicus_read the waveId when complete.',
     }));
-    return { content: [{ type: 'text', text: body }, { type: 'text', text: HEADLESS_START_REMINDER }] };
+    const waveContent = [{ type: 'text', text: body }];
+    // v4.5 Task 15: pack notices (e.g. a bench-override) are non-fatal —
+    // surfaced as extra content blocks, same precedent as amicus_start's
+    // routeResult.notice handling above.
+    for (const n of packNotices) { waveContent.push({ type: 'text', text: n }); }
+    waveContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
+    return { content: waveContent };
   },
 
   async amicus_council_tally(input) {

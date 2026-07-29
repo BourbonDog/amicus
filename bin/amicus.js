@@ -152,6 +152,16 @@ async function main() {
       case 'update':
         await handleUpdate();
         break;
+      case 'template': {
+        const { handleTemplate } = require('../src/cli-handlers-template');
+        exitCode = await handleTemplate(args);
+        break;
+      }
+      case 'pack': {
+        const { handlePack } = require('../src/cli-handlers-pack');
+        exitCode = await handlePack(args);
+        break;
+      }
       default: {
         console.error(`Unknown command: ${command}`);
         // suggestCommand honors a cap-3 contract (up to 3 candidates, closest
