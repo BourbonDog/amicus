@@ -241,11 +241,13 @@ async function handleCouncilRunTool(input, project, helpers) {
   let workspaceOpened = false;
   let workspaceOpenReason = null;
   try {
-    const { isElectronUsable } = require('./sidecar/electron-install');
+    const { probeElectronState } = require('./sidecar/electron-state');
     const { getWorkspaceAutoOpen } = require('./utils/config');
+    const es = probeElectronState(); // 3-state (#76): splits absent vs broken
     const decision = ao.decide({
       client: helpers.clientName,
-      electronUsable: isElectronUsable(),
+      electronState: es.state,
+      electronDir: es.electronDir,
       platform: process.platform,
       env: process.env,
       autoOpenConfig: getWorkspaceAutoOpen(),

@@ -7,7 +7,10 @@
  * Decision order (spec §6 guard 4):
  * 1. uiParam === false → 'param-suppressed' (explicit user request beats everything, checked first)
  * 2. Hard guards (always checked, beat even explicit true):
- *    - !electronUsable → 'electron-absent'
+ *    - electron package-missing → 'electron-absent'
+ *    - electron binary-missing → 'electron-broken: …' (#76: package present but
+ *      the exe never arrived — a repairable state the old boolean conflated
+ *      with never-installed; the reason names the dir and the fix)
  *    - platform === 'linux' && !env.DISPLAY → 'no-display'
  * 3. uiParam === true → 'ok' (explicit request overrides config and client gate, never hard guards)
  * 4. autoOpenConfig === false → 'config-disabled'
@@ -16,7 +19,9 @@
  *
  * @param {object} options
  * @param {string} options.client - The client type (e.g., 'code-local', 'cowork', 'code-web')
- * @param {boolean} options.electronUsable - Whether Electron is available
+ * @param {boolean} [options.electronUsable] - Legacy boolean probe (used only when electronState is absent)
+ * @param {'ok'|'package-missing'|'binary-missing'} [options.electronState] - 3-state probe (#76); takes precedence
+ * @param {string|null} [options.electronDir] - Resolved electron dir, named in the electron-broken reason
  * @param {string} options.platform - The platform (e.g., 'win32', 'darwin', 'linux')
  * @param {object} options.env - Environment variables object
  * @param {boolean} options.autoOpenConfig - The config.workspace.autoOpen setting
@@ -26,6 +31,8 @@
 function shouldAutoOpenWorkspace({
   client,
   electronUsable,
+  electronState,
+  electronDir,
   platform,
   env,
   autoOpenConfig,
@@ -36,9 +43,16 @@ function shouldAutoOpenWorkspace({
     return { open: false, reason: 'param-suppressed' };
   }
 
-  // Step 2: Hard guards (always checked, beat even explicit uiParam === true)
-  if (!electronUsable) {
+  // Step 2: Hard guards (always checked, beat even explicit uiParam === true).
+  // electronState (3-state, #76) wins over the legacy electronUsable boolean,
+  // whose false collapses to package-missing (the old 'electron-absent').
+  const state = electronState || (electronUsable ? 'ok' : 'package-missing');
+  if (state === 'package-missing') {
     return { open: false, reason: 'electron-absent' };
+  }
+  if (state === 'binary-missing') {
+    const where = electronDir ? ` under ${electronDir}` : '';
+    return { open: false, reason: `electron-broken: binary missing${where} — run \`amicus doctor --fix\`` };
   }
 
   if (platform === 'linux' && !env.DISPLAY) {

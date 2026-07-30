@@ -91,6 +91,23 @@ describe('amicus_council_run auto-open wiring', () => {
     expect(seenCtx.uiParam).toBe(false);
   });
 
+  // #76: the wiring now feeds the 3-state electron probe into the decision so
+  // binary-missing (package present, exe gone) is distinguishable from a
+  // never-installed package. Shape-only assertion — the machine's actual
+  // provisioning state varies.
+  test('decision context carries the 3-state electronState probe (not just a boolean)', async () => {
+    let seenCtx;
+    const autoOpen = {
+      decide: (ctx) => { seenCtx = ctx; return { open: false, reason: 'param-suppressed' }; },
+      launch: () => {},
+    };
+    await handleCouncilRunTool(input({ ui: false }), tmp, helpers({ autoOpen }));
+    expect(['ok', 'package-missing', 'binary-missing']).toContain(seenCtx.electronState);
+    if (seenCtx.electronState !== 'package-missing') {
+      expect(typeof seenCtx.electronDir).toBe('string');
+    }
+  });
+
   test('a launch that throws does not fail the tool result (best-effort, run body unaffected)', async () => {
     const autoOpen = {
       decide: () => ({ open: true, reason: 'ok' }),

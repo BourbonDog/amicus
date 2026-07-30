@@ -32,10 +32,32 @@ describe('shouldAutoOpenWorkspace', () => {
     [{ platform: 'linux', env: {}, uiParam: true }, false, 'no-display'],
     [{ platform: 'linux', env: { DISPLAY: ':0' } }, true, 'ok'],
     [{ platform: 'darwin' }, true, 'ok'],
+    // #76: electronState (3-state probe) splits the old electron-absent reason.
+    // When provided it takes precedence over the legacy electronUsable boolean.
+    [{ electronState: 'ok', electronUsable: false }, true, 'ok'],
+    [{ electronState: 'package-missing' }, false, 'electron-absent'],
+    [{ electronState: 'package-missing', uiParam: true }, false, 'electron-absent'],
+    [
+      { electronState: 'binary-missing', electronDir: 'C:\\x\\electron' },
+      false, 'electron-broken: binary missing under C:\\x\\electron — run `amicus doctor --fix`',
+    ],
+    [
+      { electronState: 'binary-missing', electronDir: 'C:\\x\\electron', uiParam: true },
+      false, 'electron-broken: binary missing under C:\\x\\electron — run `amicus doctor --fix`',
+    ],
   ];
 
   test.each(MATRIX)('%o -> open=%s reason=%s', (over, open, reason) => {
     expect(shouldAutoOpenWorkspace({ ...BASE, ...over })).toEqual({ open, reason });
+  });
+
+  // #76: a binary-missing state with no electronDir supplied must still produce
+  // a self-explanatory reason, not "under undefined".
+  test('binary-missing without electronDir omits the dir clause', () => {
+    const r = shouldAutoOpenWorkspace({ ...BASE, electronState: 'binary-missing' });
+    expect(r.open).toBe(false);
+    expect(r.reason).toMatch(/^electron-broken: binary missing/);
+    expect(r.reason).not.toMatch(/undefined/);
   });
 });
 

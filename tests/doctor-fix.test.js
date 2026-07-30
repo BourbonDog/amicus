@@ -23,6 +23,10 @@ function brokenElectronDeps(extra = {}) {
   return {
     // Pure probe says electron is not installed -> the electron check is broken.
     getElectronPath: () => null,
+    // #76: pin the electron-mcp check to 'none' so it can neither probe the
+    // real machine nor consume this suite's repairElectron mock — these tests
+    // exercise the RUNNING-copy check's fix path in isolation.
+    scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
     ...extra,
   };
 }
@@ -94,6 +98,9 @@ describe('runDoctorChecks --fix electron self-heal (#56)', () => {
     const repairElectron = jest.fn();
     const checks = await doctor.runDoctorChecks({
       getElectronPath: () => '/path/to/electron',
+      // #76: pin electron-mcp too — otherwise it scans the real machine and
+      // may legitimately consume this suite's repairElectron mock.
+      scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
       fix: true,
       repairElectron,
     });

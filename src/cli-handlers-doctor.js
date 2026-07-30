@@ -7,6 +7,8 @@ const mcpChecks = require('./utils/doctor-mcp-checks');
 // engine-mcp check body — verifies the engine in the npx-cache copies the MCP
 // actually launches (bug report #1). Split out to keep this file under the gate.
 const engineCheck = require('./utils/doctor-engine-check');
+// electron-mcp check body (#76) — same blind spot, electron-flavored.
+const electronMcpCheck = require('./utils/doctor-electron-mcp-check');
 // local-providers check body (v4.2 §4.7 C8) — split out to keep this file
 // under the gate (mirrors the engineCheck/mcpChecks split above).
 const localProvidersCheck = require('./utils/doctor-local-providers-check');
@@ -47,6 +49,8 @@ function realDeps() {
     scanEngineInstalls: () => require('./utils/engine-install-scan').scanEngineInstalls(),
     // report #2: copy-from-sibling self-heal for `doctor --fix`.
     repairEngine: (o) => require('./utils/engine-repair').repairEngine(o),
+    // electron-mcp check (#76): same enumeration, electron probed per copy.
+    scanElectronInstalls: () => electronMcpCheck.scanElectronInstalls(),
     getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
     // #56: self-heal primitive for `doctor --fix`. Pure probe (getElectronPath)
     // stays separate; repair only runs when fix is requested.
@@ -160,6 +164,12 @@ async function runDoctorChecks(depsOverride = {}) {
   // launches (`npx -y amicus@latest mcp`), so a green 'opencode-bin' (the running
   // install) can't hide a broken copy the MCP would spawn (bug report #1/#4).
   checks.push(await guardAsync('engine-mcp', 'OpenCode engine (MCP launch path)', () => engineCheck.evaluateEngineMcp(d)));
+
+  // #76: same green-while-broken blind spot for Electron — probe the npx-cache
+  // copies `ui: true` actually depends on. fixTimeoutMs forwards the #56
+  // never-hang guard to the per-copy repairElectron calls.
+  checks.push(await guardAsync('electron-mcp', 'Electron (MCP launch path)',
+    () => electronMcpCheck.evaluateElectronMcp({ ...d, fixTimeoutMs: FIX_TIMEOUT_MS })));
 
   checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
     if (d.getElectronPath()) {
