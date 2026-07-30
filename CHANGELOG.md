@@ -3,6 +3,30 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Added
+
+- **`electron-mcp` doctor check — doctor now validates Electron in the install the MCP actually
+  runs from (#76).** `amicus doctor` used to probe Electron only in the copy doctor itself runs
+  from (usually the global install), while `npx -y amicus@latest mcp` serves councils from an
+  npx-cache copy — so doctor could print `Electron: ok` while every `ui: true` run failed with
+  `electron-absent` (the electron-flavored recurrence of the engine's green-while-broken defect).
+  The new check enumerates running/global/npx-cache installs (reusing the engine scanner) and
+  probes Electron in each through a dual-root resolver — npm nests `electron` under
+  `amicus/node_modules` in a global install but hoists it to a sibling in the npx cache (the #69
+  layout lesson, now applied to Electron). With `--fix`, binary-missing npx copies are healed in
+  place via `repairElectron` under the #56 timeout guard; never-installed copies are reported,
+  not repaired.
+
+### Changed
+
+- **`workspaceOpenReason` distinguishes a broken Electron from a missing one (#76).**
+  `electron-absent` now means the electron package was never installed; the new
+  `electron-broken: binary missing under <dir> — run `amicus doctor --fix`` covers the
+  package-present-but-binary-missing state (interrupted postinstall, AV quarantine) that the old
+  single reason conflated with it — naming the exact dir and the one-command fix.
+
 ## [4.5.0] - 2026-07-28
 
 "Save and share your councils" — complex run configurations become one command, repeatable and

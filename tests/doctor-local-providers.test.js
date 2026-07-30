@@ -40,6 +40,9 @@ const baseDeps = {
   listSessionIndexTmpFiles: () => [],
   scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
   repairEngine: async () => ({ repaired: false }),
+  // #76: electron-mcp's default scan shells out (`npm root -g`) exactly like
+  // scanEngineInstalls — pin it for the same no-subprocess reason.
+  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
 };
 
 async function localCheck(deps) {

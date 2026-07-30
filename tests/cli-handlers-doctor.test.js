@@ -36,6 +36,8 @@ const allGood = {
   scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
   // engine self-heal (--fix): deterministic no-op unless a test overrides it.
   repairEngine: async () => ({ repaired: false }),
+  // electron-mcp (#76): deterministic scan, same rationale as scanEngineInstalls.
+  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
   // M14: deterministic fixture — without this the local-providers check would
   // fall through to the real config dir (and, worse, fire a REAL probe against
   // it) on whatever machine runs this "pure" doctor suite. probeLocalProvider
@@ -133,6 +135,49 @@ describe('runDoctorChecks', () => {
   test('missing Electron → warn only (headless still works)', async () => {
     const checks = await runDoctorChecks({ ...allGood, getElectronPath: () => null });
     expect(byId(checks).electron.status).toBe('warn');
+  });
+
+  // #76: green-while-broken — the running copy's electron is fine, but the npx
+  // copy the MCP launches from has the package with no binary. The dedicated
+  // electron-mcp check must surface it while the running-copy check stays ok.
+  test('electron-mcp: binary-missing npx copy → warn naming the copy, running-copy check unaffected', async () => {
+    const pkgDir = 'C:\\cache\\_npx\\h1\\node_modules\\amicus';
+    const electronDir = 'C:\\cache\\_npx\\h1\\node_modules\\electron';
+    const checks = await runDoctorChecks({ ...allGood,
+      scanElectronInstalls: () => ({
+        installs: [{ kind: 'npx', pkgDir, electronDir, state: 'binary-missing' }],
+        mcpLaunch: 'npx',
+      }),
+    });
+    expect(byId(checks).electron.status).toBe('ok'); // running copy: still green
+    const mcp = byId(checks)['electron-mcp'];
+    expect(mcp.status).toBe('warn');
+    expect(mcp.message).toMatch(/binary missing/i);
+    expect(mcp.message).toContain(pkgDir);
+  });
+
+  test('electron-mcp --fix: heals the npx copy via repairElectron({electronDir, timeoutMs}) and reports self-healed', async () => {
+    const healed = { v: false };
+    const electronDir = 'C:\\cache\\_npx\\h1\\node_modules\\electron';
+    const repairElectron = jest.fn(async () => { healed.v = true; return { repaired: true }; });
+    const checks = await runDoctorChecks({ ...allGood,
+      fix: true,
+      scanElectronInstalls: () => ({
+        installs: [{
+          kind: 'npx', pkgDir: 'C:\\cache\\_npx\\h1\\node_modules\\amicus',
+          electronDir, state: healed.v ? 'ok' : 'binary-missing',
+        }],
+        mcpLaunch: 'npx',
+      }),
+      repairElectron,
+    });
+    const mcp = byId(checks)['electron-mcp'];
+    expect(mcp.status).toBe('ok');
+    expect(mcp.message).toMatch(/self-healed/i);
+    // The #56 never-hang guard must reach the npx-copy repair too.
+    expect(repairElectron).toHaveBeenCalledWith(
+      expect.objectContaining({ electronDir, timeoutMs: expect.any(Number) }),
+    );
   });
 
   test('stale catalog (older than 24h) → warn', async () => {

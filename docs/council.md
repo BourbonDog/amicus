@@ -413,8 +413,11 @@ bottom, first match wins:
 6. Otherwise → opens.
 
 **Response fields.** `amicus_council_run`'s result always carries `workspaceOpened: boolean`, and,
-**only when it did not open**, `workspaceOpenReason` — one of `param-suppressed`, `electron-absent`,
-`no-display`, `config-disabled`, `client-not-code-local`, or a `spawn-failed:`/`auto-open-failed:`
+**only when it did not open**, `workspaceOpenReason` — one of `param-suppressed`, `electron-absent`
+(the electron package was never installed for this copy), an `electron-broken:` detail (the package
+is present but its binary never arrived — interrupted download or AV quarantine; the reason names
+the electron dir and points at `amicus doctor --fix`), `no-display`, `config-disabled`,
+`client-not-code-local`, or a `spawn-failed:`/`auto-open-failed:`
 detail if the decision said to open but the launch itself failed. The launch is fire-and-forget: it
 never blocks the tool's response, and a launch failure never fails the council run itself — the run
 proceeds exactly as it would with no Workspace at all, and `amicus watch <runId> --ui` still works
