@@ -75,11 +75,16 @@ jest.mock('child_process', () => ({
   })
 }));
 
+// --- electron availability gate: stub ensureElectron (#55) so these tests never
+// depend on a REAL electron install. require.resolve-guarding was not enough: a
+// scripts-suppressed install leaves the package resolvable with dist/<exe>
+// missing, and the REAL ensureElectron() then kicks off a repair whose lock
+// poisons parallel sibling suites ("Another electron repair is already in
+// progress"). Provisioning itself is covered by tests/ensure-electron.test.js. ---
+jest.mock('../../src/sidecar/electron-ensure', () => ({ ensureElectron: jest.fn().mockResolvedValue({ ok: true, path: '/fake/electron' }) }));
+
 describe('runInteractive close handler vs. durable abort marker (phase-3 final review)', () => {
   let project;
-  let electronInstalled = true;
-  try { require.resolve('electron'); } catch { electronInstalled = false; }
-  const itElectron = electronInstalled ? it : it.skip;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -91,7 +96,7 @@ describe('runInteractive close handler vs. durable abort marker (phase-3 final r
     fs.rmSync(project, { recursive: true, force: true });
   });
 
-  itElectron('folds an on-disk aborted marker into the result even when the watch never ticked', async () => {
+  it('folds an on-disk aborted marker into the result even when the watch never ticked', async () => {
     const { getSessionDir } = require('../../src/session-manager');
     const { runInteractive } = require('../../src/sidecar/interactive');
 
@@ -113,7 +118,7 @@ describe('runInteractive close handler vs. durable abort marker (phase-3 final r
     expect(resolveTerminalState(result).status).toBe('aborted');
   });
 
-  itElectron('does not fold anything when there is no on-disk marker (no false positives)', async () => {
+  it('does not fold anything when there is no on-disk marker (no false positives)', async () => {
     const { getSessionDir } = require('../../src/session-manager');
     const { runInteractive } = require('../../src/sidecar/interactive');
 

@@ -76,20 +76,20 @@ jest.mock('child_process', () => ({
   })
 }));
 
+// --- electron availability gate: stub ensureElectron (#55) so these tests never
+// depend on a REAL electron install. require.resolve-guarding was not enough: a
+// scripts-suppressed install leaves the package resolvable with dist/<exe>
+// missing, and the REAL ensureElectron() then kicks off a repair whose lock
+// poisons parallel sibling suites ("Another electron repair is already in
+// progress"). Provisioning itself is covered by tests/ensure-electron.test.js. ---
+jest.mock('../../src/sidecar/electron-ensure', () => ({ ensureElectron: jest.fn().mockResolvedValue({ ok: true, path: '/fake/electron' }) }));
+
 const { canonicalProjectPath } = require('../../src/utils/project-path');
 
 describe('runInteractive scopes session + route to --cwd (#45)', () => {
   // process cwd != --cwd: this is the path that breaks today.
   const PROJECT = 'c:\\Users\\me\\--cwd-target';
   const EXPECTED_DIR = canonicalProjectPath(PROJECT);
-
-  // getElectronPath()/checkElectronAvailable() are local bindings inside
-  // interactive.js, so they cannot be spied via the module export. They rely on
-  // a real electron install (present in CI/this worktree); skip headlessly if
-  // electron is not resolvable rather than asserting against a guard short-circuit.
-  let electronInstalled = true;
-  try { require.resolve('electron'); } catch { electronInstalled = false; }
-  const itElectron = electronInstalled ? it : it.skip;
 
   let runInteractive;
   beforeEach(() => {
@@ -100,12 +100,12 @@ describe('runInteractive scopes session + route to --cwd (#45)', () => {
     runInteractive = require('../../src/sidecar/interactive').runInteractive;
   });
 
-  itElectron('creates the session scoped to canonicalProjectPath(--cwd)', async () => {
+  it('creates the session scoped to canonicalProjectPath(--cwd)', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
     expect(createSession).toHaveBeenCalledWith({ fake: 'client' }, EXPECTED_DIR);
   });
 
-  itElectron('scopes the status poll and message mirror to the same directory', async () => {
+  it('scopes the status poll and message mirror to the same directory', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
     // Invoke the captured closures the poller/mirror would call.
     await mockGetStatusFn();
@@ -114,7 +114,7 @@ describe('runInteractive scopes session + route to --cwd (#45)', () => {
     expect(getMessages).toHaveBeenCalledWith({ fake: 'client' }, 'ses_test', EXPECTED_DIR);
   });
 
-  itElectron('threads the session directory to Electron so the route matches the create scope', async () => {
+  it('threads the session directory to Electron so the route matches the create scope', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
     expect(mockSpawnEnv.AMICUS_SESSION_DIRECTORY).toBe(EXPECTED_DIR);
   });

@@ -75,12 +75,17 @@ describe('buildElectronEnv - fold nonce (15b.3, #BL-7 residual)', () => {
 });
 
 describe('getElectronPath', () => {
-  // This assertion needs a real electron install (it inspects require('electron')'s
-  // binary path). Local dev omits electron via --omit=optional, so skip it when
-  // electron isn't resolvable; it runs in CI where electron IS installed.
-  let electronInstalled = true;
-  try { require.resolve('electron'); } catch { electronInstalled = false; }
-  const itElectron = electronInstalled ? it : it.skip;
+  // This assertion needs a real, USABLE electron install: it inspects
+  // require('electron')'s binary path, and electron's index.js THROWS when
+  // dist/<exe> is missing. require.resolve('electron') alone is not enough — a
+  // scripts-suppressed install leaves the package resolvable with no binary —
+  // so stat the exe the same way the runtime probe does (#54). Local dev omits
+  // electron via --omit=optional, so skip in both cases; it runs in CI where
+  // electron IS installed and provisioned.
+  const { isElectronUsable } = require('../../src/sidecar/electron-install');
+  let electronUsable = true;
+  try { require.resolve('electron'); electronUsable = isElectronUsable(); } catch { electronUsable = false; }
+  const itElectron = electronUsable ? it : it.skip;
 
   itElectron('returns the path from require("electron") instead of hardcoded relative path', () => {
     const { getElectronPath } = require('../../src/sidecar/interactive-process');
