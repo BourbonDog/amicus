@@ -8,7 +8,19 @@ const doctor = require('../src/cli-handlers-doctor');
 const HINTS = require('../src/utils/remediation-hints');
 
 const findCheck = (checks, id) => checks.find((c) => c.id === id);
-const base = { readApiKeyValues: () => ({}) }; // offline credit probe
+// These suites pass fix:true, and unlisted deps inherit realDeps() — which
+// makes the inherited electron/engine checks SELF-HEAL for real: on a box where
+// node_modules/electron/dist is missing (scripts-suppressed install), the
+// electron check's d.repairElectron({timeoutMs}) extracts — or DOWNLOADS
+// (~144MB) — the real binary from inside the unit suite, racing the repair lock
+// across jest workers. Pin the probe green and both self-heal seams inert; only
+// the legacy-mcp check is under test here.
+const base = {
+  readApiKeyValues: () => ({}), // offline credit probe
+  getElectronPath: () => '/fake/electron', // electron check: ok — repair unreachable
+  repairElectron: async () => ({ repaired: true }), // never the real binary self-heal
+  repairEngine: async () => ({ repaired: true }), // never the real npx-cache copy-heal
+};
 
 const AMICUS_MCP = { command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] };
 

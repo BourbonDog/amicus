@@ -166,6 +166,7 @@ describe('reinstall hints converge on doctor --fix (#56)', () => {
       deps: {
         isElectronUsable: () => false,
         repairElectron: async () => ({ deferred: true }),
+        logProgress: () => {}, // every other DI'd site silences the "[amicus] Provisioning..." stderr line — this one was the last emitter in a unit run
       },
     });
     expect(res.ok).toBe(false);
