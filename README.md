@@ -15,6 +15,8 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen?labelColor=1A1C29)](https://nodejs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?labelColor=1A1C29)](./CONTRIBUTING.md)
 
+**[Quick start ↓](#quick-start)** · [Commands](#commands) · [Documentation](#documentation) · [Troubleshooting](#troubleshooting)
+
 > **Supported clients:** Claude Code CLI, Claude Desktop, and Claude Cowork are fully tested and supported. Claude Code web is experimental.
 
 </div>
@@ -24,10 +26,10 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 ## Table of Contents
 
 - [What is Amicus](#what-is-amicus)
+- [The Council](#the-council)
 - [Ways to run the council](#ways-to-run-the-council)
 - [Quick start](#quick-start)
 - [Requirements & Dependencies](#requirements--dependencies)
-- [The Council](#the-council)
 - [The parallel window](#the-parallel-window)
 - [Commands](#commands)
 - [Models](#models)
@@ -52,7 +54,7 @@ One install delivers six things that work together:
 - **The `amicus` CLI (with an `am` alias) and an MCP server.** The engine underneath both skills: launches sessions, shares context, runs parallel waves, and exposes the same surface to Claude as MCP tools.
 - **A self-updating model catalog.** Aliases and validation resolve against a live catalog fetched from provider APIs (cached locally), so model names stay current without a hard-coded table.
 - **Observability.** `amicus watch <id>` renders any live or finished run (fan-out or council) from any terminal; `--follow` streams milestones as they happen; `--on-complete` fires a hook when a run lands; `--retry-failed` plus opt-in cheaper-model fallbacks recover dead legs without relaunching the whole wave; `amicus spend` answers "what did this cost, and where" with per-run attribution.
-- **Council Workspace.** `amicus watch <runId> --ui`: a window that shows a council *thinking* — live seats, the anonymized judge packet, the adjudication matrix, dissent drill-in, chair verdict, and cost-by-seat — for both live and historical runs. It also **auto-opens** on an MCP-invoked council run from Claude Code (local), so you no longer have to remember the flag (see [The Council](#the-council)).
+- **Council Workspace.** `amicus watch <runId> --ui`: a window that shows a council *thinking* — live seats, the anonymized judge packet, the adjudication matrix, dissent drill-in, chair verdict, and cost-by-seat — for both live and historical runs. It also **auto-opens** on an MCP-invoked council run from Claude Code (local), so you no longer have to remember the flag (see [docs/council.md](./docs/council.md#council-workspace-gui)).
 
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
@@ -60,14 +62,102 @@ Claude is the orchestrator. The council and chat skills run *on top of* the engi
 
 ---
 
+## The Council
+
+> Trigger it by saying *"council review this"* to Claude, or, on the plugin channel, run **`/amicus:council`** directly.
+
+**Why multi-model.** Any single model — including the one running your session — has consistent blind spots. Route the *same* material through models from *different* families and the disagreements surface: missed issues, overstated confidence, claims one model alone would have waved through. The council is the structured version of that idea.
+
+**The flow, in five beats:**
+
+1. **Independent reviews.** Each council model reviews the artifact on its own (one parallel wave), producing a structured findings list — claim, severity (`blocker | major | minor | nit`), location, rationale.
+2. **Anonymized cross-review.** Claude relabels every review (Review A, B, C…) and sends the identical bundle to every model. Each model ranks the reviews and adjudicates every finding (`agree | dispute | neutral`) — *unknowingly judging its own*, so self-bias washes out. This yields a **street-cred** ranking and sorts findings into **Disputed / Confirmed / Contested / Singleton** tiers.
+3. **Chair verdict.** A designated **non-Claude** chair receives the de-anonymized picture — all reviews, rankings, and adjudications — and synthesizes an independent verdict. Claude presents it verbatim; Claude does not synthesize.
+4. **Tiered decisions.** Confirmed findings get one bulk accept/deny; Contested and Singleton findings are decided one at a time (accept / deny / modify).
+5. **Outputs applied.** Accepted findings are written into a reviewed copy of the source; the full run is captured in the run folder.
+
+```mermaid
+flowchart LR
+    A["Artifact"] --> B["Independent<br/>reviews"]
+    B --> C["Anonymized<br/>cross-review"]
+    C --> D["Chair verdict<br/>(non-Claude)"]
+    D --> E["Tiered<br/>accept / deny"]
+    E --> F["Reviewed copy<br/>+ run folder"]
+```
+
+**What a run produces** (in `output/<stem>-council/`):
+
+- `review-<model>.md` × N — each model's independent review.
+- `crossreview-matrix.md` — the adjudication grid plus the de-anonymized street-cred table.
+- `verdict.md` — the chair's synthesis.
+- `report.md` — synthesis + the full decision log + a per-call run-stats table.
+- `report.html` — the deterministic renderer output (adjudication matrix, street-cred table,
+  findings-by-tier, cost — no chair prose). This is the default artifact handed to the user.
+- For an **editable source**, the accepted edits land in `<stem>-reviewed.<ext>` next to the original.
+
+**Optional council elements** (v2.2.0, all default off): five opt-in behaviors, offered once as a menu at launch — nothing turns on unless you name it, and the confirmation lists exactly what's on.
+
+- **Critic seat** — one reviewer swaps to a four-pass adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Its findings enter the same anonymized bundle as everyone else's, so the bench disciplines the critic: manufactured negativity lands Disputed and dies in the tally.
+- **Expert lenses** — each reviewer takes a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, or custom). Lens runs never feed the reliability ledger, and the report discloses the weakened cross-review anonymity.
+- **Debate mode** — after cross-review, every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw**, and the disputing judges re-vote. Exactly one rebuttal round, then the final tally.
+- **Chair verdict scale** — the chair closes with 3–5 hard questions and one parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`.
+- **Claude in the council** — Claude adds its own fresh review to the bundle so the bench ranks and adjudicates it. Claude is *judged* but never votes or chairs, so the verdict stays independent.
+
+The critic and lens methodologies are adapted from the `/critic` and `/debate` agents in [John Renaldi's product-kit](https://github.com/jrenaldi79/plugin-marketplace) (MIT); the briefing boilerplate lives in [`skills/second-opinion/SEAT-BRIEFS.md`](./skills/second-opinion/SEAT-BRIEFS.md).
+
+**Cost is disclosed up front.** Before any model launches, you see the run shape — including any enabled optional elements — for example:
+
+> This run uses 3 council models across 2 fanout waves + 1 chair call, with critic seat + debate mode ON (~7 base runs + up to 6 rebuttal calls).
+
+Then the council waits for your confirmation.
+
+The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**. For what `amicus council tally|verdict|report|stats` actually take as input and produce — field-by-field schemas, verdict.json's provenance, and a full worked example run against the real CLI — see **[docs/council.md](./docs/council.md)**.
+
+---
+
 ## Ways to run the council
 
 The council is the hero — start with the everyday way, and reach for the more powerful ways when you need them:
 
-- **Just ask, in Claude Code.** Hand Claude a plan, diff, design, or manuscript and say *"council review this."* The `second-opinion` skill runs the whole ritual in your session — several models review independently → anonymized cross-review → a non-Claude chair verdict → tiered accept/deny edits — with no setup beyond your API keys. This is how most people use it. → [The Council](#the-council)
-- **Headless, in CI, with no Claude runtime.** `amicus council run --prompt-file plan.md --council free` runs that same pipeline in one command — reviews → cross-review → tally → chair verdict — writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council](./docs/council.md#amicus-council-run)
+- **Just ask, in Claude Code.** Hand Claude a plan, diff, design, or manuscript and say *"council review this."* The `second-opinion` skill runs the whole ritual above in your session, with no setup beyond your API keys. This is how most people use it. → [Quick start](#quick-start)
+- **Headless, in CI, with no Claude runtime.** `amicus council run --prompt-file plan.md --council free` runs that same pipeline in one command — reviews → cross-review → tally → chair verdict — writing `verdict.json` and `report.html`. It needs no Claude session, so it drops straight into CI. → [Headless council (CI)](#headless-council-ci)
 - **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
 - **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
+
+### Headless council (CI)
+
+The same pipeline runs with no Claude runtime at all: `amicus council run --prompt-file briefing.md --models gemini,glm --chair deepseek --json` executes the review waves, the anonymized cross-review, the tally, and the chair verdict in one command, and writes the full run directory (`verdict.json` with the chair's parsed `overallVerdict`, `report.html`, every review and judge output). That is what powers the repo's own **Council Review GitHub Action v2** — on PRs labeled `council-review` it posts an adjudicated verdict as a check run plus a sticky comment, uploads the run directory as an evidence artifact, and can optionally gate merges via its `fail_on` input (default: report-only). Reference: [docs/council.md](./docs/council.md#amicus-council-run).
+
+### Free council (zero-cost)
+
+Want the cross-examination without the model spend? `amicus setup` offers a **Free OpenRouter council** mode — readline wizard option 2, and the Electron **Models** step. It detects the free `:free` models live from the catalog, lets you multi-pick (Enter takes a vendor-diverse default), and saves them as `councils.free` — a first-class `councils` config primitive seeded under collision-safe `free-*` aliases. Your `config.default` is left untouched, and all you need is an `OPENROUTER_API_KEY`.
+
+Run it anywhere a council runs:
+
+```bash
+amicus fanout --council free --prompt "Review this design"
+```
+
+The `amicus_fanout` MCP tool takes the same `council` parameter, and the `second-opinion` skill reads `councils.free` automatically. A member that gets delisted is dropped with a warning — the council still runs as long as ≥2 survive. Free models are **rate-limited and quality-variable**, and some return 404 unless you enable data-sharing at [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy).
+
+### Council presets
+
+Save your own named member lists with `amicus council save <name> --models a,b,c` (≥2 resolvable aliases or `provider/model` IDs), then run them with `--council <name>` anywhere a council runs. `amicus council list` shows saved presets plus three built-in benches that work with no setup at all — `free` (the same zero-cost dynamic pick described above, used when you haven't seeded `councils.free`), `budget` (cheap workhorses, one per vendor family), and `frontier` (premium flagships, one per vendor family). `amicus council show <name>` resolves any of them (saved or built-in) and reports which members are currently usable. A saved council always shadows a built-in of the same name — exactly how the wizard's `councils.free` seeding already worked.
+
+### Policy packs (v4.5)
+
+A council preset only saves the bench. A **pack** saves the whole run — bench, chair, critic/lenses, cost/timeout options, and a briefing template — as one named, shareable JSON file:
+
+```bash
+amicus pack save review-bench --kind council --bench gemini,deepseek,gpt --chair opus --timeout 20 --max-cost 2
+amicus council run --pack review-bench --prompt-file plan.md --json
+```
+
+Any flag you also type on that second line overrides just that value — a pack only fills in what you didn't say explicitly, and it's recorded on the run either way. Packs work the same way on `fanout`/`start` and on the `amicus_fanout`/`amicus_start`/`amicus_council_run` MCP tools. `amicus pack list`/`show`/`rm` manage them, and `--from-run <id>` builds one from a run you already liked instead of typing flags at all. Full reference: [docs/usage.md § Policy packs](./docs/usage.md#policy-packs).
+
+### Briefing templates (v4.5)
+
+`--template <name> --artifact <file>` (plus repeatable `--var k=v`) renders a `{{prompt}}`/`{{artifact}}`-style Markdown template before it's sent, on `start`/`fanout`/`council run` alike — templates live in `~/.config/amicus/templates/`, and a pack's `briefing.template` is how one reaches an MCP-invoked run (MCP has no template param of its own). `amicus template list|show` manage them; v4.5 ships one built-in, `review`. Full reference: [docs/usage.md § Briefing templates](./docs/usage.md#briefing-templates).
 
 ---
 
@@ -152,6 +242,14 @@ amicus start --model gemini --prompt "Fact-check the auth approach Claude just p
 
 A window opens alongside your editor with Gemini ready, pre-loaded with your conversation. Work with it, then **Fold** the summary back.
 
+### Updating
+
+Amicus checks the npm registry at most once every 24 hours (cached background check). When an update exists, the CLI prints a notice and the Electron toolbar shows a one-click **Update** banner. Or run it yourself:
+
+```bash
+amicus update
+```
+
 ### Install from GitHub
 
 The npm package is the primary path. To install straight from the repo instead — the postinstall runs **identically** (same MCP registration, same two skills) — you just need `git` on your `PATH`:
@@ -204,82 +302,6 @@ Everything you need before your first run, and what's optional.
 
 ---
 
-## The Council
-
-> Trigger it by saying *"council review this"* to Claude, or, on the plugin channel, run **`/amicus:council`** directly.
-
-**Why multi-model.** Any single model — including the one running your session — has consistent blind spots. Route the *same* material through models from *different* families and the disagreements surface: missed issues, overstated confidence, claims one model alone would have waved through. The council is the structured version of that idea.
-
-**The flow, in five beats:**
-
-1. **Independent reviews.** Each council model reviews the artifact on its own (one parallel wave), producing a structured findings list — claim, severity (`blocker | major | minor | nit`), location, rationale.
-2. **Anonymized cross-review.** Claude relabels every review (Review A, B, C…) and sends the identical bundle to every model. Each model ranks the reviews and adjudicates every finding (`agree | dispute | neutral`) — *unknowingly judging its own*, so self-bias washes out. This yields a **street-cred** ranking and sorts findings into **Disputed / Confirmed / Contested / Singleton** tiers.
-3. **Chair verdict.** A designated **non-Claude** chair receives the de-anonymized picture — all reviews, rankings, and adjudications — and synthesizes an independent verdict. Claude presents it verbatim; Claude does not synthesize.
-4. **Tiered decisions.** Confirmed findings get one bulk accept/deny; Contested and Singleton findings are decided one at a time (accept / deny / modify).
-5. **Outputs applied.** Accepted findings are written into a reviewed copy of the source; the full run is captured in the run folder.
-
-**What a run produces** (in `output/<stem>-council/`):
-
-- `review-<model>.md` × N — each model's independent review.
-- `crossreview-matrix.md` — the adjudication grid plus the de-anonymized street-cred table.
-- `verdict.md` — the chair's synthesis.
-- `report.md` — synthesis + the full decision log + a per-call run-stats table.
-- `report.html` — the deterministic renderer output (adjudication matrix, street-cred table,
-  findings-by-tier, cost — no chair prose). This is the default artifact handed to the user.
-- For an **editable source**, the accepted edits land in `<stem>-reviewed.<ext>` next to the original.
-
-**Optional council elements** (v2.2.0, all default off): five opt-in behaviors, offered once as a menu at launch — nothing turns on unless you name it, and the confirmation lists exactly what's on.
-
-- **Critic seat** — one reviewer swaps to a four-pass adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Its findings enter the same anonymized bundle as everyone else's, so the bench disciplines the critic: manufactured negativity lands Disputed and dies in the tally.
-- **Expert lenses** — each reviewer takes a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, or custom). Lens runs never feed the reliability ledger, and the report discloses the weakened cross-review anonymity.
-- **Debate mode** — after cross-review, every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw**, and the disputing judges re-vote. Exactly one rebuttal round, then the final tally.
-- **Chair verdict scale** — the chair closes with 3–5 hard questions and one parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`.
-- **Claude in the council** — Claude adds its own fresh review to the bundle so the bench ranks and adjudicates it. Claude is *judged* but never votes or chairs, so the verdict stays independent.
-
-The critic and lens methodologies are adapted from the `/critic` and `/debate` agents in [John Renaldi's product-kit](https://github.com/jrenaldi79/plugin-marketplace) (MIT); the briefing boilerplate lives in [`skills/second-opinion/SEAT-BRIEFS.md`](./skills/second-opinion/SEAT-BRIEFS.md).
-
-**Cost is disclosed up front.** Before any model launches, you see the run shape — including any enabled optional elements — for example:
-
-> This run uses 3 council models across 2 fanout waves + 1 chair call, with critic seat + debate mode ON (~7 base runs + up to 6 rebuttal calls).
-
-Then the council waits for your confirmation.
-
-The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**. For what `amicus council tally|verdict|report|stats` actually take as input and produce — field-by-field schemas, verdict.json's provenance, and a full worked example run against the real CLI — see **[docs/council.md](./docs/council.md)**.
-
-**Headless council (CI).** The same pipeline runs with no Claude runtime at all: `amicus council
-run --prompt-file briefing.md --models gemini,glm --chair deepseek --json` executes the review
-waves, the anonymized cross-review, the tally, and the chair verdict in one command, and writes
-the full run directory (`verdict.json` with the chair's parsed `overallVerdict`, `report.html`,
-every review and judge output). That is what powers the repo's own **Council Review GitHub Action
-v2** — on PRs labeled `council-review` it posts an adjudicated verdict as a check run plus a
-sticky comment, uploads the run directory as an evidence artifact, and can optionally gate merges
-via its `fail_on` input (default: report-only). Reference: [docs/council.md](./docs/council.md#amicus-council-run).
-
-**Free council (zero-cost).** Want the cross-examination without the model spend? `amicus setup` offers a **Free OpenRouter council** mode — readline wizard option 2, and the Electron **Models** step. It detects the free `:free` models live from the catalog, lets you multi-pick (Enter takes a vendor-diverse default), and saves them as `councils.free` — a first-class `councils` config primitive seeded under collision-safe `free-*` aliases. Your `config.default` is left untouched, and all you need is an `OPENROUTER_API_KEY`.
-
-Run it anywhere a council runs:
-
-```bash
-amicus fanout --council free --prompt "Review this design"
-```
-
-The `amicus_fanout` MCP tool takes the same `council` parameter, and the `second-opinion` skill reads `councils.free` automatically. A member that gets delisted is dropped with a warning — the council still runs as long as ≥2 survive. Free models are **rate-limited and quality-variable**, and some return 404 unless you enable data-sharing at [openrouter.ai/settings/privacy](https://openrouter.ai/settings/privacy).
-
-**Council presets.** Save your own named member lists with `amicus council save <name> --models a,b,c` (≥2 resolvable aliases or `provider/model` IDs), then run them with `--council <name>` anywhere a council runs. `amicus council list` shows saved presets plus three built-in benches that work with no setup at all — `free` (the same zero-cost dynamic pick described above, used when you haven't seeded `councils.free`), `budget` (cheap workhorses, one per vendor family), and `frontier` (premium flagships, one per vendor family). `amicus council show <name>` resolves any of them (saved or built-in) and reports which members are currently usable. A saved council always shadows a built-in of the same name — exactly how the wizard's `councils.free` seeding already worked.
-
-**Policy packs (v4.5).** A council preset only saves the bench. A **pack** saves the whole run — bench, chair, critic/lenses, cost/timeout options, and a briefing template — as one named, shareable JSON file:
-
-```bash
-amicus pack save review-bench --kind council --bench gemini,deepseek,gpt --chair opus --timeout 20 --max-cost 2
-amicus council run --pack review-bench --prompt-file plan.md --json
-```
-
-Any flag you also type on that second line overrides just that value — a pack only fills in what you didn't say explicitly, and it's recorded on the run either way. Packs work the same way on `fanout`/`start` and on the `amicus_fanout`/`amicus_start`/`amicus_council_run` MCP tools. `amicus pack list`/`show`/`rm` manage them, and `--from-run <id>` builds one from a run you already liked instead of typing flags at all. Full reference: [docs/usage.md § Policy packs](./docs/usage.md#policy-packs).
-
-**Briefing templates (v4.5).** `--template <name> --artifact <file>` (plus repeatable `--var k=v`) renders a `{{prompt}}`/`{{artifact}}`-style Markdown template before it's sent, on `start`/`fanout`/`council run` alike — templates live in `~/.config/amicus/templates/`, and a pack's `briefing.template` is how one reaches an MCP-invoked run (MCP has no template param of its own). `amicus template list|show` manage them; v4.5 ships one built-in, `review`. Full reference: [docs/usage.md § Briefing templates](./docs/usage.md#briefing-templates).
-
----
-
 ## The parallel window
 
 When you don't need a full council — just one other model's take — fork a conversation. Amicus extracts your current Claude Code context, opens a session pre-loaded with it, you **work** alongside it, and you **fold** a structured summary back into Claude's context when you're done.
@@ -305,12 +327,6 @@ When you don't need a full council — just one other model's take — fork a co
 
 **Safety.** Amicus warns on **file conflicts** (a file changed externally while the session ran) and on **context drift** (the shared context may be stale relative to your current session), so a fold never silently overwrites newer work.
 
-**Auto-update.** Amicus checks the npm registry at most once every 24 hours (cached background check). When an update exists, the CLI prints a notice and the Electron toolbar shows a one-click **Update** banner. Or run it yourself:
-
-```bash
-amicus update
-```
-
 ![The parallel-window architecture: fork, work, fold](./docs/architecture.png)
 
 ---
@@ -332,7 +348,7 @@ amicus update
 | `amicus spend` | Cross-run cost rollup from the spend ledger, with per-run attribution — total + per-model spend, tokens, and source mix, most-expensive first (`--wave`/`--council`/`--project`/`--model`/`--op`/`--failed` filter it, `--group-by` buckets it, `--since 7d` windows it; `--json` for a versioned doc; shows remaining OpenRouter credit when a key is configured). |
 | `amicus key` | Manage API keys non-interactively: `amicus key <provider> <key>` saves after live validation; `--remove`; bare `amicus key` lists providers. |
 | `amicus provider` | Add/list/test/remove local, OpenAI-compatible providers (LM Studio, Ollama, vLLM) — configured with `--preset` or `--url`, at **$0** marginal cost (`--json` on every subcommand). |
-| `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [The Council](#the-council) for the built-in `free`/`budget`/`frontier` benches. |
+| `amicus council` | Council math: `tally <input.json>` (deterministic tiers + ledger append), `stats` (reviewer reliability), `report <verdict.json> [--md\|--html]`, `validate <file>` (findings-block check, exit 0/2/1), `verdict <tally.json> [--decisions <d.json>] [-o <out.json>]` (build + write verdict.json). Presets: `save <name> --models a,b,c`, `list [--json]`, `show <name> [--json]` — see [Council presets](#council-presets) for the built-in `free`/`budget`/`frontier` benches. |
 | `amicus council run` | The headless council engine: Stage-1 reviews → anonymized cross-review → deterministic tally → non-Claude chair verdict, in one command with no Claude runtime. Add `--debate` for a Stage-2.5 rebuttal round (raisers defend/amend/withdraw, disputing judges re-vote) and `--claude-review <file>` to enter Claude's own review as judged review N+1. Writes a run directory with `verdict.json` (including `overallVerdict`) and `report.html` — see [docs/council.md](./docs/council.md#amicus-council-run). |
 | `amicus pack` | Save a full run configuration — bench, chair/critic/lenses, options, briefing template — and invoke it by name: `save <name> --kind council\|fanout\|solo [flags]` (or `--from-run <id>`), `list`, `show <name>`, `rm <name>`. `--pack <name>` on `start`/`fanout`/`council run` loads one; explicit flags always override it. See [docs/usage.md § Policy packs](./docs/usage.md#policy-packs). |
 | `amicus template` | `list`/`show <name>` a briefing template. `--template <name> [--artifact <file>] [--var k=v]` on `start`/`fanout`/`council run` renders one before the briefing is sent. See [docs/usage.md § Briefing templates](./docs/usage.md#briefing-templates). |
@@ -474,7 +490,7 @@ Run `amicus doctor` first — it checks keys, catalog, OpenCode binary, Electron
 | `npm install -g amicus` fails with `EEXIST: … claude-sidecar` | The old upstream `claude-sidecar` package is still installed globally; npm won't overwrite another package's bin shims | `npm uninstall -g claude-sidecar`, then `npm install -g amicus`. Your keys and past sessions are not lost, but v2.0.0 no longer reads the old paths automatically — see [docs/SHIMS.md](./docs/SHIMS.md) for the one-time migration steps (rename `~/.config/sidecar/` and any `.claude/sidecar_sessions/` dirs). |
 | Install fails partway, or `amicus doctor` reports the OpenCode binary "not found" | A **transient** error during the OpenCode engine's own postinstall (a spawn `ENOENT`, or an antivirus file-lock while it lays down its 11 per-platform binaries) can roll back the whole atomic install — retrying usually succeeds | Just re-run `npm install -g amicus`. If it still fails, clear the cache first: `npm cache clean --force && npm install -g amicus`. |
 | `401` / auth error | No usable key for the model's vendor — bare `provider/model` ids fall back to `OPENROUTER_API_KEY` automatically, so this means neither the direct key nor an OpenRouter key is configured (or `--gateway direct`/`openrouter` forced a gateway whose key is missing) | Run `amicus setup`, or `amicus key <provider> <key>` to add the missing key; see [Routing](#routing). |
-| `402` / "Payment Required" on first council review / `start` / `fanout` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. (The `amicus council` subcommand itself is deterministic math and never calls a model.) | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See "Free council (zero-cost)" under [The Council](#the-council) above. |
+| `402` / "Payment Required" on first council review / `start` / `fanout` call | Your OpenRouter key is real but has no credit. Key save (`amicus key openrouter <key>` or the setup wizard's key step) only checks that the key **authenticates** — it doesn't check balance, so a zero-credit key saves cleanly and only fails later, on the first real model call. (The `amicus council` subcommand itself is deterministic math and never calls a model.) | Add credit at [openrouter.ai/credits](https://openrouter.ai/credits), **or** switch to a zero-cost council: `amicus setup` → option 2 (Free OpenRouter council) builds one from live `:free`-suffixed models and saves it as `councils.free` — then run `amicus fanout --council free …`. See [Free council (zero-cost)](#free-council-zero-cost) above. |
 | Every direct `anthropic/…` model (`haiku`, `sonnet`, `opus`, `claude`) errors `Not Found` in ~2 s at zero tokens, but the same model works via `openrouter/anthropic/…` | An inherited `ANTHROPIC_BASE_URL` missing its `/v1` path segment. The engine appends only `/messages`, so requests hit `https://api.anthropic.com/messages` → HTTP 404 with an empty body → the bare status text. A shell spawned by Claude Code sets the `/v1`-less form for you. The model id, alias, and key are all fine. | `export ANTHROPIC_BASE_URL=https://api.anthropic.com/v1`, or unset it entirely, or pass `--gateway openrouter`. In a council a dead seat **degrades the run instead of failing it** — smoke-test each seat with one throwaway `amicus start` before paying for a council. See [docs/troubleshooting.md](./docs/troubleshooting.md#every-direct-anthropic-model-fails-with-not-found). |
 | `Model 'X' is unverified against the direct catalog; attempting anyway` for a model that plainly exists | Not a claim the model is wrong — amicus **couldn't check**. That vendor's direct catalog fetch failed (usually a stale or truncated stored key), leaving its namespace empty, and an empty namespace never blocks a launch. The engine may still run the model from its own credential store, so a working model warns forever. | `amicus models --refresh` and watch for a provider that stays empty; re-save the good key with `amicus key <provider> <apikey>`. See [docs/troubleshooting.md](./docs/troubleshooting.md#model-x-is-unverified-against-the-direct-catalog-attempting-anyway). |
 | Session not found | No session matches the given ID | Run `amicus list`, or omit `--session-id` to use the most recent. |
