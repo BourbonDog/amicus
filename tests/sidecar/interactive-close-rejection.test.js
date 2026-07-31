@@ -41,6 +41,14 @@ jest.mock('../../src/sidecar/interactive-abort', () => {
   };
 });
 
+// --- electron availability gate: stub ensureElectron (#55) so these tests never
+// depend on a REAL electron install. require.resolve-guarding was not enough: a
+// scripts-suppressed install leaves the package resolvable with dist/<exe>
+// missing, and the REAL ensureElectron() then kicks off a repair whose lock
+// poisons parallel sibling suites ("Another electron repair is already in
+// progress"). Provisioning itself is covered by tests/ensure-electron.test.js. ---
+jest.mock('../../src/sidecar/electron-ensure', () => ({ ensureElectron: jest.fn().mockResolvedValue({ ok: true, path: '/fake/electron' }) }));
+
 // The message both teardown sites reject with; also what identifies OUR
 // rejection in the process-global bucket (see ourRejections below).
 const CLOSE_REJECTION = 'SDK wrapper already dead';
@@ -49,10 +57,6 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
   let project;
   let unhandledRejections;
   let onUnhandledRejection;
-
-  let electronInstalled = true;
-  try { require.resolve('electron'); } catch { electronInstalled = false; }
-  const itElectron = electronInstalled ? it : it.skip;
 
   beforeEach(() => {
     jest.resetModules();
@@ -87,7 +91,7 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
   const ourRejections = () =>
     unhandledRejections.filter((r) => r?.message === CLOSE_REJECTION);
 
-  itElectron('session-setup failure path (:104) — rejecting close() does not escape as unhandledRejection', async () => {
+  it('session-setup failure path (:104) — rejecting close() does not escape as unhandledRejection', async () => {
     const rejectingClose = jest.fn().mockRejectedValue(new Error(CLOSE_REJECTION));
 
     jest.doMock('../../src/opencode-client', () => ({
@@ -122,7 +126,7 @@ describe('runInteractive teardown vs. rejecting server.close() (adversarial-revi
     expect(ourRejections()).toEqual([]);
   });
 
-  itElectron('normal Electron-exit path (:203) — rejecting close() does not escape as unhandledRejection', async () => {
+  it('normal Electron-exit path (:203) — rejecting close() does not escape as unhandledRejection', async () => {
     const rejectingClose = jest.fn().mockRejectedValue(new Error(CLOSE_REJECTION));
 
     jest.doMock('../../src/opencode-client', () => ({

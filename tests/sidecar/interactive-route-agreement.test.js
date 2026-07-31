@@ -87,6 +87,14 @@ jest.mock('child_process', () => ({
   })
 }));
 
+// --- electron availability gate: stub ensureElectron (#55) so these tests never
+// depend on a REAL electron install. require.resolve-guarding was not enough: a
+// scripts-suppressed install leaves the package resolvable with dist/<exe>
+// missing, and the REAL ensureElectron() then kicks off a repair whose lock
+// poisons parallel sibling suites ("Another electron repair is already in
+// progress"). Provisioning itself is covered by tests/ensure-electron.test.js. ---
+jest.mock('../../src/sidecar/electron-ensure', () => ({ ensureElectron: jest.fn().mockResolvedValue({ ok: true, path: '/fake/electron' }) }));
+
 const { canonicalProjectPath } = require('../../src/utils/project-path');
 // The REAL route builder electron/main.js uses — exercised across the boundary.
 const { buildSessionRoute } = require('../../electron/session-route');
@@ -99,13 +107,6 @@ describe('create/route directory agreement when cwd != --cwd (#46)', () => {
   const EXPECTED_DIR = canonicalProjectPath(PROJECT);
   const BASE_URL = 'http://localhost:4096';
 
-  // getElectronPath()/checkElectronAvailable() are local bindings in
-  // interactive.js and rely on a real electron install (present in CI/this
-  // worktree); skip headlessly rather than asserting against the guard.
-  let electronInstalled = true;
-  try { require.resolve('electron'); } catch { electronInstalled = false; }
-  const itElectron = electronInstalled ? it : it.skip;
-
   let runInteractive;
   beforeEach(() => {
     jest.clearAllMocks();
@@ -116,7 +117,7 @@ describe('create/route directory agreement when cwd != --cwd (#46)', () => {
   });
 
   // (1) create scope == route input: the SAME single value, not two guesses.
-  itElectron('createSession directory EQUALS the directory used to build the route', async () => {
+  it('createSession directory EQUALS the directory used to build the route', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
 
     const createDir = createSession.mock.calls[0][1];
@@ -128,7 +129,7 @@ describe('create/route directory agreement when cwd != --cwd (#46)', () => {
   });
 
   // (2) route derives from the session directory, NOT a fresh base64url(CWD).
-  itElectron('route segment encodes the session directory and never process.cwd()', async () => {
+  it('route segment encodes the session directory and never process.cwd()', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
 
     // Reproduce exactly what electron/main.js does: feed the threaded
@@ -146,7 +147,7 @@ describe('create/route directory agreement when cwd != --cwd (#46)', () => {
   });
 
   // (3) per-session follow-up calls carry the SAME directory as create + route.
-  itElectron('per-session follow-up calls carry the same directory as create + route', async () => {
+  it('per-session follow-up calls carry the same directory as create + route', async () => {
     await runInteractive('m', 'sys', 'hi', 'task-1', PROJECT, {});
 
     // Drive the closures the activity poller / mirror invoke on each tick.
