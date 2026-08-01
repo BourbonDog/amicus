@@ -122,10 +122,12 @@ function parseArgs(argv) {
 }
 
 /**
- * Check if a flag is boolean (doesn't take a value)
+ * Flags that take no value. Module-level (not rebuilt per call) so
+ * `getBooleanFlags()` can hand the same list to src/utils/known-flags.js —
+ * which needs it to tell a real boolean flag from an unknown token, and must
+ * not keep a second copy that can rot out of sync with this one.
  */
-function isBooleanFlag(key) {
-   const booleanFlags = [
+const BOOLEAN_FLAGS = [
      'no-ui',
      'no-mcp',
      'no-context',
@@ -156,8 +158,21 @@ function isBooleanFlag(key) {
      'ui',                   // watch: open the Council Workspace window; v4.4 seam (v4.3 Task 11)
      'follow',               // fanout / council run: stream this run's own events to stderr (v4.3 Task 13)
      'fallback',             // fanout / council run: opt-in cheaper-model substitution (v4.3 Task 18, spec 6.2); --no-fallback negates via the generic no-* catch-all below
-   ];
-  return booleanFlags.includes(key);
+];
+
+/**
+ * Check if a flag is boolean (doesn't take a value)
+ */
+function isBooleanFlag(key) {
+  return BOOLEAN_FLAGS.includes(key);
+}
+
+/**
+ * The boolean-flag names, for the unknown-flag check.
+ * @returns {string[]} copy — callers must not mutate the source list
+ */
+function getBooleanFlags() {
+  return [...BOOLEAN_FLAGS];
 }
 
 /**
@@ -765,5 +780,6 @@ module.exports = {
   validateStartArgs,
   getUsage,
   getCommandNames,
+  getBooleanFlags,
   DEFAULTS
 };

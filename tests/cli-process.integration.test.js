@@ -88,6 +88,57 @@ describe('CLI Process: unknown command', () => {
   });
 });
 
+/**
+ * An unknown FLAG gets the same treatment as an unknown COMMAND.
+ *
+ * Before this, `parseArgs` accepted any `--token`: it landed on the parsed
+ * object, no handler read it, and the command ran as though it were never
+ * typed. `amicus start -m deepseek --prompt "…" --headless` exited 0 having
+ * silently taken the interactive path, ignored `-m`, and left a session running.
+ */
+describe('CLI Process: unknown flag', () => {
+  it('rejects --headless on start instead of silently ignoring it', async () => {
+    const { stderr, code } = await runCli(['start', '--model', 'gemini', '--prompt', 'x', '--headless']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown option: --headless');
+  });
+
+  it('suggests the nearest flag for a near-miss typo', async () => {
+    const { stderr, code } = await runCli(['start', '--modl', 'gemini']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('Unknown option: --modl');
+    expect(stderr).toContain('--model');
+  });
+
+  it('names every unknown flag, not just the first', async () => {
+    const { stderr, code } = await runCli(['start', '--alpha', '--beta']);
+    expect(code).toBe(1);
+    expect(stderr).toContain('--alpha');
+    expect(stderr).toContain('--beta');
+  });
+
+  it('points at the scoped help for the command that was run', async () => {
+    const { stderr, code } = await runCli(['council', 'run', 'x.md', '--headless']);
+    expect(code).toBe(1);
+    expect(stderr).toMatch(/--help/);
+  });
+
+  it('does NOT reject a valid flag set', async () => {
+    // --help short-circuits before any handler, so this proves the check let it through.
+    const { code, stdout } = await runCli(['start', '--help']);
+    expect(code).toBe(0);
+    expect(stdout).toContain('Usage:');
+  });
+
+  it('does NOT reject the internal MCP passthroughs', async () => {
+    // Would exit 1 with "Unknown option" if --task-id were rejected; instead it
+    // reaches real validation and fails on the missing --prompt.
+    const { stderr, code } = await runCli(['start', '--task-id', 'abc123', '--model', 'gemini']);
+    expect(code).toBe(1);
+    expect(stderr).not.toContain('Unknown option');
+  });
+});
+
 describe('CLI Process: start validation errors', () => {
   it('exits 1 when --prompt is missing', async () => {
     const { stderr, code } = await runCli(['start', '--model', 'google/gemini-2.5-flash'], {

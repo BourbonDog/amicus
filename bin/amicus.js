@@ -22,6 +22,7 @@ const { handleStart, handleFanout, handleRead } = require('../src/cli-handlers-r
 const { handleResume, handleContinue } = require('../src/cli-handlers-resume-continue');
 const { isOneShotCommand, armExitWatchdog } = require('../src/utils/lifecycle');
 const { suggestCommand } = require('../src/utils/input-validators');
+const { unknownFlags, getKnownFlags } = require('../src/utils/known-flags');
 const { logger } = require('../src/utils/logger');
 
 const VERSION = require('../package.json').version;
@@ -29,6 +30,28 @@ const VERSION = require('../package.json').version;
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const command = args._[0];
+
+  // Reject unknown flags BEFORE anything can act on a half-understood command
+  // line. parseArgs accepts any `--token`, so an unrecognized one used to land
+  // on `args`, go unread, and let the command run as though it were never typed
+  // — `start … --headless` silently took the interactive path, ignored `--model`
+  // and left a session running. Same treatment as an unknown command: name it,
+  // suggest the nearest real flag, point at help, exit 1. See
+  // src/utils/known-flags.js for what counts as known and why.
+  const badFlags = unknownFlags(args);
+  if (badFlags.length > 0) {
+    for (const flag of badFlags) {
+      console.error(`Unknown option: --${flag}`);
+      const candidates = suggestCommand(flag, [...getKnownFlags()]);
+      if (candidates.length > 0) {
+        console.error(`Did you mean: ${candidates.map(c => `--${c}`).join(', ')}`);
+      }
+    }
+    console.error(command
+      ? `Run \`amicus ${command} --help\` to see valid options.`
+      : 'Run `amicus --help` to see valid options.');
+    process.exit(1);
+  }
 
   // Install crash handler for MCP-spawned processes (have --task-id)
   if (args['task-id'] && (command === 'start' || command === 'continue')) {
