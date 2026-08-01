@@ -634,6 +634,30 @@ Full task-by-task history, the final whole-branch review, and both post-HOLD wav
 worktree's `.superpowers/sdd/progress.md` (local-only, not published). Every entry below is
 self-contained — read the ledger only for the reasoning behind a line, not to find out what's open.
 
+### v4.6 IN FLIGHT — start here (2026-08-01)
+
+**Branch:** `feat/v4.6-degrade-invariant` (3 doc commits, not pushed; no code yet).
+
+**Theme:** the north star — *installing and running amicus should be simple and error-free;
+when an error occurs it either self-heals or self-diagnoses, transparently, keeping the user
+informed.* A **correct-but-silent degrade fails that bar as hard as a crash**, which is what
+this work fixes.
+
+- **Spec:** `docs/superpowers/specs/2026-08-01-degrade-announcement-invariant-design.md`
+- **Plan 1 of 4:** `docs/superpowers/plans/2026-08-01-v4.6-degrade-invariant-plan-1-contract-and-sink.md`
+  — 9 TDD tasks. **This is the next thing to execute.** Use `superpowers:subagent-driven-development`.
+- **Plans 2–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
+  plan immediately before its development, not all up front — *"we learned a lesson about plan rot
+  the hard way."* Do not pre-write them.
+
+**Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
+
+**Measured baseline, so nobody re-derives it:** 11 four-seat council runs on v4.5.4 `af3e8f1`,
+**10 clean**. The single loss was a free model that never returned a first token. **The engine is
+not losing legs** — the defect is that when a seat *is* lost, nothing tells the user which one.
+
+---
+
 ### v4.6 hard gates — resolve before/at v4.6 kickoff
 
 - [ ] **Tight-file extraction pass.** ⚠️ **RE-MEASURED 2026-08-01 against `main` @ `af3e8f1`
