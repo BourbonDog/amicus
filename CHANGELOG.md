@@ -3,6 +3,32 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [4.5.4] - 2026-08-01
+
+### Fixed
+
+- **README: corrected a false claim about Electron and install channels.** The install section
+  said "the standalone Electron window is npm-only." That is not true — the Council Workspace
+  auto-open gate (`src/sidecar/workspace-auto-open.js`) keys on `client === 'code-local'` plus
+  Electron presence, **not** on install channel, so a plugin-channel user in Claude Code local
+  does get the window. Removed.
+
+### Changed
+
+- **README now leads with npm as the recommended install**, with a per-channel comparison table.
+  The accurate reason npm is preferable for the interactive experience: the plugin's MCP config
+  sets `AMICUS_SKIP_POSTINSTALL=1`, and `scripts/postinstall.js` returns early on that — *before*
+  `provisionElectron()`. So the plugin channel gets no `amicus` on `PATH` (every window-opening
+  command becomes an `npx` call), no Electron provisioning or cache-heal, no reachable
+  `amicus doctor --fix` when the GUI breaks, and a fresh npx cache directory on every release.
+  The plugin block keeps its genuine strengths — native registration and the slash commands the
+  npm paths don't have — alongside an accurate statement of the tradeoff.
+- **README documents the single-MCP-registration behavior** when both channels are installed.
+  Config, API keys, and session history are shared, but the MCP server is one registration named
+  `amicus` that resolves to whichever install registered most recently — so the copy the CLI runs
+  and the copy Claude's MCP tools run can differ. This is the #76 confusion; `amicus doctor`
+  reports the MCP launch path and `--fix` repairs that copy in place.
+
 ## [4.5.3] - 2026-08-01
 
 ### Fixed
