@@ -44,4 +44,16 @@ function makeDegrade(input = {}) {
   return Object.freeze(record);
 }
 
-module.exports = { makeDegrade, DEGRADE_CHANNELS };
+/**
+ * The ONE voice for every channel. Kept here rather than at call sites so ten
+ * channels cannot drift into ten dialects.
+ * @param {object} record from makeDegrade
+ * @returns {string} one line, newline-terminated
+ */
+function formatDegrade(record) {
+  const lead = record.kind === 'heal' ? 'Recovered' : 'Notice';
+  const remedy = record.remedy ? ` Try: ${record.remedy}.` : '';
+  return `${lead}: ${record.what} — ${record.why}. ${record.effect}.${remedy}\n`;
+}
+
+module.exports = { makeDegrade, formatDegrade, DEGRADE_CHANNELS };
