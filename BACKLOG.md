@@ -645,10 +645,24 @@ this work fixes.
 
 - **Spec:** `docs/superpowers/specs/2026-08-01-degrade-announcement-invariant-design.md`
 - **Plan 1 of 4:** `docs/superpowers/plans/2026-08-01-v4.6-degrade-invariant-plan-1-contract-and-sink.md`
-  — 9 TDD tasks. **This is the next thing to execute.** Use `superpowers:subagent-driven-development`.
+  — **EXECUTED 2026-08-01** (subagent-driven-development, 9 tasks + final whole-branch review):
+  14 code commits `0005e79..7cd2a8b` on this branch. Suite **477 suites / 6185 tests / 0 failures**
+  (measured merge-base baseline 472/6150 — delta is the branch's own additions), lint + sizes green.
+  Final review verdict after its 3-fix hardening wave: **Ready to merge.** #85 closed with a
+  regression pin. Ledger: `.superpowers/sdd/progress.md` (local-only).
+  - ⚠️ **Scoping note for the owner:** the plan's headline says "all ten channels wired"; **nine**
+    in-council channels shipped. `dropped-members` is in the vocabulary (`DEGRADE_CHANNELS`) but its
+    announce site is the CLI/MCP entry layer (outside Plan 1's files) and it never flips
+    `degraded.value` — its sink migration needs an owner call on which later plan owns it.
+  - ⚠️ **Behavior change for the v4.6 CHANGELOG:** a shared-server acquisition failure now exits
+    **degraded (2)** (was: stderr + run.json only, exit 0). Spec-intended; run-single-server suite
+    aligned.
 - **Plans 2–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
   plan immediately before its development, not all up front — *"we learned a lesson about plan rot
-  the hard way."* Do not pre-write them.
+  the hard way."* Do not pre-write them. **Plan 2 (verdict/report surface: `verdict.degrades[]`,
+  derived `seatLoss`, report section) is next**, and inherits the final review's carries: a
+  thin-judge e2e pin, the "will exit / exits" hedging sweep, and the roll-up polish items in the
+  ledger.
 
 **Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
 
