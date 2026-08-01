@@ -111,6 +111,7 @@ src/
 │   ├── run-chair.js
 │   ├── run-debate-stage.js
 │   ├── run-debate.js
+│   ├── run-degrade.js
 │   ├── run-finalize.js
 │   ├── run-launch.js
 │   ├── run-server.js
@@ -473,6 +474,7 @@ evals/
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
 | `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
+| `council/run-degrade.js` |  | `createDegradeSink()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()` |
