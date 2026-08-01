@@ -50,17 +50,36 @@ users only see a version bump when we bump it, not on every commit. Treat
 ### Preflight (run before every submission or major post-listing update)
 
 ```bash
-claude plugin validate . --strict
+claude plugin validate .claude-plugin/plugin.json    # the PLUGIN check — see the path trap below
+claude plugin validate .                             # the marketplace manifest (separate check)
 claude --plugin-dir .   # smoke: /amicus:council, /amicus:sidecar, /amicus:second-opinion, MCP tools
 npm test
 ```
 
-- `claude plugin validate . --strict` is the same structural check the
-  review pipeline runs; `--strict` promotes unrecognized-field warnings to
-  errors so nothing slips through that CI would later flag. It needs the
-  Claude Code CLI installed locally — it is **not** wired into this repo's
-  CI (runners have no `claude` auth), so `tests/plugin-manifest.test.js` is
-  the CI-side proxy for manifest completeness.
+- **Path trap — `claude plugin validate .` does NOT validate the plugin.**
+  This repo's `.claude-plugin/` holds *both* `marketplace.json` and
+  `plugin.json`; given `.`, the CLI resolves the marketplace manifest, prints
+  `Validating marketplace manifest:` / `✔ Validation passed`, and never looks
+  at the plugin, its commands, or its skills. Always pass
+  `.claude-plugin/plugin.json` explicitly for the plugin check — that is the
+  surface the review pipeline evaluates. (This masked a real defect for a
+  month: `commands/council.md` shipped an unparseable `argument-hint` from
+  2026-07-02 until 2026-08-01 while `.` reported clean. Read the first line
+  of the output — it names which manifest was actually checked.)
+- `claude plugin validate` is the same structural check the review pipeline
+  runs. It needs the Claude Code CLI installed locally — it is **not** wired
+  into this repo's CI (runners have no `claude` auth), so
+  `tests/plugin-manifest.test.js` and `tests/plugin-commands.test.js` are the
+  CI-side proxies. The latter now YAML-parses the command and skill
+  frontmatter (`yaml` is a devDependency for exactly this); substring
+  assertions like `toContain('argument-hint:')` cannot see a parse failure,
+  which is how the `council.md` defect passed CI.
+- **`--strict` is expected to FAIL here, by design.** It promotes the
+  root-`CLAUDE.md` warning ("not loaded as project context") to an error. The
+  plugin root is the repo root, and `CLAUDE.md` is this repo's development
+  context — we keep it deliberately. Use the non-strict run as the gate and
+  read the warning list by eye; a *new* warning is the signal, not the
+  `CLAUDE.md` one.
 - `claude --plugin-dir .` loads the plugin from the working tree so you can
   manually confirm `/amicus:council`, `/amicus:sidecar`, and
   `/amicus:second-opinion` all appear in the command picker exactly once,
@@ -68,10 +87,18 @@ npm test
 - `npm test` must be green, specifically `tests/plugin-manifest.test.js`
   and `tests/plugin-commands.test.js`.
 
-**Known current-tree preflight result (checked 2026-07-02, `p9/distribution`
-at a1bea3c):** `claude plugin validate . --strict` passes clean, exit 0.
-(History: `--strict` previously flagged an unknown `plugin.json → bugs`
-field; that field was removed in commit `4207485`, so the warning is gone.)
+**Known current-tree preflight result (checked 2026-08-01, on
+`fix/plugin-frontmatter-validation`):**
+`claude plugin validate .claude-plugin/plugin.json` → exit 0,
+`✔ Validation passed with warnings` (the one retained root-`CLAUDE.md`
+warning). With `--strict` → exit 1 on that same warning, as documented above.
+`claude plugin validate .` → exit 0 on the marketplace manifest.
+
+History of this line: it previously read "`claude plugin validate . --strict`
+passes clean, exit 0" as of 2026-07-02 — measured against the *marketplace*
+manifest via the path trap above, while the plugin itself had a hard
+frontmatter error in `commands/council.md`. Older still: `--strict` flagged an
+unknown `plugin.json → bugs` field, removed in commit `4207485`.
 
 ### Submit
 

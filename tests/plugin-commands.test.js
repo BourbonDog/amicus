@@ -2,8 +2,20 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const YAML = require('yaml');
 const ROOT = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf-8').replace(/\r\n/g, '\n');
+
+// Parse the YAML frontmatter the way Claude Code's loader does. A file whose frontmatter
+// fails to parse still LOOKS fine to a substring assertion, but loads at runtime with every
+// metadata field silently dropped — which is exactly how commands/council.md shipped an
+// unquoted `argument-hint: [...] [...]` (YAML flow-seq) past `toContain('argument-hint:')`.
+const parseFrontmatter = (p) => {
+  const md = read(p);
+  const m = md.match(/^---\n([\s\S]*?)\n---\n/);
+  if (!m) throw new Error(`${p}: no YAML frontmatter block`);
+  return YAML.parse(m[1]);
+};
 
 describe('plugin slash commands (Phase 9a)', () => {
   test('commands/council.md exists, is user-invoked-only, and wraps second-opinion with $ARGUMENTS', () => {
@@ -13,6 +25,27 @@ describe('plugin slash commands (Phase 9a)', () => {
     expect(md).toContain('disable-model-invocation: true');
     expect(md).toContain('$ARGUMENTS');
     expect(md).toContain('second-opinion');
+  });
+
+  test('commands/council.md frontmatter actually PARSES as YAML and keeps its metadata', () => {
+    const fm = parseFrontmatter('commands/council.md');
+    expect(typeof fm.description).toBe('string');
+    expect(fm.description.length).toBeGreaterThan(0);
+    // Must survive as a STRING: an unquoted `[material, ...] [...]` parses as a flow sequence
+    // (or throws) and the hint is lost.
+    expect(typeof fm['argument-hint']).toBe('string');
+    expect(fm['argument-hint']).toContain('material');
+    // User-invoked only — dropped frontmatter would silently make the command model-invocable.
+    expect(fm['disable-model-invocation']).toBe(true);
+  });
+
+  test('both plugin skills have frontmatter that parses as YAML with a usable description', () => {
+    for (const skill of ['skills/sidecar/SKILL.md', 'skills/second-opinion/SKILL.md']) {
+      const fm = parseFrontmatter(skill);
+      expect(typeof fm.name).toBe('string');
+      expect(typeof fm.description).toBe('string');
+      expect(fm.description.length).toBeGreaterThan(0);
+    }
   });
 
   test('plugin.json does NOT declare a commands key (auto-discovery; a custom path REPLACES the default commands/ dir)', () => {
