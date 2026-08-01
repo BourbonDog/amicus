@@ -203,7 +203,7 @@ async function runCouncil(options, deps = {}) {
 
     // ---- Stage 2.5: debate (optional, spec §5.1) ----
     const { debatedInput, debatedRecord, debateOutcomes, debateFindings, aborted: debateAborted } =
-      await runDebateStage(ctx, { provisional, provisionalInput, overBudget, degraded });
+      await runDebateStage(ctx, { provisional, provisionalInput, overBudget });
     // Mirrors the `if (signalled || s1.aborted)` / `if (signalled || s2.aborted)` guards
     // above: run-debate-stage.js can't reach this closure's `finalize`, so it hands the
     // signal back here instead (see its docblock) and we finalize on its behalf.

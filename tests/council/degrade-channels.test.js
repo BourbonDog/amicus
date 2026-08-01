@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { runStage1 } = require('../../src/council/run-stages');
 const { runChair } = require('../../src/council/run-chair');
+const { runDebateStage } = require('../../src/council/run-debate-stage');
 const { createDegradeSink } = require('../../src/council/run-degrade');
 
 // Mirrors tests/council/run-stages.test.js's review() fixture: prose + a fenced
@@ -149,5 +150,20 @@ describe('thin cross-review channel', () => {
       });
     }
     expect(noted[0].what).toBe('only 1 of 3 judges returned a usable cross-review');
+  });
+});
+
+describe('debate-degraded channel', () => {
+  test('a debate skipped for the cost ceiling is announced', async () => {
+    const noted = [];
+    const runDir = fs.mkdtempSync(path.join(tmp, 'debate-'));
+    await runDebateStage(
+      { o: { debate: true, runDir, runId: 'r1' }, degrade: { note: (r) => noted.push(r) } },
+      { provisional: { findings: [{ id: 'A1', tier: 'Contested' }] },
+        provisionalInput: {}, overBudget: () => true },
+    );
+    const d = noted.find(n => n.channel === 'debate-degraded');
+    expect(d).toBeDefined();
+    expect(d.why).toMatch(/ceiling/);
   });
 });

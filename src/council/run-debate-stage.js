@@ -32,7 +32,7 @@ const { emitStageStarted, emitStageTerminal } = require('../observe/events');
 
 const now = () => new Date().toISOString();
 
-async function runDebateStage(ctx, { provisional, provisionalInput, overBudget, degraded }) {
+async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }) {
   const { o } = ctx;
   let debatedInput = provisionalInput, debatedRecord = provisional;
   let debateOutcomes = null, debateFindings = null;
@@ -86,12 +86,25 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget, 
         ? dbg.addendumOutcomes : null;
       // Dead/unstructured defense, partial/fully-dead re-vote or a cost-ceiling re-vote skip
       // each degrade the run → exit 2 (spec §5.7), same channel as a dead Stage-1 leg.
-      if (dbg.degraded) { degraded.value = true; }
+      if (dbg.degraded) {
+        ctx.degrade.note({
+          channel: 'debate-degraded',
+          what: 'the debate round did not complete cleanly',
+          why: 'one or more defense or re-vote legs died or returned unstructured output',
+          effect: 'affected findings keep their provisional tier; exits degraded (2)',
+        });
+      }
     } else if (worthDebating) {
       // Budget gone before the defense wave launched, but there WAS something to debate — the
       // other cost-ceiling branch (spec §5.7). Over budget AND nothing to debate stays the latter.
       debateSummary.outcome = 'skipped-cost-ceiling';
-      degraded.value = true;
+      ctx.degrade.note({
+        channel: 'debate-degraded',
+        what: 'the debate round did not run',
+        why: 'the --max-cost ceiling was reached before the defense wave could launch',
+        effect: 'contested findings were not debated and keep their provisional tier; exits degraded (2)',
+        remedy: 'raise --max-cost to let the debate round run',
+      });
     }
     runState.checkpoint(o.runDir, { debate: debateSummary });
   }
