@@ -109,6 +109,7 @@ src/
 │   ├── run-assemble.js
 │   ├── run-budget.js
 │   ├── run-chair.js
+│   ├── run-debate-stage.js
 │   ├── run-debate.js
 │   ├── run-finalize.js
 │   ├── run-launch.js
@@ -469,6 +470,7 @@ evals/
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-budget.js` |  | `createBudget()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
+| `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
