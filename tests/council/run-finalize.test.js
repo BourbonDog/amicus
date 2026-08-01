@@ -11,6 +11,9 @@
  * scripted driver test cannot easily produce every combination.
  */
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { statusForExit, resolveTerminalExit, SIGNAL_EXIT } = require('../../src/council/run-finalize');
 const { createDegradeSink } = require('../../src/council/run-degrade');
 
@@ -55,6 +58,39 @@ describe('resolveTerminalExit', () => {
     expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded, degrade,
       inexactUnderCeiling: () => true })).toBe(2);
     expect(degraded.value).toBe(true);
+  });
+
+  /**
+   * Final-review F1. `inexactUnderCeiling()` can be true on ANY non-signalled
+   * path — including exit 1 (quorum/internal error) — but the record's own
+   * effect text asserts "the run exits degraded (2)", which is FALSE there (the
+   * run exits 1). The claim must be noted only where it is true; the
+   * inexactness itself is still announced on every path by noticeUnknownSpend()
+   * at writeRunTerminal, independent of this gate.
+   */
+  test('exit 1 (quorum/internal error): inexactness is real but the "exits degraded (2)" claim is NOT noted', () => {
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-finalize-'));
+    try {
+      const degraded = deg(false);
+      const degrade = createDegradeSink({ runDir, degraded, write: () => {} });
+      const code = resolveTerminalExit({ signalled: null, exitCode: 1, degraded, degrade,
+        inexactUnderCeiling: () => true });
+      expect(code).toBe(1);
+      expect(degrade.all()).toEqual([]);
+    } finally { fs.rmSync(runDir, { recursive: true, force: true }); }
+  });
+
+  test('exit 0: the claim IS noted, once, and the run degrades to 2', () => {
+    const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-finalize-'));
+    try {
+      const degraded = deg(false);
+      const degrade = createDegradeSink({ runDir, degraded, write: () => {} });
+      const code = resolveTerminalExit({ signalled: null, exitCode: 0, degraded, degrade,
+        inexactUnderCeiling: () => true });
+      expect(code).toBe(2);
+      expect(degrade.all()).toHaveLength(1);
+      expect(degrade.all()[0].channel).toBe('inexact-under-ceiling');
+    } finally { fs.rmSync(runDir, { recursive: true, force: true }); }
   });
 
   test('an EXACT total under a ceiling leaves the flag and the code alone', () => {

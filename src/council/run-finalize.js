@@ -64,7 +64,14 @@ function statusForExit(code) {
  */
 function resolveTerminalExit({ signalled, exitCode, degraded, degrade, inexactUnderCeiling }) {
   if (signalled) { return signalled; }
-  if (degrade && inexactUnderCeiling && inexactUnderCeiling()) {
+  // Final-review F1: the inexactness itself is still announced on EVERY path by
+  // noticeUnknownSpend() at writeRunTerminal, below — that is unconditional and
+  // untouched. What is gated here is only the CLAIM this record's effect text
+  // makes, "the run exits degraded (2)", which is true on exactly the codes that
+  // end up 2 (a clean 0 about to flip, or an already-degraded 2). On exit 1
+  // (quorum/internal error) or an abort/signal code the run does NOT exit 2, so
+  // noting that sentence there would be false.
+  if (degrade && inexactUnderCeiling && inexactUnderCeiling() && (exitCode === 0 || exitCode === 2)) {
     degrade.note({
       channel: 'inexact-under-ceiling',
       what: 'the run total is a lower bound, not an exact figure',
