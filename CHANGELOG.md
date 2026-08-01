@@ -3,6 +3,34 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **Unknown CLI flags are rejected instead of silently absorbed.** `parseArgs` treated any
+  `--token` as a flag: an unrecognized one landed on the parsed args object, no handler read it,
+  and the command ran as though it were never typed. Found while smoke-testing v4.5.2 —
+  `amicus start -m deepseek --prompt "…" --headless` printed no error and exited 0, but `start`
+  has no `--headless`; the run silently took the **interactive** path, ignored `-m`, and left a
+  session running against the default model. A typo (`--modl`), a flag borrowed from another
+  command, or an invented one all behaved the same way, and an unknown flag followed by a
+  positional would swallow it as its value. Unknown flags now get the same treatment amicus
+  already gave an unknown *command*: name it, suggest the nearest real flag, point at `--help`,
+  exit 1. The known-flag set is **derived from the usage text** (the same source `getCommandNames()`
+  uses, for the same anti-rot reason) plus the boolean-flag list, plus a small explicitly-documented
+  allowlist of internal MCP→CLI passthroughs (`--task-id`, `--run-id`, `--council-name`,
+  `--cowork-process`) and undocumented-but-working flags (`--briefing`, `--mode`, `--quiet`).
+  A regression test asserts every `args.<flag>` any CLI handler reads is in the known set, so the
+  check can never silently start rejecting a flag that works.
+
+### Changed
+
+- **README Quick start is now four numbered steps**, with **Configure** promoted from a bold line
+  buried between two callouts to its own step and TOC entry. Installing without configuring is the
+  step people skip, and every council fails at the first model call when they do — so it now says
+  so plainly, notes that one OpenRouter key is enough to start, and ends with `amicus doctor` as
+  the confirmation that setup actually took.
+
 ## [4.5.2] - 2026-07-31
 
 ### Fixed

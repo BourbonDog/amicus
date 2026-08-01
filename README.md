@@ -29,6 +29,10 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 - [The Council](#the-council)
 - [Ways to run the council](#ways-to-run-the-council)
 - [Quick start](#quick-start)
+  - [1. Install](#1-install)
+  - [**2. Configure — don't skip this**](#2-configure--dont-skip-this)
+  - [3. Your first council](#3-your-first-council)
+  - [4. Your first sidecar](#4-your-first-sidecar)
 - [Requirements & Dependencies](#requirements--dependencies)
 - [The parallel window](#the-parallel-window)
 - [Commands](#commands)
@@ -170,7 +174,9 @@ Any flag you also type on that second line overrides just that value — a pack 
 >
 > **Convention used throughout this README:** plugin-channel users: prefix CLI examples with `npx -y amicus@latest` (skip the bare `amicus`/`am`). Individual code blocks are not duplicated per channel — this note is the one translation you need.
 
-**Install** — pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
+### 1. Install
+
+Pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
 
 **As a Claude Code plugin** — the most native path if you use Claude Code:
 
@@ -207,13 +213,25 @@ For the **npm** and **install-script** paths, a postinstall auto-configures ever
 
 > **Skipped the postinstall?** `--ignore-scripts` npm installs never run it, and the plugin channel skips it by design (Claude Code registers the plugin's MCP server and skills itself). Either way, run `amicus init` (plugin channel: `npx -y amicus@latest init`) any time to (re)register on demand — e.g. to also wire up Claude Desktop, which the plugin path doesn't touch. See [`amicus init`](./docs/usage.md#amicus-init).
 
-**Configure:**
+---
+
+### 2. Configure — don't skip this
+
+> ### ⚠️ Installing is not enough. Run this or nothing will work.
+>
+> Amicus has **no API keys of its own** — it drives *your* accounts at OpenRouter, Google,
+> OpenAI, Anthropic, or DeepSeek. Until you add at least one key, every council and every
+> sidecar fails at the first model call. **This is the step people skip.**
 
 ```bash
 amicus setup
 # plugin-only install (no CLI on PATH):
 npx -y amicus@latest setup
 ```
+
+**One key is enough to start.** [OpenRouter](https://openrouter.ai/keys) is the usual choice —
+a single key reaches every model in the catalog, which is what makes a mixed-vendor council
+work without four separate accounts.
 
 This opens a graphical wizard:
 
@@ -226,7 +244,20 @@ This opens a graphical wizard:
 
 > **Headless environments:** if Electron can't open a window, the wizard falls back to a readline-based setup in the terminal.
 
-**Your first council** — no flags to learn. In Claude Code or Cowork, give Claude a document and say:
+**Confirm it took** — this is the fastest way to know you're actually ready:
+
+```bash
+amicus doctor
+```
+
+Green across the board (`0 error(s)`) means keys, catalog, engine, skills, and MCP registration
+are all in place. Anything red, `amicus doctor` tells you exactly what to run next.
+
+---
+
+### 3. Your first council
+
+No flags to learn. In Claude Code or Cowork, give Claude a document and say:
 
 > *council review this*
 
@@ -234,7 +265,9 @@ Plugin-channel users can also type **`/amicus:council`** directly instead of phr
 
 Claude prepares the material, recommends a bench of models, discloses the run shape and cost, and orchestrates the rest. You make the accept/deny calls at the end. (The `second-opinion` skill is what teaches Claude to recognize this — if nothing happens, run `amicus doctor` (or `npx -y amicus@latest doctor`). npm/install-script installs place the skill at `~/.claude/skills/second-opinion/`; plugin installs keep it inside the plugin itself — check `/plugin` in Claude Code to confirm amicus is enabled.)
 
-**Your first sidecar.** The sidecar is the lower-level path — you can invoke it by phrase through Claude too, but the CLI gives you the flags directly:
+### 4. Your first sidecar
+
+The sidecar is the lower-level path — you can invoke it by phrase through Claude too, but the CLI gives you the flags directly:
 
 ```bash
 amicus start --model gemini --prompt "Fact-check the auth approach Claude just proposed"
