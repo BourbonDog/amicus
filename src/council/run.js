@@ -140,7 +140,6 @@ async function runCouncil(options, deps = {}) {
     });
     emitStageTerminal(o.runDir, o.runId, 'stage1', s1Status, o.lenses ? null : `${o.runId}-s1`, o.follow);
     if (signalled || s1.aborted) { return finalize(s1.aborted || signalled); }
-    if (s1.degraded) { degraded.value = true; } // bench shrank → never a "full run"
     if (s1.reviews.length < 2) {
       return finalize(1, {
         code: 'COUNCIL_QUORUM',
