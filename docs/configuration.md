@@ -147,7 +147,11 @@ A start that exceeds this window is treated as **transient** and retried on the 
 
 Raise it if you see `Timeout waiting for server to start` on a slow box — a project directory on a sync-backed volume (OneDrive, Dropbox) with an antivirus scanner attached can push a cold OpenCode/SQLite start well past the default. Values of `0` or below are ignored rather than honored, since a zero start timeout fails every start instantly.
 
-To see how much headroom you actually have, run with debug logging and look for the `OpenCode server started` line — it reports both `startMs` (what the start took) and `timeoutMs` (the ceiling it ran against).
+To see how much headroom you actually have, run with `LOG_LEVEL=debug` and look for the `OpenCode server started` line — it reports both `startMs` (what the start took) and `timeoutMs` (the ceiling it ran against):
+
+```json
+{"level":"debug","msg":"OpenCode server started","startMs":561,"timeoutMs":30000}
+```
 
 ### Shared server
 

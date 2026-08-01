@@ -3,7 +3,7 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
-## [Unreleased]
+## [4.5.2] - 2026-07-31
 
 ### Fixed
 
