@@ -63,6 +63,7 @@ test('remedy is appended only when present', () => {
     channel: 'dead-leg', what: 'a', why: 'b', effect: 'c', remedy: 'retry with --timeout 15',
   }));
   expect(withRemedy).toContain('Try: retry with --timeout 15.');
+  expect(withRemedy).toBe('Notice: a — b. c. Try: retry with --timeout 15.\n');
 });
 
 test('a heal is labelled Recovered, not Notice', () => {
