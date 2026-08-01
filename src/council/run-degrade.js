@@ -26,7 +26,7 @@ function createDegradeSink({ runDir, degraded, write }) {
       record = makeDegrade({
         channel: 'internal',
         what: `a degrade on channel '${input && input.channel}' could not be recorded`,
-        why: err.message,
+        why: (err && err.message) || 'unknown error',
         effect: 'the run still degrades; the original detail is lost',
       });
     }

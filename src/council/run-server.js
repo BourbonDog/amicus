@@ -146,7 +146,11 @@ async function resolveRunServerModels(o, deps = {}) {
  * Verified, not assumed — `tests/council/run-state.test.js` pins it.
  *
  * @param {object} o the council run's resolved options (carries `degrade`, the
- *   council sink, for the `sharedServerUnavailable` announcement below)
+ *   council sink, for the `sharedServerUnavailable` announcement below). `o.degrade`
+ *   is expected to be set on that path — run.js threads it — but the call below is
+ *   still guarded rather than assumed: a throw from this module would escape
+ *   runCouncil past its "never rejects for run errors" contract (see this file's
+ *   own docblock), which is worse than a missed note.
  * @param {object} patch a single top-level run.json key
  * @param {string} what the field name, for the failure log
  */
@@ -160,14 +164,16 @@ function recordServerFate(o, patch, what) {
     const unavailable = patch.sharedServerUnavailable;
     const reason = typeof unavailable === 'string' ? unavailable
       : (unavailable && unavailable.error) || 'unknown error';
-    o.degrade.note({
-      channel: 'shared-server-unavailable',
-      kind: 'degrade',
-      what: 'could not start a shared OpenCode server',
-      why: reason,
-      effect: 'each wave will start its own, which is the configuration that races; the run '
-        + 'exits degraded (2)',
-    });
+    if (o.degrade) {
+      o.degrade.note({
+        channel: 'shared-server-unavailable',
+        kind: 'degrade',
+        what: 'could not start a shared OpenCode server',
+        why: reason,
+        effect: 'each wave will start its own, which is the configuration that races; the run '
+          + 'exits degraded (2)',
+      });
+    }
   }
 }
 

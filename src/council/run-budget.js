@@ -38,9 +38,10 @@ const { sumWaveUsage } = require('../utils/pricing');
  * @param {number|null|undefined} opts.maxCost the `--max-cost` ceiling, if any
  * @param {string} [opts.runDir] run directory; when given, budget refusals are
  *   checkpointed into run.json so the record outlives the stderr notice
- * @param {{note: Function}} [opts.degrade] the council degrade sink; a budget
+ * @param {{note: Function}} opts.degrade the council degrade sink; a budget
  *   refusal announces through it so the run can never exit 0 with a silently
- *   shrunken bench
+ *   shrunken bench. Required, not optional — noteBudgetRefusal dereferences it
+ *   unconditionally.
  * @param {(s:string)=>void} [opts.write] stderr writer seam (defaults to process.stderr)
  * @returns {{spendState:Function, spent:Function, overBudget:Function,
  *   remainingBudget:Function, noticeUnknownSpend:Function, usageBlock:Function,
@@ -154,7 +155,7 @@ function createBudget({ allLegs, maxCost, runDir, degrade, write }) {
         + 'LAUNCH and are missing from this council',
       why: `the $${maxCost} --max-cost ceiling refused it${message ? `: ${message}` : ''}`,
       effect: 'The run continues with the bench that did launch and will exit degraded (2)',
-      remedy: 'Raise --max-cost, or pass --no-cost-gate, to seat them.',
+      remedy: 'Raise --max-cost, or pass --no-cost-gate, to seat them',
     });
     if (runDir) {
       // Never let bookkeeping sink a run that is otherwise fine.
