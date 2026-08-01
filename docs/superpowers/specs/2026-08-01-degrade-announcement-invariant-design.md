@@ -74,6 +74,25 @@ The full north star spans three subsystems. This spec is the first two, merged.
 | Spec 2 | Install transparency & bounded self-heal — `AMICUS_SKIP_POSTINSTALL` skipping Electron provisioning, the ~165 MB engine cold-download on first MCP call | queued |
 | Follow-on | Council Workspace renders `degrades[]` (data lands in `run.json` here; the GUI render is additive) | queued |
 
+### Open issues in scope
+
+All six open issues at the time of writing map onto the north star. Four are the invariant
+itself, not neighbours of it.
+
+| Issue | Class | Disposition |
+|---|---|---|
+| **#85** dead leg announced on no surface | silent degrade | **core** — the `dead-leg` channel |
+| **#84** `seatLoss` cannot report a lost bench seat | silent degrade | **core** — closed by D3 (derived `seatLoss`) |
+| **#81** Workspace auto-open is MCP-only; CLI never opens and gives "no notice that a GUI was available and skipped" | **silent skip** | **core** — an unannounced degrade in all but name. The *transport inconsistency* is a product decision; the *silence* is this spec's. |
+| **#82** `watch --ui` on a `--out-dir` run fails "pointer missing" | **diagnosis names the symptom, not the cause** — the pointer lives under the launch cwd, not the out-dir | **core** — same class as doctor's canned hint. Fix the message to name the cause and the working invocation; whether to also write a second pointer is a separate call. |
+| **#83** `runStats` omits every Stage-2 judge leg (~38% of run cost per-leg unattributable) | artifact under-reports | **adjacent** — same assembly path D3 touches. Take it in the same pass to avoid two edits to one function. |
+| **#80** `watch --help` omits `--ui` | discoverability | **in scope for v4.6**, but it belongs to the "simple and easy" half, not the invariant. Trivial; bundle it. |
+
+Note #81 and #82 are both about the **Workspace**, and D6 defers the Workspace *renderer*.
+That is not a contradiction: D6 defers rendering `degrades[]` in the GUI. #81 and #82 are about
+the window opening at all and about a CLI error message — neither touches
+`workspace-panels.js`.
+
 ---
 
 ## 3. Decisions taken
