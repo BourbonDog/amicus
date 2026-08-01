@@ -3,6 +3,32 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **`/amicus:council` lost all of its frontmatter at load time.** `commands/council.md`'s
+  `argument-hint` value began with `[material, path, or URL] [...]`, which YAML reads as a flow
+  sequence followed by a second, unexpected `[` — the whole block failed to parse, so the command
+  loaded with empty metadata: no description, no argument hint, and `disable-model-invocation:
+  true` silently dropped (the command was model-invocable, the opposite of the intent). The value
+  is now single-quoted. Present since `3900429` (Phase 9a, 2026-07-02); `claude plugin validate
+  .claude-plugin/plugin.json` failed on it, non-strict, that entire time.
+- **The preflight that should have caught it was validating the wrong file.** With `.claude-plugin/`
+  holding both manifests, `claude plugin validate .` resolves the *marketplace* manifest and
+  reports `✔ Validation passed` without ever inspecting the plugin. `docs/DISTRIBUTION.md` §2 now
+  documents the path trap, prescribes `claude plugin validate .claude-plugin/plugin.json`, and
+  records why `--strict` is expected to fail here (the deliberately retained root-`CLAUDE.md`
+  warning).
+
+### Changed
+
+- **`tests/plugin-commands.test.js` now YAML-parses frontmatter** for `commands/council.md` and
+  both skills, asserting `description`, `argument-hint` (as a *string*), and
+  `disable-model-invocation: true` survive parsing. The previous
+  `expect(md).toContain('argument-hint:')` substring checks passed happily against a file that
+  could not parse. `yaml` added as a devDependency for this.
+
 ## [4.5.4] - 2026-08-01
 
 ### Fixed

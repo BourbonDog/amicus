@@ -1,6 +1,6 @@
 ---
 description: Run a structured multi-model LLM council review of the given material — wraps the second-opinion skill (independent reviews → anonymous cross-review → non-Claude chair verdict → accept/deny decisions).
-argument-hint: [material, path, or URL] [analysis request + criteria] [optional elements — e.g. "with a critic seat", "debate mode", "expert lenses", "chair verdict scale"]
+argument-hint: '[material, path, or URL] [analysis request + criteria] [optional elements — e.g. "with a critic seat", "debate mode", "expert lenses", "chair verdict scale"]'
 disable-model-invocation: true
 ---
 
