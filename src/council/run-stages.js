@@ -107,25 +107,6 @@ async function launchStage1(ctx) {
   return { aborted, legs, deadWaves };
 }
 
-/**
- * Announce Stage-1 sub-waves that never produced a leg.
- *
- * POLICY (the standing "never fail closed on availability" ruling, applied the
- * same way run-budget.js applies it to cost): the run CONTINUES with the bench
- * that did launch. What it must never do is lose the seats SILENTLY — so every
- * dead wave is announced on stderr, kept on run.json's stage entry (run.js) and
- * degrades the run's exit code to 2.
- * @param {Array<{waveId: string, models: string[], reason: string}>} deadWaves
- * @param {(s: string) => void} [write] stderr seam
- */
-function reportDeadStage1Waves(deadWaves, write = (s) => process.stderr.write(s)) {
-  for (const d of deadWaves) {
-    write(`Notice: Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs `
-      + `— ${d.reason}. Those seats are NOT in this council. The run continues with the bench that `
-      + 'did launch and will exit degraded (2).\n');
-  }
-}
-
 /** Role of a seat by its input alias. */
 function roleFor(o, alias) {
   if (o.lenses) {
@@ -151,7 +132,16 @@ async function runStage1(ctx) {
   const { o } = ctx;
   const { aborted, legs, deadWaves } = await launchStage1(ctx);
   if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false }; }
-  reportDeadStage1Waves(deadWaves);
+
+  for (const d of deadWaves) {
+    ctx.degrade.note({
+      channel: 'dead-wave',
+      what: `Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs`,
+      why: d.reason,
+      effect: 'Those seats are NOT in this council. The run continues with the bench that did '
+        + 'launch and will exit degraded (2)',
+    });
+  }
 
   const materialized = materializeReviews(o.runDir, legs);
   const alive = new Set(materialized.map(m => m.leg));
@@ -273,4 +263,4 @@ async function runStage1(ctx) {
 // module that produces the exit codes — so the child no longer imports from its
 // parent (v4.4.1 review F5). isAbortExit is still re-exported for run-chair.js
 // and run-debate.js, which have always taken it from here.
-module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor, reportDeadStage1Waves };
+module.exports = { runStage1, runStage2, isAbortExit, slug, roleFor };

@@ -64,7 +64,7 @@ async function runCouncil(options, deps = {}) {
   const degraded = { value: false };
   const degrade = require('./run-degrade').createDegradeSink({ runDir: o.runDir, degraded });
   const { addWave, overBudget, remainingBudget, noticeUnknownSpend, usageBlock, reserveBudget,
-    noteBudgetRefusal, inexactUnderCeiling } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
+    noteBudgetRefusal, inexactUnderCeiling } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degrade });
   // v4.4.1 Task 0.5: ONE OpenCode server for the whole run — ./run-server carries
   // the why and the evidence that `_scratch` judge isolation survives it. Acquired
   // below (a getter, because the launchers are built first); null = as before.
@@ -94,13 +94,13 @@ async function runCouncil(options, deps = {}) {
     const claimed = sharedServer;
     sharedServer = null;
     await require('./run-server').releaseRunServer(claimed);
-    const code = resolveTerminalExit({ signalled, exitCode, degraded, inexactUnderCeiling });
+    const code = resolveTerminalExit({ signalled, exitCode, degraded, degrade, inexactUnderCeiling });
     const run = await writeRunTerminal({ o, code, error, noticeUnknownSpend, usageBlock });
     return { exitCode: code, run };
   };
 
   // Injected launchers bring their own transport. Never throws — degrades to null.
-  if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer(o, deps); }
+  if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer({ ...o, degrade }, deps); }
 
   const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };
 

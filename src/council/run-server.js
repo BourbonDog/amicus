@@ -145,7 +145,8 @@ async function resolveRunServerModels(o, deps = {}) {
  * cannot clobber `budgetRefusals[]` or anything else already on the document.
  * Verified, not assumed — `tests/council/run-state.test.js` pins it.
  *
- * @param {object} o the council run's resolved options
+ * @param {object} o the council run's resolved options (carries `degrade`, the
+ *   council sink, for the `sharedServerUnavailable` announcement below)
  * @param {object} patch a single top-level run.json key
  * @param {string} what the field name, for the failure log
  */
@@ -154,6 +155,19 @@ function recordServerFate(o, patch, what) {
   try { require('./run-state').checkpoint(o.runDir, patch); }
   catch (writeErr) {
     logger.warn(`Could not record ${what} on run.json`, { runId: o.runId, error: writeErr.message });
+  }
+  if (what === 'sharedServerUnavailable') {
+    const unavailable = patch.sharedServerUnavailable;
+    const reason = typeof unavailable === 'string' ? unavailable
+      : (unavailable && unavailable.error) || 'unknown error';
+    o.degrade.note({
+      channel: 'shared-server-unavailable',
+      kind: 'degrade',
+      what: 'could not start a shared OpenCode server',
+      why: reason,
+      effect: 'each wave will start its own, which is the configuration that races; the run '
+        + 'exits degraded (2)',
+    });
   }
 }
 
@@ -222,14 +236,11 @@ async function acquireRunServer(o, deps = {}) {
     // DURABLE: it lands on the run's own record, next to `budgetRefusals[]`,
     // for the same reason — a silent partial is the failure mode this whole
     // release exists to remove.
-    const degrade = { error: err.message, at: new Date().toISOString() };
-    recordServerFate(o, { sharedServerUnavailable: degrade }, 'sharedServerUnavailable');
+    const serverFailure = { error: err.message, at: new Date().toISOString() };
+    recordServerFate(o, { sharedServerUnavailable: serverFailure }, 'sharedServerUnavailable');
     logger.warn('Shared OpenCode server unavailable — falling back to one server per wave', {
       runId: o.runId, error: err.message,
     });
-    process.stderr.write(
-      `Notice: could not start a shared OpenCode server (${err.message}); each wave will start `
-      + 'its own, which is the configuration that races. Expect degraded results.\n');
     return null;
   }
 }
@@ -245,4 +256,4 @@ async function releaseRunServer(shared) {
   try { await shared.server.close(); } catch { /* best-effort: the run is over */ }
 }
 
-module.exports = { acquireRunServer, releaseRunServer, resolveRunServerModels };
+module.exports = { acquireRunServer, releaseRunServer, resolveRunServerModels, recordServerFate };

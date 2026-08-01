@@ -59,12 +59,19 @@ function statusForExit(code) {
  * a run that published a total it knows is a floor has not earned that.
  *
  * @param {{signalled: number|null, exitCode: number, degraded?: {value: boolean},
- *   inexactUnderCeiling?: () => boolean}} args
+ *   degrade?: {note: Function}, inexactUnderCeiling?: () => boolean}} args
  * @returns {number}
  */
-function resolveTerminalExit({ signalled, exitCode, degraded, inexactUnderCeiling }) {
+function resolveTerminalExit({ signalled, exitCode, degraded, degrade, inexactUnderCeiling }) {
   if (signalled) { return signalled; }
-  if (degraded && inexactUnderCeiling && inexactUnderCeiling()) { degraded.value = true; }
+  if (degrade && inexactUnderCeiling && inexactUnderCeiling()) {
+    degrade.note({
+      channel: 'inexact-under-ceiling',
+      what: 'the run total is a lower bound, not an exact figure',
+      why: 'one or more legs reported no usage, so their cost is unknown',
+      effect: '--max-cost bounded only KNOWN spend; the run exits degraded (2)',
+    });
+  }
   return (exitCode === 0 && degraded && degraded.value) ? 2 : exitCode;
 }
 

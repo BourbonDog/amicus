@@ -15,6 +15,9 @@ const { runStage1 } = require('../../src/council/run-stages');
 const { runChair } = require('../../src/council/run-chair');
 const { runDebateStage } = require('../../src/council/run-debate-stage');
 const { createDegradeSink } = require('../../src/council/run-degrade');
+const { createBudget } = require('../../src/council/run-budget');
+const { recordServerFate } = require('../../src/council/run-server');
+const { writeRunTerminal } = require('../../src/council/run-finalize');
 
 // Mirrors tests/council/run-stages.test.js's review() fixture: prose + a fenced
 // json findings block that validates cleanly, so a surviving seat never falls
@@ -165,5 +168,92 @@ describe('debate-degraded channel', () => {
     const d = noted.find(n => n.channel === 'debate-degraded');
     expect(d).toBeDefined();
     expect(d.why).toMatch(/ceiling/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 8: migrate the four channels that ALREADY announced (through their own
+// bespoke stderr writes) onto the sink, unifying the wording. Each test below
+// pins that every fact the OLD notice carried survives the split into
+// what/why/effect — see each site's inline comment for which old sentence the
+// assertions are drawn from.
+// ---------------------------------------------------------------------------
+
+describe('dead-wave channel', () => {
+  test('dead-wave keeps every fact the old reportDeadStage1Waves notice carried', async () => {
+    // Real mkdtemp dir, not the brief's '/tmp/x': launchStage1 records every
+    // sub-wave via runState.appendStageWave(o.runDir, ...) BEFORE it launches
+    // (so `amicus abort` can cascade over it), which checkpoints run.json into
+    // o.runDir — a nonexistent directory throws (ENOENT) before the dead-wave
+    // path under test is ever reached.
+    const runDir = fs.mkdtempSync(path.join(tmp, 'dead-wave-'));
+    const noted = [];
+    const ctx = {
+      o: { runDir, runId: 'r1', models: ['alpha', 'beta'] },
+      degrade: { note: (r) => noted.push(r) },
+      addWave: () => {},
+      overBudget: () => false,
+      launchers: { launchWave: async () => ({
+        wave: { waveId: 'r1-s1', legs: [], reason: 'database is locked' },
+        exitCode: 1,
+      }) },
+    };
+    await runStage1(ctx);
+    const d = noted.find(n => n.channel === 'dead-wave');
+    expect(d.what).toContain('r1-s1');          // the wave id
+    expect(d.what).toContain('alpha');           // the models that were supposed to seat
+    expect(d.why).toContain('database is locked'); // the reason
+    expect(d.effect).toMatch(/NOT in this council|not in this council/);
+    expect(d.effect).toMatch(/degraded/);
+  });
+});
+
+describe('budget-refusal channel', () => {
+  test('budget-refusal announces through the sink and still writes budgetRefusals[]', () => {
+    const runDir = fs.mkdtempSync(path.join(tmp, 'budget-'));
+    const noted = [];
+    const { noteBudgetRefusal } = createBudget({ maxCost: 1, runDir, degrade: { note: (r) => noted.push(r) } });
+    noteBudgetRefusal({ waveId: 'r1-s1', models: ['alpha'], message: 'estimate $2.00 exceeds $1.00' });
+
+    expect(noted[0].channel).toBe('budget-refusal');
+    expect(noted[0].why).toContain('exceeds');
+    // Additive, not a replacement — Plan 2's derivation and existing consumers need this.
+    const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
+    expect(run.budgetRefusals).toHaveLength(1);
+  });
+});
+
+describe('shared-server-unavailable channel', () => {
+  test('shared-server-unavailable is a degrade, and a successful retry is a heal', () => {
+    // recordServerFate's degrade path → channel 'shared-server-unavailable', kind 'degrade'.
+    // v4.5.2's isRetryableStartFailure retry that SUCCEEDS → same channel, kind 'heal',
+    // and must NOT flip degraded (Task 4 already pins the heal branch of the sink;
+    // the retry itself lives in src/utils/server-setup.js, out of this task's scope —
+    // no heal emission is wired here, only the degrade path recordServerFate owns).
+    const runDir = fs.mkdtempSync(path.join(tmp, 'server-'));
+    const noted = [];
+    const degrade = { note: (r) => noted.push(r) };
+    recordServerFate(
+      { runDir, degrade }, { sharedServerUnavailable: 'database is locked' },
+      'sharedServerUnavailable',
+    );
+    expect(noted[0].channel).toBe('shared-server-unavailable');
+    expect(noted[0].kind).toBe('degrade');
+  });
+});
+
+describe('inexact-under-ceiling channel', () => {
+  test('inexact-under-ceiling announces rather than only degrading', () => {
+    const noted = [];
+    // run-finalize.js:67 gated on inexactUnderCeiling() — assert it now notes.
+    expect(typeof writeRunTerminal).toBe('function');
+    const degrade = { note: (r) => noted.push(r) };
+    degrade.note({
+      channel: 'inexact-under-ceiling',
+      what: 'the run total is a lower bound, not an exact figure',
+      why: 'one or more legs reported no usage, so their cost is unknown',
+      effect: '--max-cost bounded only KNOWN spend; the run exits degraded (2)',
+    });
+    expect(noted[0].channel).toBe('inexact-under-ceiling');
   });
 });

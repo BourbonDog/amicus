@@ -12,6 +12,7 @@
  */
 
 const { statusForExit, resolveTerminalExit, SIGNAL_EXIT } = require('../../src/council/run-finalize');
+const { createDegradeSink } = require('../../src/council/run-degrade');
 
 describe('statusForExit (spec §4 degradation table)', () => {
   test('maps every code the driver can produce', () => {
@@ -48,7 +49,10 @@ describe('resolveTerminalExit', () => {
    */
   test('an inexact total under a ceiling degrades 0 → 2 through the SAME flag', () => {
     const degraded = deg(false);
-    expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded,
+    // v4.6 Task 8: the flip now happens through a degrade.note() call, not a
+    // bare assignment — wire the real sink so degraded.value still flips.
+    const degrade = createDegradeSink({ degraded, write: () => {} });
+    expect(resolveTerminalExit({ signalled: null, exitCode: 0, degraded, degrade,
       inexactUnderCeiling: () => true })).toBe(2);
     expect(degraded.value).toBe(true);
   });
