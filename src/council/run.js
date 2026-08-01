@@ -62,6 +62,7 @@ async function runCouncil(options, deps = {}) {
   // across Stage-1's CONCURRENT launches, why addWave must release-and-account atomically, and
   // why a refused wave sets `degraded` (a shrunken bench never exits 0) rather than aborting.
   const degraded = { value: false };
+  const degrade = require('./run-degrade').createDegradeSink({ runDir: o.runDir, degraded });
   const { addWave, overBudget, remainingBudget, noticeUnknownSpend, usageBlock, reserveBudget,
     noteBudgetRefusal, inexactUnderCeiling } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
   // v4.4.1 Task 0.5: ONE OpenCode server for the whole run — ./run-server carries
@@ -101,7 +102,7 @@ async function runCouncil(options, deps = {}) {
   // Injected launchers bring their own transport. Never throws — degrades to null.
   if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer(o, deps); }
 
-  const ctx = { o, launchers, addWave, overBudget, scratchDir: path.join(o.runDir, '_scratch') };
+  const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };
 
   try {
     // v4.1 §4.4: Claude-in-council is a FILE input — validated after initRun (so the

@@ -157,6 +157,16 @@ async function runStage1(ctx) {
   const alive = new Set(materialized.map(m => m.leg));
   const deadLegs = legs.filter(l => !alive.has(l));
 
+  for (const leg of deadLegs) {
+    ctx.degrade.note({
+      channel: 'dead-leg',
+      what: `seat ${leg.modelInput || leg.model} did not review`,
+      why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output`,
+      effect: `${materialized.length} of ${legs.length} seats reviewed; `
+        + 'the run continues with the bench that did and exits degraded (2)',
+    });
+  }
+
   const reviews = [];
   let repairSeq = 0;
   for (const m of materialized) {
