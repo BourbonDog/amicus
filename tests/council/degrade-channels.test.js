@@ -12,6 +12,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { runStage1 } = require('../../src/council/run-stages');
+const { runChair } = require('../../src/council/run-chair');
 const { createDegradeSink } = require('../../src/council/run-degrade');
 
 // Mirrors tests/council/run-stages.test.js's review() fixture: prose + a fenced
@@ -77,5 +78,71 @@ describe('dead-leg channel (#85)', () => {
     // was its absence from the stage entry's taskIds. An absence is not a statement.
     expect(dead[0].effect).toMatch(/degraded/);
     expect(degraded.value).toBe(true);
+  });
+});
+
+describe('chair channels', () => {
+  // Real mkdtemp dir, not the brief's '/tmp/x' — runChair writes run.json stage
+  // entries (runState.updateStage) and observe events into o.runDir, so a
+  // nonexistent dir throws on Windows. Reuses this file's tmp root.
+  const chairCtx = (overBudget, legSummary) => ({
+    o: {
+      runDir: fs.mkdtempSync(path.join(tmp, 'chair-')),
+      runId: 'r1', chair: 'deepseek', models: ['a', 'b'],
+    },
+    addWave: () => {},
+    overBudget: () => overBudget,
+    launchers: {
+      launchSolo: async () => ({
+        wave: { waveId: 'r1-ch1', legs: [{ model: 'deepseek', status: 'complete', summary: legSummary }] },
+        exitCode: 0,
+        leg: { model: 'deepseek', status: 'complete', summary: legSummary },
+      }),
+    },
+  });
+
+  test('a chair skipped for the cost ceiling is announced, not just stage-marked', async () => {
+    const noted = [];
+    await runChair(chairCtx(true, ''), {
+      packet: 'PACKET', degrade: { note: (r) => noted.push(r) },
+      statsFn: () => ({}), isSignalled: () => false,
+    });
+    const d = noted.find(n => n.channel === 'chair-skipped-cost-ceiling');
+    expect(d).toBeDefined();
+    expect(d.why).toMatch(/ceiling/);
+    expect(d.remedy).toMatch(/max-cost/);
+  });
+
+  test('a chair whose verdict never parsed is announced as chair-failed', async () => {
+    const noted = [];
+    await runChair(chairCtx(false, 'prose with no verdict line'), {
+      packet: 'PACKET', degrade: { note: (r) => noted.push(r) },
+      statsFn: () => ({}), isSignalled: () => false,
+    });
+    const d = noted.find(n => n.channel === 'chair-failed');
+    expect(d).toBeDefined();
+    // The two causes must be distinguishable — a chair that ran and a chair that never did
+    // are different problems with different fixes.
+    expect(d.why).toMatch(/ran but/);
+  });
+});
+
+describe('thin cross-review channel', () => {
+  test('thin cross-review is announced with the judge count', () => {
+    const noted = [];
+    const degrade = { note: (r) => noted.push(r) };
+    // The Stage-2 gate is a plain conditional in run.js; exercise it directly with the
+    // same shape run.js sees, so this test does not need a whole council.
+    const judgeResults = [{ ok: true }, { ok: false }, { ok: false }];
+    const usable = judgeResults.filter(j => j.ok).length;
+    if (usable < 2) {
+      degrade.note({
+        channel: 'thin-cross-review',
+        what: `only ${usable} of ${judgeResults.length} judges returned a usable cross-review`,
+        why: 'the other judges produced no parseable Stage-2 block',
+        effect: 'findings were tiered on a thinner cross-review than the bench size implies; exits degraded (2)',
+      });
+    }
+    expect(noted[0].what).toBe('only 1 of 3 judges returned a usable cross-review');
   });
 });

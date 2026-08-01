@@ -176,7 +176,15 @@ async function runCouncil(options, deps = {}) {
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
     emitStageTerminal(o.runDir, o.runId, 'stage2', 'complete', `${o.runId}-s2`, o.follow);
     if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
-    if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
+    const usableJudges = s2.judgeResults.filter(j => j.ok).length;
+    if (usableJudges < 2) {
+      degrade.note({
+        channel: 'thin-cross-review',
+        what: `only ${usableJudges} of ${s2.judgeResults.length} judges returned a usable cross-review`,
+        why: 'the other judges produced no parseable Stage-2 block',
+        effect: 'findings were tiered on a thinner cross-review than the bench size implies; exits degraded (2)',
+      });
+    }
 
     // Merge Stage-2 judging conformance into each seat's row (worst wins).
     const byJudge = new Map(s2.judgeResults.map(j => [j.judge, j]));
@@ -207,7 +215,7 @@ async function runCouncil(options, deps = {}) {
     });
 
     const chairRes = await runChair(ctx, {
-      packet, degraded, statsFn, isSignalled: () => signalled,
+      packet, degrade, statsFn, isSignalled: () => signalled,
     });
     if (chairRes.aborted !== null) { return finalize(chairRes.aborted); }
     const { chairLeg, actualChair, chairText, chairConformance, overallVerdict } = chairRes;
