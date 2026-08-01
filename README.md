@@ -169,26 +169,40 @@ Any flag you also type on that second line overrides just that value — a pack 
 
 > **Two install channels — read this first.** Amicus ships two ways, and CLI commands look different in each:
 >
-> - **npm global** (`npm install -g amicus` or the install script) puts `amicus`/`am` on your `PATH`. Every `amicus <command>` example in this README works as written.
+> - **npm global** (`npm install -g amicus` or the install script) — **the recommended path.** Puts `amicus`/`am` on your `PATH`, so every `amicus <command>` example in this README works as written, and provisions the Electron GUI that the parallel window runs in.
 > - **Claude Code plugin** (`/plugin install amicus@bourbondog-amicus`) does **not** put a CLI on your `PATH`. CLI calls go through `npx -y amicus@latest <command>` instead — e.g. `amicus doctor` becomes `npx -y amicus@latest doctor`. In exchange, the plugin channel gets two things npm does **not**: the slash commands `/amicus:council` and `/amicus:sidecar`. **These are plugin-channel-ONLY — npm users don't get them** and drive the same skills by saying "council review this" / talking to Claude instead.
+>
+> See the [comparison table below](#1-install) for the full tradeoff — the short version is that npm is what you want for the interactive window, and the two can be installed side by side.
 >
 > **Convention used throughout this README:** plugin-channel users: prefix CLI examples with `npx -y amicus@latest` (skip the bare `amicus`/`am`). Individual code blocks are not duplicated per channel — this note is the one translation you need.
 
 ### 1. Install
 
-Pick whichever fits. Every path delivers the MCP server and both skills; the `amicus`/`am` CLI lands on your PATH with the **npm and install-script paths** (the plugin path runs the CLI on demand via `npx -y amicus@latest <command>`):
+Every path delivers the MCP server and both skills. They differ in what else you get:
 
-**As a Claude Code plugin** — the most native path if you use Claude Code:
+| | **npm / install script** | **Claude Code plugin** |
+|---|---|---|
+| `amicus` / `am` on your `PATH` | ✅ | ❌ — every call is `npx -y amicus@latest <command>` |
+| **Interactive Electron window** (`amicus start`, `watch --ui`) | ✅ provisioned at install | ⚠️ best-effort — see below |
+| Self-heal when the GUI breaks (`amicus doctor --fix`) | ✅ | ❌ no CLI to run it with |
+| MCP server + both skills | ✅ | ✅ |
+| Slash commands `/amicus:council`, `/amicus:sidecar` | ❌ | ✅ |
 
-```text
-/plugin marketplace add BourbonDog/amicus
-/plugin install amicus@bourbondog-amicus
-/reload-plugins
+---
+
+#### With npm — recommended
+
+The canonical path, and the one that gets you the full interactive experience (needs [Node.js](https://nodejs.org) ≥ 18):
+
+```bash
+npm install -g amicus
 ```
 
-Claude Code registers the MCP server and both skills for you — nothing to configure. It also gets you two slash commands the npm/install-script paths don't: **`/amicus:council`** (run a full council review) and **`/amicus:sidecar`** (fork a conversation to another model). (The plugin does not put `amicus` on your PATH — CLI calls go through `npx -y amicus@latest <command>`; the standalone Electron window is npm-only; and the first council/sidecar call downloads the OpenCode engine.)
+This is the path to pick unless you specifically want the plugin's slash commands. It puts `amicus`/`am` on your `PATH` — which is what the **parallel window** is driven by — and its postinstall provisions the Electron GUI, with `amicus doctor --fix` to repair it in place if anything goes wrong later.
 
-**With the install script** — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
+#### With the install script
+
+Same result as npm, one command — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
 
 ```bash
 # macOS / Linux
@@ -200,11 +214,25 @@ curl -fsSL https://raw.githubusercontent.com/BourbonDog/amicus/main/install.sh |
 irm https://raw.githubusercontent.com/BourbonDog/amicus/main/install.ps1 | iex
 ```
 
-**With npm** — the canonical path (needs [Node.js](https://nodejs.org) ≥ 18):
+#### As a Claude Code plugin
 
-```bash
-npm install -g amicus
+The most native *registration* path if you use Claude Code, and the only one with slash commands:
+
+```text
+/plugin marketplace add BourbonDog/amicus
+/plugin install amicus@bourbondog-amicus
+/reload-plugins
 ```
+
+Claude Code registers the MCP server and both skills for you — nothing to configure. You also get **`/amicus:council`** (run a full council review) and **`/amicus:sidecar`** (fork a conversation to another model), which the npm paths don't have.
+
+> **Know the tradeoff before you pick this.** The plugin does not put `amicus` on your `PATH`, so every CLI call goes through `npx -y amicus@latest <command>` — including the ones that open the interactive window. It also skips amicus's postinstall, which is what provisions and self-heals the Electron GUI. The window still works when Electron lands in the npx cache, and the Council Workspace still auto-opens on a council run from Claude Code — but nothing repairs it when Electron *doesn't* land, and each new release re-resolves into a fresh cache directory. **If you want the parallel window as a daily driver, install with npm.**
+>
+> (Also: the first council/sidecar call downloads the OpenCode engine.)
+
+**Running both is supported** — and is what you want if you like the slash commands *and* the window. Install with npm for the CLI and the GUI, then add the plugin for `/amicus:council`. Your config, API keys, and session history live outside either install and are shared automatically.
+
+> One thing to know if you do: the MCP server is a **single registration named `amicus`**, so it resolves to one install — whichever registered most recently, which is usually the plugin's `npx -y amicus@latest mcp`. That's harmless (both serve the same tools), but it means the copy your CLI runs and the copy Claude's MCP tools run can differ. `amicus doctor` reports the MCP launch path explicitly and `--fix` repairs that copy in place, so if a GUI or engine problem ever shows up in Claude but not in your terminal, that's the first thing to check.
 
 For the **npm** and **install-script** paths, a postinstall auto-configures everything — no manual registration:
 
@@ -413,7 +441,7 @@ $ amicus status demo123 --json
   "taskId": "demo123",
   "status": "complete",
   "elapsed": "5m 0s",
-  "version": "4.5.3",
+  "version": "4.5.4",
   "model": "google/gemini-2.5-flash",
   "phase": "terminal"
 }
