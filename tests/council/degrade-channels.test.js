@@ -111,6 +111,11 @@ describe('chair channels', () => {
     expect(d).toBeDefined();
     expect(d.why).toMatch(/ceiling/);
     expect(d.remedy).toMatch(/max-cost/);
+    // Regression pin: a cost-skipped chair announces ONCE. Without the exclusivity
+    // guard, the unconditional end-of-function catch-all also fires 'chair-failed'
+    // (chairLeg is still null after a skip) — a false "no chair leg completed,
+    // including after the fallback chain" for an event where no chain ever ran.
+    expect(noted).toHaveLength(1);
   });
 
   test('a chair whose verdict never parsed is announced as chair-failed', async () => {

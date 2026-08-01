@@ -81,10 +81,12 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
 
   let chairLeg = null;
   let actualChair = null;
+  let skippedForCost = false;
   if (overBudget()) {
     // Ceiling hit after the tally is computable: skip the chair, write the
     // verdict with overallVerdict null, exit 2 (spec §4 degradation table).
     // Never abort in-flight legs for cost — this only stops NEW launches.
+    skippedForCost = true;
     degrade.note({
       channel: 'chair-skipped-cost-ceiling',
       what: 'the chair did not run',
@@ -152,7 +154,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
   // A completed chair whose verdict never parsed is 'unstructured' even when
   // the repair was skipped (e.g. the chair leg itself tripped --max-cost).
   if (chairText && !overallVerdict) { chairConformance = 'unstructured'; }
-  if (!chairLeg || !overallVerdict) {
+  if (!skippedForCost && (!chairLeg || !overallVerdict)) {
     degrade.note({
       channel: 'chair-failed',
       what: 'the council has no chair synthesis',
