@@ -586,6 +586,39 @@ evidence needed to act on them without re-deriving it. None blocks the v4.4.1 ta
     which is exactly the path that leaves a seat showing as perpetually live in the Workspace. Fixing
     FR-1 makes any occurrence of FR-3 *visible* instead of silent, which is the cheaper order to do
     them in.
+  - **v4.5.2 note:** the retry classifier this entry wants to reuse is now `isRetryableStartFailure`
+    (lock-class OR timeout-class) in `src/utils/server-setup.js`. FR-3 is unchanged in substance —
+    it is about `createSession`, not server start — but any retry written for it should reuse that
+    predicate rather than adding a third classifier.
+
+## v4.5.2 deferred — field-report items NOT taken (2026-07-31)
+
+**Provenance.** v4.5.2 fixed three defects from a v4.5.1 field report (server-start timeout untunable
+and unretried; `extract-zip` phantom dependency killing the Electron self-heal in every published
+install; a lost critic invisible outside `run.json`). The reporter proposed several further changes
+that are **design decisions, not defects**. The report itself notes that fixing the timeout "largely
+makes this interaction disappear," so none of these are urgent — but each is a real call to make.
+
+- [ ] **SL-1 · Stagger the Stage-1 launches when the shared server is unavailable** — [S]
+  `src/council/run-stages.js:81` fires the bench wave and the critic solo under one `Promise.all`,
+  ~20ms apart. Under the per-wave fallback both race the same OpenCode SQLite start. A few hundred
+  ms of jitter costs nothing against a multi-minute run. ⚠️ Only reachable when shared-server
+  acquisition already failed — with v4.5.2's retry that is now rare, so **measure before building**.
+- [ ] **SL-2 · Retry a dead wave once after the survivors release their servers** — [M]
+  Today a wave that dies at start is recorded permanently dead. The critic is fail-soft, so a
+  serialized second attempt is nearly free. Interacts with the budget reservation path — a retried
+  wave must not double-reserve.
+- [ ] **SL-3 · Decide whether an explicit `--critic` may degrade silently at all** — [S, decision]
+  A user who typed `--critic` asked for adversarial review; returning a verdict without it inverts
+  the feature. v4.5.2 made the loss *visible* (`seatLoss` on verdict.json) but kept the standing
+  never-fail-closed ruling. The open question is whether an explicitly-requested critic deserves an
+  exception, or a flag. **Christian's call — do not implement unilaterally.**
+- [ ] **SL-4 · `run-<runId>.json` instead of overwriting `run.json`** — [M]
+  Two runs sharing an `--out` directory silently destroy the first one's run record, including its
+  `sharedServerUnavailable` degrade entry — only the per-wave manifests survive. Given how much of
+  `src/council/run-server.js`'s design rationale rests on making a degrade *durable on the run
+  record*, this is a real hole. ⚠️ Changes an on-disk layout the MCP tools and `amicus watch` read;
+  needs a compatibility pass (or a symlink/copy to `run.json`), which is why v4.5.2 left it alone.
 
 ## v4.5.0 post-ship dispositions (2026-07-28)
 
