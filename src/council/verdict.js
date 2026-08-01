@@ -16,6 +16,44 @@ const VERDICT_SCHEMA_VERSION = 2;
  * @param {{overallVerdict?: (string|null)}} [opts] engine hook (Plan B): the
  *   parsed chair `VERDICT:` line; omitted/undefined → null.
  */
+/**
+ * Describe which requested seats actually reviewed, for the verdict's own face.
+ *
+ * ⚠️ ADDED v4.5.2 from a field report. The critic is a SOLO wave with one leg,
+ * so losing it loses 100% of the adversarial role — and unlike a dead bench wave
+ * (which trips the quorum gate and fails the run loudly) a dead critic is
+ * survivable, so the run continues to a full verdict, tally and chair synthesis
+ * that never saw the critic's findings. Run `dfb6a692` did exactly that and the
+ * only record was `deadWaves` in run.json, a file nobody opens when the verdict
+ * reads clean. A user who typed `--critic` asked for adversarial review; a
+ * verdict produced without it must say so where the verdict is read.
+ *
+ * Returns null when no critic was requested — there is nothing to report, and an
+ * always-present block would train readers to ignore it.
+ *
+ * @param {{runId: string, critic: ?string,
+ *   deadWaves: Array<{waveId: string, models: string[], reason: string}>}} o
+ * @returns {?{criticRequested: string, criticSeated: boolean, reason: ?string,
+ *   deadBenchSeats: string[]}}
+ */
+function summarizeSeatLoss({ runId, critic, deadWaves = [] } = {}) {
+  if (!critic) { return null; }
+  // Match on EITHER carrier. The `-c1` suffix is the convention run-stages.js
+  // uses, but a wave that names the critic model is the critic wave whatever it
+  // is called — and relying on the id alone would silently under-report if that
+  // convention ever changes.
+  const isCriticWave = w =>
+    w.waveId === `${runId}-c1` || (w.models || []).includes(critic);
+  const dead = deadWaves.find(isCriticWave) || null;
+  return {
+    criticRequested: critic,
+    criticSeated: !dead,
+    reason: dead ? dead.reason : null,
+    deadBenchSeats: deadWaves.filter(w => !isCriticWave(w))
+      .flatMap(w => w.models || []),
+  };
+}
+
 function buildVerdict(record, decisions = [], opts = {}) {
   const byId = new Map(decisions.map(d => [d.id, d]));
   return {
@@ -46,6 +84,9 @@ function buildVerdict(record, decisions = [], opts = {}) {
     streetCred: record.streetCred.map(s => ({ model: s.model, withSelf: s.withSelf, peersOnly: s.peersOnly })),
     runStats: record.runStats,
     tierCounts: record.tierCounts,
+    // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic
+    // was requested, so its absence never has to be interpreted.
+    ...(opts.seatLoss ? { seatLoss: opts.seatLoss } : {}),
   };
 }
 
@@ -93,4 +134,6 @@ function writeVerdictAtomic(filePath, verdict) {
   fs.renameSync(tmp, filePath);
 }
 
-module.exports = { buildVerdict, readOverallVerdict, writeVerdictAtomic, VERDICT_SCHEMA_VERSION };
+module.exports = {
+  buildVerdict, summarizeSeatLoss, readOverallVerdict, writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
+};

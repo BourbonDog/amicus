@@ -168,6 +168,47 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
     expect(emitted()).toMatch(/Stage-1 wave abc123-c1 \(qwen\) produced NO legs/);
   });
 
+  /**
+   * v4.5.2. The test above proves the loss reaches run.json. It did NOT reach
+   * verdict.json — so a run that produced a full verdict, tally and chair
+   * synthesis without ever seeing its critic looked clean to anyone reading the
+   * verdict, which is the file people actually open. Field run `dfb6a692`
+   * shipped exactly that. The whole point of `--critic` is adversarial review;
+   * its absence has to be legible where the conclusion is.
+   */
+  test('NON-LENS: a lost critic is recorded on verdict.json, not just run.json', async () => {
+    const script = {
+      'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
+      'abc123-c1': () => deadWave('Failed to start server: Timeout waiting for server to start after 5000ms'),
+      'abc123-s2': twoJudges,
+      'abc123-ch1': chairOk,
+    };
+    const opts = baseOptions(tmp, { critic: 'qwen' });
+    await runCouncil(opts, deps(scriptedLaunchers(script)));
+
+    const verdict = JSON.parse(
+      fs.readFileSync(path.join(opts.runDir, 'verdict.json'), 'utf-8'));
+    expect(verdict.seatLoss).toBeDefined();
+    expect(verdict.seatLoss.criticRequested).toBe('qwen');
+    expect(verdict.seatLoss.criticSeated).toBe(false);
+    expect(verdict.seatLoss.reason).toMatch(/Timeout waiting for server to start/);
+  });
+
+  test('a critic that DID seat is recorded as seated, so silence is unambiguous', async () => {
+    const script = {
+      'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
+      'abc123-c1': () => okWave([mkLeg('qwen', review('qwen'))]),
+      'abc123-s2': twoJudges,
+      'abc123-ch1': chairOk,
+    };
+    const opts = baseOptions(tmp, { critic: 'qwen' });
+    await runCouncil(opts, deps(scriptedLaunchers(script)));
+
+    const verdict = JSON.parse(
+      fs.readFileSync(path.join(opts.runDir, 'verdict.json'), 'utf-8'));
+    expect(verdict.seatLoss.criticSeated).toBe(true);
+  });
+
   test('a dead LEG (not a dead wave) marks the stage partial too, with no deadWaves', async () => {
     const script = happyScript();
     script['abc123-s1'] = () => okWave([

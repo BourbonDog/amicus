@@ -222,4 +222,43 @@ describe('artifact emission', () => {
     expect(fs.existsSync(path.join(dir, 'chair-output.md'))).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  /**
+   * v4.5.2: a lost critic has to reach the file a reader actually opens. The
+   * summary is computed upstream (src/council/verdict.js summarizeSeatLoss);
+   * this pins that the assembler carries it ONTO DISK rather than dropping it.
+   */
+  test('writeVerdictFiles records a lost critic in verdict.json', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-asm3-'));
+    const reason = 'Failed to start server: Timeout waiting for server to start after 5000ms';
+    asm.writeVerdictFiles({
+      runDir: dir, record, overallVerdict: null, chairText: null,
+      critic: 'qwen',
+      deadWaves: [{ waveId: `${record.meta.runId}-c1`, models: ['qwen'], reason }],
+    });
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, 'verdict.json'), 'utf-8'));
+    expect(onDisk.seatLoss).toEqual({
+      criticRequested: 'qwen', criticSeated: false, reason, deadBenchSeats: [],
+    });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('writeVerdictFiles records a seated critic when no wave died', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-asm4-'));
+    asm.writeVerdictFiles({
+      runDir: dir, record, overallVerdict: null, chairText: null,
+      critic: 'qwen', deadWaves: [],
+    });
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, 'verdict.json'), 'utf-8'));
+    expect(onDisk.seatLoss.criticSeated).toBe(true);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('writeVerdictFiles omits seatLoss when no critic was requested', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-asm5-'));
+    asm.writeVerdictFiles({ runDir: dir, record, overallVerdict: null, chairText: null });
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, 'verdict.json'), 'utf-8'));
+    expect(onDisk.seatLoss).toBeUndefined();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

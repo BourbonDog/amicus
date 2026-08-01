@@ -173,7 +173,22 @@ async function robustExtract(zip, opts = {}) {
     deps = {},
   } = opts;
   const fs = deps.fs || fsDefault;
-  const extractZip = deps.extractZip || require('extract-zip');
+  // GUARDED (v4.5.2). This `require` used to be bare, and `extract-zip` was
+  // never declared in dependencies — it resolved in the dev tree only because
+  // `puppeteer` (a devDependency) pulls it transitively, so a published install
+  // threw MODULE_NOT_FOUND here and took the WHOLE function with it: the native
+  // fallback below, the bounded idle/max timers, and `doctor --fix` all became
+  // unreachable. The dependency is now declared, so this should never fire —
+  // but Strategy 1 being unavailable is precisely what the native strategies
+  // exist for, so it must degrade into them rather than out of the function.
+  let extractZip = deps.extractZip;
+  if (!extractZip) {
+    try {
+      extractZip = require('extract-zip');
+    } catch (e) {
+      extractZip = () => { throw new Error(`extract-zip unavailable: ${e.message}`); };
+    }
+  }
   const spawn = deps.spawn || spawnSync;
   const setTimer = deps.setTimeout || setTimeout;
   const clearTimer = deps.clearTimeout || clearTimeout;

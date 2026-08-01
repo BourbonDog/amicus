@@ -26,6 +26,8 @@ const {
   killPortProcess,
   ensurePortAvailable,
   isLockClassStartFailure,
+  isTimeoutClassStartFailure,
+  isRetryableStartFailure,
   retryOnLockRace,
   LOCK_RETRY_DELAYS_MS,
   DEFAULT_PORT
@@ -309,5 +311,100 @@ describe('lock-race retry window (Step 10.5)', () => {
     });
     await expect(retryOnLockRace(attempt, { retryDelayMs: 0 })).resolves.toBe('started');
     expect(attempt).toHaveBeenCalledTimes(5);
+  });
+});
+
+/**
+ * A server-START TIMEOUT is retryable — the field bug behind the v4.5.2 fix.
+ *
+ * `@opencode-ai/sdk` rejects with `Timeout waiting for server to start after
+ * 5000ms` when OpenCode has not printed its listening line inside the SDK's
+ * default window. On a slow box (sync-backed volume + AV scanning a cold
+ * SQLite open) that window is simply too tight — and the failure is TRANSIENT,
+ * exactly like a lock race. Before this fix the classifier matched only
+ * `database is locked|database table is locked|SQLITE_BUSY`, so a start timeout
+ * fell straight through `retryOnLockRace` with ZERO retries, past machinery
+ * that already existed and was already wired in at every call site.
+ *
+ * Field evidence: a council run degraded to per-wave servers on this error and
+ * then lost its entire Stage-1 bench (`COUNCIL_QUORUM: Only 0 … survived`).
+ */
+describe('timeout-class start failure is retryable (v4.5.2)', () => {
+  const SDK_MESSAGE = 'Timeout waiting for server to start after 5000ms';
+
+  it('classifies the SDK start-timeout message as timeout-class', () => {
+    expect(isTimeoutClassStartFailure(new Error(SDK_MESSAGE))).toBe(true);
+  });
+
+  it('classifies it as retryable, but NOT as lock-class', () => {
+    const err = new Error(SDK_MESSAGE);
+    expect(isRetryableStartFailure(err)).toBe(true);
+    // The two classes stay distinct: lock-class keeps its narrow meaning so the
+    // existing docblock ("database is locked") does not quietly become a lie.
+    expect(isLockClassStartFailure(err)).toBe(false);
+  });
+
+  it('matches whatever timeout the SDK reports, not just the 5000ms default', () => {
+    expect(isTimeoutClassStartFailure(
+      new Error('Timeout waiting for server to start after 20000ms'))).toBe(true);
+  });
+
+  it('matches when amicus has prefixed the message at the fanout boundary', () => {
+    // src/sidecar/fanout.js wraps it as `Failed to start server: ${err.message}`.
+    expect(isRetryableStartFailure(
+      new Error(`Failed to start server: ${SDK_MESSAGE}`))).toBe(true);
+  });
+
+  it('retries a start timeout the full 5 attempts, then rethrows unchanged', async () => {
+    const attempt = jest.fn(async () => { throw new Error(SDK_MESSAGE); });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 }))
+      .rejects.toThrow(SDK_MESSAGE);
+    expect(attempt).toHaveBeenCalledTimes(5);
+  });
+
+  it('sleeps the real 250/500/1000/2000 schedule for a start timeout', async () => {
+    const slept = [];
+    const realSetTimeout = setTimeout;
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+      slept.push(ms);
+      return realSetTimeout(fn, 0);
+    });
+    try {
+      const attempt = jest.fn(async () => { throw new Error(SDK_MESSAGE); });
+      await expect(retryOnLockRace(attempt)).rejects.toThrow(SDK_MESSAGE);
+      expect(slept).toEqual([250, 500, 1000, 2000]);
+    } finally { spy.mockRestore(); }
+  });
+
+  it('a start that times out twice then succeeds returns the server', async () => {
+    let n = 0;
+    const attempt = jest.fn(async () => {
+      n += 1;
+      if (n < 3) { throw new Error(SDK_MESSAGE); }
+      return 'started';
+    });
+    await expect(retryOnLockRace(attempt, { retryDelayMs: 0 })).resolves.toBe('started');
+    expect(attempt).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * Widening the class must not widen it into deterministic territory. A
+   * REQUEST timeout is not a START timeout, and a missing binary never sleeps.
+   */
+  it('does not swallow unrelated timeouts or deterministic failures', () => {
+    for (const msg of [
+      'Request timeout after 30000ms',
+      'ETIMEDOUT connect 127.0.0.1:4096',
+      'ENOENT: opencode not found',
+      'EADDRINUSE: port busy',
+    ]) {
+      expect(isTimeoutClassStartFailure(new Error(msg))).toBe(false);
+      expect(isRetryableStartFailure(new Error(msg))).toBe(false);
+    }
+  });
+
+  it('handles a null/undefined error without throwing', () => {
+    expect(isTimeoutClassStartFailure(null)).toBe(false);
+    expect(isRetryableStartFailure(undefined)).toBe(false);
   });
 });

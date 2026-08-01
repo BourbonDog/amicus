@@ -253,6 +253,10 @@ async function startOpenCodeServer(mcpConfig, options = {}) {
   if (options.models) { serverOptions.models = options.models; }
   if (options.systemPrompt) { serverOptions.systemPrompt = options.systemPrompt; }
   if (options.agentName) { serverOptions.agentName = options.agentName; }
+  // Explicit per-call override only. Unset is the normal case and is correct:
+  // buildServerOptions resolves AMICUS_SERVER_START_TIMEOUT_MS / the platform
+  // default downstream, so forwarding `undefined` here would change nothing.
+  if (options.timeout !== undefined) { serverOptions.timeout = options.timeout; }
 
   // v4.4.1 Task 0.5: a LOCK-CLASS start failure is retried (5 attempts,
   // 250/500/1000/2000ms — widened from 3/750ms by Step 10.5, see server-setup).

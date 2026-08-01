@@ -4,53 +4,207 @@
   "title": "amicus council-verdict document",
   "description": "Verdict record (`council verdict --json`, amicus_verdict, verdict.json). overallVerdict is the chair's parsed VERDICT line — null in every Stage-4 manual path, populated by the headless engine.",
   "type": "object",
-  "required": ["schemaVersion", "type", "runId", "council", "overallVerdict", "findings", "streetCred", "runStats", "tierCounts"],
+  "required": [
+    "schemaVersion",
+    "type",
+    "runId",
+    "council",
+    "overallVerdict",
+    "findings",
+    "streetCred",
+    "runStats",
+    "tierCounts"
+  ],
   "properties": {
-    "schemaVersion": { "const": 2 },
-    "type": { "const": "council-verdict" },
-    "runId": { "type": "string" },
-    "runType": { "type": ["string", "null"] },
-    "date": { "type": ["string", "null"] },
-    "chair": { "type": ["string", "null"] },
-    "council": { "type": "array", "items": { "type": "string" } },
-    "claudeInCouncil": { "type": "boolean" },
+    "schemaVersion": {
+      "const": 2
+    },
+    "type": {
+      "const": "council-verdict"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "runType": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "date": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "chair": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "council": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claudeInCouncil": {
+      "type": "boolean"
+    },
     "overallVerdict": {
       "oneOf": [
-        { "enum": ["Ship it", "Fix these first", "Fundamental rethink"] },
-        { "type": "null" }
+        {
+          "enum": [
+            "Ship it",
+            "Fix these first",
+            "Fundamental rethink"
+          ]
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "tier", "decision", "applied"],
+        "required": [
+          "id",
+          "tier",
+          "decision",
+          "applied"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "raiser": { "type": ["string", "null"] },
-          "severity": { "type": ["string", "null"] },
-          "tier": { "enum": ["Confirmed", "Contested", "Singleton", "Disputed"] },
-          "basis": { "type": "object" },
-          "confidence": { "enum": ["thin", "solid"] },
-          "tierOverride": { "type": ["object", "null"] },
-          "duplicateOf": { "type": ["string", "null"] },
-          "adjudications": { "type": "array" },
-          "decision": { "type": ["string", "null"] },
-          "applied": { "type": "boolean" },
+          "id": {
+            "type": "string"
+          },
+          "raiser": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tier": {
+            "enum": [
+              "Confirmed",
+              "Contested",
+              "Singleton",
+              "Disputed"
+            ]
+          },
+          "basis": {
+            "type": "object"
+          },
+          "confidence": {
+            "enum": [
+              "thin",
+              "solid"
+            ]
+          },
+          "tierOverride": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "duplicateOf": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "adjudications": {
+            "type": "array"
+          },
+          "decision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "applied": {
+            "type": "boolean"
+          },
           "debate": {
             "type": "object",
             "properties": {
-              "action": { "enum": ["defended", "amended", "withdrawn", "no-response"] },
-              "previousTier": { "type": ["string", "null"] }
+              "action": {
+                "enum": [
+                  "defended",
+                  "amended",
+                  "withdrawn",
+                  "no-response"
+                ]
+              },
+              "previousTier": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
             },
-            "required": ["action"],
+            "required": [
+              "action"
+            ],
             "additionalProperties": false
           }
         }
       }
     },
-    "streetCred": { "type": "array", "items": { "type": "object" } },
-    "runStats": { "type": "array", "items": { "type": "object" } },
-    "tierCounts": { "type": "object" }
+    "streetCred": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "runStats": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "tierCounts": {
+      "type": "object"
+    },
+    "seatLoss": {
+      "type": "object",
+      "description": "Present only when --critic was requested. Records whether the adversarial seat actually reviewed: a dead critic wave is survivable (the quorum gate guards only the bench), so a run can otherwise reach a full verdict with the critic silently absent.",
+      "properties": {
+        "criticRequested": {
+          "type": "string",
+          "description": "The model asked for as critic."
+        },
+        "criticSeated": {
+          "type": "boolean",
+          "description": "False when the critic wave died before producing legs."
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why the critic wave died, when it did."
+        },
+        "deadBenchSeats": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Bench models lost to dead waves, excluding the critic."
+        }
+      },
+      "required": [
+        "criticRequested",
+        "criticSeated"
+      ]
+    }
   }
 }
