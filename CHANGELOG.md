@@ -3,6 +3,53 @@
 All notable changes to Amicus are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow semver.
 
+## [Unreleased]
+
+### Fixed
+
+- **OpenCode server-start timeout is no longer pinned to the SDK's 5000 ms, and a start timeout
+  is now retried.** `@opencode-ai/sdk` defaults `createOpencodeServer`'s start timeout to 5 s and
+  lets the caller override it; amicus never passed one, so every start on every platform ran on
+  that default — undocumented, untunable, and invisible to `amicus doctor`. Worse, the existing
+  start retry (`retryOnLockRace`) classified only `database is locked` / `SQLITE_BUSY`, so a start
+  timeout fell straight through with **zero** retries, past machinery already wired in at every
+  call site. On a Windows box with the project on a OneDrive-synced volume and Defender active, a
+  cold OpenCode/SQLite start blew the window: the council's shared server failed to acquire, the
+  run degraded to exactly the per-wave configuration `src/council/run-server.js` exists to
+  eliminate, and the whole Stage-1 bench died with `COUNCIL_QUORUM: Only 0 Stage-1 review(s)
+  survived`. Three of the reporter's runs were lost this way. A start timeout is now classified as
+  transient (`isTimeoutClassStartFailure`) and retried on the same bounded 250/500/1000/2000 ms
+  schedule, the timeout is threaded through `buildServerOptions` and both upstream start sites,
+  and the default is raised to **30 s on Windows / 15 s elsewhere** — a slow start costs latency,
+  a failed start costs a review seat.
+- **The Electron self-heal was dead code in every published install.** `src/sidecar/unzip.js`
+  did a bare, unguarded `require('extract-zip')` for a package that was never declared in
+  `dependencies` or `optionalDependencies`. It resolved in the dev tree only because `puppeteer`
+  (a devDependency) pulls it transitively — `npm ls extract-zip --omit=dev` returned empty — so on
+  a real `npm i -g amicus` `robustExtract` threw `MODULE_NOT_FOUND` before Strategy 1. That made
+  the native-unzip fallback below it unreachable, the bounded idle/max timers from the
+  extract-zip-node24 work inert, and `amicus doctor --fix` dead-end at `self-heal incomplete` —
+  while routing users toward antivirus allow-listing for what was actually a missing module.
+  `extract-zip` is now a declared production dependency, the `require` degrades into the native
+  strategies instead of throwing out of the function, and a new `no-phantom-dependencies` test
+  fails on any undeclared runtime require anywhere in `src/`, `bin/` or `electron/`.
+- **A lost critic is now recorded on `verdict.json`.** The critic is a solo wave with one leg, and
+  unlike a dead bench wave (which trips the quorum gate and fails the run loudly) a dead critic is
+  survivable — so a run could reach a full verdict, tally and chair synthesis that had never seen
+  the adversarial seat, with the only record being `deadWaves` in `run.json`. Field run `dfb6a692`
+  did exactly that. `verdict.json` now carries an optional `seatLoss` block
+  (`criticRequested`/`criticSeated`/`reason`/`deadBenchSeats`) whenever `--critic` was requested,
+  so a reader of the verdict can see the critic never ran. Additive; `schemaVersion` stays `2`.
+
+### Added
+
+- **`AMICUS_SERVER_START_TIMEOUT_MS`** — override the server-start window (see
+  [docs/configuration.md](docs/configuration.md#server-startup)). Values ≤ 0 are ignored rather
+  than honored, since a zero start timeout fails every start instantly.
+- **Successful server starts are logged at debug level** with both `startMs` and the `timeoutMs`
+  ceiling in force, so headroom on a slow box is measurable rather than inferred — the question
+  the field report could not answer.
+
 ## [4.5.1] - 2026-07-30
 
 ### Added

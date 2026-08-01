@@ -19,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('../utils/atomic-write');
-const { buildVerdict, writeVerdictAtomic } = require('./verdict');
+const { buildVerdict, summarizeSeatLoss, writeVerdictAtomic } = require('./verdict');
 const { buildReport } = require('./report');
 const { validateFindings } = require('./findings');
 const { toGlobalFindings } = require('./anonymize');
@@ -178,8 +178,12 @@ function writeTallyFiles({ runDir, tallyInput, record }) {
  * buildVerdict's own signature.
  * @returns {object} the verdict written to disk
  */
-function writeVerdictFiles({ runDir, record, overallVerdict, chairText }) {
-  const verdict = buildVerdict(record, []);
+function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves }) {
+  // v4.5.2 — computed here rather than in run.js so verdict assembly stays in
+  // one place; see summarizeSeatLoss in ./verdict for why a lost critic has to
+  // reach the verdict at all.
+  const seatLoss = summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
+  const verdict = buildVerdict(record, [], { seatLoss });
   verdict.overallVerdict = (overallVerdict === undefined) ? null : overallVerdict;
   writeVerdictAtomic(path.join(runDir, 'verdict.json'), verdict);
   const html = buildReport({ verdict }, { format: 'html' });

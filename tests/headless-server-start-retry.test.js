@@ -119,6 +119,40 @@ describe('runHeadless server start: lock-class retry (F5)', () => {
     expect(mockStartServer).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * v4.5.2: a start TIMEOUT is transient too, and until this release it matched
+   * no alternative in the lock-class regex — so it fell through the retry with
+   * zero attempts. This is the second of the two start sites; the first is
+   * src/sidecar/session-utils.js.
+   */
+  it('retries a start TIMEOUT and can succeed', async () => {
+    mockStartServer
+      .mockRejectedValueOnce(new Error('Timeout waiting for server to start after 5000ms'))
+      .mockImplementation(async () => okServer());
+    await run();
+    expect(mockStartServer).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * `serverOptions` here is a whitelist rebuilt from `options`, so an explicit
+   * per-call timeout has to be forwarded or it is silently dropped and the
+   * caller gets the default anyway. (The default and the env knob both resolve
+   * downstream in buildServerOptions and need no forwarding.)
+   */
+  it('forwards an explicit start timeout to startServer', async () => {
+    mockStartServer.mockImplementation(async () => okServer());
+    await runHeadless('openrouter/a/b', 'sys', 'user', 'task1234', '/proj', 60000, 'build',
+      { retryDelayMs: 1, pollIntervalMs: 5, timeout: 45000 });
+    expect(mockStartServer).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 45000 }));
+  });
+
+  it('leaves timeout unset when not provided', async () => {
+    mockStartServer.mockImplementation(async () => okServer());
+    await run();
+    expect(mockStartServer.mock.calls[0][0].timeout).toBeUndefined();
+  });
+
   // The shared-server seam is upstream of all of this: an injected server means
   // there is no start to retry.
   it('an injected external server never reaches the starter at all', async () => {

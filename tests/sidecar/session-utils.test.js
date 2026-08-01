@@ -555,6 +555,25 @@ describe('startOpenCodeServer client passthrough', () => {
       expect.objectContaining({ mcp: mcpConfig, client: 'code-local' })
     );
   });
+
+  /**
+   * v4.5.2: `serverOptions` here is a WHITELIST rebuilt from `options`, so an
+   * unforwarded key is silently dropped. The platform default and the
+   * AMICUS_SERVER_START_TIMEOUT_MS env var both resolve downstream in
+   * buildServerOptions and need no help — but an explicit per-call timeout has
+   * to survive this hop, or a caller that sets one gets the default anyway.
+   */
+  it('forwards an explicit start timeout to startServer', async () => {
+    await startOpenCodeServer(null, { timeout: 45000 });
+    expect(mockStartServer).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 45000 })
+    );
+  });
+
+  it('leaves timeout unset when not provided, so the default resolves downstream', async () => {
+    await startOpenCodeServer(null);
+    expect(mockStartServer.mock.calls[0][0].timeout).toBeUndefined();
+  });
 });
 
 /**

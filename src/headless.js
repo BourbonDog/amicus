@@ -272,6 +272,12 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       if (options.mcp) {
         serverOptions.mcp = options.mcp;
       }
+      // v4.5.2: explicit per-call override only — see the note at the matching
+      // hop in src/sidecar/session-utils.js. The default and the env knob both
+      // resolve downstream in buildServerOptions.
+      if (options.timeout !== undefined) {
+        serverOptions.timeout = options.timeout;
+      }
       // v4.4.1 fix wave (F5): this is the OTHER server-start site. It calls
       // startServer directly rather than going through startOpenCodeServer, so
       // the lock-class retry added for the concurrent-start race never covered

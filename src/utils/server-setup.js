@@ -90,6 +90,28 @@ function ensurePortAvailable(port = DEFAULT_PORT) {
 const LOCK_CLASS_START_FAILURE = /database is locked|database table is locked|SQLITE_BUSY/i;
 
 /**
+ * A start failure that is a TIMEOUT, not a deterministic error.
+ *
+ * `@opencode-ai/sdk` rejects with `Timeout waiting for server to start after
+ * ${timeout}ms` when OpenCode has not printed its listening line inside the
+ * caller-supplied window (SDK default: 5000ms — see AMICUS_SERVER_START_TIMEOUT_MS
+ * in src/opencode-client.js for why amicus no longer accepts that default).
+ *
+ * ⚠️ ADDED v4.5.2 from a field report. A start timeout is TRANSIENT — a cold
+ * SQLite open on a sync-backed volume with an AV scanner attached simply takes
+ * longer than the window — and is therefore *more* retryable than a lock race,
+ * since retrying costs nothing but the backoff. Before this, it matched no
+ * alternative in LOCK_CLASS_START_FAILURE and so fell straight through
+ * `retryOnLockRace` with ZERO retries. A reporter's council degraded to per-wave
+ * servers on this error and then lost its entire Stage-1 bench
+ * (`COUNCIL_QUORUM: Only 0 Stage-1 review(s) survived`).
+ *
+ * Deliberately anchored to "…server to start". A REQUEST timeout, an ETIMEDOUT
+ * connect, and a generic "timeout" are NOT this class and must not sleep here.
+ */
+const TIMEOUT_CLASS_START_FAILURE = /Timeout waiting for server to start/i;
+
+/**
  * Backoff between start attempts; 5 attempts total, ≤3.75s of added latency.
  *
  * ⚠️ WIDENED from 3 attempts at 250/500ms (≤750ms) by v4.4.1 Step 10.5. 750ms is
@@ -109,12 +131,48 @@ const LOCK_RETRY_DELAYS_MS = [250, 500, 1000, 2000];
  * @returns {boolean} true only for a lock-class (retryable) start failure
  */
 function isLockClassStartFailure(error) {
+  return matchesStartFailure(error, LOCK_CLASS_START_FAILURE);
+}
+
+/**
+ * @param {Error|null} error
+ * @returns {boolean} true only for a timeout-class (retryable) start failure
+ */
+function isTimeoutClassStartFailure(error) {
+  return matchesStartFailure(error, TIMEOUT_CLASS_START_FAILURE);
+}
+
+/**
+ * The union the retry actually applies to: lock-class OR timeout-class.
+ *
+ * Kept separate from the two predicates so each class keeps its own narrow,
+ * accurate meaning — `isLockClassStartFailure` still answers "was this a lock
+ * race?" and nothing else, so its docblock does not quietly become a lie.
+ *
+ * @param {Error|null} error
+ * @returns {boolean} true for any transient (retryable) start failure
+ */
+function isRetryableStartFailure(error) {
+  return isLockClassStartFailure(error) || isTimeoutClassStartFailure(error);
+}
+
+/**
+ * Test `pattern` against every carrier an error might arrive on.
+ *
+ * The real failure arrives as a message with the server's own stdout inlined
+ * ("Server exited with code 1 / Server output: … database is locked"), and
+ * amicus prefixes it again at the fanout boundary (`Failed to start server:
+ * …`), so check the usual carriers too — a wrapped/spawn-shaped error still
+ * has to match.
+ *
+ * @param {Error|null} error
+ * @param {RegExp} pattern
+ * @returns {boolean}
+ */
+function matchesStartFailure(error, pattern) {
   if (!error) { return false; }
-  // The real failure arrives as a message with the server's own stdout inlined
-  // ("Server exited with code 1 / Server output: … database is locked"), but
-  // check the usual carriers too so a wrapped/spawn-shaped error still matches.
   const carriers = [error.message, error.stderr, error.stdout, error.cause && error.cause.message];
-  return carriers.some(c => typeof c === 'string' && LOCK_CLASS_START_FAILURE.test(c));
+  return carriers.some(c => typeof c === 'string' && pattern.test(c));
 }
 
 /**
@@ -141,9 +199,16 @@ async function retryOnLockRace(attempt, opts = {}) {
     try {
       return await attempt(i);
     } catch (error) {
-      if (i >= delays.length || !isLockClassStartFailure(error)) { throw error; }
-      logger.warn('OpenCode server start lost a lock race — retrying', {
-        attempt: i + 1, of: delays.length + 1, delayMs: delays[i], error: error.message,
+      if (i >= delays.length || !isRetryableStartFailure(error)) { throw error; }
+      logger.warn('OpenCode server start failed transiently — retrying', {
+        attempt: i + 1,
+        of: delays.length + 1,
+        delayMs: delays[i],
+        // Name WHICH transient class fired: a run that retried on `timeout`
+        // wants a bigger AMICUS_SERVER_START_TIMEOUT_MS, one that retried on
+        // `lock` wants less concurrency. Same retry, different operator action.
+        failureClass: isLockClassStartFailure(error) ? 'lock' : 'timeout',
+        error: error.message,
       });
       await new Promise(resolve => setTimeout(resolve, delays[i]));
     }
@@ -158,5 +223,7 @@ module.exports = {
   killPortProcess,
   ensurePortAvailable,
   isLockClassStartFailure,
+  isTimeoutClassStartFailure,
+  isRetryableStartFailure,
   retryOnLockRace
 };

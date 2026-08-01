@@ -284,7 +284,8 @@ async function runCouncil(options, deps = {}) {
     runState.updateStage(o.runDir, tallyStage, { status: 'complete', completedAt: now() });
     emitStageStarted(o.runDir, o.runId, tallyStage, null, o.follow);
     emitStageTerminal(o.runDir, o.runId, tallyStage, 'complete', null, o.follow);
-    asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText });
+    asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText,
+      critic: o.critic, deadWaves });
     runState.updateStage(o.runDir, 'verdict', { status: 'complete', completedAt: now() });
     emitStageStarted(o.runDir, o.runId, 'verdict', null, o.follow);
     emitStageTerminal(o.runDir, o.runId, 'verdict', 'complete', null, o.follow);

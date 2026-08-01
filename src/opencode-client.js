@@ -403,10 +403,66 @@ async function getSessionStatus(client, sessionId, directory) {
 }
 
 /**
+ * How long to wait for OpenCode to announce it is listening, per platform.
+ *
+ * ⚠️ ADDED v4.5.2 from a field report. `@opencode-ai/sdk` defaults this to
+ * 5000ms (`dist/server.js:4-8`) and lets the caller override it; amicus never
+ * passed one, so every start on every platform ran on the SDK's 5s — untunable
+ * and invisible to `amicus doctor`. A reporter's Windows box (project on a
+ * OneDrive-synced volume, Defender active) blew through it on a cold
+ * OpenCode/SQLite open: the council's shared server failed to acquire, the run
+ * degraded to the per-wave configuration `src/council/run-server.js` exists to
+ * eliminate, and the whole Stage-1 bench died (`COUNCIL_QUORUM: Only 0 …`).
+ *
+ * The asymmetry decides the number: a slow start costs LATENCY, a failed start
+ * costs a REVIEW SEAT. win32 gets the widest window because that is where
+ * sync-backed volumes and always-on AV filter drivers are the norm.
+ *
+ * This is a ceiling, not a sleep — a healthy start still resolves in well under
+ * a second and pays none of it.
+ */
+const SERVER_START_TIMEOUT_MS = Object.freeze({ win32: 30000, default: 15000 });
+
+/**
+ * Resolve the start timeout: explicit option → env override → platform default.
+ *
+ * `0` and negatives are REJECTED rather than honored. For most amicus knobs `0`
+ * is a documented disable switch (see src/utils/env-num.js), but a 0ms start
+ * timeout disables nothing — it fails every start instantly. That is an own-goal
+ * an operator can only reach by accident, so it falls back to the default.
+ *
+ * @param {object} [options] - Server options ({timeout} respected if positive)
+ * @param {object} [env] - Environment (test seam; defaults to process.env)
+ * @param {string} [platform] - Platform (test seam; defaults to process.platform)
+ * @returns {number} milliseconds
+ */
+function resolveServerStartTimeoutMs(options = {}, env, platform) {
+  const plat = platform || process.platform;
+  const dflt = SERVER_START_TIMEOUT_MS[plat] || SERVER_START_TIMEOUT_MS.default;
+  const positive = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  if (options.timeout !== undefined) {
+    const explicit = positive(options.timeout);
+    if (explicit) { return explicit; }
+  }
+  const raw = (env || process.env).AMICUS_SERVER_START_TIMEOUT_MS;
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    const fromEnv = positive(raw);
+    if (fromEnv) { return fromEnv; }
+  }
+  return dflt;
+}
+
+/**
  * Build the server options object for createOpencodeServer.
  * Extracted for testability (no SDK dependency).
  *
  * @param {object} [options] - Server options
+ * @param {number} [options.timeout] - Start timeout in ms. Omit to use
+ *   AMICUS_SERVER_START_TIMEOUT_MS or the platform default; NEVER omitted from
+ *   the object handed to the SDK, so the SDK's own 5000ms default is unreachable.
  * @param {number} [options.port] - Port to run on
  * @param {string} [options.hostname='127.0.0.1'] - Hostname to bind to
  * @param {AbortSignal} [options.signal] - Abort signal to stop server
@@ -544,6 +600,9 @@ function buildServerOptions(options = {}) {
 
   const serverOptions = {
     hostname: options.hostname || '127.0.0.1',
+    // ALWAYS set — unlike port/signal below, an omitted timeout is not a
+    // harmless "let the SDK decide", it is the 5000ms that cost a bench.
+    timeout: resolveServerStartTimeoutMs(options),
   };
 
   // Only include port/signal when explicitly set — passing undefined
@@ -660,11 +719,27 @@ async function startServer(options = {}) {
     }
   }
 
-  const createOpencodeServer = await getCreateOpencodeServer();
+  // `_createOpencodeServer` is a test seam, matching `_hasOpencodeBinary` /
+  // `_ensureEngine` / `_opencodeRoots` above: the SDK arrives through a dynamic
+  // `import()`, which `jest.mock` cannot intercept under CommonJS, so the start
+  // path is otherwise unreachable from a unit test.
+  const createOpencodeServer = options._createOpencodeServer
+    || await getCreateOpencodeServer();
   const serverOptions = buildServerOptions(options);
 
+  // Measure the healthy path. The v4.5.2 timeout had to be sized from the
+  // asymmetry of the failure (a slow start costs latency, a failed one costs a
+  // review seat) because nothing recorded how long a GOOD start takes — so the
+  // margin against the ceiling was unmeasurable on exactly the slow boxes that
+  // needed it. Now it is one debug line, not an inference.
+  const startedAt = Date.now();
   const sdkServer = await createOpencodeServer(serverOptions);
-  const client = await createClient(sdkServer.url);
+  const { logger } = require('./utils/logger');
+  logger.debug('OpenCode server started', {
+    startMs: Date.now() - startedAt,
+    timeoutMs: serverOptions.timeout,
+  });
+  const client = await (options._createClient || createClient)(sdkServer.url);
 
   // Capture the Go server PID once so close() can force-kill it cross-platform
   // (F3 #15). Prefer a PID the SDK exposes; fall back to the port listener.
@@ -822,6 +897,8 @@ module.exports = {
   abortSession,
   checkHealth,
   buildServerOptions,
+  resolveServerStartTimeoutMs,
+  SERVER_START_TIMEOUT_MS,
   buildServerHandle,
   startServer,
   loadMcpConfig,

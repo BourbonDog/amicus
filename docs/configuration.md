@@ -137,6 +137,18 @@ Legacy `SIDECAR_IDLE_TIMEOUT*` names were removed in v2.0.0 — rename to the `A
 
 Set `AMICUS_IDLE_TIMEOUT=0` to disable self-termination entirely.
 
+### Server startup
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `AMICUS_SERVER_START_TIMEOUT_MS` | How long to wait for OpenCode to report it is listening before treating the start as failed. | `30000` on Windows, `15000` elsewhere |
+
+A start that exceeds this window is treated as **transient** and retried on the same bounded schedule as an OpenCode database lock race (5 attempts, 250/500/1000/2000 ms), because retrying costs nothing but the backoff while a failed start costs a whole review seat.
+
+Raise it if you see `Timeout waiting for server to start` on a slow box — a project directory on a sync-backed volume (OneDrive, Dropbox) with an antivirus scanner attached can push a cold OpenCode/SQLite start well past the default. Values of `0` or below are ignored rather than honored, since a zero start timeout fails every start instantly.
+
+To see how much headroom you actually have, run with debug logging and look for the `OpenCode server started` line — it reports both `startMs` (what the start took) and `timeoutMs` (the ceiling it ran against).
+
 ### Shared server
 
 The shared-server mode (`AMICUS_SHARED_SERVER=1`, which is the default) lets multiple Amicus sessions reuse a single OpenCode Go binary process rather than spawning one per invocation, eliminating cold-start latency on the second and subsequent calls. Disable it with `AMICUS_SHARED_SERVER=0` if you need per-process isolation or are diagnosing a crash loop.
