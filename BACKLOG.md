@@ -634,9 +634,11 @@ Full task-by-task history, the final whole-branch review, and both post-HOLD wav
 worktree's `.superpowers/sdd/progress.md` (local-only, not published). Every entry below is
 self-contained — read the ledger only for the reasoning behind a line, not to find out what's open.
 
-### v4.6 IN FLIGHT — start here (2026-08-01)
+### v4.6 SHIPPED 2026-08-02 — the degrade announcement invariant (execution record)
 
-**Branch:** `feat/v4.6-degrade-invariant` (3 doc commits, not pushed; no code yet).
+**Shipped:** tag `v4.6.0`, `main` `5f07f0e` (Plan 4 merged via PR #90). Plans 1–4 all executed;
+every milestone issue was closed at ship (#80–#85, #87). The per-plan entries below are the
+execution record, kept as written during the milestone.
 
 **Theme:** the north star — *installing and running amicus should be simple and error-free;
 when an error occurs it either self-heals or self-diagnoses, transparently, keeping the user
@@ -654,6 +656,8 @@ this work fixes.
     in-council channels shipped. `dropped-members` is in the vocabulary (`DEGRADE_CHANNELS`) but its
     announce site is the CLI/MCP entry layer (outside Plan 1's files) and it never flips
     `degraded.value` — its sink migration needs an owner call on which later plan owns it.
+    **RESOLVED by Plan 4:** dropped members now announce per-member through the sink and the run
+    exits degraded (2) on every transport — the tenth channel is wired.
   - ⚠️ **Behavior change for the v4.6 CHANGELOG:** a shared-server acquisition failure now exits
     **degraded (2)** (was: stderr + run.json only, exit 0). Spec-intended; run-single-server suite
     aligned.
@@ -685,12 +689,23 @@ this work fixes.
     heals only; degrade records are the `--json` surface; warns map to no record.
   - **Owner ruling queued:** does the unverified voice extend to `sweepSessionIndexTmp` (cause
     near-definitional) and `rebuildElectron` (no live call site)? Final review says post-merge.
-- **Plan 4 is deliberately NOT written yet** (plan-rot ruling). It picks up: **#80/#81/#82**,
-  **#87**, the `dropped-members` placement ruling, and the ledger's polish batch — now including a
-  three-way `degrades` schema-copy lockstep test (run/verdict/doctor), the doctor `data`
-  description (council prose copied verbatim per plan), and the channel-domain grouping comment.
+- **Plan 4 of 4:** `docs/superpowers/plans/2026-08-02-v4.6-degrade-invariant-plan-4-cli-parity.md`
+  — **EXECUTED 2026-08-02** on `feat/v4.6-plan-4-cli-parity`, merged to `main` via PR #90 and
+  tagged `v4.6.0`. Closed **#80/#81** (Workspace discoverability: `watch` usage names `--ui`; a
+  CLI council run with Electron present prints how to open the live Workspace), **#82**
+  (`watch --ui` against an `--out-dir` run now names the launch-directory pointer and the working
+  invocation), and **#87** (the Stage-5 verdict rebuild preserves `seatLoss`/`degrades[]`, CLI and
+  MCP both). Took the **dropped-members ruling**: announce per-member through the sink; a dropped
+  preset member now exits degraded (2) on every transport (recorded as a v4.6 CHANGELOG behavior
+  change). Landed the ledger polish batch — the three-way `degrades` schema-copy lockstep test
+  (run/verdict/doctor), the doctor `data` description, the channel-domain grouping comment
+  (`1dcf11a`) — and the closing docs pass (`66a5533`).
+  - ⚠️ **Size cliff created:** `src/cli-handlers-council-run.js` landed at **299/300 exactly** —
+    the next edit to it extracts first (`cli-council-run-render.js`, 51 lines, is the receiver).
+    See the tight-file table below.
 
-**Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
+**Issues closed by the milestone (all closed at the 2026-08-02 ship):** #85 (plan 1) · #84, #83
+(plan 2) · #80, #81, #82, #87 (plan 4).
 
 **Measured baseline, so nobody re-derives it:** 11 four-seat council runs on v4.5.4 `af3e8f1`,
 **10 clean**. The single loss was a free model that never returned a first token. **The engine is
@@ -698,7 +713,7 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
 
 ---
 
-### v4.6 hard gates — resolve before/at v4.6 kickoff
+### Next-rev hard gates — resolve before/at kickoff *(carried past v4.6.0; the tight-file table was re-measured at the v4.6 ship and is current)*
 
 - [ ] **Tight-file extraction pass.** ⚠️ **RE-MEASURED 2026-08-01 against `main` @ `af3e8f1`
   (v4.5.4). The previous five-file list was written at the v4.5.0 tip and is STALE — it named five
@@ -743,11 +758,12 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
     **243/300** and is no longer a cliff.
 
   `src/pack/pack-forward.js` (96 lines) remains the natural receiving module for pack-domain
-  spillover. **Any v4.6 task, or any hotfix, touching a file in the table above must extract from it
-  FIRST**, before adding anything.
+  spillover. **Any next-rev task, or any hotfix, touching a file in the table above must extract
+  from it FIRST**, before adding anything.
 - [ ] **KNOWN_VARIABLES single-source (T3-m2).** `src/template/render.js:45` hand-maintains two
   copies of the known-template-variable set — `KNOWN_VARIABLES` and a separate inline validation
-  array. Consistent today; v4.6's `{{input}}` chaining variable (composable waves, F6) adds a third
+  array. Consistent today; the composition rev's `{{input}}` chaining variable (F6, now slotted
+  v4.7) adds a third
   variable to both, and an edit that updates one copy but not the other fails silently. Single-source
   them **before** `{{input}}` lands — hard gate, not a nice-to-have.
 
@@ -784,7 +800,11 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   `reason` values. Fine as long as nothing branches on the string; revisit whether `reason` should
   become a coded enum instead of free text if a third reason is ever added.
 
-### Minor findings riding to v4.6 (one line each; full reasoning is in the ledger)
+### Minor findings riding forward (one line each; full reasoning is in the ledger)
+
+*(Filed at the v4.5.0 ship, addressed to the then-planned composition "v4.6". The
+degrade-invariant milestone that actually shipped as v4.6.0 was not a sweep of this list —
+unchecked items ride to the next rev.)*
 
 - [ ] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
   comment in a sibling edit; restore a reworded version.

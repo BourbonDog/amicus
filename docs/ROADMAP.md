@@ -7,12 +7,14 @@ major jump, gated on funding/cofounder. The observability arc is split so the **
 first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
 preview dropped to the backlog.
 
-Amicus is at **v4.5.0** (tagged 2026-07-28). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.6.0** (tagged 2026-08-02). Each 4.x rev below leads with the benefit, not the
 plumbing.
 
-**Status:** v4.0 through **v4.5.0** have **shipped** — everything down to the v4.6 heading is a
-record of what landed, not a plan. **v4.6 (composition + tagging + GUI ergonomics) is the next
-rev.** v5.0 remains forward-looking.
+**Status:** v4.0 through **v4.6.0** have **shipped** — everything down to the v4.7 heading is a
+record of what landed, not a plan. **v4.7 (composition + tagging + GUI ergonomics) is the next
+planned rev** — that scope carried the number v4.6 here until the degrade-announcement-invariant
+milestone took the v4.6.0 release (2026-08-02); renumbered, not descoped. v5.0 remains
+forward-looking.
 
 > 📁 **Reading this from an npm install?** Some references below point at working documents that
 > live in the git repository and are deliberately **not** in the published package — anything under
@@ -95,7 +97,7 @@ stops hiding. Design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-des
   client best able to show it. *(S–M; the pieces exist — see the design notes below.)*
 - **Council policy packs + full run-profiles** (bench + lenses + options + briefing template, invoke by name) — B7/F5 *(M)*
 - **Briefing templates + library** (F9) *(S–M)* — the foundation packs reference; the `{{input}}`
-  chaining variable and the `critique`/`refine` built-ins arrive with v4.6
+  chaining variable and the `critique`/`refine` built-ins arrive with the composition rev (now v4.7)
 - **Ride-along fixes** — FR-1 (a failed council seat can render perpetually live), the FR-2 ruling,
   RN-1/RN-5/RN-11 Workspace renderer fixes, TST-3 real-CDP abort pass *(S each; dispositions for
   all 17 open items are tabled in the design doc's §8)*
@@ -103,7 +105,37 @@ stops hiding. Design: `docs/superpowers/specs/2026-07-27-v4.5-save-and-share-des
 > Why here: save/share velocity multipliers that only pay off once councils are a command (v4.0)
 > and observable (v4.3/v4.4); auto-open makes the v4.4 surface discoverable on its best client.
 
-## v4.6 — "Compose your councils" *(specced after v4.5 ships — anti-rot rule)*
+## v4.6 — "A loss announces itself" *(the degrade announcement invariant)* — ✅ SHIPPED v4.6.0, 2026-08-02
+**Benefit:** a council run can no longer degrade quietly — every loss states what was lost, why,
+and what it does to the run, in one voice, on every surface (stderr, `run.json`, `verdict.json`,
+the report, `doctor`). The north star made mechanical: a correct-but-silent degrade fails the bar
+as hard as a crash.
+- **The ten-channel degrade announcement contract** — every loss routes through one sink
+  (`src/council/run-degrade.js`, the only code allowed to flip `degraded.value`, enforced by a
+  source-scan invariant test) and lands with mandatory what/why/effect on every surface, including
+  the report's new **"What was lost"** section — #85 *(L)*
+- **`verdict.seatLoss` derived from the degrade records** (#84 — a dead critic *leg* finally flips
+  `criticSeated`; the v4.5.2 seatLoss suites passed byte-unedited) + **Stage-2 judge legs get
+  `runStats` cost rows** (#83 — per-leg attribution for ~38% of a run's spend that had none) *(M)*
+- **`doctor` speaks the vocabulary** — `doctor --json` gains additive `degrades[]`, `--fix` prints
+  `Recovered:` lines in the one voice, and the engine hints state causes as **unverified** instead
+  of asserting an antivirus guess *(M)*
+- **Workspace discoverability from the CLI** — `watch` usage names `--ui` (#80), a CLI council run
+  with Electron present prints how to open the live Workspace (#81), `watch --ui` against an
+  `--out-dir` run names its cause (#82), and the Stage-5 verdict rebuild preserves
+  `seatLoss`/`degrades[]` (#87) *(S each)*
+- **Deliberate behavior changes** — dropped preset members and shared-server acquisition failures
+  now exit degraded (2) on every transport; judge rows raise reported cost totals vs v4.5.x
+  (`runStats` consumers keying by model must exclude `role: 'judge'`).
+- **Docs** — the full record is `CHANGELOG.md` §4.6.0; spec
+  `docs/superpowers/specs/2026-08-01-degrade-announcement-invariant-design.md`; plans 1–4 under
+  `docs/superpowers/plans/` (`2026-08-0*-v4.6-degrade-invariant-plan-*.md`).
+> Why it jumped the queue (2026-08-01): the v4.5.x field reports showed the engine was not losing
+> legs (11 four-seat council runs on v4.5.4, 10 clean) — but when a seat *was* lost, nothing told
+> the user which one. That silent-degrade class was ruled a north-star violation and took the rev
+> number; the composition scope below moved to v4.7.
+
+## v4.7 — "Compose your councils" *(renumbered from v4.6, 2026-08-02 — spec + fresh plan at kickoff per the anti-rot rule)*
 **Benefit:** councils chain — generate → critique → refine with no manual copy-paste — and history
 becomes navigable.
 - **Composable/chained waves** (`--input-from <id>` / `--prompt-file -` pipe + per-source digests) —
@@ -115,8 +147,8 @@ becomes navigable.
   remainder of TST-7
 - **README + docs update** *(S)*
 > The 2026-07-19 combined spec (`2026-07-19-v4.5-policy-packs-composition-design.md`) holds the
-> approved chaining/tagging/F10 design detail and is the primary input to the v4.6 brainstorm; it
-> is NOT executed as-written — v4.6 gets its own spec + fresh plan once v4.5 ships.
+> approved chaining/tagging/F10 design detail and is the primary input to the v4.7 brainstorm; it
+> is NOT executed as-written — v4.7 gets its own spec + fresh plan at kickoff.
 
 ### Deferred out of v4.4.1 into v4.5 (2026-07-27)
 
