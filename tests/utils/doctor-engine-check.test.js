@@ -189,7 +189,7 @@ describe('evaluateEngineMcp (--fix)', () => {
     const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
     expect(r.fixed).toBe(true);
     expect(r.fixDetail).toBe('copied the engine into 1 npx-cache copy');
-    expect(r.message).toMatch(/self-healed/i); // prose byte-identical shape, unchanged
+    expect(r.message).toBe('engine present in 1 npx-cache copy (self-healed 1 npx-cache copy)'); // prose byte-identical, exact
   });
 
   test('a repair that heals nothing does NOT mark fixed', async () => {
@@ -216,6 +216,8 @@ describe('evaluateEngineMcp (--fix)', () => {
     expect(r.fixed).toBe(true);
     expect(r.fixDetail).toBe('copied the engine into 1 npx-cache copy');
     expect(r.status).toBe('warn'); // the existing ambiguity rule is untouched
-    expect(r.message).toMatch(/self-heal incomplete/i); // prose byte-identical
+    expect(r.message).toBe(
+      `engine missing from 1/2 npx-cache copies: ${npxDir('h2')} (searched: ); self-heal incomplete: ${npxDir('h2')} — no healthy sibling install to copy the engine from`,
+    ); // prose byte-identical, exact
   });
 });

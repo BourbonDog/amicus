@@ -171,7 +171,7 @@ describe('evaluateElectronMcp (--fix)', () => {
     const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron });
     expect(r.fixed).toBe(true);
     expect(r.fixDetail).toBe('self-healed 1 npx-cache copy');
-    expect(r.message).toMatch(/self-healed/i); // prose byte-identical shape, unchanged
+    expect(r.message).toBe('electron present in 1 npx-cache copy (self-healed 1 npx-cache copy)'); // prose byte-identical, exact
   });
 
   test('a repair that heals nothing does NOT mark fixed', async () => {
@@ -198,7 +198,33 @@ describe('evaluateElectronMcp (--fix)', () => {
     expect(r.fixed).toBe(true);
     expect(r.fixDetail).toBe('self-healed 1 npx-cache copy');
     expect(r.status).toBe('warn'); // the existing ambiguity rule is untouched
-    expect(r.message).toMatch(/self-heal incomplete/i); // prose byte-identical
+    expect(r.message).toBe(
+      `electron unavailable in 1/2 npx-cache copies: ${npxPkg('h2')} (binary missing; electron dir: ${npxEl('h2')}); self-heal incomplete: ${npxEl('h2')} — antivirus quarantine`,
+    ); // prose byte-identical, exact
+  });
+
+  // Reviewer follow-up: the bare `: { ...after, ...fixFields }` fallback (no
+  // `failed` list — every ATTEMPTED repair succeeded) is reached whenever an
+  // unattempted, unhealable copy (package-missing; never enters `repairable`)
+  // keeps `after.status` off 'ok'. Distinct branch from the "self-heal
+  // incomplete" partial case above, which requires >=1 attempted failure.
+  test('an unattempted (package-missing) copy left broken, alongside a fully successful repair, still marks fixed via the bare fallback branch', async () => {
+    const healed = { h1: false };
+    const scan = () => ({
+      installs: [
+        { kind: 'npx', pkgDir: npxPkg('h1'), electronDir: npxEl('h1'), state: healed.h1 ? 'ok' : 'binary-missing' },
+        npxCopy('h2', 'package-missing'),
+      ],
+      mcpLaunch: 'npx',
+    });
+    const repairElectron = jest.fn(async ({ electronDir }) => { healed.h1 = true; return { repaired: true, electronDir }; });
+    const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron });
+    expect(repairElectron).toHaveBeenCalledTimes(1); // package-missing is never attempted — nothing to repair into
+    expect(r.fixed).toBe(true);
+    expect(r.fixDetail).toBe('self-healed 1 npx-cache copy');
+    expect(r.status).toBe('warn'); // unchanged from what this scenario already produced pre-flag
+    expect(r.message).toBe(`electron unavailable in 1/2 npx-cache copies: ${npxPkg('h2')} (not installed)`);
+    expect(r.message).not.toMatch(/self-heal incomplete/i); // the bare-fallback branch, not the failed-join branch
   });
 });
 
