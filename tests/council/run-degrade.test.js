@@ -246,3 +246,38 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
     expect(emitted()).not.toMatch(/produced NO legs/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// v4.6 Plan 4 Task 4: dropped-members — a preset member whose alias/id never
+// resolved is a lost seat, announced through the sink like every other loss.
+// BEHAVIOR CHANGE, pinned deliberately: this used to be silent (exit 0, a
+// bare CLI-only stderr Notice); it now exits 2, on every transport.
+// ---------------------------------------------------------------------------
+
+describe('dropped-members channel (spec §5, Plan 4 Task 4)', () => {
+  test('a dropped preset member is announced on run.json + verdict.json and exits degraded (2)', async () => {
+    const opts = baseOptions(tmp, {
+      droppedMembers: [{ member: 'kimi', reason: 'alias no longer resolves to a known model' }],
+    });
+    const { exitCode, run } = await runCouncil(opts, deps(scriptedLaunchers(happyScript())));
+
+    expect(exitCode).toBe(2); // the behavior change, pinned deliberately: was 0
+    const dm = (run.degrades || []).find(d => d.channel === 'dropped-members');
+    expect(dm).toBeDefined();
+    expect(dm.what).toContain('kimi');
+    expect(dm.why).toBe('alias no longer resolves to a known model');
+    expect(dm.data).toEqual({ member: 'kimi', reason: 'alias no longer resolves to a known model' });
+
+    const verdict = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'verdict.json'), 'utf-8'));
+    const vRec = (verdict.degrades || []).find(d => d.channel === 'dropped-members');
+    expect(vRec).toBeDefined();
+    expect(vRec.data).toEqual({ member: 'kimi', reason: 'alias no longer resolves to a known model' });
+  });
+
+  test('an empty droppedMembers list is a no-op control: stays exit 0 with no such record', async () => {
+    const opts = baseOptions(tmp, { droppedMembers: [] });
+    const { exitCode, run } = await runCouncil(opts, deps(scriptedLaunchers(happyScript())));
+    expect(exitCode).toBe(0);
+    expect((run.degrades || []).find(d => d.channel === 'dropped-members')).toBeUndefined();
+  });
+});

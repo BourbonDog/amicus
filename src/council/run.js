@@ -73,6 +73,20 @@ async function runCouncil(options, deps = {}) {
     || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal, sharedServer: () => sharedServer });
 
   runState.initCouncilRun(o); // run.json seed + sessions-dir pointer (run-state.js)
+
+  // dropped-members (spec §5, Plan 4): a seat the user's preset requested that
+  // never resolved is a lost seat — announced like every other loss. Fires
+  // once per member, before any launch (zero spend), for BOTH transports.
+  for (const dm of o.droppedMembers || []) {
+    degrade.note({
+      channel: 'dropped-members',
+      what: `seat ${dm.member} was not seated`,
+      why: dm.reason,
+      effect: 'the bench is smaller than the preset requested; the run will exit degraded (2)',
+      data: { member: dm.member, reason: dm.reason },
+    });
+  }
+
   emitRunStarted(o.runDir, o.runId, { bench: o.models, chair: o.chair }, o.follow);
 
   let signalled = null;

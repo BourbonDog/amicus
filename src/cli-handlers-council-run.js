@@ -72,11 +72,8 @@ function resolveBench(args, useJson) {
     if (expanded.error) {
       return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: ${expanded.error}` }) };
     }
-    if (expanded.dropped && expanded.dropped.length && !useJson) {
-      process.stderr.write(`Notice: dropped unavailable council member(s): ${expanded.dropped.join(', ')}\n`);
-    }
-    // v4.5 Wave 2: threaded into runCouncil's options — the ONLY prior signal
-    // was the stderr-only Notice above, which --json mode never even prints.
+    // v4.5 Wave 2 → Plan 4 Task 4: threaded into runCouncil's options — the
+    // sink now announces each dropped member, with reason, on every transport and surface.
     return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
   }
   return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
@@ -88,8 +85,7 @@ function resolveBench(args, useJson) {
  */
 function realDeps() {
   return {
-    // #81 (spec §2): the SAME pure presence probe doctor's electron checks use
-    // (src/cli-handlers-doctor.js) — stats the exe, never launches anything.
+    // #81 (spec §2): same pure presence probe doctor's electron checks use (src/cli-handlers-doctor.js).
     getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
   };
 }

@@ -242,4 +242,21 @@ describe('council run threads droppedMembers into runCouncil options (Wave 2 chi
       { member: 'catalog-ghost', reason: 'not present in the cached model catalog' },
     ]);
   });
+
+  // v4.6 Plan 4 Task 4: the bare, --json-blind stderr Notice this same fixture
+  // used to print in human mode is gone — superseded by the sink's per-member
+  // announcement (which fires inside runCouncil, mocked away in this suite).
+  // Nothing else about this path changed: droppedMembers still threads through.
+  test('human mode: the old "Notice: dropped unavailable council member(s)" line is GONE', async () => {
+    const args = argsBase({ council: 'droppy', chair: 'opus', json: false });
+    delete args.models;
+    const code = await handleCouncilRun(args);
+    expect(code).toBe(0);
+    const stderrText = err.mock.calls.map(c => c[0]).join('');
+    expect(stderrText).not.toMatch(/Notice: dropped unavailable council member/);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.droppedMembers).toEqual([
+      { member: 'catalog-ghost', reason: expect.any(String) },
+    ]);
+  });
 });
