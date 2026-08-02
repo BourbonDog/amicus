@@ -322,6 +322,7 @@ src/
 ├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-council-awareness.js
+├── mcp-council-bench.js
 ├── mcp-council-run.js
 ├── mcp-notify.js  # Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'`
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
@@ -449,6 +450,7 @@ evals/
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
+| `mcp-council-bench.js` |  | `resolveBenchInput()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |

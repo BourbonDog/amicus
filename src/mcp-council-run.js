@@ -17,6 +17,9 @@ const runState = require('./council/run-state');
 const { fenceSidecarOutput } = require('./utils/untrusted-fence');
 const { isPathInside } = require('./project-root-allowlist');
 const { validateOnComplete, requestMcpNotify } = require('./mcp-notify');
+// v4.6 Plan 4 Task 4b: resolveBenchInput moved to its own leaf (size gate) —
+// see mcp-council-bench.js's module docblock for why.
+const { resolveBenchInput } = require('./mcp-council-bench');
 
 function textResult(text, isError) {
   const result = { content: [{ type: 'text', text }] };
@@ -39,34 +42,6 @@ const COUNCIL_PACK_PARAM_MAP = {
   debate: 'debate', timeoutMinutes: 'timeout', maxCost: 'max-cost', gateway: 'gateway',
   template: 'template',
 };
-
-/**
- * Resolve the bench: models XOR council preset (amicus_fanout parity).
- * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed council
- * preset name when that branch was taken, else null — this handler always
- * spawns the CLI child with an already-expanded `--models` list (never
- * `--council`), so the preset name would otherwise be lost; the caller
- * forwards it via the internal `--council-name` passthrough instead.
- */
-function resolveBenchInput(input) {
-  const inputModels = Array.isArray(input.models) ? input.models : [];
-  const hasModels = inputModels.length > 0;
-  const hasCouncil = typeof input.council === 'string' && input.council.trim();
-  if (hasModels && hasCouncil) { return { error: "Pass exactly one of 'models' / 'council', not both." }; }
-  if (!hasModels && !hasCouncil) { return { error: "Provide 'models' or 'council'." }; }
-  if (hasCouncil) {
-    const { resolveCouncilMembers } = require('./utils/config');
-    const { readCache } = require('./utils/model-catalog');
-    const catalog = (readCache() || {}).models || [];
-    const presetName = input.council.trim();
-    const expanded = resolveCouncilMembers(presetName, catalog);
-    if (expanded.error) { return { error: expanded.error }; }
-    // v4.5 Wave 2: the child never re-resolves (bench is spawned pre-expanded
-    // to --models) — the pre-seed below is the only place this is recorded.
-    return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
-  }
-  return { bench: inputModels, presetName: null, droppedMembers: [] };
-}
 
 /**
  * amicus_council_run: validate → prep run dir → spawn CLI child → return
