@@ -74,3 +74,20 @@ test('a heal is labelled Recovered, not Notice', () => {
   }));
   expect(line.startsWith('Recovered: ')).toBe(true);
 });
+
+test('carries a frozen copy of structured data when provided', () => {
+  const src = { seat: 'beta', status: 'timeout' };
+  const d = makeDegrade({ ...valid, data: src });
+  expect(d.data).toEqual({ seat: 'beta', status: 'timeout' });
+  expect(d.data).not.toBe(src);                       // a copy, not the caller's object
+  expect(() => { d.data.seat = 'mutated'; }).toThrow(); // frozen (file is 'use strict')
+  src.seat = 'changed-later';
+  expect(d.data.seat).toBe('beta');                   // insulated from later caller mutation
+});
+
+test('omits data when absent and rejects a non-object data', () => {
+  expect(makeDegrade(valid).data).toBeUndefined();
+  expect(() => makeDegrade({ ...valid, data: 'a string' })).toThrow(/data/);
+  expect(() => makeDegrade({ ...valid, data: ['an', 'array'] })).toThrow(/data/);
+  expect(() => makeDegrade({ ...valid, data: null })).toThrow(/data/);
+});

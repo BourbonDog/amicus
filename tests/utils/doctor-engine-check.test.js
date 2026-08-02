@@ -175,4 +175,49 @@ describe('evaluateEngineMcp (--fix)', () => {
     expect(r.status).toBe('ok');
     expect(r.message).toMatch(/self-healed 2 npx-cache copies/i);
   });
+
+  // v4.6 Plan 3 Task 3: repair-success rows carry a structured fixed/fixDetail
+  // fact so the doctor-degrade collector never has to parse prose. Prose stays
+  // byte-identical — this only ADDS fields.
+  test('a full self-heal marks the row fixed with a human-ready detail', async () => {
+    const healed = { v: false };
+    const scan = () => ({
+      installs: [{ kind: 'npx', pkgDir: npxDir('h1'), engineOk: healed.v, roots: [] }],
+      mcpLaunch: 'npx',
+    });
+    const repairEngine = jest.fn(async ({ destPkgDir }) => { healed.v = true; return { repaired: true, destPkgDir }; });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(r.fixed).toBe(true);
+    expect(r.fixDetail).toBe('copied the engine into 1 npx-cache copy');
+    expect(r.message).toBe('engine present in 1 npx-cache copy (self-healed 1 npx-cache copy)'); // prose byte-identical, exact
+  });
+
+  test('a repair that heals nothing does NOT mark fixed', async () => {
+    const scan = () => ({ installs: [{ kind: 'npx', pkgDir: npxDir('h1'), engineOk: false, roots: [] }], mcpLaunch: 'npx' });
+    const repairEngine = jest.fn(async () => ({ repaired: false, reason: 'no healthy sibling install to copy the engine from' }));
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(r.fixed).toBeUndefined();
+  });
+
+  test('a partial self-heal (one healed, one still broken) marks fixed with the healed count, status stays warn', async () => {
+    const healed = { h1: false };
+    const scan = () => ({
+      installs: [
+        { kind: 'npx', pkgDir: npxDir('h1'), engineOk: healed.h1, roots: [] },
+        { kind: 'npx', pkgDir: npxDir('h2'), engineOk: false, roots: [] },
+      ],
+      mcpLaunch: 'npx',
+    });
+    const repairEngine = jest.fn(async ({ destPkgDir }) => {
+      if (destPkgDir === npxDir('h1')) { healed.h1 = true; return { repaired: true }; }
+      return { repaired: false, reason: 'no healthy sibling install to copy the engine from' };
+    });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(r.fixed).toBe(true);
+    expect(r.fixDetail).toBe('copied the engine into 1 npx-cache copy');
+    expect(r.status).toBe('warn'); // the existing ambiguity rule is untouched
+    expect(r.message).toBe(
+      `engine missing from 1/2 npx-cache copies: ${npxDir('h2')} (searched: ); self-heal incomplete: ${npxDir('h2')} — no healthy sibling install to copy the engine from`,
+    ); // prose byte-identical, exact
+  });
 });

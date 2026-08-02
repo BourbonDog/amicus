@@ -13,6 +13,10 @@ const path = require('path');
 const { failJson, buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
 const { validateTaskId } = require('./utils/validators');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
+// v4.6 Plan 4 Task 2: renderRunHuman moved to its own leaf (size gate); this
+// file re-exports it below so every existing require() of this path still
+// resolves it unchanged.
+const { renderRunHuman } = require('./cli-council-run-render');
 
 const CHAIR_DEFAULT = 'deepseek';
 
@@ -40,9 +44,9 @@ function sanitizeCouncilName(name) {
 
 /**
  * Resolve bench models from --models XOR --council (mirrors handleFanout).
- * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed --council
- * name when that branch was taken, else null — threaded into runCouncil's
- * `councilName` option so council ledger rows can be attributed to a preset.
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1: trimmed --council name,
+ * else null) and `droppedMembers`: a preset's own drops, or — bare --models —
+ * the parsed `--dropped-members` MCP→child passthrough (v4.6 Plan 4 Task 4b).
  */
 function resolveBench(args, useJson) {
   const hasModels = typeof args.models === 'string' && args.models.trim();
@@ -68,54 +72,40 @@ function resolveBench(args, useJson) {
     if (expanded.error) {
       return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: ${expanded.error}` }) };
     }
-    if (expanded.dropped && expanded.dropped.length && !useJson) {
-      process.stderr.write(`Notice: dropped unavailable council member(s): ${expanded.dropped.join(', ')}\n`);
-    }
-    // v4.5 Wave 2: threaded into runCouncil's options — the ONLY prior signal
-    // was the stderr-only Notice above, which --json mode never even prints.
+    // v4.5 Wave 2 → Plan 4 Task 4: threaded into runCouncil's options — the
+    // sink now announces each dropped member, with reason, on every transport and surface.
     return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
   }
-  return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
-}
-
-function renderRunHuman(run) {
-  const lines = [
-    `Council run ${run.runId}: ${run.status} (exit ${run.exitCode})`,
-    `  bench: ${(run.bench || []).join(', ')}  chair: ${run.chair}`,
-    `  dir:   ${run.options && run.options.outDir}`,
-  ];
-  // v4.4: a cost line that omits unpriced legs reads as the whole bill. The
-  // diagnosis measured council-wsgate02 printing $0.3720 for a run that really
-  // spent $0.9859. Say what we know, then say what we cannot know — and print
-  // the line even when NOTHING resolved (the old `typeof amount === 'number'`
-  // guard silently dropped it, so a fully unpriced run looked free).
-  const u = run.usage || null;
-  const unknownLegs = u && typeof u.unknownLegs === 'number'
-    ? u.unknownLegs
-    : (u && u.cost && u.cost.unpricedLegs) || 0;
-  // v4.4 Task 2: a fully-priced run can still be short. `council-wsgate01`
-  // printed an unqualified $0.2821 for a run that really spent $0.3036 — every
-  // leg `reported`, and 100% of the gap one unattributed `explore` child session.
-  const subtreeLegs = u && typeof u.subtreeUnknownLegs === 'number'
-    ? u.subtreeUnknownLegs
-    : (u && u.cost && u.cost.subtreeUnknownLegs) || 0;
-  if (u && u.cost && (typeof u.cost.amount === 'number' || unknownLegs > 0 || subtreeLegs > 0)) {
-    const known = typeof u.cost.amount === 'number' ? `$${u.cost.amount.toFixed(4)}` : '$0.0000';
-    const gaps = [];
-    if (unknownLegs > 0) { gaps.push(`${unknownLegs} leg(s) unknown`); }
-    if (subtreeLegs > 0) { gaps.push(`${subtreeLegs} leg(s) with unattributed subagent child-session spend`); }
-    const tail = gaps.length > 0
-      ? ` + ${gaps.join(' + ')} — real spend is at least this much`
-      : '';
-    lines.push(`  cost:  ${known} (${u.cost.source})${tail}`);
+  if (args['dropped-members'] === undefined) {
+    return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
   }
-  if (run.error) { lines.push(`  error: ${run.error.code}: ${run.error.message}`); }
-  return lines.join('\n') + '\n';
+  let dm; try { dm = JSON.parse(args['dropped-members']); } catch { dm = null; }
+  if (!Array.isArray(dm) || !dm.every(d => d && typeof d.member === 'string' && typeof d.reason === 'string')) {
+    return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --dropped-members must be a JSON array of {member, reason} entries' }) };
+  }
+  return { bench: parseList(args.models), presetName: null, droppedMembers: dm };
 }
 
-/** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
-async function handleCouncilRun(args) {
+/**
+ * Default real helpers; tests override via depsOverride (mirrors
+ * cli-handlers-spend.js's realDeps()/depsOverride convention).
+ */
+function realDeps() {
+  return {
+    // #81 (spec §2): same pure presence probe doctor's electron checks use (src/cli-handlers-doctor.js).
+    getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
+  };
+}
+
+/**
+ * @param {object} args parsed CLI args
+ * @param {object} [depsOverride] test seam (getElectronPath)
+ * @returns {Promise<number>} exit code
+ */
+async function handleCouncilRun(args, depsOverride = {}) {
   const useJson = !!args.json;
+  const deps = { ...realDeps(), ...depsOverride };
 
   // v4.5 Task 12 (B7/F5): resolve --pack FIRST, above the Task-5 template
   // block, so a pack-filled args.template renders through that single
@@ -243,6 +233,17 @@ async function handleCouncilRun(args) {
   const { readCache } = require('./utils/model-catalog');
   const { runCouncil } = require('./council/run');
   const cfg = loadConfig() || {};
+
+  // #81 (spec §2): the GUI's existence was announced on NO surface from the
+  // CLI path — MCP launches auto-open, the CLI stayed silent. Auto-open
+  // parity is a product decision (deliberately not taken here); the SILENCE
+  // is the spec's to fix. Presence probe only — never launches. Placed here
+  // (runId/runDir already resolved, still before the engine await) so the
+  // notice is useful WHILE the run is live, not just after it finishes.
+  if (!useJson && deps.getElectronPath()) {
+    process.stderr.write(`Notice: the Council Workspace can render this run live — open it with: amicus watch ${runId} --ui\n`);
+  }
+
   const { exitCode, run } = await runCouncil({
     briefing: promptRes.prompt, models: bench, chair, critic, lenses,
     project, runId, runDir,

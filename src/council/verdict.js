@@ -10,13 +10,6 @@ const { parseChairVerdict } = require('./parse-stage2');
 const VERDICT_SCHEMA_VERSION = 2;
 
 /**
- * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
- * @param {object} record  tally() output
- * @param {Array<{id,decision,applied,duplicateOf,tierOverride}>} decisions
- * @param {{overallVerdict?: (string|null)}} [opts] engine hook (Plan B): the
- *   parsed chair `VERDICT:` line; omitted/undefined → null.
- */
-/**
  * Describe which requested seats actually reviewed, for the verdict's own face.
  *
  * ⚠️ ADDED v4.5.2 from a field report. The critic is a SOLO wave with one leg,
@@ -54,6 +47,50 @@ function summarizeSeatLoss({ runId, critic, deadWaves = [] } = {}) {
   };
 }
 
+/**
+ * seatLoss, derived from the sink's records (v4.6 Plan 2, spec D3 — closes #84).
+ *
+ * WHY A DERIVATION: two fields reporting lost seats can disagree; deriving one
+ * from the other makes contradiction inexpressible. `summarizeSeatLoss` stays
+ * exactly as v4.5.2 shipped it (its tests pass unedited — that is the proof the
+ * shape survived); this function rebuilds its wave input from `dead-wave`
+ * records and then adds the losses waves can never show: `dead-leg` records —
+ * a solo critic wave that STARTED but whose one leg died is invisible to
+ * deadWaves, which is #84's second half.
+ *
+ * Reads ONLY record.data (Task 1's machine surface) — never the prose fields.
+ * @param {{runId: string, critic: ?string, degrades: Array<object>}} o
+ * @returns {?object} the summarizeSeatLoss shape, or null when no critic was requested
+ */
+function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
+  if (!critic) { return null; }
+  const real = degrades.filter(d => d.kind !== 'heal' && d.data);
+  const waves = real.filter(d => d.channel === 'dead-wave')
+    .map(d => ({ waveId: d.data.waveId, models: d.data.models || [], reason: d.data.reason }));
+  const base = summarizeSeatLoss({ runId, critic, deadWaves: waves });
+  const legs = real.filter(d => d.channel === 'dead-leg');
+  const criticLeg = legs.find(l => l.data.seat === critic) || null;
+  return {
+    ...base,
+    criticSeated: base.criticSeated && !criticLeg,
+    reason: base.reason || (criticLeg
+      ? (criticLeg.data.reason || `the critic leg ended '${criticLeg.data.status}' with no usable output`)
+      : null),
+    deadBenchSeats: [...base.deadBenchSeats,
+      ...legs.filter(l => l.data.seat !== critic).map(l => l.data.seat)],
+  };
+}
+
+/**
+ * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
+ * @param {object} record  tally() output
+ * @param {Array<{id,decision,applied,duplicateOf,tierOverride}>} decisions
+ * @param {{overallVerdict?: (string|null), seatLoss?: object, degrades?: Array<object>}} [opts]
+ *   `overallVerdict` is the engine hook (Plan B): the parsed chair `VERDICT:`
+ *   line; omitted/undefined → null. `seatLoss` (v4.5.2) and `degrades` (v4.6
+ *   Plan 2) are additive and OPTIONAL — each lands on the verdict only when
+ *   truthy/non-empty, absent otherwise (never fabricated).
+ */
 function buildVerdict(record, decisions = [], opts = {}) {
   const byId = new Map(decisions.map(d => [d.id, d]));
   return {
@@ -87,6 +124,11 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic
     // was requested, so its absence never has to be interpreted.
     ...(opts.seatLoss ? { seatLoss: opts.seatLoss } : {}),
+    // v4.6 Plan 2 (spec §4): the canonical what-was-lost surface. Additive and
+    // OPTIONAL — present only when the run actually degraded, so a clean run's
+    // verdict is byte-for-byte unchanged. schemaVersion stays 2 (the v4.5.2
+    // seatLoss precedent).
+    ...(opts.degrades && opts.degrades.length ? { degrades: opts.degrades } : {}),
   };
 }
 
@@ -127,6 +169,29 @@ function readOverallVerdict(runDir, runId) {
   return null;
 }
 
+/**
+ * Recover the additive loss surfaces for a Stage-5 rebuild (#87, v4.6 Plan 4).
+ * Same contract as readOverallVerdict directly above: the run folder's own
+ * verdict.json is the only source, a foreign runId never leaks, and absence
+ * yields nulls — the rebuild preserves, never invents. tally.json carries
+ * neither field, which is why the pre-#87 rebuild silently destroyed both.
+ * @param {string} runDir
+ * @param {string} [runId]
+ * @returns {{seatLoss: (object|null), degrades: (Array<object>|null)}}
+ */
+function readPriorVerdictSurfaces(runDir, runId) {
+  try {
+    const prior = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
+    if (!runId || prior.runId === runId) {
+      return {
+        seatLoss: (prior.seatLoss && typeof prior.seatLoss === 'object') ? prior.seatLoss : null,
+        degrades: Array.isArray(prior.degrades) && prior.degrades.length ? prior.degrades : null,
+      };
+    }
+  } catch { /* no prior verdict.json, or unreadable — nothing to preserve */ }
+  return { seatLoss: null, degrades: null };
+}
+
 /** Atomic write: tmp + rename (matches the repo's wave.json convention). */
 function writeVerdictAtomic(filePath, verdict) {
   const tmp = `${filePath}.tmp-${process.pid}`;
@@ -135,5 +200,6 @@ function writeVerdictAtomic(filePath, verdict) {
 }
 
 module.exports = {
-  buildVerdict, summarizeSeatLoss, readOverallVerdict, writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
+  buildVerdict, summarizeSeatLoss, deriveSeatLoss, readOverallVerdict, readPriorVerdictSurfaces,
+  writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
 };

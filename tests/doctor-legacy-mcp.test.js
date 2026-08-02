@@ -111,6 +111,58 @@ describe("doctor 'mcp-legacy' duplicate sidecar check (Task 4.3)", () => {
     expect(c.hint).toBe(HINTS.removeLegacySidecar);
   });
 
+  // v4.6 Plan 3 Task 3: repair-success rows carry a structured fixed/fixDetail
+  // fact so the doctor-degrade collector never has to parse prose. Prose stays
+  // byte-identical — this only ADDS fields.
+  test('doctor --fix full removal marks the row fixed with a human-ready detail', async () => {
+    const migrateLegacyMcpEntries = jest.fn(() => [
+      { target: 'Claude Code', result: 'removed' },
+      { target: 'Claude Desktop', result: 'removed' },
+    ]);
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      inspectLegacyMcpEntries: () => [
+        { target: 'Claude Code', status: 'removable', config: AMICUS_MCP },
+        { target: 'Claude Desktop', status: 'removable', config: AMICUS_MCP },
+      ],
+      migrateLegacyMcpEntries,
+    });
+    const c = findCheck(checks, 'mcp-legacy');
+    expect(c.fixed).toBe(true);
+    expect(c.fixDetail).toBe("removed the duplicate legacy 'sidecar' entry from Claude Code, Claude Desktop");
+    expect(c.message).toBe('removed legacy entry from: Claude Code, Claude Desktop'); // prose byte-identical
+  });
+
+  test('doctor --fix that removes nothing does NOT mark fixed', async () => {
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      inspectLegacyMcpEntries: () => [
+        { target: 'Claude Code', status: 'removable', config: AMICUS_MCP },
+      ],
+      migrateLegacyMcpEntries: () => [
+        { target: 'Claude Code', result: 'write-failed' },
+      ],
+    });
+    const c = findCheck(checks, 'mcp-legacy');
+    expect(c.fixed).toBeUndefined();
+  });
+
+  test('doctor --fix partial removal (some removed, some not) marks fixed, naming only the removed target', async () => {
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      inspectLegacyMcpEntries: () => [
+        { target: 'Claude Code', status: 'removable', config: AMICUS_MCP },
+        { target: 'Claude Desktop', status: 'removable', config: AMICUS_MCP },
+      ],
+      migrateLegacyMcpEntries: () => [
+        { target: 'Claude Code', result: 'removed' },
+        { target: 'Claude Desktop', result: 'write-failed' },
+      ],
+    });
+    const c = findCheck(checks, 'mcp-legacy');
+    expect(c.fixed).toBe(true);
+    expect(c.fixDetail).toBe("removed the duplicate legacy 'sidecar' entry from Claude Code");
+    expect(c.status).toBe('warn'); // unchanged: partial removal is still a warn
+    expect(c.message).toMatch(/removed 1\/2/); // prose byte-identical
+  });
+
   test('customized sidecar entry is untouched → ok with a left-alone note (never the dupe hint), even with --fix', async () => {
     const migrateLegacyMcpEntries = jest.fn();
     const checks = await doctor.runDoctorChecks({ ...base, fix: true,

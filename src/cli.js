@@ -397,7 +397,7 @@ Commands:
   council verdict <tally.json> [--decisions <d.json>] [-o <out.json>]   Build + write verdict.json
   doctor      Check your setup: keys, catalog, binary, skills, MCP (--json)
   spend [--since 7d] [--json]           Cross-run cost rollup from the spend ledger
-  watch <id> [--json] [--plain] [--interval <sec>]   Live-render a run from any terminal
+  watch <id> [--json] [--plain] [--interval <sec>] [--ui]   Live-render a run from any terminal
   abort       Abort a running session (or --all)
   setup       Configure default model and aliases
     --api-keys               Open API key setup window

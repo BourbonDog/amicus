@@ -171,7 +171,7 @@ function recordServerFate(o, patch, what) {
         what: 'could not start a shared OpenCode server',
         why: reason,
         effect: 'each wave will start its own, which is the configuration that races; the run '
-          + 'exits degraded (2)',
+          + 'will exit degraded (2)',
       });
     }
   }

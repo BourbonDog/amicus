@@ -106,11 +106,19 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     }
     if (!parsed.ok) {
       judgeResults.push({ judge, ok: false, order: null, adjudications: null,
-        conformance: leg.status === 'complete' ? 'unstructured' : 'clean' });
+        conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
+        // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
+        // Stage-1's convention (reviews carry the original wave leg even when a
+        // repair ran — repairs are separately recorded via appendStageWave).
+        // A repair solo's leg is NOT preferred here: attributing it instead
+        // would leave every non-repaired (the common case) judge with a false
+        // `status: 'error'` row — worse than the missing row #83 complained about.
+        leg: leg || null });
       continue;
     }
     const { order } = rankingToOrder(parsed.ranking, labels.labelMap);
-    judgeResults.push({ judge, ok: true, order, adjudications: parsed.adjudications, conformance });
+    judgeResults.push({ judge, ok: true, order, adjudications: parsed.adjudications, conformance,
+      leg: leg || null });
   }
   return { aborted: null, judgeResults };
 }

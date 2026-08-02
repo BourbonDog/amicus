@@ -42,3 +42,22 @@ describe('remediation-hints helper', () => {
     expect(Object.isFrozen(hints)).toBe(true);
   });
 });
+
+describe('unverified-cause voice (v4.6 Plan 3)', () => {
+  test('engineMissing states the cause as unverified, never asserts one', () => {
+    expect(hints.engineMissing).toMatch(/the cause was not verified/);
+    expect(hints.engineMissing).toMatch(/Common causes \(unverified\)/);
+    expect(hints.engineMissing).not.toMatch(/likely/);
+  });
+
+  test('reinstallEngineAv labels the antivirus cause unverified', () => {
+    expect(hints.reinstallEngineAv).toMatch(/unverified, but a known cause/);
+  });
+
+  test('the copy-paste commands survived the prose rewrite byte-identical', () => {
+    expect(hints.engineMissing).toContain('npm i -g amicus');
+    expect(hints.engineMissing).toContain('amicus doctor');
+    expect(hints.reinstallEngineAv).toContain('npm install -g amicus');
+    expect(hints.reinstallEngineAv).toContain('npm cache clean --force && npm install -g amicus');
+  });
+});

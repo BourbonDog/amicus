@@ -171,40 +171,8 @@ async function runDoctorChecks(depsOverride = {}) {
   checks.push(await guardAsync('electron-mcp', 'Electron (MCP launch path)',
     () => electronMcpCheck.evaluateElectronMcp({ ...d, fixTimeoutMs: FIX_TIMEOUT_MS })));
 
-  checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
-    if (d.getElectronPath()) {
-      return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed', hint: null };
-    }
-    // Broken (missing / quarantined). With --fix, self-heal in place (#56):
-    // repairElectron provisions the binary; {deferred} (no cache, no network)
-    // maps to WARN — a deferred download is not a failure. Without --fix, just
-    // point the user at `amicus doctor --fix`.
-    if (d.fix) {
-      let res;
-      try {
-        res = await d.repairElectron({ timeoutMs: FIX_TIMEOUT_MS });
-      } catch (e) {
-        return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `repair failed: ${e.message} — headless still works`, hint: HINTS.doctorFix };
-      }
-      res = res || {};
-      if (res.repaired) {
-        return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null };
-      }
-      const why = res.reason ? ` — ${res.reason}` : '';
-      // Quarantine (AV deleted electron.exe post-extract) is NOT a deferral and
-      // must NEVER be silently retried: surface the allow-list instruction as a
-      // WARN and STOP. No re-run of repairElectron here (no loop).
-      const detail = res.quarantined
-        ? `antivirus quarantine${why}`
-        : res.deferred
-          ? `deferred${why}`
-          : res.contended
-            ? `repair already in progress${why}`
-            : `not provisioned${why}`;
-      return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint: HINTS.doctorFix };
-    }
-    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.doctorFix };
-  }));
+  checks.push(await guardAsync('electron', 'Electron (interactive GUI)',
+    () => electronMcpCheck.evaluateElectronInteractive(d, { fixTimeoutMs: FIX_TIMEOUT_MS })));
 
   checks.push(guard('skills', 'Skills installed', () => (
     d.skillInstalled()
@@ -256,7 +224,7 @@ async function runDoctorChecks(depsOverride = {}) {
 
 const MARK = { ok: '✓', warn: '⚠', error: '✗' }; // ✓ ⚠ ✗
 
-function renderHuman(checks) {
+function renderHuman(checks, degrades = []) {
   let out = 'amicus doctor\n\n';
   for (const c of checks) {
     out += `${MARK[c.status] || '?'} ${c.name}: ${c.message}\n`;
@@ -265,6 +233,13 @@ function renderHuman(checks) {
   const errors = checks.filter(c => c.status === 'error').length;
   const warns = checks.filter(c => c.status === 'warn').length;
   out += `\n${errors} error(s), ${warns} warning(s).\n`;
+  // D7: every --fix repair announces what it did, in the one voice. Failures
+  // are NOT repeated here — the ✗ rows above already carry them; degrade
+  // records are the --json/artifact surface.
+  const { formatDegrade } = require('./utils/degrade');
+  for (const r of degrades.filter(x => x.kind === 'heal')) {
+    out += formatDegrade(r);
+  }
   return out;
 }
 
@@ -281,14 +256,18 @@ async function handleDoctor(args, runChecks = runDoctorChecks) {
   // self-heal in place. Omitted (not false) when absent so the injected
   // test-double sees a clean "no fix" call.
   const checks = await runChecks(args.fix ? { fix: true } : undefined);
+  // v4.6 Plan 3: collect once, both paths consume — the shared degrade/heal
+  // vocabulary (spec §4/§6). Never affects the exit-code logic below.
+  const { collectDoctorDegrades } = require('./utils/doctor-degrade');
+  const degrades = collectDoctorDegrades(checks);
   if (useJson) {
     const { buildDoctorDoc } = require('./utils/result-schema');
     const VERSION = require('../package.json').version;
-    const doc = buildDoctorDoc({ version: VERSION, timestamp: new Date().toISOString(), checks });
+    const doc = buildDoctorDoc({ version: VERSION, timestamp: new Date().toISOString(), checks, degrades });
     process.stdout.write(JSON.stringify(doc, null, 2) + '\n');
     return doc.ok ? 0 : 1;
   }
-  process.stdout.write(renderHuman(checks));
+  process.stdout.write(renderHuman(checks, degrades));
   return checks.some(c => c.status === 'error') ? 1 : 0;
 }
 

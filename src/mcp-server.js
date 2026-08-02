@@ -1388,8 +1388,12 @@ const handlers = {
       // must be carried through or it is destroyed. Unlike the CLI there is no
       // run-folder path to anchor on (`record` arrives inline), so it is an
       // explicit input; omitted → null, never fabricated.
+      // #87: seatLoss/degrades get the same additive-passthrough treatment —
+      // present only when the caller supplies them, never fabricated here.
       const verdict = buildVerdict(input.record, input.decisions || [],
-        { overallVerdict: input.overallVerdict });
+        { overallVerdict: input.overallVerdict,
+          ...(input.seatLoss ? { seatLoss: input.seatLoss } : {}),
+          ...(Array.isArray(input.degrades) && input.degrades.length ? { degrades: input.degrades } : {}) });
       if (!input.render) {
         return textResult(fenceSidecarOutput(JSON.stringify(verdict)));
       }

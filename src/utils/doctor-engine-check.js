@@ -73,7 +73,7 @@ function evaluateEngineInstalls(d) {
  * the engine into each via d.repairEngine, then re-report from a fresh scan.
  * Without d.fix — or when nothing is copy-fixable — returns the plain verdict.
  * @param {object} d doctor deps (scanEngineInstalls, fix?, repairEngine?)
- * @returns {Promise<{id,name,status,message,hint}>}
+ * @returns {Promise<{id,name,status,message,hint,fixed?,fixDetail?}>}
  */
 async function evaluateEngineMcp(d) {
   const verdict = evaluateEngineInstalls(d);
@@ -94,11 +94,22 @@ async function evaluateEngineMcp(d) {
   const after = evaluateEngineInstalls(d); // fresh scan reflects the copies
   if (after.status === 'ok') {
     const n = results.length;
-    return { ...after, message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')})` };
+    return {
+      ...after,
+      message: `${after.message} (self-healed ${n} npx-cache ${plural(n, 'copy', 'copies')})`,
+      fixed: true,
+      fixDetail: `copied the engine into ${n} npx-cache ${plural(n, 'copy', 'copies')}`,
+    };
   }
   const failed = results.filter((r) => !r.repaired)
     .map((r) => `${r.pkgDir}${r.reason ? ` — ${r.reason}` : ''}`).join('; ');
-  return { ...after, message: `${after.message}; self-heal incomplete: ${failed}` };
+  // Partial credit: some copies healed even though the check overall is still
+  // not 'ok' — flag it ONLY when >=1 repair actually succeeded (#84-style rule).
+  const healed = results.filter((r) => r.repaired).length;
+  const fixFields = healed > 0
+    ? { fixed: true, fixDetail: `copied the engine into ${healed} npx-cache ${plural(healed, 'copy', 'copies')}` }
+    : {};
+  return { ...after, message: `${after.message}; self-heal incomplete: ${failed}`, ...fixFields };
 }
 
 module.exports = { evaluateEngineInstalls, evaluateEngineMcp };

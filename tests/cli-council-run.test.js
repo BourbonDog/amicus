@@ -180,3 +180,42 @@ describe('engine invocation', () => {
     expect(text).toMatch(/2 leg\(s\) unknown/);
   });
 });
+
+// v4.6 Plan 4 Task 3 (#81, spec §2 — the SILENCE half): MCP's amicus_council_run
+// auto-opens the Workspace; the CLI path announced its existence on NO surface.
+// getElectronPath is a pure presence probe (same one doctor's electron checks
+// use) injected as this handler's first deps seam — a fake stands in here so
+// no test ever depends on this machine's real Electron install state.
+describe('Workspace notice on the CLI path (#81: the SILENCE half)', () => {
+  const noticeFor = (runId) =>
+    `Notice: the Council Workspace can render this run live — open it with: amicus watch ${runId} --ui\n`;
+
+  test('human mode + Electron present prints exactly one Workspace notice with the real runId, on stderr', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: { runId: 'r1', status: 'complete' } });
+    const args = argsBase(); args.json = false;
+    const code = await handleCouncilRun(args, { getElectronPath: () => '/fake/Electron.app' });
+    expect(code).toBe(0);
+    const runId = runCouncil.mock.calls[0][0].runId;
+    const stderrText = err.mock.calls.map(c => c[0]).join('');
+    const notice = noticeFor(runId);
+    expect(stderrText).toContain(notice);
+    expect(stderrText.split(notice).length - 1).toBe(1); // exactly one occurrence
+  });
+
+  test('--json mode never emits the Workspace notice, even when Electron is present', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: { runId: 'r2', status: 'complete' } });
+    const code = await handleCouncilRun(argsBase(), { getElectronPath: () => '/fake/Electron.app' });
+    expect(code).toBe(0);
+    const stderrText = err.mock.calls.map(c => c[0]).join('');
+    expect(stderrText).not.toContain('Council Workspace');
+  });
+
+  test('human mode with Electron absent emits no Workspace notice', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: { runId: 'r3', status: 'complete' } });
+    const args = argsBase(); args.json = false;
+    const code = await handleCouncilRun(args, { getElectronPath: () => null });
+    expect(code).toBe(0);
+    const stderrText = err.mock.calls.map(c => c[0]).join('');
+    expect(stderrText).not.toContain('Council Workspace');
+  });
+});

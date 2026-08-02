@@ -19,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('../utils/atomic-write');
-const { buildVerdict, summarizeSeatLoss, writeVerdictAtomic } = require('./verdict');
+const { buildVerdict, summarizeSeatLoss, deriveSeatLoss, writeVerdictAtomic } = require('./verdict');
 const { buildReport } = require('./report');
 const { validateFindings } = require('./findings');
 const { toGlobalFindings } = require('./anonymize');
@@ -160,6 +160,16 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     findings.push(...claudeReview.globalFindings);
     runStats.push(claudeRunStatsRow());
   }
+  // #83 (v4.6 Plan 2): Stage-2 judge legs are ~38% of a run's cost and had no
+  // runStats row at all — per-leg cost was unattributable from the artifact.
+  // One row per judge, attributing the judge's ORIGINAL Stage-2 wave leg (never
+  // a repair solo's — run-stage2.js mirrors Stage-1's convention there); a judge
+  // whose wave leg died still gets an honest error row.
+  for (const j of (judgeResults || [])) {
+    runStats.push(buildRunStatsEntry({
+      leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance,
+    }));
+  }
   if (chairStats) { runStats.push(chairStats); }
   return { meta, findings, adjudications, rankings, runStats };
 }
@@ -176,14 +186,22 @@ function writeTallyFiles({ runDir, tallyInput, record }) {
  * Undecided verdict + deterministic report. Sets the nullable overallVerdict
  * (council family v2, Plan A) on buildVerdict's output — independent of
  * buildVerdict's own signature.
+ * @param {{runDir: string, record: object, overallVerdict?: (string|null),
+ *   chairText?: string, critic?: string, deadWaves?: Array<object>,
+ *   degrades?: Array<object>}} o `degrades` (v4.6 Plan 2), when present, is
+ *   both carried onto the verdict and used to DERIVE `seatLoss` (deriveSeatLoss)
+ *   in preference to summarizing it from `deadWaves` (summarizeSeatLoss).
  * @returns {object} the verdict written to disk
  */
-function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves }) {
-  // v4.5.2 — computed here rather than in run.js so verdict assembly stays in
-  // one place; see summarizeSeatLoss in ./verdict for why a lost critic has to
-  // reach the verdict at all.
-  const seatLoss = summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
-  const verdict = buildVerdict(record, [], { seatLoss });
+function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves, degrades }) {
+  // v4.6 Plan 2 (spec D3): when the sink's records are available they are the
+  // single source of truth — seatLoss derives from them so it can never
+  // disagree with degrades[]. deadWaves remains the fallback for direct
+  // callers that predate the sink (their tests pass unedited).
+  const seatLoss = degrades
+    ? deriveSeatLoss({ runId: record.meta.runId, critic, degrades })
+    : summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
+  const verdict = buildVerdict(record, [], { seatLoss, degrades });
   verdict.overallVerdict = (overallVerdict === undefined) ? null : overallVerdict;
   writeVerdictAtomic(path.join(runDir, 'verdict.json'), verdict);
   const html = buildReport({ verdict }, { format: 'html' });

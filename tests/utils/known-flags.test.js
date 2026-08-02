@@ -43,7 +43,7 @@ describe('getKnownFlags', () => {
    * usage block. Rejecting them would break every MCP-launched run.
    */
   it('includes the internal MCP→CLI passthroughs', () => {
-    for (const f of ['task-id', 'run-id', 'council-name', 'cowork-process']) {
+    for (const f of ['task-id', 'run-id', 'council-name', 'cowork-process', 'dropped-members']) {
       expect(known.has(f)).toBe(true);
       expect(INTERNAL_FLAGS.has(f)).toBe(true);
     }

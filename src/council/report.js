@@ -11,6 +11,7 @@
 
 const { formatCost, sumWaveUsage } = require('../utils/pricing');
 const { formatDuration } = require('../utils/format-duration');
+const { formatDegrade } = require('../utils/degrade');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
@@ -65,8 +66,14 @@ function toModel(verdict, wave) {
       .map(f => ({ id: f.id, previousTier: f.debate.previousTier, tier: f.tier })),
   };
   const runStats = verdict.runStats || [];
+  // Cost-row role tag (Plan 2 final review F1): #83 gave judges their own
+  // runStats row, so a bench model can now appear twice (seat + judge),
+  // indistinguishable by `model` alone. Tag ONLY judge rows — old verdicts have
+  // no judge rows at all, so chair/critic/lens/seat rows stay byte-identical to
+  // their historical rendering.
   const costRows = runStats.map(r => ({
-    model: r.model, status: r.status, durationMs: r.durationMs,
+    model: r.role === 'judge' ? `${r.model} (judge)` : r.model,
+    status: r.status, durationMs: r.durationMs,
     cost: r.usage && r.usage.cost ? r.usage.cost : null,
   }));
   const total = (wave && wave.usage && wave.usage.cost) ? wave.usage.cost : sumWaveUsage(runStats).cost;
@@ -78,6 +85,13 @@ function toModel(verdict, wave) {
     tierCounts: verdict.tierCounts || { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 },
     judges, findings, debate,
     streetCred: verdict.streetCred || [],
+    // v4.6 Plan 2: additive and OPTIONAL on the verdict (verdict.js only sets
+    // it when the run actually degraded), so a clean verdict's model — and
+    // therefore its rendered report — is byte-for-byte unchanged.
+    // Plan 2 final review F2: LOSSES ONLY — a heal is announced on stderr/run.json but
+    // is not a loss (spec D4, §8), so it must never render under "What was
+    // lost". deriveSeatLoss (verdict.js) applies the same kind !== 'heal' filter.
+    degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal'),
     cost: { rows: costRows, total },
   };
 }
@@ -96,6 +110,16 @@ function renderMd(m) {
   out.push('## Verdict summary\n');
   out.push('| Tier | Count |\n|---|---|');
   for (const t of TIER_ORDER) { out.push(`| ${t} | ${m.tierCounts[t]} |`); }
+
+  // Heading-over-nothing: emitted ONLY when the run actually degraded, so a
+  // clean verdict's report stays byte-identical to before this section
+  // existed. Losses are headline news, so they sit directly under the
+  // summary, before the reader reaches the adjudication detail.
+  if (m.degrades.length) {
+    out.push('\n## What was lost\n');
+    // ONE voice (Plan 1's formatDegrade) — the report must not grow a dialect.
+    for (const d of m.degrades) { out.push(`- ${formatDegrade(d).trimEnd()}`); }
+  }
 
   out.push('\n## Adjudication matrix\n');
   out.push(`| Finding | Sev | Raiser | ${m.judges.join(' | ')} | Tier | Decision |`);

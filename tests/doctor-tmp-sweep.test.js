@@ -112,6 +112,48 @@ describe("doctor 'sessions-index-tmp' orphan sweep (B15)", () => {
     const c = findCheck(checks, 'sessions-index-tmp');
     expect(c.status).not.toBe('error');
   });
+
+  // v4.6 Plan 3 Task 3: repair-success rows carry a structured fixed/fixDetail
+  // fact so the doctor-degrade collector never has to parse prose. Prose stays
+  // byte-identical — this only ADDS fields.
+  test('--fix sweeping every orphan clean marks the row fixed with a human-ready detail', async () => {
+    const unlinkSessionIndexTmp = jest.fn();
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      now: () => NOW,
+      listSessionIndexTmpFiles: () => [stale('.sessions-index.json.111.aaa111aaa111.tmp'), stale('.sessions-index.json.222.bbb222bbb222.tmp')],
+      unlinkSessionIndexTmp,
+    });
+    const c = findCheck(checks, 'sessions-index-tmp');
+    expect(c.fixed).toBe(true);
+    expect(c.fixDetail).toBe('swept 2 orphaned session-index tmp file(s)');
+    expect(c.message).toBe('swept 2 orphaned tmp file(s)'); // prose byte-identical
+  });
+
+  test('--fix that sweeps nothing (fresh survivor only) does NOT mark fixed', async () => {
+    const unlinkSessionIndexTmp = jest.fn();
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      now: () => NOW,
+      listSessionIndexTmpFiles: () => [fresh('.sessions-index.json.333.ccc333ccc333.tmp')],
+      unlinkSessionIndexTmp,
+    });
+    const c = findCheck(checks, 'sessions-index-tmp');
+    expect(c.fixed).toBeUndefined();
+  });
+
+  test('--fix that sweeps only some (a fresh survivor remains) does NOT mark fixed — only the fully-clean sweep does', async () => {
+    const unlinkSessionIndexTmp = jest.fn();
+    const checks = await doctor.runDoctorChecks({ ...base, fix: true,
+      now: () => NOW,
+      listSessionIndexTmpFiles: () => [
+        stale('.sessions-index.json.111.aaa111aaa111.tmp'),
+        fresh('.sessions-index.json.444.ddd444ddd444.tmp'),
+      ],
+      unlinkSessionIndexTmp,
+    });
+    const c = findCheck(checks, 'sessions-index-tmp');
+    expect(c.fixed).toBeUndefined();
+    expect(c.status).toBe('warn'); // unchanged: a fresh survivor keeps the check from going ok
+  });
 });
 
 // Real-fs coverage for the list/unlink glue itself (the describe block above

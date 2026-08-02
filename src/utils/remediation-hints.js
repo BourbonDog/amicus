@@ -33,7 +33,7 @@ const REMEDIATION_HINTS = Object.freeze({
    */
   reinstallEngineAv:
     'npm install -g amicus  (a transient install error can roll back the engine binaries — re-run, or: npm cache clean --force && npm install -g amicus). '
-    + 'If your antivirus (e.g. Windows Defender) quarantined opencode.exe, allow-list it first, then reinstall.',
+    + 'If your antivirus (e.g. Windows Defender) quarantined opencode.exe — unverified, but a known cause — allow-list it first, then reinstall.',
 
   /**
    * Runtime server-start failure when the opencode engine binary does not
@@ -41,8 +41,10 @@ const REMEDIATION_HINTS = Object.freeze({
    * spawn ENOENT — surfaced by startServer (the missing-binary boundary).
    */
   engineMissing:
-    'OpenCode engine binary not found — it was likely skipped during install or quarantined by antivirus. '
-    + 'Run "amicus doctor", reinstall with "npm i -g amicus", and allow-list opencode.exe in your antivirus.',
+    'OpenCode engine binary not found — the cause was not verified. Common causes (unverified): '
+    + 'an install that skipped or rolled back the engine packages, or antivirus quarantine of opencode.exe. '
+    + 'Run "amicus doctor" to check the actual install, reinstall with "npm i -g amicus", '
+    + 'and allow-list opencode.exe in your antivirus if quarantine was the cause.',
 
   /** Electron absent — reinstall to add the interactive GUI (headless still works). */
   reinstallElectron: 'npm install -g amicus  (reinstall to add Electron)',

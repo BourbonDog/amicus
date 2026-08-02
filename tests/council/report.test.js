@@ -138,3 +138,63 @@ describe('report tier palette ↔ design tokens', () => {
     expect(html).toContain('--tier-singleton-ink: #4b5563');
   });
 });
+
+describe('What was lost (v4.6 Plan 2)', () => {
+  const lostVerdict = () => ({
+    schemaVersion: 2, type: 'council-verdict', runId: 'r1', runType: 'council',
+    date: '2026-08-01', chair: 'deepseek', council: ['alpha', 'beta'],
+    claudeInCouncil: false, overallVerdict: null,
+    findings: [], streetCred: [], runStats: [], tierCounts: {},
+    degrades: [{
+      kind: 'degrade', channel: 'dead-leg',
+      what: 'seat beta did not review',
+      why: "the leg ended 'timeout' with no usable output",
+      effect: '1 of 2 seats reviewed; the run continues with the bench that did and will exit degraded (2)',
+      data: { seat: 'beta', status: 'timeout', reason: null },
+    }],
+  });
+
+  test('md: renders the section through the one voice', () => {
+    const md = buildReport({ verdict: lostVerdict() }, { format: 'md' });
+    expect(md).toContain('## What was lost');
+    expect(md).toContain('- Notice: seat beta did not review — the leg ended');
+  });
+
+  test('md: NO heading when the run lost nothing', () => {
+    const v = lostVerdict(); delete v.degrades;
+    expect(buildReport({ verdict: v }, { format: 'md' })).not.toContain('What was lost');
+  });
+
+  test('html: section present, channel and voice line escaped and rendered', () => {
+    const html = buildReport({ verdict: lostVerdict() }, { format: 'html' });
+    expect(html).toContain('What was lost');
+    expect(html).toContain('dead-leg');
+    expect(html).toContain('seat beta did not review');
+  });
+
+  test('html: absent section on a clean verdict', () => {
+    const v = lostVerdict(); delete v.degrades;
+    expect(buildReport({ verdict: v }, { format: 'html' })).not.toContain('What was lost');
+  });
+
+  test('a heal-only verdict renders NO What-was-lost section in either format', () => {
+    const v = lostVerdict();
+    v.degrades = [{ kind: 'heal', channel: 'shared-server-unavailable',
+      what: 'the shared OpenCode server failed to start', why: 'database is locked',
+      effect: 'retried and succeeded; no seats lost' }];
+    expect(buildReport({ verdict: v }, { format: 'md' })).not.toContain('What was lost');
+    expect(buildReport({ verdict: v }, { format: 'html' })).not.toContain('What was lost');
+  });
+
+  test('cost rows tag judge rows and only judge rows', () => {
+    const v = lostVerdict();
+    v.runStats = [
+      { model: 'alpha', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 10, usage: null },
+      { model: 'alpha', role: 'judge', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 5, usage: null },
+      { model: 'deep', role: 'chair', wasChair: true, conformance: 'clean', status: 'complete', durationMs: 7, usage: null },
+    ];
+    const md = buildReport({ verdict: v }, { format: 'md' });
+    expect(md).toContain('alpha (judge)');
+    expect(md).not.toContain('deep (chair)');   // historical byte-identity: only judges tagged
+  });
+});

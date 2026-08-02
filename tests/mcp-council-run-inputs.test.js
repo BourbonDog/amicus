@@ -102,6 +102,16 @@ describe('council preset name reaches the spawned argv (v4.3 Task 3, spec §7.1)
     const args = calls[0].args;
     expect(args).not.toContain('--council-name');
   });
+
+  // v4.6 Plan 4 Task 4b: bare `models` input never resolves any drops (no
+  // --council to resolve), so the --dropped-members passthrough must be
+  // absent too — same "never both/never fabricated" precedent as --council-name.
+  test('input.models (no preset) never adds --dropped-members either', async () => {
+    const calls = [];
+    await handleCouncilRunTool(input(), tmp, helpers(calls));
+    const args = calls[0].args;
+    expect(args).not.toContain('--dropped-members');
+  });
 });
 
 // v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): a `council`
@@ -185,5 +195,36 @@ describe('droppedMembers threads through the MCP council-preset resolution path 
     expect(res.isError).toBeUndefined();
     const body = parseFenced(res);
     expect('droppedMembers' in body).toBe(false);
+  });
+
+  // v4.6 Plan 4 Task 4b: closes the transport disparity task-4-report.md's
+  // Concerns section flagged — the child is always spawned with --models
+  // (never --council), so its own resolveBench sees no preset to resolve and
+  // always resolves droppedMembers: [] for itself. Without a passthrough, a
+  // preset's drops never reach the child's runCouncil() options, so the
+  // sink's dropped-members channel (Task 4) never fires and the run exits 0
+  // instead of the CLI path's 2. Same internal, undocumented-passthrough
+  // precedent as --council-name.
+  test('a council preset that drops a member also spawns --dropped-members with the exact JSON', async () => {
+    const calls = [];
+    const res = await handleCouncilRunTool(
+      { briefingFile, council: 'droppy', chair: 'opus', outDir: 'run4' }, tmp, helpers(calls));
+    expect(res.isError).toBeUndefined();
+    const args = calls[0].args;
+    expect(args).toContain('--dropped-members');
+    const raw = args[args.indexOf('--dropped-members') + 1];
+    expect(JSON.parse(raw)).toEqual([{ member: 'catalog-ghost', reason: expect.any(String) }]);
+  });
+
+  test('a council preset with nothing dropped omits --dropped-members from the spawned argv', async () => {
+    fs.writeFileSync(path.join(cfgDir, 'model-catalog.json'), JSON.stringify({
+      schemaVersion: 2, fetchedAt: Date.now(),
+      models: [{ id: 'vendorx/model-a' }, { id: 'vendorx/model-b' }, { id: 'vendorx/ghost-model' }],
+    }));
+    const calls = [];
+    await handleCouncilRunTool(
+      { briefingFile, council: 'droppy', chair: 'opus', outDir: 'run5' }, tmp, helpers(calls));
+    const args = calls[0].args;
+    expect(args).not.toContain('--dropped-members');
   });
 });

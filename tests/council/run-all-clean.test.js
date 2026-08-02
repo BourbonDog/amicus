@@ -77,8 +77,9 @@ describe('an all-clean bench produces a coherent run (LC-10)', () => {
     const waveIds = launchers.calls.map(c => c.waveId);
     expect(waveIds).toEqual(['abc123-s1', 'abc123-s2', 'abc123-ch1']);
     const tally = readJson('tally.json');
+    // #83 (v4.6 Plan 2): 3 seat rows + 3 judge rows (one per bench model, all clean).
     expect(tally.runStats.filter(r => !r.wasChair).map(r => r.conformance))
-      .toEqual(['clean', 'clean', 'clean']);
+      .toEqual(['clean', 'clean', 'clean', 'clean', 'clean', 'clean']);
     expect(JSON.stringify(tally)).not.toContain('findingsUnverified');
     expect(JSON.stringify(tally)).not.toContain('repairRefused');
   });

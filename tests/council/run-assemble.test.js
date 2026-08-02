@@ -62,7 +62,9 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
   });
 
   test('runStats: one row per seat + the chair row; verbatim durations/usage', () => {
-    expect(input.runStats).toHaveLength(4);
+    // #83 (v4.6 Plan 2): 3 seat/critic rows + 3 judge rows (JUDGES has one entry
+    // per bench model) + 1 chair row.
+    expect(input.runStats).toHaveLength(7);
     const chairRow = input.runStats.find(r => r.wasChair);
     expect(chairRow).toMatchObject({ model: 'deepseek', role: 'chair', durationMs: 4200 });
     const gpt = input.runStats.find(r => r.model === 'gpt');
@@ -73,6 +75,31 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
     const record = tally(input);
     expect(record.tierCounts.Confirmed).toBe(1);   // A1: gpt agrees (peer), gemini self-vote excluded
   });
+});
+
+test('#83: buildTallyInput emits a runStats row per judge, role judge', () => {
+  const input = asm.buildTallyInput({
+    runId: 'r1', date: '2026-08-01', bench: ['alpha', 'beta'], chair: 'deepseek',
+    reviews: [
+      { model: 'alpha', modelInput: 'alpha', role: 'seat', text: 't', findings: [], conformance: 'clean',
+        leg: { model: 'alpha', status: 'complete', durationMs: 100, usage: { cost: { amount: 0.01 } } } },
+    ],
+    judgeResults: [
+      // adjudications: [] completes the fixture — buildTallyInput's rankings/
+      // adjudications reduction runs unconditionally over every ok:true judge
+      // (okJudges.flatMap(j => j.adjudications.map(...))), so an ok:true entry
+      // with no adjudications key would throw before ever reaching runStats.
+      { judge: 'alpha', ok: true, conformance: 'clean', adjudications: [],
+        leg: { model: 'alpha', status: 'complete', durationMs: 50, usage: { cost: { amount: 0.005 } } } },
+      { judge: 'beta', ok: false, conformance: 'unstructured', leg: null },
+    ],
+    chairStats: null, claudeReview: null,
+  });
+  const judges = input.runStats.filter(r => r.role === 'judge');
+  expect(judges).toHaveLength(2);
+  expect(judges[0]).toMatchObject({ model: 'alpha', role: 'judge', status: 'complete' });
+  expect(judges[0].usage.cost.amount).toBe(0.005);
+  expect(judges[1]).toMatchObject({ model: 'beta', role: 'judge', status: 'error', usage: null });
 });
 
 // Finding 3: --models containing the reserved 'claude' seat, combined with

@@ -70,7 +70,11 @@ function readPointer(project, runId) {
   const id = String(runId).replace(/^council-/, '');
   if (!RUN_ID_RE.test(id)) { return { runId: id, error: 'invalid runId' }; }
   const ptr = runState.readPointer(project, id);
-  if (!ptr) { return { runId: id, error: 'pointer missing, unreadable, or invalid' }; }
+  if (!ptr) {
+    return { runId: id, error: 'pointer missing — run pointers live under the LAUNCH directory '
+      + '(where `council run` was invoked), not --out-dir. If this run used --out-dir, point '
+      + '--project at the launch directory instead.' };
+  }
   return { runId: id, runDir: ptr.runDir };
 }
 

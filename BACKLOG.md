@@ -657,12 +657,38 @@ this work fixes.
   - ⚠️ **Behavior change for the v4.6 CHANGELOG:** a shared-server acquisition failure now exits
     **degraded (2)** (was: stderr + run.json only, exit 0). Spec-intended; run-single-server suite
     aligned.
-- **Plans 2–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
-  plan immediately before its development, not all up front — *"we learned a lesson about plan rot
-  the hard way."* Do not pre-write them. **Plan 2 (verdict/report surface: `verdict.degrades[]`,
-  derived `seatLoss`, report section) is next**, and inherits the final review's carries: a
-  thin-judge e2e pin, the "will exit / exits" hedging sweep, and the roll-up polish items in the
-  ledger.
+- **Plan 2 of 4:** `docs/superpowers/plans/2026-08-01-v4.6-degrade-invariant-plan-2-verdict-surface.md`
+  — **EXECUTED 2026-08-02** on the stacked branch `feat/v4.6-plan-2-verdict-surface` (13 commits
+  atop `e360c3d`, HEAD `4a46b9d`). Suite **479 suites / 6,210 tests / 0 failures** (delta vs the
+  measured Plan-1 baseline hand-accounted). Final review verdict after its fix wave: **Ready to
+  merge.** Closes **#84** (`seatLoss` derived from `degrades[]` — a dead critic LEG finally flips
+  `criticSeated`) and **#83** (Stage-2 judge `runStats` rows, judge-tagged in the report's cost
+  table). `verdict.json` gains additive `degrades[]`; the report gains "What was lost" (one voice,
+  heals filtered); in-run effect texts hedged ("will exit degraded (2)", 7 sites). The v4.5.2
+  seatLoss suites passed **byte-unedited** (the D3 derivation proof).
+  - ⚠️ **CHANGELOG note for v4.6:** report/tally cost totals now include judge legs and read
+    HIGHER than v4.5.x for identical runs; `runStats` consumers keying by model must exclude
+    `role: 'judge'` (ledger.js does).
+  - **#87 filed** (final-review find): the Stage-5 verdict rebuild drops `seatLoss`/`degrades[]`
+    from a decided verdict — pre-existing v4.5.2 class widened; slotted to **Plan 4**.
+- **Plan 3 of 4:** `docs/superpowers/plans/2026-08-02-v4.6-degrade-invariant-plan-3-truthful-doctor.md`
+  — **EXECUTED 2026-08-02** on the stacked branch `feat/v4.6-plan-3-truthful-doctor` (8 commits
+  atop Plan 2, HEAD `be54d48`). Suite **480 suites / 6,241 tests / 0 failures**. Final review:
+  **Ready to merge** (recommended hint-voice pin applied). What shipped: the doctor collector
+  (`doctor-check-failed`/`doctor-fix` channels; error rows + structural `fixed`/`fixDetail` flags
+  at all five `--fix` sites → shared-vocabulary records, zero prose parsing); `doctor --json` gains
+  additive `degrades[]`; `--fix` prints `Recovered:` lines in the one voice; exit codes and ✗/⚠
+  rows byte-unchanged; `engineMissing`/`reinstallEngineAv` now state causes as **unverified**
+  (commands byte-identical); `cli-handlers-doctor.js` extracted 295→263. The plan's measured-reality
+  block records that the v4.5.x engine-copy checks already satisfied criterion 4's first half.
+  - **Owner interpretation recorded in the plan header** (veto by editing it): human output renders
+    heals only; degrade records are the `--json` surface; warns map to no record.
+  - **Owner ruling queued:** does the unverified voice extend to `sweepSessionIndexTmp` (cause
+    near-definitional) and `rebuildElectron` (no live call site)? Final review says post-merge.
+- **Plan 4 is deliberately NOT written yet** (plan-rot ruling). It picks up: **#80/#81/#82**,
+  **#87**, the `dropped-members` placement ruling, and the ledger's polish batch — now including a
+  three-way `degrades` schema-copy lockstep test (run/verdict/doctor), the doctor `data`
+  description (council prose copied verbatim per plan), and the channel-domain grouping comment.
 
 **Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
 
@@ -687,25 +713,27 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   Those are already far over and are NOT cliffs — `mcp-server.js` is 1490 lines. Only **gated**
   files can trip the gate.
 
-  **Gated files at ≥293/300 today** (★ = was on the old list):
+  **Gated files at ≥293/300** (★ = was on the old list; re-measured 2026-08-02 at the v4.6
+  Plan-4 tip — the four v4.6-touched rows moved, three DOWN via extractions, one UP to the edge):
 
   | Lines | File | |
   |---|---|---|
   | **300** | `src/sidecar/electron-install.js` | AT CEILING, was missing |
   | **300** | `src/cli-handlers-run.js` | ★ |
-  | 299 | `src/council/run.js` | was missing |
+  | **299** | `src/cli-handlers-council-run.js` | ★ **v4.6 Plan 4 landed it here EXACTLY — zero headroom; next edit extracts first (`cli-council-run-render.js`, 51 lines, is the receiver)** |
   | 299 | `src/council/run-debate.js` | was missing |
   | 298 | `src/sidecar/start.js` | was missing |
   | 298 | `src/sidecar/fanout.js` | was missing |
-  | 298 | `src/mcp-council-run.js` | ★ (old list said 296) |
-  | 298 | `src/cli-handlers-council-run.js` | ★ |
   | 297 | `src/sidecar/continue.js` | was missing |
   | 297 | `src/sidecar/context-builder.js` | was missing |
   | 297 | `src/pack/pack-resolve.js` | ★ |
   | 296 | `src/sidecar/session-utils.js` | was missing |
-  | 295 | `src/cli-handlers-doctor.js` | **regressed — see below** |
   | 295 | `electron/workspace-ui/workspace-panels.js` | ★ |
   | 293 | `electron/workspace-ui/workspace-verbs.js` | was missing |
+
+  De-cliffed by v4.6 extractions (out of the ≥293 band): `src/council/run.js` 299→**271**
+  (Plan 1), `src/mcp-council-run.js` 298→**281** (Plan 4), `src/cli-handlers-doctor.js`
+  295→**274** (Plan 3).
 
   **Two corrections to entries elsewhere in this file:**
   - The Phase 17 entry claims `src/cli-handlers-doctor.js` was resolved to 260/300 by the Phase 20.1

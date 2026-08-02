@@ -11,6 +11,7 @@ const { formatCost } = require('../utils/pricing');
 const { formatDuration } = require('../utils/format-duration');
 const { TIER_ORDER, SYMBOL } = require('./report');
 const { tokenCss } = require('../design/tokens');
+const { formatDegrade } = require('../utils/degrade');
 
 const TIER_VAR = {
   Disputed: 'var(--tier-disputed)',
@@ -52,8 +53,22 @@ function renderHtml(m) {
   const costRows = m.cost.rows.map(r =>
     `<tr><td>${esc(r.model)}</td><td>${esc(r.status)}</td><td>${dur(r.durationMs)}</td>` +
     `<td>${esc(formatCost(r.cost))}</td></tr>`).join('');
+  // v4.6 Plan 2: 'What was lost' rows — m.degrades is absent on hand-built
+  // models (same tolerance as m.debate below); ONE voice (Plan 1's
+  // formatDegrade) rendered into the row, not a second HTML dialect.
+  const lostRows = (m.degrades || []).map(d =>
+    `<tr><td>${esc(d.channel)}</td><td>${esc(formatDegrade(d).trimEnd())}</td></tr>`).join('');
   const meta = [h.date, h.chair ? `chair: ${h.chair}` : null, `council: ${h.council.join(', ')}`,
     h.claudeInCouncil ? 'Claude in council' : null].filter(Boolean).map(esc).join(' · ');
+
+  // Heading-over-nothing, same guard idiom as debateSection below: absent or
+  // empty degrades ⇒ no section at all, so a clean verdict's HTML stays
+  // byte-identical to before this section existed. Losses are headline news,
+  // so the section sits directly after the Verdict-summary table (report.js's
+  // renderMd mirrors this placement immediately after the tier loop).
+  const lostSection = lostRows
+    ? `<h2>What was lost</h2><table><tr><th>Channel</th><th>Notice</th></tr>${lostRows}</table>`
+    : '';
 
   // m.debate is absent on hand-built models (tests/council/report.test.js calls
   // renderHtml directly with no debate key) — the guard must tolerate that, and
@@ -113,7 +128,7 @@ td.c { text-align: center; }
 <h1>Council Report — ${esc(h.runType)} (${esc(h.runId)})</h1>
 <p class="meta">${meta}</p>
 <h2>Verdict summary</h2>
-<table><tr><th>Tier</th><th>Count</th></tr>${tierRows}</table>
+<table><tr><th>Tier</th><th>Count</th></tr>${tierRows}</table>${lostSection}
 <h2>Adjudication matrix</h2>
 <table><tr><th>Finding</th><th>Sev</th><th>Raiser</th>${judgeHead}<th>Tier</th><th>Decision</th></tr>${matrixRows}</table>
 <p class="legend">✓ agree · ✗ dispute · – neutral · <sup>*</sup> raiser's own vote</p>

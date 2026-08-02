@@ -5,6 +5,49 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added (v4.6 milestone — the degrade announcement invariant, plans 1-4)
+
+- **The ten-channel degrade announcement contract.** A council run can no longer degrade its
+  exit code without announcing what was lost: every loss routes through one sink
+  (`src/council/run-degrade.js`, the only code allowed to flip `degraded.value` — enforced by a
+  source-scan invariant test) and lands with mandatory *what/why/effect* on stderr,
+  `run.json.degrades[]`, `verdict.json.degrades[]`, and the report's new **"What was lost"**
+  section, all rendered in one voice.
+- **`verdict.seatLoss` is now derived from the degrade records** (closes #84) — a dead critic
+  *leg* finally flips `criticSeated`, and `seatLoss` can no longer disagree with `degrades[]`.
+  The v4.5.2 seatLoss shape is unchanged (its tests passed byte-unedited).
+- **Stage-2 judge legs get `runStats` rows** (closes #83) — per-leg cost attribution for ~38%
+  of a run's spend that had none, judge-tagged in the report's cost table.
+- **`doctor` speaks the same language**: `doctor --json` gains additive `degrades[]`;
+  `doctor --fix` prints `Recovered:` lines for every repair; the engine hints state causes as
+  **unverified** instead of asserting an antivirus guess.
+- **The Workspace is discoverable from the CLI**: `watch` usage names `--ui` (closes #80), and
+  a CLI council run with Electron present prints how to open the live Workspace (closes #81 —
+  the silence half; auto-open parity remains a product decision).
+
+### Changed (v4.6 — deliberate behavior changes)
+
+- **A dropped preset member now degrades the run to exit 2 on every transport** (was: exit 0
+  with a `--json`-blind stderr notice). The loss is announced per-member with its reason.
+- **A shared-server acquisition failure now exits degraded (2)** (was: stderr + run.json only,
+  exit 0) — the per-wave fallback is the racy configuration and the run says so.
+- **Reported cost totals rise** for identical runs versus v4.5.x: judge legs now appear in
+  `runStats`. Consumers keying `runStats` by model must exclude `role: 'judge'` (as the
+  ledger's reliability join now does).
+- In-run degrade notices hedge the exit-code claim truthfully ("will exit degraded (2)");
+  `engineMissing`/`reinstallEngineAv` hint prose changed to the unverified voice (commands
+  byte-identical).
+
+### Fixed (v4.6)
+
+- **A dead Stage-1 leg was announced on no surface at all** (closes #85) — the only trace was
+  its absence from the stage entry's `taskIds`. Now named everywhere, with a regression pin.
+- **The Stage-5 verdict rebuild silently destroyed `seatLoss`/`degrades[]`** (closes #87) —
+  `tally.json` carries neither, so the decisions flow dropped both; now preserved from the run
+  folder's verdict the same way the chair's synthesis already was, on both CLI and MCP.
+- **`watch --ui` against an `--out-dir` run failed with a symptom, not a cause** (closes #82) —
+  the error now names the launch-directory pointer and the working invocation.
+
 ### Fixed
 
 - **`/amicus:council` lost all of its frontmatter at load time.** `commands/council.md`'s

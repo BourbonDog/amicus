@@ -363,7 +363,7 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
   // v4.6 Plan 1 Task 8: this channel now routes through the real degrade sink,
   // which made the exit-code degrade this describe block's title has always
   // claimed REAL — a shared-server-acquisition failure with a working per-wave
-  // fallback now correctly exits degraded (2), not a silent 0.
+  // fallback now correctly will exit degraded (2), not a silent 0.
   describe('a shared-server start failure degrades — loudly, durably, never fatally', () => {
     let stderr; let perWaveStart;
     const runDoc = () => JSON.parse(

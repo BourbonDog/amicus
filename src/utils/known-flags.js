@@ -29,7 +29,7 @@
  * Real flags that appear in NO usage block. Rejecting any of these would break
  * working callers, so they are enumerated deliberately rather than derived.
  *
- * ⚠️ The first four are spawned by the MCP server onto its own CLI children
+ * ⚠️ These are spawned by the MCP server onto its own CLI children
  * (src/mcp-server.js, src/mcp-council-run.js). They are not user-facing and are
  * intentionally undocumented — but they are on the argv of every MCP-launched
  * run, so rejecting them would break the entire MCP surface.
@@ -39,6 +39,7 @@ const INTERNAL_FLAGS = new Set([
   'run-id',          // MCP → `council run`: pins the child's run id
   'council-name',    // MCP → `council run`: preset name for ledger attribution
   'cowork-process',  // MCP → `start`: Cowork process handle for context capture
+  'dropped-members', // MCP → 'council run': per-member preset drops as JSON (v4.6 Plan 4)
 
   // User-facing but undocumented, and read by real handlers today. Listed so the
   // rejection is a bug fix and not a silent removal of working behaviour; if any

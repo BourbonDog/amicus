@@ -18,7 +18,11 @@ function countSeverity(findings) {
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
   const sc = new Map(streetCred.map(s => [s.model, s]));
-  const rs = new Map(runStats.filter(r => !DEBATE_ROLES.has(r.role)).map(r => [r.model, r]));
+  // Judge rows (#83, v4.6 Plan 2) are Stage-2 cost attribution, not seats: the
+  // join below is keyed by MODEL, and judges ARE bench models — without this
+  // exclusion the judge row would silently overwrite the seat row.
+  const rs = new Map(runStats.filter(r => !DEBATE_ROLES.has(r.role) && r.role !== 'judge')
+    .map(r => [r.model, r]));
   return meta.models.map(model => {
     const raised = findings.filter(f => f.raiser === model);
     const s = sc.get(model) || {};

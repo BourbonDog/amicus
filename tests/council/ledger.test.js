@@ -67,3 +67,24 @@ test('buildStatsDoc wraps the reliability rows in the council v2 envelope (v4.0 
   const doc = buildStatsDoc(rows);
   expect(doc).toEqual({ schemaVersion: 2, type: 'council-stats', models: rows });
 });
+
+test('#83 guard: judge rows never shadow seat rows in the reliability join', () => {
+  // Two rows, same model: the seat row must win — buildLedgerRows' join (ledger.js:21)
+  // is keyed by model, and before this guard the LAST entry for a key wins a JS Map
+  // build, so the judge row (listed second, as it is here) would silently overwrite
+  // the seat row. buildLedgerRows' output row does not project durationMs (only
+  // role/wasChair/conformance survive the join), so `role` is the observable proxy
+  // for which source row won: 'seat' proves the seat row (durationMs 100) survived;
+  // 'judge' would mean the judge row (durationMs 50) clobbered it.
+  const rec = {
+    meta: { runId: 'r1', date: '2026-08-01', runType: 'headless', models: ['alpha'], chair: 'c' },
+    findings: [], streetCred: [{ model: 'alpha', withSelf: 1, peersOnly: 1 }],
+    judged: true,
+    runStats: [
+      { model: 'alpha', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 100, usage: null },
+      { model: 'alpha', role: 'judge', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 50, usage: null },
+    ],
+  };
+  const rows = buildLedgerRows(rec);
+  expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+});

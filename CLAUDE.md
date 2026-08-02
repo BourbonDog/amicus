@@ -214,6 +214,7 @@ src/
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
 │   ├── degrade.js
+│   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
 │   ├── doctor-local-providers-check.js  # The `local-providers` doctor check (v4.2 §4.7 C8), split out of
@@ -295,6 +296,7 @@ src/
 │   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
 │   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
 │   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
+├── cli-council-run-render.js
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
@@ -320,6 +322,7 @@ src/
 ├── index.js  # Amicus - Main Module
 ├── jsonl-parser.js  # JSONL Parser
 ├── mcp-council-awareness.js
+├── mcp-council-bench.js
 ├── mcp-council-run.js
 ├── mcp-notify.js  # Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'`
 ├── mcp-server.js  # @module mcp-server — Amicus MCP Server (stdio transport)
@@ -421,6 +424,7 @@ evals/
 <!-- AUTO:modules -->
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
+| `cli-council-run-render.js` |  | `renderRunHuman()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
@@ -446,6 +450,7 @@ evals/
 | `index.js` | Amicus - Main Module | `startAmicus()`, `listAmicus()`, `resumeAmicus()`, `continueAmicus()`, `readAmicus()` |
 | `jsonl-parser.js` | JSONL Parser | `parseJSONLLine()`, `readJSONL()`, `extractTimestamp()`, `formatMessage()`, `formatContext()` |
 | `mcp-council-awareness.js` |  | `subWaveIds()`, `countWaveLegs()`, `elapsedOf()`, `enginePid()`, `buildCouncilStatusPayload()` |
+| `mcp-council-bench.js` |  | `resolveBenchInput()` |
 | `mcp-council-run.js` |  | `handleCouncilRunTool()`, `buildCouncilStatusPayload()`, `listCouncilRuns()`, `abortCouncilRun()` |
 | `mcp-notify.js` | Pure helpers + in-process registry for the MCP `onComplete: 'mcp-notify'` | `validateOnComplete()`, `buildNotifyPayload()`, `requestMcpNotify()`, `consumeMcpNotify()` |
 | `mcp-server.js` | @module mcp-server — Amicus MCP Server (stdio transport) | `handlers()`, `startMcpServer()`, `getProjectDir()`, `resolveProjectDir()`, `getClientRoot()` |
@@ -483,7 +488,7 @@ evals/
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
-| `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `readOverallVerdict()`, `writeVerdictAtomic()`, `VERDICT_SCHEMA_VERSION()` |
+| `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |
 | `observe/council-legs.js` |  | `buildLegRows()` |
 | `observe/events.js` |  | `appendEvent()`, `createEventTail()`, `EVENTS_FILE()`, `EVENTS_SCHEMA_VERSION()`, `emitWaveStarted()` |
@@ -559,7 +564,8 @@ evals/
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `toCanonicalDefault()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
-| `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()` |
+| `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
+| `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |
 | `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |
 | `utils/doctor-mcp-checks.js` | B14/Task 4.3: the two MCP-registration doctor checks ('mcp' and | `evaluateMcpRegistration()`, `evaluateLegacyMcpEntry()` |

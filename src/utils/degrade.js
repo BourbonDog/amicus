@@ -12,10 +12,13 @@
  */
 
 const DEGRADE_CHANNELS = Object.freeze(new Set([
+  // council runtime channels
   'dead-leg', 'dead-wave', 'budget-refusal', 'shared-server-unavailable',
   'dropped-members', 'chair-skipped-cost-ceiling', 'chair-failed',
   'thin-cross-review', 'debate-degraded', 'inexact-under-ceiling',
   'internal',
+  // doctor channels
+  'doctor-check-failed', 'doctor-fix',
 ]));
 
 const KINDS = Object.freeze(new Set(['degrade', 'heal']));
@@ -40,6 +43,12 @@ function makeDegrade(input = {}) {
   };
   if (typeof input.remedy === 'string' && input.remedy.trim()) {
     record.remedy = input.remedy.trim();
+  }
+  if (input.data !== undefined) {
+    if (typeof input.data !== 'object' || input.data === null || Array.isArray(input.data)) {
+      throw new Error("degrade: 'data' must be a plain object when provided");
+    }
+    record.data = Object.freeze({ ...input.data });
   }
   return Object.freeze(record);
 }

@@ -91,7 +91,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       channel: 'chair-skipped-cost-ceiling',
       what: 'the chair did not run',
       why: 'the --max-cost ceiling was reached before the chair could launch',
-      effect: 'the verdict is written with no chair synthesis and overallVerdict null; exits degraded (2)',
+      effect: 'the verdict is written with no chair synthesis and overallVerdict null; will exit degraded (2)',
       remedy: 'raise --max-cost, or re-run the chair alone against the existing tally',
     });
     runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
@@ -161,7 +161,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       why: chairLeg
         ? 'the chair ran but its output carried no parseable VERDICT: line'
         : 'no chair leg completed, including after the fallback chain',
-      effect: 'the verdict is written with overallVerdict null; exits degraded (2)',
+      effect: 'the verdict is written with overallVerdict null; will exit degraded (2)',
     });
   }
 

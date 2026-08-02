@@ -73,6 +73,20 @@ async function runCouncil(options, deps = {}) {
     || createLaunchers({ remainingBudget, reserveBudget, onBudgetRefusal: noteBudgetRefusal, sharedServer: () => sharedServer });
 
   runState.initCouncilRun(o); // run.json seed + sessions-dir pointer (run-state.js)
+
+  // dropped-members (spec §5, Plan 4): a seat the user's preset requested that
+  // never resolved is a lost seat — announced like every other loss. Fires
+  // once per member, before any launch (zero spend), for BOTH transports.
+  for (const dm of o.droppedMembers || []) {
+    degrade.note({
+      channel: 'dropped-members',
+      what: `seat ${dm.member} was not seated`,
+      why: dm.reason,
+      effect: 'the bench is smaller than the preset requested; the run will exit degraded (2)',
+      data: { member: dm.member, reason: dm.reason },
+    });
+  }
+
   emitRunStarted(o.runDir, o.runId, { bench: o.models, chair: o.chair }, o.follow);
 
   let signalled = null;
@@ -181,7 +195,7 @@ async function runCouncil(options, deps = {}) {
         channel: 'thin-cross-review',
         what: `only ${usableJudges} of ${s2.judgeResults.length} judges returned a usable cross-review`,
         why: 'the other judges produced no parseable Stage-2 block',
-        effect: 'findings were tiered on a thinner cross-review than the bench size implies; exits degraded (2)',
+        effect: 'findings were tiered on a thinner cross-review than the bench size implies; will exit degraded (2)',
       });
     }
 
@@ -240,8 +254,10 @@ async function runCouncil(options, deps = {}) {
     runState.updateStage(o.runDir, tallyStage, { status: 'complete', completedAt: now() });
     emitStageStarted(o.runDir, o.runId, tallyStage, null, o.follow);
     emitStageTerminal(o.runDir, o.runId, tallyStage, 'complete', null, o.follow);
+    // Verdict assembly is the degrade cut-off: anything noted after this line
+    // reaches stderr + run.json but not verdict.json (spec §6 rule 1).
     asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText,
-      critic: o.critic, deadWaves });
+      critic: o.critic, deadWaves, degrades: degrade.all() });
     runState.updateStage(o.runDir, 'verdict', { status: 'complete', completedAt: now() });
     emitStageStarted(o.runDir, o.runId, 'verdict', null, o.follow);
     emitStageTerminal(o.runDir, o.runId, 'verdict', 'complete', null, o.follow);

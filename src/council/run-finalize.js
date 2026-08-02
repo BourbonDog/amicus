@@ -72,6 +72,7 @@ function resolveTerminalExit({ signalled, exitCode, degraded, degrade, inexactUn
   // (quorum/internal error) or an abort/signal code the run does NOT exit 2, so
   // noting that sentence there would be false.
   if (degrade && inexactUnderCeiling && inexactUnderCeiling() && (exitCode === 0 || exitCode === 2)) {
+    // Late channel (spec §6 rule 1): fires AFTER verdict assembly, so this record is run.json-only by design — it can never appear on verdict.degrades[].
     degrade.note({
       channel: 'inexact-under-ceiling',
       what: 'the run total is a lower bound, not an exact figure',

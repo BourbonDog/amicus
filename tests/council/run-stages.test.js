@@ -452,6 +452,36 @@ describe('runStage2', () => {
     expect(g.adjudications).toEqual([{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]);
   });
 
+  test('#83: each judgeResult carries its leg for cost attribution', async () => {
+    // Same ctx-construction pattern as the happy-path test above (no repairs;
+    // both judges parse clean on the first pass) — driven the same way.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+      ]),
+      onSolo: () => { throw new Error('no repairs expected'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    for (const j of judgeResults) {
+      expect(j).toHaveProperty('leg');
+      expect(j.leg === null || typeof j.leg === 'object').toBe(true);
+    }
+    // Regression pin (controller ruling, post-#83): a judge that parses on the
+    // FIRST pass (the common path — this fixture's onSolo throws, so NO repair
+    // fires for either judge) must carry its own wave leg, non-null, status
+    // 'complete' — never null. Before this ruling, `leg: (solo && solo.leg) ||
+    // null` left every non-repaired judge with `leg: null`, which downstream
+    // renders as a false `status: 'error'` row — worse than the missing row
+    // #83 complained about. Confirmed RED against that pre-fix form (stash-check).
+    const gemini = judgeResults.find(j => j.judge === 'gemini');
+    expect(gemini.leg).not.toBeNull();
+    expect(gemini.leg.status).toBe('complete');
+  });
+
   test('malformed judge → repair solo in _scratch → ok with conformance repaired', async () => {
     const solos = [];
     const ctx = makeCtx({
