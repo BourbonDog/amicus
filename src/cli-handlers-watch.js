@@ -104,7 +104,7 @@ async function handleWatch(args) {
   const { failJson, ERROR_CODES } = require('./utils/error-doc');
   const id = args._[1];
   if (!id || id === true) {
-    process.stderr.write('Error: id is required for watch\nUsage: amicus watch <id> [--json] [--plain] [--interval <sec>]\n');
+    process.stderr.write('Error: id is required for watch\nUsage: amicus watch <id> [--json] [--plain] [--interval <sec>] [--ui]\n');
     return 1;
   }
   const check = validateTaskId(String(id));
