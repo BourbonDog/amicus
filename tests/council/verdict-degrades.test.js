@@ -48,3 +48,66 @@ describe('verdict.degrades[]', () => {
     expect(onDisk.degrades[0].what).toBe('seat beta did not review');
   });
 });
+
+const { deriveSeatLoss, summarizeSeatLoss } = require('../../src/council/verdict');
+
+const mk = (channel, data, extra = {}) => makeDegrade({
+  channel, what: 'w', why: 'y', effect: 'e', data, ...extra,
+});
+
+describe('deriveSeatLoss (spec D3 — closes #84)', () => {
+  test('wave-only records reproduce summarizeSeatLoss byte-for-byte', () => {
+    const degrades = [mk('dead-wave', { waveId: 'r1-c1', models: ['critic-m'], reason: 'server timeout' })];
+    const derived = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    const legacy = summarizeSeatLoss({ runId: 'r1', critic: 'critic-m',
+      deadWaves: [{ waveId: 'r1-c1', models: ['critic-m'], reason: 'server timeout' }] });
+    expect(derived).toEqual(legacy);
+  });
+
+  test('#84 pin: a dead CRITIC LEG flips criticSeated — deadWaves never could', () => {
+    const degrades = [mk('dead-leg', { seat: 'critic-m', status: 'timeout', reason: 'no first token' })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    expect(s.criticSeated).toBe(false);
+    expect(s.reason).toBe('no first token');
+    // The exact #84 failure: summarizeSeatLoss reads only deadWaves, so the same
+    // loss reported as a leg leaves the verdict claiming the critic seated.
+    expect(summarizeSeatLoss({ runId: 'r1', critic: 'critic-m', deadWaves: [] }).criticSeated).toBe(true);
+  });
+
+  test('#84 pin: a dead BENCH LEG reaches deadBenchSeats', () => {
+    const degrades = [mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    expect(s.criticSeated).toBe(true);
+    expect(s.deadBenchSeats).toEqual(['beta']);
+  });
+
+  test('a dead critic leg with no reason falls back to naming the status', () => {
+    const degrades = [mk('dead-leg', { seat: 'critic-m', status: 'error', reason: null })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    expect(s.reason).toBe("the critic leg ended 'error' with no usable output");
+  });
+
+  test('no critic requested → null, exactly like the shipped shape', () => {
+    expect(deriveSeatLoss({ runId: 'r1', critic: null,
+      degrades: [mk('dead-leg', { seat: 'beta', status: 'timeout', reason: null })] })).toBeNull();
+  });
+
+  test('heals and dataless records are ignored by the derivation', () => {
+    const degrades = [
+      mk('shared-server-unavailable', undefined, { kind: 'heal' }),
+      mk('thin-cross-review', undefined),
+    ];
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    expect(s.criticSeated).toBe(true);
+    expect(s.deadBenchSeats).toEqual([]);
+  });
+
+  test('writeVerdictFiles prefers the derivation when degrades is provided', () => {
+    const runDir = fs.mkdtempSync(path.join(tmp, 'derive-'));
+    writeVerdictFiles({ runDir, record: record(), overallVerdict: null, chairText: null,
+      critic: 'critic-m', deadWaves: [],   // legacy input says "all seated"
+      degrades: [mk('dead-leg', { seat: 'critic-m', status: 'timeout', reason: 'no first token' })] });
+    const onDisk = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
+    expect(onDisk.seatLoss.criticSeated).toBe(false);  // the records win — one source of truth
+  });
+});

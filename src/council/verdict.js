@@ -54,6 +54,40 @@ function summarizeSeatLoss({ runId, critic, deadWaves = [] } = {}) {
   };
 }
 
+/**
+ * seatLoss, derived from the sink's records (v4.6 Plan 2, spec D3 — closes #84).
+ *
+ * WHY A DERIVATION: two fields reporting lost seats can disagree; deriving one
+ * from the other makes contradiction inexpressible. `summarizeSeatLoss` stays
+ * exactly as v4.5.2 shipped it (its tests pass unedited — that is the proof the
+ * shape survived); this function rebuilds its wave input from `dead-wave`
+ * records and then adds the losses waves can never show: `dead-leg` records —
+ * a solo critic wave that STARTED but whose one leg died is invisible to
+ * deadWaves, which is #84's second half.
+ *
+ * Reads ONLY record.data (Task 1's machine surface) — never the prose fields.
+ * @param {{runId: string, critic: ?string, degrades: Array<object>}} o
+ * @returns {?object} the summarizeSeatLoss shape, or null when no critic was requested
+ */
+function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
+  if (!critic) { return null; }
+  const real = degrades.filter(d => d.kind !== 'heal' && d.data);
+  const waves = real.filter(d => d.channel === 'dead-wave')
+    .map(d => ({ waveId: d.data.waveId, models: d.data.models || [], reason: d.data.reason }));
+  const base = summarizeSeatLoss({ runId, critic, deadWaves: waves });
+  const legs = real.filter(d => d.channel === 'dead-leg');
+  const criticLeg = legs.find(l => l.data.seat === critic) || null;
+  return {
+    ...base,
+    criticSeated: base.criticSeated && !criticLeg,
+    reason: base.reason || (criticLeg
+      ? (criticLeg.data.reason || `the critic leg ended '${criticLeg.data.status}' with no usable output`)
+      : null),
+    deadBenchSeats: [...base.deadBenchSeats,
+      ...legs.filter(l => l.data.seat !== critic).map(l => l.data.seat)],
+  };
+}
+
 function buildVerdict(record, decisions = [], opts = {}) {
   const byId = new Map(decisions.map(d => [d.id, d]));
   return {
@@ -140,5 +174,6 @@ function writeVerdictAtomic(filePath, verdict) {
 }
 
 module.exports = {
-  buildVerdict, summarizeSeatLoss, readOverallVerdict, writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
+  buildVerdict, summarizeSeatLoss, deriveSeatLoss, readOverallVerdict, writeVerdictAtomic,
+  VERDICT_SCHEMA_VERSION,
 };

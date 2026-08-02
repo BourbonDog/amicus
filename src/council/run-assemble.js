@@ -19,7 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('../utils/atomic-write');
-const { buildVerdict, summarizeSeatLoss, writeVerdictAtomic } = require('./verdict');
+const { buildVerdict, summarizeSeatLoss, deriveSeatLoss, writeVerdictAtomic } = require('./verdict');
 const { buildReport } = require('./report');
 const { validateFindings } = require('./findings');
 const { toGlobalFindings } = require('./anonymize');
@@ -179,10 +179,13 @@ function writeTallyFiles({ runDir, tallyInput, record }) {
  * @returns {object} the verdict written to disk
  */
 function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves, degrades }) {
-  // v4.5.2 — computed here rather than in run.js so verdict assembly stays in
-  // one place; see summarizeSeatLoss in ./verdict for why a lost critic has to
-  // reach the verdict at all.
-  const seatLoss = summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
+  // v4.6 Plan 2 (spec D3): when the sink's records are available they are the
+  // single source of truth — seatLoss derives from them so it can never
+  // disagree with degrades[]. deadWaves remains the fallback for direct
+  // callers that predate the sink (their tests pass unedited).
+  const seatLoss = degrades
+    ? deriveSeatLoss({ runId: record.meta.runId, critic, degrades })
+    : summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
   const verdict = buildVerdict(record, [], { seatLoss, degrades });
   verdict.overallVerdict = (overallVerdict === undefined) ? null : overallVerdict;
   writeVerdictAtomic(path.join(runDir, 'verdict.json'), verdict);
