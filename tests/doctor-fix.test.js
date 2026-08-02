@@ -72,6 +72,38 @@ describe('runDoctorChecks --fix electron self-heal (#56)', () => {
     expect(electron.message).toMatch(/not provisioned/i);
   });
 
+  // v4.6 Plan 3 Task 3: repair-success rows carry a structured fixed/fixDetail
+  // fact so the doctor-degrade collector never has to parse prose. Prose stays
+  // byte-identical — this only ADDS fields.
+  test('a successful --fix repair marks the row fixed with a human-ready detail', async () => {
+    const repairElectron = jest.fn().mockResolvedValue({ repaired: true });
+    const checks = await doctor.runDoctorChecks(brokenElectronDeps({ fix: true, repairElectron }));
+    const electron = findCheck(checks, 'electron');
+
+    expect(electron.fixed).toBe(true);
+    expect(electron.fixDetail).toBe('provisioned the Electron binary in place');
+    expect(electron.message).toBe('installed (self-healed)'); // prose byte-identical
+  });
+
+  test('a failed repair does NOT mark fixed', async () => {
+    const repairElectron = jest.fn().mockResolvedValue({ repaired: false, reason: 'deferred' });
+    const checks = await doctor.runDoctorChecks(brokenElectronDeps({ fix: true, repairElectron }));
+    const electron = findCheck(checks, 'electron');
+
+    expect(electron.fixed).toBeUndefined();
+  });
+
+  test('a deferred repair does NOT mark fixed', async () => {
+    const repairElectron = jest.fn().mockResolvedValue({
+      deferred: true,
+      reason: 'No cached electron zip found; deferring download.',
+    });
+    const checks = await doctor.runDoctorChecks(brokenElectronDeps({ fix: true, repairElectron }));
+    const electron = findCheck(checks, 'electron');
+
+    expect(electron.fixed).toBeUndefined();
+  });
+
   test('--fix maps {deferred} to WARN (not error)', async () => {
     const repairElectron = jest.fn().mockResolvedValue({
       deferred: true,

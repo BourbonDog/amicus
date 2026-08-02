@@ -68,14 +68,21 @@ function evaluateLegacyMcpEntry(d) {
   }
   if (d.fix) {
     const removed = (d.migrateLegacyMcpEntries() || []).filter(r => r.result === 'removed');
+    // Structured fix outcome (v4.6 Plan 3 Task 3): a repaired row carries
+    // fixed/fixDetail whenever ANY entry was actually removed, even on the
+    // partial-failure path below — a genuine no-op (removed.length === 0)
+    // stays unflagged.
+    const fixFields = removed.length > 0
+      ? { fixed: true, fixDetail: `removed the duplicate legacy 'sidecar' entry from ${removed.map(r => r.target).join(', ')}` }
+      : {};
     if (removed.length >= dupes.length) {
       const message = `removed legacy entry from: ${removed.map(r => r.target).join(', ')}`;
       return unreadableNote
-        ? { id, name, status: 'warn', message: `${message}; ${unreadableNote}`, hint: HINTS.removeLegacySidecar }
-        : { id, name, status: 'ok', message, hint: null };
+        ? { id, name, status: 'warn', message: `${message}; ${unreadableNote}`, hint: HINTS.removeLegacySidecar, ...fixFields }
+        : { id, name, status: 'ok', message, hint: null, ...fixFields };
     }
     const message = `removed ${removed.length}/${dupes.length} duplicate(s) — could not update every config`;
-    return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };
+    return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar, ...fixFields };
   }
   const message = `duplicate 'sidecar' entry in ${dupes.map(e => e.target).join(', ')} — doubles the MCP tool list`;
   return { id, name, status: 'warn', message: unreadableNote ? `${message}; ${unreadableNote}` : message, hint: HINTS.removeLegacySidecar };

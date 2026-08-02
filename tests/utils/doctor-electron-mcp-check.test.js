@@ -157,6 +157,49 @@ describe('evaluateElectronMcp (--fix)', () => {
     expect(r.status).toBe('warn');
     expect(r.message).toMatch(/disk full/i);
   });
+
+  // v4.6 Plan 3 Task 3: repair-success rows carry a structured fixed/fixDetail
+  // fact so the doctor-degrade collector never has to parse prose. Prose stays
+  // byte-identical — this only ADDS fields.
+  test('a full self-heal marks the row fixed with a human-ready detail', async () => {
+    const healed = { v: false };
+    const scan = () => ({
+      installs: [{ kind: 'npx', pkgDir: npxPkg('h1'), electronDir: npxEl('h1'), state: healed.v ? 'ok' : 'binary-missing' }],
+      mcpLaunch: 'npx',
+    });
+    const repairElectron = jest.fn(async ({ electronDir }) => { healed.v = true; return { repaired: true, electronDir }; });
+    const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron });
+    expect(r.fixed).toBe(true);
+    expect(r.fixDetail).toBe('self-healed 1 npx-cache copy');
+    expect(r.message).toMatch(/self-healed/i); // prose byte-identical shape, unchanged
+  });
+
+  test('a repair that heals nothing does NOT mark fixed', async () => {
+    const scan = () => ({ installs: [npxCopy('h1', 'binary-missing')], mcpLaunch: 'npx' });
+    const repairElectron = jest.fn(async () => ({ repaired: false, reason: 'antivirus quarantine' }));
+    const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron });
+    expect(r.fixed).toBeUndefined();
+  });
+
+  test('a partial self-heal (one healed, one still broken) marks fixed with the healed count, status stays warn', async () => {
+    const healed = { h1: false };
+    const scan = () => ({
+      installs: [
+        { kind: 'npx', pkgDir: npxPkg('h1'), electronDir: npxEl('h1'), state: healed.h1 ? 'ok' : 'binary-missing' },
+        { kind: 'npx', pkgDir: npxPkg('h2'), electronDir: npxEl('h2'), state: 'binary-missing' },
+      ],
+      mcpLaunch: 'npx',
+    });
+    const repairElectron = jest.fn(async ({ electronDir }) => {
+      if (electronDir === npxEl('h1')) { healed.h1 = true; return { repaired: true }; }
+      return { repaired: false, reason: 'antivirus quarantine' };
+    });
+    const r = await evaluateElectronMcp({ scanElectronInstalls: scan, fix: true, repairElectron });
+    expect(r.fixed).toBe(true);
+    expect(r.fixDetail).toBe('self-healed 1 npx-cache copy');
+    expect(r.status).toBe('warn'); // the existing ambiguity rule is untouched
+    expect(r.message).toMatch(/self-heal incomplete/i); // prose byte-identical
+  });
 });
 
 describe('scanElectronInstalls (default wiring — #69 lesson: exercise the real root computation)', () => {

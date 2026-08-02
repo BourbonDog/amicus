@@ -70,7 +70,8 @@ function evaluateSessionIndexTmpSweep(d) {
   }
   const remaining = files.length - swept;
   if (remaining === 0) {
-    return { id, name, status: 'ok', message: `swept ${swept} orphaned tmp file(s)`, hint: null };
+    const fixFields = swept > 0 ? { fixed: true, fixDetail: `swept ${swept} orphaned session-index tmp file(s)` } : {};
+    return { id, name, status: 'ok', message: `swept ${swept} orphaned tmp file(s)`, hint: null, ...fixFields };
   }
   return { id, name, status: 'warn', message: `swept ${swept}, ${remaining} remaining (too fresh or unremovable)`, hint: HINTS.sweepSessionIndexTmp };
 }
