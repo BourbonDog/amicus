@@ -287,8 +287,9 @@ describe('registerWorkspaceHandlers — extra security-gate coverage', () => {
   // so those assertions could not distinguish "the fence rejected this" from
   // "there's nothing here" — deleting RUN_ID_RE from run-scan.js would still
   // leave every one of those tests green (the error message just changes from
-  // 'invalid runId' to 'pointer missing, unreadable, or invalid'). Pinning the
-  // exact message each fence produces makes the assertion mechanism-specific:
+  // 'invalid runId' to readPointer's pointer-missing message (#82: now names the
+  // launch directory and --out-dir as the cause)). Pinning the exact message
+  // each fence produces makes the assertion mechanism-specific:
   // it goes red if either fence (the RUN_ID_RE charset check in readPointer,
   // or safeSessionDir's resolved-path containment check) is removed.
   describe('malformed runId rejected on every channel, with REAL deps (no fakes)', () => {

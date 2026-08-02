@@ -165,6 +165,20 @@ describe('readPointer', () => {
     expect(readPointer(project, '99999999').error).toBeTruthy();
   });
 
+  // #82: the old message ('pointer missing, unreadable, or invalid') named the
+  // symptom, not the cause. A run launched with --out-dir writes run.json under
+  // --out-dir but the council-<id>.json POINTER always lives under the LAUNCH
+  // cwd's .claude/amicus_sessions — so a user who points --project at --out-dir
+  // hits this exact branch and had no way to guess why. The new message must
+  // name both facts: where the pointer actually lives, and the flag that misled
+  // them.
+  test('missing-pointer error names the launch directory and --out-dir as the actual cause', () => {
+    const project = seedProject({ aaaa1111: path.join(FX, 'council-run-complete') });
+    const { error } = readPointer(project, '99999999');
+    expect(error).toMatch(/LAUNCH directory/);
+    expect(error).toMatch(/--out-dir/);
+  });
+
   // Security regression (Task 4 review finding #1): a caller-supplied runId reaches
   // runState.readPointer's `council-${runId}.json` path.join with no separator/traversal
   // filtering. A runId like '../../../secret' collapses the literal 'council-..' segment

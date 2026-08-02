@@ -305,8 +305,8 @@ describe('getRunDetail — outer fence (runDir must resolve inside project)', ()
     const d = getRunDetail(project, 'aaaa1111');
 
     // Distinguishable from getRunDetail's other error shapes ('run.json missing',
-    // the readPointer-sourced 'pointer missing, unreadable, or invalid', etc.) —
-    // this is the outer fence firing, before run.json is ever read.
+    // the readPointer-sourced pointer-missing message, etc.) — this is the outer
+    // fence firing, before run.json is ever read.
     expect(d.error).toBe('run directory escapes project');
     expect(d.run).toBeUndefined();
     expect(d.derived).toBeUndefined();
