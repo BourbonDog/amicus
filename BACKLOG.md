@@ -671,12 +671,24 @@ this work fixes.
     `role: 'judge'` (ledger.js does).
   - **#87 filed** (final-review find): the Stage-5 verdict rebuild drops `seatLoss`/`degrades[]`
     from a decided verdict — pre-existing v4.5.2 class widened; slotted to **Plan 4**.
-- **Plans 3–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
-  plan immediately before its development, not all up front — *"we learned a lesson about plan rot
-  the hard way."* **Plan 3 (truthful doctor) is next** — write it just-in-time against the
-  post-merge tree (extraction prerequisite: `src/cli-handlers-doctor.js` at 295/300;
-  `doctor-mcp-checks.js` is the receiving module). Plan 4 additionally picks up **#87** and the
-  post-merge polish batch recorded in the ledger.
+- **Plan 3 of 4:** `docs/superpowers/plans/2026-08-02-v4.6-degrade-invariant-plan-3-truthful-doctor.md`
+  — **EXECUTED 2026-08-02** on the stacked branch `feat/v4.6-plan-3-truthful-doctor` (8 commits
+  atop Plan 2, HEAD `be54d48`). Suite **480 suites / 6,241 tests / 0 failures**. Final review:
+  **Ready to merge** (recommended hint-voice pin applied). What shipped: the doctor collector
+  (`doctor-check-failed`/`doctor-fix` channels; error rows + structural `fixed`/`fixDetail` flags
+  at all five `--fix` sites → shared-vocabulary records, zero prose parsing); `doctor --json` gains
+  additive `degrades[]`; `--fix` prints `Recovered:` lines in the one voice; exit codes and ✗/⚠
+  rows byte-unchanged; `engineMissing`/`reinstallEngineAv` now state causes as **unverified**
+  (commands byte-identical); `cli-handlers-doctor.js` extracted 295→263. The plan's measured-reality
+  block records that the v4.5.x engine-copy checks already satisfied criterion 4's first half.
+  - **Owner interpretation recorded in the plan header** (veto by editing it): human output renders
+    heals only; degrade records are the `--json` surface; warns map to no record.
+  - **Owner ruling queued:** does the unverified voice extend to `sweepSessionIndexTmp` (cause
+    near-definitional) and `rebuildElectron` (no live call site)? Final review says post-merge.
+- **Plan 4 is deliberately NOT written yet** (plan-rot ruling). It picks up: **#80/#81/#82**,
+  **#87**, the `dropped-members` placement ruling, and the ledger's polish batch — now including a
+  three-way `degrades` schema-copy lockstep test (run/verdict/doctor), the doctor `data`
+  description (council prose copied verbatim per plan), and the channel-domain grouping comment.
 
 **Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
 
