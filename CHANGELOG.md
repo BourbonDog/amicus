@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-08-02
+
 ### Added (v4.6 milestone — the degrade announcement invariant, plans 1-4)
 
 - **The ten-channel degrade announcement contract.** A council run can no longer degrade its
