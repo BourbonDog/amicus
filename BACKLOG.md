@@ -657,12 +657,26 @@ this work fixes.
   - ⚠️ **Behavior change for the v4.6 CHANGELOG:** a shared-server acquisition failure now exits
     **degraded (2)** (was: stderr + run.json only, exit 0). Spec-intended; run-single-server suite
     aligned.
-- **Plans 2–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
+- **Plan 2 of 4:** `docs/superpowers/plans/2026-08-01-v4.6-degrade-invariant-plan-2-verdict-surface.md`
+  — **EXECUTED 2026-08-02** on the stacked branch `feat/v4.6-plan-2-verdict-surface` (13 commits
+  atop `e360c3d`, HEAD `4a46b9d`). Suite **479 suites / 6,210 tests / 0 failures** (delta vs the
+  measured Plan-1 baseline hand-accounted). Final review verdict after its fix wave: **Ready to
+  merge.** Closes **#84** (`seatLoss` derived from `degrades[]` — a dead critic LEG finally flips
+  `criticSeated`) and **#83** (Stage-2 judge `runStats` rows, judge-tagged in the report's cost
+  table). `verdict.json` gains additive `degrades[]`; the report gains "What was lost" (one voice,
+  heals filtered); in-run effect texts hedged ("will exit degraded (2)", 7 sites). The v4.5.2
+  seatLoss suites passed **byte-unedited** (the D3 derivation proof).
+  - ⚠️ **CHANGELOG note for v4.6:** report/tally cost totals now include judge legs and read
+    HIGHER than v4.5.x for identical runs; `runStats` consumers keying by model must exclude
+    `role: 'judge'` (ledger.js does).
+  - **#87 filed** (final-review find): the Stage-5 verdict rebuild drops `seatLoss`/`degrades[]`
+    from a decided verdict — pre-existing v4.5.2 class widened; slotted to **Plan 4**.
+- **Plans 3–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
   plan immediately before its development, not all up front — *"we learned a lesson about plan rot
-  the hard way."* Do not pre-write them. **Plan 2 (verdict/report surface: `verdict.degrades[]`,
-  derived `seatLoss`, report section) is next**, and inherits the final review's carries: a
-  thin-judge e2e pin, the "will exit / exits" hedging sweep, and the roll-up polish items in the
-  ledger.
+  the hard way."* **Plan 3 (truthful doctor) is next** — write it just-in-time against the
+  post-merge tree (extraction prerequisite: `src/cli-handlers-doctor.js` at 295/300;
+  `doctor-mcp-checks.js` is the receiving module). Plan 4 additionally picks up **#87** and the
+  post-merge polish batch recorded in the ledger.
 
 **Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
 
