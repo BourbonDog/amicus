@@ -171,40 +171,8 @@ async function runDoctorChecks(depsOverride = {}) {
   checks.push(await guardAsync('electron-mcp', 'Electron (MCP launch path)',
     () => electronMcpCheck.evaluateElectronMcp({ ...d, fixTimeoutMs: FIX_TIMEOUT_MS })));
 
-  checks.push(await guardAsync('electron', 'Electron (interactive GUI)', async () => {
-    if (d.getElectronPath()) {
-      return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed', hint: null };
-    }
-    // Broken (missing / quarantined). With --fix, self-heal in place (#56):
-    // repairElectron provisions the binary; {deferred} (no cache, no network)
-    // maps to WARN — a deferred download is not a failure. Without --fix, just
-    // point the user at `amicus doctor --fix`.
-    if (d.fix) {
-      let res;
-      try {
-        res = await d.repairElectron({ timeoutMs: FIX_TIMEOUT_MS });
-      } catch (e) {
-        return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `repair failed: ${e.message} — headless still works`, hint: HINTS.doctorFix };
-      }
-      res = res || {};
-      if (res.repaired) {
-        return { id: 'electron', name: 'Electron (interactive GUI)', status: 'ok', message: 'installed (self-healed)', hint: null };
-      }
-      const why = res.reason ? ` — ${res.reason}` : '';
-      // Quarantine (AV deleted electron.exe post-extract) is NOT a deferral and
-      // must NEVER be silently retried: surface the allow-list instruction as a
-      // WARN and STOP. No re-run of repairElectron here (no loop).
-      const detail = res.quarantined
-        ? `antivirus quarantine${why}`
-        : res.deferred
-          ? `deferred${why}`
-          : res.contended
-            ? `repair already in progress${why}`
-            : `not provisioned${why}`;
-      return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: `${detail} — headless still works`, hint: HINTS.doctorFix };
-    }
-    return { id: 'electron', name: 'Electron (interactive GUI)', status: 'warn', message: 'not installed — headless still works', hint: HINTS.doctorFix };
-  }));
+  checks.push(await guardAsync('electron', 'Electron (interactive GUI)',
+    () => electronMcpCheck.evaluateElectronInteractive(d, { fixTimeoutMs: FIX_TIMEOUT_MS })));
 
   checks.push(guard('skills', 'Skills installed', () => (
     d.skillInstalled()
