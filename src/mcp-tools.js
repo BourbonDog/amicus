@@ -437,7 +437,7 @@ function getTools() {
         'The engine-written <runDir>/verdict.json seatLoss block (v4.5.2 — critic seating). ' +
         'Additive passthrough — preserved onto the rebuilt verdict; omitted → absent, never ' +
         'fabricated (#87).'),
-      degrades: z.array(z.record(z.any())).optional().describe(
+      degrades: z.array(z.record(z.any())).nullable().optional().describe(
         'The engine-written <runDir>/verdict.json degrades[] (v4.6 Plan 2 — what was lost). ' +
         'Additive passthrough — preserved onto the rebuilt verdict; omitted → absent, never ' +
         'fabricated (#87).'),

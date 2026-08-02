@@ -1,6 +1,8 @@
 // tests/mcp-verdict-chair-carry.test.js
 'use strict';
+const { z } = require('zod');
 const { handlers } = require('../src/mcp-server');
+const { getTools } = require('../src/mcp-tools');
 
 /**
  * MCP half of the Stage-5 chair-verdict defect. `amicus_verdict` had the same
@@ -64,6 +66,24 @@ test('#87: amicus_verdict carries seatLoss and degrades through when supplied', 
 
 test('#87: amicus_verdict without seatLoss/degrades leaves both absent (never fabricated)', async () => {
   const res = await handlers.amicus_verdict({ record: record(), decisions: [] }, process.cwd());
+  const v = verdictOf(res);
+  expect(v).not.toHaveProperty('seatLoss');
+  expect(v).not.toHaveProperty('degrades');
+});
+
+// #87 follow-up: degrades lacked `.nullable()`, so the MCP SDK's schema
+// validation rejected an explicit `degrades: null` ("Expected array, received
+// null") before the handler ever ran — the handler's own guard
+// (Array.isArray(input.degrades) && ...) was written to treat null as
+// nothing-to-pass but could never see it. This asserts the tool's real Zod
+// schema accepts the same explicit-null shape seatLoss already did, then
+// drives the handler end-to-end to confirm both keys stay absent.
+test('#87: explicit null seatLoss AND degrades is schema-valid and leaves both absent', async () => {
+  const tool = getTools().find(t => t.name === 'amicus_verdict');
+  const input = { record: record(), decisions: [], seatLoss: null, degrades: null };
+  expect(z.object(tool.inputSchema).safeParse(input).success).toBe(true);
+
+  const res = await handlers.amicus_verdict(input, process.cwd());
   const v = verdictOf(res);
   expect(v).not.toHaveProperty('seatLoss');
   expect(v).not.toHaveProperty('degrades');
