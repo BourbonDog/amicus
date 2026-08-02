@@ -180,6 +180,14 @@ async function handleCouncilRunTool(input, project, helpers) {
   // itself is never spawned (it would collide with `--models`) — this internal,
   // undocumented flag carries the preset NAME through for attribution only.
   if (presetName) { args.push('--council-name', presetName); }
+  // v4.6 Plan 4 Task 4b: same precedent as --council-name above — an internal,
+  // undocumented passthrough. The child's own resolveBench has no literal
+  // --council to re-resolve from, so without this it always resolves
+  // droppedMembers: [] and the sink's dropped-members channel (Task 4) never
+  // fires — a CLI `--council <preset>` run exits 2 on a dropped member while
+  // an identical MCP run exits 0. Omitted when nothing dropped (and always
+  // for bare `models` input) — argv stays byte-identical to today otherwise.
+  if (droppedMembers.length) { args.push('--dropped-members', JSON.stringify(droppedMembers)); }
   // v4.1 §4.5b/§4.5d. claudeReviewFile is resolved against `project` for the same
   // reason outDir is — an MCP client may send a relative path, and the child's cwd
   // is the run dir. Validation of the file itself stays in the spawned engine's

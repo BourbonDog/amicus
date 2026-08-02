@@ -152,6 +152,46 @@ describe('council run threads councilName (v4.3 Task 3, spec §7.1)', () => {
   });
 });
 
+// v4.6 Plan 4 Task 4b: the internal `--dropped-members` MCP→child passthrough
+// — same precedent as --council-name (mcp-council-run.js spawns the CLI child
+// with an already-expanded --models list, never --council, so the child's own
+// resolveBench never resolves any drops for itself). Internal flag: malformed
+// input means an amicus bug, not a user typo, so resolveBench fails loud
+// rather than silently defaulting to [].
+describe('the internal --dropped-members MCP→child passthrough (v4.6 Plan 4 Task 4b)', () => {
+  test('a valid JSON array of {member, reason} threads through to runCouncil options', async () => {
+    const json = JSON.stringify([{ member: 'vendorx/ghost', reason: 'not present in the cached model catalog' }]);
+    const code = await handleCouncilRun(argsBase({ 'dropped-members': json }));
+    expect(code).toBe(0);
+    const opts = runCouncil.mock.calls[0][0];
+    expect(opts.droppedMembers).toEqual([
+      { member: 'vendorx/ghost', reason: 'not present in the cached model catalog' },
+    ]);
+  });
+
+  test('absent --dropped-members leaves droppedMembers empty (unchanged default)', async () => {
+    const code = await handleCouncilRun(argsBase());
+    expect(code).toBe(0);
+    expect(runCouncil.mock.calls[0][0].droppedMembers).toEqual([]);
+  });
+
+  test.each([
+    ['not valid JSON at all', 'not-json{{{'],
+    ['valid JSON but not an array', '{"member":"x","reason":"y"}'],
+    ['an array of non-objects', '["x","y"]'],
+    ['an array with a missing reason', '[{"member":"x"}]'],
+    ['an array with a non-string member', '[{"member":1,"reason":"y"}]'],
+  ])('malformed --dropped-members (%s) fails loud: BAD_ARGS naming the flag, no spawn', async (_name, raw) => {
+    const code = await handleCouncilRun(argsBase({ 'dropped-members': raw }));
+    expect(code).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    const doc = JSON.parse(out.mock.calls[0][0]);
+    expect(doc.type).toBe('error');
+    expect(doc.error.code).toBe('BAD_ARGS');
+    expect(doc.error.message).toMatch(/--dropped-members/);
+  });
+});
+
 // v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): the live repro
 // found `--council <preset>` silently dropping a member (whose alias resolves
 // to a catalog-absent id) with ZERO signal reaching `--json`/MCP callers —
@@ -258,5 +298,33 @@ describe('council run threads droppedMembers into runCouncil options (Wave 2 chi
     expect(opts.droppedMembers).toEqual([
       { member: 'catalog-ghost', reason: expect.any(String) },
     ]);
+  });
+
+  // v4.6 Plan 4 Task 4b — THE PARITY PIN: an MCP-shaped invocation (bare
+  // --models + the internal --dropped-members passthrough mcp-council-run.js
+  // now spawns) must drive runCouncil with the SAME droppedMembers option a
+  // real --council <preset> CLI invocation produces for an identical drop.
+  // This is the exact disparity task-4-report.md's Concerns section flagged:
+  // CLI exit 2 vs MCP exit 0 on the same preset dropping the same member.
+  test('an MCP-shaped invocation (--models + --dropped-members) matches the CLI --council preset path', async () => {
+    // Path A: a real --council <preset> CLI invocation.
+    const presetArgs = argsBase({ council: 'droppy', chair: 'opus' });
+    delete presetArgs.models;
+    await handleCouncilRun(presetArgs);
+    const presetDropped = runCouncil.mock.calls[0][0].droppedMembers;
+    expect(presetDropped).toEqual([{ member: 'catalog-ghost', reason: expect.any(String) }]);
+
+    // Path B: an MCP-shaped invocation — bare --models plus the internal
+    // passthrough carrying the SAME drop list mcp-council-run.js would have
+    // produced for this preset (mirrors how the MCP parent forwards it).
+    runCouncil.mockClear();
+    const mcpShapedArgs = argsBase({
+      models: 'vendorx/model-a,vendorx/model-b',
+      'dropped-members': JSON.stringify(presetDropped),
+    });
+    await handleCouncilRun(mcpShapedArgs);
+    const mcpDropped = runCouncil.mock.calls[0][0].droppedMembers;
+
+    expect(mcpDropped).toEqual(presetDropped);
   });
 });

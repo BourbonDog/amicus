@@ -44,9 +44,9 @@ function sanitizeCouncilName(name) {
 
 /**
  * Resolve bench models from --models XOR --council (mirrors handleFanout).
- * Also returns `presetName` (v4.3 Task 3, spec §7.1): the trimmed --council
- * name when that branch was taken, else null — threaded into runCouncil's
- * `councilName` option so council ledger rows can be attributed to a preset.
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1: trimmed --council name,
+ * else null) and `droppedMembers`: a preset's own drops, or — bare --models —
+ * the parsed `--dropped-members` MCP→child passthrough (v4.6 Plan 4 Task 4b).
  */
 function resolveBench(args, useJson) {
   const hasModels = typeof args.models === 'string' && args.models.trim();
@@ -76,7 +76,15 @@ function resolveBench(args, useJson) {
     // sink now announces each dropped member, with reason, on every transport and surface.
     return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
   }
-  return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
+  if (args['dropped-members'] === undefined) {
+    return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
+  }
+  let dm; try { dm = JSON.parse(args['dropped-members']); } catch { dm = null; }
+  if (!Array.isArray(dm) || !dm.every(d => d && typeof d.member === 'string' && typeof d.reason === 'string')) {
+    return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --dropped-members must be a JSON array of {member, reason} entries' }) };
+  }
+  return { bench: parseList(args.models), presetName: null, droppedMembers: dm };
 }
 
 /**

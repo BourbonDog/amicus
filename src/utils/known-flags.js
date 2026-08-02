@@ -39,6 +39,8 @@ const INTERNAL_FLAGS = new Set([
   'run-id',          // MCP → `council run`: pins the child's run id
   'council-name',    // MCP → `council run`: preset name for ledger attribution
   'cowork-process',  // MCP → `start`: Cowork process handle for context capture
+  // MCP → 'council run': per-member preset drops as JSON — the child's sink announces them (v4.6 Plan 4)
+  'dropped-members',
 
   // User-facing but undocumented, and read by real handlers today. Listed so the
   // rejection is a bug fix and not a silent removal of working behaviour; if any
