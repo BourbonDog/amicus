@@ -83,6 +83,27 @@ describe('dead-leg channel (#85)', () => {
     expect(dead[0].effect).toMatch(/degraded/);
     expect(degraded.value).toBe(true);
   });
+
+  test('dead-leg records carry structured data {seat, status, reason}', async () => {
+    const noted = [];
+    const runDir = fs.mkdtempSync(path.join(tmp, 'data-'));
+    const ctx = {
+      o: { runDir, runId: 'r1', models: ['alpha', 'beta'], briefing: 'material', date: '2026-08-01' },
+      degrade: { note: (r) => noted.push(r) },
+      addWave: () => {},
+      overBudget: () => false,
+      launchers: { launchWave: async () => ({
+        wave: { waveId: 'r1-s1', legs: [
+          { modelInput: 'alpha', status: 'complete', summary: review('alpha') },
+          { modelInput: 'beta', status: 'timeout', summary: '', error: 'no first token' },
+        ] },
+        exitCode: 0,
+      }) },
+    };
+    await runStage1(ctx);
+    const dead = noted.find(n => n.channel === 'dead-leg');
+    expect(dead.data).toEqual({ seat: 'beta', status: 'timeout', reason: 'no first token' });
+  });
 });
 
 describe('chair channels', () => {
@@ -205,6 +226,24 @@ describe('dead-wave channel', () => {
     expect(d.why).toContain('database is locked'); // the reason
     expect(d.effect).toMatch(/NOT in this council|not in this council/);
     expect(d.effect).toMatch(/degraded/);
+  });
+
+  test('dead-wave records carry structured data {waveId, models, reason}', async () => {
+    const noted = [];
+    const runDir = fs.mkdtempSync(path.join(tmp, 'data-w-'));
+    const ctx = {
+      o: { runDir, runId: 'r1', models: ['alpha', 'beta'], briefing: 'material', date: '2026-08-01' },
+      degrade: { note: (r) => noted.push(r) },
+      addWave: () => {},
+      overBudget: () => false,
+      launchers: { launchWave: async () => ({
+        wave: { waveId: 'r1-s1', legs: [], reason: 'database is locked' },
+        exitCode: 1,
+      }) },
+    };
+    await runStage1(ctx);
+    const dead = noted.find(n => n.channel === 'dead-wave');
+    expect(dead.data).toEqual({ waveId: 'r1-s1', models: ['alpha', 'beta'], reason: 'database is locked' });
   });
 });
 
