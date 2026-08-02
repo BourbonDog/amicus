@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { buildVerdict } = require('../../src/council/verdict');
+const { buildVerdict, readPriorVerdictSurfaces } = require('../../src/council/verdict');
 const { writeVerdictFiles } = require('../../src/council/run-assemble');
 const { makeDegrade } = require('../../src/utils/degrade');
 
@@ -109,5 +109,21 @@ describe('deriveSeatLoss (spec D3 — closes #84)', () => {
       degrades: [mk('dead-leg', { seat: 'critic-m', status: 'timeout', reason: 'no first token' })] });
     const onDisk = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
     expect(onDisk.seatLoss.criticSeated).toBe(false);  // the records win — one source of truth
+  });
+});
+
+describe('readPriorVerdictSurfaces (#87)', () => {
+  test('#87: readPriorVerdictSurfaces recovers seatLoss and degrades, runId-guarded', () => {
+    const runDir = fs.mkdtempSync(path.join(tmp, 'prior-'));
+    fs.writeFileSync(path.join(runDir, 'verdict.json'), JSON.stringify({
+      runId: 'r1', seatLoss: { criticRequested: 'c', criticSeated: false, reason: 'x', deadBenchSeats: [] },
+      degrades: [{ kind: 'degrade', channel: 'dead-leg', what: 'w', why: 'y', effect: 'e' }],
+    }));
+    const got = readPriorVerdictSurfaces(runDir, 'r1');
+    expect(got.seatLoss.criticSeated).toBe(false);
+    expect(got.degrades).toHaveLength(1);
+    expect(readPriorVerdictSurfaces(runDir, 'OTHER')).toEqual({ seatLoss: null, degrades: null }); // foreign verdict never leaks
+    expect(readPriorVerdictSurfaces(fs.mkdtempSync(path.join(tmp, 'empty-')), 'r1'))
+      .toEqual({ seatLoss: null, degrades: null });                                               // absent → absent
   });
 });

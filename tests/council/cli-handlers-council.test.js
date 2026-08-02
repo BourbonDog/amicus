@@ -360,6 +360,39 @@ test('verdict: structurally-invalid tally (valid JSON, missing meta/findings) �
   expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
 });
 
+test('verdict: rebuild preserves prior seatLoss and degrades from the run folder verbatim (#87)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
+  const tallyPath = writeTally(dir);
+  const priorSeatLoss = { criticRequested: 'critic-m', criticSeated: false, reason: 'timeout', deadBenchSeats: ['beta'] };
+  const priorDegrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'w', why: 'y', effect: 'e' }];
+  // The run folder's own verdict.json — the tally's sibling — is what #87 was
+  // silently destroying; the rebuild must read it back before overwriting it.
+  fs.writeFileSync(path.join(dir, 'verdict.json'), JSON.stringify({
+    runId: 'av-receiver-council', seatLoss: priorSeatLoss, degrades: priorDegrades,
+  }));
+  const outPath = path.join(dir, 'out-verdict.json');
+  const { code, out } = await capture(() => handleCouncil({
+    _: ['council', 'verdict', tallyPath], out: outPath, json: true,
+  }));
+  expect(code).toBe(0);
+  const doc = JSON.parse(out);
+  expect(doc.seatLoss).toEqual(priorSeatLoss);
+  expect(doc.degrades).toEqual(priorDegrades);
+});
+
+test('verdict: rebuild has neither seatLoss nor degrades when no prior verdict.json exists (#87)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
+  const tallyPath = writeTally(dir);
+  const outPath = path.join(dir, 'verdict.json');
+  const { code, out } = await capture(() => handleCouncil({
+    _: ['council', 'verdict', tallyPath], out: outPath, json: true,
+  }));
+  expect(code).toBe(0);
+  const doc = JSON.parse(out);
+  expect(doc).not.toHaveProperty('seatLoss');
+  expect(doc).not.toHaveProperty('degrades');
+});
+
 // ---------------------------------------------------------------------------
 // council save / list / show (B23)
 // ---------------------------------------------------------------------------

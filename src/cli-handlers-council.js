@@ -8,7 +8,7 @@ const { sumWaveUsage, formatCost } = require('./utils/pricing');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { buildReport } = require('./council/report');
 const { validateFindings, buildValidateDoc } = require('./council/findings');
-const { buildVerdict, readOverallVerdict, writeVerdictAtomic } = require('./council/verdict');
+const { buildVerdict, readOverallVerdict, readPriorVerdictSurfaces, writeVerdictAtomic } = require('./council/verdict');
 const {
   runSave: runCouncilSave,
   runList: runCouncilList,
@@ -169,8 +169,14 @@ function runVerdict(args, useJson) {
     // one of only two homes of the chair's synthesis (the other is
     // chair-output.md); tally.json carries no copy. Recover it from the RUN
     // folder — the tally's own directory, not `-o` — before rebuilding.
-    const overallVerdict = readOverallVerdict(path.dirname(path.resolve(tallyPath)), record.meta.runId);
-    verdict = buildVerdict(record, decisions, { overallVerdict });
+    const runDir = path.dirname(path.resolve(tallyPath));
+    const overallVerdict = readOverallVerdict(runDir, record.meta.runId);
+    // #87: tally.json carries neither seatLoss nor degrades — recover both from
+    // the run folder's verdict the same way the chair line is recovered.
+    const prior = readPriorVerdictSurfaces(runDir, record.meta.runId);
+    verdict = buildVerdict(record, decisions, { overallVerdict,
+      ...(prior.seatLoss ? { seatLoss: prior.seatLoss } : {}),
+      ...(prior.degrades ? { degrades: prior.degrades } : {}) });
   }
   catch (e) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `cannot build verdict: ${e.message}`,

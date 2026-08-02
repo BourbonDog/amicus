@@ -433,6 +433,14 @@ function getTools() {
         '(or the closing VERDICT: line of chair-output.md). Pass it through whenever you ' +
         'overwrite verdict.json — it is the only copy, tally.json has none. Omit when the ' +
         'chair was skipped; never author one yourself.'),
+      seatLoss: z.record(z.any()).nullable().optional().describe(
+        'The engine-written <runDir>/verdict.json seatLoss block (v4.5.2 — critic seating). ' +
+        'Additive passthrough — preserved onto the rebuilt verdict; omitted → absent, never ' +
+        'fabricated (#87).'),
+      degrades: z.array(z.record(z.any())).optional().describe(
+        'The engine-written <runDir>/verdict.json degrades[] (v4.6 Plan 2 — what was lost). ' +
+        'Additive passthrough — preserved onto the rebuilt verdict; omitted → absent, never ' +
+        'fabricated (#87).'),
       render: z.boolean().optional().describe('Also return the markdown rendering of the decided verdict (and refresh report.html when outDir is given).'),
       outDir: z.string().optional().describe('Dir to write report.html into when render:true — resolved against the project dir and rejected if it escapes it. Omit to write nothing.'),
       project: z.string().optional().describe('Optional project directory path.'),

@@ -48,3 +48,23 @@ test('amicus_verdict with an explicit null overallVerdict stays null', async () 
     { record: record(), decisions: [], overallVerdict: null }, process.cwd());
   expect(verdictOf(res).overallVerdict).toBeNull();
 });
+
+// #87: the same additive-passthrough contract, extended to seatLoss and
+// degrades — the two surfaces the Stage-5 rebuild (CLI and MCP alike) was
+// silently destroying because tally.json carries neither.
+test('#87: amicus_verdict carries seatLoss and degrades through when supplied', async () => {
+  const seatLoss = { criticRequested: 'critic-m', criticSeated: false, reason: 'timeout', deadBenchSeats: [] };
+  const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'w', why: 'y', effect: 'e' }];
+  const res = await handlers.amicus_verdict(
+    { record: record(), decisions: [], seatLoss, degrades }, process.cwd());
+  const v = verdictOf(res);
+  expect(v.seatLoss).toEqual(seatLoss);
+  expect(v.degrades).toEqual(degrades);
+});
+
+test('#87: amicus_verdict without seatLoss/degrades leaves both absent (never fabricated)', async () => {
+  const res = await handlers.amicus_verdict({ record: record(), decisions: [] }, process.cwd());
+  const v = verdictOf(res);
+  expect(v).not.toHaveProperty('seatLoss');
+  expect(v).not.toHaveProperty('degrades');
+});

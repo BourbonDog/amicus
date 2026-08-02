@@ -166,6 +166,29 @@ function readOverallVerdict(runDir, runId) {
   return null;
 }
 
+/**
+ * Recover the additive loss surfaces for a Stage-5 rebuild (#87, v4.6 Plan 4).
+ * Same contract as readOverallVerdict directly above: the run folder's own
+ * verdict.json is the only source, a foreign runId never leaks, and absence
+ * yields nulls — the rebuild preserves, never invents. tally.json carries
+ * neither field, which is why the pre-#87 rebuild silently destroyed both.
+ * @param {string} runDir
+ * @param {string} [runId]
+ * @returns {{seatLoss: (object|null), degrades: (Array<object>|null)}}
+ */
+function readPriorVerdictSurfaces(runDir, runId) {
+  try {
+    const prior = JSON.parse(fs.readFileSync(path.join(runDir, 'verdict.json'), 'utf-8'));
+    if (!runId || prior.runId === runId) {
+      return {
+        seatLoss: (prior.seatLoss && typeof prior.seatLoss === 'object') ? prior.seatLoss : null,
+        degrades: Array.isArray(prior.degrades) && prior.degrades.length ? prior.degrades : null,
+      };
+    }
+  } catch { /* no prior verdict.json, or unreadable — nothing to preserve */ }
+  return { seatLoss: null, degrades: null };
+}
+
 /** Atomic write: tmp + rename (matches the repo's wave.json convention). */
 function writeVerdictAtomic(filePath, verdict) {
   const tmp = `${filePath}.tmp-${process.pid}`;
@@ -174,6 +197,6 @@ function writeVerdictAtomic(filePath, verdict) {
 }
 
 module.exports = {
-  buildVerdict, summarizeSeatLoss, deriveSeatLoss, readOverallVerdict, writeVerdictAtomic,
-  VERDICT_SCHEMA_VERSION,
+  buildVerdict, summarizeSeatLoss, deriveSeatLoss, readOverallVerdict, readPriorVerdictSurfaces,
+  writeVerdictAtomic, VERDICT_SCHEMA_VERSION,
 };
