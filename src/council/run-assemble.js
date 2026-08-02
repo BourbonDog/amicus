@@ -160,6 +160,14 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     findings.push(...claudeReview.globalFindings);
     runStats.push(claudeRunStatsRow());
   }
+  // #83 (v4.6 Plan 2): Stage-2 judge legs are ~38% of a run's cost and had no
+  // runStats row at all — per-leg cost was unattributable from the artifact.
+  // One row per judge; a judge whose solo died still gets an honest error row.
+  for (const j of (judgeResults || [])) {
+    runStats.push(buildRunStatsEntry({
+      leg: j.leg, model: j.judge, role: 'judge', conformance: j.conformance,
+    }));
+  }
   if (chairStats) { runStats.push(chairStats); }
   return { meta, findings, adjudications, rankings, runStats };
 }

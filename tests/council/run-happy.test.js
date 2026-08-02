@@ -65,7 +65,8 @@ describe('runCouncil — full happy path (fake launchers)', () => {
     });
     const chairRow = input.runStats.find(r => r.wasChair);
     expect(chairRow).toMatchObject({ model: 'deepseek', role: 'chair' });
-    expect(input.runStats).toHaveLength(4);
+    // #83 (v4.6 Plan 2): 3 seat rows + 3 judge rows (one per bench model, all judge) + 1 chair row.
+    expect(input.runStats).toHaveLength(7);
   });
 
   test('verdict.json carries the parsed chair verdict; report.html rendered', () => {

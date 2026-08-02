@@ -452,6 +452,26 @@ describe('runStage2', () => {
     expect(g.adjudications).toEqual([{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]);
   });
 
+  test('#83: each judgeResult carries its leg for cost attribution', async () => {
+    // Same ctx-construction pattern as the happy-path test above (no repairs;
+    // both judges parse clean on the first pass) — driven the same way.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+      ]),
+      onSolo: () => { throw new Error('no repairs expected'); },
+    });
+    const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    for (const j of judgeResults) {
+      expect(j).toHaveProperty('leg');
+      expect(j.leg === null || typeof j.leg === 'object').toBe(true);
+    }
+  });
+
   test('malformed judge → repair solo in _scratch → ok with conformance repaired', async () => {
     const solos = [];
     const ctx = makeCtx({
