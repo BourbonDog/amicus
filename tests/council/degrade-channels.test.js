@@ -54,6 +54,9 @@ describe('dead-leg channel (#85)', () => {
     expect(dead.what).toContain('beta');
     expect(dead.why).toContain('timeout');
     expect(dead.effect).toMatch(/1 of 2|exits degraded/);
+    // Final review F4: the hedge convention's only real pin — reverting the
+    // Task 8 wording sweep (run-stages.js:157) must fail a test.
+    expect(dead.effect).toMatch(/will exit degraded \(2\)/);
   });
 
   test('#85 regression: a dead leg is stated on run.json, not merely absent from taskIds', async () => {

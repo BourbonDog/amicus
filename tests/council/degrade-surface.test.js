@@ -49,7 +49,6 @@ test('a dead Stage-1 leg is named identically on stderr, run.json, verdict.json 
     expect(exitCode).toBe(2);
 
     // 1. stderr — the sink's one voice, naming the seat
-    const line = stderrLines.find(s => s.includes('dead') || s.includes('did not review'));
     expect(stderrLines.join('')).toContain('seat gpt did not review');
 
     // 2. run.json
@@ -93,7 +92,9 @@ test('thin cross-review fires through the REAL runCouncil path, and judges have 
     'abc123-s2': (o) => okWave(o.models.map((m, i) =>
       mkLeg(m, i === 0 ? judgeOut(['Review A', 'Review B'], []) : 'no parseable block'))),
     // Two malformed judges × the 2-attempt repair bound = four repair solos,
-    // all kept unparseable so neither judge becomes usable via repair.
+    // all kept unparseable so neither judge becomes usable via repair. Every
+    // one of q1..q4 MUST stay scripted: an unscripted repair solo surfaces as
+    // INTERNAL exit 1, so this test fails as `expected 2, received 1`.
     'abc123-q1': stillBad, 'abc123-q2': stillBad,
     'abc123-q3': stillBad, 'abc123-q4': stillBad,
     'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
