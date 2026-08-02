@@ -82,9 +82,26 @@ function resolveBench(args, useJson) {
   return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
 }
 
-/** @param {object} args parsed CLI args @returns {Promise<number>} exit code */
-async function handleCouncilRun(args) {
+/**
+ * Default real helpers; tests override via depsOverride (mirrors
+ * cli-handlers-spend.js's realDeps()/depsOverride convention).
+ */
+function realDeps() {
+  return {
+    // #81 (spec §2): the SAME pure presence probe doctor's electron checks use
+    // (src/cli-handlers-doctor.js) — stats the exe, never launches anything.
+    getElectronPath: () => require('./sidecar/interactive-process').getElectronPath(),
+  };
+}
+
+/**
+ * @param {object} args parsed CLI args
+ * @param {object} [depsOverride] test seam (getElectronPath)
+ * @returns {Promise<number>} exit code
+ */
+async function handleCouncilRun(args, depsOverride = {}) {
   const useJson = !!args.json;
+  const deps = { ...realDeps(), ...depsOverride };
 
   // v4.5 Task 12 (B7/F5): resolve --pack FIRST, above the Task-5 template
   // block, so a pack-filled args.template renders through that single
@@ -212,6 +229,17 @@ async function handleCouncilRun(args) {
   const { readCache } = require('./utils/model-catalog');
   const { runCouncil } = require('./council/run');
   const cfg = loadConfig() || {};
+
+  // #81 (spec §2): the GUI's existence was announced on NO surface from the
+  // CLI path — MCP launches auto-open, the CLI stayed silent. Auto-open
+  // parity is a product decision (deliberately not taken here); the SILENCE
+  // is the spec's to fix. Presence probe only — never launches. Placed here
+  // (runId/runDir already resolved, still before the engine await) so the
+  // notice is useful WHILE the run is live, not just after it finishes.
+  if (!useJson && deps.getElectronPath()) {
+    process.stderr.write(`Notice: the Council Workspace can render this run live — open it with: amicus watch ${runId} --ui\n`);
+  }
+
   const { exitCode, run } = await runCouncil({
     briefing: promptRes.prompt, models: bench, chair, critic, lenses,
     project, runId, runDir,
