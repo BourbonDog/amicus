@@ -42,7 +42,7 @@
           "remedy": { "type": "string" },
           "data": {
             "type": "object",
-            "description": "v4.6 Plan 2: optional structured facts for derivations (e.g. dead-leg {seat,status,reason}, dead-wave {waveId,models,reason}). Prose fields stay the human surface."
+            "description": "v4.6 Plan 3: optional structured facts for derivations (doctor: {checkId}). Prose fields stay the human surface."
           }
         }
       }

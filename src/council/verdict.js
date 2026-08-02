@@ -10,13 +10,6 @@ const { parseChairVerdict } = require('./parse-stage2');
 const VERDICT_SCHEMA_VERSION = 2;
 
 /**
- * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
- * @param {object} record  tally() output
- * @param {Array<{id,decision,applied,duplicateOf,tierOverride}>} decisions
- * @param {{overallVerdict?: (string|null)}} [opts] engine hook (Plan B): the
- *   parsed chair `VERDICT:` line; omitted/undefined → null.
- */
-/**
  * Describe which requested seats actually reviewed, for the verdict's own face.
  *
  * ⚠️ ADDED v4.5.2 from a field report. The critic is a SOLO wave with one leg,
@@ -88,6 +81,16 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
   };
 }
 
+/**
+ * Merge a tally record with Claude's Stage-4 decisions into the verdict record.
+ * @param {object} record  tally() output
+ * @param {Array<{id,decision,applied,duplicateOf,tierOverride}>} decisions
+ * @param {{overallVerdict?: (string|null), seatLoss?: object, degrades?: Array<object>}} [opts]
+ *   `overallVerdict` is the engine hook (Plan B): the parsed chair `VERDICT:`
+ *   line; omitted/undefined → null. `seatLoss` (v4.5.2) and `degrades` (v4.6
+ *   Plan 2) are additive and OPTIONAL — each lands on the verdict only when
+ *   truthy/non-empty, absent otherwise (never fabricated).
+ */
 function buildVerdict(record, decisions = [], opts = {}) {
   const byId = new Map(decisions.map(d => [d.id, d]));
   return {

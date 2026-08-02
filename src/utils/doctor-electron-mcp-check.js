@@ -113,7 +113,7 @@ function evaluateElectronInstalls(d) {
  * exe — then re-report from a fresh scan. package-missing copies are never
  * repaired (no package to repair into). Mirrors evaluateEngineMcp.
  * @param {object} d doctor deps (scanElectronInstalls, fix?, repairElectron?, fixTimeoutMs?)
- * @returns {Promise<{id,name,status,message,hint}>}
+ * @returns {Promise<{id,name,status,message,hint,fixed?,fixDetail?}>}
  */
 async function evaluateElectronMcp(d) {
   const verdict = evaluateElectronInstalls(d);
@@ -166,7 +166,7 @@ async function evaluateElectronMcp(d) {
  * instead of a closure constant.
  * @param {object} d doctor deps (getElectronPath, fix?, repairElectron)
  * @param {{fixTimeoutMs: number}} opts
- * @returns {Promise<{id,name,status,message,hint}>}
+ * @returns {Promise<{id,name,status,message,hint,fixed?,fixDetail?}>}
  */
 async function evaluateElectronInteractive(d, { fixTimeoutMs }) {
   if (d.getElectronPath()) {

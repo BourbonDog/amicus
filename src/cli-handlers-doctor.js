@@ -236,8 +236,9 @@ function renderHuman(checks, degrades = []) {
   // D7: every --fix repair announces what it did, in the one voice. Failures
   // are NOT repeated here — the ✗ rows above already carry them; degrade
   // records are the --json/artifact surface.
+  const { formatDegrade } = require('./utils/degrade');
   for (const r of degrades.filter(x => x.kind === 'heal')) {
-    out += require('./utils/degrade').formatDegrade(r);
+    out += formatDegrade(r);
   }
   return out;
 }

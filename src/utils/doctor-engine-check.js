@@ -73,7 +73,7 @@ function evaluateEngineInstalls(d) {
  * the engine into each via d.repairEngine, then re-report from a fresh scan.
  * Without d.fix — or when nothing is copy-fixable — returns the plain verdict.
  * @param {object} d doctor deps (scanEngineInstalls, fix?, repairEngine?)
- * @returns {Promise<{id,name,status,message,hint}>}
+ * @returns {Promise<{id,name,status,message,hint,fixed?,fixDetail?}>}
  */
 async function evaluateEngineMcp(d) {
   const verdict = evaluateEngineInstalls(d);

@@ -186,6 +186,11 @@ function writeTallyFiles({ runDir, tallyInput, record }) {
  * Undecided verdict + deterministic report. Sets the nullable overallVerdict
  * (council family v2, Plan A) on buildVerdict's output — independent of
  * buildVerdict's own signature.
+ * @param {{runDir: string, record: object, overallVerdict?: (string|null),
+ *   chairText?: string, critic?: string, deadWaves?: Array<object>,
+ *   degrades?: Array<object>}} o `degrades` (v4.6 Plan 2), when present, is
+ *   both carried onto the verdict and used to DERIVE `seatLoss` (deriveSeatLoss)
+ *   in preference to summarizing it from `deadWaves` (summarizeSeatLoss).
  * @returns {object} the verdict written to disk
  */
 function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves, degrades }) {

@@ -89,4 +89,5 @@ test('omits data when absent and rejects a non-object data', () => {
   expect(makeDegrade(valid).data).toBeUndefined();
   expect(() => makeDegrade({ ...valid, data: 'a string' })).toThrow(/data/);
   expect(() => makeDegrade({ ...valid, data: ['an', 'array'] })).toThrow(/data/);
+  expect(() => makeDegrade({ ...valid, data: null })).toThrow(/data/);
 });

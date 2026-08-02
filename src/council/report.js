@@ -66,7 +66,7 @@ function toModel(verdict, wave) {
       .map(f => ({ id: f.id, previousTier: f.debate.previousTier, tier: f.tier })),
   };
   const runStats = verdict.runStats || [];
-  // Cost-row role tag (v4.6 Plan 2 final review, F1): #83 gave judges their own
+  // Cost-row role tag (Plan 2 final review F1): #83 gave judges their own
   // runStats row, so a bench model can now appear twice (seat + judge),
   // indistinguishable by `model` alone. Tag ONLY judge rows — old verdicts have
   // no judge rows at all, so chair/critic/lens/seat rows stay byte-identical to
@@ -88,7 +88,7 @@ function toModel(verdict, wave) {
     // v4.6 Plan 2: additive and OPTIONAL on the verdict (verdict.js only sets
     // it when the run actually degraded), so a clean verdict's model — and
     // therefore its rendered report — is byte-for-byte unchanged.
-    // Final review F2: LOSSES ONLY — a heal is announced on stderr/run.json but
+    // Plan 2 final review F2: LOSSES ONLY — a heal is announced on stderr/run.json but
     // is not a loss (spec D4, §8), so it must never render under "What was
     // lost". deriveSeatLoss (verdict.js) applies the same kind !== 'heal' filter.
     degrades: (verdict.degrades || []).filter(d => d.kind !== 'heal'),

@@ -210,7 +210,7 @@ function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [] }) {
 /**
  * Build a doctor health-check document (`doctor --json`).
  * @param {{version: string, timestamp: string, checks: Array<{id,name,status,message,hint}>,
- *   degrades?: Array<object>}} opts
+ *   degrades?: Array<{kind,channel,what,why,effect,remedy?,data?}>}} opts
  */
 function buildDoctorDoc({ version, timestamp, checks, degrades }) {
   return {
