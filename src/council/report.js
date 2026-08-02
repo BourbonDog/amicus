@@ -11,6 +11,7 @@
 
 const { formatCost, sumWaveUsage } = require('../utils/pricing');
 const { formatDuration } = require('../utils/format-duration');
+const { formatDegrade } = require('../utils/degrade');
 
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
@@ -78,6 +79,10 @@ function toModel(verdict, wave) {
     tierCounts: verdict.tierCounts || { Confirmed: 0, Contested: 0, Singleton: 0, Disputed: 0 },
     judges, findings, debate,
     streetCred: verdict.streetCred || [],
+    // v4.6 Plan 2: additive and OPTIONAL on the verdict (verdict.js only sets
+    // it when the run actually degraded), so a clean verdict's model — and
+    // therefore its rendered report — is byte-for-byte unchanged.
+    degrades: verdict.degrades || [],
     cost: { rows: costRows, total },
   };
 }
@@ -96,6 +101,16 @@ function renderMd(m) {
   out.push('## Verdict summary\n');
   out.push('| Tier | Count |\n|---|---|');
   for (const t of TIER_ORDER) { out.push(`| ${t} | ${m.tierCounts[t]} |`); }
+
+  // Heading-over-nothing: emitted ONLY when the run actually degraded, so a
+  // clean verdict's report stays byte-identical to before this section
+  // existed. Losses are headline news, so they sit directly under the
+  // summary, before the reader reaches the adjudication detail.
+  if (m.degrades.length) {
+    out.push('\n## What was lost\n');
+    // ONE voice (Plan 1's formatDegrade) — the report must not grow a dialect.
+    for (const d of m.degrades) { out.push(`- ${formatDegrade(d).trimEnd()}`); }
+  }
 
   out.push('\n## Adjudication matrix\n');
   out.push(`| Finding | Sev | Raiser | ${m.judges.join(' | ')} | Tier | Decision |`);

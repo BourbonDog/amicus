@@ -138,3 +138,42 @@ describe('report tier palette ↔ design tokens', () => {
     expect(html).toContain('--tier-singleton-ink: #4b5563');
   });
 });
+
+describe('What was lost (v4.6 Plan 2)', () => {
+  const lostVerdict = () => ({
+    schemaVersion: 2, type: 'council-verdict', runId: 'r1', runType: 'council',
+    date: '2026-08-01', chair: 'deepseek', council: ['alpha', 'beta'],
+    claudeInCouncil: false, overallVerdict: null,
+    findings: [], streetCred: [], runStats: [], tierCounts: {},
+    degrades: [{
+      kind: 'degrade', channel: 'dead-leg',
+      what: 'seat beta did not review',
+      why: "the leg ended 'timeout' with no usable output",
+      effect: '1 of 2 seats reviewed; the run continues with the bench that did and exits degraded (2)',
+      data: { seat: 'beta', status: 'timeout', reason: null },
+    }],
+  });
+
+  test('md: renders the section through the one voice', () => {
+    const md = buildReport({ verdict: lostVerdict() }, { format: 'md' });
+    expect(md).toContain('## What was lost');
+    expect(md).toContain('- Notice: seat beta did not review — the leg ended');
+  });
+
+  test('md: NO heading when the run lost nothing', () => {
+    const v = lostVerdict(); delete v.degrades;
+    expect(buildReport({ verdict: v }, { format: 'md' })).not.toContain('What was lost');
+  });
+
+  test('html: section present, channel and voice line escaped and rendered', () => {
+    const html = buildReport({ verdict: lostVerdict() }, { format: 'html' });
+    expect(html).toContain('What was lost');
+    expect(html).toContain('dead-leg');
+    expect(html).toContain('seat beta did not review');
+  });
+
+  test('html: absent section on a clean verdict', () => {
+    const v = lostVerdict(); delete v.degrades;
+    expect(buildReport({ verdict: v }, { format: 'html' })).not.toContain('What was lost');
+  });
+});
