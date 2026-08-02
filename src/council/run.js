@@ -240,8 +240,10 @@ async function runCouncil(options, deps = {}) {
     runState.updateStage(o.runDir, tallyStage, { status: 'complete', completedAt: now() });
     emitStageStarted(o.runDir, o.runId, tallyStage, null, o.follow);
     emitStageTerminal(o.runDir, o.runId, tallyStage, 'complete', null, o.follow);
+    // Verdict assembly is the degrade cut-off: anything noted after this line
+    // reaches stderr + run.json but not verdict.json (spec §6 rule 1).
     asm.writeVerdictFiles({ runDir: o.runDir, record, overallVerdict, chairText,
-      critic: o.critic, deadWaves });
+      critic: o.critic, deadWaves, degrades: degrade.all() });
     runState.updateStage(o.runDir, 'verdict', { status: 'complete', completedAt: now() });
     emitStageStarted(o.runDir, o.runId, 'verdict', null, o.follow);
     emitStageTerminal(o.runDir, o.runId, 'verdict', 'complete', null, o.follow);

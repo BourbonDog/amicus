@@ -87,6 +87,11 @@ function buildVerdict(record, decisions = [], opts = {}) {
     // Additive and OPTIONAL (schemaVersion stays 2): present only when a critic
     // was requested, so its absence never has to be interpreted.
     ...(opts.seatLoss ? { seatLoss: opts.seatLoss } : {}),
+    // v4.6 Plan 2 (spec §4): the canonical what-was-lost surface. Additive and
+    // OPTIONAL — present only when the run actually degraded, so a clean run's
+    // verdict is byte-for-byte unchanged. schemaVersion stays 2 (the v4.5.2
+    // seatLoss precedent).
+    ...(opts.degrades && opts.degrades.length ? { degrades: opts.degrades } : {}),
   };
 }
 
