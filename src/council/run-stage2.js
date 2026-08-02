@@ -84,16 +84,12 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     // a judge that refuses has no `conformance` column, so the tally silently shows
     // fewer votes and a finding's basis counts can flip its tier.
     let judging = leg.summary || '';
-    // #83 (v4.6 Plan 2): hoisted out of the while loop (was `const`, block-scoped
-    // to each iteration) so the last repair attempt's leg survives the loop for
-    // the judgeResults.push() sites below to attribute cost from.
-    let solo = null;
     while (!parsed.ok && leg.status === 'complete' && leg.summary && attempts < 2 && !ctx.overBudget()) {
       attempts += 1;
       repairSeq += 1;
       const waveId = `${o.runId}-q${repairSeq}`;
       runState.appendStageWave(o.runDir, 'stage2', waveId);
-      solo = await ctx.launchers.launchSolo({
+      const solo = await ctx.launchers.launchSolo({
         model: judge,
         prompt: stage2.buildJudgeRepairPrompt({ errors: parsed.errors, judgement: judging }),
         project: ctx.scratchDir, waveId, timeout: o.timeout,
@@ -111,12 +107,18 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     if (!parsed.ok) {
       judgeResults.push({ judge, ok: false, order: null, adjudications: null,
         conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
-        leg: (solo && solo.leg) || null });
+        // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
+        // Stage-1's convention (reviews carry the original wave leg even when a
+        // repair ran — repairs are separately recorded via appendStageWave).
+        // A repair solo's leg is NOT preferred here: attributing it instead
+        // would leave every non-repaired (the common case) judge with a false
+        // `status: 'error'` row — worse than the missing row #83 complained about.
+        leg: leg || null });
       continue;
     }
     const { order } = rankingToOrder(parsed.ranking, labels.labelMap);
     judgeResults.push({ judge, ok: true, order, adjudications: parsed.adjudications, conformance,
-      leg: (solo && solo.leg) || null });
+      leg: leg || null });
   }
   return { aborted: null, judgeResults };
 }

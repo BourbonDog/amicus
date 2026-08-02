@@ -67,6 +67,12 @@ describe('runCouncil — full happy path (fake launchers)', () => {
     expect(chairRow).toMatchObject({ model: 'deepseek', role: 'chair' });
     // #83 (v4.6 Plan 2): 3 seat rows + 3 judge rows (one per bench model, all judge) + 1 chair row.
     expect(input.runStats).toHaveLength(7);
+    // Controller ruling: every judge here parses clean on the first pass (happyScript's
+    // 'abc123-s2' judges all validate, no repair fires) — its runStats row must attribute
+    // the judge's real wave leg (status 'complete', real cost), not a false error row.
+    const judgeRow = input.runStats.find(r => r.role === 'judge');
+    expect(judgeRow).toMatchObject({ status: 'complete' });
+    expect(judgeRow.usage.cost.amount).toBeCloseTo(0.01);
   });
 
   test('verdict.json carries the parsed chair verdict; report.html rendered', () => {
