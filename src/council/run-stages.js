@@ -154,7 +154,7 @@ async function runStage1(ctx) {
       what: `seat ${leg.modelInput || leg.model} did not review`,
       why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output`,
       effect: `${materialized.length} of ${legs.length} seats reviewed; `
-        + 'the run continues with the bench that did and exits degraded (2)',
+        + 'the run continues with the bench that did and will exit degraded (2)',
       data: { seat: leg.modelInput || leg.model, status: leg.status, reason: leg.error || null },
     });
   }

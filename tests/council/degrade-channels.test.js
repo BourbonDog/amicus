@@ -170,7 +170,7 @@ describe('thin cross-review channel', () => {
         channel: 'thin-cross-review',
         what: `only ${usable} of ${judgeResults.length} judges returned a usable cross-review`,
         why: 'the other judges produced no parseable Stage-2 block',
-        effect: 'findings were tiered on a thinner cross-review than the bench size implies; exits degraded (2)',
+        effect: 'findings were tiered on a thinner cross-review than the bench size implies; will exit degraded (2)',
       });
     }
     expect(noted[0].what).toBe('only 1 of 3 judges returned a usable cross-review');

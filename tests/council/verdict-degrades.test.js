@@ -21,7 +21,7 @@ const deadLeg = () => makeDegrade({
   channel: 'dead-leg',
   what: 'seat beta did not review',
   why: "the leg ended 'timeout' with no usable output",
-  effect: '1 of 2 seats reviewed; the run continues with the bench that did and exits degraded (2)',
+  effect: '1 of 2 seats reviewed; the run continues with the bench that did and will exit degraded (2)',
   data: { seat: 'beta', status: 'timeout', reason: null },
 });
 

@@ -91,7 +91,7 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
           channel: 'debate-degraded',
           what: 'the debate round did not complete cleanly',
           why: 'one or more defense or re-vote legs died or returned unstructured output',
-          effect: 'affected findings keep their provisional tier; exits degraded (2)',
+          effect: 'affected findings keep their provisional tier; will exit degraded (2)',
         });
       }
     } else if (worthDebating) {
@@ -102,7 +102,7 @@ async function runDebateStage(ctx, { provisional, provisionalInput, overBudget }
         channel: 'debate-degraded',
         what: 'the debate round did not run',
         why: 'the --max-cost ceiling was reached before the defense wave could launch',
-        effect: 'contested findings were not debated and keep their provisional tier; exits degraded (2)',
+        effect: 'contested findings were not debated and keep their provisional tier; will exit degraded (2)',
         remedy: 'raise --max-cost to let the debate round run',
       });
     }
