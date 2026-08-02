@@ -214,6 +214,7 @@ src/
 │   ├── council-presets.js  # Built-in council benches (B23).
 │   ├── curated-models.js  # Family definitions + pinned fallbacks for the wizard model picker (v2).
 │   ├── degrade.js
+│   ├── doctor-degrade.js
 │   ├── doctor-electron-mcp-check.js  # The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of
 │   ├── doctor-engine-check.js  # The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out
 │   ├── doctor-local-providers-check.js  # The `local-providers` doctor check (v4.2 §4.7 C8), split out of
@@ -559,6 +560,7 @@ evals/
 | `utils/council-presets.js` | Built-in council benches (B23). | `BUDGET_ALIASES()`, `FRONTIER_ALIASES()`, `resolveBuiltinCouncil()`, `listBuiltinCouncilNames()` |
 | `utils/curated-models.js` | Family definitions + pinned fallbacks for the wizard model picker (v2). | `getFamilies()`, `toDefaultAliases()`, `toCanonicalDefault()`, `listCuratedRoutes()`, `toGatewayRoutes()` |
 | `utils/degrade.js` |  | `makeDegrade()`, `formatDegrade()`, `DEGRADE_CHANNELS()` |
+| `utils/doctor-degrade.js` |  | `collectDoctorDegrades()` |
 | `utils/doctor-electron-mcp-check.js` | The `electron-mcp` doctor check ("Electron (MCP launch path)"), split out of | `scanElectronInstalls()`, `evaluateElectronInstalls()`, `evaluateElectronMcp()`, `evaluateElectronInteractive()` |
 | `utils/doctor-engine-check.js` | The `engine-mcp` doctor check ("OpenCode engine (MCP launch path)"), split out | `evaluateEngineInstalls()`, `evaluateEngineMcp()` |
 | `utils/doctor-local-providers-check.js` | The `local-providers` doctor check (v4.2 §4.7 C8), split out of | `evaluateLocalProviders()` |

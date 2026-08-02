@@ -16,6 +16,7 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'dropped-members', 'chair-skipped-cost-ceiling', 'chair-failed',
   'thin-cross-review', 'debate-degraded', 'inexact-under-ceiling',
   'internal',
+  'doctor-check-failed', 'doctor-fix',
 ]));
 
 const KINDS = Object.freeze(new Set(['degrade', 'heal']));
