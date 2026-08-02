@@ -260,6 +260,9 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   edit to this file would have tripped `npm run check:sizes` and forced a split/extraction before the actual
   change could land. **DONE (Phase 20, 20.1 extraction of `doctor-mcp-checks.js`):** the file is now
   260/300 — headroom restored, no longer at the cliff.
+  ⚠️ **REGRESSED. Re-measured 2026-08-01 at `af3e8f1`: back to 295/300.** The headroom the 20.1
+  extraction bought has been spent. Treat this as a live cliff again — see the re-measured table
+  under "v4.6 hard gates".
 - [ ] **Release-checklist item: manual POSIX teardown smoke test.** No orphaned `opencode serve` process
   after a normal exit, a Ctrl-C, or an external `kill` of the parent — B06's target platform (POSIX) has
   never had this executed by hand. Add it to the pre-v2.0.0 release ritual (no `RELEASE-CHECKLIST.md` exists
@@ -282,6 +285,9 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 - **`continue`/`resume` never compute per-run usage** (no `resolveUsage` call on those finalize paths — pre-existing, predates the spend ledger) — so their runs contribute zero spend-ledger rows. Add usage resolution + ledger appends to both. [S]
 - **Benign double network fetch on the no-cache-failure refresh path** — `runRefresh` and the `refresh-catalog` IPC both call `refreshCatalog()` then `getCatalogInfo({maxAgeMs: Infinity})`, which re-enters `refreshCatalog` when NO cache doc exists (readCache returns null for a metadata-only failure doc). Idempotent, rare path; dedupe when convenient. [S]
 - **Size-gate cliffs:** `src/utils/result-schema.js` is now at exactly 300/300 (Phase 20 pushed it from 294 to the ceiling via the `abort-result.js`/`result-schema-version.js` split-out re-exports) — the cliff is HERE now, not just approaching; the next touch to this file forces a split first (buildSpendDoc already carries a fold-back note for result-schema). `src/cli-handlers-doctor.js` is resolved — see the Phase 17 entry above (now 260/300 after the 20.1 extraction). [note]
+  ⚠️ **BOTH FIGURES ARE STALE. Re-measured 2026-08-01 at `af3e8f1`:** `result-schema.js` is **243/300**
+  and no longer a cliff; `cli-handlers-doctor.js` has regressed to **295/300** and is one again. Use
+  the re-measured table under "v4.6 hard gates" as the source of truth.
 - **Free-picker missing-`name` fallback** (`r.name || r.id`) covered by inspection, not a test pin — one-liner test someday. [nit]
 - **`mode: 'interactive'` spend rows untested directly** — the interactive finalize path shares its ledger-append call site with the tested headless path, but has no dedicated test exercising it through an interactive harness. [nit]
 - **Surface `waveId` (and optionally the council name) in spend rows/rollup** so wave-level cost questions ("what did this council run cost in total?") are answerable directly from `amicus spend` instead of cross-referencing run docs. [S]
@@ -628,15 +634,89 @@ Full task-by-task history, the final whole-branch review, and both post-HOLD wav
 worktree's `.superpowers/sdd/progress.md` (local-only, not published). Every entry below is
 self-contained — read the ledger only for the reasoning behind a line, not to find out what's open.
 
+### v4.6 IN FLIGHT — start here (2026-08-01)
+
+**Branch:** `feat/v4.6-degrade-invariant` (3 doc commits, not pushed; no code yet).
+
+**Theme:** the north star — *installing and running amicus should be simple and error-free;
+when an error occurs it either self-heals or self-diagnoses, transparently, keeping the user
+informed.* A **correct-but-silent degrade fails that bar as hard as a crash**, which is what
+this work fixes.
+
+- **Spec:** `docs/superpowers/specs/2026-08-01-degrade-announcement-invariant-design.md`
+- **Plan 1 of 4:** `docs/superpowers/plans/2026-08-01-v4.6-degrade-invariant-plan-1-contract-and-sink.md`
+  — **EXECUTED 2026-08-01** (subagent-driven-development, 9 tasks + final whole-branch review):
+  14 code commits `0005e79..7cd2a8b` on this branch. Suite **477 suites / 6185 tests / 0 failures**
+  (measured merge-base baseline 472/6150 — delta is the branch's own additions), lint + sizes green.
+  Final review verdict after its 3-fix hardening wave: **Ready to merge.** #85 closed with a
+  regression pin. Ledger: `.superpowers/sdd/progress.md` (local-only).
+  - ⚠️ **Scoping note for the owner:** the plan's headline says "all ten channels wired"; **nine**
+    in-council channels shipped. `dropped-members` is in the vocabulary (`DEGRADE_CHANNELS`) but its
+    announce site is the CLI/MCP entry layer (outside Plan 1's files) and it never flips
+    `degraded.value` — its sink migration needs an owner call on which later plan owns it.
+  - ⚠️ **Behavior change for the v4.6 CHANGELOG:** a shared-server acquisition failure now exits
+    **degraded (2)** (was: stderr + run.json only, exit 0). Spec-intended; run-single-server suite
+    aligned.
+- **Plans 2–4 are deliberately NOT written yet.** Owner ruling (Christian, 2026-08-01): write each
+  plan immediately before its development, not all up front — *"we learned a lesson about plan rot
+  the hard way."* Do not pre-write them. **Plan 2 (verdict/report surface: `verdict.degrades[]`,
+  derived `seatLoss`, report section) is next**, and inherits the final review's carries: a
+  thin-judge e2e pin, the "will exit / exits" hedging sweep, and the roll-up polish items in the
+  ledger.
+
+**Open issues this milestone closes:** #85 (plan 1) · #84, #83 (plan 2) · #81, #82, #80 (plan 4).
+
+**Measured baseline, so nobody re-derives it:** 11 four-seat council runs on v4.5.4 `af3e8f1`,
+**10 clean**. The single loss was a free model that never returned a first token. **The engine is
+not losing legs** — the defect is that when a seat *is* lost, nothing tells the user which one.
+
+---
+
 ### v4.6 hard gates — resolve before/at v4.6 kickoff
 
-- [ ] **Tight-file extraction pass.** Five files sit at/near the 300-line size-gate ceiling at the
-  v4.5.0 tip (verified against the shipped tip): `src/cli-handlers-run.js` 300/300,
-  `src/cli-handlers-council-run.js` 298/300, `src/pack/pack-resolve.js` 297/300,
-  `src/mcp-council-run.js` 296/300, `electron/workspace-ui/workspace-panels.js` 295/300.
-  `src/pack/pack-forward.js` (96 lines) is the natural receiving module for pack-domain spillover out
-  of the first three. **Any v4.6 task, or any hotfix, touching one of these five files must extract
-  from it FIRST**, before adding anything.
+- [ ] **Tight-file extraction pass.** ⚠️ **RE-MEASURED 2026-08-01 against `main` @ `af3e8f1`
+  (v4.5.4). The previous five-file list was written at the v4.5.0 tip and is STALE — it named five
+  files and missed nine, including one AT the ceiling.** Re-measure before trusting any list here;
+  the numbers move every release.
+
+  Scope reminder, because it is what makes the list readable: the gate
+  (`scripts/check-file-sizes.js`) is 300 lines over `src/**/*.js` + `electron/**/*.js`, minus a
+  **12-file grandfathered `exclude` list** (`config.js`, `cli.js`, `headless.js`, `mcp-server.js`,
+  `mcp-tools.js`, `opencode-client.js`, `session-manager.js`, `prompt-builder.js`,
+  `sidecar/setup.js`, `electron/setup-ui.js`, `electron/main.js`, `electron/setup-ui-styles.js`).
+  Those are already far over and are NOT cliffs — `mcp-server.js` is 1490 lines. Only **gated**
+  files can trip the gate.
+
+  **Gated files at ≥293/300 today** (★ = was on the old list):
+
+  | Lines | File | |
+  |---|---|---|
+  | **300** | `src/sidecar/electron-install.js` | AT CEILING, was missing |
+  | **300** | `src/cli-handlers-run.js` | ★ |
+  | 299 | `src/council/run.js` | was missing |
+  | 299 | `src/council/run-debate.js` | was missing |
+  | 298 | `src/sidecar/start.js` | was missing |
+  | 298 | `src/sidecar/fanout.js` | was missing |
+  | 298 | `src/mcp-council-run.js` | ★ (old list said 296) |
+  | 298 | `src/cli-handlers-council-run.js` | ★ |
+  | 297 | `src/sidecar/continue.js` | was missing |
+  | 297 | `src/sidecar/context-builder.js` | was missing |
+  | 297 | `src/pack/pack-resolve.js` | ★ |
+  | 296 | `src/sidecar/session-utils.js` | was missing |
+  | 295 | `src/cli-handlers-doctor.js` | **regressed — see below** |
+  | 295 | `electron/workspace-ui/workspace-panels.js` | ★ |
+  | 293 | `electron/workspace-ui/workspace-verbs.js` | was missing |
+
+  **Two corrections to entries elsewhere in this file:**
+  - The Phase 17 entry claims `src/cli-handlers-doctor.js` was resolved to 260/300 by the Phase 20.1
+    `doctor-mcp-checks.js` extraction. It has since crept back to **295/300** — the cliff is live
+    again, and `doctor-mcp-checks.js` (84 lines) is still the natural receiving module.
+  - The Phase 16 roll-up claims `src/utils/result-schema.js` is "now at exactly 300/300". It is
+    **243/300** and is no longer a cliff.
+
+  `src/pack/pack-forward.js` (96 lines) remains the natural receiving module for pack-domain
+  spillover. **Any v4.6 task, or any hotfix, touching a file in the table above must extract from it
+  FIRST**, before adding anything.
 - [ ] **KNOWN_VARIABLES single-source (T3-m2).** `src/template/render.js:45` hand-maintains two
   copies of the known-template-variable set — `KNOWN_VARIABLES` and a separate inline validation
   array. Consistent today; v4.6's `{{input}}` chaining variable (composable waves, F6) adds a third

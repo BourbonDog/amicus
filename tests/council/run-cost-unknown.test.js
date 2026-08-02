@@ -194,8 +194,15 @@ describe('the run announces unknown spend on stderr', () => {
 
   test('the notice fires exactly once, not once per budget gate', async () => {
     await runCouncil(baseOptions(tmp, { maxCost: 5 }), deps(scriptedLaunchers(scriptWithUnknownSeat())));
+    // v4.6 Task 8: run-finalize.js's inexact-under-ceiling channel now ALSO
+    // announces through the degrade sink (a fifth, separate mechanism from
+    // noticeUnknownSpend), and its mandated wording ('...so their cost is
+    // unknown') matches this same case-insensitive pattern — one hit from
+    // noticeUnknownSpend's single announcement (still exactly once — the
+    // guarantee this test names), one from the new channel's one-time note at
+    // finalize. The count grew by exactly the one new, unrelated channel.
     const hits = stderrText().match(/cost is UNKNOWN/gi) || [];
-    expect(hits).toHaveLength(1);
+    expect(hits).toHaveLength(2);
   });
 
   // v4.4.1 CA-3: the Stage-1 gate announces "1 council leg"; the notice used to

@@ -38,15 +38,17 @@ const { sumWaveUsage } = require('../utils/pricing');
  * @param {number|null|undefined} opts.maxCost the `--max-cost` ceiling, if any
  * @param {string} [opts.runDir] run directory; when given, budget refusals are
  *   checkpointed into run.json so the record outlives the stderr notice
- * @param {{value: boolean}} [opts.degraded] the driver's degrade flag; a budget
- *   refusal sets it so the run can never exit 0 with a silently shrunken bench
+ * @param {{note: Function}} opts.degrade the council degrade sink; a budget
+ *   refusal announces through it so the run can never exit 0 with a silently
+ *   shrunken bench. Required, not optional — noteBudgetRefusal dereferences it
+ *   unconditionally.
  * @param {(s:string)=>void} [opts.write] stderr writer seam (defaults to process.stderr)
  * @returns {{spendState:Function, spent:Function, overBudget:Function,
  *   remainingBudget:Function, noticeUnknownSpend:Function, usageBlock:Function,
  *   addWave:Function, reserveBudget:Function, releaseBudget:Function,
  *   noteBudgetRefusal:Function, budgetRefusals:Function, inexactUnderCeiling:Function}}
  */
-function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
+function createBudget({ allLegs, maxCost, runDir, degrade, write }) {
   const legs = allLegs || [];
   const emit = write || ((s) => process.stderr.write(s));
   const hasCeiling = maxCost !== null && maxCost !== undefined;
@@ -146,11 +148,15 @@ function createBudget({ allLegs, maxCost, runDir, degraded, write }) {
     const rec = { waveId: (info && info.waveId) || null, models: (info && info.models) || [],
       reason: 'max-cost', at: new Date().toISOString() };
     refusals.push(rec);
-    if (degraded) { degraded.value = true; }
-    emit(`Notice: the $${maxCost} --max-cost ceiling refused wave ${rec.waveId} `
-      + `(${rec.models.join(', ') || 'no models'}) — those seats DID NOT LAUNCH and are missing from `
-      + 'this council. The run continues with the bench that did launch and will exit degraded (2). '
-      + 'Raise --max-cost, or pass --no-cost-gate, to seat them.\n');
+    const message = info && info.message;
+    degrade.note({
+      channel: 'budget-refusal',
+      what: `wave ${rec.waveId} (${rec.models.join(', ') || 'no models'}) — those seats DID NOT `
+        + 'LAUNCH and are missing from this council',
+      why: `the $${maxCost} --max-cost ceiling refused it${message ? `: ${message}` : ''}`,
+      effect: 'The run continues with the bench that did launch and will exit degraded (2)',
+      remedy: 'Raise --max-cost, or pass --no-cost-gate, to seat them',
+    });
     if (runDir) {
       // Never let bookkeeping sink a run that is otherwise fine.
       try { require('./run-state').checkpoint(runDir, { budgetRefusals: refusals.slice() }); }

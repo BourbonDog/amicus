@@ -35,6 +35,7 @@ const { createBudget } = require('../../src/council/run-budget');
 const { createLaunchers } = require('../../src/council/run-launch');
 const { preflightBudget } = require('../../src/sidecar/fanout-budget');
 const { runStage1 } = require('../../src/council/run-stages');
+const { createDegradeSink } = require('../../src/council/run-degrade');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-reserve-')); });
@@ -268,7 +269,11 @@ describe('a budget-refused wave is never silently dropped', () => {
 
   test('noteBudgetRefusal shouts on stderr and keeps a durable record', () => {
     const out = [];
-    const b = createBudget({ allLegs: [], maxCost: 0.10, write: (s) => out.push(s) });
+    // v4.6 Task 8: the announcement itself now goes through the degrade sink,
+    // not this module's own `write` — wire a real sink onto the same capture
+    // array so "shouts on stderr" still means what it says.
+    const degrade = createDegradeSink({ write: (s) => out.push(s) });
+    const b = createBudget({ allLegs: [], maxCost: 0.10, degrade, write: (s) => out.push(s) });
     b.noteBudgetRefusal({ waveId: 'r-c1', models: ['kimi'] });
     const text = out.join('');
     expect(text).toContain('r-c1');
@@ -280,7 +285,8 @@ describe('a budget-refused wave is never silently dropped', () => {
 
   test('every refusal is announced — the notice is not sticky', () => {
     const out = [];
-    const b = createBudget({ allLegs: [], maxCost: 0.10, write: (s) => out.push(s) });
+    const degrade = createDegradeSink({ write: (s) => out.push(s) });
+    const b = createBudget({ allLegs: [], maxCost: 0.10, degrade, write: (s) => out.push(s) });
     b.noteBudgetRefusal({ waveId: 'r-c1', models: ['kimi'] });
     b.noteBudgetRefusal({ waveId: 'r-q1', models: ['grok'] });
     expect(out).toHaveLength(2);
@@ -289,7 +295,8 @@ describe('a budget-refused wave is never silently dropped', () => {
 
   test('a refusal degrades the run — it can never exit 0 with a shrunken bench', () => {
     const degraded = { value: false };
-    const b = createBudget({ allLegs: [], maxCost: 0.10, degraded, write: () => {} });
+    const degrade = createDegradeSink({ degraded, write: () => {} });
+    const b = createBudget({ allLegs: [], maxCost: 0.10, degrade, write: () => {} });
     expect(degraded.value).toBe(false);
     b.noteBudgetRefusal({ waveId: 'r-c1', models: ['kimi'] });
     expect(degraded.value).toBe(true);
@@ -299,7 +306,9 @@ describe('a budget-refused wave is never silently dropped', () => {
     const runDir = path.join(tmp, 'council-abc');
     fs.mkdirSync(runDir, { recursive: true });
     fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify({ runId: 'abc', status: 'running' }));
-    const b = createBudget({ allLegs: [], maxCost: 0.10, runDir, write: () => {} });
+    // This test cares only about budgetRefusals[]'s own (unchanged) checkpoint,
+    // not the announcement — a no-op stub is enough to satisfy the new signature.
+    const b = createBudget({ allLegs: [], maxCost: 0.10, runDir, degrade: { note: () => {} }, write: () => {} });
     b.noteBudgetRefusal({ waveId: 'abc-c1', models: ['kimi'] });
     const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf-8'));
     expect(run.budgetRefusals).toEqual([expect.objectContaining({ waveId: 'abc-c1', models: ['kimi'] })]);
@@ -310,7 +319,8 @@ describe('a budget-refused wave is never silently dropped', () => {
     fs.mkdirSync(runDir, { recursive: true });
     fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify({ runId: 'xyz', status: 'running', stages: [] }));
     const out = [];
-    const budget = createBudget({ allLegs: [], maxCost: 0.10, runDir, write: (s) => out.push(s) });
+    const degrade = createDegradeSink({ runDir, write: (s) => out.push(s) });
+    const budget = createBudget({ allLegs: [], maxCost: 0.10, runDir, degrade, write: (s) => out.push(s) });
     const review = (n) => `Review ${n}.\n\n\`\`\`json\n${JSON.stringify({
       overall: 'take',
       findings: [{ id: 1, severity: 'major', claim: `c-${n}`, location: 'l', rationale: 'r' }],

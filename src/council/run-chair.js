@@ -46,13 +46,13 @@ function pickFallbackChair(statsRows, bench, failedChair) {
  * Chair chain (attempt → retry → ledger-promoted fallback → give up) plus the
  * single VERDICT-line repair re-prompt.
  * @param {object} ctx run.js's {o, launchers, addWave, overBudget, scratchDir}
- * @param {{packet: string, degraded: {value: boolean}, statsFn: Function,
+ * @param {{packet: string, degrade: {note: Function}, statsFn: Function,
  *   isSignalled: function(): (number|null)}} args
  * @returns {Promise<{aborted: number|null, chairLeg: object|null,
  *   actualChair: string|null, chairText: string|null,
  *   chairConformance: string, overallVerdict: string|null}>}
  */
-async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
+async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
   const { o, launchers, addWave, overBudget } = ctx;
   const now = () => new Date().toISOString();
   const bail = (code) => ({
@@ -81,11 +81,19 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
 
   let chairLeg = null;
   let actualChair = null;
+  let skippedForCost = false;
   if (overBudget()) {
     // Ceiling hit after the tally is computable: skip the chair, write the
     // verdict with overallVerdict null, exit 2 (spec §4 degradation table).
     // Never abort in-flight legs for cost — this only stops NEW launches.
-    degraded.value = true;
+    skippedForCost = true;
+    degrade.note({
+      channel: 'chair-skipped-cost-ceiling',
+      what: 'the chair did not run',
+      why: 'the --max-cost ceiling was reached before the chair could launch',
+      effect: 'the verdict is written with no chair synthesis and overallVerdict null; exits degraded (2)',
+      remedy: 'raise --max-cost, or re-run the chair alone against the existing tally',
+    });
     runState.updateStage(o.runDir, 'chair', { status: 'skipped', completedAt: now() });
     emitStageTerminal(o.runDir, o.runId, 'chair', 'skipped', null, o.follow);
   } else {
@@ -146,7 +154,16 @@ async function runChair(ctx, { packet, degraded, statsFn, isSignalled }) {
   // A completed chair whose verdict never parsed is 'unstructured' even when
   // the repair was skipped (e.g. the chair leg itself tripped --max-cost).
   if (chairText && !overallVerdict) { chairConformance = 'unstructured'; }
-  if (!chairLeg || !overallVerdict) { degraded.value = true; } // spec table: exit 2 rows
+  if (!skippedForCost && (!chairLeg || !overallVerdict)) {
+    degrade.note({
+      channel: 'chair-failed',
+      what: 'the council has no chair synthesis',
+      why: chairLeg
+        ? 'the chair ran but its output carried no parseable VERDICT: line'
+        : 'no chair leg completed, including after the fallback chain',
+      effect: 'the verdict is written with overallVerdict null; exits degraded (2)',
+    });
+  }
 
   return {
     aborted: null, chairLeg, actualChair, chairText, chairConformance, overallVerdict,

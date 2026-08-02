@@ -25,7 +25,7 @@ const mkLeg = (model, summary, status = 'complete') => ({
 });
 const okWave = (legs) => ({ wave: { status: 'complete', legs }, exitCode: 0 });
 
-function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = null, lenses = null, overBudget = () => false }) {
+function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = null, lenses = null, overBudget = () => false, degrade = { note: () => {} } }) {
   const runDir = path.join(tmp, 'council-abc123');
   fs.mkdirSync(runDir, { recursive: true });
   const added = [];
@@ -44,6 +44,12 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
     },
     addWave: (w) => added.push(w),
     overBudget,
+    // v4.6 Plan 1 Task 5: a stub default so every pre-existing test in this file
+    // (none of which exercises the degrade sink) keeps driving runStage1/2
+    // without wiring one up — real coverage of the sink lives in
+    // tests/council/degrade-channels.test.js. Additive only: any test wanting
+    // to assert on notes passes its own `degrade` and reads it back.
+    degrade,
     scratchDir: path.join(runDir, '_scratch'),
     _added: added,
   };

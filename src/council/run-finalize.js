@@ -59,12 +59,26 @@ function statusForExit(code) {
  * a run that published a total it knows is a floor has not earned that.
  *
  * @param {{signalled: number|null, exitCode: number, degraded?: {value: boolean},
- *   inexactUnderCeiling?: () => boolean}} args
+ *   degrade?: {note: Function}, inexactUnderCeiling?: () => boolean}} args
  * @returns {number}
  */
-function resolveTerminalExit({ signalled, exitCode, degraded, inexactUnderCeiling }) {
+function resolveTerminalExit({ signalled, exitCode, degraded, degrade, inexactUnderCeiling }) {
   if (signalled) { return signalled; }
-  if (degraded && inexactUnderCeiling && inexactUnderCeiling()) { degraded.value = true; }
+  // Final-review F1: the inexactness itself is still announced on EVERY path by
+  // noticeUnknownSpend() at writeRunTerminal, below — that is unconditional and
+  // untouched. What is gated here is only the CLAIM this record's effect text
+  // makes, "the run exits degraded (2)", which is true on exactly the codes that
+  // end up 2 (a clean 0 about to flip, or an already-degraded 2). On exit 1
+  // (quorum/internal error) or an abort/signal code the run does NOT exit 2, so
+  // noting that sentence there would be false.
+  if (degrade && inexactUnderCeiling && inexactUnderCeiling() && (exitCode === 0 || exitCode === 2)) {
+    degrade.note({
+      channel: 'inexact-under-ceiling',
+      what: 'the run total is a lower bound, not an exact figure',
+      why: 'one or more legs reported no usage, so their cost is unknown',
+      effect: '--max-cost bounded only KNOWN spend; the run exits degraded (2)',
+    });
+  }
   return (exitCode === 0 && degraded && degraded.value) ? 2 : exitCode;
 }
 

@@ -26,7 +26,7 @@ const runState = require('./run-state');
 const { createLaunchers } = require('./run-launch');
 const { runStage1, runStage2 } = require('./run-stages');   // stage 2 lives in ./run-stage2 (300-line gate), re-exported there
 const { runChair, pickFallbackChair } = require('./run-chair');
-const runDebateMod = require('./run-debate');
+const { runDebateStage } = require('./run-debate-stage');   // debate orchestration lives there (300-line gate), extracted from here (v4.6 Plan 1 Task 1)
 const { decorateRecord } = require('./debate');
 const asm = require('./run-assemble');
 const { createBudget } = require('./run-budget');
@@ -62,8 +62,9 @@ async function runCouncil(options, deps = {}) {
   // across Stage-1's CONCURRENT launches, why addWave must release-and-account atomically, and
   // why a refused wave sets `degraded` (a shrunken bench never exits 0) rather than aborting.
   const degraded = { value: false };
+  const degrade = require('./run-degrade').createDegradeSink({ runDir: o.runDir, degraded });
   const { addWave, overBudget, remainingBudget, noticeUnknownSpend, usageBlock, reserveBudget,
-    noteBudgetRefusal, inexactUnderCeiling } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degraded });
+    noteBudgetRefusal, inexactUnderCeiling } = createBudget({ maxCost: o.maxCost, runDir: o.runDir, degrade });
   // v4.4.1 Task 0.5: ONE OpenCode server for the whole run — ./run-server carries
   // the why and the evidence that `_scratch` judge isolation survives it. Acquired
   // below (a getter, because the launchers are built first); null = as before.
@@ -93,15 +94,15 @@ async function runCouncil(options, deps = {}) {
     const claimed = sharedServer;
     sharedServer = null;
     await require('./run-server').releaseRunServer(claimed);
-    const code = resolveTerminalExit({ signalled, exitCode, degraded, inexactUnderCeiling });
+    const code = resolveTerminalExit({ signalled, exitCode, degraded, degrade, inexactUnderCeiling });
     const run = await writeRunTerminal({ o, code, error, noticeUnknownSpend, usageBlock });
     return { exitCode: code, run };
   };
 
   // Injected launchers bring their own transport. Never throws — degrades to null.
-  if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer(o, deps); }
+  if (!deps.launchers) { sharedServer = await require('./run-server').acquireRunServer({ ...o, degrade }, deps); }
 
-  const ctx = { o, launchers, addWave, overBudget, scratchDir: path.join(o.runDir, '_scratch') };
+  const ctx = { o, launchers, addWave, overBudget, degrade, scratchDir: path.join(o.runDir, '_scratch') };
 
   try {
     // v4.1 §4.4: Claude-in-council is a FILE input — validated after initRun (so the
@@ -139,7 +140,6 @@ async function runCouncil(options, deps = {}) {
     });
     emitStageTerminal(o.runDir, o.runId, 'stage1', s1Status, o.lenses ? null : `${o.runId}-s1`, o.follow);
     if (signalled || s1.aborted) { return finalize(s1.aborted || signalled); }
-    if (s1.degraded) { degraded.value = true; } // bench shrank → never a "full run"
     if (s1.reviews.length < 2) {
       return finalize(1, {
         code: 'COUNCIL_QUORUM',
@@ -175,7 +175,15 @@ async function runCouncil(options, deps = {}) {
     runState.updateStage(o.runDir, 'stage2', { status: 'complete', completedAt: now() });
     emitStageTerminal(o.runDir, o.runId, 'stage2', 'complete', `${o.runId}-s2`, o.follow);
     if (signalled || s2.aborted) { return finalize(s2.aborted || signalled); }
-    if (s2.judgeResults.filter(j => j.ok).length < 2) { degraded.value = true; } // thin cross-review
+    const usableJudges = s2.judgeResults.filter(j => j.ok).length;
+    if (usableJudges < 2) {
+      degrade.note({
+        channel: 'thin-cross-review',
+        what: `only ${usableJudges} of ${s2.judgeResults.length} judges returned a usable cross-review`,
+        why: 'the other judges produced no parseable Stage-2 block',
+        effect: 'findings were tiered on a thinner cross-review than the bench size implies; exits degraded (2)',
+      });
+    }
 
     // Merge Stage-2 judging conformance into each seat's row (worst wins).
     const byJudge = new Map(s2.judgeResults.map(j => [j.judge, j]));
@@ -193,64 +201,12 @@ async function runCouncil(options, deps = {}) {
     const provisional = tally(provisionalInput);
 
     // ---- Stage 2.5: debate (optional, spec §5.1) ----
-    let debatedInput = provisionalInput, debatedRecord = provisional;
-    let debateOutcomes = null, debateFindings = null;
-    let debateSummary = o.debate ? { enabled: true, outcome: 'nothing-to-debate',
-      contested: 0, disputed: 0, defended: 0, amended: 0, withdrawn: 0, noResponse: 0,
-      revoteJudges: 0, revoteApplied: 0, verdictChanges: 0 } : null;
-    if (o.debate) {
-      // spec §5.1: the provisional tally is ALSO an audit artifact, not just a stage
-      // checkpoint — no ledger append, written before any debate leg launches.
-      fs.writeFileSync(path.join(o.runDir, 'tally-provisional.json'), JSON.stringify(provisional, null, 2), { mode: 0o600 });
-      runState.updateStage(o.runDir, 'tally-provisional', { status: 'complete', startedAt: now(), completedAt: now() });
-      emitStageStarted(o.runDir, o.runId, 'tally-provisional', null, o.follow);
-      emitStageTerminal(o.runDir, o.runId, 'tally-provisional', 'complete', null, o.follow);
-      const worthDebating = !runDebateMod.nothingToDebate(provisional);
-      if (worthDebating && !overBudget()) {
-        runState.updateStage(o.runDir, 'debate-defense', { status: 'running', startedAt: now(), project: ctx.scratchDir });
-        emitStageStarted(o.runDir, o.runId, 'debate-defense', null, o.follow);
-        const dbg = await runDebateMod.runDebate(ctx, { provisionalRecord: provisional, tallyInput: provisionalInput });
-        // A signal mid-debate aborts finalization: no tally-final, no ledger (spec §5.7). Close
-        // the summary FIRST — the writer contract requires a valid `outcome` whenever the key exists.
-        if (dbg.aborted) {
-          runState.checkpoint(o.runDir, { debate: { ...debateSummary, outcome: 'ran',
-            contested: dbg.contested, disputed: dbg.disputed } });
-          return finalize(dbg.aborted);
-        }
-        runState.updateStage(o.runDir, 'debate-defense', { status: 'complete', completedAt: now() });
-        emitStageTerminal(o.runDir, o.runId, 'debate-defense', 'complete', null, o.follow);
-        // run-debate owns debate-revote's running/waveId/waveIds checkpoint — only it
-        // knows whether the wave launched. Never advertise a `-rv` id here: a skipped
-        // re-vote would leave the abort cascade chasing the v4.0 lens `-s1` phantom.
-        // Mirror run-chair.js's 'skipped' convention (no startedAt) when nothing was
-        // defended/amended or the cost ceiling skipped it — 'complete' would report
-        // work that never happened.
-        runState.updateStage(o.runDir, 'debate-revote', dbg.revoteLaunched
-          ? { status: 'complete', completedAt: now() } : { status: 'skipped', completedAt: now() });
-        // debate-revote-TERMINAL only — run-debate.js owns the START (spec §4.2 /
-        // v4.3 Task 7 B3 note): only it knows the `-rv` waveId when launched.
-        emitStageTerminal(o.runDir, o.runId, 'debate-revote',
-          dbg.revoteLaunched ? 'complete' : 'skipped', dbg.revoteLaunched ? `${o.runId}-rv` : null, o.follow);
-        ({ debatedInput, debateFindings, debateSummary } = dbg);
-        debatedRecord = tally(debatedInput);
-        // Defensive truthiness guard: `[]` is truthy in JS, so an empty outcomes
-        // list must be normalized to null here — otherwise the packet-assembly
-        // ternary below still calls buildDebateAddendum({outcomes: []}), which
-        // emits a bare "--- Debate round outcomes ---" heading with nothing
-        // under it (same defect class ee447b6 fixed on the report renderer).
-        debateOutcomes = (dbg.addendumOutcomes && dbg.addendumOutcomes.length > 0)
-          ? dbg.addendumOutcomes : null;
-        // Dead/unstructured defense, partial/fully-dead re-vote or a cost-ceiling re-vote skip
-        // each degrade the run → exit 2 (spec §5.7), same channel as a dead Stage-1 leg.
-        if (dbg.degraded) { degraded.value = true; }
-      } else if (worthDebating) {
-        // Budget gone before the defense wave launched, but there WAS something to debate — the
-        // other cost-ceiling branch (spec §5.7). Over budget AND nothing to debate stays the latter.
-        debateSummary.outcome = 'skipped-cost-ceiling';
-        degraded.value = true;
-      }
-      runState.checkpoint(o.runDir, { debate: debateSummary });
-    }
+    const { debatedInput, debatedRecord, debateOutcomes, debateFindings, aborted: debateAborted } =
+      await runDebateStage(ctx, { provisional, provisionalInput, overBudget });
+    // Mirrors the `if (signalled || s1.aborted)` / `if (signalled || s2.aborted)` guards
+    // above: run-debate-stage.js can't reach this closure's `finalize`, so it hands the
+    // signal back here instead (see its docblock) and we finalize on its behalf.
+    if (debateAborted) { return finalize(debateAborted); }
 
     const packet = asm.buildChairPacketFile({
       runDir: o.runDir, reviews: s1.reviews, claudeReview, date: o.date,
@@ -258,7 +214,7 @@ async function runCouncil(options, deps = {}) {
     });
 
     const chairRes = await runChair(ctx, {
-      packet, degraded, statsFn, isSignalled: () => signalled,
+      packet, degrade, statsFn, isSignalled: () => signalled,
     });
     if (chairRes.aborted !== null) { return finalize(chairRes.aborted); }
     const { chairLeg, actualChair, chairText, chairConformance, overallVerdict } = chairRes;

@@ -360,6 +360,10 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
   // ⚠️ …but that fallback IS the bug this task removed, so it must also be LOUD
   // and DURABLE (Step 10.5). Run v441plan02 degraded exactly here, lost 4 of 5
   // seats to `database is locked`, and left nothing on run.json to show for it.
+  // v4.6 Plan 1 Task 8: this channel now routes through the real degrade sink,
+  // which made the exit-code degrade this describe block's title has always
+  // claimed REAL — a shared-server-acquisition failure with a working per-wave
+  // fallback now correctly exits degraded (2), not a silent 0.
   describe('a shared-server start failure degrades — loudly, durably, never fatally', () => {
     let stderr; let perWaveStart;
     const runDoc = () => JSON.parse(
@@ -408,7 +412,7 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
 
     test('it degrades to per-wave servers rather than aborting the run', async () => {
       const { exitCode } = await run();
-      expect(exitCode).toBe(0);
+      expect(exitCode).toBe(2);
       for (const [o] of mockRunFanout.mock.calls) {
         expect(o.server).toBeUndefined();
         expect(o.serverClient).toBeUndefined();
@@ -423,7 +427,7 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     // code. With a working per-wave fallback the run still finishes clean.
     test('the run still completes when the shared server is unavailable', async () => {
       const { exitCode } = await run();
-      expect(exitCode).toBe(0);
+      expect(exitCode).toBe(2);
       expect(exitCode).not.toBe(1);
     });
 
@@ -457,9 +461,12 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
       // …and it survives to the ON-DISK terminal record, not just the return value.
       const onDisk = runDoc();
       expect(onDisk.sharedServerUnavailable.error).toMatch(/database is locked/);
-      expect(onDisk.status).toBe('complete');
+      expect(onDisk.status).toBe('partial');
       // Mutually exclusive with the positive record — never both.
       expect(onDisk.sharedServer).toBeUndefined();
+      // The durable announcement is the migration's whole point: run.json's
+      // degrades[] carries the channel record, not just the legacy field above.
+      expect(onDisk.degrades.some((d) => d.channel === 'shared-server-unavailable')).toBe(true);
     });
 
     test('the degraded run.json still validates against the published schema', () => {
@@ -492,7 +499,7 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
       });
       try {
         const { exitCode } = await run(); // must RESOLVE, not reject
-        expect(exitCode).toBe(0);
+        expect(exitCode).toBe(2);
       } finally { spy.mockRestore(); }
     });
   });
