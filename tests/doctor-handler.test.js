@@ -27,6 +27,26 @@ describe('handleDoctor', () => {
     expect(code).toBe(1);
   });
 
+  // v4.6 Plan 3 Task 4: the doctor doc gains the shared degrade/heal vocabulary.
+  test('--json carries degrades[] for error rows and heals, absent when clean', async () => {
+    const rows = [
+      { id: 'a', name: 'A', status: 'ok', message: 'fine', hint: null },
+      { id: 'engine-mcp', name: 'Engine', status: 'error', message: 'missing: C:\\x', hint: 'npm install -g amicus' },
+      { id: 'electron', name: 'Electron', status: 'ok', message: 'installed (self-healed)', fixed: true, fixDetail: 'provisioned the Electron binary in place' },
+    ];
+    const { code, out } = await capture(() => doctor.handleDoctor({ _: [], json: true }, async () => rows));
+    const doc = JSON.parse(out);
+    expect(code).toBe(1);
+    expect(doc.degrades).toHaveLength(2);
+    expect(doc.degrades.map(d => d.kind).sort()).toEqual(['degrade', 'heal']);
+    expect(doc.degrades.find(d => d.kind === 'degrade').data.checkId).toBe('engine-mcp');
+
+    const { code: cleanCode, out: cleanOut } = await capture(() => doctor.handleDoctor({ _: [], json: true }, async () => [rows[0]]));
+    const cleanDoc = JSON.parse(cleanOut);
+    expect(cleanCode).toBe(0);
+    expect(cleanDoc.degrades).toBeUndefined(); // absence never interpreted
+  });
+
   test('human output shows ✓/⚠/✗ marks and hints', async () => {
     const checks = [
       { id: 'a', name: 'Node.js', status: 'ok', message: 'v20', hint: null },
@@ -36,6 +56,24 @@ describe('handleDoctor', () => {
     expect(out).toMatch(/Node\.js/);
     expect(out).toMatch(/amicus key/);
     expect(out).toMatch(/[✓✗]/);
+  });
+
+  // v4.6 Plan 3 Task 4 / spec criterion 6: a self-healed run announces the
+  // repair in the one voice (formatDegrade) and still exits 0.
+  test('human output announces heals in the one voice and STILL exits 0 — criterion 6', async () => {
+    const rows = [
+      { id: 'electron', name: 'Electron', status: 'ok', message: 'installed (self-healed)', fixed: true, fixDetail: 'provisioned the Electron binary in place' },
+    ];
+    const { code, out } = await capture(() => doctor.handleDoctor({ _: [], fix: true }, async () => rows));
+    expect(code).toBe(0); // a heal never degrades a healthy run
+    expect(out).toContain("Recovered: the 'Electron' check was repaired in place — doctor --fix provisioned the Electron binary in place.");
+  });
+
+  test('human output does NOT duplicate failures as Notice lines', async () => {
+    const rows = [{ id: 'x', name: 'X', status: 'error', message: 'broken', hint: null }];
+    const { code, out } = await capture(() => doctor.handleDoctor({ _: [] }, async () => rows));
+    expect(code).toBe(1);
+    expect(out).not.toContain('Notice:'); // the ✗ row already says it
   });
 
   test('doctor is a one-shot command', () => {

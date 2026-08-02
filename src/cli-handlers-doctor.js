@@ -224,7 +224,7 @@ async function runDoctorChecks(depsOverride = {}) {
 
 const MARK = { ok: '✓', warn: '⚠', error: '✗' }; // ✓ ⚠ ✗
 
-function renderHuman(checks) {
+function renderHuman(checks, degrades = []) {
   let out = 'amicus doctor\n\n';
   for (const c of checks) {
     out += `${MARK[c.status] || '?'} ${c.name}: ${c.message}\n`;
@@ -233,6 +233,12 @@ function renderHuman(checks) {
   const errors = checks.filter(c => c.status === 'error').length;
   const warns = checks.filter(c => c.status === 'warn').length;
   out += `\n${errors} error(s), ${warns} warning(s).\n`;
+  // D7: every --fix repair announces what it did, in the one voice. Failures
+  // are NOT repeated here — the ✗ rows above already carry them; degrade
+  // records are the --json/artifact surface.
+  for (const r of degrades.filter(x => x.kind === 'heal')) {
+    out += require('./utils/degrade').formatDegrade(r);
+  }
   return out;
 }
 
@@ -249,14 +255,18 @@ async function handleDoctor(args, runChecks = runDoctorChecks) {
   // self-heal in place. Omitted (not false) when absent so the injected
   // test-double sees a clean "no fix" call.
   const checks = await runChecks(args.fix ? { fix: true } : undefined);
+  // v4.6 Plan 3: collect once, both paths consume — the shared degrade/heal
+  // vocabulary (spec §4/§6). Never affects the exit-code logic below.
+  const { collectDoctorDegrades } = require('./utils/doctor-degrade');
+  const degrades = collectDoctorDegrades(checks);
   if (useJson) {
     const { buildDoctorDoc } = require('./utils/result-schema');
     const VERSION = require('../package.json').version;
-    const doc = buildDoctorDoc({ version: VERSION, timestamp: new Date().toISOString(), checks });
+    const doc = buildDoctorDoc({ version: VERSION, timestamp: new Date().toISOString(), checks, degrades });
     process.stdout.write(JSON.stringify(doc, null, 2) + '\n');
     return doc.ok ? 0 : 1;
   }
-  process.stdout.write(renderHuman(checks));
+  process.stdout.write(renderHuman(checks, degrades));
   return checks.some(c => c.status === 'error') ? 1 : 0;
 }
 

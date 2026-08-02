@@ -21,7 +21,29 @@
           "name": { "type": "string" },
           "status": { "type": "string" },
           "message": { "type": ["string", "null"] },
-          "hint": { "type": ["string", "null"] }
+          "hint": { "type": ["string", "null"] },
+          "fixed": { "type": "boolean" },
+          "fixDetail": { "type": "string" }
+        }
+      }
+    },
+    "degrades": {
+      "description": "v4.6 Plan 3: failed checks and --fix repairs in the shared degrade/heal vocabulary — additive, absent when clean.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "channel", "what", "why", "effect"],
+        "properties": {
+          "kind": { "enum": ["degrade", "heal"] },
+          "channel": { "type": "string" },
+          "what": { "type": "string" },
+          "why": { "type": "string" },
+          "effect": { "type": "string" },
+          "remedy": { "type": "string" },
+          "data": {
+            "type": "object",
+            "description": "v4.6 Plan 2: optional structured facts for derivations (e.g. dead-leg {seat,status,reason}, dead-wave {waveId,models,reason}). Prose fields stay the human surface."
+          }
         }
       }
     }

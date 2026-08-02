@@ -209,9 +209,10 @@ function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [] }) {
 
 /**
  * Build a doctor health-check document (`doctor --json`).
- * @param {{version: string, timestamp: string, checks: Array<{id,name,status,message,hint}>}} opts
+ * @param {{version: string, timestamp: string, checks: Array<{id,name,status,message,hint}>,
+ *   degrades?: Array<object>}} opts
  */
-function buildDoctorDoc({ version, timestamp, checks }) {
+function buildDoctorDoc({ version, timestamp, checks, degrades }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'doctor',
@@ -219,6 +220,9 @@ function buildDoctorDoc({ version, timestamp, checks }) {
     version,
     timestamp,
     checks,
+    // v4.6 Plan 3 (spec §4/§6): the shared-vocabulary surface. Additive and
+    // OPTIONAL — present only when a check failed or --fix repaired something.
+    ...(degrades && degrades.length ? { degrades } : {}),
   };
 }
 
