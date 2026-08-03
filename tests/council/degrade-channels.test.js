@@ -55,7 +55,12 @@ describe('dead-leg channel (#85)', () => {
     expect(dead.why).toContain('timeout');
     expect(dead.effect).toMatch(/1 of 2|exits degraded/);
     // Final review F4: the hedge convention's only real pin — reverting the
-    // Task 8 wording sweep (run-stages.js:157) must fail a test.
+    // wording in run-retry-notes.js's legEffect() must fail a test. (SL-2:
+    // this fixture's retry also dies, so the dead-leg effect text is built by
+    // retryLegStillDeadNote -> legEffect there, not by run-stages.js — the
+    // separate byte-identical copy run-stages.js inlines for a D7
+    // overBudget-skip is guarded by the "D7"-named pins in
+    // tests/council/run-stages.test.js instead.)
     expect(dead.effect).toMatch(/will exit degraded \(2\)/);
   });
 

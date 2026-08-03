@@ -415,3 +415,19 @@ describe('retryStage1Losses fix-wave (SL-2 Task 5 coordinator review)', () => {
     expect(ctx._notes[0].data.seat).toBe('a');
   });
 });
+
+describe('SL-2 Task 6: sink invariant (source pin)', () => {
+  test('run-retry.js never touches degraded.value (sink invariant, source pin)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'council', 'run-retry.js'), 'utf-8');
+    // Deviation from the brief's literal regex: a bare /degraded\s*\.\s*value/
+    // substring match false-positives on this module's OWN docstring, which
+    // explains the invariant in prose ("...never touches `degraded.value`...").
+    // Anchored to an assignment instead (`(?!=)` excludes ===/==) — the same
+    // pattern tests/council/degrade-invariant.test.js already uses for its
+    // repo-wide scan — so the pin catches a real `degraded.value = ...`
+    // mutation without breaking on prose that documents the very invariant
+    // it guards. Root-caused and verified: the loose pattern matches this
+    // file's source today (docstring only); the anchored one does not.
+    expect(src).not.toMatch(/degraded\s*\.\s*value\s*=(?!=)/);
+  });
+});

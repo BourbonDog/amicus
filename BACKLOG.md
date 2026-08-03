@@ -610,7 +610,7 @@ makes this interaction disappear," so none of these are urgent — but each is a
   ~20ms apart. Under the per-wave fallback both race the same OpenCode SQLite start. A few hundred
   ms of jitter costs nothing against a multi-minute run. ⚠️ Only reachable when shared-server
   acquisition already failed — with v4.5.2's retry that is now rare, so **measure before building**.
-- [ ] **SL-2 · Retry a dead wave once after the survivors release their servers** — [M]
+- [x] **SL-2 · Retry a dead wave once after the survivors release their servers** — [M]
   Today a wave that dies at start is recorded permanently dead. The critic is fail-soft, so a
   serialized second attempt is nearly free. Interacts with the budget reservation path — a retried
   wave must not double-reserve.
@@ -619,6 +619,11 @@ makes this interaction disappear," so none of these are urgent — but each is a
   the v4.6 `kind:'heal'` vocabulary on the council path (D7 anticipated a council heal emitter);
   and the sink never un-flips `degraded.value`, so the retry must run BEFORE the `dead-wave`
   degrade is noted — heal on recovery, degrade only if the retry also dies.
+  **DONE (2026-08-03, branch `feat/sl2-stage1-retry`):** shipped per the spec
+  (`docs/superpowers/specs/2026-08-03-sl2-stage1-retry-design.md`) — waves AND legs (D1),
+  unconditional (D2), `run-retry.js` module (D3). SL-3's re-decision now waits on
+  post-retry field data. `run-stages.js` measured 292/300 at close-out (8 lines headroom —
+  next edit likely extracts).
 - [ ] **SL-3 · Decide whether an explicit `--critic` may degrade silently at all** — [S, decision]
   A user who typed `--critic` asked for adversarial review; returning a verdict without it inverts
   the feature. v4.5.2 made the loss *visible* (`seatLoss` on verdict.json) but kept the standing

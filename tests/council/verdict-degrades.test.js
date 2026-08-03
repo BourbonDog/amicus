@@ -112,6 +112,46 @@ describe('deriveSeatLoss (spec D3 — closes #84)', () => {
   });
 });
 
+// SL-2 (spec: docs/superpowers/specs/2026-08-03-sl2-stage1-retry-design.md).
+// Brief names tests/council/verdict.test.js for this pin, but that file has no
+// deriveSeatLoss import or describe conventions at all (grep confirms
+// deriveSeatLoss is required only here and by run-retry.test.js) — this file
+// is where deriveSeatLoss's actual describe block and `mk` fixture helper
+// live, so the pin (and its Task-4-handoff null-status siblings) are appended
+// here instead, matching this file's existing conventions rather than the
+// brief's mispointed path.
+describe('SL-2: heals never count as losses', () => {
+  test('a healed critic is SEATED — stage1-retry heal records are ignored by deriveSeatLoss', () => {
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'crit', degrades: [
+      { kind: 'heal', channel: 'stage1-retry',
+        what: 'seat crit reviewed on retry', why: 'w', effect: 'e',
+        data: { seat: 'crit', retryWaveId: 'r1-c1r1', retryOfWaveId: 'r1-c1' } },
+    ] });
+    expect(s).toEqual({ criticRequested: 'crit', criticSeated: true, reason: null, deadBenchSeats: [] });
+  });
+
+  // Task-4/5 handoff: a reconciliation note (run-retry-notes.js's
+  // missingLegStillDeadNote) carries data.status: null, data.reason: null —
+  // the seat's retry produced no leg record at all, so there is no status to
+  // name. Pre-fix, verdict.js's fallback rendered the literal string "the
+  // critic leg ended 'null' with no usable output".
+  test('a critic reconciliation note (status/reason both null) reports "no usable output", never the literal null', () => {
+    const degrades = [mk('dead-leg', { seat: 'critic-m', status: null, reason: null })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    expect(s.criticSeated).toBe(false);
+    expect(s.reason).toBe('the critic leg produced no usable output');
+  });
+
+  // Sibling pin, same describe block: a record that DOES carry a real status
+  // must keep rendering the original "ended '<status>'" text byte-identically.
+  test('a critic dead-leg with a real status (no reason) keeps the old text byte-identical', () => {
+    const degrades = [mk('dead-leg', { seat: 'critic-m', status: 'timeout', reason: null })];
+    const s = deriveSeatLoss({ runId: 'r1', critic: 'critic-m', degrades });
+    expect(s.criticSeated).toBe(false);
+    expect(s.reason).toBe("the critic leg ended 'timeout' with no usable output");
+  });
+});
+
 describe('readPriorVerdictSurfaces (#87)', () => {
   test('#87: readPriorVerdictSurfaces recovers seatLoss and degrades, runId-guarded', () => {
     const runDir = fs.mkdtempSync(path.join(tmp, 'prior-'));

@@ -73,8 +73,15 @@ function deriveSeatLoss({ runId, critic, degrades = [] } = {}) {
   return {
     ...base,
     criticSeated: base.criticSeated && !criticLeg,
+    // SL-2 handoff: a reconciliation note (run-retry-notes.js's
+    // missingLegStillDeadNote) carries data.status: null when the retry
+    // produced no leg for the seat at all — there is no status to name, so
+    // the old `ended '${status}'` template rendered the literal string
+    // "ended 'null'". A status-carrying record keeps the original text.
     reason: base.reason || (criticLeg
-      ? (criticLeg.data.reason || `the critic leg ended '${criticLeg.data.status}' with no usable output`)
+      ? (criticLeg.data.reason || (criticLeg.data.status
+        ? `the critic leg ended '${criticLeg.data.status}' with no usable output`
+        : 'the critic leg produced no usable output'))
       : null),
     deadBenchSeats: [...base.deadBenchSeats,
       ...legs.filter(l => l.data.seat !== critic).map(l => l.data.seat)],
