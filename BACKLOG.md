@@ -614,11 +614,24 @@ makes this interaction disappear," so none of these are urgent — but each is a
   Today a wave that dies at start is recorded permanently dead. The critic is fail-soft, so a
   serialized second attempt is nearly free. Interacts with the budget reservation path — a retried
   wave must not double-reserve.
+  **PULLED FORWARD (Christian, 2026-08-03 — the SL-3 ruling below): implement now, ahead of the
+  composition rev.** Design inputs recorded at ruling time: this is the natural first live use of
+  the v4.6 `kind:'heal'` vocabulary on the council path (D7 anticipated a council heal emitter);
+  and the sink never un-flips `degraded.value`, so the retry must run BEFORE the `dead-wave`
+  degrade is noted — heal on recovery, degrade only if the retry also dies.
 - [ ] **SL-3 · Decide whether an explicit `--critic` may degrade silently at all** — [S, decision]
   A user who typed `--critic` asked for adversarial review; returning a verdict without it inverts
   the feature. v4.5.2 made the loss *visible* (`seatLoss` on verdict.json) but kept the standing
   never-fail-closed ruling. The open question is whether an explicitly-requested critic deserves an
   exception, or a flag. **Christian's call — do not implement unilaterally.**
+  **RULED heal-first (Christian, 2026-08-03): SL-2 is pulled forward and implemented first; SL-3
+  stays OPEN and is re-decided with post-retry frequency data.** Context frozen for that
+  re-decision: v4.6 already killed the "silently" half — a dead critic announces on every surface
+  (stderr one-voice, `run.json`/`verdict.json` `degrades[]`, derived `seatLoss`, the report's
+  "What was lost") and exits degraded (2) by construction (`dead-leg`/`dead-wave` → the sink).
+  What remains is fail-soft (status quo) vs fail-closed vs an opt-in strictness flag. Baseline at
+  ruling time: 11 four-seat runs on v4.5.4, 10 clean; the one loss was a free model that never
+  produced a first token.
 - [ ] **SL-4 · `run-<runId>.json` instead of overwriting `run.json`** — [M]
   Two runs sharing an `--out` directory silently destroy the first one's run record, including its
   `sharedServerUnavailable` degrade entry — only the per-wave manifests survive. Given how much of
