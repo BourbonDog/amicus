@@ -672,6 +672,16 @@ makes this interaction disappear," so none of these are urgent — but each is a
   both judges parsed, the chair synthesized (`overallVerdict` non-null), degrades = the one
   dead-leg only. Ledger note: a 404 leg produces no usage → no spend row → `retryOfWaveId` rows
   appear only when a retry actually bills (mechanism unit-pinned).
+- [ ] **Workspace Seats panel: a seat with zero usable legs never gets a row** — [S]
+  The spec-§10 GUI close-out (run 2039b2d1, retried dead critic, full-res capture): `renderSeats`
+  shows only the five completed legs (bench ×2, judges ×2, chair — all statuses/costs correct);
+  the dead critic — first attempt AND its `-c1r1` retry — has **no row at all**. The good news:
+  no ghost, no duplicate, no perpetually-live row (the RN-11/FR-1 failure modes are absent —
+  **SL-2 introduces no GUI regression; the §10 check is CLOSED**). The gap: the loss is invisible
+  on the seats surface (header chips, street-cred dash, verdict prose and report.html all carry
+  it). Pre-existing class — session-less dead legs never got rows — not SL-2-caused. Candidate
+  fix: render announced dead seats as rows ("did not review — retried once") derived from
+  `degrades[]`/`seatLoss`, honoring the announcement invariant on this surface too.
 
 ## v4.5.0 post-ship dispositions (2026-07-28)
 
