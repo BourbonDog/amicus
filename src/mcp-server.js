@@ -1459,6 +1459,21 @@ async function startMcpServer() {
     { capabilities: { roots: {} } }
   );
 
+  // MCP update notice (spec 2026-08-03): the MCP server replaces the CLI's
+  // deliberately-skipped pre-command update check. Fire-and-forget — startup
+  // is never delayed; when the async init resolves with an update known, one
+  // stderr line lands in the client's MCP log. The per-result notice itself
+  // is appended by maybeAppendUpdateNotice in the registration wrapper below.
+  const { initUpdateCheck, getUpdateInfo } = require('./utils/updater');
+  const { maybeAppendUpdateNotice } = require('./utils/update-notice');
+  initUpdateCheck().then(() => {
+    const updateInfo = getUpdateInfo();
+    if (updateInfo && updateInfo.hasUpdate) {
+      process.stderr.write(
+        `[amicus] update available: v${updateInfo.current} -> v${updateInfo.latest}\n`);
+    }
+  }).catch(() => { /* advisory only */ });
+
   for (const tool of getTools()) {
     const register = (name) => server.registerTool(
       name,
@@ -1466,11 +1481,11 @@ async function startMcpServer() {
       async (input) => {
         try {
           const project = await resolveProjectDir(input.project, server);
-          return await handlers[tool.name](input, project, server);
+          return maybeAppendUpdateNotice(await handlers[tool.name](input, project, server));
         }
         catch (err) {
           logger.error(`MCP tool error: ${name}`, { error: err.message });
-          return textResult(`Error: ${err.message}`, true);
+          return maybeAppendUpdateNotice(textResult(`Error: ${err.message}`, true));
         }
       }
     );
