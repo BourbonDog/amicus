@@ -143,7 +143,13 @@ async function runStage1(ctx) {
   const retry = await retryStage1Losses(ctx, { deadWaves, deadLegs: deadLegs0,
     counts: { reviewed: firstPass.length, total: legs.length } });
   if (retry.aborted) {
-    return { aborted: retry.aborted, reviews: [], deadLegs: deadLegs0, deadWaves, degraded: false };
+    // Final whole-branch review: same bug class as the post-retry-repair
+    // abort fixed ~87 lines below ("Must be the post-retry set") — subtract
+    // whatever retry.recoveredLegs already healed before this abort landed.
+    const healed = new Set(retry.recoveredLegs.map(l => l.modelInput || l.model));
+    return { aborted: retry.aborted, reviews: [], degraded: false,
+      deadLegs: deadLegs0.filter(l => !healed.has(l.modelInput || l.model)),
+      deadWaves: deadWaves.map(w => ({ ...w, models: (w.models || []).filter(m => !healed.has(m)) })).filter(w => w.models.length > 0) };
   }
 
   for (const d of retry.skippedDeadWaves) {

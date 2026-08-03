@@ -511,6 +511,33 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
     expect(heals.map(n => n.data.seat)).toEqual(['b']); // no bogus heal for 'a'
   });
 
+  test('CODE FIX 3: abort during the RETRY UNIT ITSELF (not the post-retry repair) also reports post-retry dead sets', async () => {
+    // Sibling of CODE FIX 1, for the OTHER abort return in this seam (line
+    // ~145, the `retry.aborted` short-circuit) rather than the post-retry
+    // findings-repair abort CODE FIX 1 covers. Whole bench wave [a,b] dies
+    // first pass; critic solo dies too. Retry pass (serial: bench, then
+    // critic): the bench retry unit heals BOTH a and b, THEN the critic
+    // retry unit's solo aborts. Before this fix, the `retry.aborted` return
+    // handed back the pre-retry `deadLegs0`/`deadWaves` bindings verbatim —
+    // a heal-then-abort run recorded a+b as dead even though their heals
+    // were already noted on ctx.degrade a moment earlier in the same
+    // (serial) retry pass.
+    const ctx = makeCtx({ models: ['a', 'b'], critic: 'crit' });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [], reason: 'server never started' }, exitCode: 1 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [usableLeg('a'), usableLeg('b')] }, exitCode: 0 });
+    ctx.launchers.launchSolo
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-c1', legs: [deadLeg('crit')] }, exitCode: 0, leg: deadLeg('crit') })
+      .mockResolvedValueOnce({ wave: null, exitCode: 130, leg: null });
+    const r = await runStage1(ctx);
+    expect(r.aborted).toBe(130);
+    expect(r.deadWaves).toEqual([]); // a, b healed — the wave entry is gone, not just emptied of names
+    expect(r.deadLegs.map(l => l.modelInput)).toEqual(['crit']); // crit's retry itself aborted — still dead
+    expect(r.reviews).toEqual([]);
+    const heals = ctx._notes.filter(n => n.channel === 'stage1-retry' && n.kind === 'heal');
+    expect(heals.map(n => n.data.seat).sort()).toEqual(['a', 'b']); // heals for a+b noted regardless of the later abort
+  });
+
   test('D7 twin: overBudget dead-WAVE skip — degrade fields byte-identical to the pre-SL-2 text', async () => {
     // The sibling of the existing dead-LEG byte-identity pin above, for a
     // whole-wave loss: budget-skipped records must read exactly as they did

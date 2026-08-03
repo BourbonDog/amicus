@@ -73,6 +73,45 @@ test('a dead Stage-1 leg is named identically on stderr, run.json, verdict.json 
   } finally { spy.mockRestore(); }
 });
 
+test('a scripted dead Stage-1 leg whose retry RECOVERS: run exits 0, one stage1-retry heal, no dead-leg/dead-wave degrade', async () => {
+  // Headline SL-2 behavior, end to end through the real runCouncil driver —
+  // the sibling of the dead-leg surface test above, but the retry SUCCEEDS
+  // this time. gpt's first leg dies; gpt's once-only retry (bench unit,
+  // single seat, waveId 'abc123-s1r1') comes back usable, so gpt is seated
+  // for Stage 2 same as gemini/qwen. The sink invariant (run-retry.js's
+  // module doc: a heal never touches `degraded.value`) means this must exit
+  // 0, not 2 — a heal is announced, not a loss.
+  const script = {
+    'abc123-s1': (_o) => okWave([
+      mkLeg('gemini', review('gemini')),
+      mkLeg('gpt', '', 'timeout'),
+      mkLeg('qwen', review('qwen')),
+    ], 2, 'partial'),
+    'abc123-s1r1': () => okWave([mkLeg('gpt', review('gpt'))]),
+    'abc123-s2': () => okWave([
+      mkLeg('gemini', judgeOut(['Review B', 'Review C', 'Review A'],
+        [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }])),
+      mkLeg('gpt', judgeOut(['Review A', 'Review C', 'Review B'],
+        [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'dispute' }])),
+      mkLeg('qwen', judgeOut(['Review A', 'Review B', 'Review C'],
+        [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }, { id: 'C1', verdict: 'agree' }])),
+    ]),
+    'abc123-ch1': (o) => okWave([mkLeg(o.model, 'Synthesis.\n\nVERDICT: Ship it')]),
+  };
+  const opts = baseOptions(tmp);
+  const { exitCode } = await runCouncil(opts, deps(scriptedLaunchers(script)));
+  expect(exitCode).toBe(0);
+
+  const run = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'run.json'), 'utf-8'));
+  const degrades = run.degrades || [];
+  expect(degrades).toHaveLength(1);
+  expect(degrades[0].channel).toBe('stage1-retry');
+  expect(degrades[0].kind).toBe('heal');
+  expect(degrades[0].data.seat).toBe('gpt');
+  expect(degrades.find(d => d.channel === 'dead-leg')).toBeUndefined();
+  expect(degrades.find(d => d.channel === 'dead-wave')).toBeUndefined();
+});
+
 test('thin cross-review fires through the REAL runCouncil path, and judges have rows', async () => {
   // Only ONE judge returns a parseable Stage-2 block → usable < 2 → the
   // thin-cross-review channel must fire from run.js's live conditional.

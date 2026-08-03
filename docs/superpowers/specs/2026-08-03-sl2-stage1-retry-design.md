@@ -126,6 +126,20 @@ attempt-class combinations, explicitly:
   `` ; its once-only retry wave produced no legs ``
 - A skipped retry (D7) leaves today's texts byte-unchanged.
 
+**Fifth family (amendment — added by the Task-4 fix wave, after this section was first
+written, to close the partial-return vanish class):** a launched seat can come back with NO
+leg record at all, distinct from a leg record that came back unusable — a retry unit's
+response that only partially reconciles against its own launched-seat set (e.g. a bench unit
+retries `[a, b]` and the response contains a leg for `a` only). Always **`dead-leg`**
+(never `dead-wave`, regardless of whether the seat's original loss was wave- or leg-class),
+via `missingLegStillDeadNote` (`src/council/run-retry-notes.js`): why is the same origin fact
+the other four combinations use (wave-origin or leg-origin) with `` ; its once-only retry
+produced no leg for this seat `` appended, and **`data.status`/`data.reason` are both
+`null`** — there is no retry-attempt status to name, only the absence of one, for both
+origins. `deriveSeatLoss` (`src/council/verdict.js`) is this family's verdict-surface
+rendering: its null-status fallback renders `'the critic leg produced no usable output'` in
+place of the pre-fix literal string `"ended 'null'"`.
+
 **Vocabulary ripple (corrected at plan time):** add `'stage1-retry'` to `DEGRADE_CHANNELS`
 (`src/utils/degrade.js`) only. The three schema copies type `channel` as a free string —
 re-measured 2026-08-03 — so no schema edit is needed and
