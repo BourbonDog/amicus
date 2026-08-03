@@ -157,3 +157,20 @@ describe('materializeReviews', () => {
     expect(path.basename(out[0].file)).toBe('review-openrouter-deepseek-deepseek-chat.md');
   });
 });
+
+describe('retryOfWaveId passthrough (SL-2)', () => {
+  test('launchWave forwards retryOfWaveId to the transport when present', async () => {
+    const fanoutFn = jest.fn().mockResolvedValue({ wave: { waveId: 'r-s1r1', legs: [] }, exitCode: 0 });
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gpt'], prompt: 'p', project: tmp, waveId: 'r-s1r1',
+      retryOfWaveId: 'r-s1' });
+    expect(fanoutFn.mock.calls[0][0].retryOfWaveId).toBe('r-s1');
+  });
+
+  test('a launch without retryOfWaveId sends NO retryOfWaveId key (byte-identical transport call)', async () => {
+    const fanoutFn = jest.fn().mockResolvedValue({ wave: { waveId: 'r-s1', legs: [] }, exitCode: 0 });
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gpt'], prompt: 'p', project: tmp, waveId: 'r-s1' });
+    expect('retryOfWaveId' in fanoutFn.mock.calls[0][0]).toBe(false);
+  });
+});
