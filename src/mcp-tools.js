@@ -574,9 +574,13 @@ function getGuideText() {
     .map(([name, model]) => `| ${name} | ${model} |`)
     .join('\n');
   // #33: surface the running version (and a call-time staleness warning) so a
-  // post-upgrade agent session can tell it's running old code.
+  // post-upgrade agent session can tell it's running old code. Spec 2026-08-03
+  // adds the registry-side sibling: a newer release exists (not latched here —
+  // the guide is the on-demand surface).
   const warn = versionWarning();
+  const updateLine = require('./utils/update-notice').guideUpdateLine();
   const versionLine = `**Running amicus version:** ${RUNNING_VERSION}`
+    + (updateLine ? `\n\n> ${updateLine}` : '')
     + (warn ? `\n\n> ⚠️ ${warn}` : '');
 
   return `# Amicus Usage Guide

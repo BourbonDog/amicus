@@ -284,6 +284,7 @@ src/
 │   ├── start-helpers.js  # Start Command Helpers
 │   ├── thinking-validators.js  # Thinking Level Validators
 │   ├── untrusted-fence.js  # Untrusted sidecar output fence.
+│   ├── update-notice.js  # The MCP server is the one entry point that skips bin/amicus.js's update
 │   ├── update-notifier-loader.js  # update-notifier Loader
 │   ├── updater.js  # Updater Module
 │   ├── validators.js  # Input Validators
@@ -634,6 +635,7 @@ evals/
 | `utils/start-helpers.js` | Start Command Helpers | `resolveLaunchModel()`, `deriveAlias()`, `maybeOfferProviderDefaults()` |
 | `utils/thinking-validators.js` | Thinking Level Validators | `MODEL_THINKING_SUPPORT()`, `getSupportedThinkingLevels()`, `validateThinkingLevel()` |
 | `utils/untrusted-fence.js` | Untrusted sidecar output fence. | `fenceSidecarOutput()` |
+| `utils/update-notice.js` | The MCP server is the one entry point that skips bin/amicus.js's update | `classifySelfInstall()`, `upgradeInstruction()`, `buildUpdateNotice()`, `maybeAppendUpdateNotice()`, `guideUpdateLine()` |
 | `utils/update-notifier-loader.js` | update-notifier Loader | `loadUpdateNotifier()` |
 | `utils/updater.js` | Updater Module | `initUpdateCheck()`, `getUpdateInfo()`, `notifyUpdate()`, `performUpdate()` |
 | `utils/validators.js` | Input Validators | `VALID_AGENT_MODES()`, `PROVIDER_KEY_MAP()`, `MODEL_THINKING_SUPPORT()`, `TASK_ID_PATTERN()`, `validateTaskId()` |
