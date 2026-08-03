@@ -168,6 +168,12 @@ async function runStage1(ctx) {
   }
   for (const rec of retry.stillDeadNotes) { ctx.degrade.note(rec); }
 
+  // Invariant this merge relies on: retry.recoveredLegs only ever names seats
+  // that actually lost their seat on the first pass (run-retry.js's recovery
+  // loop drops any leg for a seat with no firstFailures entry) — so `legs`
+  // and `recoveredLegs` can never both carry a leg for the same seat here.
+  // materializeReviews re-writing an already-materialized recovered leg's
+  // review-*.md a second time is accepted as an idempotent no-op, not a bug.
   const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs]);
   const stillDeadLegs = [...retry.skippedDeadLegs, ...retry.stillDeadLegs];
   const stillDeadWaves = [...retry.skippedDeadWaves, ...retry.stillDeadWaves];
@@ -219,7 +225,12 @@ async function runStage1(ctx) {
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) {
-        return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves, degraded: false };
+        // SL-2 fix-wave: this used to read the pre-retry `deadWaves` binding —
+        // run.js persists this return into stage-1 state before the abort
+        // short-circuit, so a heal-then-abort run was recording seats as dead
+        // that had actually reviewed on retry. Must be the post-retry set,
+        // same as the normal-completion return below.
+        return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves, degraded: false };
       }
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }

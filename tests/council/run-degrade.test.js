@@ -17,11 +17,14 @@ const deps = (launchers) => ({ launchers, appendRunFn: jest.fn(), statsFn: () =>
 describe('quorum failure (spec §4: <2 completed Stage-1 reviews → exit 1)', () => {
   test('stops before Stage 2, error doc COUNCIL_QUORUM, run.json status error', async () => {
     const script = {
-      'abc123-s1': (opts) => okWave([
+      'abc123-s1': (_opts) => okWave([
         mkLeg('gemini', review('gemini')),
         mkLeg('gpt', '', 'error'),
         mkLeg('qwen', '', 'timeout'),
       ], 2, 'partial'),
+      // SL-2: gpt+qwen retry once (bench unit) before quorum is ever checked;
+      // scripted as a dead retry so both stay lost and quorum still fails.
+      'abc123-s1r1': () => okWave([]),
       // NO -s2 script: reaching Stage 2 throws "no script for waveId abc123-s2"
     };
     const launchers = scriptedLaunchers(script);
@@ -42,6 +45,9 @@ describe('one dead Stage-1 leg, >=2 survivors (mission-pinned: exit 2)', () => {
       mkLeg('gpt', review('gpt')),
       mkLeg('qwen', '', 'error'),
     ], 2, 'partial');
+    // SL-2: qwen retries once (bench unit, single seat) before this is recorded
+    // lost; scripted as a dead retry so it stays lost and the run still degrades.
+    script['abc123-s1r1'] = () => okWave([]);
     script['abc123-s2'] = () => okWave([
       mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
       mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
@@ -130,6 +136,9 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
       'abc123-l1': () => okWave([mkLeg('gemini', review('gemini'))]),
       'abc123-l2': () => okWave([mkLeg('gpt', review('gpt'))]),
       'abc123-l3': () => deadWave(),
+      // SL-2: the dead lens solo retries once before this is recorded lost;
+      // scripted as a dead retry so it stays lost and the run still degrades.
+      'abc123-l3r1': () => deadWave(),
       'abc123-s2': twoJudges,
       'abc123-ch1': chairOk,
     };
@@ -155,6 +164,9 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
     const script = {
       'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
       'abc123-c1': () => deadWave('Failed to start server: SQLITE_BUSY'),
+      // SL-2: the dead critic solo retries once before this is recorded lost;
+      // scripted as a dead retry so it stays lost and the run still degrades.
+      'abc123-c1r1': () => deadWave(),
       'abc123-s2': twoJudges,
       'abc123-ch1': chairOk,
     };
@@ -180,6 +192,9 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
     const script = {
       'abc123-s1': (o) => okWave(o.models.map(m => mkLeg(m, review(m)))),
       'abc123-c1': () => deadWave('Failed to start server: Timeout waiting for server to start after 5000ms'),
+      // SL-2: the dead critic solo retries once before this is recorded lost;
+      // scripted as a dead retry so it stays lost and the run still degrades.
+      'abc123-c1r1': () => deadWave(),
       'abc123-s2': twoJudges,
       'abc123-ch1': chairOk,
     };
@@ -214,6 +229,9 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
     script['abc123-s1'] = () => okWave([
       mkLeg('gemini', review('gemini')), mkLeg('gpt', review('gpt')), mkLeg('qwen', '', 'error'),
     ], 2, 'partial');
+    // SL-2: qwen retries once (bench unit, single seat) before this is recorded
+    // lost; scripted as a dead retry so it stays lost and the run still degrades.
+    script['abc123-s1r1'] = () => okWave([]);
     script['abc123-s2'] = twoJudges;
     const { exitCode, run } = await runCouncil(baseOptions(tmp), deps(scriptedLaunchers(script)));
     expect(exitCode).toBe(2);

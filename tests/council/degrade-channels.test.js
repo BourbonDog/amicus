@@ -105,7 +105,15 @@ describe('dead-leg channel (#85)', () => {
     };
     await runStage1(ctx);
     const dead = noted.find(n => n.channel === 'dead-leg');
-    expect(dead.data).toEqual({ seat: 'beta', status: 'timeout', reason: 'no first token' });
+    // SL-2 CONTRACT DECISION (spec §5): this fake launcher returns the SAME
+    // canned wave (both legs) on every call, so the retry sees beta again —
+    // still 'timeout', so beta stays lost. A retried-and-still-dead record
+    // deliberately carries retryWaveId and the first-attempt firstFailure
+    // fact on top of the pre-SL-2 {seat, status, reason} — D7 byte-identity
+    // applies only to budget-skipped records, not retried ones.
+    expect(dead.data).toEqual({ seat: 'beta', status: 'timeout', reason: 'no first token',
+      firstFailure: { seat: 'beta', class: 'leg', status: 'timeout', reason: 'no first token' },
+      retryWaveId: 'r1-s1r1' });
   });
 });
 
@@ -246,7 +254,13 @@ describe('dead-wave channel', () => {
     };
     await runStage1(ctx);
     const dead = noted.find(n => n.channel === 'dead-wave');
-    expect(dead.data).toEqual({ waveId: 'r1-s1', models: ['alpha', 'beta'], reason: 'database is locked' });
+    // SL-2 CONTRACT DECISION (spec §5): this fake launcher returns the same
+    // wholesale-dead wave on every call, so the retry also produces no legs
+    // and the wave stays lost. A retried-and-still-dead wave record carries
+    // retryWaveId on top of the pre-SL-2 {waveId, models, reason} — D7
+    // byte-identity applies only to budget-skipped records, not retried ones.
+    expect(dead.data).toEqual({ waveId: 'r1-s1', models: ['alpha', 'beta'], reason: 'database is locked',
+      retryWaveId: 'r1-s1r1' });
   });
 });
 

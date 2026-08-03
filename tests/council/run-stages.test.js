@@ -469,6 +469,64 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
     expect(r.aborted).toBe(130);
     expect(ctx._notes).toEqual([]);
   });
+
+  // ---- Fix-wave (coordinator review, appended after Task 5's initial commit) ----
+
+  test('CODE FIX 1: abort during a POST-retry repair reports post-retry dead sets, not the pre-retry ones', async () => {
+    // The whole first-pass wave dies; the retry heals BOTH seats (so the
+    // pre-retry deadWaves record and the post-retry stillDeadWaves diverge:
+    // [{...}] vs []). The retry-recovered leg for 'b' is malformed, which
+    // enters the findings-repair loop below; that repair solo aborts. Before
+    // the fix, the abort-mid-repair return leaked the stale pre-retry
+    // `deadWaves` binding — a heal-then-abort run reported a seat as dead
+    // that had actually reviewed.
+    const ctx = makeCtx({
+      models: ['a', 'b'],
+      onSolo: () => ({ wave: { status: 'aborted', legs: [] }, exitCode: 130 }),
+    });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [] }, exitCode: 1 }) // whole wave dies
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('a'), mkLeg('b', 'prose without json')] }, exitCode: 0 }); // retry heals both
+    const r = await runStage1(ctx);
+    expect(r.aborted).toBe(130);
+    expect(r.deadWaves).toEqual([]);
+    expect(r.deadLegs).toEqual([]);
+    expect(r.reviews.map(v => v.model)).toEqual(['a']); // 'b' never got pushed — abort landed first
+  });
+
+  test('CODE FIX 2: a retry leg for a seat that never failed is ignored — exactly one review per seat', async () => {
+    // Only 'b' failed; the bench retry is launched for 'b' alone, but the
+    // (mocked) response also names 'a', who never lost its seat. Before the
+    // fix this fabricated a bogus heal for 'a' ("ended 'unknown'") and a
+    // second, duplicate review row for 'a' alongside its real first-pass one.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [usableLeg('a'), deadLeg('b')] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [usableLeg('b'), usableLeg('a')] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(r.reviews.filter(v => v.model === 'a')).toHaveLength(1);
+    expect(r.reviews.map(v => v.model).sort()).toEqual(['a', 'b']);
+    const heals = ctx._notes.filter(n => n.channel === 'stage1-retry' && n.kind === 'heal');
+    expect(heals.map(n => n.data.seat)).toEqual(['b']); // no bogus heal for 'a'
+  });
+
+  test('D7 twin: overBudget dead-WAVE skip — degrade fields byte-identical to the pre-SL-2 text', async () => {
+    // The sibling of the existing dead-LEG byte-identity pin above, for a
+    // whole-wave loss: budget-skipped records must read exactly as they did
+    // before SL-2 existed, for waves same as for legs.
+    const ctx = makeCtx({ overBudget: () => true });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [] }, exitCode: 1 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1); // no retry launch
+    const n = ctx._notes.find(x => x.channel === 'dead-wave');
+    expect(n.what).toBe('Stage-1 wave abc123-s1 (gemini, gpt, qwen) produced NO legs');
+    expect(n.why).toBe('the wave produced no legs');
+    expect(n.effect).toBe('Those seats are NOT in this council. The run continues with the bench that did '
+      + 'launch and will exit degraded (2)');
+    expect(r.degraded).toBe(true);
+  });
 });
 
 describe('runStage2', () => {

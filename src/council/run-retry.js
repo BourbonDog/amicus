@@ -214,6 +214,15 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
     for (const leg of legs) {
       const seat = leg.modelInput || leg.model;
       const ff = unit.firstFailures.find(f => f.seat === seat) || null;
+      // SL-2 fix-wave: a retry response should only ever name seats THIS unit
+      // launched for (unit.models is built in lockstep with firstFailures via
+      // groupStage1Losses's recordFailure) — but if a leg turns up for a seat
+      // with no firstFailures entry, that seat never lost its seat in the
+      // first place. Skip it entirely: no heal (it would fabricate an "ended
+      // 'unknown'" why for a seat that never failed) and no still-dead note —
+      // the seat's first-attempt review stands untouched, rather than this
+      // stray leg doubling it into a duplicate bench entry alongside the real one.
+      if (!ff) { continue; }
       if (usable.has(leg)) {
         out.recoveredLegs.push(leg);
         ctx.degrade.note({ channel: 'stage1-retry', kind: 'heal',

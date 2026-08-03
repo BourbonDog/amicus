@@ -398,3 +398,20 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
     expect(r.stillDeadNotes[0].why).toBe('no reason recorded; the once-only retry wave also produced no legs');
   });
 });
+
+describe('retryStage1Losses fix-wave (SL-2 Task 5 coordinator review)', () => {
+  test('CODE FIX 2: a retry leg for a seat with no firstFailures entry is skipped — not healed, not returned', async () => {
+    // unit models ['a']; the (mocked) retry response also names 'ghost', who
+    // never lost its seat in the first place. Before the fix this fabricated
+    // a bogus heal for 'ghost' (ff===null -> "ended 'unknown'") and pushed a
+    // duplicate leg into recoveredLegs alongside whatever 'ghost' already had.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a'), usableLeg('ghost')] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: 'died' }], deadLegs: [], counts: COUNTS });
+    expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
+    expect(ctx._notes).toHaveLength(1); // only a's heal — no bogus heal for 'ghost'
+    expect(ctx._notes[0].data.seat).toBe('a');
+  });
+});

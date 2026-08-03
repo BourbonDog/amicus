@@ -31,11 +31,14 @@ test('a dead Stage-1 leg is named identically on stderr, run.json, verdict.json 
   try {
     // gpt's leg dies; gemini and qwen survive and judge each other.
     const script = {
-      'abc123-s1': (o) => okWave([
+      'abc123-s1': (_o) => okWave([
         mkLeg('gemini', review('gemini')),
         mkLeg('gpt', '', 'timeout'),
         mkLeg('qwen', review('qwen')),
       ], 2, 'partial'),
+      // SL-2: gpt retries once (bench unit, single seat) before this is
+      // recorded lost; scripted as a dead retry so it stays lost.
+      'abc123-s1r1': () => okWave([]),
       // Adaptation: Stage 2 launches ONE wave whose legs are the surviving
       // judges (run-stage2.js:57-63 — `models: judges`, a WAVE call, never a
       // per-judge `.model` solo), so this keys off `o.models` like
