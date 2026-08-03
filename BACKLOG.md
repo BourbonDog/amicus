@@ -645,6 +645,34 @@ makes this interaction disappear," so none of these are urgent — but each is a
   record*, this is a real hole. ⚠️ Changes an on-disk layout the MCP tools and `amicus watch` read;
   needs a compatibility pass (or a symlink/copy to `run.json`), which is why v4.5.2 left it alone.
 
+## SL-2 live-smoke findings (2026-08-03, runs 0084d48c + 2039b2d1)
+
+- [ ] **Doctor check (+ consider normalizing): `ANTHROPIC_BASE_URL` without `/v1` kills every
+  direct-Anthropic leg with a bare "Not Found"** — [S]
+  Field-diagnosed on run 0084d48c's fallback chair (`opus`, wave `ch3`). The convention split:
+  Anthropic SDKs (including Claude Code itself) treat the var as HOST and append `/v1`
+  themselves; OpenCode's provider layer treats it as the full prefix. A host-form value —
+  correct for Claude Code — 404s every direct anthropic leg. Control pair proven: the identical
+  `fanout --models opus` call fails "Not Found" on the host form and completes with `/v1`
+  appended. Add a doctor check (VERIFIABLE — string-inspect or probe; the unverified voice is
+  not needed here) with the exact hint, and decide whether the provider-config boundary should
+  instead normalize (append `/v1` when absent) — decide, don't drift. ⚠️ For the doctor text: the
+  var can live ONLY in a parent process env (here, the Claude Code app process — absent from
+  every persisted scope, shell profile, and settings file) — the check should print the value it
+  SEES, because "where it is set" may be unfindable on disk.
+- **LC-5 evidence (ROADMAP deferral table) — observed live.** Run 0084d48c walked the entire
+  chair fallback chain (`ch1`/`ch2` minimax — OpenRouter key spend limit; `ch3` opus — the `/v1`
+  issue above) and `run.json` recorded only the chairless outcome; the per-attempt causes were
+  recoverable ONLY by hand-digging each `ch*` wave doc. Exactly the gap LC-5 names; scheduling
+  evidence.
+- **SL-2 verified in production** (both runs): the forced dead critic retried once (`-c1r1`
+  present in `stages.stage1.waveIds`), ONE enriched dead-leg record naming both attempts, exit 2,
+  `seatLoss.criticSeated: false` derived with the real reason, `firstFailure` + `retryWaveId` on
+  the record — spec §5/§8 shapes byte-live. Run 2039b2d1 (post credit fix) was otherwise CLEAN:
+  both judges parsed, the chair synthesized (`overallVerdict` non-null), degrades = the one
+  dead-leg only. Ledger note: a 404 leg produces no usage → no spend row → `retryOfWaveId` rows
+  appear only when a retry actually bills (mechanism unit-pinned).
+
 ## v4.5.0 post-ship dispositions (2026-07-28)
 
 **Provenance.** v4.5.0 ("Save and share your councils") shipped 2026-07-28 — branch
