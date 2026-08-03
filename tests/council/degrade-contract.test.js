@@ -42,7 +42,7 @@ test('freezes the record', () => {
 });
 
 test('every channel id is kebab-case', () => {
-  for (const c of DEGRADE_CHANNELS) { expect(c).toMatch(/^[a-z]+(-[a-z]+)*$/); }
+  for (const c of DEGRADE_CHANNELS) { expect(c).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/); }
 });
 
 test('degrade renders what / why / effect in one line', () => {
@@ -90,4 +90,26 @@ test('omits data when absent and rejects a non-object data', () => {
   expect(() => makeDegrade({ ...valid, data: 'a string' })).toThrow(/data/);
   expect(() => makeDegrade({ ...valid, data: ['an', 'array'] })).toThrow(/data/);
   expect(() => makeDegrade({ ...valid, data: null })).toThrow(/data/);
+});
+
+describe("stage1-retry channel (SL-2)", () => {
+  test('makeDegrade accepts a stage1-retry heal', () => {
+    const r = makeDegrade({
+      channel: 'stage1-retry', kind: 'heal',
+      what: 'seat gpt reviewed on retry',
+      why: "its first leg ended 'error' with no usable output and was relaunched once",
+      effect: 'The seat is in this council; nothing was lost',
+      data: { seat: 'gpt' },
+    });
+    expect(r.kind).toBe('heal');
+    expect(r.channel).toBe('stage1-retry');
+  });
+
+  test('formatDegrade renders a stage1-retry heal with the Recovered: lead', () => {
+    const r = makeDegrade({ channel: 'stage1-retry', kind: 'heal',
+      what: 'seat gpt reviewed on retry', why: 'relaunched once',
+      effect: 'The seat is in this council; nothing was lost' });
+    expect(formatDegrade(r)).toBe(
+      'Recovered: seat gpt reviewed on retry — relaunched once. The seat is in this council; nothing was lost.\n');
+  });
 });

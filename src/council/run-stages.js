@@ -20,6 +20,7 @@
 const { validateFindings, countAttemptedFindings } = require('./findings');
 const briefings = require('./briefings');
 const { materializeReviews, isAbortExit } = require('./run-launch');
+const { retryStage1Losses } = require('./run-retry');
 const runState = require('./run-state');
 const { runStage2 } = require('./run-stage2');
 
@@ -133,7 +134,25 @@ async function runStage1(ctx) {
   const { aborted, legs, deadWaves } = await launchStage1(ctx);
   if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false }; }
 
-  for (const d of deadWaves) {
+  const firstPass = materializeReviews(o.runDir, legs);
+  const alive0 = new Set(firstPass.map(m => m.leg));
+  const deadLegs0 = legs.filter(l => !alive0.has(l));
+
+  // SL-2: one retry BEFORE anything is recorded lost — the sink never
+  // un-flips, so a degrade for a seat the retry saves must never fire at all.
+  const retry = await retryStage1Losses(ctx, { deadWaves, deadLegs: deadLegs0,
+    counts: { reviewed: firstPass.length, total: legs.length } });
+  if (retry.aborted) {
+    // Final whole-branch review: same bug class as the post-retry-repair
+    // abort fixed ~87 lines below ("Must be the post-retry set") — subtract
+    // whatever retry.recoveredLegs already healed before this abort landed.
+    const healed = new Set(retry.recoveredLegs.map(l => l.modelInput || l.model));
+    return { aborted: retry.aborted, reviews: [], degraded: false,
+      deadLegs: deadLegs0.filter(l => !healed.has(l.modelInput || l.model)),
+      deadWaves: deadWaves.map(w => ({ ...w, models: (w.models || []).filter(m => !healed.has(m)) })).filter(w => w.models.length > 0) };
+  }
+
+  for (const d of retry.skippedDeadWaves) {
     ctx.degrade.note({
       channel: 'dead-wave',
       what: `Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs`,
@@ -143,21 +162,27 @@ async function runStage1(ctx) {
       data: { waveId: d.waveId, models: d.models, reason: d.reason },
     });
   }
-
-  const materialized = materializeReviews(o.runDir, legs);
-  const alive = new Set(materialized.map(m => m.leg));
-  const deadLegs = legs.filter(l => !alive.has(l));
-
-  for (const leg of deadLegs) {
+  for (const leg of retry.skippedDeadLegs) {
     ctx.degrade.note({
       channel: 'dead-leg',
       what: `seat ${leg.modelInput || leg.model} did not review`,
       why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output`,
-      effect: `${materialized.length} of ${legs.length} seats reviewed; `
+      effect: `${firstPass.length} of ${legs.length} seats reviewed; `
         + 'the run continues with the bench that did and will exit degraded (2)',
       data: { seat: leg.modelInput || leg.model, status: leg.status, reason: leg.error || null },
     });
   }
+  for (const rec of retry.stillDeadNotes) { ctx.degrade.note(rec); }
+
+  // Invariant this merge relies on: retry.recoveredLegs only ever names seats
+  // that actually lost their seat on the first pass (run-retry.js's recovery
+  // loop drops any leg for a seat with no firstFailures entry) — so `legs`
+  // and `recoveredLegs` can never both carry a leg for the same seat here.
+  // materializeReviews re-writing an already-materialized recovered leg's
+  // review-*.md a second time is accepted as an idempotent no-op, not a bug.
+  const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs]);
+  const stillDeadLegs = [...retry.skippedDeadLegs, ...retry.stillDeadLegs];
+  const stillDeadWaves = [...retry.skippedDeadWaves, ...retry.stillDeadWaves];
 
   const reviews = [];
   let repairSeq = 0;
@@ -206,7 +231,12 @@ async function runStage1(ctx) {
       });
       ctx.addWave(solo.wave);
       if (isAbortExit(solo.exitCode)) {
-        return { aborted: solo.exitCode, reviews, deadLegs, deadWaves, degraded: false };
+        // SL-2 fix-wave: this used to read the pre-retry `deadWaves` binding —
+        // run.js persists this return into stage-1 state before the abort
+        // short-circuit, so a heal-then-abort run was recording seats as dead
+        // that had actually reviewed on retry. Must be the post-retry set,
+        // same as the normal-completion return below.
+        return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves, degraded: false };
       }
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }
@@ -255,8 +285,8 @@ async function runStage1(ctx) {
       ...(repairRefused ? { repairRefused } : {}),
     });
   }
-  return { aborted: null, reviews, deadLegs, deadWaves,
-    degraded: deadLegs.length > 0 || deadWaves.length > 0 };
+  return { aborted: null, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
+    degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0 };
 }
 
 // runStage2 lives in ./run-stage2.js (300-line gate) but is re-exported here so

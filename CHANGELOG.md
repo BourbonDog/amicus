@@ -16,6 +16,15 @@ All notable changes to Amicus are documented here. Format follows
   clear-cache hint in the unverified voice; global installs get `npm install -g amicus`, from
   where #33's stale-version warning takes over). Words only — no auto-update over MCP, no
   periodic re-check; `NO_UPDATE_NOTIFIER=1` still disables the check entirely.
+- **A lost Stage-1 seat gets one more chance (SL-2).** A council sub-wave that dies before
+  its legs exist, or a leg that ends with no usable output, is relaunched exactly once —
+  serially, after the surviving launches settle. Recovery announces in the one voice
+  (`Recovered: seat X reviewed on retry — …`, a `stage1-retry` heal on
+  `run.json`/`verdict.json` `degrades[]`) and the run stays exit 0; a seat still dead after
+  its retry degrades exactly as before, with both attempts named in the why. Unconditional;
+  gated on the run's `--max-cost` position (an over-budget run skips the retry and records
+  the loss byte-identically to v4.6.0). Retry legs and their spend-ledger rows carry
+  `retryOfWaveId`. A healed critic counts as seated in `verdict.seatLoss`.
 
 ### Removed
 

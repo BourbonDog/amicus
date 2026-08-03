@@ -114,6 +114,8 @@ src/
 │   ├── run-degrade.js
 │   ├── run-finalize.js
 │   ├── run-launch.js
+│   ├── run-retry-notes.js
+│   ├── run-retry.js
 │   ├── run-server.js
 │   ├── run-stage2.js
 │   ├── run-stages.js
@@ -483,6 +485,8 @@ evals/
 | `council/run-degrade.js` |  | `createDegradeSink()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
+| `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
+| `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |

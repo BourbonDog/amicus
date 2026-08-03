@@ -94,6 +94,10 @@ function createLaunchers(deps = {}) {
       // part of that allowance in the meantime. This is the CLAIM that settles
       // it — synchronous by contract, so two callers can never interleave.
       ...(reserveBudget ? { reserveBudget: (est) => reserveBudget(opts.waveId, est) } : {}),
+      // SL-2: a Stage-1 retry names the wave it replaces; fanout threads this
+      // onto every leg and its spend-ledger row (v4.3 --retry-failed machinery).
+      // Spread-guarded so a normal launch's transport call stays byte-identical.
+      ...(opts.retryOfWaveId ? { retryOfWaveId: opts.retryOfWaveId } : {}),
       models: opts.models.join(','),
       prompt: opts.prompt,
       promptMeta: { source: 'council-engine', file: null, chars: opts.prompt.length },
