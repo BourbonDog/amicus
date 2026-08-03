@@ -48,7 +48,7 @@ Provenance is implied under trusted publishing.
 
 Run top-to-bottom before `npm version`:
 
-1. **MODEL-NOTES fold-back:** diff the machine-local ledger (`~/.claude/skills/second-opinion/MODEL-NOTES.md`) against the shipped seed (`skills/second-opinion/MODEL-NOTES.md`); port durable, machine-independent lessons into the shipped file (merge/prune, keep it tight — no run-ledger numbers, those live in `amicus council stats`).
+1. **MODEL-NOTES fold-back:** diff the machine-local ledger (`~/.claude/skills/second-opinion/MODEL-NOTES.md`) against the shipped seed (`skills/second-opinion/MODEL-NOTES.md`); cherry-pick generalizable lessons from the local ledger into the shipped seed — **per-section judgment, both directions, never a bulk copy** (the divergence is two-directional: adopt seed-side corrections back into the local ledger too). Merge/prune, keep it tight — no run-ledger numbers, those live in `amicus council stats`. Standing practice per the owner's ruling, 2026-08-03: shipped = curated seed, local = lab notebook.
 2. `npm test` green; `npm run lint` clean.
 3. **Integration tier, both rails:**
    - `npm run test:integration` (keyless) — must be **0 failures**. This is the same thing the `integration` job in `ci.yml` runs on every push, so it should already be green.
