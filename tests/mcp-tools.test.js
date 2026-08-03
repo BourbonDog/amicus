@@ -549,3 +549,24 @@ describe('council MCP tool schemas', () => {
     expect(Object.keys(stats.inputSchema)).toEqual(expect.arrayContaining(['project']));
   });
 });
+
+describe('getGuideText update line (spec 2026-08-03)', () => {
+  const originalMock = process.env.AMICUS_MOCK_UPDATE;
+
+  afterEach(() => {
+    if (originalMock === undefined) { delete process.env.AMICUS_MOCK_UPDATE; }
+    else { process.env.AMICUS_MOCK_UPDATE = originalMock; }
+  });
+
+  test('shows the update-available line under mock mode', () => {
+    process.env.AMICUS_MOCK_UPDATE = 'available';
+    const text = getGuideText();
+    expect(text).toContain('**Update available: v99.0.0**'); // updater mock FAKE_LATEST
+  });
+
+  test('no update known: no update line', () => {
+    delete process.env.AMICUS_MOCK_UPDATE;
+    const text = getGuideText();
+    expect(text).not.toContain('Update available:');
+  });
+});

@@ -7,6 +7,15 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Added
 
+- **The MCP channel finally hears about new versions** (spec 2026-08-03). The MCP server now
+  runs the update check at startup and appends one flavor-aware notice block to the first
+  successful tool result of each server process (once per session, latched); `amicus_guide`
+  carries an always-on update line, and one `[amicus] update available` line lands in the
+  client's MCP log on stderr. The instruction is chosen config-first (`npx -y amicus@latest`
+  registrations are told a restart suffices; cached/pinned npx copies get the re-point-or-
+  clear-cache hint in the unverified voice; global installs get `npm install -g amicus`, from
+  where #33's stale-version warning takes over). Words only — no auto-update over MCP, no
+  periodic re-check; `NO_UPDATE_NOTIFIER=1` still disables the check entirely.
 - **A lost Stage-1 seat gets one more chance (SL-2).** A council sub-wave that dies before
   its legs exist, or a leg that ends with no usable output, is relaunched exactly once —
   serially, after the surviving launches settle. Recovery announces in the one voice
