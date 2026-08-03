@@ -31,6 +31,14 @@ describe('classifySelfInstall()', () => {
     })).toBe('npx');
   });
 
+  it('classifies a POSIX npx-cache copy (the shape CI runners see)', () => {
+    const { classifySelfInstall } = load();
+    expect(classifySelfInstall({
+      fs: fakeFs('/home/x/.npm/_npx/abc123/node_modules/amicus/package.json'),
+      pkgPath: 'irrelevant',
+    })).toBe('npx');
+  });
+
   it('classifies a global install (node_modules, no _npx)', () => {
     const { classifySelfInstall } = load();
     expect(classifySelfInstall({

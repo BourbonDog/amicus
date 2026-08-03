@@ -757,3 +757,18 @@ Expected: all suites PASS (posttest marker script runs automatically)
 git add CHANGELOG.md
 git commit -m "docs: CHANGELOG — MCP update notice under Unreleased"
 ```
+
+---
+
+## Execution deviations (2026-08-03)
+
+- **CI posix fixture failure (PR #91, first run):** `classifySelfInstall` used `path.dirname`
+  before segment-splitting; posix `dirname` collapses a Windows-style test fixture to `'.'`,
+  failing `classifies an npx-cache copy` on ubuntu/macos while Windows passed. Fix: split the
+  raw realpath (basename can't collide with `_npx`/`node_modules`), delete the `path` require;
+  added a posix-shaped npx fixture. **Lesson for future plans: any path-classification helper
+  must be dirname-free pure string ops, and its tests must carry fixtures in BOTH separator
+  styles — the known "CI-only path-fixture failure class" from the release recipe.**
+- Two-session collision mid-execution (shared checkout switched by the SL-2 session; its
+  `f0d0290` swept in an untracked test, removed by `891908e`) forced the move to a dedicated
+  worktree with a junctioned `node_modules`. Parallel amicus sessions must take worktrees.

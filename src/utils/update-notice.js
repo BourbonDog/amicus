@@ -17,8 +17,6 @@
 
 'use strict';
 
-const path = require('path');
-
 /** Upgrade wordings (spec §4). Config-derived rows are verified-voiced;
  *  NPX_CACHED_LINE keeps the hedge — the config read is best-effort. */
 const GLOBAL_LINE = 'Run `npm install -g amicus`, then restart your MCP client.';
@@ -42,8 +40,11 @@ function classifySelfInstall(deps = {}) {
   const fs = deps.fs || require('fs');
   const pkgPath = deps.pkgPath || require('./version-info').PKG_PATH;
   try {
-    const real = fs.realpathSync(pkgPath);
-    const parts = path.dirname(real).split(/[\\/]/);
+    // Split the raw realpath — NOT path.dirname first: dirname is platform-
+    // bound (posix dirname collapses a foreign backslash path to '.', the CI
+    // path-fixture failure class), and the basename 'package.json' can never
+    // collide with the segment names probed here.
+    const parts = fs.realpathSync(pkgPath).split(/[\\/]/);
     if (parts.includes('_npx')) { return 'npx'; }
     if (parts.includes('node_modules')) { return 'global'; }
     return 'other';
