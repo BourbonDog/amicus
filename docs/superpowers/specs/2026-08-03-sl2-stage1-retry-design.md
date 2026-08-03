@@ -126,9 +126,10 @@ attempt-class combinations, explicitly:
   `` ; its once-only retry wave produced no legs ``
 - A skipped retry (D7) leaves today's texts byte-unchanged.
 
-**Vocabulary ripple:** add `'stage1-retry'` to `DEGRADE_CHANNELS` (`src/utils/degrade.js`)
-and to the channel enum in all three schema copies (run/verdict/doctor); the three-way
-lockstep test is updated in the same commit — it exists precisely to force this.
+**Vocabulary ripple (corrected at plan time):** add `'stage1-retry'` to `DEGRADE_CHANNELS`
+(`src/utils/degrade.js`) only. The three schema copies type `channel` as a free string —
+re-measured 2026-08-03 — so no schema edit is needed and
+`tests/schemas-degrades-lockstep.test.js` is untouched.
 
 **seatLoss invariant:** heal records never contribute to `seatLoss` derivation — **a healed
 critic counts as seated** (`criticSeated: true`). This is the pin that makes the SL-3
@@ -177,8 +178,7 @@ re-decision data trustworthy. Verify `deriveSeatLoss` matches on the dead channe
    today's text byte-unchanged.
 8. An abort exit during a retry propagates as abort — no degrade-noting.
 9. No new flag or env knob; identical behavior on CLI and MCP transports (engine-level).
-10. `'stage1-retry'` present in `DEGRADE_CHANNELS` and all three schema copies; the
-    lockstep test passes.
+10. `'stage1-retry'` present in DEGRADE_CHANNELS; the lockstep test passes unmodified.
 
 ## §9 Testing
 
@@ -193,12 +193,12 @@ re-decision data trustworthy. Verify `deriveSeatLoss` matches on the dead channe
   after the retry pass (order pin); no reservation for a retried wave outlives its
   `addWave`; the degrade-invariant source-scan still passes (the module never touches
   `degraded.value`).
-- **Schema:** lockstep test updated for the new channel.
+- **Schema:** none — channel is a free string in all three copies; the lockstep test stays untouched and green.
 
 ## §10 Size gates and verification items
 
 Files touched: new `run-retry.js` (~150 target); `run-stages.js` seam (~10 lines net);
-`run-launch.js` +1 passthrough; `degrade.js` +1 channel; three schemas; lockstep test.
+`run-launch.js` +1 passthrough; `degrade.js` +1 channel.
 None are in the tight-file table today — **re-measure at plan time** (hard-gate rule; the
 numbers move every release).
 

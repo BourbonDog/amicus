@@ -16,6 +16,7 @@ const DEGRADE_CHANNELS = Object.freeze(new Set([
   'dead-leg', 'dead-wave', 'budget-refusal', 'shared-server-unavailable',
   'dropped-members', 'chair-skipped-cost-ceiling', 'chair-failed',
   'thin-cross-review', 'debate-degraded', 'inexact-under-ceiling',
+  'stage1-retry',
   'internal',
   // doctor channels
   'doctor-check-failed', 'doctor-fix',
