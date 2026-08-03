@@ -622,8 +622,9 @@ makes this interaction disappear," so none of these are urgent — but each is a
   **DONE (2026-08-03, branch `feat/sl2-stage1-retry`):** shipped per the spec
   (`docs/superpowers/specs/2026-08-03-sl2-stage1-retry-design.md`) — waves AND legs (D1),
   unconditional (D2), `run-retry.js` module (D3). SL-3's re-decision now waits on
-  post-retry field data. `run-stages.js` measured 292/300 at close-out (8 lines headroom —
-  next edit likely extracts).
+  post-retry field data. `run-stages.js` measured 292/300 at Task-6 close-out and **298/300
+  after the final-review fix — 2 lines headroom, the next edit to this seam extracts first**;
+  `run-retry.js` sits at 280/300 on day one. Both join the tight-file watch list.
 - [ ] **SL-3 · Decide whether an explicit `--critic` may degrade silently at all** — [S, decision]
   A user who typed `--critic` asked for adversarial review; returning a verdict without it inverts
   the feature. v4.5.2 made the loss *visible* (`seatLoss` on verdict.json) but kept the standing
