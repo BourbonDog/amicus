@@ -17,6 +17,8 @@
 const briefings = require('./briefings');
 const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
+const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
+  = require('./run-retry-notes');
 
 /** 1-based lens index for a loss, from the waveId convention or the model. */
 function lensIndexOf(o, waveId, model) {
@@ -115,7 +117,10 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = []) {
   // orchestrator can route it to skipped instead of it vanishing silently.
   if (bench.srcWaves.length > 0 || bench.srcLegs.length > 0) { out.push(bench); }
   if (criticUnit.srcWaves.length > 0 || criticUnit.srcLegs.length > 0) { out.push(criticUnit); }
-  out.push(...[...lensUnits.values()].sort((a, b) => (a.lensIndex ?? 0) - (b.lensIndex ?? 0)));
+  // Coordinator-review MINOR-7a: null sorts LAST (Infinity), not first (0) —
+  // an unmappable loss is not "lens index 0"; it should not perturb the
+  // ascending order of the real, well-indexed lens retries.
+  out.push(...[...lensUnits.values()].sort((a, b) => (a.lensIndex ?? Infinity) - (b.lensIndex ?? Infinity)));
   return out;
 }
 
@@ -126,42 +131,6 @@ function briefingFor(o, unit) {
     return briefings.buildLensBriefing({ lens: o.lenses[unit.lensIndex - 1], briefing: o.briefing, date: o.date });
   }
   return briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date });
-}
-
-/** D-effect parity: still-dead leg notes reuse today's count phrasing, with the
- *  FIRST attempt's counts — the why carries the retry story (spec §5). */
-const legEffect = (counts) =>
-  `${counts.reviewed} of ${counts.total} seats reviewed; `
-  + 'the run continues with the bench that did and will exit degraded (2)';
-
-function waveStillDeadNote(w, unit) {
-  return { channel: 'dead-wave',
-    what: `Stage-1 wave ${w.waveId} (${(w.models || []).join(', ') || 'no models'}) produced NO legs`,
-    why: `${w.reason}; the once-only retry wave also produced no legs`,
-    effect: 'Those seats are NOT in this council. The run continues with the bench that did '
-      + 'launch and will exit degraded (2)',
-    data: { waveId: w.waveId, models: w.models, reason: w.reason, retryWaveId: unit.waveId } };
-}
-
-function srcLegStillDeadNote(leg, unit, counts) {
-  const seat = leg.modelInput || leg.model;
-  return { channel: 'dead-leg', what: `seat ${seat} did not review`,
-    why: `the leg ended '${leg.status}'${leg.error ? `: ${leg.error}` : ''} with no usable output; `
-      + 'its once-only retry wave produced no legs',
-    effect: legEffect(counts),
-    data: { seat, status: leg.status, reason: leg.error || null, retryWaveId: unit.waveId } };
-}
-
-function retryLegStillDeadNote(seat, ff, retryLeg, unit, counts) {
-  const why = ff && ff.class === 'wave'
-    ? `its first wave ${ff.waveId} produced no legs (${ff.reason}); `
-      + `its once-only retry leg ended '${retryLeg.status}' with no usable output`
-    : `the leg ended '${ff ? ff.status : 'unknown'}'${ff && ff.reason ? `: ${ff.reason}` : ''} `
-      + `with no usable output; its once-only retry also ended '${retryLeg.status}'`;
-  return { channel: 'dead-leg', what: `seat ${seat} did not review`, why,
-    effect: legEffect(counts),
-    data: { seat, status: retryLeg.status, reason: retryLeg.error || null,
-      firstFailure: ff, retryWaveId: unit.waveId } };
 }
 
 /**
@@ -176,11 +145,16 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
 
   for (const unit of groupStage1Losses(o, deadWaves, deadLegs)) {
     // Task-4 review hardening: a unit this pass cannot even ATTEMPT — an
-    // unmappable lens loss (no carrier resolved an index) or a unit whose
-    // sources named zero models — is never launched. Its sources fall back
-    // to the ordinary skipped-loss path so the caller's normal degrade notes
-    // still fire; being unmappable is not an exemption from the record.
-    if (unit.lensIndex === null || unit.models.length === 0) {
+    // unmappable lens loss (no carrier resolved an index), a lens index
+    // outside the run's actual lens roster (coordinator-review MINOR-7b: a
+    // malformed waveId like "...-l99" must not become an out-of-range
+    // `o.lenses[98]` access inside briefingFor), or a unit whose sources
+    // named zero models — is never launched. Its sources fall back to the
+    // ordinary skipped-loss path so the caller's normal degrade notes still
+    // fire; being unmappable is not an exemption from the record.
+    const lensOutOfRange = unit.unit === 'lens' && unit.lensIndex !== null
+      && (unit.lensIndex < 1 || unit.lensIndex > (o.lenses || []).length);
+    if (unit.lensIndex === null || lensOutOfRange || unit.models.length === 0) {
       out.skippedDeadWaves.push(...unit.srcWaves);
       out.skippedDeadLegs.push(...unit.srcLegs);
       continue;
@@ -211,12 +185,31 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
     if (legs.length === 0) {
       // The retry wave itself died wholesale — final failure keeps each
       // source's granularity (D5): wave-origin stays a dead-wave, leg-origin
-      // stays a dead-leg, both enriched with the retry fact.
-      for (const w of unit.srcWaves) { out.stillDeadNotes.push(waveStillDeadNote(w, unit)); out.stillDeadWaves.push(w); }
-      for (const l of unit.srcLegs) { out.stillDeadNotes.push(srcLegStillDeadNote(l, unit, counts)); out.stillDeadLegs.push(l); }
+      // stays a dead-leg, both enriched with the retry fact. Coordinator-
+      // review MINOR-4: emitted ONCE per SEAT — the grouping dedup (Task-4
+      // hardening) keeps BOTH src records when a seat arrives via a srcWave
+      // AND a srcLeg (or via two srcLegs), so without this a single lost
+      // seat could be announced twice. Waves are processed first (mirrors
+      // the "wave wins" precedent from the grouping-level dedup); a seat
+      // already covered by its wave's note is skipped when its srcLeg is
+      // reached.
+      const notedSeats = new Set();
+      for (const w of unit.srcWaves) {
+        out.stillDeadNotes.push(waveStillDeadNote(w, unit));
+        out.stillDeadWaves.push(w);
+        for (const m of (w.models || [])) { notedSeats.add(m); }
+      }
+      for (const l of unit.srcLegs) {
+        const seat = l.modelInput || l.model;
+        if (notedSeats.has(seat)) { continue; }
+        notedSeats.add(seat);
+        out.stillDeadNotes.push(srcLegStillDeadNote(l, unit, counts));
+        out.stillDeadLegs.push(l);
+      }
       continue;
     }
     const usable = new Set(materializeReviews(o.runDir, legs).map(m => m.leg));
+    const seenSeats = new Set(legs.map(leg => leg.modelInput || leg.model));
     const lostWaveSeats = new Map(); // waveId -> seats still lost from a wave-origin
     for (const leg of legs) {
       const seat = leg.modelInput || leg.model;
@@ -239,6 +232,30 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
           const src = unit.srcLegs.find(l => (l.modelInput || l.model) === seat);
           if (src) { out.stillDeadLegs.push(src); }
         }
+      }
+    }
+    // CRITICAL fix (coordinator review): the loop above only visits seats
+    // that came back WITH a leg record. A partial wave return (unit models
+    // [a,b], the wave comes back with only a's leg) leaves 'b' invisible to
+    // that loop entirely — no heal, no still-dead note, no skip: it would
+    // vanish from every array. Reconcile against the full launched-seat set
+    // (the union of unit.models, every srcWave's models, and every srcLeg's
+    // seat — not just unit.models alone, so this holds even if some future
+    // change to the grouping made unit.models an incomplete union) so every
+    // launched seat lands in exactly one of recovered / still-dead / skipped.
+    const launchedSeats = new Set(unit.models);
+    for (const w of unit.srcWaves) { for (const m of (w.models || [])) { launchedSeats.add(m); } }
+    for (const l of unit.srcLegs) { launchedSeats.add(l.modelInput || l.model); }
+    for (const seat of launchedSeats) {
+      if (seenSeats.has(seat)) { continue; } // already handled above (healed or still-dead)
+      const ff = unit.firstFailures.find(f => f.seat === seat) || null;
+      out.stillDeadNotes.push(missingLegStillDeadNote(seat, ff, unit, counts));
+      if (ff && ff.class === 'wave') {
+        if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
+        lostWaveSeats.get(ff.waveId).push(seat);
+      } else {
+        const src = unit.srcLegs.find(l => (l.modelInput || l.model) === seat);
+        if (src) { out.stillDeadLegs.push(src); }
       }
     }
     // Wave-origin seats still lost: the return-contract wave entry carries only

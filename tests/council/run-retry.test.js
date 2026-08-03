@@ -3,6 +3,11 @@ jest.mock('../../src/council/run-state', () => ({ appendStageWave: jest.fn() }))
 const runState = require('../../src/council/run-state');
 const { groupStage1Losses, retryStage1Losses } = require('../../src/council/run-retry');
 
+// Coordinator-review MINOR-6: the shared mock's call history and any
+// per-test mockImplementation (see the 'appendStageWave is called BEFORE...'
+// test below) must not leak into the next test.
+beforeEach(() => { runState.appendStageWave.mockReset(); });
+
 const O = { runId: 'r1', models: ['a', 'b', 'crit'], critic: 'crit', lenses: null };
 
 describe('groupStage1Losses (SL-2 Task 3)', () => {
@@ -52,8 +57,18 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Coordinator-review MINOR-6: fakeCtx mints a real tmpdir per call (needed —
+// materializeReviews writes review-*.md files into it); track every one so
+// they can be swept up after the file's tests finish instead of accumulating
+// on disk across runs.
+const createdRunDirs = [];
+afterAll(() => {
+  for (const dir of createdRunDirs) { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 function fakeCtx(oOverrides = {}, opts = {}) {
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sl2-'));
+  createdRunDirs.push(runDir);
   const notes = [];
   return {
     o: { runId: 'r1', runDir, models: ['a', 'b', 'crit'], critic: 'crit', lenses: null,
@@ -129,6 +144,9 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
       deadLegs: [deadLeg('a'), deadLeg('b')], counts: COUNTS });
     expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
     expect(ctx._notes).toHaveLength(1); // a's heal
+    // Coordinator-review IMPORTANT-3b: explicit heal-why text for the
+    // leg-origin class (previously only asserted implicitly by count).
+    expect(ctx._notes[0].why).toBe("its first leg ended 'error' with no usable output and was relaunched once");
     expect(r.stillDeadNotes).toHaveLength(1);
     expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg', what: 'seat b did not review',
       why: "the leg ended 'error': boom with no usable output; its once-only retry also ended 'timeout'",
@@ -159,14 +177,28 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
   });
 
   test('sequential launch: the critic solo launches only after the bench retry settles', async () => {
+    // Coordinator-review IMPORTANT-2: the original version pushed 'bench'
+    // synchronously before any await, so it couldn't tell sequential await
+    // apart from a concurrent Promise.all — 'bench' would land first either
+    // way as long as launchWave was merely CALLED before launchSolo. Deferring
+    // the bench mock's resolution to a macrotask means a concurrency bug
+    // would let 'critic' (a microtask-resolved mock) land BEFORE
+    // 'bench-done', which this asserts against.
     const order = [];
-    const launchWave = jest.fn().mockImplementation(async () => { order.push('bench');
-      return { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 }; });
+    const launchWave = jest.fn().mockImplementation(() => {
+      order.push('bench');
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          order.push('bench-done');
+          resolve({ wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 });
+        }, 0);
+      });
+    });
     const launchSolo = jest.fn().mockImplementation(async () => { order.push('critic');
       return { wave: { waveId: 'r1-c1r1', legs: [usableLeg('crit')] }, exitCode: 0 }; });
     const ctx = fakeCtx({}, { launchWave, launchSolo });
     await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [deadLeg('a'), deadLeg('crit')], counts: COUNTS });
-    expect(order).toEqual(['bench', 'critic']);
+    expect(order).toEqual(['bench', 'bench-done', 'critic']);
   });
 
   test('overBudget pre-gate (D7): unit skipped, original entries routed back untouched, no launch', async () => {
@@ -262,5 +294,107 @@ describe('retryStage1Losses hardening (SL-2 Task 4 review)', () => {
     expect(r.skippedDeadWaves).toEqual([]);
     expect(r.stillDeadNotes).toEqual([]);
     expect(ctx._notes).toEqual([]);
+  });
+});
+
+describe('retryStage1Losses fix-wave (coordinator review)', () => {
+  test('CRITICAL: bench partial return (leg-origin) — a seat with NO leg record at all in the ' +
+    'retry response still gets a still-dead note, never vanishes', async () => {
+    // unit models ['a','b']; the retry wave comes back naming ONLY 'a' —
+    // 'b' has no leg record whatsoever (not even an error/timeout leg).
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('a'), deadLeg('b')], counts: COUNTS });
+    expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
+    expect(r.stillDeadNotes).toHaveLength(1);
+    expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg', what: 'seat b did not review',
+      why: "the leg ended 'error': boom with no usable output; its once-only retry produced no leg for this seat" });
+    expect(r.stillDeadLegs.map(l => l.modelInput)).toEqual(['b']);
+  });
+
+  test('CRITICAL: wave-origin partial return — an unseen seat lands in stillDeadWaves with reduced ' +
+    'models, never vanishes', async () => {
+    // deadWave names ['a','b']; the retry wave comes back naming ONLY 'a'.
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['a', 'b'], reason: 'died' }], deadLegs: [], counts: COUNTS });
+    expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
+    expect(r.stillDeadWaves).toEqual([{ waveId: 'r1-s1', models: ['b'], reason: 'died' }]);
+    const note = r.stillDeadNotes.find(n => n.data && n.data.seat === 'b');
+    expect(note).toMatchObject({ channel: 'dead-leg', what: 'seat b did not review',
+      why: 'its first wave r1-s1 produced no legs (died); its once-only retry produced no leg for this seat' });
+  });
+
+  test('every input seat lands in exactly one of recovered / still-dead / skipped (invariant, mixed unit)', async () => {
+    // bench unit ['a','b','c']: 'a' comes back usable, 'b' comes back but
+    // unusable (per-leg still-dead), 'c' has no leg record at all (the
+    // CRITICAL reconciliation path) -- every seat must be accounted for
+    // exactly once across the three buckets.
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [usableLeg('a'), deadLeg('b', 'timeout', null)] }, exitCode: 0 }); // 'c' entirely absent
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('a'), deadLeg('b'), deadLeg('c')], counts: COUNTS });
+    expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
+    expect(r.stillDeadLegs.map(l => l.modelInput).sort()).toEqual(['b', 'c']);
+    expect(r.skippedDeadLegs).toEqual([]);
+    // exactly one still-dead note per lost seat -- no double, no omission
+    const seatsNoted = r.stillDeadNotes.map(n => n.data.seat).sort();
+    expect(seatsNoted).toEqual(['b', 'c']);
+  });
+
+  test('IMPORTANT-3a: leg-origin retry wave dies wholesale — srcLegStillDeadNote fires, why names both attempts', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('a'), deadLeg('b')], counts: COUNTS });
+    expect(ctx._notes).toEqual([]);
+    expect(r.stillDeadNotes).toHaveLength(2);
+    expect(r.stillDeadNotes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ channel: 'dead-leg', what: 'seat a did not review',
+        why: "the leg ended 'error': boom with no usable output; its once-only retry wave produced no legs" }),
+      expect.objectContaining({ channel: 'dead-leg', what: 'seat b did not review',
+        why: "the leg ended 'error': boom with no usable output; its once-only retry wave produced no legs" }),
+    ]));
+    expect(r.stillDeadLegs.map(l => l.modelInput).sort()).toEqual(['a', 'b']);
+  });
+
+  test('MINOR-4: wholesale death does not double-announce a seat present in both a srcWave and a srcLeg', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const w = { waveId: 'r1-s0', models: ['a'], reason: 'died' };
+    const l = deadLeg('a', 'timeout', null);
+    const r = await retryStage1Losses(ctx, { deadWaves: [w], deadLegs: [l], counts: COUNTS });
+    // seat 'a' arrived via both a srcWave and a srcLeg (grouping keeps both
+    // sources — Task-4 hardening item 1) -- the wholesale-death path must
+    // still announce it exactly once, not twice. First source (the wave) wins.
+    expect(r.stillDeadNotes).toHaveLength(1);
+    expect(r.stillDeadNotes[0].channel).toBe('dead-wave');
+    expect(r.stillDeadWaves).toEqual([w]);
+    expect(r.stillDeadLegs).toEqual([]); // the leg source is superseded, not double-counted
+  });
+
+  test('MINOR-7b: an out-of-range lensIndex (waveId names a lens beyond o.lenses.length) is treated as unmappable', async () => {
+    const launchWave = jest.fn();
+    const launchSolo = jest.fn();
+    const ctx = fakeCtx({ models: ['m1', 'm2'], critic: null, lenses: ['security', 'perf'] },
+      { launchWave, launchSolo });
+    const w = { waveId: 'r1-l5', models: ['m1'], reason: 'died' }; // only 2 lenses exist
+    const r = await retryStage1Losses(ctx, { deadWaves: [w], deadLegs: [], counts: COUNTS });
+    expect(launchWave).not.toHaveBeenCalled();
+    expect(launchSolo).not.toHaveBeenCalled();
+    expect(r.skippedDeadWaves).toEqual([w]);
+  });
+
+  test('MINOR-7c: waveStillDeadNote renders a missing w.reason as "no reason recorded"', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: undefined }], deadLegs: [], counts: COUNTS });
+    expect(r.stillDeadNotes[0].why).toBe('no reason recorded; the once-only retry wave also produced no legs');
   });
 });
