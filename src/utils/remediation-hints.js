@@ -49,21 +49,19 @@ const REMEDIATION_HINTS = Object.freeze({
   /** Electron absent — reinstall to add the interactive GUI (headless still works). */
   reinstallElectron: 'npm install -g amicus  (reinstall to add Electron)',
 
-  /**
-   * Electron present but broken (ABI mismatch / partial unpack). Delete the
-   * vendored copy and reinstall to force a clean rebuild.
-   */
-  rebuildElectron:
-    'rm -rf node_modules/electron && npm install -g amicus  (rebuild Electron after an ABI mismatch or partial unpack)',
-
   /** Point the user at the single recovery hub. */
   runDoctor: 'run: amicus doctor  (diagnoses config, keys, engine & MCP, with copy-paste fixes)',
 
   /**
-   * Self-heal the optional Electron GUI in place (#56). This is the convergence
-   * target for the three "reinstall to fix Electron" hints — it provisions the
-   * binary from cache (or downloads on demand) WITHOUT a global reinstall, so it
-   * can't loop the way `npm install -g amicus` could when the rollback recurs.
+   * Self-heal the optional Electron GUI in place (#56). The convergence target
+   * for the "reinstall to fix Electron" hints — it provisions the binary from
+   * cache (or downloads on demand) WITHOUT a global reinstall, so it can't
+   * loop the way `npm install -g amicus` could when the rollback recurs.
+   * (`rebuildElectron`, the manual rm-rf-and-reinstall variant, was deleted
+   * 2026-08-03 by owner ruling: no live call site once this hint became the
+   * target, and its prose asserted unverified causes. A reintroduction must
+   * use the unverified-cause voice — absence-pinned in
+   * tests/remediation-hints.test.js.)
    */
   doctorFix: 'amicus doctor --fix  (self-heal the Electron GUI in place — provisions the binary; no reinstall, so it can\'t loop)',
 
@@ -80,6 +78,12 @@ const REMEDIATION_HINTS = Object.freeze({
    * atomic tmp-write and rename leaves a stray temp file in the config dir
    * forever. `doctor --fix` sweeps files older than 60s (never a live writer's
    * ms-lived tmp).
+   *
+   * Voice ruling (Christian, 2026-08-03): this hint keeps its confident cause.
+   * "Left by an interrupted write" is definitional, not a guess — the atomic
+   * write pattern admits no other producer, and the age gate excludes live
+   * writers — so the Plan 3 unverified-cause voice deliberately does NOT
+   * apply. Do not re-file it against that criterion.
    */
   sweepSessionIndexTmp:
     'amicus doctor --fix  (sweeps orphaned .sessions-index.json.*.tmp files left by an interrupted write)',

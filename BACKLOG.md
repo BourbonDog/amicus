@@ -689,6 +689,13 @@ this work fixes.
     heals only; degrade records are the `--json` surface; warns map to no record.
   - **Owner ruling queued:** does the unverified voice extend to `sweepSessionIndexTmp` (cause
     near-definitional) and `rebuildElectron` (no live call site)? Final review says post-merge.
+    **RESOLVED (Christian, 2026-08-03):** the voice applies only where the cause is genuinely a
+    guess. `sweepSessionIndexTmp` keeps its confident voice — the cause is definitional (an
+    atomic-write tmp orphan has no other producer; the 60s age gate excludes live writers) —
+    ruling recorded in its docblock and pinned in `tests/remediation-hints.test.js`.
+    `rebuildElectron` was decided on existence, not voice: **deleted** as superseded by
+    `doctorFix` (no live call site), absence-pinned in the same suite; a reintroduction must
+    adopt the unverified-cause voice.
 - **Plan 4 of 4:** `docs/superpowers/plans/2026-08-02-v4.6-degrade-invariant-plan-4-cli-parity.md`
   — **EXECUTED 2026-08-02** on `feat/v4.6-plan-4-cli-parity`, merged to `main` via PR #90 and
   tagged `v4.6.0`. Closed **#80/#81** (Workspace discoverability: `watch` usage names `--ui`; a

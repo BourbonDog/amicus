@@ -5,6 +5,16 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **The unused `rebuildElectron` remediation hint** (owner ruling 2026-08-03, closing Plan 3's
+  queued hint-voice question). It had no live call site — `doctor --fix`, the in-place Electron
+  self-heal, is its stated convergence target — and its prose asserted unverified causes ("after
+  an ABI mismatch or partial unpack"). Absence-pinned in `tests/remediation-hints.test.js`; a
+  reintroduction must adopt the unverified-cause voice. The same ruling keeps
+  `sweepSessionIndexTmp`'s confident voice: its cause is definitional (an atomic-write tmp orphan
+  has no other producer), not a guess.
+
 ## [4.6.0] - 2026-08-02
 
 ### Added (v4.6 milestone — the degrade announcement invariant, plans 1-4)

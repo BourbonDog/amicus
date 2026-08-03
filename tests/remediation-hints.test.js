@@ -4,7 +4,7 @@ const hints = require('../src/utils/remediation-hints');
 
 describe('remediation-hints helper', () => {
   test('exports copy-paste fix strings as non-empty strings', () => {
-    for (const key of ['reinstall', 'reinstallEngine', 'reinstallElectron', 'rebuildElectron', 'cacheClean', 'runDoctor']) {
+    for (const key of ['reinstall', 'reinstallEngine', 'reinstallElectron', 'cacheClean', 'runDoctor']) {
       expect(typeof hints[key]).toBe('string');
       expect(hints[key].length).toBeGreaterThan(0);
     }
@@ -23,11 +23,6 @@ describe('remediation-hints helper', () => {
   test('reinstallElectron hint mentions reinstalling to add Electron', () => {
     expect(hints.reinstallElectron).toMatch(/npm install -g amicus/i);
     expect(hints.reinstallElectron).toMatch(/electron/i);
-  });
-
-  test('rebuildElectron hint covers deleting node_modules/electron and rebuilding', () => {
-    expect(hints.rebuildElectron).toMatch(/node_modules[/\\]electron/i);
-    expect(hints.rebuildElectron).toMatch(/rebuild|reinstall/i);
   });
 
   test('cacheClean hint is the npm cache clean command', () => {
@@ -59,5 +54,16 @@ describe('unverified-cause voice (v4.6 Plan 3)', () => {
     expect(hints.engineMissing).toContain('amicus doctor');
     expect(hints.reinstallEngineAv).toContain('npm install -g amicus');
     expect(hints.reinstallEngineAv).toContain('npm cache clean --force && npm install -g amicus');
+  });
+
+  // Owner ruling 2026-08-03, closing Plan 3's queued hint-voice question: the
+  // unverified-cause voice applies only where the cause is genuinely a guess.
+  test('rebuildElectron stays deleted: no live call site, doctor --fix is the convergence target — a reintroduction must adopt the unverified-cause voice', () => {
+    expect(hints).not.toHaveProperty('rebuildElectron');
+  });
+
+  test('sweepSessionIndexTmp keeps its confident voice: the cause is definitional, not guessed', () => {
+    expect(hints.sweepSessionIndexTmp).toMatch(/left by an interrupted write/);
+    expect(hints.sweepSessionIndexTmp).not.toMatch(/unverified/i);
   });
 });
