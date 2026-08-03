@@ -24,11 +24,26 @@ const mkLeg = (model, summary, status = 'complete') => ({
   durationMs: 1000, usage: { cost: { amount: 0.01, source: 'reported' } },
 });
 const okWave = (legs) => ({ wave: { status: 'complete', legs }, exitCode: 0 });
+// SL-2 Task 5: legs for the retry-seam tests. usableLeg materializes cleanly;
+// deadLeg defaults to the exact status/error pair ('error'/'boom') the
+// pre-existing dead-leg test already uses inline, so the enriched-why pins
+// below read the same as the rest of this file. Mirrors the same-named
+// helpers in tests/council/run-retry.test.js.
+const usableLeg = (model) => mkLeg(model, review(model));
+const deadLeg = (model, status = 'error', error = 'boom') => ({ ...mkLeg(model, '', status), error });
 
-function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = null, lenses = null, overBudget = () => false, degrade = { note: () => {} } }) {
+function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = null, lenses = null, overBudget = () => false, degrade } = {}) {
   const runDir = path.join(tmp, 'council-abc123');
   fs.mkdirSync(runDir, { recursive: true });
   const added = [];
+  // v4.6 Plan 1 Task 5 / SL-2 Task 5: a stub default so every pre-existing test
+  // in this file (most of which don't exercise the degrade sink) keeps driving
+  // runStage1/2 without wiring one up — real coverage of the sink lives in
+  // tests/council/degrade-channels.test.js. The default now COLLECTS into
+  // `_notes` (the SL-2 retry-seam tests read notes back off the ctx directly);
+  // additive — a test wanting a different sink still passes its own `degrade`
+  // and reads that back instead.
+  const notes = [];
   return {
     o: { briefing: 'material', models, chair: 'deepseek', critic, lenses,
       runId: 'abc123', runDir, timeout: 10, gateway: 'auto', noValidateModel: false, date: '2026-07-19',
@@ -36,22 +51,23 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
       // can prove the id actually reached the launcher, not just a falsy default.
       councilName: 'nightly-council' },
     launchers: {
-      launchWave: async (opts) => onWave(opts),
-      launchSolo: async (opts) => {
+      // jest.fn()-wrapped (not a plain arrow) so the SL-2 tests can queue
+      // per-call responses with `.mockResolvedValueOnce(...)` across the
+      // first-launch + retry-launch sequence; falls back to the injected
+      // onWave/onSolo callback once the queue is empty, so every pre-existing
+      // test's plain-callback setup keeps working untouched.
+      launchWave: jest.fn(async (opts) => onWave(opts)),
+      launchSolo: jest.fn(async (opts) => {
         const r = await onSolo(opts);
         return { ...r, leg: (r.wave && r.wave.legs && r.wave.legs[0]) || null };
-      },
+      }),
     },
     addWave: (w) => added.push(w),
     overBudget,
-    // v4.6 Plan 1 Task 5: a stub default so every pre-existing test in this file
-    // (none of which exercises the degrade sink) keeps driving runStage1/2
-    // without wiring one up — real coverage of the sink lives in
-    // tests/council/degrade-channels.test.js. Additive only: any test wanting
-    // to assert on notes passes its own `degrade` and reads it back.
-    degrade,
+    degrade: degrade || { note: (n) => notes.push(n) },
     scratchDir: path.join(runDir, '_scratch'),
     _added: added,
+    _notes: notes,
   };
 }
 
@@ -401,6 +417,57 @@ describe('runStage1', () => {
     });
     const { aborted } = await runStage1(ctx);
     expect(aborted).toBe(130);
+  });
+});
+
+describe('SL-2: the Stage-1 once-only retry seam', () => {
+  test('a dead leg whose retry recovers: heal noted, NO degrade, review counted, deadLegs empty', async () => {
+    // first launch: bench wave with one usable + one dead leg; retry launch: usable leg for the dead seat
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'r1-s1', legs: [usableLeg('a'), deadLeg('b')] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'r1-s1r1', legs: [usableLeg('b')] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const chans = ctx._notes.map(n => [n.channel, n.kind || 'degrade']);
+    expect(chans).toEqual([['stage1-retry', 'heal']]);
+    expect(r.reviews.map(v => v.model).sort()).toEqual(['a', 'b']);
+    expect(r.deadLegs).toEqual([]);
+    expect(r.degraded).toBe(false);
+  });
+
+  test('retry also dies: exactly ONE dead-leg degrade, enriched why, degraded true', async () => {
+    const ctx = makeCtx();
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'r1-s1', legs: [usableLeg('a'), deadLeg('b')] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'timeout', null)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const deadNotes = ctx._notes.filter(n => n.channel === 'dead-leg');
+    expect(deadNotes).toHaveLength(1);
+    expect(deadNotes[0].why).toMatch(/its once-only retry also ended 'timeout'/);
+    expect(r.degraded).toBe(true);
+    expect(r.deadLegs.map(l => l.modelInput)).toEqual(['b']);
+  });
+
+  test('overBudget: no retry launch, degrade fields byte-identical to the pre-SL-2 text', async () => {
+    const ctx = makeCtx({ overBudget: () => true });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'r1-s1', legs: [usableLeg('a'), deadLeg('b')] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1); // no second launch
+    const n = ctx._notes.find(x => x.channel === 'dead-leg');
+    expect(n.why).toBe("the leg ended 'error': boom with no usable output");
+    expect(n.effect).toBe('1 of 2 seats reviewed; the run continues with the bench that did and will exit degraded (2)');
+    expect(r.degraded).toBe(true);
+  });
+
+  test('abort during the retry propagates without noting anything', async () => {
+    const ctx = makeCtx();
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'r1-s1', legs: [deadLeg('a'), deadLeg('b')] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: null, exitCode: 130 });
+    const r = await runStage1(ctx);
+    expect(r.aborted).toBe(130);
+    expect(ctx._notes).toEqual([]);
   });
 });
 
