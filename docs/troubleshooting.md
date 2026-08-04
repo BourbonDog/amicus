@@ -5,7 +5,7 @@
 
 ## First: run `amicus doctor`
 
-Before working through any symptom below, run `amicus doctor` (plugin-only installs: `npx -y amicus@latest doctor`). It checks, in order: Node version, config directory, API keys, default model, catalog freshness, alias staleness, the OpenCode binary, the OpenCode engine's MCP launch path, Electron, installed skills, MCP registration, the legacy sidecar MCP entry, session index tmp files, OpenRouter credit, local providers, and the project root — and prints a targeted fix hint for every failing check. `amicus doctor --fix` self-heals what it can (e.g. re-installs a broken Electron in place); `--json` gives machine-readable output.
+Before working through any symptom below, run `amicus doctor` (plugin-only installs: `npx -y amicus@latest doctor`). It checks, in order: Node version, config directory, API keys, default model, catalog freshness, alias staleness and drift, the ANTHROPIC_BASE_URL form, the OpenCode binary, the OpenCode engine's MCP launch path, Electron, installed skills, MCP registration, the legacy sidecar MCP entry, session index tmp files, OpenRouter credit, local providers, and the project root — and prints a targeted fix hint for every failing check. `amicus doctor --fix` self-heals what it can (e.g. re-installs a broken Electron in place); `--json` gives machine-readable output.
 
 ---
 
@@ -80,7 +80,7 @@ you're seeing it anyway, it's one of:
   exotic proxy serving `/messages` at a custom root stays possible).
 - You're running a **pre-v4.6.2** amicus, where none of the above exists yet.
 
-**Confirm it in one command** (no key needed for the first two lines):
+**Confirm it in one command** (no key needed for the first three lines):
 
 ```bash
 amicus doctor                        # anthropic-base-url row: the value seen + how it's treated
