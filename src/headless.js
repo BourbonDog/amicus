@@ -461,7 +461,9 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // await for 6+ minutes with the backstop never even created yet, upstream
     // of every mechanism that was supposed to catch it. `startedAt` here means
     // "time since the leg asked for output". Disarmed permanently by the first
-    // progressed tick in the poll loop below; 0 (or negative) disables — the
+    // SUBSTANTIVE-activity tick in the poll loop below (output/tool/result/
+    // reasoning/settle — NOT the placeholder-compatible message/assistant-id
+    // signals; see substantiveActivity); 0 (or negative) disables — the
     // send itself is unbounded in that case too (see withTimeout below).
     const { resolveNoOutputBackstopMs, createNoOutputBackstop } = require('./utils/no-output-backstop');
     const noOutputBackstopMs = options.noOutputBackstopMs !== undefined

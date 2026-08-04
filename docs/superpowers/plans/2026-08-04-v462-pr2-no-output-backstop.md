@@ -448,3 +448,40 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - **Type consistency:** `tick(progressed, nowMs) -> 'armed'|'disarmed'|'fired'` and the reason
   string are identical across T1/T2/T3.
 - **Commit lines:** all four tasks carry the identical standard Co-Authored-By line.
+
+---
+
+## Execution deviations (2026-08-04) — the durable record
+
+Three field-driven corrections superseded this plan's text during execution; each was caught by
+the controller's Task-5 live smoke (an accepting-but-silent local sink), root-caused, fixed
+TDD-style with RED isolated against the pre-fix HEAD, and re-reviewed. The plan body above is
+kept as written per the anti-rot convention; THIS section is authoritative where they conflict.
+
+1. **Timeout/backstop mutual exclusion** (fix wave, `46d5251`). The plan had the pre-existing
+   `--timeout` block and the new backstop-fired block as independent `if`s — close thresholds
+   fired both (double abort, and `statusFromResult` checks `timedOut` before `error`, so the
+   backstop kill masqueraded as an ordinary timeout). `!backstopFired` now guards the timeout
+   condition; a deterministic collision test pins `statusFromResult === 'error'`.
+2. **Arm before the prompt send** (amendment 1, `62f7ee9`). The plan armed at poll-loop start;
+   the field shape blocks the prompt AWAIT itself (OpenCode's handler stalls on the provider),
+   upstream of arming — a live leg hung 6+ minutes at `prompt_sent`. The backstop is now
+   created before the send and the await is raced through the existing `withTimeout`
+   (ms ≤ 0 degrades to unbounded); on expiry `sessionError` is seeded with the shared
+   `noOutputBackstopReason()` (the #37 boundary pattern) and the loop is skipped.
+3. **Disarm only on substantive activity** (amendment 2, `c38a008`). The plan's tick predicate
+   `progressed` — and this plan's own "Naming correction vs spec" header claiming it has the
+   same semantics as the spec's "token/reasoning/tool_use" — was WRONG: OpenCode creates an
+   empty assistant placeholder on prompt acceptance, and `messageActivity`/`newAssistant` fire
+   for it, disarming the backstop on the bookkeeping artifact of the exact
+   accepted-but-not-serving class it exists to catch (debug-trace proven: pollCount 13→21,
+   messageCount 2, outputLength 0, no fire). The backstop now ticks on `substantiveActivity`
+   (output/tool/result/reasoning/settle only); `progressed` and all its stall/idle consumers
+   are untouched.
+
+Also corrected in execution: Task 4's premise that `[Unreleased]` "already has v4.6.2-PR1
+content" was wrong for this branch (PR1 lives on a sibling branch); the section was created
+fresh. Live evidence for the shipped behavior: fire path = leg error at exactly the configured
+window with the verbatim reason, wave `error` not `timeout`, clean exit; disarm path = healthy
+leg completes normally. Wave ids and the full narrative live in the session ledger
+(`.superpowers/sdd/progress.md`, local-only) and the test docblocks.
