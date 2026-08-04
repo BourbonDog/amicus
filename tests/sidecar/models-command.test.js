@@ -11,7 +11,7 @@ const CATALOG = [
     contextLength: 1048576, pricing: null },
 ];
 
-function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings } = {}) {
+function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings, probeStoredAliases } = {}) {
   jest.resetModules();
   jest.doMock('../../src/utils/model-catalog', () => ({
     getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000 })),
@@ -31,6 +31,22 @@ function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindin
   if (gatewayFindings !== undefined) {
     jest.doMock('../../src/utils/gateway-route-audit', () => ({
       auditGatewayRoutes: () => gatewayFindings,
+    }));
+  }
+  // v4.6.2 PR3: only mocked when a test passes a spy, so it can assert
+  // whether the probe module was called (or not — the --live branch gate is
+  // the whole point of the regression test). Tests that never touch --live
+  // don't need it mocked; the real (side-effect-free at require time) module
+  // loads instead.
+  if (probeStoredAliases) {
+    jest.doMock('../../src/sidecar/models-probe', () => ({
+      probeStoredAliases,
+      // Task 4: models.js's cap pre-check now imports this real predicate
+      // from models-probe.js instead of inlining its own filter — mock it
+      // with the same logic so the mocked module stays a faithful stand-in.
+      selectStoredAliases: (sources) => sources.filter(s => s.source === 'user-config'),
+      PROBE_WINDOW_MS: 30000,
+      PROBE_PROMPT: 'Reply with exactly: OK',
     }));
   }
   return require('../../src/sidecar/models');
@@ -427,6 +443,286 @@ describe('amicus models', () => {
       const { getUsage } = require('../../src/cli');
       const usage = getUsage();
       expect(usage).toContain('--strict');
+    });
+  });
+
+  // v4.6.2 PR3 (spec §6, D5): `--check --live` — probe every stored alias with
+  // one real engine leg. probeStoredAliases (src/sidecar/models-probe.js) is
+  // ALWAYS mocked via loadHandler's `probeStoredAliases` param here — these
+  // tests exercise the CLI wiring only (branch gate, exit combine, human/
+  // --json rendering, the cap pre-check), not the probe module's own
+  // classification logic (see tests/sidecar/models-probe.test.js for that).
+  describe('--check --live (v4.6.2 PR3)', () => {
+    const threeOutcomes = [
+      { alias: 'gemini', target: 'openrouter/google/gemini-3.6-flash', outcome: 'served', detail: null, cost: 0.0004 },
+      {
+        alias: 'probetest', target: 'anthropic/claude-opus-4-8', outcome: 'accepted-but-silent',
+        detail: 'NO_OUTPUT_BACKSTOP: model produced no output, reasoning, or tool calls in 30s', cost: null,
+      },
+      { alias: 'gpt', target: 'openai/gpt-5.6-terra', outcome: 'error', detail: '402 Payment Required', cost: null },
+    ];
+
+    function captureStderr(fn) {
+      const writes = [];
+      const orig = process.stderr.write;
+      process.stderr.write = (s) => { writes.push(String(s)); return true; };
+      return Promise.resolve().then(fn).finally(() => { process.stderr.write = orig; })
+        .then(code => ({ code, err: writes.join('') }));
+    }
+
+    it('without --live, runCheck never calls the probe module (regression — byte-identical output)', async () => {
+      const probeStoredAliases = jest.fn();
+      const { handleModels } = loadHandler({ sources: [], stale: [], probeStoredAliases });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('All aliases resolve');
+      expect(out).not.toContain('Live probe');
+      expect(probeStoredAliases).not.toHaveBeenCalled();
+    });
+
+    it('--live prints all three outcome classes in the documented format, after drift, before gateway findings', async () => {
+      const probeStoredAliases = jest.fn(async () => ({ results: threeOutcomes, waveId: 'w9' }));
+      const oneFinding = [{ alias: 'opus', gateway: 'direct', kind: 'stale', model: 'anthropic/claude-opus-4-1' }];
+      const { handleModels } = loadHandler({
+        sources: [], stale: [], probeStoredAliases, gatewayFindings: oneFinding,
+      });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+      expect(probeStoredAliases).toHaveBeenCalledTimes(1);
+      expect(out).toContain('Live probe (3 stored aliases):');
+      expect(out).toContain('  SERVED: gemini -> openrouter/google/gemini-3.6-flash ($0.0004)');
+      expect(out).toContain('  SILENT: probetest -> anthropic/claude-opus-4-8 — NO_OUTPUT_BACKSTOP:');
+      expect(out).toContain('(accepted but not serving)');
+      expect(out).toContain('  ERROR:  gpt -> openai/gpt-5.6-terra — 402 Payment Required');
+      expect(out.indexOf('Live probe')).toBeGreaterThan(out.indexOf('All aliases resolve'));
+      expect(out.indexOf('Live probe')).toBeLessThan(out.indexOf('Per-gateway route audit'));
+      expect(code).toBe(2); // 2 non-served, legacy exit was 0 -> max(0, min(2,100)) = 2
+    });
+
+    it('exit combine: probe dominates a lower legacy (stale) exit', async () => {
+      const probeStoredAliases = jest.fn(async () => ({ results: threeOutcomes, waveId: 'w9' })); // nonServed = 2
+      const stale = [{ alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults' }]; // legacy = 1
+      const { handleModels } = loadHandler({ sources: stale, stale, probeStoredAliases });
+      const { code } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+      expect(code).toBe(2);
+    });
+
+    it('exit combine: a higher legacy (stale) exit is preserved over a smaller nonServed count', async () => {
+      const probeStoredAliases = jest.fn(async () => ({
+        results: [
+          { alias: 'gemini', target: 'x', outcome: 'served', detail: null, cost: 0.0001 },
+          { alias: 'grok', target: 'y', outcome: 'error', detail: 'boom', cost: null },
+        ],
+        waveId: 'w1',
+      })); // nonServed = 1
+      const stale = Array.from({ length: 5 }, (_, i) => ({ alias: `a${i}`, model: `openrouter/v/m${i}`, source: 'defaults' })); // legacy = 5
+      const { handleModels } = loadHandler({ sources: stale, stale, probeStoredAliases });
+      const { code } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+      expect(code).toBe(5);
+    });
+
+    it('nonServed count caps at CHECK_EXIT_CAP (100)', async () => {
+      const many = Array.from({ length: 150 }, (_, i) => ({ alias: `a${i}`, target: `m${i}`, outcome: 'error', detail: 'x', cost: null }));
+      const probeStoredAliases = jest.fn(async () => ({ results: many, waveId: 'wbig' }));
+      const { handleModels } = loadHandler({ sources: [], stale: [], probeStoredAliases });
+      const { code } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+      expect(code).toBe(100);
+    });
+
+    it('--json gains additive probe/probeCount fields', async () => {
+      const probeStoredAliases = jest.fn(async () => ({ results: threeOutcomes, waveId: 'w9' }));
+      const { handleModels } = loadHandler({ sources: [], stale: [], probeStoredAliases });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true, json: true }));
+      expect(code).toBe(2);
+      const doc = JSON.parse(out);
+      expect(doc.type).toBe('alias-audit');
+      expect(doc.probeCount).toBe(3);
+      expect(doc.probe).toEqual(threeOutcomes);
+      // additive: pre-existing fields still present
+      expect(doc.staleCount).toBe(0);
+      expect(doc.driftedCount).toBe(0);
+    });
+
+    it('--json without --live carries the additive default (probe: [], probeCount: 0, probeSkipped: null)', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.probe).toEqual([]);
+      expect(doc.probeCount).toBe(0);
+      expect(doc.probeSkipped).toBeNull();
+    });
+
+    it('--json WITH --live and the probe running: probeSkipped stays null (only set when the probe does NOT run)', async () => {
+      const probeStoredAliases = jest.fn(async () => ({ results: threeOutcomes, waveId: 'w9' }));
+      const { handleModels } = loadHandler({ sources: [], stale: [], probeStoredAliases });
+      const { out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, live: true, json: true }));
+      const doc = JSON.parse(out);
+      expect(doc.probeSkipped).toBeNull();
+    });
+
+    it('zero stored aliases: probe module returns empty results -> "no stored aliases to probe", exit unaffected', async () => {
+      const probeStoredAliases = jest.fn(async () => ({ results: [], waveId: null }));
+      const { handleModels } = loadHandler({ sources: [], stale: [], probeStoredAliases });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('no stored aliases to probe');
+      expect(out).not.toContain('Live probe (');
+    });
+
+    it('--live without --check errors with a clear one-liner and never reaches the catalog/probe', async () => {
+      const probeStoredAliases = jest.fn();
+      const { handleModels } = loadHandler({ probeStoredAliases });
+      const { code, err } = await captureStderr(() => handleModels({ _: ['models'], live: true }));
+      expect(code).toBe(1);
+      expect(err).toContain('--live requires --check');
+      expect(probeStoredAliases).not.toHaveBeenCalled();
+    });
+
+    // Task 2 review carry-in: a stored-alias count above the fan-out leg cap
+    // fails wave-creation pre-emptively inside runFanout, and models-probe.js
+    // degrades every row to a generic error — losing the real reason. Pre-
+    // check the cap here, in the CLI layer, before ever calling the probe.
+    describe('the >max-legs edge', () => {
+      const manyStored = Array.from({ length: 11 }, (_, i) => ({ alias: `s${i}`, model: `openrouter/v/m${i}`, source: 'user-config' }));
+
+      afterEach(() => { delete process.env.AMICUS_FANOUT_MAX_LEGS; });
+
+      it('stored count > default cap (10): errors, exits 1, never calls the probe (no spend on a doomed wave)', async () => {
+        const probeStoredAliases = jest.fn();
+        const { handleModels } = loadHandler({ sources: manyStored, stale: [], probeStoredAliases });
+        const { code, err } = await captureStderr(() => handleModels({ _: ['models'], check: true, live: true }));
+        expect(code).toBe(1);
+        expect(err).toContain('11'); // count
+        expect(err).toContain('10'); // cap
+        expect(err).toContain('AMICUS_FANOUT_MAX_LEGS'); // env knob
+        expect(probeStoredAliases).not.toHaveBeenCalled();
+      });
+
+      it('respects AMICUS_FANOUT_MAX_LEGS override when checking the cap', async () => {
+        process.env.AMICUS_FANOUT_MAX_LEGS = '3';
+        const fourStored = manyStored.slice(0, 4);
+        const probeStoredAliases = jest.fn();
+        const { handleModels } = loadHandler({ sources: fourStored, stale: [], probeStoredAliases });
+        const { code, err } = await captureStderr(() => handleModels({ _: ['models'], check: true, live: true }));
+        expect(code).toBe(1);
+        expect(err).toContain('4');
+        expect(err).toContain('3');
+        expect(probeStoredAliases).not.toHaveBeenCalled();
+      });
+
+      it('stored count exactly AT the cap is allowed through (only > cap errors)', async () => {
+        const tenStored = manyStored.slice(0, 10);
+        // Task 4 review carry-in (Minor 5): the fixture used to claim 10
+        // stored aliases while mocking an empty `results: []` — untruthful,
+        // since a real probe returns one row per stored alias. Ten stored in,
+        // ten SERVED rows out, keeping this test's own assertions unchanged.
+        const tenResults = tenStored.map(s => (
+          { alias: s.alias, target: s.model, outcome: 'served', detail: null, cost: 0.0001 }));
+        const probeStoredAliases = jest.fn(async () => ({ results: tenResults, waveId: 'wcap' }));
+        const { handleModels } = loadHandler({ sources: tenStored, stale: [], probeStoredAliases });
+        const { code } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+        expect(code).toBe(0);
+        expect(probeStoredAliases).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    // Task 3 review (Important 1): this test used to pin --live as a SILENT
+    // no-op here ("byte-identical to no --live") — updated, not extended,
+    // to assert the new announcement instead (per the review's explicit
+    // instruction not to merely add a sibling test alongside the old one).
+    it('catalog unavailable + --live: announces the skip instead of silently doing nothing, probe never called', async () => {
+      const probeStoredAliases = jest.fn();
+      const { handleModels } = loadHandler({ catalog: [], probeStoredAliases });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('Catalog unavailable');
+      expect(out).toContain('--live skipped: catalog-unavailable — nothing was probed');
+      expect(out).not.toContain('Live probe');
+      expect(probeStoredAliases).not.toHaveBeenCalled();
+    });
+
+    it('catalog unavailable WITHOUT --live: unchanged, no skip line (the announcement is --live-gated)', async () => {
+      const { handleModels } = loadHandler({ catalog: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('Catalog unavailable');
+      expect(out).not.toContain('--live skipped');
+    });
+
+    it('catalog unavailable + --live + --json: doc gets probeSkipped "catalog-unavailable"', async () => {
+      const probeStoredAliases = jest.fn();
+      const { handleModels } = loadHandler({ catalog: [], probeStoredAliases });
+      const { code, out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, live: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.catalogAvailable).toBe(false);
+      expect(doc.probeSkipped).toBe('catalog-unavailable');
+      expect(probeStoredAliases).not.toHaveBeenCalled();
+    });
+
+    it('catalog unavailable + --json (no --live): probeSkipped is null (additive default, drifted precedent)', async () => {
+      const { handleModels } = loadHandler({ catalog: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.catalogAvailable).toBe(false);
+      expect(doc.probeSkipped).toBeNull();
+    });
+
+    // Task 3 review (Important 1 / Minor 4): --refresh short-circuits --check
+    // in handleModels, so `--refresh --check --live` used to reach runRefresh
+    // and silently never probe anything — the second silent-skip path named
+    // by the review, distinct from the catalog-unavailable one above.
+    describe('--refresh --check --live: the refresh short-circuit', () => {
+      function captureBoth(fn) {
+        const outWrites = []; const errWrites = [];
+        const origOut = process.stdout.write; const origErr = process.stderr.write;
+        process.stdout.write = (s) => { outWrites.push(String(s)); return true; };
+        process.stderr.write = (s) => { errWrites.push(String(s)); return true; };
+        return Promise.resolve().then(fn).finally(() => {
+          process.stdout.write = origOut; process.stderr.write = origErr;
+        }).then(code => ({ code, out: outWrites.join(''), err: errWrites.join('') }));
+      }
+
+      it('non-json: still refreshes, announces the skip, never calls the probe', async () => {
+        const probeStoredAliases = jest.fn();
+        const { handleModels } = loadHandler({ probeStoredAliases });
+        const { code, out } = await captureStdout(() =>
+          handleModels({ _: ['models'], refresh: true, check: true, live: true }));
+        expect(code).toBe(0);
+        expect(out).toContain('Refreshed catalog: 2 models.');
+        expect(out).toContain('--live skipped: refresh-precedes-check — nothing was probed');
+        expect(probeStoredAliases).not.toHaveBeenCalled();
+      });
+
+      it('--json: stdout stays valid JSON (model-catalog doc); the skip line goes to stderr instead', async () => {
+        const probeStoredAliases = jest.fn();
+        const { handleModels } = loadHandler({ probeStoredAliases });
+        const { code, out, err } = await captureBoth(() =>
+          handleModels({ _: ['models'], refresh: true, check: true, live: true, json: true }));
+        expect(code).toBe(0);
+        const doc = JSON.parse(out); // throws if stdout was corrupted by stray text
+        expect(doc.type).toBe('model-catalog');
+        expect(err).toContain('--live skipped: refresh-precedes-check — nothing was probed');
+        expect(probeStoredAliases).not.toHaveBeenCalled();
+      });
+
+      it('--refresh --check WITHOUT --live: unchanged, no skip line (regression)', async () => {
+        const { handleModels } = loadHandler();
+        const { code, out } = await captureStdout(() =>
+          handleModels({ _: ['models'], refresh: true, check: true }));
+        expect(code).toBe(0);
+        expect(out).toContain('Refreshed catalog: 2 models.');
+        expect(out).not.toContain('--live skipped');
+      });
+    });
+
+    it('usage text documents --live for models --check', () => {
+      const { getUsage } = require('../../src/cli');
+      const usage = getUsage();
+      expect(usage).toContain('--live');
     });
   });
 });

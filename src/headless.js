@@ -466,7 +466,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // signals; see substantiveActivity); 0 (or negative) disables — the
     // send itself is unbounded in that case too (see withTimeout below).
     const { resolveNoOutputBackstopMs, createNoOutputBackstop } = require('./utils/no-output-backstop');
-    const noOutputBackstopMs = options.noOutputBackstopMs !== undefined
+    // v4.6.2 PR3 Task 1: Number.isFinite, not `!== undefined` — a non-number
+    // (e.g. a string arriving from a CLI/JSON boundary) must fall through to
+    // env resolution instead of reaching the deadline arithmetic below.
+    // `startedAt + ms` string-concatenates when ms is a string, producing a
+    // deadline `nowMs >= deadline` can never satisfy — the backstop would
+    // silently never fire. Finite zero (the documented explicit-disable
+    // value) still takes the direct branch: Number.isFinite(0) === true.
+    const noOutputBackstopMs = Number.isFinite(options.noOutputBackstopMs)
       ? options.noOutputBackstopMs : resolveNoOutputBackstopMs(options._env);
     const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
     let backstopFired = false;

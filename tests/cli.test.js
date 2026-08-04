@@ -1071,6 +1071,19 @@ describe('CLI Argument Parser', () => {
     });
   });
 
+  describe('models command', () => {
+    // v4.6.2 PR3 Task 4 (review Minor 2): --live is registered in cli.js's
+    // BOOLEAN_FLAGS (Task 3) but never had a parseArgs pin of its own — prove
+    // the real parser treats it as boolean and that --check (also boolean)
+    // doesn't swallow it, with positionals still intact.
+    test('--live is a boolean flag and does not disturb --check or positionals', () => {
+      const args = parseArgs(['models', '--check', '--live']);
+      expect(args.live).toBe(true);
+      expect(args.check).toBe(true);
+      expect(args._).toEqual(['models']);
+    });
+  });
+
   describe('usage text includes new options', () => {
     test('--no-mcp appears in usage', () => {
       const { getUsage } = require('../src/cli');

@@ -149,6 +149,7 @@ const BOOLEAN_FLAGS = [
      'md',                   // council report: emit Markdown (default)
      'fix',                  // doctor: self-heal fixable checks in place (#56)
      'strict',               // models --check: exit non-zero on curated per-gateway drift (#gwid Task 6)
+     'live',                 // models --check: opt-in probe of stored aliases with real engine legs (v4.6.2 PR3, spec §6)
      'render',               // council verdict: also refresh report.html next to the decided verdict
      'claude',               // init: register for Claude Code only (Task 15)
      'desktop',              // init: register for Claude Desktop only (Task 15)
@@ -501,6 +502,9 @@ Options for 'models':
   --strict                     With --check: also exit non-zero on curated
                                per-gateway drift (stale/divergent direct or
                                openrouter forms). Informational without it.
+  --live                       With --check: probe every stored alias with one real
+                               engine leg (spends) — served / accepted-but-silent /
+                               error. Requires --check.
   --json                       Machine-readable output
 `,
   list: `

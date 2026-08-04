@@ -376,11 +376,28 @@ amicus models                 # List the catalog
 amicus models --search gemini # Filter by substring over id and name
 amicus models --refresh       # Force-refresh from provider APIs
 amicus models --check         # Audit your aliases against the catalog
+amicus models --check --live  # + probe every stored alias with a real leg (spends)
 ```
 
 `amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
 
 **Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line prints the exact `amicus setup --add-alias <alias>=<current>` refresh command. Drift is informational only — unlike stale aliases, it never changes the exit code.
+
+**Live probe (`--check --live`).** Presence in the catalog is not proof of service — a stored alias can point at a model id the catalog still lists but the provider has quietly stopped serving (the v4.6.1 `gemini` incident). `--check` alone can't see that; `--live` can, by actually asking. Scope is **stored aliases only** (`amicus setup --add-alias`) — curated defaults follow the catalog by construction and have no "was it actually served" question for a live probe to answer. **This spends real money — one tiny leg per stored alias** — every probed alias gets one ordinary engine leg on a single quiet fan-out wave, with a real session dir and a real spend-ledger row, exactly as if you'd run it yourself.
+
+Each stored alias resolves to one of three outcomes:
+
+| Outcome | Example line | Meaning |
+|---------|--------------|---------|
+| `SERVED` | `SERVED: gemini -> openrouter/google/gemini-3.6-flash ($0.0004)` | The model answered; cost shown in parens. |
+| `SILENT` (`accepted-but-silent`) | `SILENT: probetest -> anthropic/claude-opus-4-8 — NO_OUTPUT_BACKSTOP: … (accepted but not serving)` | The endpoint accepted the request but produced nothing for the probe's 30 s backstop window (shorter than the ordinary 120 s default, and not tunable) — the exact "listed but not actually serving" failure this check exists to catch. |
+| `ERROR` | `ERROR:  gpt -> openai/gpt-5.6-terra — 402 Payment Required` | Routing, auth, or provider failure; the raw error is printed. |
+
+**Exit code.** The probe's non-served count folds into the same exit code as the static audit — `max(existing exit, min(nonServedCount, 100))` — so a single `SILENT` or `ERROR` fails the check even when every alias is otherwise catalog-fresh. No stored aliases prints `Live probe: no stored aliases to probe` and never affects the exit code. `--json` adds `probe` (the per-alias array) and `probeCount` (its length) to the `alias-audit` document — both additive, `[]`/`0` when `--live` wasn't passed.
+
+**Cap.** The probe is one fan-out leg per stored alias, so it's bound by the same fan-out leg cap as everything else — 10 by default, raise it with `AMICUS_FANOUT_MAX_LEGS`. More stored aliases than the cap fails fast with a one-line error and probes nothing, so a doomed wave never spends a token.
+
+**When it doesn't run.** `--live` requires `--check` (a bare `--live` errors immediately). If the catalog itself is unavailable, or `--refresh` is also on the command line (which returns before `--check` ever runs), the probe is skipped — Amicus says so instead of silently dropping the flag: `--live skipped: <reason> — nothing was probed`. The `--json` signal differs by path: for catalog-unavailable, the `alias-audit` document carries an additive `probeSkipped` field (a reason slug, e.g. `"catalog-unavailable"`; `null` once the probe actually ran or wasn't requested); for the `--refresh` case, `--json`'s stdout document is a `model-catalog` doc instead, which never carries `probeSkipped` — the announcement goes to stderr there so stdout stays valid JSON.
 
 **Validation on launch.** `start` and `fanout` validate the model against the catalog before launching. For an explicit `--model` on `continue`/`resume` this is **blocking** (a typo'd model fails fast with suggestions); for a model *inherited* from a prior session it's **advisory**. Skip it any time with `--no-validate-model`, or fix the catalog with `amicus models --refresh`.
 

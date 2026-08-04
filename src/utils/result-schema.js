@@ -198,11 +198,26 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
  * that omit it are unaffected. Paired with an additive `driftedCount`
  * (drifted.length), mirroring the staleCount/stale and
  * gatewayFindingsCount/gatewayFindings pairs above.
+ * `probe` (v4.6.2 PR3, spec §6 D5) is additive: the `--live` opt-in per-alias
+ * probe outcomes (probeStoredAliases — served/accepted-but-silent/error), one
+ * row per stored alias actually probed. Defaults to [] so every call without
+ * --live (i.e. every existing caller) is unaffected. Paired with an additive
+ * `probeCount` (probe.length), mirroring the driftedCount/drifted pair above.
+ * `probeSkipped` (v4.6.2 PR3 Task 4) is additive: null when the probe ran or
+ * `--live` wasn't requested; otherwise a stable reason slug (e.g.
+ * 'catalog-unavailable') for the one case this function can see — the
+ * `--refresh --check --live` skip (runRefresh returns before this is ever
+ * called) is announced by the caller instead, since that path emits a
+ * model-catalog doc, not this one.
  * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean,
  *   gatewayFindings?: Array<{alias,gateway,kind,model,expected?}>,
- *   drifted?: Array<{alias,stored,current}>}} opts
+ *   drifted?: Array<{alias,stored,current}>,
+ *   probe?: Array<{alias,target,outcome,detail,cost}>,
+ *   probeSkipped?: string|null}} opts
  */
-function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [], drifted = [] }) {
+function buildAuditDoc({
+  stale, catalogAvailable, gatewayFindings = [], drifted = [], probe = [], probeSkipped = null
+}) {
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'alias-audit',
@@ -213,6 +228,9 @@ function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [], drifted 
     gatewayFindings,
     driftedCount: drifted.length,
     drifted,
+    probeCount: probe.length,
+    probe,
+    probeSkipped,
   };
 }
 
