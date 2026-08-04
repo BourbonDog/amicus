@@ -5,6 +5,19 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The `gpt` quick-pick family stopped resolving once OpenAI split 5.6 into
+  tiers.** `idPattern` only matched bare numeric ids (`gpt-5.5`), so it missed
+  5.6 entirely — `gpt-5.6-sol` (premium), `gpt-5.6-terra` (mid), `gpt-5.6-luna`
+  (economy), and their `-pro` siblings all fell outside it, leaving the family
+  pinned to the older `gpt-5.5` and the owner's stored `gpt` alias reported as
+  DRIFTED. Per owner ruling, `gpt` now tracks the TERRA (mid) tier: the
+  pattern additionally matches `-terra` while still excluding `-terra-pro`,
+  `-sol*`, `-luna*`, and the unrelated `-codex` family; the pinned fallback
+  moves to `openrouter/openai/gpt-5.6-terra`. Bare numeric ids stay matched as
+  a within-family fallback.
+
 ## [4.6.1] - 2026-08-03
 
 ### Added

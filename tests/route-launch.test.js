@@ -371,9 +371,9 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // like `foo -> openrouter/openai/gpt-5.5` must stay on OpenRouter even
   // though a direct id for the same model exists and both keys are present.
   test('alias pinned to an explicit openrouter/... literal for a curated model stays on OpenRouter, even with both keys (Fix 1)', async () => {
-    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.5', openrouter: 'openrouter/openai/gpt-5.5' }
+    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' }
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, foo: gptRoutes.openrouter }, // 'openrouter/openai/gpt-5.5'
+      aliases: { ...ALIASES, foo: gptRoutes.openrouter }, // 'openrouter/openai/gpt-5.6-terra'
       apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
     });
     const r = await resolveRouteForLaunch({ model: 'foo', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
@@ -387,9 +387,9 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // openrouter/... literal forces OR; this must not regress from the fix
   // above.
   test('alias pinned to a bare direct id for the same curated model still resolves direct (no regression)', async () => {
-    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.5', openrouter: 'openrouter/openai/gpt-5.5' }
+    const gptRoutes = toGatewayRoutes().gpt; // { direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' }
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, foo: gptRoutes.direct }, // 'openai/gpt-5.5'
+      aliases: { ...ALIASES, foo: gptRoutes.direct }, // 'openai/gpt-5.6-terra'
       apiKeys: { ...ALL_FALSE, openai: true, openrouter: true },
     });
     const r = await resolveRouteForLaunch({ model: 'foo', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
