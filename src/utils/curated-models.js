@@ -21,8 +21,10 @@ const { isDirectProvider } = require('./provider-registry');
  * resolve live from the catalog. A per-provider `fallback` entry is
  * OPTIONAL: when absent and the catalog cannot resolve that namespace,
  * the direct route is omitted (no pinned guess is better than a wrong one).
- * `gpt`'s pattern intentionally matches any plain numeric flagship id
- * (gpt-5.5, gpt-6) and excludes suffixed variants (-pro/-mini/-codex).
+ * `gpt`'s pattern intentionally matches a plain numeric flagship id
+ * (gpt-5.5, gpt-6) OR that id's `-terra` tier variant (gpt-5.6-terra), and
+ * excludes every other suffixed variant (-pro/-mini/-codex/-sol/-luna) —
+ * see the tier-semantics comment on the entry below.
  * Pinned ids verified against the live catalog 2026-06-24.
  */
 const FAMILIES = [
@@ -37,11 +39,17 @@ const FAMILIES = [
     idPattern: /^gemini-[\d.]+-pro(-preview|-exp|-latest)?$/,
     directProviders: ['google'],
     fallback: { openrouter: 'openrouter/google/gemini-3.1-pro-preview' } },
+  // 5.6 split the flagship into tiers: sol (premium, $5/$30), terra (mid,
+  // $1/$6), luna (economy, $0.10/$0.60), each with a -pro sibling, plus the
+  // unrelated gpt-5.3-codex family. Owner ruling: `gpt` tracks the TERRA
+  // (mid) tier — sol/luna/pro variants and codex are excluded deliberately.
+  // Bare numeric ids (gpt-5.5-style) stay matched as a within-family
+  // fallback if the terra naming ever disappears from the catalog.
   { alias: 'gpt', label: 'GPT flagship', blurb: 'strong coding',
     vendorPath: 'openai',
-    idPattern: /^gpt-[\d.]+$/,
+    idPattern: /^gpt-[\d.]+(-terra)?$/,
     directProviders: ['openai'],
-    fallback: { openrouter: 'openrouter/openai/gpt-5.5' } },
+    fallback: { openrouter: 'openrouter/openai/gpt-5.6-terra' } },
   { alias: 'opus', label: 'Claude Opus-class', blurb: 'deep analysis',
     vendorPath: 'anthropic',
     idPattern: /^claude-opus-[\d.-]+$/,
@@ -61,6 +69,12 @@ const FAMILIES = [
  * Refreshed against the live catalog 2026-06-11.
  */
 const CARDLESS = [
+  // gpt-pro: previous-generation premium pro ($30/$180 per Mtok). Still
+  // served — verified 2026-08-04 — but 5.6 shipped per-tier -pro siblings
+  // instead (sol-pro/terra-pro/luna-pro, each priced at its base tier), so
+  // expect this pin to sunset with the 5.5 line. Retargeting is an owner
+  // ruling (terra-pro to match `gpt`'s terra tracking vs sol-pro as the
+  // premium tier); see the tier-semantics comment on the `gpt` family above.
   { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.5-pro' } },
   // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
   { alias: 'codex', routes: { openrouter: 'openrouter/openai/gpt-5.3-codex' } },

@@ -197,7 +197,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('gpt');
-      expect(result).toBe('openai/gpt-5.5');
+      expect(result).toBe('openai/gpt-5.6-terra');
     });
 
     it('returns the stored bare id unchanged when ANTHROPIC_API_KEY is set but OPENROUTER_API_KEY is not', () => {
