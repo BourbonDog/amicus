@@ -5,6 +5,21 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`doctor` gains a new `anthropic-base-url` row.** Prints the exact `ANTHROPIC_BASE_URL` the
+  process sees and how it will be treated — the host-form value can live only in a parent
+  process's environment, so the seen value is the only diagnostic there is.
+- **Host-form `ANTHROPIC_BASE_URL` is now carried into the engine as `<value>/v1` by default**
+  (a provider-config override — zero env vars written; announced once per process).
+  Host-form is the Anthropic-SDK convention (the SDK appends `/v1` itself), but OpenCode's
+  provider layer treats the value as the full prefix, so unnormalized host-form previously
+  404'd every direct-Anthropic leg. `AMICUS_BASE_URL_NORMALIZE=0` disables normalization
+  entirely.
+- **`models --check` and the `doctor` aliases row now flag stored-alias drift**: a stored alias
+  that's still catalog-listed but no longer matches any route its family currently resolves to
+  (the v4.6.1 `gemini` release-gate class), with the exact `setup --add-alias` refresh command.
+
 ## [4.6.1] - 2026-08-03
 
 ### Added
