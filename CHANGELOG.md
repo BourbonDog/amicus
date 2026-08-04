@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.6.1] - 2026-08-03
+
 ### Added
 
 - **The MCP channel finally hears about new versions** (spec 2026-08-03). The MCP server now
@@ -25,6 +27,15 @@ All notable changes to Amicus are documented here. Format follows
   gated on the run's `--max-cost` position (an over-budget run skips the retry and records
   the loss byte-identically to v4.6.0). Retry legs and their spend-ledger rows carry
   `retryOfWaveId`. A healed critic counts as seated in `verdict.seatLoss`.
+
+### Changed
+
+- **The shipped second-opinion MODEL-NOTES seed was corrected and enriched** (owner-ruled
+  fold-back, PR #93): the haiku "hard-404" warning re-caused to the `ANTHROPIC_BASE_URL` `/v1`
+  convention split, GLM's stale reliability caution withdrawn on the v4.4.1 fence-extractor
+  replay evidence, pre-degrade-era claims re-grounded in the current announce/retry contract,
+  and three model sections plus the "peer consensus ≠ evidence on published numbers" rule added
+  from the field.
 
 ### Removed
 
