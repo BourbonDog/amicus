@@ -112,6 +112,9 @@ describe('probeStoredAliases', () => {
       { alias: 'grok', target: stored[1].model, outcome: 'accepted-but-silent', detail: backstopError, cost: null },
       { alias: 'deepseek', target: stored[2].model, outcome: 'error', detail: routingError, cost: null },
     ]);
+    // Task 3 carry-in: pin the comma-joined multi-alias `models` string shape.
+    expect(runFanout.mock.calls[0][0].models).toBe(
+      `${stored[0].model},${stored[1].model},${stored[2].model}`);
   });
 
   test('maps legs back to aliases by ARRAY ORDER, not by matching model id (two stored aliases, one shared target)', async () => {

@@ -5,6 +5,7 @@
  *   amicus models --search <q>     substring filter over id+name
  *   amicus models --refresh        force-refresh the cache
  *   amicus models --check          stale-alias audit (exit = stale count, max 100)
+ *   amicus models --check --live   + probe every stored alias with a real leg (spends)
  *   --json on all of the above     versioned documents (result-schema)
  *
  * Returns an exit code; bin/amicus.js plumbs it like fanout's.
@@ -18,6 +19,8 @@ const { auditGatewayRoutes } = require('../utils/gateway-route-audit');
 const { buildCatalogDoc, buildAuditDoc } = require('../utils/result-schema');
 const { getFamilies } = require('../utils/curated-models');
 const { pickCurrent } = require('../utils/quick-picks');
+const { probeStoredAliases } = require('./models-probe');
+const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 
 const CHECK_EXIT_CAP = 100;
 
@@ -128,6 +131,26 @@ function fmtGatewayFinding(f) {
   return `  GATEWAY DIVERGENT: ${f.alias} direct form ${f.model} no longer matches catalog (now ${f.expected})`;
 }
 
+const PROBE_LABELS = { served: 'SERVED', 'accepted-but-silent': 'SILENT', error: 'ERROR' };
+
+/** '$0.0004' | '$1.23' | '—' (unknown). Deliberately NOT formatCost (pricing.js):
+ * a probe result's `cost` is a bare number (models-probe.js doesn't carry the
+ * reported/estimated source tag), so this never claims a precision it can't back. */
+function fmtProbeCost(cost) {
+  if (cost === null || cost === undefined || Number.isNaN(cost)) { return '—'; }
+  return cost < 1 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`;
+}
+
+/** One readable line per probed alias (`--check --live`, v4.6.2 PR3): uppercase
+ * class prefix padded to a fixed column, two-space indent — mirrors the STALE/
+ * DRIFTED/GATEWAY line style above. @param {object} r probeStoredAliases() row */
+function fmtProbeLine(r) {
+  const head = `  ${(PROBE_LABELS[r.outcome] + ':').padEnd(8)}${r.alias} -> ${r.target}`;
+  if (r.outcome === 'served') { return `${head} (${fmtProbeCost(r.cost)})`; }
+  if (r.outcome === 'accepted-but-silent') { return `${head} — ${r.detail} (accepted but not serving)`; }
+  return `${head} — ${r.detail}`;
+}
+
 async function runCheck(args) {
   const catalogInfo = await getCatalogInfo();
   const catalog = catalogInfo.models;
@@ -150,13 +173,36 @@ async function runCheck(args) {
   // default; --strict promotes it to a build-breaking exit code (CI gate).
   const gatewayFindings = auditGatewayRoutes(catalogInfo);
   const legacyExitCode = Math.min(stale.length, CHECK_EXIT_CAP);
-  const exitCode = args.strict
+  let exitCode = args.strict
     ? Math.max(legacyExitCode, Math.min(gatewayFindings.length, CHECK_EXIT_CAP))
     : legacyExitCode;
 
+  // v4.6.2 PR3 (spec §6, D5): opt-in --live probe of stored aliases with real
+  // engine legs. Never spends without --live — probeStoredAliases is only
+  // ever called inside this block (regression-tested: a mocked module must
+  // see zero calls when the flag is absent). The cap pre-check runs BEFORE
+  // the call so a doomed wave never spends a token (Task 2 review carry-in:
+  // without it, runFanout fails wave-creation and models-probe.js degrades
+  // every row to a generic error, losing the real reason).
+  let probeResults = [];
+  if (args.live) {
+    const storedCount = sources.filter(s => s.source === 'user-config').length;
+    const envCap = Number(process.env.AMICUS_FANOUT_MAX_LEGS);
+    const maxLegs = (Number.isInteger(envCap) && envCap > 0) ? envCap : DEFAULT_MAX_LEGS;
+    if (storedCount > maxLegs) {
+      process.stderr.write(`Error: --live would probe ${storedCount} stored aliases, exceeding the `
+        + `fan-out cap of ${maxLegs} (set AMICUS_FANOUT_MAX_LEGS to raise)\n`);
+      return 1;
+    }
+    const probe = await probeStoredAliases({ project: args.cwd || process.cwd() });
+    probeResults = probe.results;
+    const nonServed = probeResults.filter(r => r.outcome !== 'served').length;
+    exitCode = Math.max(exitCode, Math.min(nonServed, CHECK_EXIT_CAP));
+  }
+
   if (args.json) {
     process.stdout.write(JSON.stringify(buildAuditDoc({
-      stale, catalogAvailable: true, gatewayFindings, drifted
+      stale, catalogAvailable: true, gatewayFindings, drifted, probe: probeResults
     }), null, 2) + '\n');
     return exitCode;
   }
@@ -181,6 +227,14 @@ async function runCheck(args) {
   if (driftLines.length > 0) {
     process.stdout.write('Pinned fallback drift:\n');
     for (const l of driftLines) { process.stdout.write(l + '\n'); }
+  }
+  if (args.live) {
+    if (probeResults.length === 0) {
+      process.stdout.write('Live probe: no stored aliases to probe\n');
+    } else {
+      process.stdout.write(`Live probe (${probeResults.length} stored aliases):\n`);
+      for (const r of probeResults) { process.stdout.write(fmtProbeLine(r) + '\n'); }
+    }
   }
   if (gatewayFindings.length > 0) {
     process.stdout.write('Per-gateway route audit (curated defaults):\n');
@@ -212,6 +266,10 @@ function buildFallbackDriftReport(catalog) {
 async function handleModels(args) {
   if (args.search === true) {
     process.stderr.write('Error: --search requires a value\n');
+    return 1;
+  }
+  if (args.live && !args.check) {
+    process.stderr.write('Error: --live requires --check\n');
     return 1;
   }
   if (args.refresh) { return runRefresh(args); }
