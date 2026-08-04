@@ -18,9 +18,54 @@
 const doctor = require('../src/cli-handlers-doctor');
 const HINTS = require('../src/utils/remediation-hints');
 
+// Hermeticity guard (same class as the v4.6.2-pr1 wave; see allGood's M14
+// comment in tests/cli-handlers-doctor.test.js for the original writeup):
+// runDoctorChecks always computes the FULL check list, not just 'electron' --
+// pinning only the electron seams (as brokenElectronDeps used to) leaves every
+// OTHER dep to fall through to realDeps() and run for real: the `npm root -g`
+// engine-install subprocess scan, the OpenRouter credit network probe, real
+// config/cache reads. Worse, these suites pass fix:true, so a machine with a
+// broken engine install or a removable legacy sidecar entry would get REAL
+// self-heals (engine copy-heal, ~/.claude.json migration) from inside the
+// unit suite. baseDeps mirrors allGood's full-deps shape; the electron seams
+// below stay this file's own.
+const baseDeps = {
+  nodeVersion: 'v20.0.0',
+  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
+  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
+  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
+  getCwd: () => 'C:\\Users\\me\\code\\amicus',
+  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
+  getConfigDir: () => '/cfg',
+  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
+  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
+  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
+  findStaleAliases: () => [],
+  hasOpencodeBinary: () => true,
+  getElectronPath: () => '/path/to/electron',
+  hasAmicusRegistration: () => true,
+  discoverCoworkMcps: () => ({ amicus: {} }),
+  inspectLegacyMcpEntries: () => [
+    { target: 'Claude Code', status: 'absent' },
+    { target: 'Claude Desktop', status: 'absent' },
+  ],
+  migrateLegacyMcpEntries: () => [],
+  skillInstalled: () => true,
+  listSessionIndexTmpFiles: () => [],
+  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  repairEngine: async () => ({ repaired: false }),
+  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  getLocalProviders: () => ({}),
+  probeLocalProvider: jest.fn(),
+  // v4.6.2-pr1 forward-pin: the anthropic-base-url check in flight on PR #95
+  // reads d.env -- a harmless extra key until that check lands on main.
+  env: {},
+};
+
 /** Deps that force the electron check BROKEN (probe returns null). */
 function brokenElectronDeps(extra = {}) {
   return {
+    ...baseDeps,
     // Pure probe says electron is not installed -> the electron check is broken.
     getElectronPath: () => null,
     // #76: pin the electron-mcp check to 'none' so it can neither probe the
@@ -129,6 +174,7 @@ describe('runDoctorChecks --fix electron self-heal (#56)', () => {
   test('--fix is a no-op for an already-ok electron check', async () => {
     const repairElectron = jest.fn();
     const checks = await doctor.runDoctorChecks({
+      ...baseDeps,
       getElectronPath: () => '/path/to/electron',
       // #76: pin electron-mcp too — otherwise it scans the real machine and
       // may legitimately consume this suite's repairElectron mock.
