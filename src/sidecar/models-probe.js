@@ -72,7 +72,7 @@ async function probeStoredAliases(opts = {}, deps = {}) {
   // — NOT an array; see council/run-launch.js's launchWave for the identical
   // `.join(',')` seam. An array here would parse to [] and fail the whole
   // wave with BAD_ARGS.
-  const { wave } = await runFanout({
+  const { wave, errorDoc } = await runFanout({
     models: stored.map(s => s.model).join(','),
     prompt: PROBE_PROMPT,
     quiet: true,
@@ -80,6 +80,18 @@ async function probeStoredAliases(opts = {}, deps = {}) {
     timeout: 2, // minutes — the overall ceiling behind the backstop
     project: opts.project,
   });
+
+  // Final-review blocker 1: two classes of wave never reach leg-creation at
+  // all — the budget preflight refusing before any session exists (failPre ->
+  // {wave: null, errorDoc}) or the shared server failing to start (errorWave ->
+  // {legs: [], error: message}) — so EVERY stored alias would otherwise hit
+  // the `legs[i] || {}` fallback and fabricate a generic `detail: null` row,
+  // which the CLI's `${head} — ${r.detail}` template renders as the literal
+  // string "null", masking the real reason (worse with `quiet: true`, which
+  // suppresses every other print this failure would normally surface on).
+  // Both failure classes carry a real message; thread it onto every row that
+  // has no leg of its own to explain itself.
+  const waveFailure = errorDoc ? errorDoc.message : ((wave && wave.error) || null);
 
   // Positional zip, not a model-id lookup: deriveLegIds (fanout.js) assigns
   // legs 1:1 in --models order, and two stored aliases may legitimately share
@@ -96,7 +108,7 @@ async function probeStoredAliases(opts = {}, deps = {}) {
       alias: s.alias,
       target: s.model,
       outcome,
-      detail: outcome === 'served' ? null : (leg.error || null),
+      detail: leg.error || waveFailure || null,
       cost,
     };
   });

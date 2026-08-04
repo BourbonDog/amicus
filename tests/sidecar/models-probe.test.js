@@ -140,4 +140,61 @@ describe('probeStoredAliases', () => {
       alias: 'backup', target: stored[1].model, outcome: 'error', detail: 'Error: 401 unauthorized', cost: null,
     });
   });
+
+  // Final-review blocker 1: two classes of wave never reach leg-creation at
+  // all, so `legs[i] || {}` degrades every row to a fabricated `detail: null`
+  // — which the CLI's `${head} — ${r.detail}` template literal renders as the
+  // literal string "null", masking the real reason from a --live user with
+  // `quiet: true` suppressing every other print.
+  describe('wave-level failure surfacing — a pre-leg-creation failure must not fabricate detail: null rows', () => {
+    // Class 1: fanout.js's failPre (e.g. the budget preflight refusing before
+    // any session/leg exists) resolves { wave: null, errorDoc, exitCode }.
+    // The old `const { wave } = await runFanout(...)` silently discarded errorDoc.
+    test('a pre-creation failure ({wave:null, errorDoc}) surfaces errorDoc.message as detail on every row', async () => {
+      const stored = [mkStored('gemini', 'google/gemini-3.1-flash-lite-preview'), mkStored('grok', 'x-ai/grok-4.1-fast')];
+      const runFanout = jest.fn(async () => ({
+        wave: null,
+        errorDoc: { code: 'BUDGET_EXCEEDED', message: 'Error: wave estimate $0.40 exceeds --max-cost $0.10' },
+        exitCode: 1,
+      }));
+      const collectAliasSources = jest.fn(() => stored);
+
+      const { results, waveId } = await probeStoredAliases({}, { runFanout, collectAliasSources });
+
+      expect(waveId).toBeNull();
+      expect(results).toEqual([
+        {
+          alias: 'gemini', target: stored[0].model, outcome: 'error',
+          detail: 'Error: wave estimate $0.40 exceeds --max-cost $0.10', cost: null,
+        },
+        {
+          alias: 'grok', target: stored[1].model, outcome: 'error',
+          detail: 'Error: wave estimate $0.40 exceeds --max-cost $0.10', cost: null,
+        },
+      ]);
+    });
+
+    // Class 2: the wave record WAS created (waveId exists) but never reached
+    // leg-creation because the shared OpenCode server failed to start —
+    // fanout.js's errorWave() produces { legs: [], error: message } instead of
+    // the errorDoc/wave:null shape above.
+    test('a server-start failure (wave.error set, legs: []) surfaces wave.error as detail on every row', async () => {
+      const stored = [mkStored('gemini', 'google/gemini-3.1-flash-lite-preview')];
+      const runFanout = jest.fn(async () => ({
+        wave: { waveId: 'w5', legs: [], error: 'Failed to start server: EADDRINUSE' },
+        exitCode: 1,
+      }));
+      const collectAliasSources = jest.fn(() => stored);
+
+      const { results, waveId } = await probeStoredAliases({}, { runFanout, collectAliasSources });
+
+      expect(waveId).toBe('w5');
+      expect(results).toEqual([
+        {
+          alias: 'gemini', target: stored[0].model, outcome: 'error',
+          detail: 'Failed to start server: EADDRINUSE', cost: null,
+        },
+      ]);
+    });
+  });
 });
