@@ -340,9 +340,14 @@ strings, not differently prefixed: OpenRouter serves `anthropic/claude-opus-4.8`
   (`stripGatewayPrefixWhenIdentical`). A lint rule or an "every call site is guarded" unit test is
   the cheap interim.
 
-- [ ] **MODEL-NOTES fold-back still deferred** — now carried through 4.0.0, 4.0.1, 4.1.0, 4.1.1 and
+- [x] **MODEL-NOTES fold-back still deferred** — now carried through 4.0.0, 4.0.1, 4.1.0, 4.1.1 and
   4.1.2. The machine-local copy is staler than the shipped one in places, so a bulk port would
   regress the repo; it needs a per-section diff, not a copy. [S]
+  **DONE (Christian's ruling, 2026-08-03, branch docs/model-notes-foldback):** per-section fold
+  executed both directions (shipped corrected — the haiku wrong-cause and pre-degrade-era claims —
+  and enriched with three model sections + the peer-consensus≠evidence rule; local de-staled).
+  Standing practice replaces the debt: shipped = curated seed, local = lab notebook, releases
+  cherry-pick per-section (docs/publishing.md line).
 
 ## v4.4.1 fast-follow (2026-07-26 → 2026-07-27)
 
