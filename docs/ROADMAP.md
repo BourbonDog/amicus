@@ -7,10 +7,10 @@ major jump, gated on funding/cofounder. The observability arc is split so the **
 first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
 preview dropped to the backlog.
 
-Amicus is at **v4.6.0** (tagged 2026-08-02). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.6.1** (tagged 2026-08-03). Each 4.x rev below leads with the benefit, not the
 plumbing.
 
-**Status:** v4.0 through **v4.6.0** have **shipped** — everything down to the v4.7 heading is a
+**Status:** v4.0 through **v4.6.1** have **shipped** — everything down to the v4.7 heading is a
 record of what landed, not a plan. **v4.7 (composition + tagging + GUI ergonomics) is the next
 planned rev** — that scope carried the number v4.6 here until the degrade-announcement-invariant
 milestone took the v4.6.0 release (2026-08-02); renumbered, not descoped. v5.0 remains
@@ -134,6 +134,11 @@ as hard as a crash.
 > legs (11 four-seat council runs on v4.5.4, 10 clean) — but when a seat *was* lost, nothing told
 > the user which one. That silent-degrade class was ruled a north-star violation and took the rev
 > number; the composition scope below moved to v4.7.
+
+**v4.6.1 (shipped 2026-08-03):** the follow-on point release — **SL-2** ("a lost seat gets one
+more chance": the once-only Stage-1 retry with `Recovered:` heals, ruled heal-first off SL-3),
+the **MCP update notice**, the `rebuildElectron` hint deletion, and the **fold-back-corrected
+MODEL-NOTES seed** (PR #93). Ninth consecutive first-attempt publish.
 
 ## v4.7 — "Compose your councils" *(renumbered from v4.6, 2026-08-02 — spec + fresh plan at kickoff per the anti-rot rule)*
 **Benefit:** councils chain — generate → critique → refine with no manual copy-paste — and history

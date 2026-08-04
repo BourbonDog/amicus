@@ -687,6 +687,17 @@ makes this interaction disappear," so none of these are urgent — but each is a
   it). Pre-existing class — session-less dead legs never got rows — not SL-2-caused. Candidate
   fix: render announced dead seats as rows ("did not review — retried once") derived from
   `degrades[]`/`seatLoss`, honoring the announcement invariant on this surface too.
+- [ ] **Alias audit is blind to listed-but-not-serving stored aliases** — [S–M]
+  v4.6.1 release-gate find (2026-08-03): the stored `gemini` alias pointed at
+  `google/gemini-3.1-flash-lite-preview` — still LISTED in the catalog (so `doctor`'s alias
+  audit passed it) but no longer SERVING (requests accepted, zero tokens, sessions run to
+  timeout). Three live e2e suites failed on it; root-caused by a single-leg control pair
+  (lite-preview hangs; `gemini-3.6-flash` completes) and fixed machine-side via
+  `setup --add-alias`. Candidate checks: (a) warn when a STORED alias drifts from the current
+  family resolution (the fallback-drift warning exists; the stored-alias variant does not);
+  (b) an opt-in `models --check --live` probe tier — one tiny leg per stored alias, because
+  presence in the catalog is not proof of service. Related: the backlogged "headless no-output
+  fast-fail backstop" would have turned these 130s timeouts into ~120s named failures.
 
 ## v4.5.0 post-ship dispositions (2026-07-28)
 
