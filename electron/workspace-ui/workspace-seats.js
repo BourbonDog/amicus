@@ -22,6 +22,19 @@
  * dead-leg/dead-wave degrade is only checkpointed to run.json once Stage 1's
  * once-only retry pass has resolved for that seat, so there is no mid-poll
  * instant where a seat is both "announced dead" and still live-polling.
+ *
+ * Fix wave (task review, controller ruling): dead rows are appended ONLY
+ * when the run is terminal (window.AmicusLive.TERMINAL_STATUSES — the same
+ * predicate startLiveLoop() already uses at workspace-verbs.js:69 to decide
+ * whether a run is even worth polling, reused verbatim, not a second
+ * parallel check). Without this gate, renderDetail()'s unconditional
+ * V.startLiveLoop() call (workspace-app.js:151) schedules a
+ * setTimeout(tick, 0) on any still-running run; that tick's first resolution
+ * repaints #seats-body via applyLive's direct renderSeats() call
+ * (workspace-verbs.js:129-131), whose own leaver-removal
+ * (workspace-render.js:220-222) immediately deletes the `dead:`-keyed row
+ * renderSeatsPanel just appended — a one-frame flash-then-vanish that reads
+ * as a glitch, not a feature.
  */
 (function () {
   'use strict';
@@ -32,9 +45,12 @@
     var seats = window.AmicusLive.seatsFromRunStats(d.derived.cost.rows);
     var tbody = A.$('seats-body');
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
-    var seatLoss = d.verdict && d.verdict.seatLoss;
-    var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats);
-    renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
+    var isTerminal = window.AmicusLive.TERMINAL_STATUSES.indexOf(d.run.status) !== -1;
+    if (isTerminal) {
+      var seatLoss = d.verdict && d.verdict.seatLoss;
+      var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats);
+      renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
+    }
   }
 
   /**

@@ -20,10 +20,19 @@ const { makeFakeDom } = require('./helpers/fake-workspace-page');
  * fake-DOM harness — same level sibling suites test at (workspace-matrix.
  * test.js calls AmicusMatrix.renderMatrix directly; workspace-render.test.js
  * calls AmicusRender.renderSeats directly) rather than through the thin
- * window.AmicusApp-reading renderSeatsPanel() wrapper, which
- * workspace-app-boundary.test.js already exercises end to end (and whose
- * fixture — no `degrades`, empty `verdict: {}` — is itself a live regression
- * guard for case (d) through the real entry point).
+ * window.AmicusApp-reading renderSeatsPanel() wrapper.
+ *
+ * Fix wave (task review): every case here reaches the derivation/paint
+ * functions directly via the local paint() helper below, bypassing
+ * renderSeatsPanel() itself (workspace-seats.js:29-38) — a typo in its
+ * field-access chain (e.g. `d.run.degrade`, a swapped deadSeats() argument
+ * order, `d.verdict.seatloss`) would have shipped a feature that never
+ * renders while every test here stayed green. The positive-path coverage for
+ * renderSeatsPanel() itself — reached through the real production
+ * window.AmicusApp.openRun() — now lives in workspace-app-boundary.test.js's
+ * "renderSeatsPanel (fix wave)" describe block, added alongside this fix
+ * (that file already owns the full-app-boot fixture/IPC-mock harness this
+ * needs; duplicating it here would be a second, driftable copy).
  */
 describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', () => {
   let AmicusLive;
@@ -85,6 +94,28 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(deadRows[0].children[0].textContent).toBe('foxtrot');
     expect(deadRows[0].children[2].textContent).toBe('did not review — retried once');
     expect(deadRows[0].children[6].textContent).toBe(''); // no cost cell
+  });
+
+  // Fix wave (task review, minor rider): test (b) below uses a dead-wave record but asserts
+  // ZERO rows, so an implementation that ignored `data.models` entirely would also pass it.
+  // This is the positive direction: a dead-wave naming TWO models, neither present in the
+  // live cost rows, must produce exactly two dead rows.
+  test('(a2) a dead-wave record naming two models absent from the cost rows renders exactly two dead rows', () => {
+    const costRows = [{ model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' }];
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-wave', what: 'Stage-1 wave r1-s1 (bravo, charlie) produced NO legs',
+      why: 'no reason recorded', effect: '1 of 3 seats reviewed',
+      data: { waveId: 'r1-s1', models: ['bravo', 'charlie'], reason: 'no reason recorded' },
+    }];
+
+    const tbody = paint(costRows, degrades, null, false, () => null);
+
+    expect(tbody.children.length).toBe(3);
+    const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows.length).toBe(2);
+    expect(deadRows.map((r) => r.children[0].textContent).sort()).toEqual(['bravo', 'charlie']);
+    // No retryWaveId/firstFailure on this record → the plain phrasing, both seats.
+    deadRows.forEach((r) => expect(r.children[2].textContent).toBe('did not review'));
   });
 
   test('(b) a seat that died then recovered via retry (has a usable leg) renders NO dead row', () => {
