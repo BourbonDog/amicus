@@ -104,8 +104,71 @@
     });
   }
 
+  /**
+   * D6 (v4.6.2 PR4 Task 2, "dead-seat rows"): announced-dead seats, unioned
+   * from the run's own `degrades[]` (dead-leg/dead-wave channels — the live
+   * announcement; shapes verified against src/council/run-retry-notes.js and
+   * the skipped-path notes at src/council/run-stages.js:155-174) and the
+   * verdict's derived `seatLoss` (verdict.js summarizeSeatLoss/deriveSeatLoss
+   * — the critic-loss backstop, kept for verdicts written before `degrades[]`
+   * existed, v4.5.2 precedent). De-duped by seat model: `degrades` is scanned
+   * FIRST, so a real record's retry marker always beats the backstop's
+   * no-data guess for the same seat.
+   *
+   * `retried` reads `data.retryWaveId` / `data.firstFailure`: every
+   * still-dead-after-retry note (run-retry-notes.js's four builders) carries
+   * `retryWaveId`; the two run-stages.js skipped-path notes (fired when the
+   * once-only retry pass never even attempted the seat — an unmappable lens
+   * loss, an out-of-range index, or a zero-model unit) carry neither, so they
+   * correctly fall back to the plain phrasing.
+   *
+   * D6 filter (zero usable legs ONLY, "no ghost when a retry succeeded"): a
+   * candidate already present in `liveSeats` (it has a cost row — SL-2 healed
+   * it) is dropped. This is the one thing standing between a recovered seat
+   * and a duplicate/ghost row — same failure family as the F37 debate-role
+   * collision and the RN-11 keyed-row lessons just above (seatsFromRunStats,
+   * seatCells): an identity that is not carefully matched silently
+   * duplicates or overwrites instead of failing loud.
+   *
+   * @param {Array<object>} degrades  run.json's `degrades[]` (may be absent)
+   * @param {?object} seatLoss  verdict.json's `seatLoss` (may be absent)
+   * @param {Array<{model: string}>} liveSeats  seatsFromRunStats(...)'s output
+   *   (or any seat list keyed the same way — the live seat map)
+   * @returns {Array<{model: string, statusText: string}>}
+   */
+  function deadSeats(degrades, seatLoss, liveSeats) {
+    var seen = {};
+    var order = [];
+    function add(model, retried) {
+      if (!model || seen[model]) { return; }
+      seen[model] = true;
+      order.push({
+        model: model,
+        statusText: retried ? 'did not review — retried once' : 'did not review',
+      });
+    }
+    (degrades || []).forEach(function (d) {
+      if (!d || d.kind !== 'degrade') { return; }
+      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave') { return; }
+      var data = d.data || {};
+      var retried = !!(data.retryWaveId || data.firstFailure);
+      if (d.channel === 'dead-leg') {
+        add(data.seat, retried);
+      } else {
+        (data.models || []).forEach(function (m) { add(m, retried); });
+      }
+    });
+    if (seatLoss && seatLoss.criticRequested && !seatLoss.criticSeated) {
+      add(seatLoss.criticRequested, false);
+    }
+    var live = {};
+    (liveSeats || []).forEach(function (s) { live[s.model] = true; });
+    return order.filter(function (s) { return !live[s.model]; });
+  }
+
   // ⚠️ DE-ROT (F41): STAGE_LABELS is exported so applyLive() can label post-open stages.
   var api = { pollDelay: pollDelay, seatCells: seatCells, seatsFromRunStats: seatsFromRunStats,
+    deadSeats: deadSeats,
     defaultBlind: defaultBlind, dash: dash, TERMINAL_STATUSES: TERMINAL_STATUSES, STAGE_LABELS: STAGE_LABELS };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; }
   if (typeof window !== 'undefined') { window.AmicusLive = api; }

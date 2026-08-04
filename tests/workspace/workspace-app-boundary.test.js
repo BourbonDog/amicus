@@ -844,3 +844,197 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     });
   });
 });
+
+/**
+ * v4.6.2 PR4 Task 2 fix wave (task review): the seats-panel dead-row feature
+ * (electron/workspace-ui/workspace-seats.js, electron/workspace-ui/live-model.js)
+ * had no test reaching its actual production entry point — every
+ * dead-seat-rows.test.js case called window.AmicusLive.deadSeats /
+ * window.AmicusSeats.renderDeadSeatRows directly, and this file's own
+ * pre-fix-wave fixture carried no `degrades` and an empty `verdict: {}`, so
+ * renderSeatsPanel()'s field-access chain (state.detail.run.degrades,
+ * state.detail.verdict.seatLoss, the argument order into deadSeats()) was
+ * never actually exercised end to end. A typo there (`d.run.degrade`, a
+ * swapped argument, `d.verdict.seatloss`) would have shipped a feature that
+ * never renders while every existing test — including this file's own —
+ * stayed green.
+ *
+ * Also pins the controller ruling from the same review: renderSeatsPanel
+ * must append dead rows ONLY on a terminal run. Diagnosis: renderDetail()
+ * unconditionally calls V.startLiveLoop() at its own end (workspace-app.js
+ * :151); on a still-running run that schedules a tick via
+ * `setTimeout(tick, 0)` (workspace-verbs.js:111) whose FIRST resolution
+ * repaints #seats-body via a direct `R.renderSeats(...)` call
+ * (workspace-verbs.js:129-131) — bypassing renderSeatsPanel() and its dead
+ * rows entirely. renderSeats' own leaver-removal (workspace-render.js
+ * :220-222) then deletes any `dead:`-keyed row the just-prior renderSeatsPanel
+ * call had appended, since that row's key is not among the live seats the
+ * tick just painted. Net effect pre-fix: dead rows flash in at open and
+ * vanish one tick later on any run still in progress — a glitch, not a
+ * feature. The fix gates on the SAME predicate startLiveLoop() itself already
+ * uses to decide whether a run is even worth polling
+ * (window.AmicusLive.TERMINAL_STATUSES.indexOf(status) !== -1,
+ * workspace-verbs.js:69) — reused verbatim, not a second parallel check.
+ *
+ * Reuses buildFixtureDetail()/defaultInvoke()/loadOrderedScripts()/
+ * makeFakeDom() defined above (this file's own proven-safe full-boot
+ * fixture) rather than inventing a second boot harness in
+ * dead-seat-rows.test.js.
+ */
+describe('renderSeatsPanel (fix wave): the real read path, reached via the production openRun()', () => {
+  // Deliberately NOT 'gemini'/'gpt' (buildFixtureDetail('aaaa1111')'s own bench) — the point of
+  // D6 is that a dead seat has ZERO usable legs, i.e. it must be absent from the live cost rows.
+  const DEAD_MODEL = 'foxtrot';
+  const degradesNamingFoxtrot = [{
+    kind: 'degrade', channel: 'dead-leg', what: 'seat foxtrot did not review',
+    why: "the leg ended 'error' with no usable output", effect: '2 of 3 seats reviewed',
+    data: { seat: DEAD_MODEL, status: 'error', reason: 'timed out' },
+  }];
+
+  /** buildFixtureDetail()'s own proven-good shape, with only status/degrades/seatLoss swapped. */
+  function deadSeatFixture(runId, status, degrades, seatLoss) {
+    const base = buildFixtureDetail(runId);
+    return {
+      ...base,
+      run: { ...base.run, status, degrades },
+      verdict: seatLoss ? { seatLoss } : base.verdict,
+    };
+  }
+
+  function invokeReturning(fixture) {
+    return jest.fn((channel, ...args) => (
+      channel === 'workspace:get-run' ? Promise.resolve(fixture) : defaultInvoke(channel, ...args)
+    ));
+  }
+
+  beforeEach(() => {
+    // Matches live-loop.test.js's convention: renderDetail() unconditionally calls
+    // V.startLiveLoop() (workspace-app.js:151), which — for the non-terminal fixture below —
+    // really does schedule a setTimeout(tick, 0). Fake timers keep that tick from ever firing
+    // during these tests (none of them advance timers), and jest.clearAllTimers() in afterEach
+    // discards it instead of leaking a real pending timer across tests.
+    jest.useFakeTimers();
+    const fake = makeFakeDom();
+    global.window = fake.window;
+    global.document = fake.document;
+    global.NodeFilter = fake.NodeFilter;
+    // Must be set BEFORE loadOrderedScripts(): workspace-app.js's own boot (its IIFE's last
+    // lines) fires an immediate refreshList() -> invoke('workspace:list-runs') synchronously as
+    // it loads — same ordering the top describe block's beforeEach uses. Each test below swaps
+    // in its own fixture-specific mock afterward, before calling openRun().
+    global.window.amicusWorkspace.invoke = jest.fn(defaultInvoke);
+    loadOrderedScripts();
+  });
+
+  afterEach(() => {
+    if (global.window.AmicusApp && global.window.AmicusApp.state.listTimer) {
+      clearInterval(global.window.AmicusApp.state.listTimer);
+    }
+    jest.clearAllTimers();
+    jest.useRealTimers();
+    delete global.window;
+    delete global.document;
+    delete global.NodeFilter;
+  });
+
+  test('a terminal run doc carrying degrades[] renders exactly one .seat-dead row in #seats-body after the real openRun()', async () => {
+    const fixture = deadSeatFixture('aaaa1111', 'complete', degradesNamingFoxtrot, null);
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe(DEAD_MODEL);
+    expect(deadRows[0].children[2].textContent).toBe('did not review');
+  });
+
+  test('a terminal run doc whose verdict.seatLoss (not degrades[]) names the dead critic still renders the row', async () => {
+    const seatLoss = { criticRequested: DEAD_MODEL, criticSeated: false, reason: 'timed out', deadBenchSeats: [] };
+    const fixture = deadSeatFixture('aaaa1111', 'complete', [], seatLoss);
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe(DEAD_MODEL);
+  });
+
+  test('a non-terminal (running) run doc carrying the SAME degrades[] renders NO dead rows (controller ruling: no flash-then-vanish)', async () => {
+    const fixture = deadSeatFixture('aaaa1111', 'running', degradesNamingFoxtrot, null);
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows).toHaveLength(0);
+  });
+
+  // Final-review fix wave (finding 4, rider): dead-seat-rows.test.js's case (c) proves mask
+  // parity at the paint() level (deadSeats/renderDeadSeatRows called directly with blindOn
+  // flipped) and its "(supplementary)" case proves repaint idempotency (the same painters called
+  // twice, no duplicate rows) — but neither drives the REAL #blind-toggle 'change' listener
+  // (workspace-app.js:197-200) end to end, so a regression anywhere on
+  // renderDetail_preserveBlind()'s path to renderSeatsPanel() specifically could still slip
+  // through with every existing test green. This closes that last inference gap: open a terminal
+  // run through the real openRun(), confirm the dead row, flip blind through the actual DOM
+  // listener (not a direct paint call), and confirm the row survives the repaint with the masked
+  // label.
+  test('flipping blind mode through the real #blind-toggle listener repaints the dead row masked, still exactly one row', async () => {
+    const DEAD_LABEL = 'Review C';
+    const fixture = deadSeatFixture('aaaa1111', 'complete', degradesNamingFoxtrot, null);
+    // buildFixtureDetail()'s labelMap/derived.names only cover the live bench (gemini, gpt) — add
+    // a label for the dead critic too, or blind masking would have nothing to swap to and this
+    // test could pass even if masking were broken.
+    fixture.derived = { ...fixture.derived, names: [...fixture.derived.names, { label: DEAD_LABEL, model: DEAD_MODEL }] };
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRowsBefore = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsBefore).toHaveLength(1);
+    expect(deadRowsBefore[0].children[0].textContent).toBe(DEAD_MODEL);
+
+    // The real toggle path: the 'change' listener workspace-app.js registers on #blind-toggle at
+    // boot (workspace-app.js:197-200) -> renderDetail_preserveBlind() -> renderDetail() ->
+    // P.renderSeatsPanel() -> workspace-seats.js's renderSeatsPanel(). NOT a direct
+    // renderDeadSeatRows()/renderSeatsPanel() call — see helpers/fake-workspace-page's
+    // addEventListener for how `_listeners` records this.
+    const toggle = global.document.getElementById('blind-toggle');
+    toggle._listeners.change[0]({ target: { checked: true } });
+
+    const deadRowsAfter = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsAfter).toHaveLength(1);
+    expect(deadRowsAfter[0].children[0].textContent).toBe(DEAD_LABEL);
+    expect(deadRowsAfter[0].children[0].textContent).not.toBe(DEAD_MODEL);
+  });
+
+  // Fix wave 2 (smoke-caught): the live GUI smoke on a real degraded run (12c96b6b) found that
+  // blind mode leaves the dead seat's RAW model name visible. The test above added a label for
+  // the dead model into derived.names specifically so masking would have something to show — but
+  // that is exactly why it missed the gap: a REAL run's derived.names only carries models that
+  // produced a review, and a dead seat by definition never did, so state.labelByModel never has
+  // it. This is the real-world variant: buildFixtureDetail()'s STOCK shape, no names entry for
+  // the dead model added.
+  test('flipping blind mode with NO label for the dead seat (the real-run shape) renders "(masked)", not the raw model', async () => {
+    const fixture = deadSeatFixture('aaaa1111', 'complete', degradesNamingFoxtrot, null);
+    // Deliberately NOT extending derived.names here — buildFixtureDetail()'s stock names only
+    // cover the live bench (gemini, gpt), matching what run 12c96b6b actually carried.
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRowsBefore = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsBefore).toHaveLength(1);
+    expect(deadRowsBefore[0].children[0].textContent).toBe(DEAD_MODEL); // blind OFF: raw alias is correct
+
+    const toggle = global.document.getElementById('blind-toggle');
+    toggle._listeners.change[0]({ target: { checked: true } });
+
+    const deadRowsAfter = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsAfter).toHaveLength(1);
+    expect(deadRowsAfter[0].children[0].textContent).toBe('(masked)');
+    expect(deadRowsAfter[0].children[0].textContent).not.toBe(DEAD_MODEL);
+  });
+});

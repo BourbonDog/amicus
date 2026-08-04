@@ -112,6 +112,12 @@ mark { background: var(--gold-soft); color: var(--gold-400); border-radius: var(
 .table td { border-bottom: var(--bd); padding: var(--space-3) var(--space-4); }
 .table td.num, .table th.num { text-align: right; font-family: var(--font-mono); }
 .stalled-flag { color: var(--warn); }
+/* Task 2 (v4.6.2 PR4, "dead-seat rows"): an announced-dead seat's row —
+   muted like every other "nothing to see here" surface (.empty-note,
+   .chip.aborted, .stage.skipped, .rail-project all key off --text-3), never
+   the warn/danger colors those two-line notes use — a dead seat is a fact
+   already fully explained in the banner/verdict, not a NEW alarm here. */
+tr.seat-dead td { color: var(--text-3); }
 
 /* ---- matrix tier rows (report-html light-ground pairs, as token vars) -- */
 .matrix-wrap { overflow-x: auto; }

@@ -329,7 +329,9 @@ launch:
   the Stage-2 contract carries no structured reason field, so rationale lives in prose; on a
   `--debate` run, a re-voted cell instead opens `revote-<model>.md` and also surfaces the
   structured `reason` `debate.json` records for that re-vote), chair verdict + street-cred +
-  Stage-4 decisions, and a cost-by-seat table with a `--max-cost` ceiling gauge.
+  Stage-4 decisions, and a cost-by-seat table with a `--max-cost` ceiling gauge. Once the run
+  reaches a terminal status, the Seats table also lists any seat the run announced dead as a
+  muted, no-cost row — these never appear on a still-running run mid-poll.
 
 **Historical runs** render entirely from the run directory — open any old `council-<runId>` at any
 time; nothing here requires the run to still be live.

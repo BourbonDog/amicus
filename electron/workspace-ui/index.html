@@ -102,6 +102,9 @@
   <script src="./live-model.js"></script>
   <script src="./workspace-render.js"></script>
   <script src="./workspace-matrix.js"></script>
+  <!-- ⚠️ D8 extraction (Task 1, v4.6.2 PR4): workspace-seats.js must load BEFORE
+       workspace-panels.js, whose renderSeatsPanel delegates to it. -->
+  <script src="./workspace-seats.js"></script>
   <!-- ⚠️ DE-ROT (F05): panels + verbs are the Task 13 split of workspace-app.js.
        Load order matters: workspace-app.js boots last and owns `state`. -->
   <script src="./workspace-panels.js"></script>
