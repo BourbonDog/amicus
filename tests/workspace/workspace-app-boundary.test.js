@@ -1009,4 +1009,32 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     expect(deadRowsAfter[0].children[0].textContent).toBe(DEAD_LABEL);
     expect(deadRowsAfter[0].children[0].textContent).not.toBe(DEAD_MODEL);
   });
+
+  // Fix wave 2 (smoke-caught): the live GUI smoke on a real degraded run (12c96b6b) found that
+  // blind mode leaves the dead seat's RAW model name visible. The test above added a label for
+  // the dead model into derived.names specifically so masking would have something to show — but
+  // that is exactly why it missed the gap: a REAL run's derived.names only carries models that
+  // produced a review, and a dead seat by definition never did, so state.labelByModel never has
+  // it. This is the real-world variant: buildFixtureDetail()'s STOCK shape, no names entry for
+  // the dead model added.
+  test('flipping blind mode with NO label for the dead seat (the real-run shape) renders "(masked)", not the raw model', async () => {
+    const fixture = deadSeatFixture('aaaa1111', 'complete', degradesNamingFoxtrot, null);
+    // Deliberately NOT extending derived.names here — buildFixtureDetail()'s stock names only
+    // cover the live bench (gemini, gpt), matching what run 12c96b6b actually carried.
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRowsBefore = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsBefore).toHaveLength(1);
+    expect(deadRowsBefore[0].children[0].textContent).toBe(DEAD_MODEL); // blind OFF: raw alias is correct
+
+    const toggle = global.document.getElementById('blind-toggle');
+    toggle._listeners.change[0]({ target: { checked: true } });
+
+    const deadRowsAfter = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsAfter).toHaveLength(1);
+    expect(deadRowsAfter[0].children[0].textContent).toBe('(masked)');
+    expect(deadRowsAfter[0].children[0].textContent).not.toBe(DEAD_MODEL);
+  });
 });

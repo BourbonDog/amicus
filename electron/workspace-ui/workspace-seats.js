@@ -68,16 +68,26 @@
    *
    * Cells route through window.AmicusLive.seatCells(...) — the SAME function
    * live rows use — so name masking (and every other column's blank/em-dash
-   * convention) matches exactly, not a reimplementation. Exactly one
-   * override: index 6 (cost). seatCells would dash() a missing costDisplay
-   * to '—', indistinguishable from a seat that ran but whose cost is merely
-   * unmeasured (see cost-unknown-display.test.js) — a dead seat has no cost
-   * concept at all, so that cell renders empty instead (D6: "no cost cell").
+   * convention) matches exactly, not a reimplementation. Two overrides after
+   * the call: index 0 (name, blind-ON-and-unlabeled dead seats only — see the
+   * comment at that line) and index 6 (cost). seatCells would dash() a
+   * missing costDisplay to '—', indistinguishable from a seat that ran but
+   * whose cost is merely unmeasured (see cost-unknown-display.test.js) — a
+   * dead seat has no cost concept at all, so that cell renders empty instead
+   * (D6: "no cost cell").
    */
   function renderDeadSeatRows(tbody, dead, blindOn, labelOf) {
     (dead || []).forEach(function (seat) {
       var cells = window.AmicusLive.seatCells(
         { model: seat.model, status: seat.statusText, stalled: false }, blindOn, labelOf);
+      // Fix wave 2 (smoke-caught, GUI smoke on real degraded run 12c96b6b): dead seats never
+      // produce a review, so state.labelByModel (built from the run's names derivation — models
+      // that DID review) never carries them; seatCells' own `blindOn && label ? label : alias`
+      // fallback is LOAD-BEARING for LIVE rows (RN-9/F36, live-model.js) and stays untouched, but
+      // for a dead seat that fallback leaks the raw model name under blind — precisely the seat
+      // blind mode most needs to hide. Placeholder ONLY when blind is on AND no label resolved;
+      // a label that DOES resolve (possible in principle) still wins via seatCells' own cell.
+      if (blindOn && !(labelOf && labelOf(seat.model))) { cells[0] = '(masked)'; }
       cells[6] = '';
       var row = window.AmicusRender.el('tr',
         { className: 'seat-dead', dataset: { key: 'dead:' + seat.model } },

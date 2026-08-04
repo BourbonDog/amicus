@@ -158,6 +158,35 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(openTbody.children[1].children[0].textContent).toBe('bravo'); // dead row, blind OFF — same mask
   });
 
+  // Fix wave 2 (smoke-caught): the live GUI smoke on a real degraded run (12c96b6b) found blind
+  // mode leaking the dead seat's RAW model name. Root cause: case (c) above always gave the dead
+  // seat a labelMap entry, so seatCells' `blindOn && label ? label : alias` always took the label
+  // branch — it never exercised the branch a REAL run actually hits. `state.labelByModel` is
+  // built from the run's names derivation (models that DID produce a review); a dead seat never
+  // reviews, so it is never in that map, `labelOf(alias)` is null, and seatCells' raw-alias
+  // fallback (load-bearing for LIVE rows, RN-9/F36 — left untouched) then shows the real name
+  // under blind. This is the case (c) missed: NO labelMap entry for the dead seat at all.
+  test('(c2) blind mode with NO label for the dead seat renders the "(masked)" placeholder, never the raw alias', () => {
+    const costRows = [{ model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' }];
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat bravo did not review',
+      why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+      data: { seat: 'bravo', status: 'error', reason: 'timed out' },
+    }];
+    // Only 'alpha' (the live seat) has a label — 'bravo' (the dead seat) deliberately does not,
+    // matching a real run's labelByModel shape.
+    const labelMap = { alpha: 'Review A' };
+    const labelOf = (m) => labelMap[m] || null;
+
+    const blindTbody = paint(costRows, degrades, null, true, labelOf);
+    expect(blindTbody.children[0].children[0].textContent).toBe('Review A'); // live row, blind ON, has a label
+    expect(blindTbody.children[1].children[0].textContent).toBe('(masked)'); // dead row, blind ON, NO label
+    expect(blindTbody.children[1].children[0].textContent).not.toBe('bravo');
+
+    const openTbody = paint(costRows, degrades, null, false, labelOf);
+    expect(openTbody.children[1].children[0].textContent).toBe('bravo'); // blind OFF: raw alias is correct, no placeholder
+  });
+
   test('(d) a run with no degrades renders zero dead rows (no regression on the happy path)', () => {
     const costRows = [
       { model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' },
