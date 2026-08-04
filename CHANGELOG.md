@@ -34,6 +34,13 @@ All notable changes to Amicus are documented here. Format follows
   fan-out leg cap (`AMICUS_FANOUT_MAX_LEGS`) fails fast before anything is probed. When the
   probe can't run (catalog unavailable, or `--refresh` also passed), Amicus announces the skip
   instead of silently dropping the flag.
+- **The Council Workspace seats panel now shows seats a run announced dead.** Once a run
+  reaches a terminal status, the **Seats** table appends a row for every seat with zero usable
+  legs — derived from `run.json`'s `degrades[]` (dead-leg/dead-wave records) and the critic's
+  `verdict.seatLoss` — with a blind-maskable model name, `did not review — retried once` (the
+  degrade recorded a `retryWaveId`) or plain `did not review`, no cost cell, and muted seat-dead
+  styling. Dead-seat rows are terminal-gated on purpose: they never appear mid-poll on a
+  still-running run, only once the run is done.
 
 ### Fixed
 
