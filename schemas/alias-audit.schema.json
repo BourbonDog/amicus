@@ -12,6 +12,8 @@
     "staleCount": { "type": "number" },
     "stale": { "type": "array", "items": { "type": "object" } },
     "gatewayFindingsCount": { "type": "number" },
-    "gatewayFindings": { "type": "array", "items": { "type": "object" } }
+    "gatewayFindings": { "type": "array", "items": { "type": "object" } },
+    "driftedCount": { "type": "number" },
+    "drifted": { "type": "array", "items": { "type": "object" } }
   }
 }

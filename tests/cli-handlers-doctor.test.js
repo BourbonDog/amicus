@@ -44,6 +44,14 @@ const allGood = {
   // must never be called with the empty map above.
   getLocalProviders: () => ({}),
   probeLocalProvider: jest.fn(),
+  // v4.6.2 PR1: the anthropic-base-url check reads d.env (falling through to the
+  // real process.env only when a caller omits it — see
+  // src/utils/doctor-base-url-check.js). Pinning it empty here keeps this fixture
+  // "healthy" deterministic regardless of the host/parent-process env, same
+  // rationale as the M14 getLocalProviders() pin above (a dev or CI process that
+  // happens to carry ANTHROPIC_BASE_URL, e.g. set by the Claude Code app itself,
+  // must not turn this into a warn).
+  env: {},
 };
 
 const byId = (checks) => Object.fromEntries(checks.map(c => [c.id, c]));

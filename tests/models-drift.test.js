@@ -46,6 +46,10 @@ describe('runCheck drift wiring', () => {
     jest.mock('../src/utils/alias-audit', () => ({
       collectAliasSources: () => [],
       findStaleAliases: () => [],
+      // v4.6.2 PR1 (2A): additive export runCheck now destructures — must be
+      // present on any full-replacement mock of this module or the require
+      // throws "findDriftedStoredAliases is not a function".
+      findDriftedStoredAliases: () => [],
       suggestReplacements: () => [],
     }));
   });
