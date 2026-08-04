@@ -849,7 +849,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     });
 
     // Handle timeout
-    if (!completed && !aborted && (Date.now() - startTime) >= timeoutMs) {
+    // v4.6.2 PR2 fix wave: `!backstopFired` — the backstop's own break can
+    // land after the post-break poll tail (getMessages + mirror processing
+    // already inside that iteration) has ALSO crossed timeoutMs when the two
+    // thresholds are configured close together, so this block must yield
+    // once the backstop already ended the leg. Exactly one terminal-timing
+    // signal per leg: statusFromResult() (src/utils/result-schema.js) checks
+    // timedOut BEFORE error, so a leg carrying both would misreport as an
+    // ordinary 'timeout' instead of the distinctly-named backstop reason.
+    if (!completed && !aborted && !backstopFired && (Date.now() - startTime) >= timeoutMs) {
       timedOut = true;
       logger.warn('Task timed out', { taskId, elapsed: Date.now() - startTime });
 

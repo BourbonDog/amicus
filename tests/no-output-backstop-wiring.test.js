@@ -56,6 +56,7 @@ const mockLogger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: 
 jest.mock('../src/utils/logger', () => ({ logger: mockLogger }));
 
 const { runHeadless } = require('../src/headless');
+const { statusFromResult } = require('../src/utils/result-schema');
 
 const MODEL = 'openrouter/qwen/qwen3.7-max';
 
@@ -146,5 +147,44 @@ describe('runHeadless no-output backstop wiring', () => {
     expect(String(result.error || '')).not.toMatch(/NO_OUTPUT_BACKSTOP/);
     expect(result.timedOut).toBe(true);
     expect(result.completed).toBe(false);
+  }, 20000);
+});
+
+/**
+ * Fix wave — review finding (Important): the `--timeout` block (:852) and the
+ * backstop block (:870) are independent `if`s, both gated only on
+ * `!completed && !aborted`. When noOutputBackstopMs and timeoutMs are
+ * configured close together (a near-term reality once PR3's 30s live-probe
+ * override lands), the post-break poll tail (the getMessages call + mirror
+ * processing already inside the iteration that fires the backstop) can
+ * consume the remaining margin, so BOTH blocks fire for one leg: a double
+ * abortSession() call, and result.timedOut === true riding alongside
+ * result.error = 'NO_OUTPUT_BACKSTOP: ...'. That matters downstream because
+ * src/utils/result-schema.js statusFromResult() checks `timedOut` BEFORE
+ * `error` (opposite precedence to resolveTerminalState), so a backstop-killed
+ * leg would be counted/reported as an ordinary 'timeout' in wave legs and
+ * --json — silently defeating the whole point of a distinctly-named reason.
+ */
+describe('fix wave: the backstop and the ordinary --timeout must not both fire for one leg', () => {
+  test('thresholds set close together: only the backstop fires, never both', async () => {
+    // A single poll-interval sleep (100ms) deterministically overshoots BOTH
+    // the 50ms backstop deadline and the 60ms overall timeout deadline in one
+    // hop, on the very first iteration — this reproduces the collision
+    // regardless of machine speed/jitter, unlike relying on a tight real-time
+    // race between two close-together thresholds polled at a fast interval.
+    mockGetMessages.mockResolvedValue([]);
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'collide1', '/proj', 60, 'build',
+      { ...OPTS, pollIntervalMs: 100, noOutputBackstopMs: 50 });
+
+    // The backstop must be the ONE terminal-timing signal for this leg — the
+    // ordinary --timeout block has to yield once backstopFired is true.
+    expect(result.timedOut).toBeFalsy();
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    // The downstream truth: statusFromResult must read this as 'error', not
+    // 'timeout' — this is the actual consequence the review flagged.
+    expect(statusFromResult(result)).toBe('error');
+    // Exactly one abort — not one from each independent block.
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
   }, 20000);
 });
