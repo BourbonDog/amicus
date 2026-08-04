@@ -13,7 +13,7 @@
 'use strict';
 
 const { getCatalogInfo, refreshCatalog, catalogPath } = require('../utils/model-catalog');
-const { collectAliasSources, findStaleAliases, suggestReplacements } = require('../utils/alias-audit');
+const { collectAliasSources, findStaleAliases, findDriftedStoredAliases, suggestReplacements } = require('../utils/alias-audit');
 const { auditGatewayRoutes } = require('../utils/gateway-route-audit');
 const { buildCatalogDoc, buildAuditDoc } = require('../utils/result-schema');
 const { getFamilies } = require('../utils/curated-models');
@@ -144,6 +144,7 @@ async function runCheck(args) {
   const sources = collectAliasSources();
   const stale = findStaleAliases(sources, catalog)
     .map(s => ({ ...s, suggestions: suggestReplacements(s.model, catalog) }));
+  const drifted = findDriftedStoredAliases(sources, catalog);
   // Task 6 (#gwid): per-gateway-form audit of the curated DEFAULTS
   // (toGatewayRoutes()) — additive to the flat audit above. Informational by
   // default; --strict promotes it to a build-breaking exit code (CI gate).
@@ -155,14 +156,14 @@ async function runCheck(args) {
 
   if (args.json) {
     process.stdout.write(JSON.stringify(buildAuditDoc({
-      stale, catalogAvailable: true, gatewayFindings
+      stale, catalogAvailable: true, gatewayFindings, drifted
     }), null, 2) + '\n');
     return exitCode;
   }
   const driftLines = buildFallbackDriftReport(catalog);
-  if (stale.length === 0) {
+  if (stale.length === 0 && drifted.length === 0) {
     process.stdout.write(`All aliases resolve to catalog models (${sources.length} checked).\n`);
-  } else {
+  } else if (stale.length > 0) {
     for (const s of stale) {
       process.stdout.write(`STALE: ${s.alias} -> ${s.model} (${s.source})\n`);
       if (s.suggestions.length > 0) {
@@ -172,6 +173,10 @@ async function runCheck(args) {
         process.stdout.write('  no same-vendor candidates in catalog\n');
       }
     }
+  }
+  for (const dr of drifted) {
+    process.stdout.write(`DRIFTED: ${dr.alias} -> ${dr.stored} (stored; current resolution: ${dr.current})\n`);
+    process.stdout.write(`  stored aliases don't follow catalog updates — refresh: amicus setup --add-alias ${dr.alias}=${dr.current}\n`);
   }
   if (driftLines.length > 0) {
     process.stdout.write('Pinned fallback drift:\n');

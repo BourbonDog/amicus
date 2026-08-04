@@ -192,10 +192,15 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
  * of curated DEFAULT aliases (toGatewayRoutes() vs. the live catalog),
  * distinct from the flat `stale` audit above. Defaults to [] so existing
  * callers that omit it are unaffected.
+ * `drifted` (v4.6.2 PR1, 2A) is additive: stored user-config aliases whose
+ * target is still catalog-live but behind the current quick-pick family
+ * resolution (findDriftedStoredAliases). Defaults to [] so existing callers
+ * that omit it are unaffected.
  * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean,
- *   gatewayFindings?: Array<{alias,gateway,kind,model,expected?}>}} opts
+ *   gatewayFindings?: Array<{alias,gateway,kind,model,expected?}>,
+ *   drifted?: Array<{alias,stored,current}>}} opts
  */
-function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [] }) {
+function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [], drifted = [] }) {
   return {
     schemaVersion: SCHEMA_VERSION,
     type: 'alias-audit',
@@ -204,6 +209,7 @@ function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [] }) {
     stale,
     gatewayFindingsCount: gatewayFindings.length,
     gatewayFindings,
+    drifted,
   };
 }
 

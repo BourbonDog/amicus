@@ -11,7 +11,7 @@ const CATALOG = [
     contextLength: 1048576, pricing: null },
 ];
 
-function loadHandler({ catalog = CATALOG, sources, stale, gatewayFindings } = {}) {
+function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindings } = {}) {
   jest.resetModules();
   jest.doMock('../../src/utils/model-catalog', () => ({
     getCatalogInfo: jest.fn(async () => ({ models: catalog, fetchedAt: 1718000000000 })),
@@ -22,6 +22,9 @@ function loadHandler({ catalog = CATALOG, sources, stale, gatewayFindings } = {}
     jest.doMock('../../src/utils/alias-audit', () => ({
       collectAliasSources: () => sources || [],
       findStaleAliases: () => stale || [],
+      // Additive (v4.6.2 PR1, 2A): defaults to [] so pre-existing callers of
+      // loadHandler() that never mention drift keep exercising a clean state.
+      findDriftedStoredAliases: () => drifted || [],
       suggestReplacements: () => ['openrouter/x-ai/grok-4.3'],
     }));
   }
@@ -106,6 +109,53 @@ describe('amicus models', () => {
     expect(doc.stale[0]).toEqual({
       alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults',
       suggestions: ['openrouter/x-ai/grok-4.3']
+    });
+    // v4.6.2 PR1 (2A): additive field, [] when nothing drifted.
+    expect(doc.drifted).toEqual([]);
+  });
+
+  // v4.6.2 PR1 (2A): stored-alias drift warning — a stored alias whose target
+  // is still catalog-live but behind the current quick-pick family
+  // resolution. Distinct from `stale` (dead target) and never affects exitCode.
+  describe('--check drift wiring (v4.6.2 PR1, 2A)', () => {
+    const oneDrift = [{
+      alias: 'gemini', stored: 'openrouter/google/gemini-3.1-flash-lite-preview',
+      current: 'google/gemini-3.6-flash',
+    }];
+
+    it('prints DRIFTED lines with a paste-ready refresh fix and exit stays 0', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], drifted: oneDrift });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(0); // drift never affects the exit code
+      expect(out).toContain(
+        'DRIFTED: gemini -> openrouter/google/gemini-3.1-flash-lite-preview (stored; current resolution: google/gemini-3.6-flash)');
+      expect(out).toContain('amicus setup --add-alias gemini=google/gemini-3.6-flash');
+      expect(out).not.toContain('All aliases resolve'); // suppressed: drift alone is not "all clean"
+    });
+
+    it('--json carries the additive drifted array; exit code still unaffected', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], drifted: oneDrift });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.type).toBe('alias-audit');
+      expect(doc.drifted).toEqual(oneDrift);
+    });
+
+    it('both stale and drifted present: STALE lines, DRIFTED lines, and exit code from stale only', async () => {
+      const stale = [{ alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults' }];
+      const { handleModels } = loadHandler({ sources: stale, stale, drifted: oneDrift });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(1); // unchanged: exit code is driven by stale.length only
+      expect(out).toContain('STALE: grok -> openrouter/x-ai/grok-4.1-fast (defaults)');
+      expect(out).toContain('DRIFTED: gemini -> openrouter/google/gemini-3.1-flash-lite-preview');
+    });
+
+    it('clean (no stale, no drift) still prints the all-clear line', async () => {
+      const { handleModels } = loadHandler({ sources: [], stale: [], drifted: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('All aliases resolve');
     });
   });
 
