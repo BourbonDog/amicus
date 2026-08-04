@@ -56,33 +56,50 @@ one.** The council degrades around the missing model — the chair silently fall
 collapses from 3 seats to 2, and every finding comes back `confidence: "thin"` because it only ever
 had one peer corroborator. Nothing in `verdict.json` records that the roster changed.
 
-**Cause:** an `ANTHROPIC_BASE_URL` environment variable that is missing the `/v1` path segment.
-The OpenCode engine passes it straight through to `@ai-sdk/anthropic` as the SDK `baseURL`, and the
-SDK appends only `/messages` to it. With `ANTHROPIC_BASE_URL=https://api.anthropic.com` the engine
-therefore posts to `https://api.anthropic.com/messages` instead of
+**Cause:** an `ANTHROPIC_BASE_URL` environment variable in **host-form** — missing the `/v1` path
+segment. That's the Anthropic-SDK convention (the SDK appends `/v1` itself), not OpenCode's — its
+provider layer treats the value as the already-complete prefix and appends only `/messages`, so
+`https://api.anthropic.com` (no `/v1`) posts to `https://api.anthropic.com/messages` instead of
 `https://api.anthropic.com/v1/messages`. That URL returns HTTP **404 with an empty body**, so the AI
-SDK has no error payload to report and surfaces the bare HTTP status text — `Not Found`. The model
-id, the alias, and the API key are all fine; only the URL is wrong.
+SDK has no error payload to report and surfaces the bare HTTP status text — `Not Found`. Some hosts
+set this variable for you: notably, a shell spawned by Claude Code inherits
+`ANTHROPIC_BASE_URL=https://api.anthropic.com` (no `/v1`) from the host process. The model id, the
+alias, and the API key are never the problem; only the URL is wrong.
 
-Some hosts set this variable for you. Notably, running `amicus` from a shell spawned by Claude Code
-inherits `ANTHROPIC_BASE_URL=https://api.anthropic.com` (no `/v1`) from the host process, so amicus
-can fail this way on a machine where nothing in the amicus config is wrong.
+**Since v4.6.2, this self-heals by default.** Amicus classifies `ANTHROPIC_BASE_URL` on every
+engine start; when it's host-form, it carries a normalized `<value>/v1` into the engine as a
+provider-config override (no env var is rewritten) and prints one
+`Notice: ANTHROPIC_BASE_URL is host-form (…); passing …/v1 to the engine …` line to stderr, once per
+process. `amicus doctor` also gained an `anthropic-base-url` row that always prints the exact value
+it sees and how it's being treated. So on a current install, this failure should be rare — if
+you're seeing it anyway, it's one of:
+- **`AMICUS_BASE_URL_NORMALIZE=0` is set**, the deliberate escape hatch — it disables the fix
+  entirely. Easy to hit by accident if you set it while chasing something unrelated.
+- **`ANTHROPIC_BASE_URL` carries a nonstandard path** — anything other than blank/`/` (host-form)
+  or an already-correct `/v1` — which amicus passes through untouched rather than guessing (an
+  exotic proxy serving `/messages` at a custom root stays possible).
+- You're running a **pre-v4.6.2** amicus, where none of the above exists yet.
 
-**Confirm it in one command** (no key needed for the first line):
+**Confirm it in one command** (no key needed for the first two lines):
 
 ```bash
-echo "$ANTHROPIC_BASE_URL"          # if this prints a URL with no /v1 suffix, that's the cause
-amicus start --model openrouter/anthropic/claude-haiku-4.5 --prompt hi --no-ui   # works
-amicus start --model haiku --prompt hi --no-ui                                    # "Not Found"
+amicus doctor                        # anthropic-base-url row: the value seen + how it's treated
+echo "$ANTHROPIC_BASE_URL"           # host-form (no /v1 suffix) is the underlying condition
+echo "$AMICUS_BASE_URL_NORMALIZE"    # "0" here is what disables the automatic fix
+amicus start --model haiku --prompt hi --no-ui   # should complete; stderr shows the Notice line
+                                                  # the first time normalization actually fires
 ```
 
 **Fix** — pick one:
-- Add the missing segment: `export ANTHROPIC_BASE_URL=https://api.anthropic.com/v1`
-- Or unset it entirely and let the SDK use its own default:
-  `unset ANTHROPIC_BASE_URL` (PowerShell: `Remove-Item Env:\ANTHROPIC_BASE_URL`)
+- Unset `AMICUS_BASE_URL_NORMALIZE` (or set it to anything other than `0`) to restore the default
+  self-heal.
+- Still failing with normalization on? Add the missing segment yourself:
+  `export ANTHROPIC_BASE_URL=https://api.anthropic.com/v1` (PowerShell:
+  `$env:ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1'`), or unset the variable entirely:
+  `unset ANTHROPIC_BASE_URL` (PowerShell: `Remove-Item Env:\ANTHROPIC_BASE_URL`).
 - Or route Anthropic models through OpenRouter for the run: `--gateway openrouter`.
 
-Either of the first two makes `amicus start --model haiku …` complete normally. **Before spending
+Any of these gets `amicus start --model haiku …` completing normally again. **Before spending
 money on a council, run one throwaway `amicus start` against each configured seat** — a
 `Not Found` there costs nothing, whereas discovering it mid-council costs a degraded verdict.
 
