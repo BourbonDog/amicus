@@ -13,7 +13,7 @@
     "stale": { "type": "array", "items": { "type": "object" } },
     "gatewayFindingsCount": { "type": "number" },
     "gatewayFindings": { "type": "array", "items": { "type": "object" } },
-    "driftedCount": { "type": "integer" },
+    "driftedCount": { "type": "number" },
     "drifted": { "type": "array", "items": { "type": "object" } }
   }
 }

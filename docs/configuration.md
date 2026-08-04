@@ -36,14 +36,16 @@ Per vendor, the bare form's direct key is: `google/...` → `GOOGLE_GENERATIVE_A
 `DEEPSEEK_API_KEY`.
 
 **Inherited provider base URLs.** Amicus does not define or read `*_BASE_URL` variables for the
-hosted vendors above, but it does pass the whole environment through to the OpenCode engine, which
-hands them to the underlying provider SDK. `ANTHROPIC_BASE_URL` is the one that bites: the SDK
-appends only `/messages` to it, so it must include the `/v1` path segment. A value of
-`https://api.anthropic.com` (**no** `/v1`) makes every direct `anthropic/…` model fail with a bare
-`Not Found` at zero tokens, while the same models still work through OpenRouter. Some hosts set
-this for you — a shell spawned by Claude Code inherits the `/v1`-less form. Either export
-`https://api.anthropic.com/v1` or unset the variable. See
-[troubleshooting § Every Direct Anthropic Model Fails with `"Not Found"`](./troubleshooting.md#every-direct-anthropic-model-fails-with-not-found).
+hosted vendors above, and it still passes the whole environment through to the OpenCode engine,
+which hands them to the underlying provider SDK. `ANTHROPIC_BASE_URL` gets one extra treatment:
+the SDK appends only `/messages` to it, so it must include the `/v1` path segment, and some hosts
+set the `/v1`-less host-form for you — a shell spawned by Claude Code inherits it. **Since v4.6.2,
+amicus detects that host-form value and carries a normalized `<value>/v1` into the engine as a
+provider-config override by default** (no env var is rewritten) — see `AMICUS_BASE_URL_NORMALIZE`
+above to disable it, and `amicus doctor`'s `anthropic-base-url` row to see how your current value
+is being treated. Any other path (including an already-correct `/v1`) passes through unchanged.
+See [troubleshooting § Every Direct Anthropic Model Fails with `"Not Found"`](./troubleshooting.md#every-direct-anthropic-model-fails-with-not-found)
+for the pre-normalization failure mode and the manual fix if you've disabled the knob.
 
 ---
 
@@ -88,6 +90,7 @@ through OpenRouter as before.
 | `AMICUS_FANOUT_MAX_LEGS` | Cap the number of concurrent legs in a single fanout wave. Protects against accidental runaway costs when `--models` is a long list. Non-positive or non-integer values fall back to the default. | `10` |
 | `AMICUS_MCP_CLIENT` | Force the MCP server's `--client` value (`code-local`, `code-web`, or `cowork`) instead of auto-detecting it from the caller's MCP `initialize` handshake (`clientInfo.name`). Invalid values are ignored (with a warning) and detection proceeds normally. Note: `code-web` requires an explicit `--session-dir` and is not usable for MCP-spawned sessions. | auto-detected |
 | `AMICUS_MAX_SESSIONS` | Maximum number of concurrent sessions the shared OpenCode server (`src/utils/shared-server.js`) will track before rejecting new ones. Renamed from `SIDECAR_MAX_SESSIONS` in v2.0.0. | `20` |
+| `AMICUS_BASE_URL_NORMALIZE` | Set `0` to stop amicus from carrying a host-form `ANTHROPIC_BASE_URL` into the engine as `<value>/v1`. Host-form is the Anthropic-SDK convention (the SDK appends `/v1`); OpenCode treats the value as a full prefix, so unnormalized host-form 404s every direct-Anthropic leg. | `1` |
 
 ---
 
