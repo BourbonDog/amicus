@@ -12,6 +12,8 @@ const electronMcpCheck = require('./utils/doctor-electron-mcp-check');
 // local-providers check body (v4.2 §4.7 C8) — split out to keep this file
 // under the gate (mirrors the engineCheck/mcpChecks split above).
 const localProvidersCheck = require('./utils/doctor-local-providers-check');
+// v4.6.2 PR1 (spec §4) — the 'anthropic-base-url' check body.
+const baseUrlCheck = require('./utils/doctor-base-url-check');
 
 const MAX_CATALOG_AGE_MS = 24 * 60 * 60 * 1000; // 24h (mirrors model-catalog DEFAULT_MAX_AGE_MS)
 
@@ -153,6 +155,9 @@ async function runDoctorChecks(depsOverride = {}) {
       ? { id: 'aliases', name: 'Model aliases', status: 'ok', message: catalog.length ? 'all resolve' : 'catalog empty — not checked', hint: null }
       : { id: 'aliases', name: 'Model aliases', status: 'warn', message: `${stale.length} stale: ${stale.map(s => s.alias).join(', ')}`, hint: 'amicus models --check' };
   }));
+
+  checks.push(guard('anthropic-base-url', 'ANTHROPIC_BASE_URL',
+    () => baseUrlCheck.evaluateAnthropicBaseUrl(d)));
 
   checks.push(guard('opencode-bin', 'OpenCode binary', () => (
     d.hasOpencodeBinary()
