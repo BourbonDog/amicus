@@ -160,7 +160,7 @@ describe('Sidecar Config Module', () => {
         'claude', 'sonnet', 'opus', 'haiku',
         'deepseek',
         'qwen', 'qwen-coder', 'qwen-flash',
-        'mistral', 'devstral',
+        'mistral',
         'glm', 'minimax', 'grok', 'kimi', 'seed'
       ];
 
@@ -187,10 +187,10 @@ describe('Sidecar Config Module', () => {
 
     // Anthropic is divergent: the pinned default is the authored direct-API
     // (dash) id, not OpenRouter's dot id with the prefix stripped.
-    it('should map opus to anthropic/claude-opus-4-8 (authored direct form)', () => {
+    it('should map opus to anthropic/claude-opus-5 (authored direct form)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.opus).toBe('anthropic/claude-opus-4-8');
+      expect(aliases.opus).toBe('anthropic/claude-opus-5');
     });
 
     it('should map haiku to its dated direct id and leave OpenRouter-only fable prefixed', () => {
@@ -220,11 +220,12 @@ describe('Sidecar Config Module', () => {
       expect(aliases['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
     });
 
-    it('should map mistral and devstral correctly', () => {
+    it('should map mistral correctly and drop the delisted devstral alias', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
       expect(aliases.mistral).toBe('openrouter/mistralai/mistral-medium-3-5');
-      expect(aliases.devstral).toBe('openrouter/mistralai/devstral-2512');
+      // devstral dropped 2026-08-04: OpenRouter delisted the whole family.
+      expect(aliases.devstral).toBeUndefined();
     });
 
     it('should map remaining aliases correctly', () => {
@@ -248,7 +249,7 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const aliases = config.getEffectiveAliases();
       expect(aliases.gemini).toBe('google/gemini-3.6-flash');
-      expect(aliases.opus).toBe('anthropic/claude-opus-4-8');
+      expect(aliases.opus).toBe('anthropic/claude-opus-5');
     });
 
     it('should merge user aliases with defaults (user wins)', () => {
@@ -265,7 +266,7 @@ describe('Sidecar Config Module', () => {
 
       expect(aliases.gemini).toBe('openrouter/google/custom-gemini');
       expect(aliases['my-model']).toBe('openrouter/custom/model');
-      expect(aliases.opus).toBe('anthropic/claude-opus-4-8');
+      expect(aliases.opus).toBe('anthropic/claude-opus-5');
     });
   });
 
@@ -375,7 +376,7 @@ describe('Sidecar Config Module', () => {
     it('should include all default alias models', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
-      expect(result.anthropic.models['claude-opus-4-8']).toBeDefined();
+      expect(result.anthropic.models['claude-opus-5']).toBeDefined();
       expect(result.openai.models['gpt-5.3-codex']).toBeDefined();
       expect(result.deepseek.models['deepseek-v4-pro']).toBeDefined();
     });
@@ -391,16 +392,17 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
 
-      // authoritative OpenRouter ids (dot form) are registered
-      expect(result.openrouter.models['anthropic/claude-opus-4.8']).toBeDefined();
+      // authoritative OpenRouter ids are registered
+      expect(result.openrouter.models['anthropic/claude-opus-5']).toBeDefined();
       expect(result.openrouter.models['anthropic/claude-haiku-4.5']).toBeDefined();
 
-      // the DIRECT dash forms must never appear under the openrouter provider
-      expect(result.openrouter.models['anthropic/claude-opus-4-8']).toBeUndefined();
+      // the DIRECT dash form must never appear under the openrouter provider.
+      // opus-5's two forms coincide since the 2026-08-04 pin bump, so haiku
+      // carries the dot-vs-dash half of this guard on its own now.
       expect(result.openrouter.models['anthropic/claude-haiku-4-5-20251001']).toBeUndefined();
 
-      // ...while the direct provider still carries exactly those dash forms
-      expect(result.anthropic.models['claude-opus-4-8']).toBeDefined();
+      // ...while the direct provider still carries exactly the authored direct forms
+      expect(result.anthropic.models['claude-opus-5']).toBeDefined();
       expect(result.anthropic.models['claude-haiku-4-5-20251001']).toBeDefined();
     });
 
@@ -423,7 +425,7 @@ describe('Sidecar Config Module', () => {
 
       expect(result.anthropic.models['claude-opus-4-1']).toBeDefined();
       // the shipped curated Opus route must NOT be registered for the override
-      expect(result.openrouter.models['anthropic/claude-opus-4.8']).toBeUndefined();
+      expect(result.openrouter.models['anthropic/claude-opus-5']).toBeUndefined();
     });
 
     it('should include user-configured aliases', () => {
@@ -463,7 +465,7 @@ describe('Sidecar Config Module', () => {
       expect(result.openrouter.models['x-ai/grok-4.3']).toBeDefined();
       // gpt/opus are bare canonical ids (Task 8.1a) — grouped under their own
       // direct provider, not nested inside openrouter.
-      expect(result.anthropic.models['claude-opus-4-8']).toBeDefined();
+      expect(result.anthropic.models['claude-opus-5']).toBeDefined();
       expect(result.openai).toBeDefined();
     });
 

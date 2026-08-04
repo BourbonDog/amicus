@@ -61,8 +61,9 @@ describe('shipped defaults never go stale against the shipped Anthropic floor', 
   it('pins every Anthropic-vendor default to its authored direct form', () => {
     const { toDefaultAliases } = require('../../src/utils/curated-models');
     const defaults = toDefaultAliases();
-    // Dash-form direct ids — the dot forms are OpenRouter's, not Anthropic's.
-    expect(defaults.opus).toBe('anthropic/claude-opus-4-8');
+    // Authored direct ids. For haiku the dot form is OpenRouter's, not
+    // Anthropic's; opus-5's two forms coincide but stay authored, never derived.
+    expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
     // fable is OpenRouter-only: no authored `anthropic:` route, so the pinned
     // default must stay the OpenRouter route rather than invent a direct id.

@@ -5,14 +5,14 @@
  * delete, and add functionality for the setup wizard Step 3.
  */
 
-/** Grouping metadata for the 20 default aliases */
+/** Grouping metadata for the 19 default aliases */
 const ALIAS_GROUPS = [
   { name: 'Gemini', keys: ['gemini', 'gemini-pro'] },
   { name: 'GPT', keys: ['gpt', 'gpt-pro', 'codex'] },
   { name: 'Claude', keys: ['claude', 'sonnet', 'opus', 'haiku', 'fable'] },
   { name: 'DeepSeek', keys: ['deepseek'] },
   { name: 'Qwen', keys: ['qwen', 'qwen-coder', 'qwen-flash'] },
-  { name: 'Mistral', keys: ['mistral', 'devstral'] },
+  { name: 'Mistral', keys: ['mistral'] },
   { name: 'Other', keys: ['glm', 'minimax', 'grok', 'kimi', 'seed'] },
 ];
 

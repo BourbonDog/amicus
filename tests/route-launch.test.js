@@ -207,8 +207,13 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
   // Real (unmocked) curated-models.toGatewayRoutes().opus, so this test tracks
   // the actual curated Anthropic ids rather than hand-duplicating them.
   const { toGatewayRoutes, toDefaultAliases } = require('../src/utils/curated-models');
-  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' }
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5', openrouter: 'openrouter/anthropic/claude-opus-5' }
   const opusDefault = toDefaultAliases().opus; // whatever config stores as the effective alias today
+  // haiku is the surviving divergent-FORM alias (dash+date direct vs dot OR);
+  // the opus-5 pin (2026-08-04) unified opus's two forms, so the dot-vs-dash
+  // regression tests below ride haiku now.
+  const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-4-5-20251001', openrouter: 'openrouter/anthropic/claude-haiku-4.5' }
+  const haikuDefault = toDefaultAliases().haiku;
 
   test('opus alias (curated default, not overridden) resolves direct via the bridged dash-form gatewayIds id', async () => {
     const { resolveRouteForLaunch } = loadRouteLaunch({
@@ -218,7 +223,7 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
     });
     const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: opusRoutes.direct });
-    expect(r.executableId).toBe('anthropic/claude-opus-4-8');
+    expect(r.executableId).toBe('anthropic/claude-opus-5');
   });
 
   test('opus alias (curated default, not overridden), OR-only key, resolves openrouter via the bridged gatewayIds id', async () => {
@@ -229,7 +234,7 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
     });
     const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: opusRoutes.openrouter });
-    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-4.8');
+    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-5');
   });
 
   test('user-overridden opus alias does NOT get curated gatewayIds — resolves the user\'s custom target', async () => {
@@ -255,35 +260,41 @@ describe('resolveRouteForLaunch — gatewayIds bridging for curated aliases (Tas
   // OpenRouter's real dot-form catalog id and silently dropped the "try via
   // OpenRouter" suggestion. It must now prefer the bridged gatewayIds.openrouter
   // (dot-form) instead.
-  test('opus alias reaching selection_required suggests the dot-form OpenRouter id, not a reconstructed dash-form id (Fix 2)', async () => {
+  // (Vehicle switched opus→haiku 2026-08-04: the opus-5 pin unified opus's two
+  // forms, so only haiku still distinguishes a reconstructed dash id from the
+  // real dot-form OpenRouter id.)
+  test('haiku alias reaching selection_required suggests the dot-form OpenRouter id, not a reconstructed dash-form id (Fix 2)', async () => {
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, opus: opusDefault },
-      defaultAliases: { opus: opusDefault },
+      aliases: { ...ALIASES, haiku: haikuDefault },
+      defaultAliases: { haiku: haikuDefault },
       apiKeys: { ...ALL_FALSE, anthropic: true, openrouter: true },
       catalogModels: [
         // Another authoritative row in the anthropic/ namespace so the direct
-        // dash-form id (opusRoutes.direct) is a genuine catalog MISS -> 'invalid',
+        // dash-form id (haikuRoutes.direct) is a genuine catalog MISS -> 'invalid',
         // not 'unknown' (an empty/all-non-authoritative namespace would never
         // reach selection_required at all).
         { id: 'anthropic/claude-sonnet-5', authoritative: true },
         // The real OpenRouter catalog entry: dot-form.
-        { id: opusRoutes.openrouter, authoritative: true },
+        { id: haikuRoutes.openrouter, authoritative: true },
       ],
     });
-    const r = await resolveRouteForLaunch({ model: 'opus', gatewayMode: 'auto', source: 'cli', allowSelection: true, validateModel: true });
+    const r = await resolveRouteForLaunch({ model: 'haiku', gatewayMode: 'auto', source: 'cli', allowSelection: true, validateModel: true });
     expect(r.kind).toBe('selection_required');
-    expect(r.suggestions).toContainEqual({ model: opusRoutes.openrouter, gateway: 'openrouter', note: 'same model via OpenRouter' });
+    expect(r.suggestions).toContainEqual({ model: haikuRoutes.openrouter, gateway: 'openrouter', note: 'same model via OpenRouter' });
     // The buggy reconstruction would have produced this dash-form id instead.
-    const reconstructedDashId = `openrouter/anthropic/${opusRoutes.direct.split('/')[1]}`;
-    expect(reconstructedDashId).not.toBe(opusRoutes.openrouter); // sanity: fixture actually distinguishes dash vs dot
+    const reconstructedDashId = `openrouter/anthropic/${haikuRoutes.direct.split('/')[1]}`;
+    expect(reconstructedDashId).not.toBe(haikuRoutes.openrouter); // sanity: fixture actually distinguishes dash vs dot
     expect(r.suggestions.some((s) => s.model === reconstructedDashId)).toBe(false);
   });
 });
 
 describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias (Part 2 Task 3, spec D2)', () => {
   // Real (unmocked) curated-models, same rationale as the Task 3 block above.
+  // haiku carries the divergent-form (dash-vs-dot) cases since the opus-5 pin
+  // unified opus's two forms; opus still feeds the no-leak negatives below.
   const { toGatewayRoutes } = require('../src/utils/curated-models');
-  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' }
+  const opusRoutes = toGatewayRoutes().opus; // { direct: 'anthropic/claude-opus-5', openrouter: 'openrouter/anthropic/claude-opus-5' }
+  const haikuRoutes = toGatewayRoutes().haiku; // { direct: 'anthropic/claude-haiku-4-5-20251001', openrouter: 'openrouter/anthropic/claude-haiku-4.5' }
 
   // (a) A USER vendor alias (not a curated default NAME at all) whose value
   // happens to BE the curated Anthropic direct id must still get the correct
@@ -291,22 +302,22 @@ describe('resolveRouteForLaunch — by-model gatewayIds resolution for ANY alias
   // the alias name — this is exactly what Part 1's name-based guard missed.
   test('user vendor alias "anthropic" -> curated divergent model resolves direct via by-model gatewayIds', async () => {
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, anthropic: opusRoutes.direct }, // 'anthropic/claude-opus-4-8'
+      aliases: { ...ALIASES, anthropic: haikuRoutes.direct }, // 'anthropic/claude-haiku-4-5-20251001'
       apiKeys: { ...ALL_FALSE, anthropic: true },
     });
     const r = await resolveRouteForLaunch({ model: 'anthropic', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
-    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: opusRoutes.direct });
-    expect(r.executableId).toBe('anthropic/claude-opus-4-8');
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'direct', executableId: haikuRoutes.direct });
+    expect(r.executableId).toBe('anthropic/claude-haiku-4-5-20251001');
   });
 
   test('user vendor alias "anthropic" -> curated divergent model resolves openrouter (dot-form) via by-model gatewayIds', async () => {
     const { resolveRouteForLaunch } = loadRouteLaunch({
-      aliases: { ...ALIASES, anthropic: opusRoutes.direct }, // 'anthropic/claude-opus-4-8'
+      aliases: { ...ALIASES, anthropic: haikuRoutes.direct }, // 'anthropic/claude-haiku-4-5-20251001'
       apiKeys: { ...ALL_FALSE, openrouter: true },
     });
     const r = await resolveRouteForLaunch({ model: 'anthropic', gatewayMode: 'auto', source: 'cli', allowSelection: false, validateModel: false });
-    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: opusRoutes.openrouter });
-    expect(r.executableId).toBe('openrouter/anthropic/claude-opus-4.8');
+    expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: haikuRoutes.openrouter });
+    expect(r.executableId).toBe('openrouter/anthropic/claude-haiku-4.5');
   });
 
   // (c) A user override of `opus` pointed at a non-divergent, non-curated

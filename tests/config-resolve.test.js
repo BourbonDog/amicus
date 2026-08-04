@@ -205,7 +205,7 @@ describe('Sidecar Config Module - Model Resolution', () => {
       jest.resetModules();
       const config = loadModule();
       const result = config.resolveModel('opus');
-      expect(result).toBe('anthropic/claude-opus-4-8');
+      expect(result).toBe('anthropic/claude-opus-5');
     });
 
     it('returns the stored bare id unchanged when DEEPSEEK_API_KEY is set but OPENROUTER_API_KEY is not', () => {

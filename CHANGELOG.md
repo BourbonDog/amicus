@@ -32,6 +32,25 @@ All notable changes to Amicus are documented here. Format follows
   `-sol*`, `-luna*`, and the unrelated `-codex` family; the pinned fallback
   moves to `openrouter/openai/gpt-5.6-terra`. Bare numeric ids stay matched as
   a within-family fallback.
+- **The curated `opus` pin fell behind the live catalog.** Both routes move from Claude
+  Opus 4.8 to Claude Opus 5: `openrouter/anthropic/claude-opus-5` plus the authored
+  direct `anthropic/claude-opus-5` (verified against the live catalog and Anthropic docs
+  2026-08-04 — authored, never derived; anthropic stays in `DIVERGENT_VENDORS`). Same
+  live price, so the `frontier` bench's pricing evidence is unchanged. The offline
+  `ANTHROPIC_MODELS` floor gains a matching `anthropic/claude-opus-5` row so keyless and
+  offline installs never report the shipped default stale. Opus 5's two gateway forms
+  coincide (no dotted version segment), so the dot-vs-dash regression guards now ride
+  `haiku`, the surviving divergent-form alias.
+
+### Removed
+
+- **The `devstral` alias** (owner ruling 2026-08-04). OpenRouter delisted the entire
+  devstral family — zero matches across the live catalog, any vendor — and the alias had
+  no other route. No served model is a devstral successor, so the alias was dropped
+  rather than retargeted ("no pinned guess is better than a wrong one"); `mistral`
+  remains the vendor's alias, and a stored `devstral` alias in user config is flagged
+  with replacement suggestions by `models --check` / `doctor`. This was the pin that made
+  `models --check` exit 1 — the v4.6.2 release-gate risk.
 
 ## [4.6.1] - 2026-08-03
 
