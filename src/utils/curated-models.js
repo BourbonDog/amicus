@@ -69,6 +69,12 @@ const FAMILIES = [
  * Refreshed against the live catalog 2026-06-11.
  */
 const CARDLESS = [
+  // gpt-pro: previous-generation premium pro ($30/$180 per Mtok). Still
+  // served — verified 2026-08-04 — but 5.6 shipped per-tier -pro siblings
+  // instead (sol-pro/terra-pro/luna-pro, each priced at its base tier), so
+  // expect this pin to sunset with the 5.5 line. Retargeting is an owner
+  // ruling (terra-pro to match `gpt`'s terra tracking vs sol-pro as the
+  // premium tier); see the tier-semantics comment on the `gpt` family above.
   { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.5-pro' } },
   // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
   { alias: 'codex', routes: { openrouter: 'openrouter/openai/gpt-5.3-codex' } },
