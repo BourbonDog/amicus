@@ -19,7 +19,7 @@ const { auditGatewayRoutes } = require('../utils/gateway-route-audit');
 const { buildCatalogDoc, buildAuditDoc } = require('../utils/result-schema');
 const { getFamilies } = require('../utils/curated-models');
 const { pickCurrent } = require('../utils/quick-picks');
-const { probeStoredAliases } = require('./models-probe');
+const { probeStoredAliases, selectStoredAliases } = require('./models-probe');
 const { DEFAULT_MAX_LEGS } = require('./fanout-validate');
 
 const CHECK_EXIT_CAP = 100;
@@ -94,9 +94,19 @@ async function runList(args) {
   return 0;
 }
 
+// v4.6.2 PR3 Task 4: shared --live skip line; reason doubles as the JSON probeSkipped slug.
+function fmtLiveSkipped(reason) {
+  return `--live skipped: ${reason} — nothing was probed`;
+}
+
 async function runRefresh(args) {
   const models = await refreshCatalog();
   const { fetchedAt, lastRefreshAttempt, lastRefreshError } = await getCatalogInfo({ maxAgeMs: Number.POSITIVE_INFINITY });
+  // --refresh short-circuits --check below (args.check is guaranteed true here) — must announce, not silently skip.
+  if (args.live) {
+    const line = fmtLiveSkipped('refresh-precedes-check');
+    (args.json ? process.stderr : process.stdout).write(line + '\n');
+  }
   if (args.json) {
     process.stdout.write(JSON.stringify(buildCatalogDoc({
       models, fetchedAt, refreshed: true, lastRefreshAttempt, lastRefreshError
@@ -155,12 +165,14 @@ async function runCheck(args) {
   const catalogInfo = await getCatalogInfo();
   const catalog = catalogInfo.models;
   if (!catalog || catalog.length === 0) {
+    const probeSkipped = args.live ? 'catalog-unavailable' : null;
     if (args.json) {
       process.stdout.write(JSON.stringify(buildAuditDoc({
-        stale: [], catalogAvailable: false
+        stale: [], catalogAvailable: false, probeSkipped
       }), null, 2) + '\n');
     } else {
       process.stdout.write('Catalog unavailable (offline or no providers reachable); cannot check.\n');
+      if (probeSkipped) { process.stdout.write(fmtLiveSkipped(probeSkipped) + '\n'); }
     }
     return 0;
   }
@@ -186,7 +198,7 @@ async function runCheck(args) {
   // every row to a generic error, losing the real reason).
   let probeResults = [];
   if (args.live) {
-    const storedCount = sources.filter(s => s.source === 'user-config').length;
+    const storedCount = selectStoredAliases(sources).length;
     const envCap = Number(process.env.AMICUS_FANOUT_MAX_LEGS);
     const maxLegs = (Number.isInteger(envCap) && envCap > 0) ? envCap : DEFAULT_MAX_LEGS;
     if (storedCount > maxLegs) {

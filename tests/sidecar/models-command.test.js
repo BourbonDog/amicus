@@ -41,6 +41,10 @@ function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindin
   if (probeStoredAliases) {
     jest.doMock('../../src/sidecar/models-probe', () => ({
       probeStoredAliases,
+      // Task 4: models.js's cap pre-check now imports this real predicate
+      // from models-probe.js instead of inlining its own filter — mock it
+      // with the same logic so the mocked module stays a faithful stand-in.
+      selectStoredAliases: (sources) => sources.filter(s => s.source === 'user-config'),
       PROBE_WINDOW_MS: 30000,
       PROBE_PROMPT: 'Reply with exactly: OK',
     }));
@@ -538,13 +542,23 @@ describe('amicus models', () => {
       expect(doc.driftedCount).toBe(0);
     });
 
-    it('--json without --live carries the additive default (probe: [], probeCount: 0)', async () => {
+    it('--json without --live carries the additive default (probe: [], probeCount: 0, probeSkipped: null)', async () => {
       const { handleModels } = loadHandler({ sources: [], stale: [] });
       const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
       expect(code).toBe(0);
       const doc = JSON.parse(out);
       expect(doc.probe).toEqual([]);
       expect(doc.probeCount).toBe(0);
+      expect(doc.probeSkipped).toBeNull();
+    });
+
+    it('--json WITH --live and the probe running: probeSkipped stays null (only set when the probe does NOT run)', async () => {
+      const probeStoredAliases = jest.fn(async () => ({ results: threeOutcomes, waveId: 'w9' }));
+      const { handleModels } = loadHandler({ sources: [], stale: [], probeStoredAliases });
+      const { out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, live: true, json: true }));
+      const doc = JSON.parse(out);
+      expect(doc.probeSkipped).toBeNull();
     });
 
     it('zero stored aliases: probe module returns empty results -> "no stored aliases to probe", exit unaffected', async () => {
@@ -599,7 +613,13 @@ describe('amicus models', () => {
 
       it('stored count exactly AT the cap is allowed through (only > cap errors)', async () => {
         const tenStored = manyStored.slice(0, 10);
-        const probeStoredAliases = jest.fn(async () => ({ results: [], waveId: null }));
+        // Task 4 review carry-in (Minor 5): the fixture used to claim 10
+        // stored aliases while mocking an empty `results: []` — untruthful,
+        // since a real probe returns one row per stored alias. Ten stored in,
+        // ten SERVED rows out, keeping this test's own assertions unchanged.
+        const tenResults = tenStored.map(s => (
+          { alias: s.alias, target: s.model, outcome: 'served', detail: null, cost: 0.0001 }));
+        const probeStoredAliases = jest.fn(async () => ({ results: tenResults, waveId: 'wcap' }));
         const { handleModels } = loadHandler({ sources: tenStored, stale: [], probeStoredAliases });
         const { code } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
         expect(code).toBe(0);
@@ -607,14 +627,96 @@ describe('amicus models', () => {
       });
     });
 
-    it('catalog unavailable: --live is a no-op (byte-identical to no --live), probe never called', async () => {
+    // Task 3 review (Important 1): this test used to pin --live as a SILENT
+    // no-op here ("byte-identical to no --live") — updated, not extended,
+    // to assert the new announcement instead (per the review's explicit
+    // instruction not to merely add a sibling test alongside the old one).
+    it('catalog unavailable + --live: announces the skip instead of silently doing nothing, probe never called', async () => {
       const probeStoredAliases = jest.fn();
       const { handleModels } = loadHandler({ catalog: [], probeStoredAliases });
       const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, live: true }));
       expect(code).toBe(0);
       expect(out).toContain('Catalog unavailable');
+      expect(out).toContain('--live skipped: catalog-unavailable — nothing was probed');
       expect(out).not.toContain('Live probe');
       expect(probeStoredAliases).not.toHaveBeenCalled();
+    });
+
+    it('catalog unavailable WITHOUT --live: unchanged, no skip line (the announcement is --live-gated)', async () => {
+      const { handleModels } = loadHandler({ catalog: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true }));
+      expect(code).toBe(0);
+      expect(out).toContain('Catalog unavailable');
+      expect(out).not.toContain('--live skipped');
+    });
+
+    it('catalog unavailable + --live + --json: doc gets probeSkipped "catalog-unavailable"', async () => {
+      const probeStoredAliases = jest.fn();
+      const { handleModels } = loadHandler({ catalog: [], probeStoredAliases });
+      const { code, out } = await captureStdout(() =>
+        handleModels({ _: ['models'], check: true, live: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.catalogAvailable).toBe(false);
+      expect(doc.probeSkipped).toBe('catalog-unavailable');
+      expect(probeStoredAliases).not.toHaveBeenCalled();
+    });
+
+    it('catalog unavailable + --json (no --live): probeSkipped is null (additive default, drifted precedent)', async () => {
+      const { handleModels } = loadHandler({ catalog: [] });
+      const { code, out } = await captureStdout(() => handleModels({ _: ['models'], check: true, json: true }));
+      expect(code).toBe(0);
+      const doc = JSON.parse(out);
+      expect(doc.catalogAvailable).toBe(false);
+      expect(doc.probeSkipped).toBeNull();
+    });
+
+    // Task 3 review (Important 1 / Minor 4): --refresh short-circuits --check
+    // in handleModels, so `--refresh --check --live` used to reach runRefresh
+    // and silently never probe anything — the second silent-skip path named
+    // by the review, distinct from the catalog-unavailable one above.
+    describe('--refresh --check --live: the refresh short-circuit', () => {
+      function captureBoth(fn) {
+        const outWrites = []; const errWrites = [];
+        const origOut = process.stdout.write; const origErr = process.stderr.write;
+        process.stdout.write = (s) => { outWrites.push(String(s)); return true; };
+        process.stderr.write = (s) => { errWrites.push(String(s)); return true; };
+        return Promise.resolve().then(fn).finally(() => {
+          process.stdout.write = origOut; process.stderr.write = origErr;
+        }).then(code => ({ code, out: outWrites.join(''), err: errWrites.join('') }));
+      }
+
+      it('non-json: still refreshes, announces the skip, never calls the probe', async () => {
+        const probeStoredAliases = jest.fn();
+        const { handleModels } = loadHandler({ probeStoredAliases });
+        const { code, out } = await captureStdout(() =>
+          handleModels({ _: ['models'], refresh: true, check: true, live: true }));
+        expect(code).toBe(0);
+        expect(out).toContain('Refreshed catalog: 2 models.');
+        expect(out).toContain('--live skipped: refresh-precedes-check — nothing was probed');
+        expect(probeStoredAliases).not.toHaveBeenCalled();
+      });
+
+      it('--json: stdout stays valid JSON (model-catalog doc); the skip line goes to stderr instead', async () => {
+        const probeStoredAliases = jest.fn();
+        const { handleModels } = loadHandler({ probeStoredAliases });
+        const { code, out, err } = await captureBoth(() =>
+          handleModels({ _: ['models'], refresh: true, check: true, live: true, json: true }));
+        expect(code).toBe(0);
+        const doc = JSON.parse(out); // throws if stdout was corrupted by stray text
+        expect(doc.type).toBe('model-catalog');
+        expect(err).toContain('--live skipped: refresh-precedes-check — nothing was probed');
+        expect(probeStoredAliases).not.toHaveBeenCalled();
+      });
+
+      it('--refresh --check WITHOUT --live: unchanged, no skip line (regression)', async () => {
+        const { handleModels } = loadHandler();
+        const { code, out } = await captureStdout(() =>
+          handleModels({ _: ['models'], refresh: true, check: true }));
+        expect(code).toBe(0);
+        expect(out).toContain('Refreshed catalog: 2 models.');
+        expect(out).not.toContain('--live skipped');
+      });
     });
 
     it('usage text documents --live for models --check', () => {

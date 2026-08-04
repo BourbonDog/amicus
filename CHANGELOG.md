@@ -25,6 +25,15 @@ All notable changes to Amicus are documented here. Format follows
 - **`models --check` and the `doctor` aliases row now flag stored-alias drift**: a stored alias
   that's still catalog-listed but no longer matches any route its family currently resolves to
   (the v4.6.1 `gemini` release-gate class), with the exact `setup --add-alias` refresh command.
+- **`models --check` gains an opt-in `--live` probe.** `--check --live` sends one real, tiny
+  request to every *stored* alias (curated defaults are out of scope) on a single quiet fan-out
+  wave and reports `SERVED` / `SILENT` (`accepted-but-silent`) / `ERROR` per alias — the
+  on-demand version of the check that would have caught the v4.6.1 `gemini` incident (a
+  catalog-listed model no longer actually served). Spends real money: one tiny leg per stored
+  alias. Non-served outcomes fold into the existing exit code; a stored-alias count above the
+  fan-out leg cap (`AMICUS_FANOUT_MAX_LEGS`) fails fast before anything is probed. When the
+  probe can't run (catalog unavailable, or `--refresh` also passed), Amicus announces the skip
+  instead of silently dropping the flag.
 
 ### Fixed
 

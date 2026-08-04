@@ -41,6 +41,18 @@ function classifyLeg(leg) {
 }
 
 /**
+ * Stored (user-config) aliases only — the `--live` probe's scope (spec §6):
+ * defaults/curated-route rows follow the catalog by construction and have no
+ * "was it actually served" question for a live probe to answer. Exported so
+ * the CLI's cap pre-check (models.js) and this module share one predicate.
+ * @param {Array<{source:string}>} sources collectAliasSources() output
+ * @returns {Array<{alias:string,model:string,source:string}>}
+ */
+function selectStoredAliases(sources) {
+  return sources.filter(s => s.source === 'user-config');
+}
+
+/**
  * Probe every STORED alias with one ordinary engine leg (real session dirs,
  * real spend rows — D5) on one quiet fanout wave. Returns per-alias outcomes;
  * never called without --live (the spend gate lives in the CLI layer).
@@ -52,10 +64,7 @@ async function probeStoredAliases(opts = {}, deps = {}) {
   const collectAliasSources = deps.collectAliasSources || require('../utils/alias-audit').collectAliasSources;
   const runFanout = deps.runFanout || require('./fanout').runFanout;
 
-  // Scope: stored aliases only (spec §6) — defaults/curated-route rows follow
-  // the catalog by construction and have no "was it actually served" question
-  // for a live probe to answer.
-  const stored = collectAliasSources().filter(s => s.source === 'user-config');
+  const stored = selectStoredAliases(collectAliasSources());
   if (stored.length === 0) { return { results: [], waveId: null }; }
 
   // runFanout's `models` is the same comma-separated STRING the CLI --models
@@ -95,4 +104,4 @@ async function probeStoredAliases(opts = {}, deps = {}) {
   return { results, waveId: (wave && wave.waveId) || null };
 }
 
-module.exports = { probeStoredAliases, PROBE_WINDOW_MS, PROBE_PROMPT };
+module.exports = { probeStoredAliases, selectStoredAliases, PROBE_WINDOW_MS, PROBE_PROMPT };

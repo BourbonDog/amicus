@@ -16,6 +16,7 @@
     "driftedCount": { "type": "number" },
     "drifted": { "type": "array", "items": { "type": "object" } },
     "probeCount": { "type": "number" },
-    "probe": { "type": "array", "items": { "type": "object" } }
+    "probe": { "type": "array", "items": { "type": "object" } },
+    "probeSkipped": { "type": ["string", "null"] }
   }
 }
