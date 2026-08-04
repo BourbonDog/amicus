@@ -123,3 +123,38 @@ D8 extraction-first ✓ (T1, behavior-identical bar with zero-test-edit discipli
 zero-usable-legs rule ✓ (T2 contract + recovered-seat test); blind masking ✓; record-shape
 verification mandated before design ✓; ES5/no-var zone respected ✓; renderer CSP/no-require
 constraint stated ✓; the 2039b2d1 fixture grounds tests in a real run shape ✓.
+
+## Execution deviations (appendix, recorded at Task 4 — the gitignored ledger is not durable)
+
+1. **T1: `workspace-panels.js` stayed at 295 (now 294), not ≤250.** The plan mis-measured: the
+   file's entire seats-specific code was the 6-line `renderSeatsPanel` orchestrator (the real
+   seats pipeline is `live-model.js` derivation → `workspace-render.js` DOM). Nothing more could
+   move behavior-identically; spec D8's mandate (extraction-first, ES5, new file for the feature)
+   is satisfied. Relief extraction rides the house "next edit extracts first" rule. Lesson:
+   size-relief targets in plans must be measured, not assumed.
+2. **T2 (review-caught, controller-ruled): dead rows are terminal-gated.** The task review traced
+   a flash-then-vanish — rows painted at open were wiped by the live loop's first tick
+   (`renderSeats` leaver-removal). The gate reuses `startLiveLoop`'s own `TERMINAL_STATUSES`
+   predicate. Mid-poll appearance on live runs (threading `degrades`/`seatLoss` through
+   `workspace:get-live` + `applyLive`) is deferred to an owner ruling — near-cap
+   `workspace-verbs.js` + IPC scope.
+3. **T4: the plan's zero-spend smoke run `2039b2d1` no longer exists** (destroyed with its
+   worktree; no surviving run anywhere carries a dead-seat shape — `degrades[]` persistence is
+   v4.6+). Recreated live: run `12c96b6b` (bench qwen-flash/glm + critic on a dead
+   `anthropic/claude-haiku-4-5` ref that died at catalog validation for $0, SL-2 retry also dead,
+   exit 2, $0.0488 known spend).
+4. **The recreated smoke caught a real defect the suite could not** (fixture-blindness): blind
+   mode showed the dead seat's raw name — `labelByModel` only carries models that reviewed, and
+   the e2e fixture had injected a label. Fixed scoped to the dead-row path (`(masked)` on the
+   null-label case; `seatCells`' RN-9 load-bearing fallback untouched), RED-first at both test
+   layers (`b5e8608`), smoke re-driven green on the final commit.
+5. **Final-review hardening (`c5e4673`):** run-detail IPC pass-through pin (degrades/seatLoss
+   must survive into `getRunDetail`'s payload), blind-toggle e2e through the real listener,
+   comment reconciliations. Whole-branch verdicts: "Ready to merge? Yes" (twice, post-fix).
+6. **Minors disposition:** fixed in-branch = panels wrap artifact, seats header contradiction,
+   stale app.js load-order comment; backlog (PR body carries the list) = `isTerminal` helper
+   (4 literal sites), `seatCellClass` helper (3 copies), role-aware live map (F37 direction),
+   `verdict.degrades` fallback + `seatLoss.deadBenchSeats` rendering, critic role cell,
+   `openRun` stale-response chip (pre-existing); dropped = plain-object key hazard (repo-wide
+   idiom), CHANGELOG retry-parenthetical (verified accurate), flash-mechanics test (gate
+   contract is the pin).

@@ -37,7 +37,8 @@ All notable changes to Amicus are documented here. Format follows
 - **The Council Workspace seats panel now shows seats a run announced dead.** Once a run
   reaches a terminal status, the **Seats** table appends a row for every seat with zero usable
   legs — derived from `run.json`'s `degrades[]` (dead-leg/dead-wave records) and the critic's
-  `verdict.seatLoss` — with a blind-maskable model name, `did not review — retried once` (the
+  `verdict.seatLoss` — with a blind-maskable model name (a dead seat has no anonymity label, so
+  blind mode renders `(masked)` rather than leak the raw id), `did not review — retried once` (the
   degrade recorded a `retryWaveId`) or plain `did not review`, no cost cell, and muted seat-dead
   styling. Dead-seat rows are terminal-gated on purpose: they never appear mid-poll on a
   still-running run, only once the run is done.
