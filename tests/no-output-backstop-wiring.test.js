@@ -188,3 +188,41 @@ describe('fix wave: the backstop and the ordinary --timeout must not both fire f
     expect(mockAbortSession).toHaveBeenCalledTimes(1);
   }, 20000);
 });
+
+/**
+ * Amendment wave — controller live-smoke finding. Field evidence: with an
+ * accepting-but-silent endpoint, the leg hung 6+ minutes at the prompt-send
+ * step, 0 messages, backstop never fired. Root cause: `await sendPromptAsync`
+ * (before this amendment) was awaited BEFORE the backstop was even created —
+ * OpenCode's own prompt handler can block on the upstream provider call
+ * before ever returning, so a silently-accepting endpoint hangs THIS await,
+ * upstream of every mechanism (including the backstop) that was supposed to
+ * catch it. The fix arms the backstop before the send and races the send
+ * itself against the same deadline.
+ */
+describe('amendment: the backstop is armed before the prompt send, not after', () => {
+  test('a prompt-send call that never resolves (silent-endpoint shape) fails within the backstop window, not the timeout', async () => {
+    // The exact field-observed shape: OpenCode's own prompt-send handler
+    // blocks on the upstream provider call before ever returning, so
+    // sendPromptAsync itself never resolves OR rejects.
+    mockSendPromptAsync.mockImplementation(() => new Promise(() => {}));
+    mockGetMessages.mockResolvedValue([]);
+    const started = Date.now();
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'silentsend1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200 });
+
+    // Fired at the backstop, nowhere near the 60s --timeout, and fast enough
+    // that this is obviously NOT jest's own test-timeout catching a hang.
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(result.completed).toBe(false);
+    expect(result.timedOut).toBeFalsy();
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(statusFromResult(result)).toBe('error');
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+    expect(mockAbortSession.mock.calls[0][1]).toBe('ses_parent');
+    // The poll loop must never have run at all — the leg died before it
+    // started polling (point 4 of the amendment: "the loop may be skipped").
+    expect(mockGetMessages).not.toHaveBeenCalled();
+  }, 20000);
+});
