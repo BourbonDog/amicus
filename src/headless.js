@@ -454,25 +454,79 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       promptOptions.reasoning = reasoning;
     }
 
-    // Send prompt asynchronously (returns immediately, we poll for results)
+    // v4.6.2 PR2 amendment (controller live smoke, field evidence): arm BEFORE
+    // the prompt send, not after. OpenCode's prompt-send handler can itself
+    // block on the upstream provider call before ever returning — a silently-
+    // accepting endpoint (the v4.6.1 gemini class) hung the very next line's
+    // await for 6+ minutes with the backstop never even created yet, upstream
+    // of every mechanism that was supposed to catch it. `startedAt` here means
+    // "time since the leg asked for output". Disarmed permanently by the first
+    // SUBSTANTIVE-activity tick in the poll loop below (output/tool/result/
+    // reasoning/settle — NOT the placeholder-compatible message/assistant-id
+    // signals; see substantiveActivity); 0 (or negative) disables — the
+    // send itself is unbounded in that case too (see withTimeout below).
+    const { resolveNoOutputBackstopMs, createNoOutputBackstop } = require('./utils/no-output-backstop');
+    const noOutputBackstopMs = options.noOutputBackstopMs !== undefined
+      ? options.noOutputBackstopMs : resolveNoOutputBackstopMs(options._env);
+    const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
+    let backstopFired = false;
+    // Single source for the reason string so the pre-send firing site below and
+    // the per-poll firing site further down (still ticking the SAME instance)
+    // can never drift apart.
+    const noOutputBackstopReason = () => 'NO_OUTPUT_BACKSTOP: model produced no '
+      + `output, reasoning, or tool calls in ${Math.round(noOutputBackstopMs / 1000)}s `
+      + '— likely a listed-but-not-serving model or a dead endpoint';
+
+    // Send prompt asynchronously (returns immediately, we poll for results) —
+    // bounded by the backstop: an endpoint that accepts but never answers must
+    // not hang this await the way it hung the field-observed leg.
     logger.info('Sending prompt to OpenCode', {
       sessionId,
       model,
       agent: promptOptions.agent,
       userMessageLength: userMessage.length
     });
-    const promptResult = await sendPromptAsync(client, sessionId, promptOptions);
-    writeProgress(sessionDir, 'prompt_sent');
-    logger.info('Prompt sent successfully, entering polling loop', {
-      sessionId,
-      timeoutMs
-    });
+    const sendPromptLabel = 'sendPromptAsync';
+    const sendPromptPromise = sendPromptAsync(client, sessionId, promptOptions);
+    let promptResult = null;
+    try {
+      promptResult = await withTimeout(sendPromptPromise, noOutputBackstopMs, sendPromptLabel);
+      writeProgress(sessionDir, 'prompt_sent');
+      logger.info('Prompt sent successfully, entering polling loop', {
+        sessionId,
+        timeoutMs
+      });
+    } catch (sendErr) {
+      const isBackstopTimeout = noOutputBackstopMs > 0
+        && sendErr.message === `${sendPromptLabel} timed out after ${noOutputBackstopMs}ms`;
+      if (!isBackstopTimeout) { throw sendErr; } // a genuine sendPromptAsync failure — unchanged behavior
+      // The backstop deadline won the race — OpenCode never returned from the
+      // prompt-send call at all; the "accepts, never responds" shape dies
+      // upstream of the poll loop entirely. Swallow the orphaned promise so it
+      // can never surface as an unhandled rejection whenever/if it eventually
+      // settles on its own (Promise.race already subscribes each racer
+      // internally, so this is defensive belt-and-suspenders, not load-bearing
+      // — verified empirically before relying on it).
+      sendPromptPromise.catch(() => {});
+      backstopFired = true;
+      logger.warn('No-output backstop fired before the prompt send resolved', {
+        taskId, sessionId, backstopMs: noOutputBackstopMs,
+      });
+    }
 
     const mirror = createMirrorState();
     let completed = false;
     let timedOut = false;
     let aborted = false;
     let sessionError = null; // Captures model/SDK errors from assistant messages
+
+    // Seed sessionError exactly like the #37 boundary-provider-error case right
+    // below does, so the run ends with a usable reason (the poll loop is
+    // skipped entirely on this path — see the while-condition and the
+    // backstop-abort block further down).
+    if (backstopFired) {
+      sessionError = noOutputBackstopReason();
+    }
 
     // Hard provider failure detected at the client boundary (#37): a non-2xx /
     // 402 from promptAsync surfaces here even when the server never emits an
@@ -573,7 +627,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
       return false;
     };
 
-    while (!completed && (Date.now() - startTime) < timeoutMs) {
+    // `!backstopFired`: a no-op for the pre-existing mid-loop firing path (that
+    // branch already `break`s the instant it sets backstopFired, so this outer
+    // condition is never re-checked with it true from there) — it only matters
+    // for the NEW pre-send-timeout path above, where backstopFired can already
+    // be true before the loop ever starts. Skips the loop entirely rather than
+    // burning one wasted pollIntervalMs sleep before falling through to the
+    // post-loop abort block below.
+    while (!completed && !backstopFired && (Date.now() - startTime) < timeoutMs) {
       watchdog.touch();
       await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
 
@@ -729,6 +790,26 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           || newAssistant || reasoningActivity || settleActivity;
         if (progressed) { lastProgressAt = Date.now(); }
 
+        // v4.6.2 PR2 amendment 2 (controller live smoke + debug trace): the
+        // backstop disarms only on SUBSTANTIVE activity — output, reasoning,
+        // or tool motion (the spec's "first token/reasoning/tool_use").
+        // messageActivity/newAssistant are excluded: OpenCode creates an empty
+        // assistant placeholder on prompt ACCEPTANCE, which is precisely the
+        // accepted-but-not-serving bookkeeping the backstop must not trust.
+        // `progressed` itself (and every stall/idle consumer of it above) is
+        // deliberately untouched — this is a narrower, backstop-only signal.
+        const substantiveActivity = outputGrew || toolActivity || resultActivity
+          || reasoningActivity || settleActivity;
+
+        // No-output backstop: one tick per poll. Fired is terminal — break the
+        // loop; the post-loop block below mirrors the timeout path.
+        if (noOutputBackstop.tick(substantiveActivity, Date.now()) === 'fired') {
+          backstopFired = true;
+          sessionError = noOutputBackstopReason();
+          logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstopMs });
+          break;
+        }
+
         // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise
         // burns the full --timeout with zero output — the stable-poll idle gate above
         // requires mirror.output.length > 0, which a pre-text wedge never satisfies.
@@ -832,7 +913,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     });
 
     // Handle timeout
-    if (!completed && !aborted && (Date.now() - startTime) >= timeoutMs) {
+    // v4.6.2 PR2 fix wave: `!backstopFired` — the backstop's own break can
+    // land after the post-break poll tail (getMessages + mirror processing
+    // already inside that iteration) has ALSO crossed timeoutMs when the two
+    // thresholds are configured close together, so this block must yield
+    // once the backstop already ended the leg. Exactly one terminal-timing
+    // signal per leg: statusFromResult() (src/utils/result-schema.js) checks
+    // timedOut BEFORE error, so a leg carrying both would misreport as an
+    // ordinary 'timeout' instead of the distinctly-named backstop reason.
+    if (!completed && !aborted && !backstopFired && (Date.now() - startTime) >= timeoutMs) {
       timedOut = true;
       logger.warn('Task timed out', { taskId, elapsed: Date.now() - startTime });
 
@@ -843,6 +932,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         logger.info('Session aborted after timeout', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after timeout', { error: abortErr.message });
+      }
+    }
+
+    // Backstop fired: abort the OpenCode session exactly like the timeout path
+    // (the agent keeps running otherwise). The leg's error already carries the
+    // NO_OUTPUT_BACKSTOP reason; no separate degrade machinery — the ordinary
+    // dead-leg path (SL-2 retry, sink announcement, exit codes) inherits it.
+    if (backstopFired && !completed && !aborted) {
+      try {
+        const { abortSession } = require('./opencode-client');
+        await abortSession(client, sessionId, ...dirArgs);
+        logger.info('Session aborted after no-output backstop', { taskId, sessionId });
+      } catch (abortErr) {
+        logger.warn('Failed to abort session after backstop', { error: abortErr.message });
       }
     }
 

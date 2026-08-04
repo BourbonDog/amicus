@@ -7,6 +7,12 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Added
 
+- **Headless legs now fail fast when a model produces nothing.** A leg that produces zero
+  output, reasoning, or tool calls for `AMICUS_NO_OUTPUT_BACKSTOP_MS` (120 s default,
+  env-tunable) is failed with `NO_OUTPUT_BACKSTOP: …` instead of burning the full `--timeout`
+  to learn nothing — the "accepted but not serving" class. Disarms permanently on the first
+  sign of activity, so slow cold-prefill local models are unaffected; `0` (or negative)
+  disables it.
 - **`doctor` gains a new `anthropic-base-url` row.** Prints the exact `ANTHROPIC_BASE_URL` the
   process sees and how it will be treated — the host-form value can live only in a parent
   process's environment, so the seen value is the only diagnostic there is.

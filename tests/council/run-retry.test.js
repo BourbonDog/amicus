@@ -431,3 +431,52 @@ describe('SL-2 Task 6: sink invariant (source pin)', () => {
     expect(src).not.toMatch(/degraded\s*\.\s*value\s*=(?!=)/);
   });
 });
+
+describe('v4.6.2 PR2 Task 3: backstop reason inherits the SL-2 retry + degrade chain (pin)', () => {
+  // Consumes the reason-string contract from PR2 Task 2 (src/headless.js's
+  // no-output backstop, 120s default). This suite is generic over error
+  // strings (see the 'leg dies' tests above, which use short fixtures like
+  // 'boom') -- this pin proves that genericity holds for the real backstop
+  // text end to end: the SL-2 retry launch, the enriched both-attempts
+  // dead-leg record, and degraded.value (exit-2 semantics). No production
+  // code is touched by this task.
+  const BACKSTOP = 'NO_OUTPUT_BACKSTOP: model produced no output, reasoning, or tool calls '
+    + 'in 120s — likely a listed-but-not-serving model or a dead endpoint';
+
+  test('a leg dead with the NO_OUTPUT_BACKSTOP reason retries once (SL-2); the retry also dies; ' +
+    'the dead-leg note carries the reason; degraded.value flips (exit-2)', async () => {
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', BACKSTOP)] }, exitCode: 0 });
+    const ctx = fakeCtx({}, { launchWave });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('b', 'error', BACKSTOP)], counts: COUNTS });
+
+    // (1) the SL-2 retry launches (existing retry-fired assertion pattern).
+    expect(launchWave).toHaveBeenCalledTimes(1);
+    expect(launchWave.mock.calls[0][0]).toMatchObject(
+      { waveId: 'r1-s1r1', retryOfWaveId: 'r1-s1', models: ['b'] });
+
+    // (2) the retry also dies -> the enriched both-attempts dead-leg record's
+    // why carries the backstop reason verbatim.
+    expect(ctx._notes).toEqual([]); // NEVER notes degrades itself (sink invariant)
+    expect(r.recoveredLegs).toEqual([]);
+    expect(r.stillDeadLegs.map(l => l.modelInput)).toEqual(['b']);
+    expect(r.stillDeadNotes).toHaveLength(1);
+    expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg', what: 'seat b did not review' });
+    expect(r.stillDeadNotes[0].why).toContain('NO_OUTPUT_BACKSTOP');
+    expect(r.stillDeadNotes[0].why).toBe(
+      `the leg ended 'error': ${BACKSTOP} with no usable output; its once-only retry also ended 'error'`);
+    expect(r.stillDeadNotes[0].data.reason).toBe(BACKSTOP);
+
+    // (3) degraded.value flips (exit-2 semantics). run-retry.js never notes a
+    // degrade itself (see the sink-invariant pin above); in production
+    // run-stages.js:175 feeds stillDeadNotes to the REAL degrade sink. Wire
+    // that same sink here (not the fakeCtx stub) to prove the chain actually
+    // reaches exit-2, not just that the note LOOKS right.
+    const { createDegradeSink } = require('../../src/council/run-degrade');
+    const degraded = { value: false };
+    const sink = createDegradeSink({ runDir: ctx.o.runDir, degraded, write: () => {} });
+    for (const rec of r.stillDeadNotes) { sink.note(rec); }
+    expect(degraded.value).toBe(true);
+  });
+});

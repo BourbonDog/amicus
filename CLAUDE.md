@@ -257,6 +257,7 @@ src/
 │   ├── model-input-default.js
 │   ├── model-tiers.js  # Per-vendor cost tiers (economy/balanced/frontier) + resolution against the
 │   ├── model-validator.js  # Model Validator
+│   ├── no-output-backstop.js  # v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces
 │   ├── node-version-guard.js
 │   ├── path-fence.js  # Shared realpath-containment fence.
 │   ├── path-setup.js
@@ -612,6 +613,7 @@ evals/
 | `utils/model-input-default.js` |  | `resolveModelInputOrDefault()` |
 | `utils/model-tiers.js` | Per-vendor cost tiers (economy/balanced/frontier) + resolution against the | `TIERS()`, `TIER_ORDER()`, `resolveTier()` |
 | `utils/model-validator.js` | Model Validator | `filterRelevantModels()`, `normalizeModelId()`, `validateAgainstCatalog()`, `warnIfNotInCatalog()`, `promptRouteSelection()` |
+| `utils/no-output-backstop.js` | v4.6.2 PR2 (spec §5, D4): fail a headless leg fast when the model produces | `resolveNoOutputBackstopMs()`, `createNoOutputBackstop()`, `DEFAULT_NO_OUTPUT_BACKSTOP_MS()` |
 | `utils/node-version-guard.js` |  | `checkNodeVersion()`, `MIN_NODE()` |
 | `utils/path-fence.js` | Shared realpath-containment fence. | `isRealpathContained()`, `containsOnDisk()` |
 | `utils/path-setup.js` |  | `ensureNodeModulesBinInPath()`, `hasOpencodeBinary()`, `opencodeRoots()` |
