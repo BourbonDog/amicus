@@ -188,6 +188,18 @@ For full headless configuration, see [docs/configuration.md](./configuration.md)
 
 ---
 
+## Headless Leg Fails with `NO_OUTPUT_BACKSTOP`
+
+**Symptom:** A headless leg (`amicus start --no-ui`, or one leg of a `fanout`/council run) fails with an error starting `NO_OUTPUT_BACKSTOP: model produced no output, reasoning, or tool calls in Ns`.
+
+**Cause:** The model endpoint accepted the request but produced nothing — no output, reasoning, or tool calls — for the entire backstop window (120 s by default). This is the "accepted but not serving" class: usually a dead or misconfigured endpoint, or a catalog-listed model that's no longer actually being served upstream.
+
+**Confirm:** `amicus models --check` — audits your configured aliases against the live catalog and flags drift/staleness. A model that still resolves locally but has quietly been retired upstream is exactly this failure mode.
+
+**Fix:** Check the alias's target (`amicus models --search <term>` to find the current id, then re-point the alias) — this is the common case. Raise `AMICUS_NO_OUTPUT_BACKSTOP_MS` only if a model legitimately needs more than 120 s to produce its first token; see [docs/configuration.md § Headless Poller Tuning](./configuration.md#headless-poller-tuning).
+
+---
+
 ## Multiple Active Sessions / Wrong Session Picked Up
 
 **Symptom:** Amicus resumes or reads from the wrong session.

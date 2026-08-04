@@ -5,6 +5,15 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Headless legs now fail fast when a model produces nothing.** A leg that produces zero
+  output, reasoning, or tool calls for `AMICUS_NO_OUTPUT_BACKSTOP_MS` (120 s default,
+  env-tunable) is failed with `NO_OUTPUT_BACKSTOP: …` instead of burning the full `--timeout`
+  to learn nothing — the "accepted but not serving" class. Disarms permanently on the first
+  sign of activity, so slow cold-prefill local models are unaffected; `0` (or negative)
+  disables it.
+
 ## [4.6.1] - 2026-08-03
 
 ### Added
