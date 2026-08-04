@@ -226,3 +226,74 @@ describe('amendment: the backstop is armed before the prompt send, not after', (
     expect(mockGetMessages).not.toHaveBeenCalled();
   }, 20000);
 });
+
+/**
+ * Amendment wave 2 — controller live-smoke finding, root-caused with debug
+ * logs (LOG_LEVEL=debug, silent-sink run): pollCount climbed 13->21,
+ * messageCount:2, hasAssistantMsg:true, outputLength:0 for 42+ seconds,
+ * backstop=10s never fired. OpenCode creates an EMPTY assistant-message
+ * placeholder on prompt ACCEPTANCE (see the pre-existing comment a few lines
+ * above the `progressed` computation: "the SDK creates an empty
+ * assistant-message placeholder on promptAsync that is NOT a finished
+ * response"). The original wiring ticked the backstop with `progressed`,
+ * which includes messageActivity/newAssistant — both fire once for that
+ * placeholder, permanently disarming the backstop on the exact bookkeeping
+ * artifact of the accepted-but-not-serving shape it exists to catch. Spec §5
+ * says "disarms permanently on first token/reasoning/tool_use" — the plan
+ * reused `progressed` wholesale, which is the drift this wave corrects.
+ */
+describe('amendment 2: the backstop disarms only on SUBSTANTIVE activity, not the empty assistant placeholder', () => {
+  test('an empty assistant-message placeholder (message/newAssistant activity, zero output/reasoning/tool parts) does NOT disarm the backstop', async () => {
+    // Constant across every poll: OpenCode's placeholder appears once (message
+    // count 0->1, assistant id null->'placeholder1' on poll 1) and then NEVER
+    // changes again — no text, no reasoning, no tool parts, ever.
+    mockGetMessages.mockResolvedValue([{
+      info: { role: 'assistant', id: 'placeholder1', time: { created: 1 } },
+      parts: [],
+    }]);
+    const started = Date.now();
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'placeholder1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: 200 });
+
+    // Fired at the backstop, not the 60s --timeout — proves messageActivity/
+    // newAssistant no longer disarm it.
+    expect(Date.now() - started).toBeLessThan(10000);
+    expect(result.completed).toBe(false);
+    expect(result.timedOut).toBeFalsy();
+    expect(result.error).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(result.error).toMatch(/no output, reasoning, or tool calls/);
+    expect(statusFromResult(result)).toBe('error');
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+  }, 20000);
+
+  test('real reasoning growth on a LATER poll (isolated from the placeholder\'s one-time message/newAssistant blip) still disarms it', async () => {
+    // Poll 1: the empty placeholder appears (message/newAssistant activity,
+    // no reasoning). Poll 2+: reasoning starts streaming into that SAME
+    // message — messageCount and the assistant id are now stable (both
+    // false), so ONLY reasoningActivity is true. This isolates
+    // substantiveActivity's reasoning branch from messageActivity/
+    // newAssistant, proving the fix disarms on the intended signal rather
+    // than by accident from the placeholder blip (which the OTHER amendment-2
+    // test above proves, on its own, no longer disarms anything).
+    let poll = 0;
+    mockGetMessages.mockImplementation(() => {
+      poll += 1;
+      const parts = poll === 1 ? [] : [{ id: 'r1', type: 'reasoning', text: 'thinking' }];
+      return Promise.resolve([{
+        info: { role: 'assistant', id: 'm1', time: { created: 1 } },
+        parts,
+      }]);
+    });
+
+    const result = await runHeadless(MODEL, 'sys', 'user', 'isolatedreasoning1', '/proj', 1500, 'build',
+      { ...OPTS, noOutputBackstopMs: 200 });
+
+    expect(String(result.error || '')).not.toMatch(/NO_OUTPUT_BACKSTOP/);
+    // It reached the ordinary timeout machinery — proving the backstop really
+    // did disarm (permanently) rather than just not having fired yet.
+    expect(result.timedOut).toBe(true);
+    expect(result.completed).toBe(false);
+    expect(poll).toBeGreaterThan(1); // the isolated poll-2+ reasoning growth actually ran
+  }, 20000);
+});

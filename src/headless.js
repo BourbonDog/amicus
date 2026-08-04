@@ -788,9 +788,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           || newAssistant || reasoningActivity || settleActivity;
         if (progressed) { lastProgressAt = Date.now(); }
 
+        // v4.6.2 PR2 amendment 2 (controller live smoke + debug trace): the
+        // backstop disarms only on SUBSTANTIVE activity — output, reasoning,
+        // or tool motion (the spec's "first token/reasoning/tool_use").
+        // messageActivity/newAssistant are excluded: OpenCode creates an empty
+        // assistant placeholder on prompt ACCEPTANCE, which is precisely the
+        // accepted-but-not-serving bookkeeping the backstop must not trust.
+        // `progressed` itself (and every stall/idle consumer of it above) is
+        // deliberately untouched — this is a narrower, backstop-only signal.
+        const substantiveActivity = outputGrew || toolActivity || resultActivity
+          || reasoningActivity || settleActivity;
+
         // No-output backstop: one tick per poll. Fired is terminal — break the
         // loop; the post-loop block below mirrors the timeout path.
-        if (noOutputBackstop.tick(progressed, Date.now()) === 'fired') {
+        if (noOutputBackstop.tick(substantiveActivity, Date.now()) === 'fired') {
           backstopFired = true;
           sessionError = noOutputBackstopReason();
           logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstopMs });
