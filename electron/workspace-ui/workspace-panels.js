@@ -4,12 +4,11 @@
  *
  * Loads BEFORE workspace-app.js (md-lite → live-model → workspace-render →
  * workspace-matrix → workspace-seats → workspace-panels → workspace-verbs →
- * workspace-app), so
- * every function here reads `window.AmicusApp` / `window.AmicusVerbs` at CALL
- * time (never captured at this file's own load time — neither namespace
- * exists yet when this IIFE runs). window.AmicusApp publishes its namespace
- * at the top of its own boot, before calling into this file, so by the time
- * any function below actually executes, both are present.
+ * workspace-app), so every function here reads `window.AmicusApp` /
+ * `window.AmicusVerbs` at CALL time (never captured at this file's own load
+ * time — neither namespace exists yet when this IIFE runs). window.AmicusApp
+ * publishes its namespace at the top of its own boot, before calling into this
+ * file, so by the time any function below actually executes, both are present.
  */
 (function () {
   'use strict';

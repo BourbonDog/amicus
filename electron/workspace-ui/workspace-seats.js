@@ -17,13 +17,15 @@
  * NOTE (scope, matches the plan's file list): the LIVE poll loop
  * (workspace-verbs.js's applyLive) repaints #seats-body directly via
  * AmicusRender.renderSeats(), bypassing renderSeatsPanel() entirely — dead
- * rows are only ever painted by renderSeatsPanel(), via openRun()'s
- * renderDetail() call. A dead-leg/dead-wave degrade is checkpointed to
- * run.json as soon as Stage 1's once-only retry pass resolves for that
- * seat — which can be well before the rest of the run reaches a terminal
- * status, so a seat CAN be "announced dead" in the data while the run is
- * still live-polling. See the fix wave below for why that gap matters and
- * how the terminal gate closes it.
+ * rows are only ever painted by renderSeatsPanel(), reached from
+ * renderDetail() — called both from openRun() (a fresh run open) and from the
+ * blind toggle (workspace-app.js:197-227), which must repaint dead rows too so
+ * the mask flip reaches them. A dead-leg/dead-wave degrade is checkpointed to
+ * run.json as soon as Stage 1's once-only retry pass resolves for that seat —
+ * which can be well before the rest of the run reaches a terminal status, so a
+ * seat CAN be "announced dead" in the data while the run is still
+ * live-polling. See the fix wave below for why that gap matters and how the
+ * terminal gate closes it.
  *
  * Fix wave (task review, controller ruling): dead rows are appended ONLY
  * when the run is terminal (window.AmicusLive.TERMINAL_STATUSES — the same

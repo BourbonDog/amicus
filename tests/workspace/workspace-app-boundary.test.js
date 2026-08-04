@@ -970,4 +970,43 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
     expect(deadRows).toHaveLength(0);
   });
+
+  // Final-review fix wave (finding 4, rider): dead-seat-rows.test.js's case (c) proves mask
+  // parity at the paint() level (deadSeats/renderDeadSeatRows called directly with blindOn
+  // flipped) and its "(supplementary)" case proves repaint idempotency (the same painters called
+  // twice, no duplicate rows) — but neither drives the REAL #blind-toggle 'change' listener
+  // (workspace-app.js:197-200) end to end, so a regression anywhere on
+  // renderDetail_preserveBlind()'s path to renderSeatsPanel() specifically could still slip
+  // through with every existing test green. This closes that last inference gap: open a terminal
+  // run through the real openRun(), confirm the dead row, flip blind through the actual DOM
+  // listener (not a direct paint call), and confirm the row survives the repaint with the masked
+  // label.
+  test('flipping blind mode through the real #blind-toggle listener repaints the dead row masked, still exactly one row', async () => {
+    const DEAD_LABEL = 'Review C';
+    const fixture = deadSeatFixture('aaaa1111', 'complete', degradesNamingFoxtrot, null);
+    // buildFixtureDetail()'s labelMap/derived.names only cover the live bench (gemini, gpt) — add
+    // a label for the dead critic too, or blind masking would have nothing to swap to and this
+    // test could pass even if masking were broken.
+    fixture.derived = { ...fixture.derived, names: [...fixture.derived.names, { label: DEAD_LABEL, model: DEAD_MODEL }] };
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRowsBefore = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsBefore).toHaveLength(1);
+    expect(deadRowsBefore[0].children[0].textContent).toBe(DEAD_MODEL);
+
+    // The real toggle path: the 'change' listener workspace-app.js registers on #blind-toggle at
+    // boot (workspace-app.js:197-200) -> renderDetail_preserveBlind() -> renderDetail() ->
+    // P.renderSeatsPanel() -> workspace-seats.js's renderSeatsPanel(). NOT a direct
+    // renderDeadSeatRows()/renderSeatsPanel() call — see helpers/fake-workspace-page's
+    // addEventListener for how `_listeners` records this.
+    const toggle = global.document.getElementById('blind-toggle');
+    toggle._listeners.change[0]({ target: { checked: true } });
+
+    const deadRowsAfter = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRowsAfter).toHaveLength(1);
+    expect(deadRowsAfter[0].children[0].textContent).toBe(DEAD_LABEL);
+    expect(deadRowsAfter[0].children[0].textContent).not.toBe(DEAD_MODEL);
+  });
 });

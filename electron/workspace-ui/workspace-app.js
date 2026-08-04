@@ -6,8 +6,8 @@
  * ⚠️ DE-ROT (F05) / PRE-FLIGHT (P2): this file is the last of the three-way
  * split (workspace-app.js / workspace-panels.js / workspace-verbs.js). It
  * loads LAST (md-lite → live-model → workspace-render → workspace-matrix →
- * workspace-panels → workspace-verbs → workspace-app), so panels/verbs
- * already exist and may be captured once, here, at load time.
+ * workspace-seats → workspace-panels → workspace-verbs → workspace-app), so
+ * panels/verbs already exist and may be captured once, here, at load time.
  */
 (function () {
   'use strict';

@@ -286,6 +286,49 @@ describe('getRunDetail', () => {
       ['complete', 'partial', 'error', 'crashed', 'aborted', 'timeout', 'timed-out', 'idle-timeout']
     );
   });
+
+  // Final-review fix wave (finding 1): getRunDetail returns `run` and `verdict` wholesale (the
+  // `return { runId, runDir, run, tally, verdict, artifacts, derived }` line above) — the
+  // renderer feature (electron/workspace-ui/workspace-seats.js:11-15) reads
+  // `state.detail.run.degrades` / `state.detail.verdict.seatLoss` straight off that payload, with
+  // no `derived` field carrying either separately. Nothing pinned that either field actually
+  // survives the round trip — a future payload-trim refactor (stripping "unrecognized" keys off
+  // run/verdict before they cross the IPC boundary) would silently kill the dead-seat-rows feature
+  // while every test in this suite, and every direct-call case in dead-seat-rows.test.js, stayed
+  // green.
+  test('degrades[] and verdict.seatLoss survive getRunDetail pass-through intact (the IPC contract workspace-seats.js relies on)', () => {
+    const project = makeProject();
+    const runDir = runDirIn(project, 'aaaa1111');
+
+    // Realistic dead-leg record shape — field names copied from
+    // src/council/run-retry-notes.js's retryLegStillDeadNote (the still-dead-after-retry case:
+    // `data.retryWaveId` + `data.firstFailure` both present).
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat foxtrot did not review',
+      why: "the leg ended 'error' with no usable output; its once-only retry also ended 'error'",
+      effect: '3 of 4 seats reviewed',
+      data: {
+        seat: 'foxtrot', status: 'error', reason: 'timed out', retryWaveId: 'aaaa1111-s1r1',
+        firstFailure: { seat: 'foxtrot', class: 'wave', waveId: 'aaaa1111-s1', reason: 'no legs produced' },
+      },
+    }];
+    const run = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'run.json'), 'utf-8'));
+    run.degrades = degrades;
+    fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(run));
+
+    // Realistic seatLoss shape — field names copied from src/council/verdict.js's
+    // summarizeSeatLoss return shape (also exercised by tests/council/verdict-seat-loss.test.js).
+    const seatLoss = { criticRequested: 'foxtrot', criticSeated: false, reason: 'timed out', deadBenchSeats: [] };
+    const verdict = JSON.parse(fs.readFileSync(path.join(FX, 'council-run-complete', 'verdict.json'), 'utf-8'));
+    verdict.seatLoss = seatLoss;
+    fs.writeFileSync(path.join(runDir, 'verdict.json'), JSON.stringify(verdict));
+
+    registerPointer(project, 'aaaa1111', runDir);
+    const d = getRunDetail(project, 'aaaa1111');
+
+    expect(d.run.degrades).toEqual(degrades);
+    expect(d.verdict.seatLoss).toEqual(seatLoss);
+  });
 });
 
 // Third council-review pass: getRunDetail resolved a pointer and read run.json / tally.json /
