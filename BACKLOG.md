@@ -72,7 +72,8 @@ _Result: 8 fixed · 1 partially hardened (BL-7) · 1 deferred (BL-2) · 1 refute
 
 ### Open follow-ups
 - **BL-2**: async-ify `buildContext` + MCP metadata writes (needs broader refactor).
-- **BL-7 full nonce**: land it once `tests/e2e.test.js` can be adjusted to emit the nonced marker (or lower its poll interval).
+- **BL-7 full nonce** — **DONE (v4.0.0)**: the per-run nonce shipped with the engine milestone; the
+  Phase 15 resume-nonce entry below records BL-7 as done-done.
 - **BL-10 dep removal**: drop `tiktoken` from `package.json` + regenerate the lockfile.
 
 ---
@@ -138,7 +139,8 @@ against source** (13 parallel lanes). GLM's original IDs kept for traceability. 
 _Excluded: L1 (token estimators) — already covered by BL-10. C3/H4/M10 — refuted misreads._
 
 ### Second-review follow-ups
-- **H9 tally/verdict fencing** — needs a JSON-safe mechanism (fence a free-text field or a presentation wrapper) + coordinated council/test update.
+- **H9 tally/verdict fencing** — **DONE (v4.0.0)**: prompt-injection fencing on the JSON MCP tools
+  shipped with the engine milestone (A5/C6/D5).
 - **L2 dead-branch removal** — needs a lane that also owns `tests/context.test.js:312`.
 
 ---
@@ -157,9 +159,9 @@ none need a built artifact** (unlike winget, abandoned). Ranked by leverage:
   Trivial, all 3 OSes, no gatekeeper, preserves the `~/.claude` integration. Highest-leverage non-npm move.
 - [ ] **Submit to Anthropic's COMMUNITY plugin marketplace** via the web form at clau.de/plugin-directory-submission
   (NOT a PR — PRs auto-close; the *official* marketplace is invite-only). Needs the repo public + passing safety screening.
-- [ ] **Official MCP Registry** (registry.modelcontextprotocol.io) — add `"mcpName": "io.github.BourbonDog/amicus"` to
-  package.json + a `server.json` (`mcp-publisher init`) pointing at the npm package's `mcp` subcommand + GitHub-OAuth publish.
-  Metadata-only, wraps npm, cascades to third-party directories. ⚠️ Registry is in PREVIEW (schema churn) — re-verify first.
+- [x] **Official MCP Registry** (registry.modelcontextprotocol.io) — **DONE (v1.9.0)**: `server.json`
+  + the publish.yml registry step; "✓ Server io.github.BourbonDog/amicus" verified at every release
+  since (ninth consecutive at v4.6.1).
 - [ ] **(Optional, Windows) Chocolatey** — `chocolateyInstall.ps1` runs `npm i -g amicus` with `<dependency id="nodejs-lts">`;
   no embedded binary ⇒ no VERIFICATION.txt. Medium effort (moderation latency). Preferred over Scoop (whose contained buckets reject the npm-wrapper form).
 - [ ] **(Optional) Third-party MCP directories** — Glama (auto-indexes; just claim), PulseMCP + mcp.so (Submit form),
@@ -173,7 +175,9 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 
 ## Future goals (from the 2026-07-01 review-execution plan)
 
-- [ ] **Council Review GitHub Action v2 — adjudicated verdicts in CI.** Phase 10 of the review-execution plan ships
+- [x] **Council Review GitHub Action v2 — adjudicated verdicts in CI.** **DONE (v4.0.0)** — shipped
+  with the headless engine milestone via enabler (a) (B2); `.github/workflows/council-review.yml`
+  runs the real adjudicated verdict. Entry kept for the design history: Phase 10 of the review-execution plan ships
   v1 as *fanout-only*: a `council-review`-labeled PR gets N independent model reviews (`amicus fanout --json`,
   headless) synthesized into one sticky comment. v1 deliberately does NOT claim a "council verdict" because a
   code-only pipeline cannot produce one — `amicus council tally` requires `adjudications[]`/`rankings[]`, which
@@ -202,9 +206,8 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   `yml.indexOf('npm publish')` ordering pin, which now matches a B04 comment rather than the actual command
   — coverage is currently held by the new suite's ordering test (`tests/scripts/publish-workflow.test.js`),
   so this is cleanup, not a live gap.
-- [ ] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — the new §3 correctly cites
-  `/v0/servers/.../versions/<v>`, but the untouched namespace-check paragraph still cites
-  `/v0.1/servers?search=`. Sync both to the same registry API version in the Phase 13 docs lane.
+- [x] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — **DONE**: no `/v0.1` reference
+  remains in the file (synced in the Phase 13 docs lane; re-verified 2026-08-03).
 - [ ] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** The pre-check that skips
   re-publishing to the MCP Registry (`.github/workflows/publish.yml`, "Publish to MCP Registry" step) keys
   entirely on `STATUS = "200"`. Assert the response body actually carries the expected version (not just a
@@ -219,7 +222,9 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   currently persist that client tag alongside the other session fields, so `amicus_status`/`amicus_read`
   can't surface it the way they do for spawned sessions. Pairs with the B11 `enrichWithProgress` extraction
   window (`src/mcp-server.js`, next refactor pass after the file quiets down) — do both in the same pass.
-- [ ] **`electron/main.js` has 3 pre-existing eslint errors outside lint-staged's `src/**` scope.**
+- [x] **`electron/main.js` has 3 pre-existing eslint errors outside lint-staged's `src/**` scope.**
+  **DONE (v4.4.1, ENV-5)** — `electron/` is under the lint gate (`npm run lint` + lint-staged);
+  the three sites resolved via the documented permanent `no-console` exemptions.
   `package.json`'s `lint-staged` config only globs `src/**/*.js`, so `electron/*.js` never gets auto-fixed or
   gated on commit. `npx eslint electron/main.js` currently reports 2 `no-console` (lines 42, 54) and 1
   `no-empty` (line 133) — pre-existing, not introduced by Phase 12. Fix when widening lint scope to cover
@@ -270,19 +275,17 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 
 ## Phase 17 whole-phase review triage (2026-07-03)
 
-- [ ] **`docs/usage.md` lacks detail sections for `spend`/`doctor`/`key`** — the README's compact
-  command table currently has more detail on these three than the "canonical CLI reference" does,
-  which inverts the intended README-summary / usage.md-detail split the Phase 17 restructure was
-  going for. [S]
-- [ ] **Consider a repo-wide `*.md text eol=lf` `.gitattributes` rule** (or a normalize-read helper
-  used everywhere) — two separate CRLF-checkout seams (`council-reference-docs.test.js`,
-  `docs-quick-sync.test.js`) have now bitten docs test suites in this phase alone. [S — weigh
-  renormalization churn against the recurring cost of one-off `.replace(/\r\n/g,'\n')` fixes]
+- [x] **`docs/usage.md` lacks detail sections for `spend`/`doctor`/`key`** — **DONE (v4.2.0, C10)**:
+  usage.md now carries the "Keys, Health & Spend" section with `### amicus key`/`doctor`/`spend`
+  detail (re-verified 2026-08-03).
+- [x] **Consider a repo-wide `*.md text eol=lf` `.gitattributes` rule** — **DONE (v4.4.1, ENV-4)**:
+  a repo-wide `.gitattributes` now normalizes every text file to LF, object database and working
+  tree both.
 
 ## Phase 16 review roll-up (2026-07-03)
 
-- **`council show` cannot report catalog-delisted saved-council members** — the run path (`resolveCouncilMembers`, config.js) drops delisted raw ids via its catalog `known`-set check; `show`'s resolved/dropped loop (presets-cli.js) pushes any `/`-containing id straight to `resolved`. Mirror the membership check so `show` matches run-time resolution. [S — proven by the 16a.3 review with a live fixture]
-- **`continue`/`resume` never compute per-run usage** (no `resolveUsage` call on those finalize paths — pre-existing, predates the spend ledger) — so their runs contribute zero spend-ledger rows. Add usage resolution + ledger appends to both. [S]
+- **`council show` cannot report catalog-delisted saved-council members** — the run path (`resolveCouncilMembers`, config.js) drops delisted raw ids via its catalog `known`-set check; `show`'s resolved/dropped loop (presets-cli.js) pushes any `/`-containing id straight to `resolved`. Mirror the membership check so `show` matches run-time resolution. [S — proven by the 16a.3 review with a live fixture] **DONE (v4.5.0, post-HOLD wave 2 `19c3768`)** — `show` now classifies via the same extracted `classifyCouncilMembers` the run path uses.
+- **`continue`/`resume` never compute per-run usage** (no `resolveUsage` call on those finalize paths — pre-existing, predates the spend ledger) — so their runs contribute zero spend-ledger rows. Add usage resolution + ledger appends to both. [S] **DONE (v4.3.0)** — the spend-visibility line item fixed the continue/resume zero-spend rows (A4-basic).
 - **Benign double network fetch on the no-cache-failure refresh path** — `runRefresh` and the `refresh-catalog` IPC both call `refreshCatalog()` then `getCatalogInfo({maxAgeMs: Infinity})`, which re-enters `refreshCatalog` when NO cache doc exists (readCache returns null for a metadata-only failure doc). Idempotent, rare path; dedupe when convenient. [S]
 - **Size-gate cliffs:** `src/utils/result-schema.js` is now at exactly 300/300 (Phase 20 pushed it from 294 to the ceiling via the `abort-result.js`/`result-schema-version.js` split-out re-exports) — the cliff is HERE now, not just approaching; the next touch to this file forces a split first (buildSpendDoc already carries a fold-back note for result-schema). `src/cli-handlers-doctor.js` is resolved — see the Phase 17 entry above (now 260/300 after the 20.1 extraction). [note]
   ⚠️ **BOTH FIGURES ARE STALE. Re-measured 2026-08-01 at `af3e8f1`:** `result-schema.js` is **243/300**
@@ -290,7 +293,7 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   the re-measured table under "v4.6 hard gates" as the source of truth.
 - **Free-picker missing-`name` fallback** (`r.name || r.id`) covered by inspection, not a test pin — one-liner test someday. [nit]
 - **`mode: 'interactive'` spend rows untested directly** — the interactive finalize path shares its ledger-append call site with the tested headless path, but has no dedicated test exercising it through an interactive harness. [nit]
-- **Surface `waveId` (and optionally the council name) in spend rows/rollup** so wave-level cost questions ("what did this council run cost in total?") are answerable directly from `amicus spend` instead of cross-referencing run docs. [S]
+- **Surface `waveId` (and optionally the council name) in spend rows/rollup** so wave-level cost questions ("what did this council run cost in total?") are answerable directly from `amicus spend` instead of cross-referencing run docs. [S] **DONE (v4.3.0)** — waveId/council/project attributed on every spend row + queryable `spend query` (E3/E4/E9).
 - **`council save` silently shadows a built-in on first save** — the overwrite-notice check only looks at user config, not the built-in bench names, so saving a user council named e.g. `budget` gives no "this now shadows a built-in" notice even though `council list`/`show` later report it as shadowed. Add the notice at save time. [nit]
 - **`-o` with no following value writes a file literally named `true`** (`runVerdict`'s `args.out || './verdict.json'` — when `-o` is the last token, the parser sets `result.out = true`, which is truthy and gets used as the output path). Validate that `--out`/`-o` resolves to a string before using it. [nit]
 
@@ -527,7 +530,10 @@ Three items the v4.4.1 session ledgers recorded but this file did not. A deferra
 in session scratch is not deferred, it is lost — so they are written out here in full, with the
 evidence needed to act on them without re-deriving it. None blocks the v4.4.1 tag.
 
-- [ ] **FR-1 · `runHeadless`'s three early `return`s carry A3's stale-progress defect** — [S]
+- [x] **FR-1 · `runHeadless`'s three early `return`s carry A3's stale-progress defect** — [S]
+  **DONE (v4.5.0 ride-along):** all three early returns now stamp a terminal stage derived from
+  `resolveTerminalState` with prior usage re-attached (`src/headless.js`, derivation comment block
+  around `:1095`). Evidence below kept for history.
   **OVERDUE: a reviewer asked for this ticket two tasks ago (task-8 report §5 "Known remaining hole,
   NOT in A3's scope", repeated as open item 9.4) and it was never filed.**
   A3 fixed `runHeadless`'s outer `catch` so a failed run stamps a terminal stage into
@@ -553,7 +559,10 @@ evidence needed to act on them without re-deriving it. None blocks the v4.4.1 ta
     error. Model the tests on `tests/observe/premature-completion.test.js`.
   - Compounds with **FR-3**: a `createSession` lock race is one way to *reach* `:351-360`.
 
-- [ ] **FR-2 · `repairCanHonorContract` is now INERT — a deletion hazard, not a live guard** — [S]
+- [x] **FR-2 · `repairCanHonorContract` is now INERT — a deletion hazard, not a live guard** — [S]
+  **DONE (v4.5.0 — "decide, don't drift" option (b) taken):** the predicate was removed
+  deliberately, with the F2 reasoning preserved as a comment in `src/council/run-stages.js`
+  (now `:210`). Original hazard write-up kept below for history.
   **Self-inversion was the design; the consequence still needs recording.** The predicate asks the
   validator rather than hard-coding an answer precisely so that LC-10 would switch it off on its own
   the day it landed. LC-10 has landed, so `validateFindings(EMPTY_SET_REPAIR_PROBE).ok` is now
