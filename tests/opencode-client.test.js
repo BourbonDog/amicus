@@ -27,7 +27,8 @@ const {
   sendPrompt,
   createSession,
   getMessages,
-  checkHealth
+  checkHealth,
+  buildServerOptions
 } = require('../src/opencode-client');
 
 describe('OpenCode Client Wrapper', () => {
@@ -1243,5 +1244,55 @@ describe('provider error detection (#37)', () => {
 
       expect(result.providerError).toBeUndefined();
     });
+  });
+});
+
+describe('buildServerOptions — ANTHROPIC_BASE_URL normalization (v4.6.2 PR1)', () => {
+  const { _resetBaseUrlNotice } = require('../src/utils/base-url-classify');
+  beforeEach(() => _resetBaseUrlNotice());
+
+  const noticeSink = () => {
+    const writes = [];
+    return { deps: { write: s => writes.push(s), logger: { info: () => {} } }, writes };
+  };
+
+  test('host-form env -> provider.anthropic.options.baseURL is the /v1 form', () => {
+    const { deps } = noticeSink();
+    const so = buildServerOptions({
+      _env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }, _noticeDeps: deps,
+    });
+    expect(so.config.provider.anthropic.options.baseURL)
+      .toBe('https://api.anthropic.com/v1');
+  });
+
+  test('the notice announces once across two builds', () => {
+    const { deps, writes } = noticeSink();
+    const env = { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' };
+    buildServerOptions({ _env: env, _noticeDeps: deps });
+    buildServerOptions({ _env: env, _noticeDeps: deps });
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatch(/^Notice: ANTHROPIC_BASE_URL is host-form/);
+  });
+
+  test.each([
+    [{ ANTHROPIC_BASE_URL: 'https://x.test/v1' }, 'already /v1'],
+    [{ ANTHROPIC_BASE_URL: 'https://x.test/custom' }, 'nonstandard path'],
+    [{ ANTHROPIC_BASE_URL: 'https://api.anthropic.com', AMICUS_BASE_URL_NORMALIZE: '0' }, 'knob off'],
+    [{}, 'unset'],
+  ])('no override injected for %j (%s)', (env) => {
+    const so = buildServerOptions({ _env: env });
+    const anthropic = so.config.provider.anthropic;
+    expect(anthropic && anthropic.options && anthropic.options.baseURL).toBeFalsy();
+  });
+
+  test('an existing anthropic provider entry is merged, not clobbered', () => {
+    // opus registers the anthropic provider via buildProviderModels
+    const { deps } = noticeSink();
+    const so = buildServerOptions({
+      model: 'anthropic/claude-opus-4-8',
+      _env: { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' }, _noticeDeps: deps,
+    });
+    expect(so.config.provider.anthropic.models['claude-opus-4-8']).toEqual({});
+    expect(so.config.provider.anthropic.options.baseURL).toBe('https://api.anthropic.com/v1');
   });
 });
