@@ -18,7 +18,7 @@ function loadHandler({ catalog = CATALOG, sources, stale, drifted, gatewayFindin
     refreshCatalog: jest.fn(async () => catalog),
     catalogPath: () => 'C:/fake/model-catalog.json',
   }));
-  if (sources || stale) {
+  if (sources || stale || drifted) {
     jest.doMock('../../src/utils/alias-audit', () => ({
       collectAliasSources: () => sources || [],
       findStaleAliases: () => stale || [],
@@ -112,6 +112,7 @@ describe('amicus models', () => {
     });
     // v4.6.2 PR1 (2A): additive field, [] when nothing drifted.
     expect(doc.drifted).toEqual([]);
+    expect(doc.driftedCount).toBe(0);
   });
 
   // v4.6.2 PR1 (2A): stored-alias drift warning — a stored alias whose target
@@ -140,6 +141,7 @@ describe('amicus models', () => {
       const doc = JSON.parse(out);
       expect(doc.type).toBe('alias-audit');
       expect(doc.drifted).toEqual(oneDrift);
+      expect(doc.driftedCount).toBe(1);
     });
 
     it('both stale and drifted present: STALE lines, DRIFTED lines, and exit code from stale only', async () => {

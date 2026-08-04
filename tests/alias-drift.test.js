@@ -38,6 +38,21 @@ describe('findDriftedStoredAliases', () => {
     expect(findDriftedStoredAliases(sources, CATALOG)).toHaveLength(0);
   });
 
+  // Review finding 1: toStorableRoute() canonicalizes a direct-capable vendor's
+  // OpenRouter pick to the bare direct form ('google/gemini-3.6-flash'), but a
+  // stored gateway-form value ('openrouter/google/gemini-3.6-flash' — the exact
+  // route resolveQuickPicks/pickCurrent surfaces as the live openrouter route,
+  // and what a STALE fix's own suggestion may point users to store) names the
+  // SAME model. Raw-string-comparing only against the canonicalized display
+  // value false-positives this as drift. Must be a no-op: same model, just a
+  // different gateway form.
+  test('stored alias in the gateway (openrouter) form of the current model -> no row (false-positive guard)', () => {
+    const sources = [
+      { alias: 'gemini', model: 'openrouter/google/gemini-3.6-flash', source: 'user-config' },
+    ];
+    expect(findDriftedStoredAliases(sources, CATALOG)).toHaveLength(0);
+  });
+
   test('non-user-config sources are never checked', () => {
     const sources = [
       { alias: 'gemini', model: 'openrouter/google/gemini-3.1-flash-lite-preview', source: 'defaults' },

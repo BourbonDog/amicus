@@ -195,7 +195,9 @@ function buildCatalogDoc({ models, fetchedAt, refreshed = false, search = null,
  * `drifted` (v4.6.2 PR1, 2A) is additive: stored user-config aliases whose
  * target is still catalog-live but behind the current quick-pick family
  * resolution (findDriftedStoredAliases). Defaults to [] so existing callers
- * that omit it are unaffected.
+ * that omit it are unaffected. Paired with an additive `driftedCount`
+ * (drifted.length), mirroring the staleCount/stale and
+ * gatewayFindingsCount/gatewayFindings pairs above.
  * @param {{stale: Array<{alias,model,source,suggestions}>, catalogAvailable: boolean,
  *   gatewayFindings?: Array<{alias,gateway,kind,model,expected?}>,
  *   drifted?: Array<{alias,stored,current}>}} opts
@@ -209,6 +211,7 @@ function buildAuditDoc({ stale, catalogAvailable, gatewayFindings = [], drifted 
     stale,
     gatewayFindingsCount: gatewayFindings.length,
     gatewayFindings,
+    driftedCount: drifted.length,
     drifted,
   };
 }
