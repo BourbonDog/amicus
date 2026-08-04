@@ -74,7 +74,7 @@ function buildRoutingFailureLeg({ leg, legId, waveId, quiet }) {
  * Adds `.reason` (alias of buildRunResult's `.error`) and `.legId` so the
  * fallback loop reads a stable shape without re-deriving them.
  */
-async function runSingleAttempt({ leg, legId, waveId, project, directory, follow, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce }) {
+async function runSingleAttempt({ leg, legId, waveId, project, directory, follow, systemPrompt, userMessage, timeoutMs, agent, client, server, summaryLength, reasoning, quiet, foldNonce, noOutputBackstopMs }) {
   const { IdleWatchdog } = require('../utils/idle-watchdog');
   const { markAborted } = require('../utils/session-abort');
   const { runHeadless } = require('../headless');
@@ -121,7 +121,7 @@ async function runSingleAttempt({ leg, legId, waveId, project, directory, follow
     result = await runHeadless(
       leg.model, systemPrompt, userMessage, legId, project,
       timeoutMs, agent || 'build',
-      { client, server, watchdog, summaryLength, reasoning, nonce: foldNonce, directory }
+      { client, server, watchdog, summaryLength, reasoning, nonce: foldNonce, directory, noOutputBackstopMs }
     );
   } catch (err) {
     result = { summary: '', completed: false, timedOut: false, aborted: false, error: err.message, taskId: legId };

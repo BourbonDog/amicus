@@ -267,7 +267,7 @@ async function runFanout(options) {
         timeoutMs, agent: options.agent, client, server,
         summaryLength: options.summaryLength, reasoning, quiet: options.quiet,
         foldNonce, directory: options.directory, follow,
-        fallback: options.fallback, catalog: options.catalog,
+        fallback: options.fallback, catalog: options.catalog, noOutputBackstopMs: options.noOutputBackstopMs,
       });
     }));
   } finally {

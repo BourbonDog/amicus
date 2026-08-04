@@ -297,3 +297,54 @@ describe('amendment 2: the backstop disarms only on SUBSTANTIVE activity, not th
     expect(poll).toBeGreaterThan(1); // the isolated poll-2+ reasoning growth actually ran
   }, 20000);
 });
+
+/**
+ * v4.6.2 PR3 Task 1 — the recorded PR2 carry: `options.noOutputBackstopMs`
+ * used a bare `!== undefined` check, which lets a NON-NUMBER value (e.g. a
+ * string arriving from a CLI/JSON boundary) through unguarded. Downstream,
+ * `createNoOutputBackstop`'s `startedAt + ms` does string CONCATENATION
+ * instead of addition when `ms` is a string, producing a deadline so large
+ * `nowMs >= deadline` can never go true — the backstop silently never fires.
+ * The fix narrows the direct-value branch to `Number.isFinite(...)`, so any
+ * non-finite input (string, NaN, null-as-object, etc.) falls through to the
+ * existing env-resolution seam instead of reaching the arithmetic unguarded.
+ * Finite zero is unaffected: `Number.isFinite(0) === true`, same as the old
+ * `0 !== undefined`, so the documented explicit-disable escape hatch survives
+ * the narrowing untouched.
+ */
+describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
+  test('a STRING noOutputBackstopMs (non-finite) falls through to env resolution instead of doing string arithmetic', async () => {
+    // No output, no reasoning, no tool calls — ever.
+    mockGetMessages.mockResolvedValue([]);
+    const started = Date.now();
+
+    // '200' must be REJECTED by the guard (Number.isFinite('200') === false)
+    // and fall through to the env seam (50ms) — if the guard instead let the
+    // string through raw, `startedAt + '200'` string-concatenates into an
+    // unreachable deadline and this leg would run to the full 60s --timeout
+    // instead of firing the backstop.
+    const result = await runHeadless(MODEL, 'sys', 'user', 'stringcoerce1', '/proj', 60000, 'build',
+      { ...OPTS, noOutputBackstopMs: '200', _env: { AMICUS_NO_OUTPUT_BACKSTOP_MS: '50' } });
+
+    // Fired at the env-resolved ~50ms window, nowhere near the 60s --timeout.
+    expect(Date.now() - started).toBeLessThan(10000);
+    expect(result.completed).toBe(false);
+    expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    expect(mockAbortSession).toHaveBeenCalledTimes(1);
+  }, 20000);
+
+  test('a direct noOutputBackstopMs: 0 (finite zero, explicit) still disables — silent leg runs to the timeout', async () => {
+    mockGetMessages.mockResolvedValue([]);
+
+    // Routed through the DIRECT option seam this time (not options._env) —
+    // finite zero must survive the Number.isFinite narrowing exactly like it
+    // survived the old `!== undefined` check: it is a legal explicit value,
+    // not an absent one.
+    const result = await runHeadless(MODEL, 'sys', 'user', 'directzero1', '/proj', 300, 'build',
+      { ...OPTS, noOutputBackstopMs: 0 });
+
+    expect(String(result.error || '')).not.toMatch(/NO_OUTPUT_BACKSTOP/);
+    expect(result.timedOut).toBe(true);
+    expect(result.completed).toBe(false);
+  }, 20000);
+});

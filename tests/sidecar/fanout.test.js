@@ -314,6 +314,27 @@ describe('runFanout orchestrator', () => {
     }
   });
 
+  // v4.6.2 PR3 Task 1: the live-probe override rides the same options-object
+  // vehicle as `directory` above — runFanout -> runLeg -> runSingleAttempt's
+  // runHeadless call. Mirrors the directory pair exactly (forwards / stays
+  // undefined by default) so a plain fanout caller (every caller before PR3's
+  // models-probe module) sees byte-identical runHeadless options.
+  it('forwards noOutputBackstopMs to every leg\'s runHeadless call', async () => {
+    await runFanout({ ...baseOpts(), noOutputBackstopMs: 30000 });
+    expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+    for (const call of mockRunHeadless.mock.calls) {
+      expect(call[7].noOutputBackstopMs).toBe(30000);
+    }
+  });
+
+  it('leaves runHeadless options.noOutputBackstopMs undefined when the caller omits it (plain fanout callers unaffected)', async () => {
+    await runFanout(baseOpts());
+    expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+    for (const call of mockRunHeadless.mock.calls) {
+      expect(call[7].noOutputBackstopMs).toBeUndefined();
+    }
+  });
+
   // #61 whole-branch review FIX 2: a leg's migration notice (routeResult.notice)
   // had no CLI stderr to land on in fanout — one process resolves MANY legs,
   // not a single launch — so it must surface on the wave doc instead.
