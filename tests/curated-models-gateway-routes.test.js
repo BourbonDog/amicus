@@ -16,7 +16,7 @@ test('fable is OpenRouter-only today (no direct form)', () => {
   expect(r.fable.direct).toBeUndefined();
 });
 test('direct-capable non-divergent vendor derives both forms', () => {
-  expect(r.gpt).toEqual({ direct: 'openai/gpt-5.5', openrouter: 'openrouter/openai/gpt-5.5' });
+  expect(r.gpt).toEqual({ direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' });
 });
 test('gateway-only vendor is openrouter-only', () => {
   expect(r.grok).toEqual({ openrouter: 'openrouter/x-ai/grok-4.3' });

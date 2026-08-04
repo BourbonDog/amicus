@@ -42,7 +42,7 @@ describe('curated-models v2 (families)', () => {
     const defaults = toDefaultAliases();
     // Direct-capable (openai/google/deepseek) — bare, policy-routed. These
     // vendors use identical ids on both gateways, so the bare form is derived.
-    expect(defaults.gpt).toBe('openai/gpt-5.5');
+    expect(defaults.gpt).toBe('openai/gpt-5.6-terra');
     expect(defaults['gpt-pro']).toBe('openai/gpt-5.5-pro');
     expect(defaults.codex).toBe('openai/gpt-5.3-codex');
     expect(defaults.gemini).toBe('google/gemini-3.6-flash');
@@ -106,5 +106,30 @@ describe('curated-models v2 (families)', () => {
       expect(typeof p.label).toBe('string');
       expect(typeof p.blurb).toBe('string');
     }
+  });
+});
+
+// Owner-reported: OpenAI renamed the 5.6 flagship into tier variants — sol
+// (premium), terra (mid), luna (economy) — each with a -pro sibling, plus the
+// unrelated gpt-5.3-codex family. Owner ruling: `gpt` tracks the TERRA tier.
+describe('gpt family idPattern — terra tier (5.6 rename)', () => {
+  const gptFamily = () => getFamilies().find(f => f.alias === 'gpt');
+
+  test('matches the terra id and still matches bare numeric ids (within-family fallback)', () => {
+    const { idPattern } = gptFamily();
+    expect(idPattern.test('gpt-5.6-terra')).toBe(true);
+    expect(idPattern.test('gpt-5.5')).toBe(true);
+  });
+
+  test('never matches -terra-pro, -sol, -luna, or the separate -codex family', () => {
+    const { idPattern } = gptFamily();
+    expect(idPattern.test('gpt-5.6-terra-pro')).toBe(false);
+    expect(idPattern.test('gpt-5.6-sol')).toBe(false);
+    expect(idPattern.test('gpt-5.6-luna')).toBe(false);
+    expect(idPattern.test('gpt-5.3-codex')).toBe(false);
+  });
+
+  test('fallback pins the terra tier', () => {
+    expect(gptFamily().fallback.openrouter).toBe('openrouter/openai/gpt-5.6-terra');
   });
 });

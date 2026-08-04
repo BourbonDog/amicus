@@ -1,21 +1,63 @@
 // tests/doctor-legacy-mcp.test.js
-// Partial-deps pattern from tests/doctor-fix.test.js: unlisted deps inherit
-// realDeps; inspectLegacyMcpEntries/migrateLegacyMcpEntries are injected so no
-// test reads or writes a real ~/.claude.json. base.readApiKeyValues keeps the
-// OpenRouter credit probe offline.
+// Full-pinned-deps pattern (tests/cli-handlers-doctor.test.js's allGood):
+// inspectLegacyMcpEntries/migrateLegacyMcpEntries are injected per test so no
+// test reads or writes a real ~/.claude.json, and `base` below pins every
+// other doctor dep so nothing falls through to realDeps().
 'use strict';
 const doctor = require('../src/cli-handlers-doctor');
 const HINTS = require('../src/utils/remediation-hints');
 
 const findCheck = (checks, id) => checks.find((c) => c.id === id);
-// These suites pass fix:true, and unlisted deps inherit realDeps() — which
-// makes the inherited electron/engine checks SELF-HEAL for real: on a box where
-// node_modules/electron/dist is missing (scripts-suppressed install), the
-// electron check's d.repairElectron({timeoutMs}) extracts — or DOWNLOADS
-// (~144MB) — the real binary from inside the unit suite, racing the repair lock
-// across jest workers. Pin the probe green and both self-heal seams inert; only
-// the legacy-mcp check is under test here.
+// Hermeticity guard (final-review Item 1 follow-up): runDoctorChecks always
+// computes the FULL check list, not just 'mcp-legacy' -- this file used to pin
+// only the four --fix self-heal seams (the `base` overrides below) and let
+// every OTHER dep fall through to realDeps() and run for real: engine-install
+// subprocess scans, the OpenRouter credit network probe, local-provider probes
+// against the real user config, etc. baseDeps mirrors the same full-deps shape
+// as tests/cli-handlers-doctor.test.js's `allGood` fixture (see that file's
+// M14 comment for the original writeup of this exact hazard). The per-test
+// inspectLegacyMcpEntries/migrateLegacyMcpEntries overrides still drive the
+// real mcp-legacy wiring this file exists to test.
+const baseDeps = {
+  nodeVersion: 'v20.0.0',
+  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
+  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
+  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
+  getCwd: () => 'C:\\Users\\me\\code\\amicus',
+  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
+  getConfigDir: () => '/cfg',
+  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
+  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
+  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
+  findStaleAliases: () => [],
+  hasOpencodeBinary: () => true,
+  getElectronPath: () => '/path/to/electron',
+  hasAmicusRegistration: () => true,
+  discoverCoworkMcps: () => ({ amicus: {} }),
+  inspectLegacyMcpEntries: () => [
+    { target: 'Claude Code', status: 'absent' },
+    { target: 'Claude Desktop', status: 'absent' },
+  ],
+  migrateLegacyMcpEntries: () => [],
+  skillInstalled: () => true,
+  listSessionIndexTmpFiles: () => [],
+  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  repairEngine: async () => ({ repaired: false }),
+  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  getLocalProviders: () => ({}),
+  probeLocalProvider: jest.fn(),
+  env: {},
+};
+// These suites pass fix:true; before baseDeps existed, unlisted deps inherited
+// realDeps() — which made the inherited electron/engine checks SELF-HEAL for
+// real: on a box where node_modules/electron/dist is missing
+// (scripts-suppressed install), the electron check's d.repairElectron({timeoutMs})
+// extracts — or DOWNLOADS (~144MB) — the real binary from inside the unit
+// suite, racing the repair lock across jest workers. Keep the probe green and
+// both self-heal seams pinned inert; only the legacy-mcp check is under test
+// here.
 const base = {
+  ...baseDeps,
   readApiKeyValues: () => ({}), // offline credit probe
   getElectronPath: () => '/fake/electron', // electron check: ok — repair unreachable
   repairElectron: async () => ({ repaired: true }), // never the real binary self-heal

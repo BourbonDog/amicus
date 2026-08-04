@@ -200,10 +200,10 @@ describe('Sidecar Config Module', () => {
       expect(aliases.fable).toBe('openrouter/anthropic/claude-fable-5');
     });
 
-    it('should map gpt to openai/gpt-5.5 (bare, direct-capable)', () => {
+    it('should map gpt to openai/gpt-5.6-terra (bare, direct-capable)', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
-      expect(aliases.gpt).toBe('openai/gpt-5.5');
+      expect(aliases.gpt).toBe('openai/gpt-5.6-terra');
     });
 
     it('should map deepseek to deepseek/deepseek-v4-pro (bare, direct-capable)', () => {
@@ -410,7 +410,7 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const result = config.buildProviderModels();
       expect(result.openrouter.models['google/gemini-3.6-flash']).toBeDefined();
-      expect(result.openrouter.models['openai/gpt-5.5']).toBeDefined();
+      expect(result.openrouter.models['openai/gpt-5.6-terra']).toBeDefined();
       expect(result.openrouter.models['deepseek/deepseek-v4-pro']).toBeDefined();
     });
 
@@ -514,10 +514,10 @@ describe('Sidecar Config Module', () => {
       const result = config.buildProviderModels();
       // gpt is a bare canonical default (Task 8.1a) — registered under its
       // own direct provider...
-      expect(result.openai.models['gpt-5.5']).toEqual({});
+      expect(result.openai.models['gpt-5.6-terra']).toEqual({});
       // ...AND mirrored under openrouter, so whichever route a given
       // session's router picks is already registered on the shared server.
-      expect(result.openrouter.models['openai/gpt-5.5']).toEqual({});
+      expect(result.openrouter.models['openai/gpt-5.6-terra']).toEqual({});
     });
 
     it('registers a gateway-only default alias only under openrouter (no direct-provider mirror)', () => {

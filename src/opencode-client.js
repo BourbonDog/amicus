@@ -557,6 +557,27 @@ function buildServerOptions(options = {}) {
     : (options.model ? [options.model] : []);
   config.provider = buildProviderModels(resolvedForProvider);
 
+  // v4.6.2 PR1 (spec §4, D1/D2): a host-form ANTHROPIC_BASE_URL is correct
+  // for Anthropic SDKs (they append /v1) and fatal for OpenCode's
+  // direct-anthropic provider (it appends /messages -> 404). Carry the
+  // normalized full-prefix form as a provider-config override — config-level,
+  // no process env is written anywhere. AMICUS_BASE_URL_NORMALIZE=0 disables.
+  // Merge order keeps any existing options.baseURL authoritative (M-5 lesson:
+  // never clobber a user-authored value with a derived one).
+  const { resolveBaseUrlOverride, announceBaseUrlNormalizationOnce } = require('./utils/base-url-classify');
+  const baseUrlEnv = options._env || process.env;
+  const anthropicBaseUrl = resolveBaseUrlOverride(baseUrlEnv);
+  if (anthropicBaseUrl) {
+    if (!Object.prototype.hasOwnProperty.call(config.provider, 'anthropic')) {
+      config.provider.anthropic = { models: {} };
+    }
+    config.provider.anthropic.options = {
+      baseURL: anthropicBaseUrl,
+      ...(config.provider.anthropic.options || {}),
+    };
+    announceBaseUrlNormalizationOnce(baseUrlEnv.ANTHROPIC_BASE_URL, anthropicBaseUrl, options._noticeDeps);
+  }
+
   // Register custom 'chat' agent: reads auto-approved, writes/bash require permission
   const chatAgent = {
     description: 'Conversational agent — reads are auto-approved, writes and commands require permission',

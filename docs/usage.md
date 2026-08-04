@@ -380,6 +380,8 @@ amicus models --check         # Audit your aliases against the catalog
 
 `amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
 
+**Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line prints the exact `amicus setup --add-alias <alias>=<current>` refresh command. Drift is informational only — unlike stale aliases, it never changes the exit code.
+
 **Validation on launch.** `start` and `fanout` validate the model against the catalog before launching. For an explicit `--model` on `continue`/`resume` this is **blocking** (a typo'd model fails fast with suggestions); for a model *inherited* from a prior session it's **advisory**. Skip it any time with `--no-validate-model`, or fix the catalog with `amicus models --refresh`.
 
 **Aliases are a curated seed, not a fixed list.** `amicus setup` seeds a curated set of short aliases (e.g. `gemini`, `gpt`, `opus`, `deepseek`), and you add or override them with `amicus setup --add-alias name=provider/model`. To see exactly what resolves on *your* machine, run `amicus models` — that is the source of truth.
@@ -501,6 +503,7 @@ Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a 
 | `default-model` | Your default model alias resolves | error |
 | `catalog` | Model-catalog cache present and within the 24h TTL | warn |
 | `aliases` | Your configured aliases still resolve against the catalog | warn |
+| `anthropic-base-url` | `ANTHROPIC_BASE_URL` isn't host-form (host-form 404s every direct-Anthropic leg unless normalized) | warn |
 | `opencode-bin` | The OpenCode engine binary is on `PATH` | error |
 | `engine-mcp` | The engine copy `npx -y amicus@latest mcp` would actually launch (catches a broken npx-cache copy a healthy local install would hide) | warn (error only if there's exactly one npx-cache copy and it's broken) |
 | `electron` | Electron (the interactive GUI) is installed | warn — headless still works |

@@ -108,4 +108,55 @@ function suggestReplacements(staleModel, catalog, n = 3) {
     .slice(0, n);
 }
 
-module.exports = { collectAliasSources, findStaleAliases, suggestReplacements };
+/**
+ * Stored aliases whose target is LIVE in the catalog but no longer what a
+ * fresh `amicus setup` would seed today — the v4.6.1 release-gate class
+ * (stored `gemini` -> 3.1-flash-lite-preview: still catalog-listed so
+ * findStaleAliases passes it, no longer what the family resolves to).
+ * Report + suggest, never auto-repair (this module's charter).
+ *
+ * Only user-config rows are checked (defaults/curated follow the catalog by
+ * construction), only for aliases that are quick-pick families (a custom
+ * alias has no "current" to drift from), and only when the stored target is
+ * itself catalog-live (a dead target is findStaleAliases's finding, not
+ * ours). The `current` display value goes through toStorableRoute() — the
+ * guarded 4.1.2 helper — never a bare prefix strip (spec D3).
+ *
+ * Drift membership, however, is NOT a raw compare against that single
+ * canonicalized display string. toStorableRoute() canonicalizes a
+ * direct-capable vendor's OpenRouter pick down to the bare direct form
+ * (e.g. 'google/gemini-3.6-flash'), but a stored alias may legitimately hold
+ * the gateway-prefixed form of that SAME model ('openrouter/google/gemini-
+ * 3.6-flash' — the exact route pickCurrent/resolveQuickPicks resolves live,
+ * and what a STALE fix's own suggestion may have pointed a user to store).
+ * Comparing only against the canonicalized string would false-positive that
+ * as drift. Instead, a stored row only counts as drift when its model is
+ * absent from the family's FULL live route-value set (every value in that
+ * family's `routes` map — openrouter form and any direct form together, per
+ * resolveQuickPicks) — i.e. it names a genuinely different model, not the
+ * same model under a different gateway form.
+ * @param {Array<{alias:string,model:string,source:string}>} sources
+ * @param {Array<{id:string}>} catalog
+ * @returns {Array<{alias:string,stored:string,current:string}>}
+ */
+function findDriftedStoredAliases(sources, catalog) {
+  if (!catalog || catalog.length === 0) { return []; }
+  const { resolveQuickPicks, toStorableRoute } = require('./quick-picks');
+  const current = new Map();
+  for (const r of resolveQuickPicks(catalog)) {
+    if (r.source !== 'live') { continue; }
+    const stored = toStorableRoute(r);
+    if (stored) { current.set(r.alias, { display: stored, routeValues: new Set(Object.values(r.routes)) }); }
+  }
+  const byProvider = idsByProvider(catalog);
+  return sources
+    .filter(({ source }) => source === 'user-config')
+    .filter(({ model }) => {
+      const ids = byProvider.get(model.split('/')[0]);
+      return !!(ids && ids.has(model));
+    })
+    .filter(({ alias, model }) => current.has(alias) && !current.get(alias).routeValues.has(model))
+    .map(({ alias, model }) => ({ alias, stored: model, current: current.get(alias).display }));
+}
+
+module.exports = { collectAliasSources, findStaleAliases, findDriftedStoredAliases, suggestReplacements };

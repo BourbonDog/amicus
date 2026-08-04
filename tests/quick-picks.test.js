@@ -19,6 +19,15 @@ describe('compareIdsDesc', () => {
     const ids = ['openrouter/openai/gpt-5.5-preview:free', 'openrouter/openai/gpt-5.5'];
     expect(ids.sort(compareIdsDesc)[0]).toBe('openrouter/openai/gpt-5.5');
   });
+  // Owner-reported: OpenAI renamed 5.6 into tier variants (sol/terra/luna).
+  // -terra isn't a MARKER_RE suffix, so this is a plain numeric-desc
+  // comparison, not the same-base marker-precedence rule above — pin it
+  // explicitly rather than assume compareIdsDesc treats "5.6-terra" as
+  // newer than "5.5".
+  test('terra-tier rename: gpt-5.6-terra outranks the older bare gpt-5.5', () => {
+    const ids = ['openrouter/openai/gpt-5.5', 'openrouter/openai/gpt-5.6-terra'];
+    expect(ids.sort(compareIdsDesc)[0]).toBe('openrouter/openai/gpt-5.6-terra');
+  });
 });
 
 describe('pickCurrent', () => {
@@ -71,6 +80,32 @@ describe('resolveQuickPicks', () => {
     expect(deepseek.source).toBe('live');
     expect(deepseek.routes.openrouter).toBe('openrouter/deepseek/deepseek-v9-pro');
     expect(deepseek.routes.deepseek).toBe('deepseek/deepseek-v4-pro');
+  });
+});
+
+// Owner-reported: OpenAI split 5.6 into tier variants — gpt-5.6-sol (premium),
+// gpt-5.6-terra (mid), gpt-5.6-luna (economy), each with a -pro sibling —
+// plus the unrelated gpt-5.3-codex family. The `gpt` quick pick must track
+// the TERRA tier specifically (owner ruling), not the newest id overall.
+describe('gpt quick-pick resolves to the terra tier (5.6 rename)', () => {
+  test('resolves gpt to the terra id when sol/luna/terra-pro siblings are all present', () => {
+    const catalog = [
+      row('openrouter/openai/gpt-5.5'),
+      row('openrouter/openai/gpt-5.6-sol'),
+      row('openrouter/openai/gpt-5.6-terra'),
+      row('openrouter/openai/gpt-5.6-terra-pro'),
+      row('openrouter/openai/gpt-5.6-luna'),
+    ];
+    const gpt = resolveQuickPicks(catalog).find(r => r.alias === 'gpt');
+    expect(gpt.source).toBe('live');
+    expect(gpt.routes.openrouter).toBe('openrouter/openai/gpt-5.6-terra');
+  });
+
+  test('a catalog with only the bare numeric id still resolves live (fallback-compat)', () => {
+    const catalog = [row('openrouter/openai/gpt-5.5')];
+    const gpt = resolveQuickPicks(catalog).find(r => r.alias === 'gpt');
+    expect(gpt.source).toBe('live');
+    expect(gpt.routes.openrouter).toBe('openrouter/openai/gpt-5.5');
   });
 });
 
