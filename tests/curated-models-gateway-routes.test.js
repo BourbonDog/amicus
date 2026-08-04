@@ -5,7 +5,9 @@ const { toGatewayRoutes } = require('../src/utils/curated-models');
 const r = toGatewayRoutes();
 
 test('Anthropic divergent aliases carry BOTH gateway-native ids', () => {
-  expect(r.opus).toEqual({ direct: 'anthropic/claude-opus-4-8', openrouter: 'openrouter/anthropic/claude-opus-4.8' });
+  // opus-5's two forms coincide (no dotted version segment), but the direct
+  // form is still AUTHORED, never derived — haiku keeps the dot/dash guard.
+  expect(r.opus).toEqual({ direct: 'anthropic/claude-opus-5', openrouter: 'openrouter/anthropic/claude-opus-5' });
   expect(r.haiku).toEqual({ direct: 'anthropic/claude-haiku-4-5-20251001', openrouter: 'openrouter/anthropic/claude-haiku-4.5' });
 });
 test('non-divergent Anthropic (sonnet-5) has matching forms', () => {

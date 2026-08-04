@@ -32,7 +32,7 @@ describe('curated-models v2 (families)', () => {
     // the gateway router can route direct-first; gateway-only vendors keep
     // their openrouter/ prefix since OpenRouter is their only route.
     expect(defaults.gemini).toBe('google/gemini-3.6-flash');
-    expect(defaults.opus).toBe('anthropic/claude-opus-4-8');
+    expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.deepseek).toBe('deepseek/deepseek-v4-pro');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
@@ -55,7 +55,7 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.claude).toBe('anthropic/claude-sonnet-5');
     expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
-    expect(defaults.opus).toBe('anthropic/claude-opus-4-8');
+    expect(defaults.opus).toBe('anthropic/claude-opus-5');
     // fable is divergent AND has no authored `anthropic:` route (OpenRouter-only
     // today), so it keeps its OpenRouter route rather than inventing a direct id.
     expect(defaults.fable).toBe('openrouter/anthropic/claude-fable-5');
@@ -66,7 +66,9 @@ describe('curated-models v2 (families)', () => {
     expect(defaults['qwen-flash']).toBe('openrouter/qwen/qwen3.6-flash');
     expect(defaults.glm).toBe('openrouter/z-ai/glm-5.1');
     expect(defaults.mistral).toBe('openrouter/mistralai/mistral-medium-3-5');
-    expect(defaults.devstral).toBe('openrouter/mistralai/devstral-2512');
+    // devstral: dropped 2026-08-04 (owner ruling) — OpenRouter delisted the
+    // devstral family entirely, and the alias had no other route.
+    expect(defaults.devstral).toBeUndefined();
     expect(defaults.minimax).toBe('openrouter/minimax/minimax-m2.7');
     expect(defaults.kimi).toBe('openrouter/moonshotai/kimi-k2.6');
     expect(defaults.seed).toBe('openrouter/bytedance-seed/seed-2.0-lite');

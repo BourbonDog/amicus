@@ -53,6 +53,7 @@ test('anthropic with no key returns the floor without a network call', async () 
 test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapshot', async () => {
   const f = loadFetcher(fakeHttps({ statusCode: 200, body: '{}' }));
   expect(f.ANTHROPIC_MODELS.map(m => m.id)).toEqual([
+    'anthropic/claude-opus-5',
     'anthropic/claude-opus-4-8',
     'anthropic/claude-sonnet-5',
     'anthropic/claude-haiku-4-5',

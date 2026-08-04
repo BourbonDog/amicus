@@ -25,7 +25,7 @@ const { isDirectProvider } = require('./provider-registry');
  * (gpt-5.5, gpt-6) OR that id's `-terra` tier variant (gpt-5.6-terra), and
  * excludes every other suffixed variant (-pro/-mini/-codex/-sol/-luna) —
  * see the tier-semantics comment on the entry below.
- * Pinned ids verified against the live catalog 2026-06-24.
+ * Pinned ids verified against the live catalog 2026-08-04.
  */
 const FAMILIES = [
   { alias: 'gemini', label: 'Gemini Flash-class', blurb: 'fast, large context',
@@ -54,8 +54,11 @@ const FAMILIES = [
     vendorPath: 'anthropic',
     idPattern: /^claude-opus-[\d.-]+$/,
     directProviders: ['anthropic'],
-    fallback: { openrouter: 'openrouter/anthropic/claude-opus-4.8',
-                anthropic: 'anthropic/claude-opus-4-8' } },
+    // claude-opus-5 has no dotted version segment, so the two forms coincide —
+    // the anthropic: route is still AUTHORED (DIVERGENT_VENDORS), never derived.
+    // Direct id verified against Anthropic docs 2026-08-04.
+    fallback: { openrouter: 'openrouter/anthropic/claude-opus-5',
+                anthropic: 'anthropic/claude-opus-5' } },
   { alias: 'deepseek', label: 'DeepSeek flagship', blurb: 'open-source',
     vendorPath: 'deepseek',
     idPattern: /^deepseek-v[\d.]+(-pro)?$/,
@@ -66,7 +69,7 @@ const FAMILIES = [
 
 /**
  * Alias-only entries (no wizard quick pick); openrouter route only.
- * Refreshed against the live catalog 2026-06-11.
+ * Refreshed against the live catalog 2026-08-04.
  */
 const CARDLESS = [
   // gpt-pro: previous-generation premium pro ($30/$180 per Mtok). Still
@@ -89,7 +92,10 @@ const CARDLESS = [
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
   { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },
   { alias: 'mistral', routes: { openrouter: 'openrouter/mistralai/mistral-medium-3-5' } },
-  { alias: 'devstral', routes: { openrouter: 'openrouter/mistralai/devstral-2512' } },
+  // devstral was dropped 2026-08-04 (owner ruling): OpenRouter delisted the
+  // whole devstral family and the alias had no other route. No retarget — no
+  // served model is a devstral successor ("no pinned guess is better than a
+  // wrong one"); `mistral` remains the vendor's alias.
   { alias: 'glm', routes: { openrouter: 'openrouter/z-ai/glm-5.1' } },
   { alias: 'minimax', routes: { openrouter: 'openrouter/minimax/minimax-m2.7' } },
   { alias: 'grok', routes: { openrouter: 'openrouter/x-ai/grok-4.3' } },

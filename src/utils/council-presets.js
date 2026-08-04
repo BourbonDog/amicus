@@ -43,12 +43,14 @@ const BUDGET_ALIASES = ['minimax', 'qwen-coder', 'deepseek'];
  * Frontier bench: three premium-flagship DEFAULT_ALIASES entries, one per
  * vendor family, verified against the same catalog snapshot:
  *   gpt-pro     openrouter/openai/gpt-5.5-pro          $0.00003 / $0.00018
- *   opus        openrouter/anthropic/claude-opus-4.8   $0.000005 / $0.000025
+ *   opus        openrouter/anthropic/claude-opus-5     $0.000005 / $0.000025
  *   gemini-pro  openrouter/google/gemini-3.1-pro-preview  $0.000002 / $0.000012
  * These are the three highest total (prompt+completion) prices in
  * DEFAULT_ALIASES that are also each a distinct vendor family (OpenAI /
  * Anthropic / Google) — `gpt` and `codex` (also OpenAI) and `claude`/`sonnet`
  * (also Anthropic) were skipped as same-family duplicates of the pick above.
+ * (opus re-pinned to claude-opus-5 on 2026-08-04 at the same live price, so
+ * the selection evidence above is unchanged.)
  */
 const FRONTIER_ALIASES = ['gpt-pro', 'opus', 'gemini-pro'];
 

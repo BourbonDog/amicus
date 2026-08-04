@@ -149,19 +149,25 @@ describe('divergent-vendor routes are never derived by prefix-stripping', () => 
   });
 
   test.each([
-    ['openrouter + direct', ['openrouter/anthropic/claude-opus-4.8', 'anthropic/claude-opus-4-8']],
-    ['direct only', ['anthropic/claude-opus-4-8']],
-    ['openrouter only', ['openrouter/anthropic/claude-opus-4.8']],
-  ])('seeds opus as the direct dash id from a %s catalog', (_label, ids) => {
+    ['openrouter + direct', ['openrouter/anthropic/claude-opus-5', 'anthropic/claude-opus-5'], 'anthropic/claude-opus-5'],
+    ['direct only', ['anthropic/claude-opus-5'], 'anthropic/claude-opus-5'],
+    ['openrouter only', ['openrouter/anthropic/claude-opus-5'], 'anthropic/claude-opus-5'],
+    // A catalog still on the dotted 4.8 era (older than the 2026-08-04 pins)
+    // keeps this guard's dot/dash bite alive: the seed must be the catalog's
+    // own direct dash row — or the authored direct fallback when the catalog
+    // offers no direct row — NEVER the prefix-stripped dot id.
+    ['stale dotted openrouter-only', ['openrouter/anthropic/claude-opus-4.8'], 'anthropic/claude-opus-5'],
+    ['stale dotted openrouter + dash direct', ['openrouter/anthropic/claude-opus-4.8', 'anthropic/claude-opus-4-8'], 'anthropic/claude-opus-4-8'],
+  ])('seeds opus from a %s catalog as a direct-API id, never a stripped dot id', (_label, ids, expected) => {
     const seeds = toLiveSeedAliases(ids.map(row));
-    expect(seeds.opus).toBe(toDefaultAliases().opus);
-    expect(seeds.opus).toBe('anthropic/claude-opus-4-8');
+    expect(seeds.opus).toBe(expected);
+    expect(seeds.opus).not.toBe('anthropic/claude-opus-4.8'); // the fabricated strip
   });
 
   test('a live anthropic catalog never makes the seed diverge from the shipped defaults', () => {
     const seeds = toLiveSeedAliases([
-      row('openrouter/anthropic/claude-opus-4.8'),
-      row('anthropic/claude-opus-4-8'),
+      row('openrouter/anthropic/claude-opus-5'),
+      row('anthropic/claude-opus-5'),
     ]);
     const defaults = toDefaultAliases();
     const diverged = Object.keys(defaults).filter(k => seeds[k] !== defaults[k]);
