@@ -43,7 +43,9 @@ describe('curated-models v2 (families)', () => {
     // Direct-capable (openai/google/deepseek) — bare, policy-routed. These
     // vendors use identical ids on both gateways, so the bare form is derived.
     expect(defaults.gpt).toBe('openai/gpt-5.6-terra');
-    expect(defaults['gpt-pro']).toBe('openai/gpt-5.5-pro');
+    // Owner ruling 2026-08-04: gpt-pro tracks the premium (sol) tier's pro
+    // sibling — retargeted off gpt-5.5-pro ahead of the 5.5 line's sunset.
+    expect(defaults['gpt-pro']).toBe('openai/gpt-5.6-sol-pro');
     expect(defaults.codex).toBe('openai/gpt-5.3-codex');
     expect(defaults.gemini).toBe('google/gemini-3.6-flash');
     expect(defaults['gemini-pro']).toBe('google/gemini-3.1-pro-preview');
