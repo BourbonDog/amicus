@@ -3,7 +3,8 @@
  * (v4.4 §5, ⚠️ DE-ROT F05 split of workspace-app.js).
  *
  * Loads BEFORE workspace-app.js (md-lite → live-model → workspace-render →
- * workspace-matrix → workspace-panels → workspace-verbs → workspace-app), so
+ * workspace-matrix → workspace-seats → workspace-panels → workspace-verbs →
+ * workspace-app), so
  * every function here reads `window.AmicusApp` / `window.AmicusVerbs` at CALL
  * time (never captured at this file's own load time — neither namespace
  * exists yet when this IIFE runs). window.AmicusApp publishes its namespace
@@ -37,11 +38,10 @@
     return kind + '-' + sanitizeName(model) + '.md';
   }
 
+  // ⚠️ D8 extraction (Task 1): body moved verbatim to workspace-seats.js
+  // (window.AmicusSeats), which loads immediately before this file.
   function renderSeatsPanel() {
-    var A = window.AmicusApp;
-    var d = A.state.detail;
-    var seats = window.AmicusLive.seatsFromRunStats(d.derived.cost.rows);
-    window.AmicusRender.renderSeats(A.$('seats-body'), seats, A.state.blind, A.labelOf);
+    window.AmicusSeats.renderSeatsPanel();
   }
 
   function renderMatrixPanel() {

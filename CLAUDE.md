@@ -354,6 +354,7 @@ electron/
 │   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
 │   ├── workspace-panels.js  # Council Workspace — lazy/prose panels + the matrix/verdict panel adapters
 │   ├── workspace-render.js  # Council Workspace — DOM painters (run list, header, stage rail, seats,
+│   ├── workspace-seats.js  # Council Workspace — seats panel painter (v4.4 §5). D8 extraction (Task 1,
 │   ├── workspace-verbs.js  # Council Workspace — action verbs (v4.4 §5, ⚠️ DE-ROT F05 split of
 │   └── workspace.css
 ├── close-guard.js  # Close Guard — auto-fold on window close (backlog B01)
