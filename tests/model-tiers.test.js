@@ -6,12 +6,17 @@ const { toDefaultAliases } = require('../src/utils/curated-models');
 
 const row = id => ({ id, name: id, contextLength: 1, pricing: { prompt: '0' } });
 
+// A tier's value is a regex OR an ordered regex list (first match wins).
+const matchesAny = (patterns, id) => [].concat(patterns).some(r => r.test(id));
+
 describe('TIERS table', () => {
-  test('every direct-capable vendor defines economy/balanced/frontier regexes', () => {
+  test('every direct-capable vendor defines economy/balanced/frontier patterns (regex or ordered list)', () => {
     for (const vendor of ['anthropic', 'openai', 'google', 'deepseek']) {
-      expect(TIERS[vendor].economy).toBeInstanceOf(RegExp);
-      expect(TIERS[vendor].balanced).toBeInstanceOf(RegExp);
-      expect(TIERS[vendor].frontier).toBeInstanceOf(RegExp);
+      for (const tier of ['economy', 'balanced', 'frontier']) {
+        const patterns = [].concat(TIERS[vendor][tier]);
+        expect(patterns.length).toBeGreaterThan(0);
+        for (const p of patterns) { expect(p).toBeInstanceOf(RegExp); }
+      }
     }
   });
 
@@ -23,13 +28,35 @@ describe('TIERS table', () => {
     expect(TIERS.anthropic.frontier.test('claude-sonnet-5')).toBe(false);
   });
 
-  test('openai regexes distinguish base vs -mini vs -pro', () => {
-    expect(TIERS.openai.economy.test('gpt-5.5-mini')).toBe(true);
-    expect(TIERS.openai.economy.test('gpt-5.5')).toBe(false);
-    expect(TIERS.openai.balanced.test('gpt-5.5')).toBe(true);
-    expect(TIERS.openai.balanced.test('gpt-5.5-mini')).toBe(false);
-    expect(TIERS.openai.balanced.test('gpt-5.5-pro')).toBe(false);
-    expect(TIERS.openai.frontier.test('gpt-5.5-pro')).toBe(true);
+  // Owner ruling 2026-08-04: OpenAI's 5.6 line ships named tiers only — luna
+  // ($0.10/$0.60 per Mtok in/out), terra ($1/$6), sol ($5/$30), each with a
+  // -pro sibling priced at its base tier. economy→luna, balanced→terra,
+  // frontier→sol; each tier accepts its -pro sibling and then the 5.5-era
+  // naming as ordered fallbacks so neither sunset silently kills resolution.
+  test('openai economy matches luna, its -pro sibling, and legacy -mini only', () => {
+    expect(matchesAny(TIERS.openai.economy, 'gpt-5.6-luna')).toBe(true);
+    expect(matchesAny(TIERS.openai.economy, 'gpt-5.6-luna-pro')).toBe(true);
+    expect(matchesAny(TIERS.openai.economy, 'gpt-5.4-mini')).toBe(true);
+    expect(matchesAny(TIERS.openai.economy, 'gpt-5.5')).toBe(false);
+    expect(matchesAny(TIERS.openai.economy, 'gpt-5.6-terra')).toBe(false);
+  });
+
+  test('openai balanced matches terra, bare flagship ids, and terra-pro; never sol/-mini/-pro/codex', () => {
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.6-terra')).toBe(true);
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.5')).toBe(true);
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.6-terra-pro')).toBe(true);
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.6-sol')).toBe(false);
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.4-mini')).toBe(false);
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.5-pro')).toBe(false);
+    expect(matchesAny(TIERS.openai.balanced, 'gpt-5.3-codex')).toBe(false);
+  });
+
+  test('openai frontier matches sol, sol-pro, and the legacy numeric -pro only', () => {
+    expect(matchesAny(TIERS.openai.frontier, 'gpt-5.6-sol')).toBe(true);
+    expect(matchesAny(TIERS.openai.frontier, 'gpt-5.6-sol-pro')).toBe(true);
+    expect(matchesAny(TIERS.openai.frontier, 'gpt-5.5-pro')).toBe(true);
+    expect(matchesAny(TIERS.openai.frontier, 'gpt-5.6-terra')).toBe(false);
+    expect(matchesAny(TIERS.openai.frontier, 'gpt-5.5')).toBe(false);
   });
 
   test('deepseek economy and balanced share the base pattern; frontier requires -pro', () => {
@@ -81,17 +108,41 @@ describe('resolveTier — anthropic (direct + OpenRouter twins)', () => {
   });
 });
 
-describe('resolveTier — openai (base vs -mini vs -pro)', () => {
-  const catalog = [row('openai/gpt-5.5'), row('openai/gpt-5.5-mini'), row('openai/gpt-5.5-pro')];
+describe('resolveTier — openai (5.6 named tiers: luna/terra/sol)', () => {
+  // Mirrors the live catalog 2026-08-04: the full 5.6 tier set plus the
+  // still-served 5.5 line and the last -mini generation.
+  const catalog = [
+    row('openai/gpt-5.5'), row('openai/gpt-5.5-pro'), row('openai/gpt-5.4-mini'),
+    row('openai/gpt-5.6-luna'), row('openai/gpt-5.6-luna-pro'),
+    row('openai/gpt-5.6-terra'), row('openai/gpt-5.6-terra-pro'),
+    row('openai/gpt-5.6-sol'), row('openai/gpt-5.6-sol-pro'),
+  ];
 
-  test('economy -> -mini', () => {
-    expect(resolveTier('openai', 'economy', catalog)).toBe('openai/gpt-5.5-mini');
+  test('economy -> luna, not the legacy -mini and not the -pro sibling', () => {
+    expect(resolveTier('openai', 'economy', catalog)).toBe('openai/gpt-5.6-luna');
   });
-  test('balanced -> base (anchored regex excludes -mini/-pro)', () => {
-    expect(resolveTier('openai', 'balanced', catalog)).toBe('openai/gpt-5.5');
+  test('balanced -> terra base, preferred over its same-price -pro sibling despite id sort order', () => {
+    expect(resolveTier('openai', 'balanced', catalog)).toBe('openai/gpt-5.6-terra');
   });
-  test('frontier -> -pro', () => {
-    expect(resolveTier('openai', 'frontier', catalog)).toBe('openai/gpt-5.5-pro');
+  test('frontier -> sol, not the legacy gpt-5.5-pro premium', () => {
+    expect(resolveTier('openai', 'frontier', catalog)).toBe('openai/gpt-5.6-sol');
+  });
+  test('base tier delisted -> the -pro sibling steps in ahead of legacy naming', () => {
+    const proOnly = [
+      row('openai/gpt-5.4-mini'), row('openai/gpt-5.6-luna-pro'), row('openai/gpt-5.6-sol-pro'),
+    ];
+    expect(resolveTier('openai', 'economy', proOnly)).toBe('openai/gpt-5.6-luna-pro');
+    expect(resolveTier('openai', 'frontier', proOnly)).toBe('openai/gpt-5.6-sol-pro');
+  });
+  test('balanced keeps the family bare-id fallback ahead of terra-pro (same pattern as the gpt family)', () => {
+    const noTerra = [row('openai/gpt-5.5'), row('openai/gpt-5.6-terra-pro')];
+    expect(resolveTier('openai', 'balanced', noTerra)).toBe('openai/gpt-5.5');
+  });
+  test('stale pre-5.6 catalog still resolves every tier via the legacy patterns', () => {
+    const legacy = [row('openai/gpt-5.5'), row('openai/gpt-5.5-pro'), row('openai/gpt-5.4-mini')];
+    expect(resolveTier('openai', 'economy', legacy)).toBe('openai/gpt-5.4-mini');
+    expect(resolveTier('openai', 'balanced', legacy)).toBe('openai/gpt-5.5');
+    expect(resolveTier('openai', 'frontier', legacy)).toBe('openai/gpt-5.5-pro');
   });
 });
 

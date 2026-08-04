@@ -28,7 +28,13 @@ const { pickCurrent } = require('./quick-picks');
 const { isDirectProvider } = require('./provider-registry');
 const { toDefaultAliases, listCuratedRoutes } = require('./curated-models');
 
-/** Tier regex table: pattern matches the model segment after `<vendor>/` (or `openrouter/<vendor>/`). */
+/**
+ * Tier pattern table: each tier holds a regex — or an ORDERED regex list,
+ * tried first-match-wins — over the model segment after `<vendor>/` (or
+ * `openrouter/<vendor>/`). List order expresses preference, which a single
+ * regex cannot: ids sort numeric-descending, so `-pro` siblings would
+ * otherwise outrank their same-priced base.
+ */
 const TIERS = {
   anthropic: {
     economy: /^claude-haiku-/,
@@ -36,9 +42,17 @@ const TIERS = {
     frontier: /^claude-opus-/,
   },
   openai: {
-    economy: /^gpt-[\d.]+-mini$/,
-    balanced: /^gpt-[\d.]+$/,
-    frontier: /^gpt-[\d.]+-pro$/,
+    // The 5.6 line renamed the flagship into tiers — luna ($0.10/$0.60 per
+    // Mtok in/out), terra ($1/$6), sol ($5/$30), each with a -pro sibling
+    // priced at its base tier; no bare/-mini/-pro 5.6 ids exist. Owner
+    // ruling 2026-08-04: economy→luna, balanced→terra, frontier→sol, each
+    // preferring the base name, then its -pro sibling, then the 5.5-era
+    // naming so a stale catalog still resolves. balanced's primary is the
+    // same bare-or-terra pattern the `gpt` family uses (curated-models.js),
+    // so a future return to bare flagship ids is tracked automatically.
+    economy: [/^gpt-[\d.]+-luna$/, /^gpt-[\d.]+-luna-pro$/, /^gpt-[\d.]+-mini$/],
+    balanced: [/^gpt-[\d.]+(-terra)?$/, /^gpt-[\d.]+-terra-pro$/],
+    frontier: [/^gpt-[\d.]+-sol$/, /^gpt-[\d.]+-sol-pro$/, /^gpt-[\d.]+-pro$/],
   },
   google: {
     economy: /^gemini-[\d.]+-flash-lite/,
@@ -77,9 +91,16 @@ function buildGatewayOnlyAliasMap() {
 
 const GATEWAY_ONLY_ALIAS = buildGatewayOnlyAliasMap();
 
-/** Newest catalog id matching `regex` under `vendor`; direct namespace preferred over OpenRouter's. */
-function pickForTier(catalog, vendor, regex) {
-  return pickCurrent(catalog, '', vendor, regex) || pickCurrent(catalog, 'openrouter/', vendor, regex);
+/**
+ * First match wins over a tier's ordered patterns; within each pattern the
+ * newest matching id is picked, direct namespace preferred over OpenRouter's.
+ */
+function pickForTier(catalog, vendor, patterns) {
+  for (const regex of [].concat(patterns)) {
+    const pick = pickCurrent(catalog, '', vendor, regex) || pickCurrent(catalog, 'openrouter/', vendor, regex);
+    if (pick) { return pick; }
+  }
+  return null;
 }
 
 /** True when the catalog has ANY row (any tier) under this vendor's namespace, in either gateway. */
