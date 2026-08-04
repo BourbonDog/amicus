@@ -492,6 +492,14 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     const stableFinishedPolls = options.stableFinishedPolls || STABLE_FINISHED_POLLS;
     const stableIdlePolls = options.stableIdlePolls || STABLE_IDLE_POLLS;
     const pollCallTimeoutMs = options.pollCallTimeoutMs || POLL_CALL_TIMEOUT_MS;
+    // v4.6.2 PR2 (spec §5, D4): fail fast when the model never produces
+    // ANYTHING — the "accepted but not serving" class. Disarmed permanently
+    // by the first progressed tick below; 0 (or negative) disables.
+    const { resolveNoOutputBackstopMs, createNoOutputBackstop } = require('./utils/no-output-backstop');
+    const noOutputBackstopMs = options.noOutputBackstopMs !== undefined
+      ? options.noOutputBackstopMs : resolveNoOutputBackstopMs(options._env);
+    const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
+    let backstopFired = false;
     const maxConsecutivePollFailures = options.maxConsecutivePollFailures || MAX_CONSECUTIVE_POLL_FAILURES;
     const toolCallStallMs = options.toolCallStallMs || TOOL_CALL_STALL_MS;
     // `=== undefined` rather than `||`: 0 is a meaningful value (disable the
@@ -729,6 +737,15 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
           || newAssistant || reasoningActivity || settleActivity;
         if (progressed) { lastProgressAt = Date.now(); }
 
+        // No-output backstop: one tick per poll. Fired is terminal — break the
+        // loop; the post-loop block below mirrors the timeout path.
+        if (noOutputBackstop.tick(progressed, Date.now()) === 'fired') {
+          backstopFired = true;
+          sessionError = `NO_OUTPUT_BACKSTOP: model produced no output, reasoning, or tool calls in ${Math.round(noOutputBackstopMs / 1000)}s — likely a listed-but-not-serving model or a dead endpoint`;
+          logger.warn('No-output backstop fired', { taskId, backstopMs: noOutputBackstopMs });
+          break;
+        }
+
         // B53: a wedged tool call (tool_use emitted, result never arrives) otherwise
         // burns the full --timeout with zero output — the stable-poll idle gate above
         // requires mirror.output.length > 0, which a pre-text wedge never satisfies.
@@ -843,6 +860,20 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
         logger.info('Session aborted after timeout', { taskId, sessionId });
       } catch (abortErr) {
         logger.warn('Failed to abort session after timeout', { error: abortErr.message });
+      }
+    }
+
+    // Backstop fired: abort the OpenCode session exactly like the timeout path
+    // (the agent keeps running otherwise). The leg's error already carries the
+    // NO_OUTPUT_BACKSTOP reason; no separate degrade machinery — the ordinary
+    // dead-leg path (SL-2 retry, sink announcement, exit codes) inherits it.
+    if (backstopFired && !completed && !aborted) {
+      try {
+        const { abortSession } = require('./opencode-client');
+        await abortSession(client, sessionId, ...dirArgs);
+        logger.info('Session aborted after no-output backstop', { taskId, sessionId });
+      } catch (abortErr) {
+        logger.warn('Failed to abort session after backstop', { error: abortErr.message });
       }
     }
 
