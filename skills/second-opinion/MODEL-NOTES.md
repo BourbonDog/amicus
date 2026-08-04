@@ -39,8 +39,8 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   model-specific signals. Never present a half-finished run as an answer.
 - **Seat losses are announced, retried once, and exit-coded — read the surfaces, don't diff
   finding counts.** Every lost seat/leg is announced in one voice on stderr and recorded in
-  `run.json.degrades[]`, `verdict.json.degrades[]`, and `verdict.seatLoss`, and the run exits
-  degraded (2). A Stage-1 wave or leg that dies is relaunched exactly once (serially, after the
+  `run.json.degrades[]`, `verdict.json.degrades[]`, the report's **"What was lost"** section, and
+  `verdict.seatLoss`, and the run exits degraded (2). A Stage-1 wave or leg that dies is relaunched exactly once (serially, after the
   surviving launches settle; skipped when the run is already over `--max-cost`): a heal announces
   as a `Recovered:` line and the run stays exit 0; a seat still dead after its retry is recorded
   with both attempts named in the why. A dead route still doesn't stop a council — it shrinks it —
@@ -71,7 +71,7 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   complete deliverable by the end of THIS response; if running low on room, stop reading early and
   write from what you have rather than deliver nothing."*
 - **Multi-FILE agentic reads stub out like long single reads — even WITH the anti-narration
-  preamble baked in.** Weaker readers have returned narration stubs of under ~100 chars on a
+  preamble baked in.** Weaker readers have returned narration stubs of roughly 60–100 chars on a
   multi-file packet despite the standard preamble. Treat a many-file briefing as a long-read task:
   expect stubs, retry solo once with the identical briefing, then substitute the model — or
   pre-concatenate the packet into one file for weaker readers.
@@ -215,8 +215,8 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
 ### Kimi  (`--model kimi` → via OpenRouter)
 - The bench's sharpest adjudicator (caught strawmen and misreads other judges waved through).
 - Repeatedly the **top-ranked reviewer on consumer-practical, safety-heavy artifacts** (food
-  safety, mechanical advice) — unanimous #1 in two such runs, with the most granular findings on
-  the bench and genuine structural catches.
+  safety, mechanical advice) — top-ranked in two such runs (unanimous in one), with the most
+  granular findings on the bench and genuine structural catches.
 - Its specificity is also its risk: it reaches for **exhaustive quantitative claims ("every",
   "all", "none") that are directionally right and literally wrong** — and it has successfully
   DEFENDED one in a debate round against a correct dispute. Verify its universal quantifiers
@@ -243,16 +243,19 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   opus` call fails "Not Found" on the host form and completes with `/v1` appended.
 - **Symptom signature:** instant "Not Found", zero tokens, direct-Anthropic routes only —
   OpenRouter-routed legs in the same run are unaffected. It hits every direct-Anthropic alias
-  equally (haiku, opus, sonnet, claude, fable), so a "dead" cheap seat and a "dead" frontier chair
-  with this signature share one cause.
+  equally (haiku, opus, sonnet, claude; `fable` is OpenRouter-only and unaffected), so a "dead"
+  cheap seat and a "dead" frontier chair with this signature share one cause.
 - **The check:** inspect `ANTHROPIC_BASE_URL` in the environment amicus actually runs in — the var
   can live only in a parent process's env (e.g. the host app), absent from every shell profile and
   settings file on disk. If it lacks `/v1`, that is the kill. A doctor check for this is filed on
   the backlog; until it ships, check by hand before blaming a model or an alias.
 - Seat-loss mechanics for a dead route are the same as any other loss — announced in one voice,
-  retried once, exit 2 if still dead (see the seat-loss bullet in Global operating rules).
+  exit 2 if still dead. A dead Stage-1 seat gets the one retry; a dead CHAIR walks the chair's own
+  chain instead — same-chair retry, then promotion of the best non-bench model from the ledger —
+  with the actual chair checkpointed into `run.json` (see the seat-loss bullet in Global
+  operating rules).
 
-### GLM  (`--model glm` → z-ai via OpenRouter; recent paid runs resolve to `glm-5.2`)
+### GLM  (`--model glm` → `glm-5.1` via OpenRouter; the recent observations below are from the explicit `openrouter/z-ai/glm-5.2` id)
 - The v4.4.0-era "structured-output reliability not established" warning is **withdrawn as
   wrong-cause**: its `unstructured`-conformance results and repair refusals traced to two
   since-fixed engine defects (the unanchored fence extractor that truncated any JSON quoting a
@@ -303,11 +306,12 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   re-confirm before leaning on it.
 
 ### Gemini 3.1 Pro  (`openrouter/google/gemini-3.1-pro-preview` — the PRO tier; the bare `gemini` alias resolves to flash)
-- Debut (one paid ideation run): `clean` conformance, mid-bench peer standing, cheap for its tier.
+- Debut (one paid ideation run): `clean` conformance, mid-bench peer standing.
   No narration or stall — but the material was INLINED, not an agentic read (where gemini-flash
   historically stalls); don't extend the result to agentic reads untested.
-- Use the explicit `…/gemini-3.1-pro-preview` id when you want a real Pro reviewer; the bare
-  `gemini` alias gives you flash.
+- Use the shipped `gemini-pro` alias when you want a real Pro reviewer — it live-resolves to the
+  current Pro tier, falling back to `openrouter/google/gemini-3.1-pro-preview`; the bare `gemini`
+  alias gives you flash.
 
 ### (others — add as used)
 - Opus / o-series etc. are reachable via amicus **if their API keys are configured**. Add notes
