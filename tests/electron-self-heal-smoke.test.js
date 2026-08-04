@@ -60,6 +60,48 @@ function noopLock() {
   return { acquireLock: () => ({ release: () => {} }) };
 }
 
+// Hermeticity guard (same class as the v4.6.2-pr1 wave; see allGood's M14
+// comment in tests/cli-handlers-doctor.test.js): the doctor smokes below
+// inject every ELECTRON seam, but runDoctorChecks computes the FULL check
+// list, so the remaining deps used to fall through to realDeps() and run for
+// real -- engine-install subprocess scans and the OpenRouter credit network
+// probe included, violating this suite's own "NO network" headline. baseDeps
+// mirrors allGood's shape and pins the non-electron checks; every electron
+// seam in the calls below stays exactly as injected, so the REAL-wiring smoke
+// coverage is untouched.
+const baseDeps = {
+  nodeVersion: 'v20.0.0',
+  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
+  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
+  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
+  getCwd: () => 'C:\\Users\\me\\code\\amicus',
+  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
+  getConfigDir: () => '/cfg',
+  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
+  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
+  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
+  findStaleAliases: () => [],
+  hasOpencodeBinary: () => true,
+  getElectronPath: () => '/path/to/electron',
+  hasAmicusRegistration: () => true,
+  discoverCoworkMcps: () => ({ amicus: {} }),
+  inspectLegacyMcpEntries: () => [
+    { target: 'Claude Code', status: 'absent' },
+    { target: 'Claude Desktop', status: 'absent' },
+  ],
+  migrateLegacyMcpEntries: () => [],
+  skillInstalled: () => true,
+  listSessionIndexTmpFiles: () => [],
+  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  repairEngine: async () => ({ repaired: false }),
+  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
+  getLocalProviders: () => ({}),
+  probeLocalProvider: jest.fn(),
+  // v4.6.2-pr1 forward-pin: the anthropic-base-url check in flight on PR #95
+  // reads d.env -- a harmless extra key until that check lands on main.
+  env: {},
+};
+
 beforeEach(() => {
   // ensureElectron memoizes its provision across launches; reset between tests.
   ee._resetEnsureElectron();
@@ -88,6 +130,7 @@ describe('#58 latent-bug guard: path.txt present but exe MISSING is NOT usable',
     const dir = fakeElectronDir({ withExe: false });
     const doctor = require('../src/cli-handlers-doctor');
     const checks = await doctor.runDoctorChecks({
+      ...baseDeps,
       // Probe wired to the REAL stat check over the broken package.
       getElectronPath: () =>
         (ei.isElectronUsable({ electronDir: dir, env: {}, platform: 'win32' })
@@ -298,6 +341,7 @@ describe('#58 doctor --fix heals through the REAL repairElectron', () => {
 
     const doctor = require('../src/cli-handlers-doctor');
     const checks = await doctor.runDoctorChecks({
+      ...baseDeps,
       getElectronPath: () => null, // broken before fix
       fix: true,
       repairElectron: realRepairOverPackage(dir, { extract, cachedZip: () => zip }),
@@ -325,6 +369,7 @@ describe('#58 doctor --fix heals through the REAL repairElectron', () => {
     const spawn = jest.fn(() => { throw new Error('install.js spawn must NOT be the controlled provision path'); });
     const doctor = require('../src/cli-handlers-doctor');
     const checks = await doctor.runDoctorChecks({
+      ...baseDeps,
       getElectronPath: () => null,
       fix: true,
       repairElectron: realRepairOverPackage(dir, { downloadArtifact, extract, spawn }),
@@ -342,6 +387,7 @@ describe('#58 doctor --fix heals through the REAL repairElectron', () => {
     // exercised end-to-end through runDoctorChecks.
     const doctor = require('../src/cli-handlers-doctor');
     const checks = await doctor.runDoctorChecks({
+      ...baseDeps,
       getElectronPath: () => null,
       fix: true,
       repairElectron: async () => ({ deferred: true, reason: 'no cached zip; deferring download' }),
