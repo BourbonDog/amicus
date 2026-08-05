@@ -91,6 +91,17 @@ All notable changes to Amicus are documented here. Format follows
   with replacement suggestions by `models --check` / `doctor`. This was the pin that made
   `models --check` exit 1 — the v4.6.2 release-gate risk.
 
+### CI
+
+- **The macOS/node-24 unit leg now runs jest with `--workerIdleMemoryLimit=1GB`.** That leg —
+  and only that leg — intermittently lost a worker to a native SIGSEGV ("A jest worker process
+  was terminated by another process"), which fails whichever suite occupied the worker with
+  zero assertion failures and a green rerun. Three confirmed hits (2026-07-31
+  run-cost-unknown, 2026-08-04 PR #100 update-notice, 2026-08-05 PR #105 — 6466 passed, the
+  dead worker alone failed 1 suite) tripped the standing third-occurrence rule. The limit
+  makes jest recycle an idle worker before the leak reaches segfault territory; the flag is
+  injected via a matrix `include`, so the other five legs still run a bare `npm test`.
+
 ## [4.6.1] - 2026-08-03
 
 ### Added
