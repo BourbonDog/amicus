@@ -102,6 +102,20 @@
         }
       }
     },
+    "chairAttempts": {
+      "description": "v4.6.2 PR5 (LC-5): one entry per resolved chair fallback-walk attempt (ch1/ch2/ch3 — the ch4 VERDICT-line repair is not an attempt, see classifyChairAttempt), checkpointed incrementally so a mid-walk kill preserves the attempts already resolved. Additive; absent on chairless (cost-skipped) runs and on every pre-PR5 run.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["waveId", "model", "outcome"],
+        "properties": {
+          "waveId": { "type": "string" },
+          "model": { "type": "string" },
+          "outcome": { "enum": ["completed", "error", "timeout", "no-output"] },
+          "reason": { "type": ["string", "null"] }
+        }
+      }
+    },
     "debate": {
       "type": "object",
       "properties": {
