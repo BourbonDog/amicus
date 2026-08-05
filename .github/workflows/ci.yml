@@ -14,13 +14,30 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: [22, 24]
+        # macOS/node-24 ONLY: jest workers intermittently die with "A jest worker
+        # process was terminated by another process: signal=SIGSEGV" — a native
+        # crash from unbounded worker heap growth, never a test failure: zero
+        # assertions fail and the rerun is green. Three confirmed hits tripped
+        # the standing third-occurrence rule:
+        #   2026-07-31           — killed the run-cost-unknown.test.js suite
+        #   2026-08-04 (PR #100) — killed the update-notice.test.js suite
+        #   2026-08-05 (PR #105) — 6466 tests passed; the dead worker alone
+        #                          failed 1 suite
+        # workerIdleMemoryLimit (jest >= 29) recycles a worker once its idle RSS
+        # crosses the limit, so the leak never reaches segfault territory. The
+        # include below scopes it to this one leg: everywhere else jest-flags is
+        # empty and the test step degrades to a plain `npm test`.
+        include:
+          - os: macos-latest
+            node: 24
+            jest-flags: --workerIdleMemoryLimit=1GB
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
-      - run: npm test
+      - run: npm test -- ${{ matrix.jest-flags }}
 
   quality:
     name: quality (lint + secret-scan + size-gate + actionlint)
