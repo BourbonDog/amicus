@@ -8,10 +8,11 @@
  */
 'use strict';
 
-function loadAudit(routes) {
+function loadAudit(routes, provenance = {}) {
   jest.resetModules();
   jest.doMock('../../src/utils/curated-models', () => ({
     toGatewayRoutes: () => routes,
+    directFormProvenance: () => provenance,
   }));
   return require('../../src/utils/gateway-route-audit');
 }
@@ -89,15 +90,20 @@ describe('auditGatewayRoutes — DIVERGENT', () => {
   afterEach(() => jest.resetModules());
 
   it('flags divergent-missing when the alias lacks a direct form but the catalog authoritatively confirms one', () => {
-    const { auditGatewayRoutes } = loadAudit({
-      fable: { openrouter: 'openrouter/anthropic/claude-fable-5' }, // no direct form authored
-    });
+    // Renamed off 'fable' (v4.6.3 PR1 Task 1 gave the real fable alias an
+    // authored direct route, which would make this fixture misleading) --
+    // this still pins the positive direction: gatewayOnly: false must NOT
+    // suppress the finding for a non-annotated alias.
+    const { auditGatewayRoutes } = loadAudit(
+      { nova: { openrouter: 'openrouter/anthropic/claude-nova-5' } }, // no direct form authored
+      { nova: { directForm: 'none', gatewayOnly: false } }
+    );
     const catalogInfo = cat([
-      { id: 'openrouter/anthropic/claude-fable-5' },
-      { id: 'anthropic/claude-fable-5', authoritative: true }, // now live-confirmed
+      { id: 'openrouter/anthropic/claude-nova-5' },
+      { id: 'anthropic/claude-nova-5', authoritative: true }, // now live-confirmed
     ]);
     expect(auditGatewayRoutes(catalogInfo)).toContainEqual({
-      alias: 'fable', gateway: 'direct', kind: 'divergent-missing', model: 'anthropic/claude-fable-5'
+      alias: 'nova', gateway: 'direct', kind: 'divergent-missing', model: 'anthropic/claude-nova-5'
     });
   });
 
@@ -157,5 +163,71 @@ describe('auditGatewayRoutes — DIVERGENT', () => {
     });
     expect(() => auditGatewayRoutes(cat([{ id: 'anthropic/claude-opus-4-8' }]))).not.toThrow();
     expect(auditGatewayRoutes(cat([{ id: 'anthropic/claude-opus-4-8' }]))).toEqual([]);
+  });
+});
+
+describe('derived-direct suppression + gatewayOnly (v4.6.3 PR1, spec D2)', () => {
+  afterEach(() => jest.resetModules());
+
+  it('DERIVED direct miss with a catalog-valid openrouter sibling is NOT stale', () => {
+    const { auditGatewayRoutes } = loadAudit(
+      { 'gpt-pro': { direct: 'openai/gpt-5.6-sol-pro', openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
+      { 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }
+    );
+    const catalogInfo = cat([
+      { id: 'openai/gpt-5.6-sol' }, // direct ns non-empty, but sol-pro absent
+      { id: 'openrouter/openai/gpt-5.6-sol-pro' }, // openrouter sibling IS catalog-valid
+    ]);
+    expect(auditGatewayRoutes(catalogInfo).filter(f => f.kind === 'stale')).toEqual([]);
+  });
+
+  it('DERIVED direct miss with the openrouter sibling ALSO dead still reports BOTH', () => {
+    const { auditGatewayRoutes } = loadAudit(
+      { 'gpt-pro': { direct: 'openai/gpt-5.6-sol-pro', openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
+      { 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }
+    );
+    const catalogInfo = cat([
+      { id: 'openai/gpt-5.6-sol' },
+      { id: 'openrouter/openai/gpt-5.6-sol' }, // sol-pro absent from BOTH namespaces
+    ]);
+    const stale = auditGatewayRoutes(catalogInfo).filter(f => f.kind === 'stale');
+    expect(stale.map(f => f.gateway).sort()).toEqual(['direct', 'openrouter']);
+  });
+
+  it('AUTHORED direct miss still reports -- suppression never blankets authored routes', () => {
+    const { auditGatewayRoutes } = loadAudit(
+      { haiku: { direct: 'anthropic/claude-haiku-4-5-20251001', openrouter: 'openrouter/anthropic/claude-haiku-4.5' } },
+      { haiku: { directForm: 'authored', gatewayOnly: false } }
+    );
+    const catalogInfo = cat([
+      { id: 'anthropic/claude-sonnet-5' }, // anthropic/ ns non-empty, but not the haiku id
+      { id: 'openrouter/anthropic/claude-haiku-4.5' },
+    ]);
+    expect(auditGatewayRoutes(catalogInfo).filter(f => f.kind === 'stale')).toEqual([
+      { alias: 'haiku', gateway: 'direct', kind: 'stale', model: 'anthropic/claude-haiku-4-5-20251001' },
+    ]);
+  });
+
+  it('gatewayOnly suppresses the derived-direct stale even when the openrouter form is absent from the catalog', () => {
+    const { auditGatewayRoutes } = loadAudit(
+      { 'gpt-pro': { direct: 'openai/gpt-5.6-sol-pro', openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
+      { 'gpt-pro': { directForm: 'derived', gatewayOnly: true } }
+    );
+    const catalogInfo = cat([
+      { id: 'openai/gpt-5.6-sol' }, // openrouter ns EMPTY -> classifyModel 'unknown', not 'valid'
+    ]);
+    expect(auditGatewayRoutes(catalogInfo).filter(f => f.gateway === 'direct')).toEqual([]);
+  });
+
+  it('gatewayOnly suppresses divergent-missing -- a declared routing choice never gets a pairing suggestion', () => {
+    const { auditGatewayRoutes } = loadAudit(
+      { shadow: { openrouter: 'openrouter/openai/some-model' } },
+      { shadow: { directForm: 'none', gatewayOnly: true } }
+    );
+    const catalogInfo = cat([
+      { id: 'openai/some-model', authoritative: true }, // would otherwise pair+confirm
+      { id: 'openrouter/openai/some-model' },
+    ]);
+    expect(auditGatewayRoutes(catalogInfo).filter(f => f.kind === 'divergent-missing')).toEqual([]);
   });
 });
