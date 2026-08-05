@@ -128,6 +128,7 @@
     // `live.ok` is true, so this is simply "always paint," empty roster included.
     if (live.seats) {
       R.renderSeats(A.$('seats-body'), live.seats, A.state.blind, A.labelOf);
+      window.AmicusSeats.appendDeadRows(live);
     }
     // F42: state.detail can be swapped/absent under a tick — never deref .derived unguarded.
     var derived = A.state.detail && A.state.detail.derived ? A.state.detail.derived : null;

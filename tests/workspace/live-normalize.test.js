@@ -141,4 +141,24 @@ describe('normalizeLive', () => {
     // …and the real path is untouched: a stage actually in `running` still names itself.
     expect(normalizeLive({ ...base, stages: [{ name: 'chair', status: 'running' }] }).stageName).toBe('chair');
   });
+
+  // PR4b Task 1: thread `degrades` through the live spine (Christian's mid-poll
+  // ruling on PR #102) — normalizeLive is the ONE defensive mapping layer, so it
+  // must pass a well-formed degrades[] through verbatim and degrade absent/junk
+  // input to [] rather than undefined or a thrown error.
+  test('degrades[] passes through verbatim; absent or non-array degrades normalizes to []', () => {
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat x did not review',
+      data: { seat: 'x', retryWaveId: 'w2' },
+    }];
+
+    const withDegrades = normalizeLive({ taskId: 'x', status: 'running', legs: [], degrades });
+    expect(withDegrades.degrades).toEqual(degrades);
+
+    const absent = normalizeLive({ taskId: 'x', status: 'running', legs: [] });
+    expect(absent.degrades).toEqual([]);
+
+    const junk = normalizeLive({ taskId: 'x', status: 'running', legs: [], degrades: 'junk' });
+    expect(junk.degrades).toEqual([]);
+  });
 });

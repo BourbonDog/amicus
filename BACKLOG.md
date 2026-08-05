@@ -1011,3 +1011,96 @@ unchecked items ride to the next rev.)*
   healthy while the real run path silently dropped them (Task 23 smoke discovery). Fixed in
   Post-HOLD wave 2 (`19c3768`): `show` now reuses the same extracted `classifyCouncilMembers` the
   run path uses.
+
+---
+
+## GoA paper review (2026-08-05) — query-aware selection, relevance weighting, exploration
+
+**Provenance.** Review of "Graph-of-Agents" (arXiv:2604.17148, ICLR 2026 — the MoA successor,
+3 selected agents beat 6-agent flat pipelines at ~1/3 tokens) against the council/fanout engine,
+session 2026-08-05 on `claude/amicus-paper-review-61714k`. Every code claim below was verified
+against source at `0385ae1`. ⚠️ **Read
+`docs/superpowers/plans/2026-08-05-goa-paper-review-adoption-notes.md` before implementing any
+GOA item** — it carries the paper's numbers/ablations, the full exploration-policy rationale,
+the do-not-overclaim limits (paper evidence is short-answer QA, NOT long-form code review — the
+constants k=3/τ=0.05/0.7-0.4 label cuts must be re-validated via `evals/`, never copied), and
+three **considered-but-not-backlogged** items (max-pool chair-skip, cascade refinement stage,
+self-ensemble seats) recorded so they aren't re-derived. Dependency shape: GOA-5/6/8 presuppose
+GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
+
+- [ ] **GOA-1 · Feature · Auto-bench: query-aware seat selection (node sampling)** — [L]
+  `--bench auto[:k]` (CLI + `mcp-council-bench.js` `resolveBenchInput`): one cheap meta-LLM call
+  picks k seats from candidate model cards before Stage 1. Enabling change: the catalog cache
+  DROPS OpenRouter's `description` at fetch time (`src/utils/model-fetcher.js:42-48` keeps only
+  id/name/contextLength/pricing) — retain it (same response, zero extra network), then summarize
+  cards (domain/task/size/features) à la the paper's Appendix B, cached alongside the catalog.
+  The amicus-only upgrade the stateless paper can't do: blend `deriveReliability()` rows
+  (`src/council/ledger.js`) into the picker prompt — earned evidence beats README summaries.
+  Composes with the `--max-cost` preflight (best k seats THAT FIT the budget). Degrade path,
+  never a failure: ledger unreadable → cards-only (the paper's exact proven config) → static
+  bench (`src/utils/council-presets.js`), announced via the existing sink.
+- [ ] **GOA-2 · Feature · Relevance-weighted chair packet + labeled influence (edge weighting)** — [S]
+  The score matrix already exists — Stage-2 judge rankings → `computeStreetCred()`
+  (`src/council/tally.js:49`) — but is descriptive only: tiers are unweighted counts
+  (`tally.js:84-107`) and the chair packet (`council/briefings-stage2.js`) presents seats
+  symmetrically. Annotate each review in the chair packet with peer-derived credibility using the
+  paper's label scheme (high/moderate/low; their A_ij=1 ablation costs −1.9/−2.6 points) plus
+  per-seat "be critical" calibration extending `ANTI_SYCOPHANCY_CLAUSE`. Optional second step,
+  schema-versioned: a weighted tally variant (top-ranked judge's dispute counts more).
+  ⚠️ **Never τ-prune findings** — a minority-raised blocker is what the tier cascade + debate
+  protect. Weight the chair's attention, don't delete evidence.
+- [ ] **GOA-3 · Feature · Per-finding confidence field in the findings contract** — [S–M]
+  Additive `confidence` (0.0–1.0) per finding in `FINDINGS_CONTRACT`/`FINDINGS_JSON_SHAPE`
+  (`council/briefings.js`, validated in `council/findings.js`, parsed in `parse-stage2.js`).
+  Feeds the tally's `thin/solid` flag and the chair packet; the higher-value wiring is seat-level
+  substitution (the paper's confidence backstop): chronic low-confidence + `unstructured`
+  conformance → swap the seat via `sidecar/fallback-chains.js` instead of paying repair solos to
+  a model that can't honor the contract. Tolerant parse: absent field ⇒ null, never a
+  conformance failure (old benches must not degrade).
+- [ ] **GOA-4 · Feature · Output/report impact: relevance + efficiency surfaces** — [M]
+  Make the run's selection/weighting story visible. Report + workspace: seat rail ordered by
+  street-cred with high/moderate/low badges (`council/report.js`, `council/report-html.js`,
+  `workspace/matrix-model.js` + seat painters); an efficiency panel — calls/tokens/cost vs what
+  the full static bench would have cost (paper Table 2 as a per-run artifact) — from data already
+  in tally `runStats`/spend ledger. When GOA-1 lands, the report also names WHY each seat was
+  picked (card match vs ledger evidence vs scout), reusing the picker's own output.
+- [ ] **GOA-5 · Feature · Scout seat (exploration for auto-bench)** — [M, needs GOA-1]
+  k−1 seats on merit + one rotating seat for an under-sampled model matching the query domain
+  (`lowN` models first, then never-benched catalog entries). Config knob for the rate
+  (scout every Nth run); `--bench auto:frozen` disables it for reproducible/spend-sensitive runs.
+  Rationale (see adoption notes §5): a council is a self-grading trial — the rookie's review is
+  peer-ranked and tier-contained, so exploration costs one leg's tokens, not verdict quality, and
+  every candidate reaches the 3-run `lowN` graduation in bounded time. Cheap tier: scout only on
+  free/budget benches (`utils/free-models.js` — auditioning free models is literally free).
+- [ ] **GOA-6 · Feature · Treat `lowN` as "prior vs. evidence," not "unproven → avoid"** — [S, needs GOA-1]
+  `deriveReliability()`'s `lowN` (`src/council/ledger.js:78`, runs < 3) must gate how the ledger
+  is USED, not whether a model is eligible: below 3 runs the ledger term is silent/advisory and
+  selection rests on model cards; optionally shrink toward the vendor-family/tier prior
+  (`utils/curated-models.js` / `utils/model-tiers.js`) so new models start at "presumed as good
+  as their siblings." ⚠️ The picker prompt must state that `runs: 0 — untested` is
+  neutral-to-positive (a scout-seat candidate) — an uninstructed LLM picker reads missing data as
+  risk, which recreates the entrenchment loop GOA-5 exists to break.
+- [ ] **GOA-7 · Defect+Feature · Segment ledger history by RESOLVED model (prerequisite), then recency decay** — [M; prerequisite S–M, independent]
+  **Prerequisite is a live defect today, worth doing even if no other GOA item ships:** ledger
+  rows key by council ALIAS (`buildLedgerRows` joins `meta.models` by exact string; the comment at
+  `src/council/run-debate.js:135-137` states it verbatim), and aliases silently retarget —
+  `council-presets.js` documents `gpt-pro` → `gpt-5.6-sol-pro` and the `opus` re-pin, both
+  2026-08-04 — so `council stats` conflates different underlying models under one name. Fix:
+  record the resolved executable id on each ledger row and aggregate per resolved id.
+  ⚠️ Schema discipline: the append-only ledger was deliberately NOT extended by review F3 (see
+  `src/council/tally.js:117-124`) — this is THE sanctioned shape change, so bump
+  `LEDGER_SCHEMA_VERSION`, keep old rows readable (absent id ⇒ legacy row), no drive-by fields.
+  Then: recency decay (or last-K window) in `deriveReliability` so stale evidence fades, improved
+  models get a path back in, and a retarget naturally resets an alias to `lowN` ⇒ scout treatment.
+  Bonus: resolved-id keying is the natural moment to introduce seat-id ≠ model-id, the blocker
+  recorded against self-ensemble seats (adoption notes §4.3).
+- [ ] **GOA-8 · Feature · Shadow seat: zero-risk audition variant** — [M, needs GOA-1; alternative/complement to GOA-5]
+  For benches where even one merit seat is too precious: the rookie's review IS included in the
+  anonymized Stage-2 judge bundle (blind labels — judges can't tell), so it earns rankings,
+  street-cred, and ledger rows at full fidelity, but its adjudication votes are EXCLUDED from
+  tier bases and its findings are marked advisory in tally/report (never counted, never silently
+  dropped — the announcement invariant applies). Costs one leg + marginally larger judge bundles;
+  zero influence on the verdict. Design care: the tally already excludes a raiser's own votes
+  (`tally.js:91-107`) — shadow exclusion is the same shape, one filter earlier, and `runStats`
+  needs a distinguishing role so `ledger.js`'s role-keyed joins don't misfile it (same join
+  hazard the judge rows hit — `ledger.js:21-25`).
