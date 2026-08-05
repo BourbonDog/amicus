@@ -15,13 +15,13 @@ describe('findStaleAliases', () => {
   // These fixtures use real alias names (grok, gemini, gpt, deepseek) and none
   // of these tests doMock curated-models, so findStaleAliases's lazy
   // require('./curated-models') resolves the REAL module and its REAL
-  // directFormProvenance() output for those aliases (grok and gpt are
-  // 'derived' today, but none of these fixtures' rows are both
-  // source:'defaults' AND covered-or-gatewayOnly, so the v4.6.3
-  // defaults-row suppression never engages here; a future gatewayOnly
-  // annotation on one of these aliases, or a live row added for one, would
-  // change that — re-check this block if such a change breaks it) — see the
-  // Task 4 review that added this note.
+  // directFormProvenance() output for those aliases — gpt is 'derived' today
+  // (grok 'none', gemini/deepseek 'authored'); no fixture combines a
+  // derived-provenance alias with a stale source:'defaults' row that is
+  // covered or gatewayOnly, so the suppression never engages here. A future
+  // gatewayOnly annotation on one of these aliases, or a live row added for
+  // one, would change that — re-check this block if such a change breaks it
+  // — see the Task 4 review that added this note.
   it('flags openrouter routes absent from the catalog', () => {
     const sources = [
       { alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults' },
