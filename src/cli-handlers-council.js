@@ -162,6 +162,14 @@ function runVerdict(args, useJson) {
         hint: 'pass a valid decisions.json array or omit --decisions' });
     }
   }
+  // R1 (v4.6.3): parseArgs records a valueless trailing -o/--out as boolean
+  // true (and --out= as ''); coercing either into a path writes a file
+  // literally named 'true' (and --render then TypeErrors in path.dirname).
+  // Name the flag and refuse — the unknown-flag precedent.
+  if (args.out !== undefined && (typeof args.out !== 'string' || args.out === '')) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: '-o/--out requires a value',
+      hint: 'amicus council verdict <tally.json> [--decisions <decisions.json>] [-o|--out <out.json>]' });
+  }
   const outPath = args.out || './verdict.json';
   let verdict;
   try {

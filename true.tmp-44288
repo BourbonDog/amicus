@@ -1,0 +1,1119 @@
+{
+  "schemaVersion": 2,
+  "type": "council-verdict",
+  "runId": "av-receiver-council",
+  "runType": "product-recommendation",
+  "date": "2026-06-23T15:00:00Z",
+  "chair": "deepseek",
+  "council": [
+    "deepseek",
+    "gpt",
+    "mistral"
+  ],
+  "claudeInCouncil": false,
+  "overallVerdict": null,
+  "findings": [
+    {
+      "id": "A1",
+      "raiser": "deepseek",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A2",
+      "raiser": "deepseek",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A3",
+      "raiser": "deepseek",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A4",
+      "raiser": "deepseek",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A5",
+      "raiser": "deepseek",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A6",
+      "raiser": "deepseek",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A7",
+      "raiser": "deepseek",
+      "severity": "minor",
+      "tier": "Singleton",
+      "basis": {
+        "a": 0,
+        "d": 0,
+        "n": 2
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "A8",
+      "raiser": "deepseek",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B1",
+      "raiser": "gpt",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B2",
+      "raiser": "gpt",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B3",
+      "raiser": "gpt",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B4",
+      "raiser": "gpt",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B5",
+      "raiser": "gpt",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B6",
+      "raiser": "gpt",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B7",
+      "raiser": "gpt",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B8",
+      "raiser": "gpt",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B9",
+      "raiser": "gpt",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B10",
+      "raiser": "gpt",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B11",
+      "raiser": "gpt",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "B12",
+      "raiser": "gpt",
+      "severity": "nit",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C1",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C2",
+      "raiser": "mistral",
+      "severity": "minor",
+      "tier": "Contested",
+      "basis": {
+        "a": 0,
+        "d": 1,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C3",
+      "raiser": "mistral",
+      "severity": "minor",
+      "tier": "Contested",
+      "basis": {
+        "a": 1,
+        "d": 1,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C4",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C5",
+      "raiser": "mistral",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C6",
+      "raiser": "mistral",
+      "severity": "blocker",
+      "tier": "Disputed",
+      "basis": {
+        "a": 0,
+        "d": 2,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "dispute"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C7",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Disputed",
+      "basis": {
+        "a": 0,
+        "d": 2,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C8",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C9",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C10",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 1,
+        "d": 0,
+        "n": 1
+      },
+      "confidence": "thin",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "neutral"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C11",
+      "raiser": "mistral",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C12",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Disputed",
+      "basis": {
+        "a": 0,
+        "d": 2,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "dispute"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C13",
+      "raiser": "mistral",
+      "severity": "minor",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "neutral"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C14",
+      "raiser": "mistral",
+      "severity": "major",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    },
+    {
+      "id": "C15",
+      "raiser": "mistral",
+      "severity": "blocker",
+      "tier": "Confirmed",
+      "basis": {
+        "a": 2,
+        "d": 0,
+        "n": 0
+      },
+      "confidence": "solid",
+      "tierOverride": null,
+      "duplicateOf": null,
+      "adjudications": [
+        {
+          "judge": "deepseek",
+          "verdict": "agree"
+        },
+        {
+          "judge": "gpt",
+          "verdict": "agree"
+        },
+        {
+          "judge": "mistral",
+          "verdict": "agree"
+        }
+      ],
+      "decision": null,
+      "applied": false
+    }
+  ],
+  "streetCred": [
+    {
+      "model": "deepseek",
+      "withSelf": 2,
+      "peersOnly": 2
+    },
+    {
+      "model": "gpt",
+      "withSelf": 1,
+      "peersOnly": 1
+    },
+    {
+      "model": "mistral",
+      "withSelf": 3,
+      "peersOnly": 3
+    }
+  ],
+  "runStats": [
+    {
+      "model": "deepseek",
+      "role": "council",
+      "wasChair": true,
+      "conformance": "clean",
+      "status": "complete",
+      "durationMs": null,
+      "usage": null
+    },
+    {
+      "model": "gpt",
+      "role": "council",
+      "wasChair": false,
+      "conformance": "clean",
+      "status": "complete",
+      "durationMs": null,
+      "usage": null
+    },
+    {
+      "model": "mistral",
+      "role": "council",
+      "wasChair": false,
+      "conformance": "clean",
+      "status": "complete",
+      "durationMs": null,
+      "usage": null
+    }
+  ],
+  "tierCounts": {
+    "Confirmed": 29,
+    "Contested": 2,
+    "Singleton": 1,
+    "Disputed": 3
+  }
+}
