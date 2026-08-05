@@ -137,3 +137,31 @@ describe('gpt family idPattern — terra tier (5.6 rename)', () => {
     expect(gptFamily().fallback.openrouter).toBe('openrouter/openai/gpt-5.6-terra');
   });
 });
+
+describe('directFormProvenance (v4.6.3 PR1 — provenance for the auditors)', () => {
+  const { directFormProvenance, toGatewayRoutes } = require('../src/utils/curated-models');
+  const prov = directFormProvenance();
+
+  test('authored: explicit direct routes (fable joined 2026-08-05)', () => {
+    for (const a of ['fable', 'opus', 'haiku', 'claude', 'sonnet']) {
+      expect(prov[a]).toEqual({ directForm: 'authored', gatewayOnly: false });
+    }
+  });
+
+  test('derived: non-divergent vendors with no explicit direct route', () => {
+    expect(prov.gpt).toEqual({ directForm: 'derived', gatewayOnly: false });
+    expect(prov.codex).toEqual({ directForm: 'derived', gatewayOnly: false });
+  });
+
+  test('gpt-pro is derived AND gatewayOnly — the 2026-08-05 owner ruling in data', () => {
+    expect(prov['gpt-pro']).toEqual({ directForm: 'derived', gatewayOnly: true });
+  });
+
+  test('none: gateway-only vendors derive nothing', () => {
+    expect(prov.grok).toEqual({ directForm: 'none', gatewayOnly: false });
+  });
+
+  test('covers every toGatewayRoutes() alias — the two can never disagree on the key set', () => {
+    expect(Object.keys(prov).sort()).toEqual(Object.keys(toGatewayRoutes()).sort());
+  });
+});

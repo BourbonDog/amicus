@@ -79,7 +79,12 @@ const CARDLESS = [
   // gpt-5.5-pro ($30/$180 — still served, but expected to sunset with the
   // 5.5 line). `gpt-pro` tracks SOL while the `gpt` family tracks terra —
   // see the tier-semantics comment on the `gpt` family above.
-  { alias: 'gpt-pro', routes: { openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
+  // gatewayOnly (owner ruling 2026-08-05, recorded in the v4.6.3 spec): the
+  // openrouter-only route is a deliberate routing choice — OpenAI's direct
+  // namespace does not serve gpt-5.6-sol-pro, so the DERIVED direct form
+  // must never be audited as stale and no direct pairing may be suggested.
+  { alias: 'gpt-pro', gatewayOnly: true,
+    routes: { openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
   // codex: newest codex-specific model on OpenRouter (verified 2026-06-09).
   { alias: 'codex', routes: { openrouter: 'openrouter/openai/gpt-5.3-codex' } },
   { alias: 'claude', routes: { openrouter: 'openrouter/anthropic/claude-sonnet-5',
@@ -208,6 +213,28 @@ function gatewayRoutesFor(vendorPath, obj) {
 }
 
 /**
+ * Per-alias provenance of the `direct` form in toGatewayRoutes(), for the
+ * auditors (alias-audit.js / gateway-route-audit.js): an AUTHORED direct
+ * form absent from its namespace is stale; a DERIVED one is a computed
+ * convenience whose absence is a routing fact, not staleness, while the
+ * authoring openrouter route is live. `gatewayOnly` mirrors an entry's
+ * explicit routing-choice annotation (owner-ruled): suppress derived-form
+ * findings unconditionally and never suggest a direct pairing.
+ * @returns {Object<string, {directForm: 'authored'|'derived'|'none', gatewayOnly: boolean}>}
+ */
+function directFormProvenance() {
+  const out = {};
+  const entryProv = (vendorPath, obj, gatewayOnly) => {
+    const direct = directFormFor(vendorPath, obj);
+    const directForm = !direct ? 'none' : (obj[vendorPath] ? 'authored' : 'derived');
+    return { directForm, gatewayOnly: gatewayOnly === true };
+  };
+  for (const f of FAMILIES) { out[f.alias] = entryProv(f.vendorPath, f.fallback, f.gatewayOnly); }
+  for (const e of CARDLESS) { out[e.alias] = entryProv(vendorOf(e.routes.openrouter), e.routes, e.gatewayOnly); }
+  return out;
+}
+
+/**
  * @returns {Object<string,{direct?: string, openrouter: string}>} alias →
  * per-gateway executable ids. Unlike `toDefaultAliases` (a single pinned
  * string per alias, used for display/`config.default`), this carries BOTH
@@ -243,5 +270,6 @@ function toDefaultAliases() {
 }
 
 module.exports = {
-  getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes, toGatewayRoutes, DIVERGENT_VENDORS
+  getFamilies, toDefaultAliases, toCanonicalDefault, listCuratedRoutes, toGatewayRoutes,
+  directFormProvenance, DIVERGENT_VENDORS
 };
