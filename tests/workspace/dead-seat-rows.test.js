@@ -95,8 +95,11 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     // FIRST and wins the seen-map dedup) tagged 'foxtrot' role: null, and the seatLoss backstop's
     // own unconditional 'critic' tag never got a chance to apply (already seen) — so the role
     // assertion below was untestable before this fix. Passing the real critic restores fixture
-    // truthfulness AND pins the union-dedup precedence: the degrade-sourced candidate wins (it is
-    // added first), and its role agrees with what the seatLoss backstop would have said anyway.
+    // truthfulness. NOTE (task-4 review, minor #3): the children[1] role assertion does NOT by
+    // itself pin degrade-vs-backstop precedence — the role AGREES under either ordering here
+    // (both would say 'critic'). It is the children[2] statusText assertion below ("did not
+    // review — retried once", the degrade record's retry phrasing, not the backstop's plain one)
+    // that proves the degrade-sourced candidate is the one that actually won the seen-map dedup.
     const tbody = paint(costRows, degrades, seatLoss, false, () => null, { critic: 'foxtrot' });
 
     expect(tbody.children.length).toBe(6);
@@ -296,11 +299,20 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       // degrade-sourced 'alpha' row masks deadBenchSeats' non-consumption. Documented per the
       // brief's Step 2 allowance; the meaningful assertion is POST-fix: both sources funnel
       // through the same `seen` map without producing 2 or 3 rows.
+      //
+      // retryWaveId on the degrade record (task-4 review, minor #2): pins ORDERING, not just
+      // count. deadBenchSeats candidates are always added with retried: false (plain "did not
+      // review"); the degrade-sourced candidate here carries retryWaveId, so its statusText is
+      // "did not review — retried once". Only if the degrade loop runs BEFORE the deadBenchSeats
+      // block (the brief's prescribed placement) does the degrade-sourced add() win the
+      // seen-map dedup and the retried phrasing survive — hoisting deadBenchSeats above the
+      // degrade loop would keep the row COUNT green (still 1) while silently downgrading the
+      // statusText to the plain phrasing, which the count-only assertions above could never catch.
       const costRows = [];
       const degrades = [{
         kind: 'degrade', channel: 'dead-leg', what: 'seat alpha did not review',
-        why: "the leg ended 'error'", effect: '0 of 1 seats reviewed',
-        data: { seat: 'alpha', status: 'error', reason: 'timed out' },
+        why: "the leg ended 'error'; its once-only retry also ended 'error'", effect: '0 of 1 seats reviewed',
+        data: { seat: 'alpha', status: 'error', reason: 'timed out', retryWaveId: 'r1-c1r1' },
       }];
       const seatLoss = { criticRequested: null, criticSeated: false, reason: 'no legs', deadBenchSeats: ['alpha', 'alpha'] };
 
@@ -310,7 +322,7 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       expect(deadRows.length).toBe(1);
       expect(deadRows[0].children[0].textContent).toBe('alpha');
       expect(deadRows[0].children[1].textContent).toBe('—'); // null role — degrade-sourced, no critic in this fixture
-      expect(deadRows[0].children[2].textContent).toBe('did not review');
+      expect(deadRows[0].children[2].textContent).toBe('did not review — retried once'); // degrades-before-deadBenchSeats ordering
     });
 
     test('(D4e) deadBenchSeats suppression still applies: a live role:"seat" row for the alias suppresses the bench candidate', () => {

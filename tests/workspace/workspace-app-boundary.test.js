@@ -1060,6 +1060,40 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
   });
 
   /**
+   * v4.6.3 PR2 (spec D4, task-4 review IMPORTANT #1): renderSeatsPanel's own verdict.degrades
+   * fallback had ZERO rendering coverage — (D4a) above passes both docs empty (never triggers
+   * the fallback branch) and (D4c) below only pins PRECEDENCE (run.degrades present and winning,
+   * which passes even if the verdict.degrades read were deleted outright). This is the brief's
+   * actual case (b) ("The checkpoint-loss shape... run.degrades absent/empty, verdict.degrades
+   * carrying a dead-leg record → row renders from the verdict fallback") on the TERMINAL/
+   * production path — run-degrade.js swallows checkpoint failures, so verdict.json can carry a
+   * degrade record run.json's own checkpoint lost. The task-4 report's original (D4b) exercised
+   * only the LIVE call site (appendDeadRows) — a real, valid test in its own right, but not this
+   * one: it left this path's fallback branch provably dead (replacing
+   * `: ((d.verdict && d.verdict.degrades) || [])` with `: []` left all 6511 tests green).
+   */
+  test('(D4b-terminal) renderSeatsPanel: run.degrades absent, verdict.degrades carries a dead-leg record — the row renders from the verdict fallback', async () => {
+    const verdictDegrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat sierra did not review',
+      why: "the leg ended 'error'", effect: '1 of 2 seats reviewed',
+      data: { seat: 'sierra', status: 'error', reason: 'timed out' },
+    }];
+    // deadSeatFixture(runId, status, degrades, seatLoss) quirk: passing seatLoss truthy replaces
+    // `verdict` wholesale with `{ seatLoss }`, dropping any `degrades` key — so to carry BOTH
+    // (here: seatLoss null, verdict.degrades populated) the verdict object is spread and
+    // extended by hand afterward, exactly as (D4c) below does.
+    const base = deadSeatFixture('aaaa1111', 'complete', [], null);
+    const fixture = { ...base, verdict: { ...base.verdict, degrades: verdictDegrades } };
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe('sierra');
+  });
+
+  /**
    * v4.6.3 PR2 (spec D4): precedence pin for renderSeatsPanel's own degrades source-selection —
    * `run-degrade.js` swallows checkpoint failures, so verdict.json CAN carry degrade records
    * run.json's checkpoint lost; the fix is a FALLBACK (verdict.degrades used only when

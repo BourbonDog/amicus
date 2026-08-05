@@ -53,7 +53,7 @@
     // verdict.json can carry degrade records run.json's own checkpoint lost — fall back to it
     // ONLY when run.degrades is empty/absent. A fallback, never a union: both docs can carry
     // records for the SAME run, and the persisted run.json copy is authoritative when present.
-    var deg = (d.run.degrades && d.run.degrades.length) ? d.run.degrades
+    var deg = (d.run && d.run.degrades && d.run.degrades.length) ? d.run.degrades
       : ((d.verdict && d.verdict.degrades) || []);
     var dead = window.AmicusLive.deadSeats(deg, seatLoss, seats, runMeta);
     renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
