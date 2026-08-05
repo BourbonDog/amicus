@@ -97,6 +97,15 @@ All notable changes to Amicus are documented here. Format follows
   offline installs never report the shipped default stale. Opus 5's two gateway forms
   coincide (no dotted version segment), so the dot-vs-dash regression guards now ride
   `haiku`, the surviving divergent-form alias.
+- **The Workspace seats panel's dead-seat rows are now role-aware and old-run
+  resilient.** A model that died as critic but succeeded as chair no longer has
+  its dead row hidden by the chair's cost row (only a live reviewing leg —
+  seat/critic/lens — suppresses, and a dead critic only by a live critic leg);
+  the dead critic's row names its role. Pre-v4.6 runs render their losses too:
+  `verdict.seatLoss.deadBenchSeats` feeds rows, and `verdict.json`'s
+  `degrades[]` backstops a `run.json` that lost its checkpoint. A stale
+  `get-run` reply from a run you navigated away from can no longer repaint the
+  run now open.
 
 ### Removed
 
