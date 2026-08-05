@@ -484,7 +484,7 @@ evals/
 | `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-budget.js` |  | `createBudget()` |
-| `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()` |
+| `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()`, `classifyChairAttempt()` |
 | `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-degrade.js` |  | `createDegradeSink()` |
