@@ -46,11 +46,12 @@ All notable changes to Amicus are documented here. Format follows
   (the requested chair), `ch2` (a same-chair retry), `ch3` (the ledger-promoted fallback) —
   appends an entry to an additive `chairAttempts[]` array (`{waveId, model, outcome, reason}`,
   `outcome ∈ completed|error|timeout|no-output`), checkpointed after every attempt so a mid-walk
-  kill never loses what already ran. A degraded chair's "What was lost" line now names each
-  attempt's cause instead of one flat sentence: the `chair-failed` degrade's `why` reads `ch1
-  <model>: <reason> · ch2 <model>: <reason> · ...`. The `ch4` VERDICT-line repair re-prompt is
-  deliberately not counted as an attempt — its chair leg already completed; only the verdict line
-  gets re-prompted.
+  kill never loses what already ran. When no chair leg completes at all, the `chair-failed`
+  degrade's "What was lost" `why` now names each attempt's cause instead of one flat sentence —
+  `ch1 <model>: <reason> · ch2 <model>: <reason> · ...` — while a chair that ran but produced no
+  parseable VERDICT line keeps its original flat why (the walk didn't fail). The `ch4`
+  VERDICT-line repair re-prompt is deliberately not counted as an attempt — its chair leg already
+  completed; only the verdict line gets re-prompted.
 
 ### Fixed
 
