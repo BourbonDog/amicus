@@ -43,6 +43,32 @@ function pickFallbackChair(statsRows, bench, failedChair) {
 }
 
 /**
+ * Outcome taxonomy for one fallback-walk attempt (spec §8, LC-5). The ch4
+ * VERDICT repair is deliberately NOT an attempt: its chair leg already
+ * completed — only the verdict line is being re-prompted — and the outcome
+ * enum has no honest value for it.
+ * @param {object|null} rawLeg the UNFILTERED leg (attemptChair nulls `leg` on
+ *   failure; this is the one before that narrowing, so a failed leg document
+ *   is still visible here)
+ * @param {object|null} [errorDoc] set when the launch never produced a wave
+ *   at all (pre-flight refusal) — the only source of a reason in that case
+ * @returns {{outcome: 'completed'|'error'|'timeout'|'no-output', reason: string|null}}
+ */
+function classifyChairAttempt(rawLeg, errorDoc) {
+  if (!rawLeg) {
+    const reason = (errorDoc && (errorDoc.message || errorDoc.reason)) || 'no leg document';
+    return { outcome: 'error', reason };
+  }
+  if (rawLeg.status === 'timeout') { return { outcome: 'timeout', reason: rawLeg.reason || null }; }
+  if (rawLeg.status === 'complete') {
+    const hasOutput = rawLeg.summary && String(rawLeg.summary).trim();
+    return hasOutput ? { outcome: 'completed', reason: null }
+      : { outcome: 'no-output', reason: rawLeg.reason || null };
+  }
+  return { outcome: 'error', reason: rawLeg.reason || rawLeg.error || String(rawLeg.status) };
+}
+
+/**
  * Chair chain (attempt → retry → ledger-promoted fallback → give up) plus the
  * single VERDICT-line repair re-prompt.
  * @param {object} ctx run.js's {o, launchers, addWave, overBudget, scratchDir}
@@ -76,12 +102,28 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     addWave(solo.wave);
     const ok = solo.leg && solo.leg.status === 'complete'
       && solo.leg.summary && solo.leg.summary.trim();
-    return { leg: ok ? solo.leg : null, exitCode: solo.exitCode };
+    // rawLeg is the UN-nulled leg — the classifier needs to see a failed leg
+    // document, not just the ok/null collapse the rest of the walk consumes.
+    return { leg: ok ? solo.leg : null, exitCode: solo.exitCode, errorDoc: solo.errorDoc, rawLeg: solo.leg };
   };
 
   let chairLeg = null;
   let actualChair = null;
   let skippedForCost = false;
+  // Additive on run.json (LC-5): one entry per resolved attempt (ch1/ch2/ch3;
+  // ch4 is a repair, not an attempt — see classifyChairAttempt). Declared here
+  // (not inside the else branch below) so it stays in scope for the
+  // chair-failed why enrichment after the branch closes, and so a
+  // cost-skipped chair (the `if` branch) simply never calls recordAttempt —
+  // chairAttempts is never checkpointed and the key stays absent on run.json.
+  const chairAttempts = [];
+  const recordAttempt = (attempt, waveId, model) => {
+    const cls = classifyChairAttempt(attempt.rawLeg, attempt.errorDoc);
+    chairAttempts.push({ waveId, model, outcome: cls.outcome, reason: cls.reason });
+    // Checkpointed HERE, before the caller's own isAbortExit bail — a mid-walk
+    // kill must not lose the attempts already resolved (spec §8 kill-mid-walk).
+    runState.checkpoint(o.runDir, { chairAttempts });
+  };
   if (overBudget()) {
     // Ceiling hit after the tally is computable: skip the chair, write the
     // verdict with overallVerdict null, exit 2 (spec §4 degradation table).
@@ -102,9 +144,11 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     // Fallback chain (spec §4): retry same chair once → promote best
     // non-bench model from the ledger → give up (no Claude fallback headless).
     let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
+    recordAttempt(attempt, `${o.runId}-ch1`, o.chair);
     if (isAbortExit(attempt.exitCode) || isSignalled()) { return bail(attempt.exitCode || isSignalled()); }
     if (!attempt.leg && !overBudget()) {
       attempt = await attemptChair(o.chair, `${o.runId}-ch2`);
+      recordAttempt(attempt, `${o.runId}-ch2`, o.chair);
       if (isAbortExit(attempt.exitCode) || isSignalled()) { return bail(attempt.exitCode || isSignalled()); }
     }
     if (attempt.leg) { actualChair = o.chair; }
@@ -114,6 +158,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       const fallback = pickFallbackChair(statsRows, o.models, o.chair);
       if (fallback) {
         attempt = await attemptChair(fallback, `${o.runId}-ch3`);
+        recordAttempt(attempt, `${o.runId}-ch3`, fallback);
         if (isAbortExit(attempt.exitCode) || isSignalled()) { return bail(attempt.exitCode || isSignalled()); }
         if (attempt.leg) { actualChair = fallback; }
       }
@@ -160,7 +205,8 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       what: 'the council has no chair synthesis',
       why: chairLeg
         ? 'the chair ran but its output carried no parseable VERDICT: line'
-        : 'no chair leg completed, including after the fallback chain',
+        : `no chair leg completed after the fallback walk — ${chairAttempts.map(a =>
+          `${a.waveId.split('-').pop()} ${a.model}: ${a.reason || a.outcome}`).join(' · ')}`,
       effect: 'the verdict is written with overallVerdict null; will exit degraded (2)',
     });
   }
@@ -170,4 +216,4 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
   };
 }
 
-module.exports = { runChair, pickFallbackChair };
+module.exports = { runChair, pickFallbackChair, classifyChairAttempt };

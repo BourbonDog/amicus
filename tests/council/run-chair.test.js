@@ -116,6 +116,87 @@ describe('chair retry + fallback promotion', () => {
   });
 });
 
+describe('chairAttempts[] recording (LC-5)', () => {
+  test('happy path: ch1 completes → run.json checkpoint carries one chairAttempts entry', async () => {
+    const launchers = scriptedLaunchers(happyScript());
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    expect(run.chairAttempts).toEqual([
+      { waveId: 'abc123-ch1', model: 'deepseek', outcome: 'completed', reason: null },
+    ]);
+  });
+
+  test('N-attempt walk: three entries in order with reasons carried; chair-failed why cites each cause', async () => {
+    const script = happyScript();
+    // ch1: a pre-flight refusal — no wave at all, so the leg is null and the
+    // classifier must read the reason off errorDoc.
+    script['abc123-ch1'] = () => ({ wave: null, exitCode: 1, errorDoc: { message: 'OpenRouter spend limit' } });
+    // ch2: the chair "completes" but with no output — classifies as 'no-output'.
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'complete')]);
+    // ch3: the ledger-promoted fallback times out.
+    script['abc123-ch3'] = (opts) => {
+      expect(opts.model).toBe('grok');
+      return okWave([mkLeg('grok', '', 'timeout')]);
+    };
+    const statsFn = () => [
+      { model: 'grok', avgStreetCredPeersOnly: 1.2 },
+      { model: 'gemini', avgStreetCredPeersOnly: 1.0 },
+    ];
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn,
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(run.chairAttempts).toEqual([
+      { waveId: 'abc123-ch1', model: 'deepseek', outcome: 'error', reason: 'OpenRouter spend limit' },
+      { waveId: 'abc123-ch2', model: 'deepseek', outcome: 'no-output', reason: null },
+      { waveId: 'abc123-ch3', model: 'grok', outcome: 'timeout', reason: null },
+    ]);
+    const chairFailed = (run.degrades || []).find(d => d.channel === 'chair-failed');
+    expect(chairFailed).toBeDefined();
+    expect(chairFailed.why).toContain('ch1 deepseek: OpenRouter spend limit · ch2');
+  });
+
+  test('chairless (over budget from the start): chairAttempts is never checkpointed', async () => {
+    const launchers = scriptedLaunchers(happyScript());
+    const { exitCode, run } = await runCouncil(baseOptions(tmp, { maxCost: 0.05 }), {
+      launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(launchers.calls.some(c => c.waveId === 'abc123-ch1')).toBe(false);
+    expect(run.chairAttempts).toBeUndefined();
+  });
+
+  test('kill-mid-walk: the ch1 attempt is already checkpointed before the ch2 abort bails the walk', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error')], 1, 'error');
+    // A real signal-killed solo still produces ONE leg at status 'aborted'
+    // (src/utils/result-schema.js's statusFromResult) — not an empty legs
+    // array. Using the production shape here (rather than legs:[]) is what
+    // makes ch2's own attempt classifiable, which is what lets this test
+    // actually pin the record-before-bail ordering below: recordAttempt(ch2)
+    // can only have run if it executes BEFORE the isAbortExit bail returns.
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'aborted')], 130, 'aborted');
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(130);
+    expect(run.status).toBe('aborted');
+    // The mid-walk kill must not lose the checkpoint already written for ch1,
+    // AND ch2's own (aborted) attempt must itself be recorded — proof the
+    // record call sits BEFORE the isAbortExit check at this site, not after
+    // it (a record-after-bail regression would leave this at length 1).
+    expect(run.chairAttempts).toHaveLength(2);
+    expect(run.chairAttempts[0]).toEqual(
+      { waveId: 'abc123-ch1', model: 'deepseek', outcome: 'error', reason: 'error' });
+    expect(run.chairAttempts[1]).toEqual(
+      { waveId: 'abc123-ch2', model: 'deepseek', outcome: 'error', reason: 'aborted' });
+  });
+});
+
 describe('chair VERDICT-line repair (one re-prompt)', () => {
   // v4.3 Task 3 (spec §7.2): the ch4 VERDICT-repair launch is a SEPARATE call
   // site from the ch1/ch2/ch3 chain (attemptChair) — its own attribution wiring.

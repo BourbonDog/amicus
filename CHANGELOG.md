@@ -46,6 +46,16 @@ All notable changes to Amicus are documented here. Format follows
   boundary for a dead-leg seat, since the panel keeps suppressing the row while the seat's own
   errored-leg entry is still listed live); the run's terminal refresh then additionally unions
   the critic's `seatLoss` on top, for any loss the live payload alone didn't carry.
+- **The chair fallback walk now records every attempt on `run.json`.** Each leg it tries — `ch1`
+  (the requested chair), `ch2` (a same-chair retry), `ch3` (the ledger-promoted fallback) —
+  appends an entry to an additive `chairAttempts[]` array (`{waveId, model, outcome, reason}`,
+  `outcome ∈ completed|error|timeout|no-output`), checkpointed after every attempt so a mid-walk
+  kill never loses what already ran. When no chair leg completes at all, the `chair-failed`
+  degrade's "What was lost" `why` now names each attempt's cause instead of one flat sentence —
+  `ch1 <model>: <reason> · ch2 <model>: <reason> · ...` — while a chair that ran but produced no
+  parseable VERDICT line keeps its original flat why (the walk didn't fail). The `ch4`
+  VERDICT-line repair re-prompt is deliberately not counted as an attempt — its chair leg already
+  completed; only the verdict line gets re-prompted.
 
 ### Fixed
 
