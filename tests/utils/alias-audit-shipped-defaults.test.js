@@ -71,12 +71,29 @@ describe('shipped defaults never go stale against the shipped Anthropic floor', 
     expect(defaults.fable).toBe('anthropic/claude-fable-5');
   });
 
-  it('the shipped gpt-pro default NEVER reports stale (and thus never yields a retarget fix:) while its authored openrouter route is live — the 2026-08-05 release-gate false positive', () => {
+  it('the shipped gpt-pro default NEVER reports stale (and thus never yields a retarget fix:) — gpt-pro is gatewayOnly, so this holds even before checking live coverage — the 2026-08-05 release-gate false positive', () => {
     // Direct openai namespace serves the 5.6 base tiers but NOT sol-pro
     // (today's real catalog shape); the authored openrouter route is live.
     const catalog = [
       { id: 'openai/gpt-5.6-sol' }, { id: 'openai/gpt-5.6-terra' }, { id: 'openai/gpt-5.6-luna' },
       { id: 'openrouter/openai/gpt-5.6-sol-pro' },
+    ];
+    const { collectAliasSources, findStaleAliases } = require('../../src/utils/alias-audit');
+    const stale = findStaleAliases(collectAliasSources(), catalog);
+    expect(stale.filter(r => r.alias === 'gpt-pro')).toEqual([]);
+  });
+
+  it('the shipped gpt-pro default stays clean on gatewayOnly alone, even with NO live openrouter coverage in the catalog', () => {
+    // Same fixture as the pin above, minus the openrouter row entirely — so
+    // "covered" can't be doing the suppressing here. gpt-pro carries
+    // gatewayOnly: true (curated-models.js CARDLESS), so its defaults row
+    // must be suppressed on that disjunct alone. (The curated-route row for
+    // gpt-pro also drops out here, but for an unrelated reason — the
+    // openrouter provider has zero catalog rows, so it's unverifiable, not
+    // suppressed; the assertion still isolates the defaults-row/gatewayOnly
+    // behavior this case exists to pin.)
+    const catalog = [
+      { id: 'openai/gpt-5.6-sol' }, { id: 'openai/gpt-5.6-terra' }, { id: 'openai/gpt-5.6-luna' },
     ];
     const { collectAliasSources, findStaleAliases } = require('../../src/utils/alias-audit');
     const stale = findStaleAliases(collectAliasSources(), catalog);

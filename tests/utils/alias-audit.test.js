@@ -12,6 +12,14 @@ const CATALOG = [
 ];
 
 describe('findStaleAliases', () => {
+  // These fixtures use real alias names (grok, gemini, gpt, deepseek) and none
+  // of these tests doMock curated-models, so findStaleAliases's lazy
+  // require('./curated-models') resolves the REAL module and its REAL
+  // directFormProvenance() output for those aliases (all 'none'/'authored'
+  // today, so the v4.6.3 defaults-row suppression never engages here) — a
+  // future gatewayOnly or derived-form annotation on one of these real
+  // aliases would surface as a behavior change in this block; see the Task 4
+  // review that added this note.
   it('flags openrouter routes absent from the catalog', () => {
     const sources = [
       { alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults' },
@@ -178,7 +186,13 @@ describe("defaults-row suppression via provenance (v4.6.3 PR1, spec D2)", () => 
   test('derived + NOT covered + NOT gatewayOnly still reports (both routes dead = real staleness)', () => {
     const deadCatalog = [{ id: 'openai/gpt-5.6-sol' }, { id: 'openrouter/openai/gpt-5.6-sol' }];
     withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }, find => {
-      expect(find(rows, deadCatalog).length).toBeGreaterThan(0);
+      // Exact-shape assertion, not just "something reported": with deadCatalog
+      // covered is empty, so the unrelated curated-route row always reports on
+      // its own — a length > 0 check alone would stay green even if the
+      // covered.has(alias) guard were dropped and every derived defaults row
+      // got suppressed (the over-suppression direction, which hides REAL
+      // staleness). Pin that the defaults row specifically survives.
+      expect(find(rows, deadCatalog).filter(r => r.source === 'defaults')).toHaveLength(1);
     });
   });
 
