@@ -49,12 +49,9 @@
     var seats = window.AmicusLive.seatsFromRunStats(d.derived.cost.rows);
     var tbody = A.$('seats-body');
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
-    var isTerminal = window.AmicusLive.TERMINAL_STATUSES.indexOf(d.run.status) !== -1;
-    if (isTerminal) {
-      var seatLoss = d.verdict && d.verdict.seatLoss;
-      var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats);
-      renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
-    }
+    var seatLoss = d.verdict && d.verdict.seatLoss;
+    var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats);
+    renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
   }
 
   /**
@@ -99,8 +96,24 @@
     });
   }
 
+  /**
+   * Live-tick twin of renderSeatsPanel's dead block (PR4b, Christian's mid-poll
+   * ruling on PR 102): applyLive's renderSeats repaint wipes dead:-keyed rows
+   * (leaver-removal), so every tick re-appends from the tick's own payload.
+   * seatLoss comes from state.detail (absent mid-run — the critic's own
+   * dead-leg degrade covers it live; the terminal refresh unions the rest).
+   */
+  function appendDeadRows(live) {
+    var A = window.AmicusApp;
+    var d = A.state.detail;
+    var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;
+    var dead = window.AmicusLive.deadSeats(live.degrades, seatLoss, live.seats || []);
+    renderDeadSeatRows(A.$('seats-body'), dead, A.state.blind, A.labelOf);
+  }
+
   window.AmicusSeats = {
     renderSeatsPanel: renderSeatsPanel,
     renderDeadSeatRows: renderDeadSeatRows,
+    appendDeadRows: appendDeadRows,
   };
 })();

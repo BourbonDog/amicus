@@ -961,14 +961,24 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     expect(deadRows[0].children[0].textContent).toBe(DEAD_MODEL);
   });
 
-  test('a non-terminal (running) run doc carrying the SAME degrades[] renders NO dead rows (controller ruling: no flash-then-vanish)', async () => {
+  // PR4b Task 2 (mid-poll re-append, Christian's ruling on PR #102): FLIPPED from the original
+  // v4.6.2 PR4 gate test, which asserted ZERO dead rows here. The terminal gate this test used to
+  // pin is now removed — renderSeatsPanel() always runs its dead block — so a non-terminal run
+  // doc carrying degrades[] renders the row too, same as a terminal one. Name assertion is
+  // '(masked)', not DEAD_MODEL: defaultBlind('running') is true (blind ON live, per spec), and
+  // this fixture's derived.names (buildFixtureDetail's stock gemini/gpt bench) carries no label
+  // for foxtrot, so the fix-wave-2 masking rule renders the placeholder — a real, newly-exercised
+  // path (the old test only ever ran this fixture at a terminal status, where blind defaults OFF).
+  test('a non-terminal (running) run doc carrying degrades[] DOES render the dead row (gate removed)', async () => {
     const fixture = deadSeatFixture('aaaa1111', 'running', degradesNamingFoxtrot, null);
     global.window.amicusWorkspace.invoke = invokeReturning(fixture);
 
     await global.window.AmicusApp.openRun('aaaa1111');
 
     const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
-    expect(deadRows).toHaveLength(0);
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe('(masked)');
+    expect(deadRows[0].children[0].textContent).not.toBe(DEAD_MODEL);
   });
 
   // Final-review fix wave (finding 4, rider): dead-seat-rows.test.js's case (c) proves mask
