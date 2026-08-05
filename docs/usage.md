@@ -381,6 +381,12 @@ amicus models --check --live  # + probe every stored alias with a real leg (spen
 
 `amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
 
+**Gateway-only routes.** A curated alias whose direct form is *derived* from its OpenRouter route (rather than
+authored) is not reported STALE when that direct form is missing from the vendor's
+direct namespace while the OpenRouter route still serves — a gateway-only route with
+no direct sibling is a routing choice, not staleness. Deliberately gateway-only
+entries (e.g. `gpt-pro`) are annotated as such and are never offered a retarget.
+
 **Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line prints the exact `amicus setup --add-alias <alias>=<current>` refresh command. Drift is informational only — unlike stale aliases, it never changes the exit code.
 
 **Live probe (`--check --live`).** Presence in the catalog is not proof of service — a stored alias can point at a model id the catalog still lists but the provider has quietly stopped serving (the v4.6.1 `gemini` incident). `--check` alone can't see that; `--live` can, by actually asking. Scope is **stored aliases only** (`amicus setup --add-alias`) — curated defaults follow the catalog by construction and have no "was it actually served" question for a live probe to answer. **This spends real money — one tiny leg per stored alias** — every probed alias gets one ordinary engine leg on a single quiet fan-out wave, with a real session dir and a real spend-ledger row, exactly as if you'd run it yourself.

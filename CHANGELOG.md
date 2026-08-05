@@ -5,6 +5,23 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`fable` now carries an authored direct-Anthropic route** (`anthropic/claude-fable-5`,
+  verified live: Anthropic's `/v1/models` lists it and a direct leg serves). With an
+  Anthropic key present, `fable` routes direct-first like the other Anthropic aliases;
+  the `ANTHROPIC_MODELS` floor gains a matching row so keyless installs validate it.
+
+### Fixed
+
+- **`models --check` no longer false-flags deliberate gateway-only routes.** A curated
+  alias whose direct form is derived (not authored) from its OpenRouter route is no
+  longer reported STALE — flat row, `GATEWAY STALE` row, candidates, and the
+  `fix: --add-alias` retarget suggestion all suppressed together — when the OpenRouter
+  route still serves. Deliberately gateway-only entries (`gpt-pro`) are annotated in
+  the curated data and never audited for a direct sibling. Kills the v4.6.2
+  release-gate false positive whose suggested "fix" was a silent tier downgrade.
+
 ## [4.6.2] - 2026-08-05
 
 ### Added
