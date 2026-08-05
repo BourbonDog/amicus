@@ -197,7 +197,7 @@ describe('Sidecar Config Module', () => {
       const config = loadModule();
       const aliases = config.getDefaultAliases();
       expect(aliases.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
-      expect(aliases.fable).toBe('openrouter/anthropic/claude-fable-5');
+      expect(aliases.fable).toBe('anthropic/claude-fable-5');
     });
 
     it('should map gpt to openai/gpt-5.6-terra (bare, direct-capable)', () => {

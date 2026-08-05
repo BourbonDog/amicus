@@ -58,9 +58,9 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
-    // fable is divergent AND has no authored `anthropic:` route (OpenRouter-only
-    // today), so it keeps its OpenRouter route rather than inventing a direct id.
-    expect(defaults.fable).toBe('openrouter/anthropic/claude-fable-5');
+    // fable: direct route authored 2026-08-05 (ruling R2) — /v1/models lists
+    // claude-fable-5 and a live direct leg served. Pinned direct-first.
+    expect(defaults.fable).toBe('anthropic/claude-fable-5');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
     expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');

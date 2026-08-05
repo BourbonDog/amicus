@@ -67,6 +67,6 @@ describe('shipped defaults never go stale against the shipped Anthropic floor', 
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
     // fable is OpenRouter-only: no authored `anthropic:` route, so the pinned
     // default must stay the OpenRouter route rather than invent a direct id.
-    expect(defaults.fable).toBe('openrouter/anthropic/claude-fable-5');
+    expect(defaults.fable).toBe('anthropic/claude-fable-5');
   });
 });

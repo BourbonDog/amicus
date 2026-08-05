@@ -68,7 +68,9 @@ const FAMILIES = [
 ];
 
 /**
- * Alias-only entries (no wizard quick pick); openrouter route only.
+ * Alias-only entries (no wizard quick pick). Every entry authors an
+ * openrouter route; entries whose vendor's direct API genuinely serves the
+ * model also author a direct route (claude/sonnet/haiku/fable).
  * Refreshed against the live catalog 2026-08-04.
  */
 const CARDLESS = [
@@ -86,7 +88,11 @@ const CARDLESS = [
                                 anthropic: 'anthropic/claude-sonnet-5' } },
   { alias: 'haiku', routes: { openrouter: 'openrouter/anthropic/claude-haiku-4.5',
                               anthropic: 'anthropic/claude-haiku-4-5-20251001' } },
-  { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5' } },
+  // fable: direct route authored 2026-08-05 (owner ruling R2, v4.6.3 spec §3).
+  // Anthropic's /v1/models lists claude-fable-5 AND the direct route serves
+  // (live smoke wave 47278069) — the entry was OpenRouter-only at authoring.
+  { alias: 'fable', routes: { openrouter: 'openrouter/anthropic/claude-fable-5',
+                              anthropic: 'anthropic/claude-fable-5' } },
   { alias: 'qwen', routes: { openrouter: 'openrouter/qwen/qwen3.7-max' } },
   { alias: 'qwen-coder', routes: { openrouter: 'openrouter/qwen/qwen3-coder-next' } },
   { alias: 'qwen-flash', routes: { openrouter: 'openrouter/qwen/qwen3.6-flash' } },
@@ -160,7 +166,8 @@ function listCuratedRoutes() {
  * Vendors whose direct-API ids differ from OpenRouter's (dot vs. dash
  * versioning, distinct model names, etc.). NEVER derive a direct form for
  * these — derivation would emit the wrong (dot) id, or invent a direct id
- * for a model that is OpenRouter-only today (e.g. fable).
+ * for a model the direct API does not serve (fable was that case until its
+ * direct route was verified and authored, 2026-08-05).
  * Frozen so consumers can only read it (`.has()`) — a frozen Set still
  * supports lookups, it just can't be `.add()`/`.delete()`/`.clear()`-ed.
  */
@@ -223,7 +230,8 @@ function toGatewayRoutes() {
  * disagree. It previously string-stripped `openrouter/` itself, which emitted
  * OpenRouter's dot ids for divergent vendors (`anthropic/claude-opus-4.8` —
  * the direct API only serves the dash form) and invented a bare direct id for
- * OpenRouter-only models (`fable`). Both made `amicus doctor` and `amicus
+ * then-OpenRouter-only models (`fable`, direct-authored 2026-08-05). Both made
+ * `amicus doctor` and `amicus
  * models --check` warn about the product's own shipped defaults.
  */
 function toDefaultAliases() {
