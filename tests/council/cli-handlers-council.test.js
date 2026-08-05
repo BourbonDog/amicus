@@ -409,8 +409,8 @@ test('verdict: a valueless -o/--out errors instead of writing a file named true 
   const doc = JSON.parse(result.out);
   expect(doc.error.code).toBe('BAD_ARGS');
   expect(doc.error.message).toMatch(/-o\/--out/);
-  expect(fs.existsSync(path.join(dir, 'true'))).toBe(false);
-  expect(fs.existsSync('true')).toBe(false);
+  // Verify no artifacts leaked: directory should only contain the seeded tally file
+  expect(fs.readdirSync(dir).sort()).toEqual(['tally.json']);
 });
 
 test('verdict: an empty --out= value errors the same way, never silently defaulting', async () => {
@@ -426,6 +426,8 @@ test('verdict: an empty --out= value errors the same way, never silently default
   }
   expect(result.code).toBe(1);
   expect(JSON.parse(result.out).error.code).toBe('BAD_ARGS');
+  // Verify no artifacts leaked: directory should only contain the seeded tally file
+  expect(fs.readdirSync(dir).sort()).toEqual(['tally.json']);
 });
 
 // ---------------------------------------------------------------------------

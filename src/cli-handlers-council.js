@@ -163,9 +163,10 @@ function runVerdict(args, useJson) {
     }
   }
   // R1 (v4.6.3): parseArgs records a valueless trailing -o/--out as boolean
-  // true (and --out= as ''); coercing either into a path writes a file
-  // literally named 'true' (and --render then TypeErrors in path.dirname).
-  // Name the flag and refuse — the unknown-flag precedent.
+  // true (and --out= as ''). The boolean crashes writeVerdictAtomic mid-write
+  // (renameSync TypeError on a non-string path) leaving an orphaned
+  // true.tmp-<pid>; the empty string silently falls through to the default
+  // path. Name the flag and refuse both — the unknown-flag precedent.
   if (args.out !== undefined && (typeof args.out !== 'string' || args.out === '')) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: '-o/--out requires a value',
       hint: 'amicus council verdict <tally.json> [--decisions <decisions.json>] [-o|--out <out.json>]' });
