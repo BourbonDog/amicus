@@ -154,8 +154,8 @@ describe('chair channels', () => {
     expect(d.remedy).toMatch(/max-cost/);
     // Regression pin: a cost-skipped chair announces ONCE. Without the exclusivity
     // guard, the unconditional end-of-function catch-all also fires 'chair-failed'
-    // (chairLeg is still null after a skip) — a false "no chair leg completed,
-    // including after the fallback chain" for an event where no chain ever ran.
+    // (chairLeg is still null after a skip) — a false "no chair leg completed after
+    // the fallback walk" for an event where no chain, and so no chairAttempts, ran.
     expect(noted).toHaveLength(1);
   });
 

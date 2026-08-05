@@ -42,6 +42,15 @@ All notable changes to Amicus are documented here. Format follows
   degrade recorded a `retryWaveId`) or plain `did not review`, no cost cell, and muted seat-dead
   styling. Dead-seat rows are terminal-gated on purpose: they never appear mid-poll on a
   still-running run, only once the run is done.
+- **The chair fallback walk now records every attempt on `run.json`.** Each leg it tries — `ch1`
+  (the requested chair), `ch2` (a same-chair retry), `ch3` (the ledger-promoted fallback) —
+  appends an entry to an additive `chairAttempts[]` array (`{waveId, model, outcome, reason}`,
+  `outcome ∈ completed|error|timeout|no-output`), checkpointed after every attempt so a mid-walk
+  kill never loses what already ran. A degraded chair's "What was lost" line now names each
+  attempt's cause instead of one flat sentence: the `chair-failed` degrade's `why` reads `ch1
+  <model>: <reason> · ch2 <model>: <reason> · ...`. The `ch4` VERDICT-line repair re-prompt is
+  deliberately not counted as an attempt — its chair leg already completed; only the verdict line
+  gets re-prompted.
 
 ### Fixed
 

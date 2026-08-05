@@ -176,7 +176,9 @@ Key semantics:
   same per-member reason) as a preview, before you spend anything.
 - Chair failure recovery: one retry of the same chair → promote the highest peers-only
   street-cred model (from `amicus council stats`) that is not a bench seat → give up and write
-  the verdict with `overallVerdict: null`.
+  the verdict with `overallVerdict: null`. Each attempt in that walk is additionally recorded on
+  `run.json` as `chairAttempts[]` (`{waveId, model, outcome, reason}`), checkpointed after every
+  attempt so a mid-walk kill preserves what already happened.
 - SIGINT/SIGTERM abort the active wave/solo, finalize `run.json` as `aborted`, exit 130/143.
   `amicus abort <councilRunId>` (and the MCP tools via the sessions-dir pointer file
   `council-<runId>.json`) work on council runs; `status`/`list` resolve them the same way.
