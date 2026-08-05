@@ -230,4 +230,166 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(tbody.children.length).toBe(2);
     expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(1);
   });
+
+  /**
+   * PR4b Task 2 (mid-poll re-append, Christian's ruling on PR #102): appendDeadRows() is the
+   * live-tick twin of renderSeatsPanel's dead block above — applyLive's renderSeats repaint on
+   * every tick wipes any `dead:`-keyed row (leaver-removal, workspace-render.js:220-222, whose
+   * seen-set only knows the live seats it was just given), so every tick calls this function to
+   * re-append dead rows from the TICK's OWN payload. It reads window.AmicusApp exactly like
+   * renderSeatsPanel() does (state.detail for seatLoss, state.blind/labelOf for masking) rather
+   * than taking them as arguments, so it is exercised here with a minimal AmicusApp stub — same
+   * "call the real function directly" level this whole file already tests at (see the file
+   * docstring). Full production-wiring coverage of the real verbs.js call site, reached through
+   * a real tick, lives in live-loop.test.js; the renderSeatsPanel gate-removal twin lives in
+   * workspace-app-boundary.test.js.
+   */
+  describe('appendDeadRows (PR4b Task 2: live-tick twin of renderSeatsPanel\'s dead block)', () => {
+    beforeEach(() => {
+      global.window.AmicusApp = {
+        $: function (id) { return document.getElementById(id); },
+        labelOf: function () { return null; },
+        state: { detail: null, blind: false },
+      };
+    });
+
+    function liveSeat(model) {
+      return {
+        id: model, model: model, modelInput: null, role: 'seat', status: 'complete', stage: null,
+        messages: null, tokensIn: null, tokensOut: null, costDisplay: '$0.10', lastActivity: null,
+        latestPreview: null, stalled: false,
+      };
+    }
+
+    test('renders exactly one seat-dead row for a degrade naming a model not in seats', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [liveSeat('alpha')];
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat bravo did not review',
+        why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+        data: { seat: 'bravo', status: 'error', reason: 'timed out' },
+      }];
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades });
+
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(tbody.children.length).toBe(2);
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('bravo');
+    });
+
+    // PR4b Task 3 rider (controller ruling): every test in this block leaves
+    // global.window.AmicusApp.state.detail at the beforeEach default (null), so
+    // appendDeadRows()'s `var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;` read
+    // always takes the `null` branch — the `d.verdict.seatLoss` chain itself has zero
+    // coverage here. This is the seatLoss counterpart of the test just above: degrades[] is
+    // empty, so the dead row can only come from state.detail's seatLoss read. A
+    // `d.verdict.seatloss` typo (or any break in the chain) would render zero rows here while
+    // every other test in this file stayed green.
+    test('state.detail.verdict.seatLoss naming a critic not in seats renders exactly one dead row (degrades[] empty)', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [liveSeat('alpha')];
+      global.window.AmicusApp.state.detail = {
+        verdict: { seatLoss: { criticRequested: 'some-model-not-in-seats', criticSeated: false } },
+      };
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades: [] });
+
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('some-model-not-in-seats');
+    });
+
+    test('appendDeadRows called after each of two renderSeats repaints in a row still renders exactly one dead row (wipe+re-append idempotency)', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [liveSeat('alpha')];
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat bravo did not review',
+        why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+        data: { seat: 'bravo', status: 'error', reason: 'timed out' },
+      }];
+      const live = { ok: true, seats, degrades };
+
+      for (let i = 0; i < 2; i += 1) {
+        AmicusRender.renderSeats(tbody, seats, false, () => null); // mirrors applyLive's tick repaint
+        AmicusSeats.appendDeadRows(live);
+      }
+
+      expect(tbody.children.length).toBe(2);
+      expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(1);
+    });
+
+    test('D6: a degrade naming a model that IS in seats renders zero dead rows', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [liveSeat('alpha'), liveSeat('bravo')]; // bravo recovered — has a live row
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-wave', what: 'Stage-1 wave r1-s1 (bravo) produced NO legs',
+        why: 'no reason recorded; the once-only retry wave also produced no legs', effect: 'seats reviewed',
+        data: { waveId: 'r1-s1', models: ['bravo'], reason: 'no reason recorded', retryWaveId: 'r1-s1r1' },
+      }];
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades });
+
+      expect(tbody.children.length).toBe(2);
+      expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(0);
+    });
+
+    // Fable review (PR4b fix wave): the D6 test above uses this file's `liveSeat()` helper,
+    // whose `model` IS the alias (`modelInput: null` always) — it can never expose an
+    // alias/resolved-id split. A REAL live payload seat (src/workspace/live-normalize.js's
+    // `seatOf`, F34/F36) carries `model` as the RESOLVED EXECUTABLE id and the alias in
+    // `modelInput` separately; a degrade record's `data.seat`/`data.models` are always
+    // alias-keyed (run-retry-notes.js stamps the council alias, never the resolved id). D6's
+    // live-path suppression filter must key its "already has a live row" map on the SAME alias
+    // seatCells already uses (`seat.modelInput || seat.model`, live-model.js:58), or a dead-leg
+    // seat whose errored roster row is still in the active stage's `live.seats` would render
+    // BOTH its errored live row AND a duplicate dead row until the stage boundary drops it.
+    test('D6 (live-path, production shape): a dead-leg degrade naming the ALIAS of a seat whose live row is keyed by its RESOLVED id renders zero dead rows', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [{
+        id: 'task-1', model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat',
+        status: 'running', stage: 'stage1', messages: 3, tokensIn: 500, tokensOut: 200,
+        costDisplay: '$0.05', lastActivity: null, latestPreview: null, stalled: false,
+      }];
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat gemini did not review',
+        why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+        data: { seat: 'gemini', status: 'error', reason: 'timed out' },
+      }];
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades });
+
+      expect(tbody.children.length).toBe(1); // the one live row only — no duplicate dead row
+      expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(0);
+    });
+
+    // Supplementary: blind/(masked) parity through the AmicusApp-STATE read path specifically —
+    // unlike the renderDeadSeatRows tests above (which pass blindOn/labelOf as direct args), this
+    // is the path where a wiring typo (A.blind instead of A.state.blind, A.state.labelOf instead
+    // of A.labelOf) would slip past every other test in this describe block.
+    test('blind mode with no label for the dead seat renders "(masked)" via AmicusApp.state.blind/labelOf', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [liveSeat('alpha')];
+      const labelMap = { alpha: 'Review A' }; // deliberately no entry for bravo (the dead seat)
+      global.window.AmicusApp.state.blind = true;
+      global.window.AmicusApp.labelOf = (m) => labelMap[m] || null;
+      AmicusRender.renderSeats(tbody, seats, true, global.window.AmicusApp.labelOf);
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat bravo did not review',
+        why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+        data: { seat: 'bravo', status: 'error', reason: 'timed out' },
+      }];
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades });
+
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('(masked)');
+      expect(deadRows[0].children[0].textContent).not.toBe('bravo');
+    });
+  });
 });

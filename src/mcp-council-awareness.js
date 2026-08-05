@@ -185,6 +185,7 @@ function buildCouncilStatusPayload(project, taskId) {
     legsTotal, legsComplete, elapsed: elapsedOf(run),
     exitCode: run.exitCode !== undefined ? run.exitCode : null,
     version: RUNNING_VERSION,
+    degrades: run.degrades || [],
   };
   if (usageLegs.length) { payload.usage = rollupWaveUsage(usageLegs); }
   if (allLegIds.length) {

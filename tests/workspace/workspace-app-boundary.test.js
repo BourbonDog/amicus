@@ -859,22 +859,30 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
  * never renders while every existing test — including this file's own —
  * stayed green.
  *
- * Also pins the controller ruling from the same review: renderSeatsPanel
- * must append dead rows ONLY on a terminal run. Diagnosis: renderDetail()
- * unconditionally calls V.startLiveLoop() at its own end (workspace-app.js
+ * Also pinned (HISTORY — superseded by PR4b, see below) the controller ruling from the same
+ * review: renderSeatsPanel appended dead rows ONLY on a terminal run. Diagnosis at the time:
+ * renderDetail() unconditionally calls V.startLiveLoop() at its own end (workspace-app.js
  * :151); on a still-running run that schedules a tick via
  * `setTimeout(tick, 0)` (workspace-verbs.js:111) whose FIRST resolution
- * repaints #seats-body via a direct `R.renderSeats(...)` call
- * (workspace-verbs.js:129-131) — bypassing renderSeatsPanel() and its dead
+ * repainted #seats-body via a direct `R.renderSeats(...)` call
+ * (workspace-verbs.js:130) — bypassing renderSeatsPanel() and its dead
  * rows entirely. renderSeats' own leaver-removal (workspace-render.js
- * :220-222) then deletes any `dead:`-keyed row the just-prior renderSeatsPanel
- * call had appended, since that row's key is not among the live seats the
- * tick just painted. Net effect pre-fix: dead rows flash in at open and
- * vanish one tick later on any run still in progress — a glitch, not a
- * feature. The fix gates on the SAME predicate startLiveLoop() itself already
- * uses to decide whether a run is even worth polling
+ * :220-222) then deleted any `dead:`-keyed row the just-prior renderSeatsPanel
+ * call had appended, since that row's key was not among the live seats the
+ * tick just painted. Net effect pre-fix: dead rows flashed in at open and
+ * vanished one tick later on any run still in progress — a glitch, not a
+ * feature. The fix gated on the SAME predicate startLiveLoop() itself already
+ * used to decide whether a run is even worth polling
  * (window.AmicusLive.TERMINAL_STATUSES.indexOf(status) !== -1,
  * workspace-verbs.js:69) — reused verbatim, not a second parallel check.
+ *
+ * PR4b (Christian's mid-poll ruling on PR 102) removed that gate: renderSeatsPanel appends
+ * dead rows unconditionally now, and applyLive() calls window.AmicusSeats.appendDeadRows()
+ * right after every tick's renderSeats() repaint (workspace-verbs.js:130-131) to restore the
+ * row the SAME tick that just wiped it — "hide until terminal" became "re-paint every tick."
+ * The non-terminal test below was flipped accordingly (was: asserts ZERO dead rows; now:
+ * asserts ONE) — see tests/workspace/dead-seat-rows.test.js's `appendDeadRows` describe block
+ * and tests/workspace/live-loop.test.js for the tick-level coverage of the new path.
  *
  * Reuses buildFixtureDetail()/defaultInvoke()/loadOrderedScripts()/
  * makeFakeDom() defined above (this file's own proven-safe full-boot
@@ -961,14 +969,24 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     expect(deadRows[0].children[0].textContent).toBe(DEAD_MODEL);
   });
 
-  test('a non-terminal (running) run doc carrying the SAME degrades[] renders NO dead rows (controller ruling: no flash-then-vanish)', async () => {
+  // PR4b Task 2 (mid-poll re-append, Christian's ruling on PR #102): FLIPPED from the original
+  // v4.6.2 PR4 gate test, which asserted ZERO dead rows here. The terminal gate this test used to
+  // pin is now removed — renderSeatsPanel() always runs its dead block — so a non-terminal run
+  // doc carrying degrades[] renders the row too, same as a terminal one. Name assertion is
+  // '(masked)', not DEAD_MODEL: defaultBlind('running') is true (blind ON live, per spec), and
+  // this fixture's derived.names (buildFixtureDetail's stock gemini/gpt bench) carries no label
+  // for foxtrot, so the fix-wave-2 masking rule renders the placeholder — a real, newly-exercised
+  // path (the old test only ever ran this fixture at a terminal status, where blind defaults OFF).
+  test('a non-terminal (running) run doc carrying degrades[] DOES render the dead row (gate removed)', async () => {
     const fixture = deadSeatFixture('aaaa1111', 'running', degradesNamingFoxtrot, null);
     global.window.amicusWorkspace.invoke = invokeReturning(fixture);
 
     await global.window.AmicusApp.openRun('aaaa1111');
 
     const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
-    expect(deadRows).toHaveLength(0);
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe('(masked)');
+    expect(deadRows[0].children[0].textContent).not.toBe(DEAD_MODEL);
   });
 
   // Final-review fix wave (finding 4, rider): dead-seat-rows.test.js's case (c) proves mask

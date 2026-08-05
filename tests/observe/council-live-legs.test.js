@@ -260,4 +260,42 @@ describe('buildCouncilStatusPayload: legs[] + stall flags (DE-ROT F01)', () => {
     expect(doc.legs).toBeUndefined();
     expect(doc.stalled).toBeUndefined();
   });
+
+  // PR4b Task 1: thread `degrades` through the live spine (Christian's mid-poll
+  // ruling on PR #102) — the composed payload must carry run.json's `degrades[]`
+  // verbatim so the workspace can render dead-seat rows before a run terminates.
+  test('payload carries run.json degrades[] verbatim; [] when absent', () => {
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat x did not review',
+      data: { seat: 'x', retryWaveId: 'w2' },
+    }];
+
+    const runDirA = path.join(projectDir, 'run-degrades-a');
+    runState.initRun(runDirA, {
+      schemaVersion: 2, type: 'council-run', runId: 'run-degrades-a', status: 'running',
+      stages: [{ name: 'stage1', status: 'running', waveId: null }],
+      bench: ['gemini'], chair: 'claude', critic: null, lenses: null, labelMap: null,
+      options: { outDir: runDirA }, usage: null, pid: process.pid,
+      createdAt: new Date().toISOString(), degrades,
+    });
+    runState.writePointer(projectDir, 'run-degrades-a', runDirA);
+
+    const runDirB = path.join(projectDir, 'run-degrades-b');
+    runState.initRun(runDirB, {
+      schemaVersion: 2, type: 'council-run', runId: 'run-degrades-b', status: 'running',
+      stages: [{ name: 'stage1', status: 'running', waveId: null }],
+      bench: ['gemini'], chair: 'claude', critic: null, lenses: null, labelMap: null,
+      options: { outDir: runDirB }, usage: null, pid: process.pid,
+      createdAt: new Date().toISOString(),
+      // no degrades key
+    });
+    runState.writePointer(projectDir, 'run-degrades-b', runDirB);
+
+    const { buildCouncilStatusPayload } = require('../../src/mcp-council-awareness');
+    const payloadA = buildCouncilStatusPayload(projectDir, 'run-degrades-a');
+    const payloadB = buildCouncilStatusPayload(projectDir, 'run-degrades-b');
+
+    expect(payloadA.degrades).toEqual(degrades);
+    expect(payloadB.degrades).toEqual([]);
+  });
 });

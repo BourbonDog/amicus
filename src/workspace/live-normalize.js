@@ -126,6 +126,7 @@ function normalizeLive(doc) {
     stageName: active ? active.name : null,
     stages,
     seats: legRowsOf(doc).map(seatOf),
+    degrades: Array.isArray(doc.degrades) ? doc.degrades : [],
     // ⚠️ v4.4.1 RN-8 (D1 ruling: delete the promise). `legsTotal`/`legsComplete` used to be
     // mapped here under a comment promising them as "the honest fallback readout if a seat row
     // is ever unavailable" — a UI fallback nobody ever wired. Nothing in electron/workspace-ui/

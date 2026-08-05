@@ -162,7 +162,15 @@
       add(seatLoss.criticRequested, false);
     }
     var live = {};
-    (liveSeats || []).forEach(function (s) { live[s.model] = true; });
+    // ⚠️ Fable review (PR4b fix wave): same F34/F36 alias-selection seatCells already uses
+    // (`seat.modelInput || seat.model`, above) — a LIVE payload seat's `model` is the RESOLVED
+    // executable id, not the alias a degrade record names; `modelInput` carries the alias.
+    // Keying this map on `s.model` alone meant a dead-leg seat whose errored roster row was
+    // still in the active stage's `liveSeats` never matched its alias-keyed degrade candidate,
+    // so D6 failed to suppress it — both rows rendered until the stage boundary dropped the
+    // errored row. Terminal-path cost rows (seatsFromRunStats) carry no `modelInput` at all and
+    // are already alias-only, so `|| s.model` leaves that path unchanged.
+    (liveSeats || []).forEach(function (s) { live[s.modelInput || s.model] = true; });
     return order.filter(function (s) { return !live[s.model]; });
   }
 

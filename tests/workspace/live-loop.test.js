@@ -45,8 +45,13 @@ function buildFixtureDetail(runId, status) {
 
 function liveDoc(overrides) {
   return Object.assign({
+    // PR4b fix wave (test-helper truthfulness rider): `degrades` was missing from this base
+    // shape entirely — normalizeLive's `ok:true` return (Task 1) always emits `degrades: []`
+    // when the composed doc carries none, so a fixture omitting the key altogether is a shape
+    // `normalizeLive` can no longer actually produce. `(degrades || [])` inside `deadSeats`
+    // masked this everywhere else, so it never broke a test — but the fixture itself was lying.
     ok: true, view: 'live', runId: 'cccc3333', status: 'running', stageName: 'stage1',
-    stages: null, seats: [], legsTotal: null, legsComplete: null,
+    stages: null, seats: [], degrades: [], legsTotal: null, legsComplete: null,
     costDisplay: null, costAmount: null,
     flags: { crashed: false, stalled: false, stalledForSeconds: null },
     terminal: false,
@@ -357,6 +362,41 @@ describe('renderer live loop (Task 15: startLiveLoop/stopLiveLoop/applyLive)', (
   test('applyLive throws synchronously on a live payload missing `.flags` — it does not defensively swallow malformed input (code review round 2, finding 3)', async () => {
     await global.window.AmicusApp.openRun('aaaa1111');
     expect(() => global.window.AmicusVerbs.applyLive({ ok: true, terminal: false, seats: [] })).toThrow();
+  });
+
+  // ---- mid-poll dead-seat rows (PR4b Task 2, Christian's ruling on PR #102) -------------------
+  // A still-running run's tick now re-appends dead rows every time, since applyLive's own
+  // renderSeats repaint wipes any `dead:`-keyed row from the PRIOR tick (leaver-removal — its
+  // seen-set only knows the seats it was just given). This drives a REAL tick (fake timers + a
+  // mocked workspace:get-live reply), not a direct applyLive() call like its siblings below, to
+  // prove the production wiring (verbs.js's applyLive -> window.AmicusSeats.appendDeadRows) end
+  // to end — the same idiom the cadence tests above already exercise. Pre-implementation this is
+  // the flash-then-vanish inversion: the tick's own renderSeats call wiped any dead row painted
+  // before it, so deadRows would be empty here; post-implementation it is healed back every tick.
+  test('a tick whose live reply carries seats + a dead degrades record paints the live row AND the dead row', async () => {
+    await global.window.AmicusApp.openRun('aaaa1111'); // buildFixtureDetail: status 'running' (non-terminal)
+    global.window.AmicusApp.state.blind = false; // isolate from blind-mode's own default (ON for non-terminal)
+    invokeMock.mockClear();
+    const seats = [{ id: 's1', model: 'gpt', modelInput: null, role: null, status: 'running', stage: null,
+      messages: null, tokensIn: null, tokensOut: null, costDisplay: null, lastActivity: null,
+      latestPreview: null, stalled: false }];
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat gemini did not review',
+      why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+      data: { seat: 'gemini', status: 'error', reason: 'timed out' },
+    }];
+    getLiveImpl = () => Promise.resolve(liveDoc({ seats, degrades }));
+
+    jest.advanceTimersByTime(0); // fire the immediate first tick
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+    const tbody = global.document.getElementById('seats-body');
+    const liveRows = tbody.children.filter((r) => !r.classList.contains('seat-dead'));
+    const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+    expect(liveRows).toHaveLength(1);
+    expect(liveRows[0].children[0].textContent).toBe('gpt');
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe('gemini');
   });
 
   // ---- applyLive: seats/gauge/stage-rail/banner -----------------------------
