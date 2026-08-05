@@ -58,9 +58,9 @@ describe('curated-models v2 (families)', () => {
     expect(defaults.sonnet).toBe('anthropic/claude-sonnet-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
-    // fable is divergent AND has no authored `anthropic:` route (OpenRouter-only
-    // today), so it keeps its OpenRouter route rather than inventing a direct id.
-    expect(defaults.fable).toBe('openrouter/anthropic/claude-fable-5');
+    // fable: direct route authored 2026-08-05 (ruling R2) — /v1/models lists
+    // claude-fable-5 and a live direct leg served. Pinned direct-first.
+    expect(defaults.fable).toBe('anthropic/claude-fable-5');
     // Gateway-only vendors (no direct integration) — unchanged openrouter/ route.
     expect(defaults.grok).toBe('openrouter/x-ai/grok-4.3');
     expect(defaults.qwen).toBe('openrouter/qwen/qwen3.7-max');
@@ -135,5 +135,33 @@ describe('gpt family idPattern — terra tier (5.6 rename)', () => {
 
   test('fallback pins the terra tier', () => {
     expect(gptFamily().fallback.openrouter).toBe('openrouter/openai/gpt-5.6-terra');
+  });
+});
+
+describe('directFormProvenance (v4.6.3 PR1 — provenance for the auditors)', () => {
+  const { directFormProvenance, toGatewayRoutes } = require('../src/utils/curated-models');
+  const prov = directFormProvenance();
+
+  test('authored: explicit direct routes (fable joined 2026-08-05)', () => {
+    for (const a of ['fable', 'opus', 'haiku', 'claude', 'sonnet']) {
+      expect(prov[a]).toEqual({ directForm: 'authored', gatewayOnly: false });
+    }
+  });
+
+  test('derived: non-divergent vendors with no explicit direct route', () => {
+    expect(prov.gpt).toEqual({ directForm: 'derived', gatewayOnly: false });
+    expect(prov.codex).toEqual({ directForm: 'derived', gatewayOnly: false });
+  });
+
+  test('gpt-pro is derived AND gatewayOnly — the 2026-08-05 owner ruling in data', () => {
+    expect(prov['gpt-pro']).toEqual({ directForm: 'derived', gatewayOnly: true });
+  });
+
+  test('none: gateway-only vendors derive nothing', () => {
+    expect(prov.grok).toEqual({ directForm: 'none', gatewayOnly: false });
+  });
+
+  test('covers every toGatewayRoutes() alias — the two can never disagree on the key set', () => {
+    expect(Object.keys(prov).sort()).toEqual(Object.keys(toGatewayRoutes()).sort());
   });
 });

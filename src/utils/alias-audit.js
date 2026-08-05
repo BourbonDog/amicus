@@ -62,6 +62,12 @@ function idsByProvider(catalog) {
  * at least one live resolution from any other source. This ensures the
  * suggested `--add-alias` fix actually clears the warning, and prevents
  * permanently unclearable noise when the default openrouter route is live.
+ *
+ * A stale 'defaults' entry is additionally suppressed when it is the alias's
+ * DERIVED direct-form pin (per curated-models.directFormProvenance()) and the
+ * alias is either covered live from another source or declares gatewayOnly
+ * (v4.6.3 PR1, spec D2) — an AUTHORED defaults pin and user-config rows are
+ * never suppressed this way.
  * @param {Array<{alias,model,source}>} sources
  * @param {Array<{id:string}>} catalog
  */
@@ -75,11 +81,24 @@ function findStaleAliases(sources, catalog) {
   const covered = new Set(
     sources.filter(({ model }) => isLive(model) === true).map(({ alias }) => alias)
   );
+  // v4.6.3 PR1 (spec D2). Lazy-required so suites that doMock curated-models
+  // for other cases keep working; a stub without the accessor simply gets no
+  // suppression (fail-open toward reporting).
+  const cm = require('./curated-models');
+  const provenance = typeof cm.directFormProvenance === 'function' ? (cm.directFormProvenance() || {}) : {};
   return sources.filter(({ alias, model, source }) => {
     const ids = byProvider.get(model.split('/')[0]);
     if (!ids) { return false; } // provider unverifiable
     if (ids.has(model)) { return false; } // live
     if (source.startsWith('curated-route') && covered.has(alias)) { return false; }
+    // A 'defaults' pin that is the alias's DERIVED direct form: its absence
+    // from the direct namespace is a routing fact, not staleness, while the
+    // alias has live coverage (or declares gatewayOnly). The fix: suggestion
+    // this row would otherwise print is a retarget nobody should run — the
+    // 2026-08-05 release-gate false positive (v4.6.3 spec §3).
+    const prov = provenance[alias];
+    if (source === 'defaults' && prov && prov.directForm === 'derived' &&
+        (prov.gatewayOnly || covered.has(alias))) { return false; }
     return true;
   });
 }

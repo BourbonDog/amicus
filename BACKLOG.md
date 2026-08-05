@@ -1104,4 +1104,9 @@ GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
   (`tally.js:91-107`) — shadow exclusion is the same shape, one filter earlier, and `runStats`
   needs a distinguishing role so `ledger.js`'s role-keyed joins don't misfile it (same join
   hazard the judge rows hit — `ledger.js:21-25`).
-- 2026-08-05 release-gate finding (v4.6.2 cut): models --check flags curated gpt-pro STALE by deriving a DIRECT form (openai/gpt-5.6-sol-pro) from its openrouter-only route; the openrouter route SERVES (live probe d28cab32, $0.35, 'SMOKE OK', 8s). Exit 0. Audit gap: a gateway-only route with no direct sibling is a routing choice, not staleness — teach the auditor. Same family: 'fable has no direct form' divergence line. Disposition: backlog rider, no code change mid-cut (#101's sol-pro choice stands).
+- 2026-08-05 release-gate finding (v4.6.2 cut): models --check flags curated gpt-pro STALE by deriving a DIRECT form (openai/gpt-5.6-sol-pro) from its openrouter-only route; the openrouter route SERVES (live probe d28cab32, $0.35, 'SMOKE OK', 8s). Exit 0. Audit gap: a gateway-only route with no direct sibling is a routing choice, not staleness — teach the auditor. Same family: 'fable has no direct form' divergence line.
+  [2026-08-05 re-verification: HALF-WRONG — fable's line was a TRUE report (live
+  /v1/models lists claude-fable-5; direct smoke served, wave 47278069, $0.72 — do not
+  re-probe). Resolved by authoring the direct route (ruling R2); the gpt-pro half
+  fixed by audit provenance. Both in v4.6.3 PR1.]
+  Disposition: backlog rider, no code change mid-cut (#101's sol-pro choice stands).

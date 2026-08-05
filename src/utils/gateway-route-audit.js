@@ -30,7 +30,7 @@
 
 'use strict';
 
-const { toGatewayRoutes } = require('./curated-models');
+const { toGatewayRoutes, directFormProvenance } = require('./curated-models');
 const { classifyModel } = require('./model-classification');
 const { pairAcrossGateways } = require('./gateway-route-catalog');
 const { isDirectProvider } = require('./provider-registry');
@@ -70,19 +70,32 @@ function isAuthoritative(catalogInfo, id) {
  */
 function auditGatewayRoutes(catalogInfo) {
   const routes = toGatewayRoutes();
+  const provenance = directFormProvenance();
   const findings = [];
 
   for (const [alias, forms] of Object.entries(routes)) {
+    const prov = provenance[alias] || { directForm: 'none', gatewayOnly: false };
     for (const gateway of ['direct', 'openrouter']) {
       const id = forms[gateway];
       if (!id) { continue; }
-      if (classifyModel(id, gateway, catalogInfo) === 'invalid') {
-        findings.push({ alias, gateway, kind: 'stale', model: id });
+      if (classifyModel(id, gateway, catalogInfo) !== 'invalid') { continue; }
+      // v4.6.3 PR1 (spec D2): a DERIVED direct form is a computed convenience,
+      // not an authored claim. Its absence from the direct namespace is a
+      // routing fact — not staleness — while the authoring openrouter route
+      // is live, or when the entry declares gatewayOnly (an owner-ruled
+      // routing choice). An AUTHORED direct form absent from its namespace
+      // reports exactly as before.
+      if (gateway === 'direct' && prov.directForm === 'derived' &&
+          (prov.gatewayOnly ||
+           classifyModel(forms.openrouter, 'openrouter', catalogInfo) === 'valid')) {
+        continue;
       }
+      findings.push({ alias, gateway, kind: 'stale', model: id });
     }
 
     const vendor = vendorOf(forms.openrouter);
     if (!vendor || !isDirectProvider(vendor)) { continue; } // gateway-only vendor: no direct route ever possible
+    if (prov.gatewayOnly) { continue; } // declared routing choice: never suggest a direct pairing
     const token = bareSegment(forms.openrouter, vendor);
     if (!token) { continue; }
     const paired = pairAcrossGateways(vendor, token, catalogInfo); // Task-5 contract: bare segment only

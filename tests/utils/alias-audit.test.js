@@ -12,6 +12,16 @@ const CATALOG = [
 ];
 
 describe('findStaleAliases', () => {
+  // These fixtures use real alias names (grok, gemini, gpt, deepseek) and none
+  // of these tests doMock curated-models, so findStaleAliases's lazy
+  // require('./curated-models') resolves the REAL module and its REAL
+  // directFormProvenance() output for those aliases — gpt is 'derived' today
+  // (grok 'none', gemini/deepseek 'authored'); no fixture combines a
+  // derived-provenance alias with a stale source:'defaults' row that is
+  // covered or gatewayOnly, so the suppression never engages here. A future
+  // gatewayOnly annotation on one of these aliases, or a live row added for
+  // one, would change that — re-check this block if such a change breaks it
+  // — see the Task 4 review that added this note.
   it('flags openrouter routes absent from the catalog', () => {
     const sources = [
       { alias: 'grok', model: 'openrouter/x-ai/grok-4.1-fast', source: 'defaults' },
@@ -109,6 +119,7 @@ describe('collectAliasSources', () => {
     }));
     jest.doMock('../../src/utils/curated-models', () => ({
       listCuratedRoutes: () => [{ alias: 'gemini', provider: 'google', model: 'google/g-1' }],
+      directFormProvenance: () => ({}),
     }));
     const { collectAliasSources: collect } = require('../../src/utils/alias-audit');
     expect(collect()).toEqual([
@@ -129,6 +140,7 @@ describe('collectAliasSources', () => {
         { alias: 'grok', provider: 'openrouter', model: 'openrouter/x-ai/grok-4.3' },
         { alias: 'grok', provider: 'google', model: 'google/grok-direct' },
       ],
+      directFormProvenance: () => ({}),
     }));
     const { collectAliasSources: collect } = require('../../src/utils/alias-audit');
     expect(collect()).toEqual([
@@ -136,5 +148,71 @@ describe('collectAliasSources', () => {
       { alias: 'mine', model: 'openrouter/foo/bar', source: 'user-config' },
       { alias: 'grok', model: 'google/grok-direct', source: 'curated-route (google)' },
     ]);
+  });
+});
+
+describe("defaults-row suppression via provenance (v4.6.3 PR1, spec D2)", () => {
+  const catalog = [
+    { id: 'openai/gpt-5.6-sol' },                    // direct ns exists, sol-pro absent
+    { id: 'openrouter/openai/gpt-5.6-sol-pro' },     // authored openrouter route LIVE
+  ];
+  const rows = [
+    { alias: 'gpt-pro', model: 'openai/gpt-5.6-sol-pro', source: 'defaults' },
+    { alias: 'gpt-pro', model: 'openrouter/openai/gpt-5.6-sol-pro', source: 'curated-route (openrouter)' },
+  ];
+
+  // Same doMock/resetModules/re-require idiom as collectAliasSources above,
+  // parameterized on the provenance map each case wants findStaleAliases to see.
+  function withProvenance(provenance, run) {
+    jest.resetModules();
+    jest.doMock('../../src/utils/curated-models', () => ({
+      listCuratedRoutes: () => [],
+      directFormProvenance: () => provenance,
+    }));
+    const { findStaleAliases: find } = require('../../src/utils/alias-audit');
+    run(find);
+  }
+
+  test('a defaults row that is the DERIVED direct form is suppressed when the alias is covered live', () => {
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }, find => {
+      expect(find(rows, catalog)).toEqual([]);
+    });
+  });
+
+  test('an AUTHORED defaults row still reports stale — no blanket suppression', () => {
+    withProvenance({ 'gpt-pro': { directForm: 'authored', gatewayOnly: false } }, find => {
+      expect(find(rows, catalog).map(r => r.source)).toEqual(['defaults']);
+    });
+  });
+
+  test('derived + NOT covered + NOT gatewayOnly still reports (both routes dead = real staleness)', () => {
+    const deadCatalog = [{ id: 'openai/gpt-5.6-sol' }, { id: 'openrouter/openai/gpt-5.6-sol' }];
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }, find => {
+      // Exact-shape assertion, not just "something reported": with deadCatalog
+      // covered is empty, so the unrelated curated-route row always reports on
+      // its own — a length > 0 check alone would stay green even if the
+      // covered.has(alias) guard were dropped and every derived defaults row
+      // got suppressed (the over-suppression direction, which hides REAL
+      // staleness). Pin that the defaults row specifically survives.
+      expect(find(rows, deadCatalog).filter(r => r.source === 'defaults')).toHaveLength(1);
+    });
+  });
+
+  test('gatewayOnly suppresses the defaults row even with no live coverage', () => {
+    const deadCatalog = [{ id: 'openai/gpt-5.6-sol' }, { id: 'openrouter/openai/gpt-5.6-sol' }];
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: true } }, find => {
+      expect(find(rows, deadCatalog).filter(r => r.source === 'defaults')).toEqual([]);
+      // The suppression must not swallow the alias's other rows: the dead
+      // openrouter curated-route row still reports (the only-live-route-died
+      // signal survives gatewayOnly).
+      expect(find(rows, deadCatalog).map(r => r.source)).toEqual(['curated-route (openrouter)']);
+    });
+  });
+
+  test('user-config rows are NEVER provenance-suppressed (setup --add-alias single-row path)', () => {
+    const userRow = [{ alias: 'gpt-pro', model: 'openai/gpt-5.6-sol-pro', source: 'user-config' }];
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: true } }, find => {
+      expect(find(userRow, catalog).length).toBe(1);
+    });
   });
 });

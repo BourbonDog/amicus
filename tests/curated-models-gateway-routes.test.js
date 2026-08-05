@@ -13,9 +13,11 @@ test('Anthropic divergent aliases carry BOTH gateway-native ids', () => {
 test('non-divergent Anthropic (sonnet-5) has matching forms', () => {
   expect(r.sonnet).toEqual({ direct: 'anthropic/claude-sonnet-5', openrouter: 'openrouter/anthropic/claude-sonnet-5' });
 });
-test('fable is OpenRouter-only today (no direct form)', () => {
-  expect(r.fable).toEqual({ openrouter: 'openrouter/anthropic/claude-fable-5' });
-  expect(r.fable.direct).toBeUndefined();
+test('fable carries BOTH gateway forms (direct route authored 2026-08-05, ruling R2)', () => {
+  expect(r.fable).toEqual({
+    direct: 'anthropic/claude-fable-5',
+    openrouter: 'openrouter/anthropic/claude-fable-5',
+  });
 });
 test('direct-capable non-divergent vendor derives both forms', () => {
   expect(r.gpt).toEqual({ direct: 'openai/gpt-5.6-terra', openrouter: 'openrouter/openai/gpt-5.6-terra' });

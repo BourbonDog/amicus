@@ -56,6 +56,7 @@ test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapsh
     'anthropic/claude-opus-5',
     'anthropic/claude-opus-4-8',
     'anthropic/claude-sonnet-5',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
     // The dated snapshot Anthropic's /v1/models actually lists, and the id
     // curated-models.js authors as `haiku`'s direct route. Without it the
@@ -69,9 +70,10 @@ test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapsh
   expect(ids).not.toContain('anthropic/claude-opus-4-6');
   expect(ids).not.toContain('anthropic/claude-sonnet-4-5');
   expect(ids).not.toContain('anthropic/claude-3-5-haiku');
-  // Fable is OpenRouter-only (curated-models.js CARDLESS has no `anthropic`
-  // route for it) -- it must never be listed in the DIRECT-API floor, or a
-  // full-id `anthropic/claude-fable-5` direct request would be mislabeled
-  // 'valid' by classifyModel's present-before-authoritative check.
-  expect(ids).not.toContain('anthropic/claude-fable-5');
+});
+
+test('fable IS on the floor (direct route authored 2026-08-05 — the old never-list guard inverted)', () => {
+  const f = loadFetcher(fakeHttps({ statusCode: 200, body: '{}' }));
+  const ids = f.ANTHROPIC_MODELS.map(m => m.id);
+  expect(ids).toContain('anthropic/claude-fable-5');
 });
