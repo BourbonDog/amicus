@@ -337,6 +337,36 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(0);
     });
 
+    // Fable review (PR4b fix wave): the D6 test above uses this file's `liveSeat()` helper,
+    // whose `model` IS the alias (`modelInput: null` always) — it can never expose an
+    // alias/resolved-id split. A REAL live payload seat (src/workspace/live-normalize.js's
+    // `seatOf`, F34/F36) carries `model` as the RESOLVED EXECUTABLE id and the alias in
+    // `modelInput` separately; a degrade record's `data.seat`/`data.models` are always
+    // alias-keyed (run-retry-notes.js stamps the council alias, never the resolved id). D6's
+    // live-path suppression filter must key its "already has a live row" map on the SAME alias
+    // seatCells already uses (`seat.modelInput || seat.model`, live-model.js:58), or a dead-leg
+    // seat whose errored roster row is still in the active stage's `live.seats` would render
+    // BOTH its errored live row AND a duplicate dead row until the stage boundary drops it.
+    test('D6 (live-path, production shape): a dead-leg degrade naming the ALIAS of a seat whose live row is keyed by its RESOLVED id renders zero dead rows', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [{
+        id: 'task-1', model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat',
+        status: 'running', stage: 'stage1', messages: 3, tokensIn: 500, tokensOut: 200,
+        costDisplay: '$0.05', lastActivity: null, latestPreview: null, stalled: false,
+      }];
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat gemini did not review',
+        why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+        data: { seat: 'gemini', status: 'error', reason: 'timed out' },
+      }];
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades });
+
+      expect(tbody.children.length).toBe(1); // the one live row only — no duplicate dead row
+      expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(0);
+    });
+
     // Supplementary: blind/(masked) parity through the AmicusApp-STATE read path specifically —
     // unlike the renderDeadSeatRows tests above (which pass blindOn/labelOf as direct args), this
     // is the path where a wiring typo (A.blind instead of A.state.blind, A.state.labelOf instead

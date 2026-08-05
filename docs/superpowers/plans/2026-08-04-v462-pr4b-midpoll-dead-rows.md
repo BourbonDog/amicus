@@ -195,3 +195,43 @@ rides existing idioms by instruction — the suites' own builders are the source
 present post-normalize); `deadSeats`/`renderDeadSeatRows` signatures verified against head
 `ec20859` before writing. Measured: verbs 293 (+1=294 ✓), awareness 282 (+1-2 ✓), normalize 169,
 seats 106.
+
+## Execution deviations (appendix)
+
+1. **T1: the test landed in `tests/observe/council-live-legs.test.js`, not
+   `tests/observe/council-legs.test.js` as Step 1 names.** `council-legs.test.js` is direct unit
+   coverage for `src/observe/council-legs.js`'s `buildLegRows` only — it has no run-dir/pointer
+   fixture and never calls `buildCouncilStatusPayload`. `council-live-legs.test.js` is the file
+   that actually owns "the higher-level `buildCouncilStatusPayload` fixtures" idiom the step
+   describes (build a run dir + pointer, `require('../../src/mcp-council-awareness')`, call
+   `buildCouncilStatusPayload(projectDir, ...)`). Resolved by content, not name; documented in
+   `task-b1-report.md`.
+2. **T2/T3 (and this fix wave, again): a bare `#NNN` PR-number reference inside a comment in
+   `electron/**` can collide with `tests/electron/electron-token-drift.test.js`'s hex-color scan**
+   (`/#[0-9a-fA-F]{3,8}\b/g` — any 3+ digit PR/issue number is, digit-for-digit, also a valid hex
+   literal; `#102` matched as a 3-digit hex color). T2 hit this first (its `appendDeadRows` JSDoc,
+   verbatim from the brief) and resolved it by dropping the bare `#` ("PR 102", not "PR #102") —
+   semantically identical in a `.js` comment, since GitHub's issue/PR autolinking never applies to
+   raw source-file comments anyway. T3's header rewrite independently re-hit the same collision
+   and applied the same fix. Convention for the rest of this branch (and worth carrying into
+   `docs/superpowers/` house style generally): write bare PR/issue numbers without `#` inside
+   `electron/**` comments specifically; `#NNN` remains fine everywhere else (CHANGELOG, docs/,
+   commit messages, this plan) since none of those are in the token-drift guard's scan scope.
+3. **Fix wave (fable whole-diff review of PR4b, one Important + three riders, single commit):**
+   (a) **D6 live-path suppression was inert** — `deadSeats`'s "already has a live row" map
+   (`electron/workspace-ui/live-model.js`, then line 165) keyed on `s.model` alone, but a LIVE
+   payload seat's `model` is the RESOLVED executable id (F34/F36) while degrade candidates are
+   always alias-keyed; `s.modelInput` carries the alias. A dead-LEG seat (as opposed to a
+   dead-WAVE seat, which never had a leg at all) whose errored roster row was still present in
+   the active stage's `live.seats` would render that errored live row AND a duplicate dead row
+   simultaneously until the stage boundary dropped the errored entry — a real D6 violation the
+   terminal path's alias-only cost rows never exposed. Fixed to `live[s.modelInput || s.model] =
+   true` (same alias-selection `seatCells` already uses); one new production-shaped RED-first
+   test in `dead-seat-rows.test.js`. (b) CHANGELOG hedge: the mid-poll bullet's "it paints and
+   stays through every tick after" is now qualified — immediate for a dead-wave seat, at the
+   stage boundary for a dead-leg seat (the fix's own timing consequence). `docs/council.md`'s
+   parallel sentence was verified NOT to need the same hedge — it only commits to "live, not
+   terminal-gated," a claim the fix doesn't disturb — and left as-is. (c) Test-helper
+   truthfulness: `live-loop.test.js`'s `liveDoc()` fixture helper was missing `degrades` from its
+   base shape entirely, a shape `normalizeLive` (Task 1) can no longer actually produce (it always
+   emits `degrades: []`); added, suite unchanged (36/36 before and after).

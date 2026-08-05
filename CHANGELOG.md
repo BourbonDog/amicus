@@ -42,8 +42,10 @@ All notable changes to Amicus are documented here. Format follows
   recorded a `retryWaveId`) or plain `did not review`, no cost cell, and muted seat-dead
   styling. Dead rows appear live, mid-poll: as soon as the run checkpoints the loss — always
   post-retry, so a row never lands before the seat's one shot at recovery is spent — it paints
-  and stays through every tick after; the run's terminal refresh then additionally unions the
-  critic's `seatLoss` on top, for any loss the live payload alone didn't carry.
+  and stays through every tick after (immediately for a dead-wave seat; at that stage's
+  boundary for a dead-leg seat, since the panel keeps suppressing the row while the seat's own
+  errored-leg entry is still listed live); the run's terminal refresh then additionally unions
+  the critic's `seatLoss` on top, for any loss the live payload alone didn't carry.
 
 ### Fixed
 

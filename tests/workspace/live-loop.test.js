@@ -45,8 +45,13 @@ function buildFixtureDetail(runId, status) {
 
 function liveDoc(overrides) {
   return Object.assign({
+    // PR4b fix wave (test-helper truthfulness rider): `degrades` was missing from this base
+    // shape entirely — normalizeLive's `ok:true` return (Task 1) always emits `degrades: []`
+    // when the composed doc carries none, so a fixture omitting the key altogether is a shape
+    // `normalizeLive` can no longer actually produce. `(degrades || [])` inside `deadSeats`
+    // masked this everywhere else, so it never broke a test — but the fixture itself was lying.
     ok: true, view: 'live', runId: 'cccc3333', status: 'running', stageName: 'stage1',
-    stages: null, seats: [], legsTotal: null, legsComplete: null,
+    stages: null, seats: [], degrades: [], legsTotal: null, legsComplete: null,
     costDisplay: null, costAmount: null,
     flags: { crashed: false, stalled: false, stalledForSeconds: null },
     terminal: false,
