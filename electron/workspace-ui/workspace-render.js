@@ -36,6 +36,12 @@
     return el('span', { className: 'chip ' + (kind || ''), title: text }, [text]);
   }
 
+  /** td className for seat-table cell index i — one source for the three
+   * call sites (renderSeats create + update, renderDeadSeatRows). */
+  function seatCellClass(i) {
+    return i >= 4 && i <= 6 ? 'num' : (i === 8 ? 'stalled-flag' : '');
+  }
+
   /** Dual-name display flip (blind mode). pair = {model, label}. */
   function display(pair, blind) {
     if (!pair) { return '—'; }
@@ -197,7 +203,7 @@
       var cells = window.AmicusLive.seatCells(view, blindOn, labelOf);
       if (!row) {
         row = el('tr', { dataset: { key: key } }, cells.map(function (c, i) {
-          return el('td', { className: i >= 4 && i <= 6 ? 'num' : (i === 8 ? 'stalled-flag' : '') }, [c]);
+          return el('td', { className: seatCellClass(i) }, [c]);
         }));
         tbody.appendChild(row);
         return;
@@ -205,7 +211,7 @@
       cells.forEach(function (c, i) {
         var td = row.children[i];
         if (td && td.textContent !== c) { td.textContent = c; }
-        if (td) { td.className = i >= 4 && i <= 6 ? 'num' : (i === 8 ? 'stalled-flag' : ''); }
+        if (td) { td.className = seatCellClass(i); }
       });
     });
     // RN-11 (v4.5): the keyed update added and removed rows but never MOVED
@@ -282,6 +288,6 @@
     el: el, chip: chip, display: display, relTime: relTime, renderRunList: renderRunList,
     renderHeaderChips: renderHeaderChips, renderGauge: renderGauge, renderStageRail: renderStageRail,
     renderSeats: renderSeats, renderBanner: renderBanner, renderCost: renderCost,
-    renderProseSections: renderProseSections,
+    renderProseSections: renderProseSections, seatCellClass: seatCellClass,
   };
 })();

@@ -48,13 +48,20 @@
     var tbody = A.$('seats-body');
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
     var seatLoss = d.verdict && d.verdict.seatLoss;
-    var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats);
+    var runMeta = { critic: (d.run && d.run.critic) || null };
+    // Source-selection (v4.6.3 PR2, spec D4): run-degrade.js swallows checkpoint failures, so
+    // verdict.json can carry degrade records run.json's own checkpoint lost — fall back to it
+    // ONLY when run.degrades is empty/absent. A fallback, never a union: both docs can carry
+    // records for the SAME run, and the persisted run.json copy is authoritative when present.
+    var deg = (d.run && d.run.degrades && d.run.degrades.length) ? d.run.degrades
+      : ((d.verdict && d.verdict.degrades) || []);
+    var dead = window.AmicusLive.deadSeats(deg, seatLoss, seats, runMeta);
     renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
   }
 
   /**
    * Paints the dead-seat rows appended after live rows. Deliberately NOT
-   * folded into workspace-render.js's renderSeats (287/300 — must not grow)
+   * folded into workspace-render.js's renderSeats (293/300 — must not grow)
    * and NOT run through its keyed diff: dead rows carry no per-tick-changing
    * field, so a full rebuild every call is correct and cheap, and renderSeats
    * just above already self-cleans any PRIOR dead row as an unrecognized
@@ -74,7 +81,7 @@
   function renderDeadSeatRows(tbody, dead, blindOn, labelOf) {
     (dead || []).forEach(function (seat) {
       var cells = window.AmicusLive.seatCells(
-        { model: seat.model, status: seat.statusText, stalled: false }, blindOn, labelOf);
+        { model: seat.model, role: seat.role, status: seat.statusText, stalled: false }, blindOn, labelOf);
       // Fix wave 2 (smoke-caught, GUI smoke on real degraded run 12c96b6b): dead seats never
       // produce a review, so state.labelByModel (built from the run's names derivation — models
       // that DID review) never carries them; seatCells' own `blindOn && label ? label : alias`
@@ -88,7 +95,7 @@
         { className: 'seat-dead', dataset: { key: 'dead:' + seat.model } },
         cells.map(function (c, i) {
           return window.AmicusRender.el('td',
-            { className: i >= 4 && i <= 6 ? 'num' : (i === 8 ? 'stalled-flag' : '') }, [c]);
+            { className: window.AmicusRender.seatCellClass(i) }, [c]);
         }));
       tbody.appendChild(row);
     });
@@ -105,7 +112,15 @@
     var A = window.AmicusApp;
     var d = A.state.detail;
     var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;
-    var dead = window.AmicusLive.deadSeats(live.degrades, seatLoss, live.seats || []);
+    var runMeta = { critic: (d && d.run && d.run.critic) || null };
+    // Source-selection (v4.6.3 PR2, spec D4), live-path twin of renderSeatsPanel's fallback
+    // above: the tick's own live.degrades wins when non-empty; state.detail.verdict.degrades is
+    // usually absent mid-run (verdict.json doesn't exist until the run finishes) — fine, this
+    // branch only matters for the rare same-run reopen where a prior terminal fetch already
+    // populated state.detail.verdict.
+    var deg = (live.degrades && live.degrades.length) ? live.degrades
+      : ((d && d.verdict && d.verdict.degrades) || []);
+    var dead = window.AmicusLive.deadSeats(deg, seatLoss, live.seats || [], runMeta);
     renderDeadSeatRows(A.$('seats-body'), dead, A.state.blind, A.labelOf);
   }
 

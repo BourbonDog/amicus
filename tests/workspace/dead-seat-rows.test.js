@@ -62,12 +62,17 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     delete global.NodeFilter;
   });
 
-  /** Live rows then dead rows into a fresh tbody — mirrors renderSeatsPanel()'s own call order. */
-  function paint(costRows, degrades, seatLoss, blindOn, labelOf) {
+  /**
+   * Live rows then dead rows into a fresh tbody — mirrors renderSeatsPanel()'s own call order.
+   * `runMeta` (v4.6.3 PR2, D3) is the new optional 6th arg threaded straight to
+   * AmicusLive.deadSeats — omitted callers get `undefined`, which deadSeats treats as "no
+   * critic" (unchanged pre-PR2 behavior).
+   */
+  function paint(costRows, degrades, seatLoss, blindOn, labelOf, runMeta) {
     const tbody = document.createElement('tbody');
     const liveSeats = AmicusLive.seatsFromRunStats(costRows);
     AmicusRender.renderSeats(tbody, liveSeats, blindOn, labelOf);
-    const dead = AmicusLive.deadSeats(degrades, seatLoss, liveSeats);
+    const dead = AmicusLive.deadSeats(degrades, seatLoss, liveSeats, runMeta);
     AmicusSeats.renderDeadSeatRows(tbody, dead, blindOn, labelOf);
     return tbody;
   }
@@ -85,13 +90,24 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     }];
     const seatLoss = { criticRequested: 'foxtrot', criticSeated: false, reason: 'timed out', deadBenchSeats: [] };
 
-    const tbody = paint(costRows, degrades, seatLoss, false, () => null);
+    // runMeta: { critic: 'foxtrot' } (task-3 review carry #3) — the real run 2039b2d1 this
+    // fixture models DID request a critic; without it, the degrade-sourced add() (which runs
+    // FIRST and wins the seen-map dedup) tagged 'foxtrot' role: null, and the seatLoss backstop's
+    // own unconditional 'critic' tag never got a chance to apply (already seen) — so the role
+    // assertion below was untestable before this fix. Passing the real critic restores fixture
+    // truthfulness. NOTE (task-4 review, minor #3): the children[1] role assertion does NOT by
+    // itself pin degrade-vs-backstop precedence — the role AGREES under either ordering here
+    // (both would say 'critic'). It is the children[2] statusText assertion below ("did not
+    // review — retried once", the degrade record's retry phrasing, not the backstop's plain one)
+    // that proves the degrade-sourced candidate is the one that actually won the seen-map dedup.
+    const tbody = paint(costRows, degrades, seatLoss, false, () => null, { critic: 'foxtrot' });
 
     expect(tbody.children.length).toBe(6);
     const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
     expect(deadRows.length).toBe(1);
     expect(tbody.children[5]).toBe(deadRows[0]); // appended AFTER the five live rows
     expect(deadRows[0].children[0].textContent).toBe('foxtrot');
+    expect(deadRows[0].children[1].textContent).toBe('critic'); // the role cell (task-3 review carry #3)
     expect(deadRows[0].children[2].textContent).toBe('did not review — retried once');
     expect(deadRows[0].children[6].textContent).toBe(''); // no cost cell
   });
@@ -119,6 +135,11 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
   });
 
   test('(b) a seat that died then recovered via retry (has a usable leg) renders NO dead row', () => {
+    // role: 'seat' here is the truthful live shape v4.6.3 PR2 requires — the role FIELD is
+    // always present, but its VALUE is legitimately nullable (legRole returns null on an
+    // unknown modelInput or a mismatched lens pairing — live-normalize.js:52,
+    // council-legs.js:56,79-88; the null-role branch is live code, not dead) — already present
+    // here; the reviewing-role allowlist keeps this suppression case unchanged.
     const costRows = [
       { model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' },
       { model: 'delta', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.08' }, // recovered
@@ -187,6 +208,138 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(openTbody.children[1].children[0].textContent).toBe('bravo'); // blind OFF: raw alias is correct, no placeholder
   });
 
+  /**
+   * v4.6.3 PR2 (spec D3): role-aware suppression. Pre-PR2, `deadSeats`'s live-suppression map
+   * was role-BLIND — any live cost row for a candidate's alias suppressed it, so a model that
+   * died as critic but whose chair-fallback walk landed on the SAME alias (and succeeded,
+   * producing a live `role: 'chair'` cost row) silently erased the dead-critic row it was never
+   * a replacement for. `runMeta: {critic}` lets `deadSeats` tag degrade-sourced candidates with
+   * `role: 'critic'` via alias equality (mirroring deriveSeatLoss, verdict.js) and restrict
+   * suppression to REVIEWING-role live legs (`seat`/`critic`/`lens:*`) only.
+   */
+  describe('role-aware suppression (v4.6.3 PR2, D3 — the #102 rider)', () => {
+    test('(a) dead-as-critic + alive-as-chair renders the dead row (role-aware D6, v4.6.3 PR2)', () => {
+      // model 'foxtrot' died as critic; the chair fallback walk landed on the
+      // SAME model and it succeeded as chair — its chair cost row must not
+      // suppress the dead-critic row.
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat foxtrot did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'foxtrot', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'bravo', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'foxtrot', role: 'chair', status: 'complete', costDisplay: '$0.02' },
+      ];
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('foxtrot');
+      expect(deadRows[0].children[1].textContent).toBe('critic'); // the role cell
+    });
+
+    test('(b) suppression-precision twin: a live CRITIC row for the same alias suppresses the dead-critic candidate', () => {
+      // Same fixture as (a), except foxtrot's live row is role: 'critic' (the recovered-critic
+      // case, e.g. a retry that actually seated the critic) — this DOES suppress.
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat foxtrot did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'foxtrot', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'bravo', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'foxtrot', role: 'critic', status: 'complete', costDisplay: '$0.02' },
+      ];
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(0);
+    });
+
+    test('(c1) a null-role (bench) dead-leg IS suppressed by a live seat-role row for the same alias', () => {
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat echo did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'echo', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'echo', role: 'seat', status: 'complete', costDisplay: '$0.01' }, // recovered
+      ];
+      // Not foxtrot — echo is a plain bench candidate, never tagged 'critic'.
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(0);
+    });
+
+    test('(c2) a null-role (bench) dead-leg is NOT suppressed by a chair-ONLY live row for the same alias', () => {
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat echo did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'echo', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'echo', role: 'chair', status: 'complete', costDisplay: '$0.02' }, // chair only
+      ];
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('echo');
+      expect(deadRows[0].children[1].textContent).toBe('—'); // null role -> em-dash
+    });
+  });
+
+  /**
+   * v4.6.3 PR2 (spec D4, "old-run resilience"): pre-`degrades[]` era (v4.5.2) runs carry the
+   * bench half of a seat loss ONLY in `verdict.seatLoss.deadBenchSeats` (string[] of aliases,
+   * deriveSeatLoss/verdict.js:41-47) — `degrades[]` is absent from both docs entirely.
+   * `deadSeats` itself only gains the deadBenchSeats consumption (the `add()` calls below, folded
+   * in after the critic backstop, before the live-map/suppression section); the verdict.degrades
+   * FALLBACK (task brief cases (b)/(c)) is a source-selection concern that lives in the two call
+   * sites (workspace-seats.js), not in `deadSeats` — those cases are exercised via the real
+   * production selection ternary in the `appendDeadRows` describe block further down and in
+   * workspace-app-boundary.test.js's `renderSeatsPanel` describe block (production path).
+   */
+  describe('old-run resilience: deadBenchSeats candidates (v4.6.3 PR2, D4)', () => {
+    test('(D4d) deadBenchSeats duplicate entries AND a dead-leg degrade naming the same seat collapse to exactly ONE row — the seen map absorbs both sources (the deriveSeatLoss no-dedup quirk)', () => {
+      // Pre-fix note: deadBenchSeats is unconsumed pre-fix, so this scenario already rendered
+      // exactly 1 row pre-fix too (from the degrade alone) — NOT a genuine RED, since the
+      // degrade-sourced 'alpha' row masks deadBenchSeats' non-consumption. Documented per the
+      // brief's Step 2 allowance; the meaningful assertion is POST-fix: both sources funnel
+      // through the same `seen` map without producing 2 or 3 rows.
+      //
+      // retryWaveId on the degrade record (task-4 review, minor #2): pins ORDERING, not just
+      // count. deadBenchSeats candidates are always added with retried: false (plain "did not
+      // review"); the degrade-sourced candidate here carries retryWaveId, so its statusText is
+      // "did not review — retried once". Only if the degrade loop runs BEFORE the deadBenchSeats
+      // block (the brief's prescribed placement) does the degrade-sourced add() win the
+      // seen-map dedup and the retried phrasing survive — hoisting deadBenchSeats above the
+      // degrade loop would keep the row COUNT green (still 1) while silently downgrading the
+      // statusText to the plain phrasing, which the count-only assertions above could never catch.
+      const costRows = [];
+      const degrades = [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat alpha did not review',
+        why: "the leg ended 'error'; its once-only retry also ended 'error'", effect: '0 of 1 seats reviewed',
+        data: { seat: 'alpha', status: 'error', reason: 'timed out', retryWaveId: 'r1-c1r1' },
+      }];
+      const seatLoss = { criticRequested: null, criticSeated: false, reason: 'no legs', deadBenchSeats: ['alpha', 'alpha'] };
+
+      const tbody = paint(costRows, degrades, seatLoss, false, () => null);
+
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('alpha');
+      expect(deadRows[0].children[1].textContent).toBe('—'); // null role — degrade-sourced, no critic in this fixture
+      expect(deadRows[0].children[2].textContent).toBe('did not review — retried once'); // degrades-before-deadBenchSeats ordering
+    });
+
+    test('(D4e) deadBenchSeats suppression still applies: a live role:"seat" row for the alias suppresses the bench candidate', () => {
+      // Pre-fix note: also NOT a genuine RED — deadBenchSeats is unconsumed pre-fix, so this
+      // already rendered zero rows (for the wrong reason: nothing was ever a candidate). The
+      // meaningful assertion is POST-fix: deadBenchSeats candidates flow through the SAME
+      // reviewing-role suppression map as degrade-sourced ones, not a separate unfiltered path.
+      const costRows = [{ model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' }];
+      const seatLoss = { criticRequested: null, criticSeated: false, reason: 'no legs', deadBenchSeats: ['alpha'] };
+
+      const tbody = paint(costRows, [], seatLoss, false, () => null);
+
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(0);
+    });
+  });
+
   test('(d) a run with no degrades renders zero dead rows (no regression on the happy path)', () => {
     const costRows = [
       { model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' },
@@ -253,6 +406,11 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       };
     });
 
+    // role: 'seat' added v4.6.3 PR2 — the role FIELD is always present, but its VALUE is
+    // legitimately nullable (legRole returns null on an unknown modelInput or a mismatched lens
+    // pairing — live-normalize.js:52, council-legs.js:56,79-88; the null-role branch is live
+    // code, not dead) — already present here, so the reviewing-role allowlist leaves every D6
+    // case below that uses this helper unchanged.
     function liveSeat(model) {
       return {
         id: model, model: model, modelInput: null, role: 'seat', status: 'complete', stage: null,
@@ -349,6 +507,12 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     // BOTH its errored live row AND a duplicate dead row until the stage boundary drops it.
     test('D6 (live-path, production shape): a dead-leg degrade naming the ALIAS of a seat whose live row is keyed by its RESOLVED id renders zero dead rows', () => {
       const tbody = document.getElementById('seats-body');
+      // role: 'seat' added v4.6.3 PR2 — the role FIELD is always present, but its VALUE is
+      // legitimately nullable (legRole returns null on an unknown modelInput or a mismatched
+      // lens pairing — live-normalize.js:52, council-legs.js:56,79-88; the null-role branch is
+      // live code, not dead) — already present here, so this alias/resolved-id suppression case
+      // is unchanged
+      // under the reviewing-role allowlist.
       const seats = [{
         id: 'task-1', model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat',
         status: 'running', stage: 'stage1', messages: 3, tokensIn: 500, tokensOut: 200,
@@ -390,6 +554,69 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       expect(deadRows.length).toBe(1);
       expect(deadRows[0].children[0].textContent).toBe('(masked)');
       expect(deadRows[0].children[0].textContent).not.toBe('bravo');
+    });
+
+    /**
+     * v4.6.3 PR2 (spec D4, "old-run resilience"): the live-tick source-selection contract —
+     * `live.degrades` when non-empty, else `state.detail.verdict.degrades` ("usually absent
+     * mid-run — fine", but real for the checkpoint-swallow shape below). This is the "paint
+     * layer" the task brief names for case (b): the REAL appendDeadRows() selection ternary,
+     * called directly via the AmicusApp stub — no full openRun()/IPC boot needed, unlike
+     * workspace-app-boundary.test.js's renderSeatsPanel coverage of the SAME contract on the
+     * other call site.
+     */
+    describe('old-run resilience: verdict.degrades fallback (v4.6.3 PR2, D4)', () => {
+      test('(D4b) checkpoint-loss shape: live.degrades empty, state.detail.verdict.degrades carries a dead-leg record — the row renders from the verdict fallback', () => {
+        // Pre-fix RED: appendDeadRows always used `live.degrades` alone with no fallback, so
+        // an empty live.degrades rendered nothing regardless of state.detail.verdict.degrades.
+        const tbody = document.getElementById('seats-body');
+        const seats = [liveSeat('alpha')];
+        global.window.AmicusApp.state.detail = {
+          verdict: { degrades: [{
+            kind: 'degrade', channel: 'dead-leg', what: 'seat bravo did not review',
+            why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+            data: { seat: 'bravo', status: 'error', reason: 'timed out' },
+          }] },
+        };
+        AmicusRender.renderSeats(tbody, seats, false, () => null);
+
+        AmicusSeats.appendDeadRows({ ok: true, seats, degrades: [] });
+
+        const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+        expect(deadRows.length).toBe(1);
+        expect(deadRows[0].children[0].textContent).toBe('bravo');
+      });
+
+      // Supplementary (closes the "both call sites" precedence gap noted in self-review):
+      // workspace-app-boundary.test.js pins the SAME precedence contract for renderSeatsPanel
+      // (d.run.degrades vs d.verdict.degrades); this is the appendDeadRows twin.
+      test('(supplementary) precedence: non-empty live.degrades wins over state.detail.verdict.degrades — no union of the two', () => {
+        // Pre-fix: already passes for the RIGHT reason — pre-fix code reads ONLY live.degrades,
+        // so a non-empty live.degrades already "won" trivially (verdict.degrades was never read
+        // at all). Post-fix it wins because the ternary explicitly prefers it, not because the
+        // fallback is unreachable — the D4b case above proves the fallback IS reachable.
+        const tbody = document.getElementById('seats-body');
+        const seats = [];
+        global.window.AmicusApp.state.detail = {
+          verdict: { degrades: [{
+            kind: 'degrade', channel: 'dead-leg', what: 'seat sierra did not review',
+            why: "the leg ended 'error'", effect: '0 of 1 seats reviewed',
+            data: { seat: 'sierra', status: 'error', reason: 'timed out' },
+          }] },
+        };
+        const liveDegrades = [{
+          kind: 'degrade', channel: 'dead-leg', what: 'seat romeo did not review',
+          why: "the leg ended 'error'", effect: '0 of 1 seats reviewed',
+          data: { seat: 'romeo', status: 'error', reason: 'timed out' },
+        }];
+        AmicusRender.renderSeats(tbody, seats, false, () => null);
+
+        AmicusSeats.appendDeadRows({ ok: true, seats, degrades: liveDegrades });
+
+        const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+        expect(deadRows.length).toBe(1);
+        expect(deadRows[0].children[0].textContent).toBe('romeo');
+      });
     });
   });
 });
