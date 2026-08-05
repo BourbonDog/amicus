@@ -223,6 +223,15 @@ see exactly one coordinated edit pass.
   named; `engine-*.test.js`'s local variants stay if their shapes genuinely differ). The
   helper must preserve #96's semantics exactly: full allGood-shape pins + the `env: {}`
   forward-pin. Suites' assertions stay byte-unchanged — this is fixture plumbing only.
+- **README accuracy review** *(owner scope addition, Christian, 2026-08-05)* — a
+  claim-by-claim pass over `README.md` against shipped behavior, the same
+  verify-the-premise discipline that caught the v4.5.4 "Electron window is npm-only"
+  falsehood. Sweep for: v4.6.x-era drift (degrade announcements, dead-seat rows,
+  `models --check --live`, the fable/gpt-pro routing story where the README mentions
+  models), install/quick-start claims, and command output examples that no longer match.
+  Corrections land in PR4; anything bigger than a correction (restructuring, new
+  sections) is reported as a finding for an owner call, not built. The docs gates
+  (`validate-docs`, docs-driven suites) bound the blast radius.
 
 ## §8 Testing
 
