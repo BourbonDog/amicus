@@ -258,8 +258,8 @@ function toGatewayRoutes() {
  * OpenRouter's dot ids for divergent vendors (`anthropic/claude-opus-4.8` —
  * the direct API only serves the dash form) and invented a bare direct id for
  * then-OpenRouter-only models (`fable`, direct-authored 2026-08-05). Both made
- * `amicus doctor` and `amicus
- * models --check` warn about the product's own shipped defaults.
+ * `amicus doctor` and `amicus models --check` warn about the product's own
+ * shipped defaults.
  */
 function toDefaultAliases() {
   const out = {};

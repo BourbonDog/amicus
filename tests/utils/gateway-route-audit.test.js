@@ -230,4 +230,20 @@ describe('derived-direct suppression + gatewayOnly (v4.6.3 PR1, spec D2)', () =>
     ]);
     expect(auditGatewayRoutes(catalogInfo).filter(f => f.kind === 'divergent-missing')).toEqual([]);
   });
+
+  test('gatewayOnly does NOT silence the openrouter form itself -- the only live route dying still reports', () => {
+    // openrouter namespace PRESENT but the id absent -> 'invalid', not 'unknown'
+    const { auditGatewayRoutes } = loadAudit(
+      { 'gpt-pro': { direct: 'openai/gpt-5.6-sol-pro', openrouter: 'openrouter/openai/gpt-5.6-sol-pro' } },
+      { 'gpt-pro': { directForm: 'derived', gatewayOnly: true } }
+    );
+    const catalogInfo = cat([
+      { id: 'openai/gpt-5.6-sol' }, // direct ns non-empty, sol-pro absent -- suppressed by gatewayOnly
+      { id: 'openrouter/openai/gpt-5.6-sol' }, // openrouter ns non-empty too, sol-pro absent -- NOT suppressed
+    ]);
+    const stale = auditGatewayRoutes(catalogInfo).filter(f => f.kind === 'stale');
+    expect(stale).toEqual([
+      { alias: 'gpt-pro', gateway: 'openrouter', kind: 'stale', model: 'openrouter/openai/gpt-5.6-sol-pro' },
+    ]);
+  });
 });
