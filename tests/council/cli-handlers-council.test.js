@@ -397,9 +397,16 @@ test('verdict: a valueless -o/--out errors instead of writing a file named true 
   // parseArgs records a trailing bare -o as boolean true (cli.js:104-115)
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
   const tallyPath = writeTally(dir);
-  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: true, json: true }));
-  expect(code).toBe(1);
-  const doc = JSON.parse(out);
+  const cwd = process.cwd();
+  process.chdir(dir);
+  let result;
+  try {
+    result = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: true, json: true }));
+  } finally {
+    process.chdir(cwd);
+  }
+  expect(result.code).toBe(1);
+  const doc = JSON.parse(result.out);
   expect(doc.error.code).toBe('BAD_ARGS');
   expect(doc.error.message).toMatch(/-o\/--out/);
   expect(fs.existsSync(path.join(dir, 'true'))).toBe(false);
@@ -409,9 +416,16 @@ test('verdict: a valueless -o/--out errors instead of writing a file named true 
 test('verdict: an empty --out= value errors the same way, never silently defaulting', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
   const tallyPath = writeTally(dir);
-  const { code, out } = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: '', json: true }));
-  expect(code).toBe(1);
-  expect(JSON.parse(out).error.code).toBe('BAD_ARGS');
+  const cwd = process.cwd();
+  process.chdir(dir);
+  let result;
+  try {
+    result = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: '', json: true }));
+  } finally {
+    process.chdir(cwd);
+  }
+  expect(result.code).toBe(1);
+  expect(JSON.parse(result.out).error.code).toBe('BAD_ARGS');
 });
 
 // ---------------------------------------------------------------------------
