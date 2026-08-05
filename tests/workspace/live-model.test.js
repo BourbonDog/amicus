@@ -167,6 +167,25 @@ describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
     const result = deadSeats([deadLeg('foxtrot')], null, []);
     expect(result).toEqual([{ model: 'foxtrot', role: null, statusText: 'did not review' }]);
   });
+
+  // Task-3 review carry #4: the dead-WAVE branch's critic-tagging call is
+  // `add(m, retried, critic && m === critic ? 'critic' : null)` — `m` is the loop variable over
+  // `data.models[]`, NOT `data.seat` (dead-wave records carry no `data.seat` at all; that field
+  // belongs to dead-LEG records only). A mutation swapping `m` for `data.seat` in this branch
+  // would compare `undefined === critic` for every entry (always false) and silently drop the
+  // critic tag on a dead-wave critic candidate — this test kills exactly that mutation.
+  test('a dead-WAVE record whose data.models[] includes the critic tags that entry role: "critic" (not data.seat, which dead-wave records lack)', () => {
+    const deadWave = {
+      kind: 'degrade', channel: 'dead-wave', what: 'Stage-1 wave r1-s1 (foxtrot, echo) produced NO legs',
+      why: 'no reason recorded', effect: '0 of 2 seats reviewed',
+      data: { waveId: 'r1-s1', models: ['foxtrot', 'echo'], reason: 'no reason recorded' },
+    };
+    const result = deadSeats([deadWave], null, [], { critic: 'foxtrot' });
+    expect(result).toEqual([
+      { model: 'foxtrot', role: 'critic', statusText: 'did not review' },
+      { model: 'echo', role: null, statusText: 'did not review' },
+    ]);
+  });
 });
 
 describe('dash', () => {

@@ -49,7 +49,13 @@
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
     var seatLoss = d.verdict && d.verdict.seatLoss;
     var runMeta = { critic: (d.run && d.run.critic) || null };
-    var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats, runMeta);
+    // Source-selection (v4.6.3 PR2, spec D4): run-degrade.js swallows checkpoint failures, so
+    // verdict.json can carry degrade records run.json's own checkpoint lost — fall back to it
+    // ONLY when run.degrades is empty/absent. A fallback, never a union: both docs can carry
+    // records for the SAME run, and the persisted run.json copy is authoritative when present.
+    var deg = (d.run.degrades && d.run.degrades.length) ? d.run.degrades
+      : ((d.verdict && d.verdict.degrades) || []);
+    var dead = window.AmicusLive.deadSeats(deg, seatLoss, seats, runMeta);
     renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
   }
 
@@ -107,7 +113,14 @@
     var d = A.state.detail;
     var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;
     var runMeta = { critic: (d && d.run && d.run.critic) || null };
-    var dead = window.AmicusLive.deadSeats(live.degrades, seatLoss, live.seats || [], runMeta);
+    // Source-selection (v4.6.3 PR2, spec D4), live-path twin of renderSeatsPanel's fallback
+    // above: the tick's own live.degrades wins when non-empty; state.detail.verdict.degrades is
+    // usually absent mid-run (verdict.json doesn't exist until the run finishes) — fine, this
+    // branch only matters for the rare same-run reopen where a prior terminal fetch already
+    // populated state.detail.verdict.
+    var deg = (live.degrades && live.degrades.length) ? live.degrades
+      : ((d && d.verdict && d.verdict.degrades) || []);
+    var dead = window.AmicusLive.deadSeats(deg, seatLoss, live.seats || [], runMeta);
     renderDeadSeatRows(A.$('seats-body'), dead, A.state.blind, A.labelOf);
   }
 

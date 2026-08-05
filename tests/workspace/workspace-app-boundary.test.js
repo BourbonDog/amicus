@@ -1028,6 +1028,71 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     expect(deadRows[0].children[1].textContent).toBe('critic'); // the role cell (v4.6.3 PR2, D3)
   });
 
+  /**
+   * v4.6.3 PR2 (spec D4, "old-run resilience"): the v4.5.2-shaped run — a pre-`degrades[]`-era
+   * run whose ENTIRE seat-loss record lives in `verdict.seatLoss` (both `criticRequested` for
+   * the critic half and `deadBenchSeats` for the bench half). `degrades[]` is absent from BOTH
+   * run.json and verdict.json (the array didn't exist yet). Three dead rows: the critic backstop
+   * (unchanged from Task 3) plus the two newly-consumed deadBenchSeats candidates.
+   * Pre-fix RED: `deadBenchSeats` was unconsumed, so this fixture rendered only the critic row.
+   */
+  test('(D4a) a v4.5.2-shaped run (no degrades[] anywhere) with verdict.seatLoss.deadBenchSeats renders bench dead rows alongside the critic backstop row', async () => {
+    const seatLoss = {
+      criticRequested: 'echo', criticSeated: false, reason: 'no legs',
+      deadBenchSeats: ['alpha', 'bravo'],
+    };
+    const fixture = deadSeatFixture('aaaa1111', 'complete', [], seatLoss, 'echo');
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows).toHaveLength(3);
+    const byModel = {};
+    deadRows.forEach((r) => { byModel[r.children[0].textContent] = r; });
+    expect(Object.keys(byModel).sort()).toEqual(['alpha', 'bravo', 'echo']);
+    expect(byModel.echo.children[1].textContent).toBe('critic');
+    expect(byModel.echo.children[2].textContent).toBe('did not review');
+    expect(byModel.alpha.children[1].textContent).toBe('—'); // deadBenchSeats candidates carry no role
+    expect(byModel.alpha.children[2].textContent).toBe('did not review');
+    expect(byModel.bravo.children[1].textContent).toBe('—');
+    expect(byModel.bravo.children[2].textContent).toBe('did not review');
+  });
+
+  /**
+   * v4.6.3 PR2 (spec D4): precedence pin for renderSeatsPanel's own degrades source-selection —
+   * `run-degrade.js` swallows checkpoint failures, so verdict.json CAN carry degrade records
+   * run.json's checkpoint lost; the fix is a FALLBACK (verdict.degrades used only when
+   * run.degrades is empty), never a union. Both docs here name a DIFFERENT seat; only
+   * run.degrades' seat may render.
+   * Pre-fix: already passes for the wrong reason — pre-fix code reads ONLY d.run.degrades, so
+   * verdict.degrades was never consulted at all (not a real "fallback loses gracefully", just
+   * dead code). Post-fix it passes because the ternary explicitly prefers the non-empty
+   * run.degrades, which the D4b/checkpoint-loss test in dead-seat-rows.test.js proves is a real,
+   * reachable fallback branch on the sibling (appendDeadRows) call site.
+   */
+  test('(D4c) renderSeatsPanel: non-empty run.degrades wins over verdict.degrades — no union of the two docs', async () => {
+    const runDegrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat romeo did not review',
+      why: "the leg ended 'error'", effect: '1 of 2 seats reviewed',
+      data: { seat: 'romeo', status: 'error', reason: 'timed out' },
+    }];
+    const verdictDegrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat sierra did not review',
+      why: "the leg ended 'error'", effect: '1 of 2 seats reviewed',
+      data: { seat: 'sierra', status: 'error', reason: 'timed out' },
+    }];
+    const base = deadSeatFixture('aaaa1111', 'complete', runDegrades, null);
+    const fixture = { ...base, verdict: { ...base.verdict, degrades: verdictDegrades } };
+    global.window.amicusWorkspace.invoke = invokeReturning(fixture);
+
+    await global.window.AmicusApp.openRun('aaaa1111');
+
+    const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
+    expect(deadRows).toHaveLength(1);
+    expect(deadRows[0].children[0].textContent).toBe('romeo');
+  });
+
   // PR4b Task 2 (mid-poll re-append, Christian's ruling on PR #102): FLIPPED from the original
   // v4.6.2 PR4 gate test, which asserted ZERO dead rows here. The terminal gate this test used to
   // pin is now removed — renderSeatsPanel() always runs its dead block — so a non-terminal run

@@ -143,15 +143,34 @@
    * critic but whose chair-fallback walk happened to land on that same alias
    * (and succeeded, producing a live `role: 'chair'` cost row) silently
    * erased the dead-critic row it was never a replacement for (spec §5, the
-   * #102 rider). Candidates now carry a `role` (`'critic'` via alias equality
+   * PR 102 rider). Candidates now carry a `role` (`'critic'` via alias equality
    * with `runMeta.critic` — mirroring `deriveSeatLoss`, verdict.js:72 — or
    * `null`), and only REVIEWING-role live legs (`seat`/`critic`/`lens:*`)
    * suppress at all; a `'critic'` candidate is cleared only by a live
    * CRITIC-role leg for that alias, never by a chair/judge/rebuttal/revote
-   * row landing on the same model.
+   * row landing on the same model. Hidden dependency: the recovered-critic
+   * suppression below (`byRole[alias + '|critic']`) relies on `roleFor`'s
+   * critic branch (src/council/run-stages.js), which only fires when lenses
+   * are absent — safe today only because --critic and --lenses are mutually
+   * exclusive (cli-handlers-council-run.js:196); if that exclusion ever
+   * loosens, a healed critic on a lens run would carry role 'seat' and this
+   * suppression would render a ghost dead row for it.
+   *
+   * Old-run resilience (v4.6.3 PR2, spec D4): pre-`degrades[]` runs (v4.5.2)
+   * carry the BENCH half of a seat loss only in `seatLoss.deadBenchSeats`
+   * (string[] of aliases, verdict.js deriveSeatLoss) — `degrades[]` never
+   * existed on either doc for these runs. Consumed after the critic backstop,
+   * candidates get `role: null` (deadBenchSeats carries no critic/bench
+   * distinction beyond what `criticRequested` already covers above) and flow
+   * through the same `seen`-keyed dedup and role-aware suppression as every
+   * other candidate — deriveSeatLoss does not dedup its own array, so `seen`
+   * is what keeps a repeated alias (or one also named by a real degrade
+   * record) from rendering twice.
    *
    * @param {Array<object>} degrades  run.json's `degrades[]` (may be absent)
-   * @param {?object} seatLoss  verdict.json's `seatLoss` (may be absent)
+   * @param {?object} seatLoss  verdict.json's `seatLoss` (may be absent) —
+   *   `criticRequested`/`criticSeated` back the critic candidate above,
+   *   `deadBenchSeats` (string[] of aliases) feeds the bench candidates below
    * @param {Array<{model: string}>} liveSeats  seatsFromRunStats(...)'s output
    *   (or any seat list keyed the same way — the live seat map)
    * @param {?{critic: ?string}} runMeta  run.critic (alias, or null/absent
@@ -189,6 +208,12 @@
     });
     if (seatLoss && seatLoss.criticRequested && !seatLoss.criticSeated) {
       add(seatLoss.criticRequested, false, 'critic');
+    }
+    if (seatLoss) {
+      // Pre-degrades[] era (v4.5.2): the bench half of a seat loss lives
+      // only here. Alias strings; deriveSeatLoss does not dedup — `seen`
+      // absorbs repeats and degrade-sourced duplicates.
+      (seatLoss.deadBenchSeats || []).forEach(function (m) { add(m, false, null); });
     }
     // Role-aware D6 (v4.6.3 PR2): only REVIEWING-role live legs suppress —
     // a chair/judge/rebuttal/revote row must not hide a dead reviewer, and
