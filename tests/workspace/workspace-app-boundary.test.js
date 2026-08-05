@@ -947,12 +947,18 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     data: { seat: DEAD_MODEL, status: 'error', reason: 'timed out' },
   }];
 
-  /** buildFixtureDetail()'s own proven-good shape, with only status/degrades/seatLoss swapped. */
-  function deadSeatFixture(runId, status, degrades, seatLoss) {
+  /**
+   * buildFixtureDetail()'s own proven-good shape, with only status/degrades/seatLoss swapped.
+   * `critic` (v4.6.3 PR2, D3) is an optional 5th arg — the seatLoss-backstop role test needs
+   * `run.critic` populated so renderSeatsPanel's `runMeta: {critic}` threading can tag the
+   * candidate 'critic'; every other call site omits it (undefined -> no critic, unchanged
+   * pre-PR2 behavior).
+   */
+  function deadSeatFixture(runId, status, degrades, seatLoss, critic) {
     const base = buildFixtureDetail(runId);
     return {
       ...base,
-      run: { ...base.run, status, degrades },
+      run: { ...base.run, status, degrades, critic: critic || null },
       verdict: seatLoss ? { seatLoss } : base.verdict,
     };
   }
@@ -1007,7 +1013,11 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
 
   test('a terminal run doc whose verdict.seatLoss (not degrades[]) names the dead critic still renders the row', async () => {
     const seatLoss = { criticRequested: DEAD_MODEL, criticSeated: false, reason: 'timed out', deadBenchSeats: [] };
-    const fixture = deadSeatFixture('aaaa1111', 'complete', [], seatLoss);
+    // critic: DEAD_MODEL (v4.6.3 PR2, D3) — the seatLoss backstop always tags its candidate
+    // 'critic' regardless of run.critic (it IS the critic-loss backstop), but a real run's
+    // run.critic matches seatLoss.criticRequested for the same seat, so the fixture carries it
+    // for narrative truthfulness alongside the new role-cell assertion below.
+    const fixture = deadSeatFixture('aaaa1111', 'complete', [], seatLoss, DEAD_MODEL);
     global.window.amicusWorkspace.invoke = invokeReturning(fixture);
 
     await global.window.AmicusApp.openRun('aaaa1111');
@@ -1015,6 +1025,7 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     const deadRows = global.document.getElementById('seats-body').children.filter((r) => r.classList.contains('seat-dead'));
     expect(deadRows).toHaveLength(1);
     expect(deadRows[0].children[0].textContent).toBe(DEAD_MODEL);
+    expect(deadRows[0].children[1].textContent).toBe('critic'); // the role cell (v4.6.3 PR2, D3)
   });
 
   // PR4b Task 2 (mid-poll re-append, Christian's ruling on PR #102): FLIPPED from the original

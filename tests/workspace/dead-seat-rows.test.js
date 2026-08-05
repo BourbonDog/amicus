@@ -62,12 +62,17 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     delete global.NodeFilter;
   });
 
-  /** Live rows then dead rows into a fresh tbody — mirrors renderSeatsPanel()'s own call order. */
-  function paint(costRows, degrades, seatLoss, blindOn, labelOf) {
+  /**
+   * Live rows then dead rows into a fresh tbody — mirrors renderSeatsPanel()'s own call order.
+   * `runMeta` (v4.6.3 PR2, D3) is the new optional 6th arg threaded straight to
+   * AmicusLive.deadSeats — omitted callers get `undefined`, which deadSeats treats as "no
+   * critic" (unchanged pre-PR2 behavior).
+   */
+  function paint(costRows, degrades, seatLoss, blindOn, labelOf, runMeta) {
     const tbody = document.createElement('tbody');
     const liveSeats = AmicusLive.seatsFromRunStats(costRows);
     AmicusRender.renderSeats(tbody, liveSeats, blindOn, labelOf);
-    const dead = AmicusLive.deadSeats(degrades, seatLoss, liveSeats);
+    const dead = AmicusLive.deadSeats(degrades, seatLoss, liveSeats, runMeta);
     AmicusSeats.renderDeadSeatRows(tbody, dead, blindOn, labelOf);
     return tbody;
   }
@@ -119,6 +124,9 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
   });
 
   test('(b) a seat that died then recovered via retry (has a usable leg) renders NO dead row', () => {
+    // role: 'seat' here is the truthful live shape v4.6.3 PR2 requires — the live payload
+    // ALWAYS carries it (live-normalize.js seatOf) — already present; the reviewing-role
+    // allowlist keeps this suppression case unchanged.
     const costRows = [
       { model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' },
       { model: 'delta', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.08' }, // recovered
@@ -187,6 +195,79 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(openTbody.children[1].children[0].textContent).toBe('bravo'); // blind OFF: raw alias is correct, no placeholder
   });
 
+  /**
+   * v4.6.3 PR2 (spec D3): role-aware suppression. Pre-PR2, `deadSeats`'s live-suppression map
+   * was role-BLIND — any live cost row for a candidate's alias suppressed it, so a model that
+   * died as critic but whose chair-fallback walk landed on the SAME alias (and succeeded,
+   * producing a live `role: 'chair'` cost row) silently erased the dead-critic row it was never
+   * a replacement for. `runMeta: {critic}` lets `deadSeats` tag degrade-sourced candidates with
+   * `role: 'critic'` via alias equality (mirroring deriveSeatLoss, verdict.js) and restrict
+   * suppression to REVIEWING-role live legs (`seat`/`critic`/`lens:*`) only.
+   */
+  describe('role-aware suppression (v4.6.3 PR2, D3 — the #102 rider)', () => {
+    test('(a) dead-as-critic + alive-as-chair renders the dead row (role-aware D6, v4.6.3 PR2)', () => {
+      // model 'foxtrot' died as critic; the chair fallback walk landed on the
+      // SAME model and it succeeded as chair — its chair cost row must not
+      // suppress the dead-critic row.
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat foxtrot did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'foxtrot', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'bravo', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'foxtrot', role: 'chair', status: 'complete', costDisplay: '$0.02' },
+      ];
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('foxtrot');
+      expect(deadRows[0].children[1].textContent).toBe('critic'); // the role cell
+    });
+
+    test('(b) suppression-precision twin: a live CRITIC row for the same alias suppresses the dead-critic candidate', () => {
+      // Same fixture as (a), except foxtrot's live row is role: 'critic' (the recovered-critic
+      // case, e.g. a retry that actually seated the critic) — this DOES suppress.
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat foxtrot did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'foxtrot', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'bravo', role: 'seat', status: 'complete', costDisplay: '$0.01' },
+        { model: 'foxtrot', role: 'critic', status: 'complete', costDisplay: '$0.02' },
+      ];
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(0);
+    });
+
+    test('(c1) a null-role (bench) dead-leg IS suppressed by a live seat-role row for the same alias', () => {
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat echo did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'echo', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'echo', role: 'seat', status: 'complete', costDisplay: '$0.01' }, // recovered
+      ];
+      // Not foxtrot — echo is a plain bench candidate, never tagged 'critic'.
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(0);
+    });
+
+    test('(c2) a null-role (bench) dead-leg is NOT suppressed by a chair-ONLY live row for the same alias', () => {
+      const degrades = [{ kind: 'degrade', channel: 'dead-leg', what: 'seat echo did not review',
+        why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+        data: { seat: 'echo', status: 'error', reason: 'timed out' } }];
+      const costRows = [
+        { model: 'echo', role: 'chair', status: 'complete', costDisplay: '$0.02' }, // chair only
+      ];
+      const tbody = paint(costRows, degrades, null, false, null, { critic: 'foxtrot' });
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('echo');
+      expect(deadRows[0].children[1].textContent).toBe('—'); // null role -> em-dash
+    });
+  });
+
   test('(d) a run with no degrades renders zero dead rows (no regression on the happy path)', () => {
     const costRows = [
       { model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' },
@@ -253,6 +334,9 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       };
     });
 
+    // role: 'seat' added v4.6.3 PR2 — the live payload always carries it (live-normalize.js
+    // seatOf); already present here, so the reviewing-role allowlist leaves every D6 case below
+    // that uses this helper unchanged.
     function liveSeat(model) {
       return {
         id: model, model: model, modelInput: null, role: 'seat', status: 'complete', stage: null,
@@ -349,6 +433,9 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     // BOTH its errored live row AND a duplicate dead row until the stage boundary drops it.
     test('D6 (live-path, production shape): a dead-leg degrade naming the ALIAS of a seat whose live row is keyed by its RESOLVED id renders zero dead rows', () => {
       const tbody = document.getElementById('seats-body');
+      // role: 'seat' added v4.6.3 PR2 — the live payload always carries it (live-normalize.js
+      // seatOf); already present here, so this alias/resolved-id suppression case is unchanged
+      // under the reviewing-role allowlist.
       const seats = [{
         id: 'task-1', model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat',
         status: 'running', stage: 'stage1', messages: 3, tokensIn: 500, tokensOut: 200,

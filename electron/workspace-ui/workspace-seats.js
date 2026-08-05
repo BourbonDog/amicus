@@ -48,7 +48,8 @@
     var tbody = A.$('seats-body');
     window.AmicusRender.renderSeats(tbody, seats, A.state.blind, A.labelOf);
     var seatLoss = d.verdict && d.verdict.seatLoss;
-    var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats);
+    var runMeta = { critic: (d.run && d.run.critic) || null };
+    var dead = window.AmicusLive.deadSeats(d.run.degrades, seatLoss, seats, runMeta);
     renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
   }
 
@@ -74,7 +75,7 @@
   function renderDeadSeatRows(tbody, dead, blindOn, labelOf) {
     (dead || []).forEach(function (seat) {
       var cells = window.AmicusLive.seatCells(
-        { model: seat.model, status: seat.statusText, stalled: false }, blindOn, labelOf);
+        { model: seat.model, role: seat.role, status: seat.statusText, stalled: false }, blindOn, labelOf);
       // Fix wave 2 (smoke-caught, GUI smoke on real degraded run 12c96b6b): dead seats never
       // produce a review, so state.labelByModel (built from the run's names derivation — models
       // that DID review) never carries them; seatCells' own `blindOn && label ? label : alias`
@@ -105,7 +106,8 @@
     var A = window.AmicusApp;
     var d = A.state.detail;
     var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;
-    var dead = window.AmicusLive.deadSeats(live.degrades, seatLoss, live.seats || []);
+    var runMeta = { critic: (d && d.run && d.run.critic) || null };
+    var dead = window.AmicusLive.deadSeats(live.degrades, seatLoss, live.seats || [], runMeta);
     renderDeadSeatRows(A.$('seats-body'), dead, A.state.blind, A.labelOf);
   }
 

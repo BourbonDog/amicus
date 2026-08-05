@@ -138,20 +138,37 @@
    * seatCells): an identity that is not carefully matched silently
    * duplicates or overwrites instead of failing loud.
    *
+   * Role-aware D6 (v4.6.3 PR2, spec D3): a bare model match used to suppress
+   * regardless of what the LIVE row's role was — so a model that died as
+   * critic but whose chair-fallback walk happened to land on that same alias
+   * (and succeeded, producing a live `role: 'chair'` cost row) silently
+   * erased the dead-critic row it was never a replacement for (spec §5, the
+   * #102 rider). Candidates now carry a `role` (`'critic'` via alias equality
+   * with `runMeta.critic` — mirroring `deriveSeatLoss`, verdict.js:72 — or
+   * `null`), and only REVIEWING-role live legs (`seat`/`critic`/`lens:*`)
+   * suppress at all; a `'critic'` candidate is cleared only by a live
+   * CRITIC-role leg for that alias, never by a chair/judge/rebuttal/revote
+   * row landing on the same model.
+   *
    * @param {Array<object>} degrades  run.json's `degrades[]` (may be absent)
    * @param {?object} seatLoss  verdict.json's `seatLoss` (may be absent)
    * @param {Array<{model: string}>} liveSeats  seatsFromRunStats(...)'s output
    *   (or any seat list keyed the same way — the live seat map)
-   * @returns {Array<{model: string, statusText: string}>}
+   * @param {?{critic: ?string}} runMeta  run.critic (alias, or null/absent
+   *   when no critic was requested) — degrade records carry no role field, so
+   *   this is the ONLY way a degrade-sourced candidate is identified as critic
+   * @returns {Array<{model: string, statusText: string, role: ?string}>}
    */
-  function deadSeats(degrades, seatLoss, liveSeats) {
+  function deadSeats(degrades, seatLoss, liveSeats, runMeta) {
+    var critic = runMeta && runMeta.critic ? runMeta.critic : null;
     var seen = {};
     var order = [];
-    function add(model, retried) {
+    function add(model, retried, role) {
       if (!model || seen[model]) { return; }
       seen[model] = true;
       order.push({
         model: model,
+        role: role || null,
         statusText: retried ? 'did not review — retried once' : 'did not review',
       });
     }
@@ -160,16 +177,30 @@
       if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave') { return; }
       var data = d.data || {};
       var retried = !!(data.retryWaveId || data.firstFailure);
+      // Critic identification mirrors deriveSeatLoss (verdict.js): alias
+      // equality with run.critic — degrade records carry no role field.
       if (d.channel === 'dead-leg') {
-        add(data.seat, retried);
+        add(data.seat, retried, critic && data.seat === critic ? 'critic' : null);
       } else {
-        (data.models || []).forEach(function (m) { add(m, retried); });
+        (data.models || []).forEach(function (m) {
+          add(m, retried, critic && m === critic ? 'critic' : null);
+        });
       }
     });
     if (seatLoss && seatLoss.criticRequested && !seatLoss.criticSeated) {
-      add(seatLoss.criticRequested, false);
+      add(seatLoss.criticRequested, false, 'critic');
     }
-    var live = {};
+    // Role-aware D6 (v4.6.3 PR2): only REVIEWING-role live legs suppress —
+    // a chair/judge/rebuttal/revote row must not hide a dead reviewer, and
+    // a dead-critic candidate is cleared only by a live CRITIC leg. A null
+    // role is NOT reviewing: counting it would suppress silently, the exact
+    // class the announcement invariant forbids.
+    function isReviewing(role) {
+      return role === 'seat' || role === 'critic' ||
+        (typeof role === 'string' && role.indexOf('lens:') === 0);
+    }
+    var reviewing = {};
+    var byRole = {};
     // ⚠️ Fable review (PR4b fix wave): same F34/F36 alias-selection seatCells already uses
     // (`seat.modelInput || seat.model`, above) — a LIVE payload seat's `model` is the RESOLVED
     // executable id, not the alias a degrade record names; `modelInput` carries the alias.
@@ -178,8 +209,16 @@
     // so D6 failed to suppress it — both rows rendered until the stage boundary dropped the
     // errored row. Terminal-path cost rows (seatsFromRunStats) carry no `modelInput` at all and
     // are already alias-only, so `|| s.model` leaves that path unchanged.
-    (liveSeats || []).forEach(function (s) { live[s.modelInput || s.model] = true; });
-    return order.filter(function (s) { return !live[s.model]; });
+    (liveSeats || []).forEach(function (s) {
+      if (!isReviewing(s.role)) { return; }
+      var alias = s.modelInput || s.model; // F36: alias space, never resolved ids
+      reviewing[alias] = true;
+      byRole[alias + '|' + s.role] = true;
+    });
+    return order.filter(function (s) {
+      if (s.role === 'critic') { return !byRole[s.model + '|critic']; }
+      return !reviewing[s.model];
+    });
   }
 
   // ⚠️ DE-ROT (F41): STAGE_LABELS is exported so applyLive() can label post-open stages.

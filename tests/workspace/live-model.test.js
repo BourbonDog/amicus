@@ -1,6 +1,6 @@
 'use strict';
 
-const { pollDelay, seatCells, seatsFromRunStats, defaultBlind, isTerminal, dash, TERMINAL_STATUSES, STAGE_LABELS } =
+const { pollDelay, seatCells, seatsFromRunStats, deadSeats, defaultBlind, isTerminal, dash, TERMINAL_STATUSES, STAGE_LABELS } =
   require('../../electron/workspace-ui/live-model');
 
 describe('pollDelay (spec §4.3 cadences)', () => {
@@ -103,6 +103,69 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
       { model: 'gemini', role: 'revote', status: 'complete', durationMs: 4000, costDisplay: '$0.01' },
     ]);
     expect(rows.map((r) => r.id)).toEqual(['gemini:seat', 'gemini:rebuttal', 'gemini:revote']);
+  });
+});
+
+/**
+ * v4.6.3 PR2 (spec D3, Global Constraints "reviewing-role set"): direct unit coverage of the
+ * role-aware suppression logic, complementing the paint()-level scenarios in
+ * dead-seat-rows.test.js (which exercise the same function through the real DOM-painting call
+ * chain). These pin `isReviewing`'s allowlist and the alias-space critic match in isolation.
+ */
+describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
+  function deadLeg(seat) {
+    return { kind: 'degrade', channel: 'dead-leg', what: 'seat ' + seat + ' did not review',
+      why: "the leg ended 'error'", effect: '2 of 3 seats reviewed',
+      data: { seat: seat, status: 'error', reason: 'timed out' } };
+  }
+
+  test('a dead-leg candidate whose alias matches runMeta.critic is tagged role: "critic"; others are role: null', () => {
+    const result = deadSeats([deadLeg('foxtrot'), deadLeg('echo')], null, [], { critic: 'foxtrot' });
+    expect(result).toEqual([
+      { model: 'foxtrot', role: 'critic', statusText: 'did not review' },
+      { model: 'echo', role: null, statusText: 'did not review' },
+    ]);
+  });
+
+  test('a chair-only live row for the dead critic\'s alias does NOT suppress it (chair is not reviewing)', () => {
+    const liveSeats = [{ model: 'foxtrot', role: 'chair' }];
+    const result = deadSeats([deadLeg('foxtrot')], null, liveSeats, { critic: 'foxtrot' });
+    expect(result).toEqual([{ model: 'foxtrot', role: 'critic', statusText: 'did not review' }]);
+  });
+
+  test('a live CRITIC row for the same alias DOES suppress the dead-critic candidate', () => {
+    const liveSeats = [{ model: 'foxtrot', role: 'critic' }];
+    const result = deadSeats([deadLeg('foxtrot')], null, liveSeats, { critic: 'foxtrot' });
+    expect(result).toEqual([]);
+  });
+
+  test('a null-role candidate is suppressed by ANY reviewing-role live leg for its alias: seat, critic, or lens:*', () => {
+    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: 'seat' }], null)).toEqual([]);
+    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: 'critic' }], null)).toEqual([]);
+    expect(deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: 'lens:precision' }], null)).toEqual([]);
+  });
+
+  test('a null-role candidate is NOT suppressed by a chair/judge/rebuttal/revote-only live leg for its alias', () => {
+    ['chair', 'judge', 'rebuttal', 'revote'].forEach(function (role) {
+      const result = deadSeats([deadLeg('echo')], null, [{ model: 'echo', role: role }], null);
+      expect(result).toEqual([{ model: 'echo', role: null, statusText: 'did not review' }]);
+    });
+  });
+
+  test('suppression keys on the alias (modelInput || model), never the resolved id — F36', () => {
+    const liveSeats = [{ model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat' }];
+    expect(deadSeats([deadLeg('gemini')], null, liveSeats, null)).toEqual([]);
+  });
+
+  test('the seatLoss backstop candidate always carries role: "critic" (it IS the critic-loss backstop)', () => {
+    const seatLoss = { criticRequested: 'foxtrot', criticSeated: false };
+    const result = deadSeats([], seatLoss, [], null);
+    expect(result).toEqual([{ model: 'foxtrot', role: 'critic', statusText: 'did not review' }]);
+  });
+
+  test('a missing runMeta (3-arg call, pre-PR2 call shape) behaves exactly as no critic requested', () => {
+    const result = deadSeats([deadLeg('foxtrot')], null, []);
+    expect(result).toEqual([{ model: 'foxtrot', role: null, statusText: 'did not review' }]);
   });
 });
 
