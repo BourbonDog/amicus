@@ -859,22 +859,30 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
  * never renders while every existing test — including this file's own —
  * stayed green.
  *
- * Also pins the controller ruling from the same review: renderSeatsPanel
- * must append dead rows ONLY on a terminal run. Diagnosis: renderDetail()
- * unconditionally calls V.startLiveLoop() at its own end (workspace-app.js
+ * Also pinned (HISTORY — superseded by PR4b, see below) the controller ruling from the same
+ * review: renderSeatsPanel appended dead rows ONLY on a terminal run. Diagnosis at the time:
+ * renderDetail() unconditionally calls V.startLiveLoop() at its own end (workspace-app.js
  * :151); on a still-running run that schedules a tick via
  * `setTimeout(tick, 0)` (workspace-verbs.js:111) whose FIRST resolution
- * repaints #seats-body via a direct `R.renderSeats(...)` call
- * (workspace-verbs.js:129-131) — bypassing renderSeatsPanel() and its dead
+ * repainted #seats-body via a direct `R.renderSeats(...)` call
+ * (workspace-verbs.js:130) — bypassing renderSeatsPanel() and its dead
  * rows entirely. renderSeats' own leaver-removal (workspace-render.js
- * :220-222) then deletes any `dead:`-keyed row the just-prior renderSeatsPanel
- * call had appended, since that row's key is not among the live seats the
- * tick just painted. Net effect pre-fix: dead rows flash in at open and
- * vanish one tick later on any run still in progress — a glitch, not a
- * feature. The fix gates on the SAME predicate startLiveLoop() itself already
- * uses to decide whether a run is even worth polling
+ * :220-222) then deleted any `dead:`-keyed row the just-prior renderSeatsPanel
+ * call had appended, since that row's key was not among the live seats the
+ * tick just painted. Net effect pre-fix: dead rows flashed in at open and
+ * vanished one tick later on any run still in progress — a glitch, not a
+ * feature. The fix gated on the SAME predicate startLiveLoop() itself already
+ * used to decide whether a run is even worth polling
  * (window.AmicusLive.TERMINAL_STATUSES.indexOf(status) !== -1,
  * workspace-verbs.js:69) — reused verbatim, not a second parallel check.
+ *
+ * PR4b (Christian's mid-poll ruling on PR 102) removed that gate: renderSeatsPanel appends
+ * dead rows unconditionally now, and applyLive() calls window.AmicusSeats.appendDeadRows()
+ * right after every tick's renderSeats() repaint (workspace-verbs.js:130-131) to restore the
+ * row the SAME tick that just wiped it — "hide until terminal" became "re-paint every tick."
+ * The non-terminal test below was flipped accordingly (was: asserts ZERO dead rows; now:
+ * asserts ONE) — see tests/workspace/dead-seat-rows.test.js's `appendDeadRows` describe block
+ * and tests/workspace/live-loop.test.js for the tick-level coverage of the new path.
  *
  * Reuses buildFixtureDetail()/defaultInvoke()/loadOrderedScripts()/
  * makeFakeDom() defined above (this file's own proven-safe full-boot

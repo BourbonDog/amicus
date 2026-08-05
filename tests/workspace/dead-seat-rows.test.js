@@ -279,6 +279,29 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
       expect(deadRows[0].children[0].textContent).toBe('bravo');
     });
 
+    // PR4b Task 3 rider (controller ruling): every test in this block leaves
+    // global.window.AmicusApp.state.detail at the beforeEach default (null), so
+    // appendDeadRows()'s `var seatLoss = d && d.verdict ? d.verdict.seatLoss : null;` read
+    // always takes the `null` branch — the `d.verdict.seatLoss` chain itself has zero
+    // coverage here. This is the seatLoss counterpart of the test just above: degrades[] is
+    // empty, so the dead row can only come from state.detail's seatLoss read. A
+    // `d.verdict.seatloss` typo (or any break in the chain) would render zero rows here while
+    // every other test in this file stayed green.
+    test('state.detail.verdict.seatLoss naming a critic not in seats renders exactly one dead row (degrades[] empty)', () => {
+      const tbody = document.getElementById('seats-body');
+      const seats = [liveSeat('alpha')];
+      global.window.AmicusApp.state.detail = {
+        verdict: { seatLoss: { criticRequested: 'some-model-not-in-seats', criticSeated: false } },
+      };
+      AmicusRender.renderSeats(tbody, seats, false, () => null);
+
+      AmicusSeats.appendDeadRows({ ok: true, seats, degrades: [] });
+
+      const deadRows = tbody.children.filter((r) => r.classList.contains('seat-dead'));
+      expect(deadRows.length).toBe(1);
+      expect(deadRows[0].children[0].textContent).toBe('some-model-not-in-seats');
+    });
+
     test('appendDeadRows called after each of two renderSeats repaints in a row still renders exactly one dead row (wipe+re-append idempotency)', () => {
       const tbody = document.getElementById('seats-body');
       const seats = [liveSeat('alpha')];

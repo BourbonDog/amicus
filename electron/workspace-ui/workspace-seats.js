@@ -14,31 +14,29 @@
  * threading was needed. Only the derivation (window.AmicusLive.deadSeats,
  * live-model.js) and this file's painting are new.
  *
- * NOTE (scope, matches the plan's file list): the LIVE poll loop
- * (workspace-verbs.js's applyLive) repaints #seats-body directly via
- * AmicusRender.renderSeats(), bypassing renderSeatsPanel() entirely — dead
- * rows are only ever painted by renderSeatsPanel(), reached from
- * renderDetail() — called both from openRun() (a fresh run open) and from the
- * blind toggle (workspace-app.js:197-227), which must repaint dead rows too so
- * the mask flip reaches them. A dead-leg/dead-wave degrade is checkpointed to
- * run.json as soon as Stage 1's once-only retry pass resolves for that seat —
- * which can be well before the rest of the run reaches a terminal status, so a
- * seat CAN be "announced dead" in the data while the run is still
- * live-polling. See the fix wave below for why that gap matters and how the
- * terminal gate closes it.
+ * NOTE (scope, matches the plan's file list): renderSeatsPanel() (below) is reached from
+ * renderDetail() — called both from openRun() (a fresh run open) and from the blind toggle
+ * (workspace-app.js:197-227), which must repaint dead rows too so the mask flip reaches
+ * them. A dead-leg/dead-wave degrade is checkpointed to run.json as soon as Stage 1's
+ * once-only retry pass resolves for that seat — which can be well before the rest of the run
+ * reaches a terminal status, so a seat CAN be "announced dead" in the data while the run is
+ * still live-polling.
  *
- * Fix wave (task review, controller ruling): dead rows are appended ONLY
- * when the run is terminal (window.AmicusLive.TERMINAL_STATUSES — the same
- * predicate startLiveLoop() already uses at workspace-verbs.js:69 to decide
- * whether a run is even worth polling, reused verbatim, not a second
- * parallel check). Without this gate, renderDetail()'s unconditional
- * V.startLiveLoop() call (workspace-app.js:151) schedules a
- * setTimeout(tick, 0) on any still-running run; that tick's first resolution
- * repaints #seats-body via applyLive's direct renderSeats() call
- * (workspace-verbs.js:129-131), whose own leaver-removal
- * (workspace-render.js:220-222) immediately deletes the `dead:`-keyed row
- * renderSeatsPanel just appended — a one-frame flash-then-vanish that reads
- * as a glitch, not a feature.
+ * HISTORY: dead rows first shipped gated on terminal status (Task 2's fix wave, task
+ * review, controller ruling) — appended ONLY when window.AmicusLive.TERMINAL_STATUSES
+ * matched d.run.status, the same predicate startLiveLoop() uses at workspace-verbs.js:69 to
+ * decide whether a run is even worth polling. Reason at the time: renderDetail()'s
+ * unconditional V.startLiveLoop() call (workspace-app.js:151) schedules a
+ * setTimeout(tick, 0) on any still-running run; that tick's first resolution repainted
+ * #seats-body via applyLive's direct renderSeats() call (workspace-verbs.js:130), whose own
+ * leaver-removal (workspace-render.js:220-222) immediately deleted the `dead:`-keyed row
+ * renderSeatsPanel had just appended — a one-frame flash-then-vanish that read as a glitch,
+ * not a feature — so gating on terminal simply hid dead rows until no further tick could
+ * un-paint them. PR4b (Christian's mid-poll ruling on PR 102) replaced that gate with tick
+ * re-append: applyLive() now calls appendDeadRows() (below) immediately after every
+ * renderSeats() repaint (workspace-verbs.js:130-131), restoring the row the SAME tick that
+ * just wiped it instead of leaving it hidden. renderSeatsPanel() below no longer checks
+ * TERMINAL_STATUSES at all — dead rows paint unconditionally, on a live run or a done one.
  */
 (function () {
   'use strict';
