@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.6.2] - 2026-08-05
+
 ### Added
 
 - **Headless legs now fail fast when a model produces nothing.** A leg that produces zero
