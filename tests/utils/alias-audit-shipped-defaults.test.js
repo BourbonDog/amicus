@@ -65,8 +65,21 @@ describe('shipped defaults never go stale against the shipped Anthropic floor', 
     // Anthropic's; opus-5's two forms coincide but stay authored, never derived.
     expect(defaults.opus).toBe('anthropic/claude-opus-5');
     expect(defaults.haiku).toBe('anthropic/claude-haiku-4-5-20251001');
-    // fable is OpenRouter-only: no authored `anthropic:` route, so the pinned
-    // default must stay the OpenRouter route rather than invent a direct id.
+    // fable's direct route is now AUTHORED (owner ruling R2, v4.6.3 spec §3,
+    // 2026-08-05): the direct API serves claude-fable-5, so the pinned
+    // default routes to the authored direct id, same as opus/haiku above.
     expect(defaults.fable).toBe('anthropic/claude-fable-5');
+  });
+
+  it('the shipped gpt-pro default NEVER reports stale (and thus never yields a retarget fix:) while its authored openrouter route is live — the 2026-08-05 release-gate false positive', () => {
+    // Direct openai namespace serves the 5.6 base tiers but NOT sol-pro
+    // (today's real catalog shape); the authored openrouter route is live.
+    const catalog = [
+      { id: 'openai/gpt-5.6-sol' }, { id: 'openai/gpt-5.6-terra' }, { id: 'openai/gpt-5.6-luna' },
+      { id: 'openrouter/openai/gpt-5.6-sol-pro' },
+    ];
+    const { collectAliasSources, findStaleAliases } = require('../../src/utils/alias-audit');
+    const stale = findStaleAliases(collectAliasSources(), catalog);
+    expect(stale.filter(r => r.alias === 'gpt-pro')).toEqual([]);
   });
 });

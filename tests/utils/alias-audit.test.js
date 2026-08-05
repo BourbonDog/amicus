@@ -109,6 +109,7 @@ describe('collectAliasSources', () => {
     }));
     jest.doMock('../../src/utils/curated-models', () => ({
       listCuratedRoutes: () => [{ alias: 'gemini', provider: 'google', model: 'google/g-1' }],
+      directFormProvenance: () => ({}),
     }));
     const { collectAliasSources: collect } = require('../../src/utils/alias-audit');
     expect(collect()).toEqual([
@@ -129,6 +130,7 @@ describe('collectAliasSources', () => {
         { alias: 'grok', provider: 'openrouter', model: 'openrouter/x-ai/grok-4.3' },
         { alias: 'grok', provider: 'google', model: 'google/grok-direct' },
       ],
+      directFormProvenance: () => ({}),
     }));
     const { collectAliasSources: collect } = require('../../src/utils/alias-audit');
     expect(collect()).toEqual([
@@ -136,5 +138,61 @@ describe('collectAliasSources', () => {
       { alias: 'mine', model: 'openrouter/foo/bar', source: 'user-config' },
       { alias: 'grok', model: 'google/grok-direct', source: 'curated-route (google)' },
     ]);
+  });
+});
+
+describe("defaults-row suppression via provenance (v4.6.3 PR1, spec D2)", () => {
+  const catalog = [
+    { id: 'openai/gpt-5.6-sol' },                    // direct ns exists, sol-pro absent
+    { id: 'openrouter/openai/gpt-5.6-sol-pro' },     // authored openrouter route LIVE
+  ];
+  const rows = [
+    { alias: 'gpt-pro', model: 'openai/gpt-5.6-sol-pro', source: 'defaults' },
+    { alias: 'gpt-pro', model: 'openrouter/openai/gpt-5.6-sol-pro', source: 'curated-route (openrouter)' },
+  ];
+
+  // Same doMock/resetModules/re-require idiom as collectAliasSources above,
+  // parameterized on the provenance map each case wants findStaleAliases to see.
+  function withProvenance(provenance, run) {
+    jest.resetModules();
+    jest.doMock('../../src/utils/curated-models', () => ({
+      listCuratedRoutes: () => [],
+      directFormProvenance: () => provenance,
+    }));
+    const { findStaleAliases: find } = require('../../src/utils/alias-audit');
+    run(find);
+  }
+
+  test('a defaults row that is the DERIVED direct form is suppressed when the alias is covered live', () => {
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }, find => {
+      expect(find(rows, catalog)).toEqual([]);
+    });
+  });
+
+  test('an AUTHORED defaults row still reports stale — no blanket suppression', () => {
+    withProvenance({ 'gpt-pro': { directForm: 'authored', gatewayOnly: false } }, find => {
+      expect(find(rows, catalog).map(r => r.source)).toEqual(['defaults']);
+    });
+  });
+
+  test('derived + NOT covered + NOT gatewayOnly still reports (both routes dead = real staleness)', () => {
+    const deadCatalog = [{ id: 'openai/gpt-5.6-sol' }, { id: 'openrouter/openai/gpt-5.6-sol' }];
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: false } }, find => {
+      expect(find(rows, deadCatalog).length).toBeGreaterThan(0);
+    });
+  });
+
+  test('gatewayOnly suppresses the defaults row even with no live coverage', () => {
+    const deadCatalog = [{ id: 'openai/gpt-5.6-sol' }, { id: 'openrouter/openai/gpt-5.6-sol' }];
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: true } }, find => {
+      expect(find(rows, deadCatalog).filter(r => r.source === 'defaults')).toEqual([]);
+    });
+  });
+
+  test('user-config rows are NEVER provenance-suppressed (setup --add-alias single-row path)', () => {
+    const userRow = [{ alias: 'gpt-pro', model: 'openai/gpt-5.6-sol-pro', source: 'user-config' }];
+    withProvenance({ 'gpt-pro': { directForm: 'derived', gatewayOnly: true } }, find => {
+      expect(find(userRow, catalog).length).toBe(1);
+    });
   });
 });

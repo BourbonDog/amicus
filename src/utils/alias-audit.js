@@ -75,11 +75,24 @@ function findStaleAliases(sources, catalog) {
   const covered = new Set(
     sources.filter(({ model }) => isLive(model) === true).map(({ alias }) => alias)
   );
+  // v4.6.3 PR1 (spec D2). Lazy-required so suites that doMock curated-models
+  // for other cases keep working; a stub without the accessor simply gets no
+  // suppression (fail-open toward reporting).
+  const cm = require('./curated-models');
+  const provenance = typeof cm.directFormProvenance === 'function' ? cm.directFormProvenance() : {};
   return sources.filter(({ alias, model, source }) => {
     const ids = byProvider.get(model.split('/')[0]);
     if (!ids) { return false; } // provider unverifiable
     if (ids.has(model)) { return false; } // live
     if (source.startsWith('curated-route') && covered.has(alias)) { return false; }
+    // A 'defaults' pin that is the alias's DERIVED direct form: its absence
+    // from the direct namespace is a routing fact, not staleness, while the
+    // alias has live coverage (or declares gatewayOnly). The fix: suggestion
+    // this row would otherwise print is a retarget nobody should run — the
+    // 2026-08-05 release-gate false positive (v4.6.3 spec §3).
+    const prov = provenance[alias];
+    if (source === 'defaults' && prov && prov.directForm === 'derived' &&
+        (prov.gatewayOnly || covered.has(alias))) { return false; }
     return true;
   });
 }
