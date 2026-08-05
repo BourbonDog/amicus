@@ -146,7 +146,7 @@
     P.renderVerdictPanel();
     R.renderCost($('cost-body'), d.derived.cost, state.blind, labelOf);
     P.wireLazyPanels();
-    var isTerminal = window.AmicusLive.TERMINAL_STATUSES.indexOf(d.run.status) !== -1;
+    var isTerminal = window.AmicusLive.isTerminal(d.run.status);
     $('abort-btn').hidden = isTerminal;
     V.startLiveLoop();
   }

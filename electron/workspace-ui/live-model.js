@@ -37,9 +37,17 @@
     return (state.visible && state.focused) ? 1500 : 5000;
   }
 
+  /** True when `status` is a terminal run status. The single consumption
+   * point for TERMINAL_STATUSES membership (v4.6.3 PR2 dedup) — the array
+   * itself stays exported and byte-identical to src/workspace/run-detail.js
+   * (drift-pinned). */
+  function isTerminal(status) {
+    return TERMINAL_STATUSES.indexOf(status) !== -1;
+  }
+
   /** Blind default per spec resolved Q2: ON live, OFF terminal. */
   function defaultBlind(status) {
-    return TERMINAL_STATUSES.indexOf(status) === -1;
+    return !isTerminal(status);
   }
 
   function dash(v) {
@@ -177,7 +185,8 @@
   // ⚠️ DE-ROT (F41): STAGE_LABELS is exported so applyLive() can label post-open stages.
   var api = { pollDelay: pollDelay, seatCells: seatCells, seatsFromRunStats: seatsFromRunStats,
     deadSeats: deadSeats,
-    defaultBlind: defaultBlind, dash: dash, TERMINAL_STATUSES: TERMINAL_STATUSES, STAGE_LABELS: STAGE_LABELS };
+    defaultBlind: defaultBlind, isTerminal: isTerminal, dash: dash,
+    TERMINAL_STATUSES: TERMINAL_STATUSES, STAGE_LABELS: STAGE_LABELS };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; }
   if (typeof window !== 'undefined') { window.AmicusLive = api; }
 })();

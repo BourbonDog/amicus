@@ -1,6 +1,6 @@
 'use strict';
 
-const { pollDelay, seatCells, seatsFromRunStats, defaultBlind, dash, TERMINAL_STATUSES, STAGE_LABELS } =
+const { pollDelay, seatCells, seatsFromRunStats, defaultBlind, isTerminal, dash, TERMINAL_STATUSES, STAGE_LABELS } =
   require('../../electron/workspace-ui/live-model');
 
 describe('pollDelay (spec §4.3 cadences)', () => {
@@ -9,6 +9,20 @@ describe('pollDelay (spec §4.3 cadences)', () => {
     expect(pollDelay({ terminal: false, visible: true, focused: false })).toBe(5000);
     expect(pollDelay({ terminal: false, visible: false, focused: true })).toBe(5000);
     expect(pollDelay({ terminal: true, visible: true, focused: true })).toBeNull();
+  });
+});
+
+describe('isTerminal (v4.6.3 PR2 dedup)', () => {
+  test('true for every TERMINAL_STATUSES member, false otherwise', () => {
+    TERMINAL_STATUSES.forEach(function (s) { expect(isTerminal(s)).toBe(true); });
+    expect(isTerminal('running')).toBe(false);
+    expect(isTerminal(null)).toBe(false);
+    expect(isTerminal(undefined)).toBe(false);
+  });
+  test('defaultBlind is exactly !isTerminal', () => {
+    TERMINAL_STATUSES.concat(['running', 'starting']).forEach(function (s) {
+      expect(defaultBlind(s)).toBe(!isTerminal(s));
+    });
   });
 });
 

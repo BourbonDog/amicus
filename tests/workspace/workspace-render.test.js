@@ -438,7 +438,7 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
     // assertion below that CAN go red on a future edit is the source-parity check: it fails
     // the instant the create and update branches' className expressions diverge (e.g.
     // someone tweaks the numeric-column range in one branch but not the other).
-    test('RN-11: create and update branches derive className from the IDENTICAL source expression (branch-parity pin — see comment: no runtime scenario can make className drift)', () => {
+    test('RN-11: create and update branches both derive className via seatCellClass(i) (branch-parity pin — v4.6.3 PR2 rewrite: the old pin matched an inline ternary; the new invariant is that BOTH branches call the shared helper, so it fails if either site is ever hand-rolled back into a literal ternary)', () => {
       const src = fs.readFileSync(
         path.join(__dirname, '../../electron/workspace-ui/workspace-render.js'),
         'utf8'
@@ -449,14 +449,16 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       expect(fnEnd).toBeGreaterThan(fnStart);
       const fnSrc = src.slice(fnStart, fnEnd);
 
-      // Create branch: el('td', { className: <EXPR> }, [c]) — the `[c]` fingerprint is
-      // unique to this cell (renderCost's td cells never bind a bare `c`).
-      const createMatch = fnSrc.match(/el\('td',\s*\{\s*className:\s*([\s\S]+?)\s*\},\s*\[c\]\)/);
-      // Update branch: td.className = <EXPR>;
-      const updateMatch = fnSrc.match(/td\.className\s*=\s*([\s\S]+?);/);
+      // Create branch: el('td', { className: seatCellClass(i) }, [c]) — the `[c]` fingerprint
+      // is unique to this cell (renderCost's td cells never bind a bare `c`).
+      const createMatch = fnSrc.match(/el\('td',\s*\{\s*className:\s*seatCellClass\(i\)\s*\},\s*\[c\]\)/);
+      // Update branch: td.className = seatCellClass(i);
+      const updateMatch = fnSrc.match(/td\.className\s*=\s*seatCellClass\(i\);/);
       expect(createMatch).not.toBeNull();
       expect(updateMatch).not.toBeNull();
-      expect(updateMatch[1]).toBe(createMatch[1]);
+      // Two DISTINCT source locations, each independently calling the helper — not one
+      // occurrence matched twice — is the parity this pin exists to enforce.
+      expect(createMatch.index).not.toBe(updateMatch.index);
 
       // Runtime renders kept for documentation value (they show the resulting classes are
       // correct after both create and update), not as a regression guard — per the comment
@@ -471,6 +473,13 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       AmicusRender.renderSeats(tbody, [{ ...seatA, stalled: true }], false, () => null);
       expect(tbody.children[0].children[5].className).toBe('num');
       expect(tbody.children[0].children[8].className).toBe('stalled-flag');
+    });
+  });
+
+  describe('seatCellClass (v4.6.3 PR2 dedup)', () => {
+    test('num for cells 4-6, stalled-flag for 8, empty otherwise', () => {
+      const expected = ['', '', '', '', 'num', 'num', 'num', '', 'stalled-flag'];
+      expected.forEach(function (want, i) { expect(AmicusRender.seatCellClass(i)).toBe(want); });
     });
   });
 });

@@ -54,7 +54,7 @@
 
   /**
    * Paints the dead-seat rows appended after live rows. Deliberately NOT
-   * folded into workspace-render.js's renderSeats (287/300 — must not grow)
+   * folded into workspace-render.js's renderSeats (293/300 — must not grow)
    * and NOT run through its keyed diff: dead rows carry no per-tick-changing
    * field, so a full rebuild every call is correct and cheap, and renderSeats
    * just above already self-cleans any PRIOR dead row as an unrecognized
@@ -88,7 +88,7 @@
         { className: 'seat-dead', dataset: { key: 'dead:' + seat.model } },
         cells.map(function (c, i) {
           return window.AmicusRender.el('td',
-            { className: i >= 4 && i <= 6 ? 'num' : (i === 8 ? 'stalled-flag' : '') }, [c]);
+            { className: window.AmicusRender.seatCellClass(i) }, [c]);
         }));
       tbody.appendChild(row);
     });

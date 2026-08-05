@@ -66,7 +66,7 @@
     var A = window.AmicusApp;
     stopLiveLoop();
     var d = A.state.detail;
-    if (!d || !d.run || window.AmicusLive.TERMINAL_STATUSES.indexOf(d.run.status) !== -1) { return; }
+    if (!d || !d.run || window.AmicusLive.isTerminal(d.run.status)) { return; }
     var epoch = A.state.liveEpoch; // F42: stopLiveLoop() above just bumped it; this chain owns it
     var tick = function () {
       // F42: pin the id PER TICK and SEND the pinned id — matching the reply against
