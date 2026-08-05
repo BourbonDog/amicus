@@ -172,16 +172,28 @@ describe('chairAttempts[] recording (LC-5)', () => {
   test('kill-mid-walk: the ch1 attempt is already checkpointed before the ch2 abort bails the walk', async () => {
     const script = happyScript();
     script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error')], 1, 'error');
-    script['abc123-ch2'] = () => okWave([], 130, 'aborted'); // simulates a signal-killed launch
+    // A real signal-killed solo still produces ONE leg at status 'aborted'
+    // (src/utils/result-schema.js's statusFromResult) — not an empty legs
+    // array. Using the production shape here (rather than legs:[]) is what
+    // makes ch2's own attempt classifiable, which is what lets this test
+    // actually pin the record-before-bail ordering below: recordAttempt(ch2)
+    // can only have run if it executes BEFORE the isAbortExit bail returns.
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'aborted')], 130, 'aborted');
     const { exitCode, run } = await runCouncil(baseOptions(tmp), {
       launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [],
       installSignalAbortFn: noSignals,
     });
     expect(exitCode).toBe(130);
     expect(run.status).toBe('aborted');
-    // The mid-walk kill must not lose the checkpoint already written for ch1.
+    // The mid-walk kill must not lose the checkpoint already written for ch1,
+    // AND ch2's own (aborted) attempt must itself be recorded — proof the
+    // record call sits BEFORE the isAbortExit check at this site, not after
+    // it (a record-after-bail regression would leave this at length 1).
+    expect(run.chairAttempts).toHaveLength(2);
     expect(run.chairAttempts[0]).toEqual(
       { waveId: 'abc123-ch1', model: 'deepseek', outcome: 'error', reason: 'error' });
+    expect(run.chairAttempts[1]).toEqual(
+      { waveId: 'abc123-ch2', model: 'deepseek', outcome: 'error', reason: 'aborted' });
   });
 });
 
