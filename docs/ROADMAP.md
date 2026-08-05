@@ -7,10 +7,10 @@ major jump, gated on funding/cofounder. The observability arc is split so the **
 first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
 preview dropped to the backlog.
 
-Amicus is at **v4.6.1** (tagged 2026-08-03). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.6.2** (tagged 2026-08-05). Each 4.x rev below leads with the benefit, not the
 plumbing.
 
-**Status:** v4.0 through **v4.6.1** have **shipped** — everything down to the v4.7 heading is a
+**Status:** v4.0 through **v4.6.2** have **shipped** — everything down to the v4.7 heading is a
 record of what landed, not a plan. **v4.7 (composition + tagging + GUI ergonomics) is the next
 planned rev** — that scope carried the number v4.6 here until the degrade-announcement-invariant
 milestone took the v4.6.0 release (2026-08-02); renumbered, not descoped. v5.0 remains
@@ -139,6 +139,17 @@ as hard as a crash.
 more chance": the once-only Stage-1 retry with `Recovered:` heals, ruled heal-first off SL-3),
 the **MCP update notice**, the `rebuildElectron` hint deletion, and the **fold-back-corrected
 MODEL-NOTES seed** (PR #93). Ninth consecutive first-attempt publish.
+
+### v4.6.1 / v4.6.2 — the field-report five *(patch train)* — ✅ SHIPPED v4.6.2, 2026-08-05
+Field-report-driven hardening in five sequential PRs plus one ruling follow-up: the
+`ANTHROPIC_BASE_URL` diagnosis pair (doctor row + host-form normalization) and stored-alias
+drift warning (#95); doctor-suite hermeticity (#96); the no-output backstop —
+`AMICUS_NO_OUTPUT_BACKSTOP_MS`, legs that produce nothing fail fast with a real reason (#99);
+`models --check --live` — one quiet paid wave proves stored aliases actually SERVE (#100);
+Workspace dead-seat rows — an announced-dead seat renders on the seats panel, live mid-poll
+after the owner's ruling, blind-masked (#102, #103); chair-attempt records — the fallback walk
+is diagnosable from `run.json` (`chairAttempts[]`, #105). The v4.6 announcement invariant now
+reaches the surface users watch and the artifact they keep.
 
 ## v4.7 — "Compose your councils" *(renumbered from v4.6, 2026-08-02 — spec + fresh plan at kickoff per the anti-rot rule)*
 **Benefit:** councils chain — generate → critique → refine with no manual copy-paste — and history
