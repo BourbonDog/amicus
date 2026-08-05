@@ -45,18 +45,22 @@ function runSave(name, modelsArg, useJson) {
       hint: 'each member must be a known alias (see `amicus models`) or a provider/model id containing "/"' });
   }
   const overwritten = !!getCouncil(name);
+  const shadowsBuiltin = listBuiltinCouncilNames().includes(name);
   const cfg = loadConfig() || {};
   if (!cfg.councils) { cfg.councils = {}; }
   cfg.councils[name] = members;
   saveConfig(cfg);
-  const doc = { ok: true, name, models: members, overwritten };
+  const doc = { ok: true, name, models: members, overwritten, shadowsBuiltin };
   process.stdout.write(useJson ? JSON.stringify(doc, null, 2) + '\n' : renderSave(doc));
   return 0;
 }
 
 function renderSave(doc) {
   const notice = doc.overwritten ? ' (overwritten)' : '';
-  return `Saved council '${doc.name}'${notice}: ${doc.models.join(', ')}\n` +
+  const shadow = doc.shadowsBuiltin
+    ? `  note: '${doc.name}' now shadows the built-in bench of the same name — 'amicus council list' shows both\n`
+    : '';
+  return `Saved council '${doc.name}'${notice}: ${doc.models.join(', ')}\n` + shadow +
     "  for full run configuration — chair, options, templates — see 'amicus pack'\n";
 }
 

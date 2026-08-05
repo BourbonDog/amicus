@@ -520,6 +520,39 @@ describe('council save', () => {
     const { getCouncil } = require('../../src/utils/config');
     expect(getCouncil('budget')).toEqual(['opus', 'gpt']);
   });
+
+  test('saving a built-in bench name reports shadowsBuiltin and prints the notice (v4.6.3 D7)', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'budget'], models: 'deepseek,glm', json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.ok).toBe(true);
+    expect(doc.shadowsBuiltin).toBe(true);
+    expect(doc.overwritten).toBe(false); // first save: nothing in user config — the old marker under-fired here
+  });
+
+  test('re-saving a shadowing name is BOTH overwritten and shadowsBuiltin', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'budget'], models: 'deepseek,glm', json: true }));
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'budget'], models: 'haiku,opus', json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.overwritten).toBe(true);
+    expect(doc.shadowsBuiltin).toBe(true);
+  });
+
+  test('a non-built-in name reports shadowsBuiltin false and prints no shadow notice', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mine'], models: 'deepseek,glm' }));
+    expect(code).toBe(0);
+    expect(out).not.toMatch(/shadows the built-in/);
+  });
+
+  test('human-mode shadow save prints the notice line', async () => {
+    const { out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'frontier'], models: 'deepseek,glm' }));
+    expect(out).toMatch(/shadows the built-in bench of the same name/);
+  });
 });
 
 describe('council list', () => {
