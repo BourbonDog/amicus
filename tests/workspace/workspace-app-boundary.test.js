@@ -330,6 +330,54 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
     expect(global.window.AmicusApp.state.debate).toEqual({ revotes: [{ judge: 'claude', id: 'A1', reason: 'RUN B REASON' }] });
   });
 
+  // ⚠️ v4.6.3 PR2 (D5): openRun's OWN get-run reply writes state.detail with no stale check at
+  // all — unlike the debate.json sub-fetch four lines above (F09-guarded already), this is the
+  // exact F09 class of bug on the primary fetch itself. A stale reply for a run the user has
+  // since navigated away from must never overwrite the run now open.
+  test('a stale get-run reply from a run navigated away from never repaints the run now open (v4.6.3 PR2, F09 class)', async () => {
+    let resolveStaleDetail;
+    const staleDetail = new Promise((resolve) => { resolveStaleDetail = resolve; });
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        if (args[0] === 'aaaa1111') { return staleDetail; }
+        return Promise.resolve(buildFixtureDetail(args[0]));
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    const first = global.window.AmicusApp.openRun('aaaa1111'); // left pending
+    await global.window.AmicusApp.openRun('bbbb2222');
+    expect(global.window.AmicusApp.state.detail.runId).toBe('bbbb2222');
+    resolveStaleDetail(buildFixtureDetail('aaaa1111'));
+    await first;
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(global.window.AmicusApp.state.runId).toBe('bbbb2222');
+    expect(global.window.AmicusApp.state.detail.runId).toBe('bbbb2222'); // stale A never overwrote B
+  });
+
+  // Non-regression twin for the guard above: it must bail on runId MOVEMENT only. A same-runId
+  // re-open — the live loop's terminal-refresh path (workspace-verbs.js's startLiveLoop tick
+  // calling openRun() again on the run that just went terminal) — must still apply its fresher
+  // reply, or the running->terminal blind-recompute (workspace-app.js's detailRunStatus check)
+  // never fires.
+  test('a same-runId re-open (the live-loop terminal-refresh path) still applies its reply (v4.6.3 PR2 non-regression twin)', async () => {
+    let getRunCalls = 0;
+    invokeMock.mockImplementation((channel, ...args) => {
+      if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
+      if (channel === 'workspace:get-run') {
+        getRunCalls += 1;
+        const d = buildFixtureDetail(args[0]);
+        d.run.status = getRunCalls === 1 ? 'running' : 'complete';
+        return Promise.resolve(d);
+      }
+      return Promise.resolve({ text: 'prose' });
+    });
+    await global.window.AmicusApp.openRun('aaaa1111');
+    expect(global.window.AmicusApp.state.detail.run.status).toBe('running');
+    await global.window.AmicusApp.openRun('aaaa1111'); // same runId — terminal-refresh path
+    expect(global.window.AmicusApp.state.detail.run.status).toBe('complete');
+  });
+
   test('a rejecting debate.json fetch does not throw and leaves state.debate null, not an unhandled rejection', async () => {
     invokeMock.mockImplementation((channel, ...args) => {
       if (channel === 'workspace:list-runs') { return Promise.resolve([]); }

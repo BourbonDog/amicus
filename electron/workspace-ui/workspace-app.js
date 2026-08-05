@@ -67,6 +67,11 @@
     state.runId = runId;
     state.debate = null;
     return invoke('workspace:get-run', runId).then(function (detail) {
+      // F09 guard (v4.6.3 PR2): a reply for a run the user has since
+      // navigated away from must never overwrite the run now open. Guard on
+      // runId movement ONLY — a same-run re-open (the live loop's terminal
+      // refresh) must still apply its fresher reply.
+      if (state.runId !== runId) { return; }
       state.detail = detail;
       // ⚠️ DE-ROT (F38): debate.json is the re-vote index the matrix drill-in needs — fetched
       // once per run-open (never per render), fire-and-forget. An aborted or cost-ceiling
