@@ -23,6 +23,12 @@
  * project on stale data — the wrong failure direction for a destructive
  * operation. Walking the cwd-scoped tree directly can only ever find/remove
  * files under the project doctor is already running against.
+ *
+ * Symlink safety (Task 3 review carry, v4.6.3 PR3): every stat in this walk
+ * is lstatSync, never statSync — this module never follows symlinks. A
+ * symlinked taskId or subagents directory could otherwise be traversed and
+ * have files unlinked through the link, effectively outside the sessions
+ * root; lstat closes that off at zero cost.
  */
 
 const fs = require('fs');
@@ -31,9 +37,6 @@ const HINTS = require('./remediation-hints');
 
 /** Files older than this survive to the next --fix, never a live writer's ms-lived tmp. */
 const AGE_THRESHOLD_MS = 60 * 1000;
-
-/** Subagent sessions nest one level under their parent (session-manager.js). */
-const SUBAGENTS_DIR = 'subagents';
 
 /** The cwd-scoped sessions root: <cwd>/.claude/amicus_sessions. */
 function sessionsRoot() {
@@ -54,7 +57,7 @@ function listTmpIn(dir, root) {
     .filter(isMetadataTmp)
     .map((basename) => {
       let mtimeMs = null;
-      try { mtimeMs = fs.statSync(path.join(dir, basename)).mtimeMs; } catch { /* raced away — skip below */ }
+      try { mtimeMs = fs.lstatSync(path.join(dir, basename)).mtimeMs; } catch { /* raced away — skip below */ }
       return { name: path.relative(root, path.join(dir, basename)), mtimeMs };
     })
     .filter((f) => f.mtimeMs !== null);
@@ -66,6 +69,7 @@ function listTmpIn(dir, root) {
  * @returns {Array<{name: string, mtimeMs: number}>}
  */
 function listSessionMetadataTmpFiles() {
+  const { SUBAGENTS_DIR } = require('../session-manager');
   const root = sessionsRoot();
   let taskIds;
   try { taskIds = fs.readdirSync(root); } catch { return []; }
@@ -73,7 +77,7 @@ function listSessionMetadataTmpFiles() {
   for (const taskId of taskIds) {
     const taskDir = path.join(root, taskId);
     let stat;
-    try { stat = fs.statSync(taskDir); } catch { continue; }
+    try { stat = fs.lstatSync(taskDir); } catch { continue; }
     if (!stat.isDirectory()) { continue; }
     found.push(...listTmpIn(taskDir, root));
 
@@ -83,7 +87,7 @@ function listSessionMetadataTmpFiles() {
     for (const subId of subIds) {
       const subDir = path.join(subagentsDir, subId);
       let subStat;
-      try { subStat = fs.statSync(subDir); } catch { continue; }
+      try { subStat = fs.lstatSync(subDir); } catch { continue; }
       if (!subStat.isDirectory()) { continue; }
       found.push(...listTmpIn(subDir, root));
     }
