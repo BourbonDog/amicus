@@ -28,7 +28,7 @@ describe('README Requirements & Dependencies section (#44)', () => {
 
   describe('section content', () => {
     it('states the Node minimum version', () => {
-      expect(section()).toMatch(/Node(\.js)?\s*(>=|≥)\s*18/);
+      expect(section()).toMatch(/Node(\.js)?\s*(>=|≥)\s*22\.12/);
     });
 
     it('covers the registry vs github: install with the git-toolchain note (#35)', () => {

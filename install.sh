@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/BourbonDog/amicus/main/install.sh | sh
 #
-# It only checks that Node.js >= 18 is present, then installs amicus globally.
+# It only checks that Node.js >= 22.12 is present, then installs amicus globally.
 # amicus's own postinstall does the rest (registers the MCP server, installs the
 # two skills). Nothing here writes to your machine except via npm.
 set -eu
@@ -14,15 +14,17 @@ err()  { printf '\033[31m✗\033[0m %s\n' "$1" >&2; }
 
 info "Installing amicus…"
 
-# 1. Require Node.js >= 18
+# 1. Require Node.js >= 22.12
 if ! command -v node >/dev/null 2>&1; then
   err "Node.js is required but was not found on your PATH."
-  err "Install Node 18+ from https://nodejs.org, then re-run this script."
+  err "Install Node 22.12+ from https://nodejs.org, then re-run this script."
   exit 1
 fi
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  err "amicus needs Node.js >= 18 (found $(node -v)). Update from https://nodejs.org."
+NODE_MINOR=$(node -p 'process.versions.node.split(".")[1]' 2>/dev/null || echo 0)
+NODE_VER_NUM=$((NODE_MAJOR * 1000 + NODE_MINOR))
+if [ "$NODE_VER_NUM" -lt 22012 ]; then
+  err "amicus needs Node.js >= 22.12 (found $(node -v)). Update from https://nodejs.org."
   exit 1
 fi
 if ! command -v npm >/dev/null 2>&1; then

@@ -51,8 +51,8 @@ describe('MCP Registry metadata (Phase 9c)', () => {
   test('publish.yml publishes to the MCP registry via OIDC, strictly after npm publish', () => {
     const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'publish.yml'), 'utf-8');
     expect(yml).toContain('mcp-publisher login github-oidc');
-    expect(yml.indexOf('npm publish')).toBeGreaterThan(-1);
-    expect(yml.indexOf('npm publish')).toBeLessThan(yml.indexOf('mcp-publisher publish'));
+    expect(yml.indexOf('npm publish --access public --provenance')).toBeGreaterThan(-1);
+    expect(yml.indexOf('npm publish --access public --provenance')).toBeLessThan(yml.indexOf('mcp-publisher publish'));
   });
 });
 

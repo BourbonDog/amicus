@@ -88,37 +88,8 @@ describe('findDriftedStoredAliases', () => {
 // findDriftedStoredAliases nor resolveQuickPicks is stubbed here or in
 // allGood -- the per-test readCache/collectAliasSources overrides below still
 // drive the real audit wiring this describe block exists to test.
-const baseDeps = {
-  nodeVersion: 'v20.0.0',
-  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
-  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
-  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
-  getCwd: () => 'C:\\Users\\me\\code\\amicus',
-  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
-  getConfigDir: () => '/cfg',
-  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
-  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
-  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
-  findStaleAliases: () => [],
-  hasOpencodeBinary: () => true,
-  getElectronPath: () => '/path/to/electron',
-  hasAmicusRegistration: () => true,
-  discoverCoworkMcps: () => ({ amicus: {} }),
-  inspectLegacyMcpEntries: () => [
-    { target: 'Claude Code', status: 'absent' },
-    { target: 'Claude Desktop', status: 'absent' },
-  ],
-  migrateLegacyMcpEntries: () => [],
-  skillInstalled: () => true,
-  listSessionIndexTmpFiles: () => [],
-  listSessionMetadataTmpFiles: () => [], // D8 — inert pin, same hermeticity class as the sibling above
-  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  repairEngine: async () => ({ repaired: false }),
-  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  getLocalProviders: () => ({}),
-  probeLocalProvider: jest.fn(),
-  env: {},
-};
+const { makeBaseDeps } = require('./helpers/doctor-base-deps');
+const baseDeps = makeBaseDeps();
 
 describe('doctor aliases row — drift wiring', () => {
   test('drift-only state warns with "1 drifted"', async () => {

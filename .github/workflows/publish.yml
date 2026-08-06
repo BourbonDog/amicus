@@ -105,21 +105,29 @@ jobs:
           # before doing any login/publish work at all. The registry
           # returns HTTP 200 with a body when the name+version exists and
           # HTTP 404 when it does not (confirmed live against
-          # registry.modelcontextprotocol.io/v0 2026-07-02) — a clean,
-          # reliable existence check, so no error-string matching on the
-          # publish result is needed. `|| true` keeps a transport-level
-          # curl failure (DNS/connection/TLS/timeout — exit 0 does NOT
-          # apply here, only HTTP 404/5xx get a clean exit) from aborting
-          # this step under `bash -e`; STATUS then falls through empty/000,
-          # which is != "200" and correctly proceeds into the login/publish
-          # retry loops below instead of dying with a bare curl exit code.
-          # --max-time bounds an accepted-then-stalled connection, which has
-          # no default curl timeout and could otherwise hang this step (and
-          # the whole release job) for hours; a timeout exits non-zero, so
-          # it flows through the same `|| true` fail-safe routing above.
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+          # registry.modelcontextprotocol.io/v0 2026-07-02). `|| true` keeps
+          # a transport-level curl failure (DNS/connection/TLS/timeout —
+          # exit 0 does NOT apply here, only HTTP 404/5xx get a clean exit)
+          # from aborting this step under `bash -e`; STATUS then falls
+          # through empty/000, which is != "200" and correctly proceeds into
+          # the login/publish retry loops below instead of dying with a bare
+          # curl exit code. --max-time bounds an accepted-then-stalled
+          # connection, which has no default curl timeout and could
+          # otherwise hang this step (and the whole release job) for hours;
+          # a timeout exits non-zero, so it flows through the same
+          # `|| true` fail-safe routing above.
+          BODY_FILE="${RUNNER_TEMP:-/tmp}/registry-precheck-body.json"
+          STATUS=$(curl -s -o "$BODY_FILE" -w "%{http_code}" --max-time 15 \
             "https://registry.modelcontextprotocol.io/v0/servers/io.github.BourbonDog%2Famicus/versions/$VERSION" || true)
-          if [ "$STATUS" = "200" ]; then
+          # D6 (v4.6.3): a bare 200 is not proof of publication — the registry
+          # is a PREVIEW API (schema churn expected), so the skip additionally
+          # requires the body to name this exact version. grep on a missing,
+          # empty, or reshaped body exits non-zero and the `&&` routes us into
+          # login/publish — the same fail-toward-publish direction as `|| true`
+          # above (a duplicate publish attempt is registry-idempotent; a false
+          # skip would silently drop the release).
+          # ...and the version must be ACTIVE — a deleted/deprecated version's 200 must not skip (fail direction: publish).
+          if [ "$STATUS" = "200" ] && grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\"" "$BODY_FILE" && grep -q "\"status\"[[:space:]]*:[[:space:]]*\"active\"" "$BODY_FILE"; then
             echo "::notice::io.github.BourbonDog/amicus@$VERSION already on the MCP Registry; skipping registry publish"
             exit 0
           fi

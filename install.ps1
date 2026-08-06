@@ -2,7 +2,7 @@
 #
 #   irm https://raw.githubusercontent.com/BourbonDog/amicus/main/install.ps1 | iex
 #
-# It only checks that Node.js >= 18 is present, then installs amicus globally.
+# It only checks that Node.js >= 22.12 is present, then installs amicus globally.
 # amicus's own postinstall does the rest (registers the MCP server, installs the
 # two skills). Nothing here writes to your machine except via npm.
 $ErrorActionPreference = 'Stop'
@@ -13,16 +13,20 @@ function Fail($m) { Write-Host "✗ $m"  -ForegroundColor Red }
 
 Info 'Installing amicus…'
 
-# 1. Require Node.js >= 18
+# 1. Require Node.js >= 22.12
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   Fail 'Node.js is required but was not found on your PATH.'
-  Fail 'Install Node 18+ from https://nodejs.org, then re-run this script.'
+  Fail 'Install Node 22.12+ from https://nodejs.org, then re-run this script.'
   exit 1
 }
 $major = 0
-try { $major = [int](node -p 'process.versions.node.split(".")[0]') } catch { $major = 0 }
-if ($major -lt 18) {
-  Fail "amicus needs Node.js >= 18 (found $(node -v)). Update from https://nodejs.org."
+$minor = 0
+try {
+  $major = [int](node -p 'process.versions.node.split(".")[0]')
+  $minor = [int](node -p 'process.versions.node.split(".")[1]')
+} catch { $major = 0; $minor = 0 }
+if ($major -lt 22 -or ($major -eq 22 -and $minor -lt 12)) {
+  Fail "amicus needs Node.js >= 22.12 (found $(node -v)). Update from https://nodejs.org."
   exit 1
 }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {

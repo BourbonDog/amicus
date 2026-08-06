@@ -520,7 +520,7 @@ Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a 
 
 | Check | What it verifies | Can fail as |
 |---|---|---|
-| `node` | Node.js ≥ 18 | error |
+| `node` | Node.js ≥ 22.12 | error |
 | `config-dir` | The resolved config directory | *(always ok)* |
 | `keys` | At least one cloud-vendor key configured | error |
 | `default-model` | Your default model alias resolves | error |

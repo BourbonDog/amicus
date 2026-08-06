@@ -22,12 +22,17 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
 
   test('npm publish is gated by a version-exists guard, and the publish invocation stays byte-identical', () => {
     const y = yml();
+    const stepStart = y.indexOf('- name: Publish to npm');
+    const nextStepIdx = y.indexOf('- name: Install mcp-publisher');
+    expect(stepStart).toBeGreaterThan(-1);
+    expect(nextStepIdx).toBeGreaterThan(stepStart);
+    const npmPublishStepBlock = y.slice(stepStart, nextStepIdx);
     // the exact publish command must survive untouched
-    expect(y).toContain('npm publish --access public --provenance');
+    expect(npmPublishStepBlock).toContain('npm publish --access public --provenance');
     // guard must check the registry before publishing
-    expect(y).toMatch(/npm view "?amicus@\$VERSION"? version/);
+    expect(npmPublishStepBlock).toMatch(/npm view "?amicus@\$VERSION"? version/);
     // must emit a ::notice:: when skipping
-    expect(y).toContain('::notice::');
+    expect(npmPublishStepBlock).toContain('::notice::');
   });
 
   test('ordering: npm version-exists guard < npm publish < mcp-publisher publish', () => {
@@ -85,9 +90,14 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
 
   test('registry publish is idempotent on re-run: pre-check against the registry API before publishing', () => {
     const y = yml();
+    const stepStart = y.indexOf('- name: Publish to MCP Registry');
+    const nextStepIdx = y.indexOf('- name: Create GitHub Release');
+    expect(stepStart).toBeGreaterThan(-1);
+    expect(nextStepIdx).toBeGreaterThan(stepStart);
+    const registryStepBlock = y.slice(stepStart, nextStepIdx);
     // pre-check the MCP Registry for the tag version before calling mcp-publisher publish
-    expect(y).toMatch(/registry\.modelcontextprotocol\.io\/v0/);
-    expect(y).toContain('::notice::');
+    expect(registryStepBlock).toMatch(/registry\.modelcontextprotocol\.io\/v0/);
+    expect(registryStepBlock).toContain('::notice::');
   });
 
   test('registry pre-check STATUS curl tolerates transport failure (non-fatal under bash -e)', () => {
@@ -124,13 +134,45 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(statusAssign).toMatch(/--max-time\s+\d+/);
   });
 
+  test('registry skip fires only on 200 AND a body that names this exact version (D6, v4.6.3)', () => {
+    const y = yml();
+    const stepStart = y.indexOf('- name: Publish to MCP Registry');
+    const loginStepIdx = y.indexOf('mcp-publisher login github-oidc');
+    expect(stepStart).toBeGreaterThan(-1);
+    expect(loginStepIdx).toBeGreaterThan(stepStart);
+    const preCheckBlock = y.slice(stepStart, loginStepIdx);
+    // the body must be captured to a file (never piped — no pipefail here)
+    expect(preCheckBlock).toMatch(/-o\s+"\$BODY_FILE"/);
+    // the skip condition requires BOTH the status test and the body grep
+    const skipCond = preCheckBlock.match(/if \[ "\$STATUS" = "200" \][\s\S]*?then/);
+    expect(skipCond).not.toBeNull();
+    expect(skipCond[0]).toMatch(/grep -q/);
+    expect(skipCond[0]).toMatch(/\$VERSION/);
+    // mutant-proof: `&&` must connect the status test to the grep — an
+    // inverted `||` here would false-skip EVERY release regardless of body
+    // content, which is exactly the failure mode D6 exists to close.
+    expect(skipCond[0]).toMatch(/\]\s*&&\s*grep -q/);
+    // mutant-proof (M2 extension): BOTH greps — version AND active status —
+    // must be ANDed into the same condition, not just one of them.
+    expect(skipCond[0]).toMatch(/\]\s*&&\s*grep -q[\s\S]*?&&\s*grep -q/);
+    expect(skipCond[0]).toMatch(/status/);
+    expect(skipCond[0]).toMatch(/active/);
+    // fail-toward-publish: the pre-check region must contain no exit 1
+    expect(preCheckBlock).not.toMatch(/exit 1/);
+  });
+
   test('GitHub Release creation is guarded by an existence check (gh release view)', () => {
     const y = yml();
-    expect(y).toMatch(/gh release view\s+"\$TAG_NAME"/);
-    expect(y).toContain('::notice::');
+    const stepStart = y.indexOf('- name: Create GitHub Release');
+    const nextStepIdx = y.indexOf('- name: Generate release notes with Claude');
+    expect(stepStart).toBeGreaterThan(-1);
+    expect(nextStepIdx).toBeGreaterThan(stepStart);
+    const releaseStepBlock = y.slice(stepStart, nextStepIdx);
+    expect(releaseStepBlock).toMatch(/gh release view\s+"\$TAG_NAME"/);
+    expect(releaseStepBlock).toContain('::notice::');
     // the guard must precede the actual release create call
-    const viewIdx = y.indexOf('gh release view "$TAG_NAME"');
-    const createIdx = y.indexOf('gh release create "$TAG_NAME"');
+    const viewIdx = releaseStepBlock.indexOf('gh release view "$TAG_NAME"');
+    const createIdx = releaseStepBlock.indexOf('gh release create "$TAG_NAME"');
     expect(viewIdx).toBeGreaterThan(-1);
     expect(createIdx).toBeGreaterThan(-1);
     expect(viewIdx).toBeLessThan(createIdx);

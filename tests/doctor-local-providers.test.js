@@ -15,36 +15,12 @@ const { runDoctorChecks, handleDoctor } = require('../src/cli-handlers-doctor');
 // getLocalProviders/probeLocalProvider -- each test in this file still
 // supplies its own pair of those two to exercise the specific
 // reachable/unreachable/none scenarios this file exists to test.
-const baseDeps = {
-  nodeVersion: 'v20.0.0',
-  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
-  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
-  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
-  getCwd: () => 'C:\\Users\\me\\code\\amicus',
-  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
-  getConfigDir: () => '/cfg',
-  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
-  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
-  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
-  findStaleAliases: () => [],
-  hasOpencodeBinary: () => true,
-  getElectronPath: () => '/path/to/electron',
-  hasAmicusRegistration: () => true,
-  discoverCoworkMcps: () => ({ amicus: {} }),
-  inspectLegacyMcpEntries: () => [
-    { target: 'Claude Code', status: 'absent' },
-    { target: 'Claude Desktop', status: 'absent' },
-  ],
-  migrateLegacyMcpEntries: () => [],
-  skillInstalled: () => true,
-  listSessionIndexTmpFiles: () => [],
-  listSessionMetadataTmpFiles: () => [], // D8 — inert pin, same hermeticity class as the sibling above
-  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  repairEngine: async () => ({ repaired: false }),
-  // #76: electron-mcp's default scan shells out (`npm root -g`) exactly like
-  // scanEngineInstalls — pin it for the same no-subprocess reason.
-  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-};
+const { makeBaseDeps } = require('./helpers/doctor-base-deps');
+// Preserved divergence: this file's original baseDeps also omitted `env`
+// (undocumented in the pre-consolidation fixture, never given a #95/#96
+// forward-pin writeup like the other 10 files). Kept byte-conservative here
+// rather than silently adding the pin — see pr4r-basedeps.md risk note.
+const baseDeps = makeBaseDeps({ omit: ['getLocalProviders', 'probeLocalProvider', 'env'] });
 
 async function localCheck(deps) {
   // Full baseline UNDER the per-test local-providers overrides -- deps always
