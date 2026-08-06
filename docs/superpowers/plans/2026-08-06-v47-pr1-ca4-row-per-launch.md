@@ -12,6 +12,8 @@
 
 ## Spec errata (recon findings at `ccd8d7d` — the plan implements THESE; spec §5 gets an errata note in Task 9)
 
+**RULED (Christian, 2026-08-06, at plan review): E1–E5 stand as written.**
+
 - **E1 (D4 correction):** `seatsFromRunStats` (electron/workspace-ui/live-model.js:98-113) has NO role allowlist today — #108's `isReviewing` filter lives only in `deadSeats()` (:223-226). The plan ADDs a filter excluding ONLY the three new roles; judge/chair/rebuttal/revote rows keep rendering exactly as today (F37 pin live-model.test.js:99-106 stays green).
 - **E2 (D4 correction):** the ledger-join allowlist must include legacy role `'council'` (ledger.js:34 default; av-receiver golden fixture rows carry it) → allowlist = `seat`, `critic`, `lens:*`, `chair`, `claude`, `council`; `judge` stays excluded (#83).
 - **E3 (D2 refinement):** the give-up chair error row carries **`wasChair: false`** — nobody chaired; this keeps run-chair-seam.test.js:101's "no wasChair row on give-up" pin TRUE in spirit (pin updated to also assert the new error row). A cost-SKIPPED chair (never walked, no launch, already degrade-announced) gets **no row** — bijection: no leg, no row.
