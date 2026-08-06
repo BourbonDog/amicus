@@ -52,9 +52,10 @@ All notable changes to Amicus are documented here. Format follows
 
 - **The MCP-Registry skip-check now verifies the version it trusts.** The
   release workflow's idempotency pre-check previously skipped registry publish
-  on a bare HTTP 200; it now also requires the response body to name the exact
-  version, so preview-API schema churn can no longer produce a false skip.
-  Every new failure mode still routes toward publishing.
+  on a bare HTTP 200; it now also requires the response body to both name the
+  exact version and report it as `active`, so preview-API schema churn — or a
+  stale/deprecated registry entry — can no longer produce a false skip. Every
+  new failure mode still routes toward publishing.
 
 ## [4.6.2] - 2026-08-05
 
