@@ -8,6 +8,7 @@
  * new tally input plus the debate.json findings rows. run.js then re-runs
  * tally() on the returned input and decorates the record. Keeps run.js under the
  * line gate.
+ * Also holds the pure pre-debate helpers (target selection, dispute detection, re-vote bundling) moved from run-debate.js (v4.7 PR0).
  */
 
 const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };

@@ -1,9 +1,13 @@
 /**
- * CLI handler for `amicus fanout` — extracted verbatim from
- * cli-handlers-run.js (v4.7 PR0) to keep that file under the 300-line
- * gate before F8 adds --tag forwarding. Whole-handler split precedent:
- * cli-handlers-resume-continue.js.
+ * CLI handler for the fanout command (multi-model parallel runs).
+ *
+ * Extracted verbatim from cli-handlers-run.js (v4.7 PR0) to keep that file
+ * under the 300-line gate before F8 adds --tag forwarding. Whole-handler
+ * split precedent: cli-handlers-resume-continue.js.
  */
+
+'use strict';
+
 const { validateTaskId } = require('./utils/validators');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');

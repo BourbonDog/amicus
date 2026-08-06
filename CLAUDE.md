@@ -304,13 +304,13 @@ src/
 │   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
 │   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
 │   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
-├── cli-council-run-bench.js  # Bench/input resolution for `amicus council run` — parseList,
+├── cli-council-run-bench.js  # Bench and input resolution for the council run command.
 ├── cli-council-run-render.js
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
-├── cli-handlers-fanout.js  # CLI handler for `amicus fanout` — extracted verbatim from
+├── cli-handlers-fanout.js  # CLI handler for the fanout command (multi-model parallel runs).
 ├── cli-handlers-init.js  # `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the
 ├── cli-handlers-key-local.js  # amicus key <localId> — bearer lifecycle for a config-defined local /
 ├── cli-handlers-pack.js
@@ -435,13 +435,13 @@ evals/
 <!-- AUTO:modules -->
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
-| `cli-council-run-bench.js` | Bench/input resolution for `amicus council run` — parseList, | `parseList()`, `sanitizeCouncilName()`, `resolveBench()` |
+| `cli-council-run-bench.js` | Bench and input resolution for the council run command. | `parseList()`, `sanitizeCouncilName()`, `resolveBench()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
-| `cli-handlers-fanout.js` | CLI handler for `amicus fanout` — extracted verbatim from | `handleFanout()` |
+| `cli-handlers-fanout.js` | CLI handler for the fanout command (multi-model parallel runs). | `handleFanout()` |
 | `cli-handlers-init.js` | `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the | `handleInit()` |
 | `cli-handlers-key-local.js` | amicus key <localId> — bearer lifecycle for a config-defined local / | `handleLocalKey()`, `formatLocalKeyList()`, `maskKey()` |
 | `cli-handlers-pack.js` |  | `handlePack()` |

@@ -1,10 +1,14 @@
 /**
- * Bench/input resolution for `amicus council run` — parseList,
- * sanitizeCouncilName, resolveBench, extracted verbatim from
- * cli-handlers-council-run.js (v4.7 PR0). ⚠️ The top-level cli*.js
- * name is LOAD-BEARING: the known-flags source scan covers only
- * src/cli*.js, and resolveBench reads args['dropped-members'].
+ * Bench and input resolution for the council run command.
+ *
+ * Exports parseList, sanitizeCouncilName, resolveBench, extracted verbatim
+ * from cli-handlers-council-run.js (v4.7 PR0). ⚠️ The top-level cli*.js
+ * name is LOAD-BEARING: the known-flags source scan covers only src/cli*.js,
+ * and resolveBench reads args['dropped-members'].
  */
+
+'use strict';
+
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 
 function parseList(value) {
