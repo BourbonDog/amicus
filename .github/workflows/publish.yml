@@ -126,7 +126,8 @@ jobs:
           # login/publish — the same fail-toward-publish direction as `|| true`
           # above (a duplicate publish attempt is registry-idempotent; a false
           # skip would silently drop the release).
-          if [ "$STATUS" = "200" ] && grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\"" "$BODY_FILE"; then
+          # ...and the version must be ACTIVE — a deleted/deprecated version's 200 must not skip (fail direction: publish).
+          if [ "$STATUS" = "200" ] && grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\"" "$BODY_FILE" && grep -q "\"status\"[[:space:]]*:[[:space:]]*\"active\"" "$BODY_FILE"; then
             echo "::notice::io.github.BourbonDog/amicus@$VERSION already on the MCP Registry; skipping registry publish"
             exit 0
           fi

@@ -138,6 +138,8 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     const y = yml();
     const stepStart = y.indexOf('- name: Publish to MCP Registry');
     const loginStepIdx = y.indexOf('mcp-publisher login github-oidc');
+    expect(stepStart).toBeGreaterThan(-1);
+    expect(loginStepIdx).toBeGreaterThan(stepStart);
     const preCheckBlock = y.slice(stepStart, loginStepIdx);
     // the body must be captured to a file (never piped — no pipefail here)
     expect(preCheckBlock).toMatch(/-o\s+"\$BODY_FILE"/);
@@ -146,6 +148,15 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(skipCond).not.toBeNull();
     expect(skipCond[0]).toMatch(/grep -q/);
     expect(skipCond[0]).toMatch(/\$VERSION/);
+    // mutant-proof: `&&` must connect the status test to the grep — an
+    // inverted `||` here would false-skip EVERY release regardless of body
+    // content, which is exactly the failure mode D6 exists to close.
+    expect(skipCond[0]).toMatch(/\]\s*&&\s*grep -q/);
+    // mutant-proof (M2 extension): BOTH greps — version AND active status —
+    // must be ANDed into the same condition, not just one of them.
+    expect(skipCond[0]).toMatch(/\]\s*&&\s*grep -q[\s\S]*?&&\s*grep -q/);
+    expect(skipCond[0]).toMatch(/status/);
+    expect(skipCond[0]).toMatch(/active/);
     // fail-toward-publish: the pre-check region must contain no exit 1
     expect(preCheckBlock).not.toMatch(/exit 1/);
   });
