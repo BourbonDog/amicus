@@ -144,7 +144,7 @@ describe('Headless Mode Runner', () => {
       await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
 
       expect(mockStartServer).toHaveBeenCalled();
-    });
+    }, 15000); // CI flake: starved windows/node24 runners exceed the 5s default (2x observed)
 
     describe('SDK Integration', () => {
       it('should use createSession from SDK client', async () => {
