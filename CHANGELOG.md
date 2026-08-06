@@ -42,6 +42,19 @@ All notable changes to Amicus are documented here. Format follows
 - **A valueless `-o`/`--out` on `council verdict` now errors** (`BAD_ARGS`, flag named,
   exit 1) instead of crashing mid-write (renameSync `TypeError`) and orphaning a
   `true.tmp-<pid>` temp file. Behavior change, per the v4.6.3 R1 ruling.
+- **README corrections from the v4.6.3 accuracy review**: the Node.js floor is
+  22.12 (required since v3.0 — the README, install scripts, and landing page
+  still said 18), and the optional-council-elements list now matches the
+  shipped skill (four opt-ins; the chair's verdict scale has been standard,
+  not opt-in).
+
+### CI
+
+- **The MCP-Registry skip-check now verifies the version it trusts.** The
+  release workflow's idempotency pre-check previously skipped registry publish
+  on a bare HTTP 200; it now also requires the response body to name the exact
+  version, so preview-API schema churn can no longer produce a false skip.
+  Every new failure mode still routes toward publishing.
 
 ## [4.6.2] - 2026-08-05
 
