@@ -534,13 +534,14 @@ Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a 
 | `mcp` | Amicus is registered as an MCP server in Claude Code | warn |
 | `mcp-legacy` | No duplicate legacy `sidecar` MCP entry survives alongside `amicus` | warn |
 | `sessions-index-tmp` | No orphaned `sessions-index.json.*.tmp` files | warn |
+| `session-metadata-tmp` | No orphaned per-session `.metadata.json.*.tmp` files (the B09 class) | warn |
 | `openrouter-credit` | Remaining OpenRouter credit (skipped — reports `ok` — when no OpenRouter key is set) | warn |
 | `local-providers` **(v4.2)** | Every provider in `config.providers` is reachable | warn |
 | `project-root` | Your cwd looks like a real project, not an app/install dir | warn |
 
 **`local-providers`** probes every configured local provider (2s timeout each) the same way `amicus provider test` does, and reports per-id reachability in one line, e.g. `ollama: 3 models @ http://127.0.0.1:11434/v1; my-vllm: unreachable @ http://127.0.0.1:8000/v1`. No providers configured at all is a plain `ok` ("none configured") — this check can never fail your doctor run outright, only warn: a napping `ollama serve` isn't treated as broken setup.
 
-`--fix` self-heals four of the checks above in place: reprovisions Electron, copies the OpenCode engine into a broken npx-cache install, removes a duplicate legacy MCP entry, and sweeps orphaned session-index tmp files (only ones older than 60s). It does **not** start a local server for you — `local-providers` stays a warning until you start the server yourself.
+`--fix` self-heals five of the checks above in place: reprovisions Electron, copies the OpenCode engine into a broken npx-cache install, removes a duplicate legacy MCP entry, sweeps orphaned session-index tmp files, and sweeps orphaned per-session metadata tmp files (both tmp sweeps only ones older than 60s). It does **not** start a local server for you — `local-providers` stays a warning until you start the server yourself.
 
 Exit code is `1` if anything is `error`, else `0` (same rule drives `--json`'s `ok` field).
 
