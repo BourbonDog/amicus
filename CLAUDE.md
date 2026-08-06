@@ -304,6 +304,7 @@ src/
 │   ├── matrix-model.js  # Council Workspace — adjudication matrix view model (v4.4 §5.2).
 │   ├── run-detail.js  # Council Workspace — run detail: defensive parse of run.json / tally.json /
 │   └── run-scan.js  # Council Workspace — run discovery (v4.4 spec §4.3 / §5.1).
+├── cli-council-run-bench.js  # Bench/input resolution for `amicus council run` — parseList,
 ├── cli-council-run-render.js
 ├── cli-handlers-abort.js  # CLI Abort Handler (B21-rest extraction)
 ├── cli-handlers-council-run.js
@@ -434,6 +435,7 @@ evals/
 <!-- AUTO:modules -->
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
+| `cli-council-run-bench.js` | Bench/input resolution for `amicus council run` — parseList, | `parseList()`, `sanitizeCouncilName()`, `resolveBench()` |
 | `cli-council-run-render.js` |  | `renderRunHuman()` |
 | `cli-handlers-abort.js` | CLI Abort Handler (B21-rest extraction) | `handleAbort()` |
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
