@@ -2,19 +2,26 @@
 
 **Reprioritization guidance (Christian, 2026-07-18):** engine-first is locked; the near-term work
 ships as an incremental **4.x point-release line**, each rev delivering a **behavioral / feature
-benefit users feel**; **enterprise-readiness is a venture unto itself** — the deliberate **5.0**
-major jump, gated on funding/cofounder. The observability arc is split so the **data layer ships
-first (v4.3)** and the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost
-preview dropped to the backlog.
+benefit users feel**. The observability arc is split so the **data layer ships first (v4.3)** and
+the **Electron "Council Workspace" (v4.4)** rides on top of it. `--dry-run` cost preview dropped to
+the backlog.
 
-Amicus is at **v4.6.2** (tagged 2026-08-05). Each 4.x rev below leads with the benefit, not the
+**Amendment (Christian, 2026-08-05): enterprise-readiness leaves the rev pipeline.** It was carried
+here as a numbered **v5.0** heading, which made it read as *scheduled work with a version reserved
+for it* — a commitment the product cannot make while it is gated on funding and a cofounder. It now
+lives under **Backlog (tracked, not scheduled)** with everything else that is real but unscheduled.
+Nothing about the content changed and no judgment about its value is implied; only its status. When
+an org buyer and the org to support them exist, it earns a number then.
+
+Amicus is at **v4.6.3** (tagged 2026-08-05). Each 4.x rev below leads with the benefit, not the
 plumbing.
 
-**Status:** v4.0 through **v4.6.2** have **shipped** — everything down to the v4.7 heading is a
-record of what landed, not a plan. **v4.7 (composition + tagging + GUI ergonomics) is the next
-planned rev** — that scope carried the number v4.6 here until the degrade-announcement-invariant
-milestone took the v4.6.0 release (2026-08-02); renumbered, not descoped. v5.0 remains
-forward-looking.
+**Status:** v4.0 through **v4.6.3** have **shipped** — everything down to the v4.7 heading is a
+record of what landed, not a plan. **v4.7 is not locked.** The composition scope below carried the
+number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0 release
+(2026-08-02); it was renumbered, not descoped, and it remains the leading candidate — but it is a
+candidate, not a commitment, and the rev's contents are decided at kickoff per the anti-rot rule.
+There is **no numbered major** on this roadmap.
 
 > 📁 **Reading this from an npm install?** Some references below point at working documents that
 > live in the git repository and are deliberately **not** in the published package — anything under
@@ -169,20 +176,63 @@ fooled, and a handful of proven small defects land with tests.
   path; the README/install scripts/doctor all agree on the real Node ≥22.12 floor; eleven
   duplicated doctor test fixtures consolidate into one factory — #110
 
-## v4.7 — "Compose your councils" *(renumbered from v4.6, 2026-08-02 — spec + fresh plan at kickoff per the anti-rot rule)*
-**Benefit:** councils chain — generate → critique → refine with no manual copy-paste — and history
-becomes navigable.
-- **Composable/chained waves** (`--input-from <id>` / `--prompt-file -` pipe + per-source digests) —
-  F6 *(M)* — brings the `{{input}}` template variable + the `critique`/`refine` built-ins
-- **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)*
-- **GUI power ergonomics** (F10: focus-follows fold hotkey, distinguishable window titles, tiling
-  presets) *(S each)*
-- Deferred-item candidates per the v4.5 design doc's §8: RN-2, TST-1/TST-2, REL-2, CA-4
-  (repair-solos half — the failed-chair half shipped v4.6.2), remainder of TST-7
+## v4.7 — "The count is the count" *(rescoped 2026-08-05 — spec + fresh plan at kickoff per the anti-rot rule)*
+**Benefit:** every number amicus shows you is the number — what a council cost, which legs ran, and
+which model earned the credit.
+
+**Why this scope, and why it replaced composition.** Rescoped after a roadmap review on 2026-08-05
+that started from *how the tool is actually used* rather than from the deferral list. Two findings
+drove it:
+
+1. **The Workspace is an instrument panel, not a workspace** (owner, 2026-08-05): it is used for
+   **live status while a council runs** and for **quantitative stats** — *never* to read council
+   output, which is read in the terminal or through the orchestrating agent. That retires the F10
+   ergonomics line wholesale (all three items are reading/working affordances) and promotes anything
+   that makes the numbers right.
+2. **`runStats` is a cost source, not just a record.** Verified at `8d0584a`:
+   `cli-handlers-council.js:56` computes `amicus council stats` cost as
+   `sumWaveUsage(r.runStats).cost` with **no fallback**; `council/report.js:79` falls back to
+   `sumWaveUsage(runStats).cost` when wave usage is absent; `council/ledger.js:24` joins street-cred
+   off the same array. So CA-4's omissions are not a schema nicety — they under-report spend on the
+   surface the owner relies on, which collides with the cost-truth principle (*reported > estimated
+   > unknown; never fabricate $0*). An omitted leg is not "unknown" — it renders as money never
+   spent on legs that spent money.
+
+- **CA-4 (remaining half) — `runStats` completeness** *(M)*: Stage-2 judges and repair solos are
+  absent from `tally.json`'s `runStats` (observed: 5 rows for 11 real legs in `wsgate04`).
+  ⚠️ **Scope correction:** the failed-chair third of the original CA-4 is **closed** — v4.6.2's
+  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:113` cites LC-5 by name).
+  **Open kickoff question, do not assume either way:** `chairAttempts[]` carries
+  `{waveId, model, outcome, reason}` and **no usage**, so whether failed-chair *cost* reaches
+  `runStats` is unverified. Check before scoping — it is either already handled or a third row class.
+- **GOA-7 prerequisite — segment the ledger by RESOLVED model, not alias** *(S–M)*: a **live defect
+  today**. Ledger rows key by council alias and aliases silently retarget (`gpt-pro` →
+  `gpt-5.6-sol-pro`, the `opus` re-pin — both 2026-08-04), so `council stats` conflates distinct
+  models under one name. The ledger is append-only, so every run adds rows that will later have to
+  be distrusted, and both GOA-1 and GOA-2 plan to build on this data. Bump `LEDGER_SCHEMA_VERSION`;
+  old rows stay readable (absent id ⇒ legacy). Full write-up and schema discipline: `BACKLOG.md`
+  GOA-7. *(Recency decay — GOA-7's second half — is NOT in this rev.)*
+- **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)* — the one element carried
+  over from the composition scope, and the one with a visible paper trail: this repo's own
+  `BACKLOG.md` hand-maintains an index of run identifiers (`wave 47278069`, `run dfb6a692`,
+  `runs 0084d48c + 2039b2d1`, `wsgate02`/`wsgate04`) **because there is no search**. It is also the
+  rev's only daily-felt user surface — three schema fixes alone are a thin story.
 - **README + docs update** *(S)*
-> The 2026-07-19 combined spec (`2026-07-19-v4.5-policy-packs-composition-design.md`) holds the
-> approved chaining/tagging/F10 design detail and is the primary input to the v4.7 brainstorm; it
-> is NOT executed as-written — v4.7 gets its own spec + fresh plan at kickoff.
+
+> **Why these belong in one rev.** CA-4 and GOA-7's prerequisite are the same defect class — the run
+> record under-reporting what actually happened — and both are schema-shaped. Each was individually
+> deferred with the same reason (*"M, a schema question, not a fix"*), which is exactly why neither
+> has ever been done: too big for a patch, too small to carry a rev alone. One schema pass is
+> materially cheaper than two.
+>
+> **Lineage.** v4.6 made a loss announce itself; v4.7 makes the accounting match reality. Same
+> invariant family, applied to numbers instead of degradation.
+>
+> ⚠️ **Two hard gates apply before any task touches council internals** — see `BACKLOG.md`
+> *Next-rev hard gates*: the tight-file extraction pass (`cli-handlers-council-run.js` is at
+> **299/300 exactly**, `run-debate.js` at 299, two files **at 300**), and KNOWN_VARIABLES
+> single-sourcing **only if** `{{input}}` is ever scoped — it is not in this rev, so that gate
+> travels with composition rather than blocking here.
 
 ### Deferred out of v4.4.1 into v4.5 (2026-07-27)
 
@@ -202,7 +252,7 @@ a proposed disposition — v4.5 ride-along / v4.6 / backlog — tabled for rulin
 | **CA-4** | `tally.json`'s `runStats` omits Stage-2 judges, repair solos and failed chair attempts (5 rows for 11 real legs in `wsgate04`) | `M` — a schema question, not a fix |
 | **CA-5** | `isSubagentToolCall` is still a `name === 'task'` string proxy | `M`, and **reduced** by v4.4.0: it is now only the fallback when the real subtree walk finds nothing |
 | **LC-1** | B53's stall kill is skipped while a tool-settle deferral is active | `S–M` — shipped deliberately; the author wants a second opinion, which needs data from real runs |
-| **LC-5** | A chair fallback leaves no trace in `run.json` (`wsgate02`'s haiku failed twice; only `"chair":"minimax"` was recorded) | `M` — a run-record schema addition |
+| ~~**LC-5**~~ | ~~A chair fallback leaves no trace in `run.json`~~ — ✅ **CLOSED by v4.6.2**: `chairAttempts[]` records every attempt (`{waveId, model, outcome, reason}`), checkpointed after each; `run-chair.js:113` cites LC-5 by name. **Do not re-file.** | — |
 | **RN-1** | `sanitizeName` collisions surface as a banner rather than a refusal | `S` + a product decision that was already argued once |
 | **RN-2** | `renderRunList` blind masking is best-effort — only the open run resolves labels | `M` |
 | **RN-5** | A blind-mode flip closes every open prose panel and repaints twice | `S–M` |
@@ -218,15 +268,6 @@ a proposed disposition — v4.5 ride-along / v4.6 / backlog — tabled for rulin
 record ("eleven `Number(env) || default` sites"), not a task — a blanket migration would introduce
 six new defects to fix one, and `src/utils/env-num.js`'s docblock records which knobs deliberately
 keep the old form.
-
-## v5.0 — Enterprise-readiness *(the deliberate major jump — a venture unto itself, gated on funding / cofounder)*
-**Benefit:** team/org deployment — but a distinct product + go-to-market motion (SOC2, SLAs, sales, support), not a feature drop. Parked as the 5.0 major per the chair's hard-question #5: a solo dev can't credibly ship or support this alone.
-- Secret-store backends + env-var-only mode (A3); org allowlists/blocklists, per-team cost ceilings, read-only enforcement (A6); RBAC
-- Audit & compliance: reproducibility manifests + replay (B11), seed/temp/version pinning (A7), spend export to SIEM/warehouse (A10), `/health` + metrics + structured logging (A8)
-- Team config `.amicusrc` (A9); spend **governance** (per-team caps/enforcement) — the governance half of A4
-- Learning loops that need scale anyway: reliability-aware seat selection (B4), calibration benchmarks (B5), decision-outcome feedback (B10), adaptive strategy planner (B8), evidence provenance (B6)
-- README + docs update: deployment/admin documentation for the above, in `README.md` and `docs/`
-> These cluster because they share one prerequisite you don't have yet: an org buyer + the org to support. Revisit as a funded track.
 
 ---
 
@@ -271,6 +312,57 @@ LC-10) that stretch the definition; a third that pops a GUI window would not be 
 patch. Sits naturally beside v4.5's existing **GUI power ergonomics (F10)** line.
 
 ## Backlog (tracked, not scheduled)
+
+### Enterprise-readiness *(unscheduled — gated on funding / cofounder)*
+*Moved here from a numbered `v5.0` heading, 2026-08-05. Content unchanged; only its status. It was
+never a rev — it is a distinct product and go-to-market motion (SOC2, SLAs, sales, support), and per
+the chair's hard-question #5 a solo dev can't credibly ship or support it alone. These items cluster
+because they share one prerequisite that does not exist yet: **an org buyer, and the org to support
+them.** Revisit as a funded track; it earns a version number when that track is real.*
+- Secret-store backends + env-var-only mode (A3); org allowlists/blocklists, per-team cost ceilings, read-only enforcement (A6); RBAC
+- Audit & compliance: reproducibility manifests + replay (B11), seed/temp/version pinning (A7), spend export to SIEM/warehouse (A10), `/health` + metrics + structured logging (A8)
+- Team config `.amicusrc` (A9); spend **governance** (per-team caps/enforcement) — the governance half of A4
+- Learning loops that need scale anyway: reliability-aware seat selection (B4), calibration benchmarks (B5), decision-outcome feedback (B10), adaptive strategy planner (B8), evidence provenance (B6)
+- README + docs update: deployment/admin documentation for the above, in `README.md` and `docs/`
+> ⚠️ **B4 (reliability-aware seat selection) now overlaps live backlog work.** `GOA-1` (auto-bench
+> query-aware seat selection, filed 2026-08-05 in `BACKLOG.md`) blends the street-cred ledger into
+> seat choice — that is B4's core idea arriving as a single-user feature rather than an enterprise
+> learning loop. Reconcile before either is scoped; do not build both.
+
+### Composition / chained waves (F6) *(unscheduled — dropped from v4.7, 2026-08-05)*
+`--input-from <id>` / `--prompt-file -` pipe + per-source digests *(M)*, bringing the `{{input}}`
+template variable and the `critique`/`refine` built-ins.
+
+*Not cancelled — waiting on a use case that asks for it.* The reasoning, recorded so it is not
+re-argued from scratch: **the chaining already happens, performed by the orchestrating agent.** When
+a council needs to critique a previous council's output, Claude reads run A's verdict and composes
+run B's prompt — adapting the handoff, dropping what is irrelevant, reframing what matters. A fixed
+`--input-from` digest is *less* flexible than that for interactive use. The feature's real
+beneficiary is **headless/CI chaining, where no orchestrator is in the loop** — and the one headless
+consumer today (the Council Review GitHub Action) runs a single review per PR, not a chain.
+
+**Revisit when:** a headless or scheduled workflow genuinely needs to chain councils without an
+agent driving it, or the `critique`/`refine` built-ins are wanted on their own — those are a much
+smaller slice than the chaining machinery and could ship independently of F6.
+
+⚠️ **Carries its own hard gate:** KNOWN_VARIABLES single-sourcing (`src/template/render.js:45` keeps
+two hand-maintained copies of the known-variable set) must land **before** `{{input}}` does. See
+`BACKLOG.md` *Next-rev hard gates* — that gate travels with this item, not with v4.7.
+
+### GUI power ergonomics (F10) *(unscheduled — dropped from v4.7, 2026-08-05)*
+Focus-follows-fold hotkey, distinguishable window titles, tiling presets *(S each)*.
+
+Dropped on an owner usage finding, recorded here because it should inform every future GUI decision:
+**the Council Workspace is used as an instrument panel — live status while a council runs, plus
+quantitative stats — and never to read council output.** All three F10 items are reading/working
+ergonomics for a surface that is not used that way; "distinguishable window titles" and "tiling
+presets" both presuppose multi-window reading sessions that do not happen.
+
+**Consequence beyond F10:** GUI work should be judged on *live-status fidelity* and *stat accuracy*
+first. The prose-panel and blind-masking nits (RN-2, RN-5, the `T19-*`/`T20-*` family in
+`BACKLOG.md`) sit on the unused half of the surface and should rank accordingly.
+
+### Other tracked items
 - **`--dry-run` / cost & route preview** across start/fanout/council — E2/C7/F4 *(M)* — "know the cost/route before you commit"; useful, not essential to the near-term line.
 - **F7** — Parallel council panels + super-chair (opt-in `--panels N` high-assurance; niche).
 - **E7** — Prompt dedup cache (exact-dup, opt-in, excludes council/fanout) — minor cost optimization.
@@ -285,6 +377,6 @@ patch. Sits naturally beside v4.5's existing **GUI power ergonomics (F10)** line
 - **Local providers stays near-term** (v4.2) — a broad cost/privacy benefit, not enterprise.
 - **Observability arc split:** v4.3 = the data layer + terminal surface + resilience + spend (ships first); **v4.4 = the Electron Council Workspace (B9)** as a GUI on that data.
 - **`--dry-run` cost preview → backlog** (was in the observability rev).
-- **Enterprise/governance/audit/compliance/learning-loops → v5.0**, reframed as the deliberate *major-version venture* gated on funding.
+- **Enterprise/governance/audit/compliance/learning-loops → v5.0**, reframed as the deliberate *major-version venture* gated on funding. **Superseded 2026-08-05:** moved out of the rev pipeline entirely, into *Backlog (tracked, not scheduled)*. A reserved version number read as a commitment; it isn't one.
 - The **cheap trust fixes** (envelope, injection fencing, fold nonce) pulled into **v4.0** because the engine needs them to be trustworthy in automation.
 - **Docs are part of the rev (2026-07-20):** every rev from v4.1 onward closes with a **README + docs update** line item, so each release ships its own documentation rather than deferring it.
