@@ -11,6 +11,15 @@ All notable changes to Amicus are documented here. Format follows
   verified live: Anthropic's `/v1/models` lists it and a direct leg serves). With an
   Anthropic key present, `fable` routes direct-first like the other Anthropic aliases;
   the `ANTHROPIC_MODELS` floor gains a matching row so keyless installs validate it.
+- **`doctor` gains a `session-metadata-tmp` check; `--fix` sweeps the orphans.** A kill
+  between an atomic write's tmp-file and rename leaves `.metadata.json.*.tmp` orphans in
+  per-session directories (the B09 class — ~30 write sites). Plain `doctor` reports them;
+  `--fix` removes orphans older than 60 s from the current project's sessions root and
+  announces the heal in the one voice (`Recovered: …`).
+- **`council save` announces when it shadows a built-in bench.** Saving a council named
+  `free`/`budget`/`frontier` previously printed no notice at all (the overwrite marker only
+  tracked user-config names); the save now reports `shadowsBuiltin` (`--json`) and prints
+  the shadow notice.
 
 ### Fixed
 
@@ -30,6 +39,9 @@ All notable changes to Amicus are documented here. Format follows
   `degrades[]` backstops a `run.json` that lost its checkpoint. A stale
   `get-run` reply from a run you navigated away from can no longer repaint the
   run now open.
+- **A valueless `-o`/`--out` on `council verdict` now errors** (`BAD_ARGS`, flag named,
+  exit 1) instead of crashing mid-write (renameSync `TypeError`) and orphaning a
+  `true.tmp-<pid>` temp file. Behavior change, per the v4.6.3 R1 ruling.
 
 ## [4.6.2] - 2026-08-05
 

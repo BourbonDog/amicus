@@ -393,6 +393,43 @@ test('verdict: rebuild has neither seatLoss nor degrades when no prior verdict.j
   expect(doc).not.toHaveProperty('degrades');
 });
 
+test('verdict: a valueless -o/--out errors instead of writing a file named true (v4.6.3 R1)', async () => {
+  // parseArgs records a trailing bare -o as boolean true (cli.js:104-115)
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
+  const tallyPath = writeTally(dir);
+  const cwd = process.cwd();
+  process.chdir(dir);
+  let result;
+  try {
+    result = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: true, json: true }));
+  } finally {
+    process.chdir(cwd);
+  }
+  expect(result.code).toBe(1);
+  const doc = JSON.parse(result.out);
+  expect(doc.error.code).toBe('BAD_ARGS');
+  expect(doc.error.message).toMatch(/-o\/--out/);
+  // Verify no artifacts leaked: directory should only contain the seeded tally file
+  expect(fs.readdirSync(dir).sort()).toEqual(['tally.json']);
+});
+
+test('verdict: an empty --out= value errors the same way, never silently defaulting', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
+  const tallyPath = writeTally(dir);
+  const cwd = process.cwd();
+  process.chdir(dir);
+  let result;
+  try {
+    result = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: '', json: true }));
+  } finally {
+    process.chdir(cwd);
+  }
+  expect(result.code).toBe(1);
+  expect(JSON.parse(result.out).error.code).toBe('BAD_ARGS');
+  // Verify no artifacts leaked: directory should only contain the seeded tally file
+  expect(fs.readdirSync(dir).sort()).toEqual(['tally.json']);
+});
+
 // ---------------------------------------------------------------------------
 // council save / list / show (B23)
 // ---------------------------------------------------------------------------
@@ -482,6 +519,39 @@ describe('council save', () => {
     expect(JSON.parse(out).ok).toBe(true);
     const { getCouncil } = require('../../src/utils/config');
     expect(getCouncil('budget')).toEqual(['opus', 'gpt']);
+  });
+
+  test('saving a built-in bench name reports shadowsBuiltin and prints the notice (v4.6.3 D7)', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'budget'], models: 'deepseek,glm', json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.ok).toBe(true);
+    expect(doc.shadowsBuiltin).toBe(true);
+    expect(doc.overwritten).toBe(false); // first save: nothing in user config — the old marker under-fired here
+  });
+
+  test('re-saving a shadowing name is BOTH overwritten and shadowsBuiltin', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'budget'], models: 'deepseek,glm', json: true }));
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'budget'], models: 'haiku,opus', json: true }));
+    expect(code).toBe(0);
+    const doc = JSON.parse(out);
+    expect(doc.overwritten).toBe(true);
+    expect(doc.shadowsBuiltin).toBe(true);
+  });
+
+  test('a non-built-in name reports shadowsBuiltin false and prints no shadow notice', async () => {
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'mine'], models: 'deepseek,glm' }));
+    expect(code).toBe(0);
+    expect(out).not.toMatch(/shadows the built-in/);
+  });
+
+  test('human-mode shadow save prints the notice line', async () => {
+    const { out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'frontier'], models: 'deepseek,glm' }));
+    expect(out).toMatch(/shadows the built-in bench of the same name/);
   });
 });
 

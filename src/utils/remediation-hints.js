@@ -87,6 +87,20 @@ const REMEDIATION_HINTS = Object.freeze({
    */
   sweepSessionIndexTmp:
     'amicus doctor --fix  (sweeps orphaned .sessions-index.json.*.tmp files left by an interrupted write)',
+
+  /**
+   * Orphaned per-session metadata.json.*.tmp files (v4.6.3 PR3 Task 3 / D8):
+   * same producer shape as sweepSessionIndexTmp above, one level down — a
+   * kill between an atomic write's tmp-write and rename leaves a stray temp
+   * file in a session directory forever. `doctor --fix` sweeps files older
+   * than 60s (never a live writer's ms-lived tmp).
+   *
+   * Voice ruling (Christian, 2026-08-03, sweepSessionIndexTmp above): applies
+   * verbatim here — the cause is definitional, not a guess, so this hint also
+   * keeps its confident voice rather than the unverified-cause voice.
+   */
+  sweepSessionMetadataTmp:
+    'amicus doctor --fix  (sweeps orphaned .metadata.json.*.tmp files left by an interrupted write)',
 });
 
 module.exports = REMEDIATION_HINTS;

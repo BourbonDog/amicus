@@ -22,6 +22,9 @@ const SESSION_STATUS = {
 /** Canonical session dir name — new sessions are written here. */
 const SESSIONS_DIR = 'amicus_sessions';
 
+/** Subagent sessions nest one level under their parent taskId dir. */
+const SUBAGENTS_DIR = 'subagents';
+
 /**
  * Get the canonical session directory path for a task (used for WRITES).
  * Spec Reference: §8.1 Session directory structure
@@ -256,7 +259,7 @@ function saveSummary(projectDir, taskId, summary) {
  * // Returns: '/path/to/project/.claude/amicus_sessions/abc123/subagents/subagent-xyz'
  */
 function getSubagentDir(projectDir, parentTaskId, subagentId) {
-  return path.join(getSessionDir(projectDir, parentTaskId), 'subagents', subagentId);
+  return path.join(getSessionDir(projectDir, parentTaskId), SUBAGENTS_DIR, subagentId);
 }
 
 /**
@@ -355,7 +358,7 @@ function getSubagentSession(projectDir, parentTaskId, subagentId) {
  * @returns {object[]} Array of sub-agent metadata
  */
 function listSubagents(projectDir, parentTaskId, filter = {}) {
-  const subagentsDir = path.join(getSessionDir(projectDir, parentTaskId), 'subagents');
+  const subagentsDir = path.join(getSessionDir(projectDir, parentTaskId), SUBAGENTS_DIR);
 
   if (!fs.existsSync(subagentsDir)) {
     return [];
@@ -412,6 +415,7 @@ module.exports = {
   getSessionDir,
   resolveExistingSessionDir,
   SESSIONS_DIR,
+  SUBAGENTS_DIR,
   SESSION_STATUS,
   // Sub-agent functions
   getSubagentDir,

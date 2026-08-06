@@ -38,6 +38,7 @@ const baseDeps = {
   migrateLegacyMcpEntries: () => [],
   skillInstalled: () => true,
   listSessionIndexTmpFiles: () => [],
+  listSessionMetadataTmpFiles: () => [], // D8 — inert pin, same hermeticity class as the sibling above
   scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
   repairEngine: async () => ({ repaired: false }),
   // #76: electron-mcp's default scan shells out (`npm root -g`) exactly like

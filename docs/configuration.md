@@ -247,9 +247,11 @@ Everything lives under `~/.config/amicus/` (`getConfigDir()` in `src/utils/confi
 metadata) use an atomic write: a temp file named `.<target>.<pid>.<random>.tmp` is written
 alongside the target, then renamed into place. A process killed between the write and the rename
 leaves an orphaned `.tmp` file behind forever — harmless, but it accumulates. `amicus doctor --fix`
-sweeps orphaned `sessions-index.json.*.tmp` files (only ones older than 60 seconds, so a live
-writer's in-flight tmp file is never touched); `amicus doctor` (without `--fix`) just reports the
-count.
+sweeps orphaned `sessions-index.json.*.tmp` files and, per-session, orphaned `.metadata.json.*.tmp`
+files (the B09 class, ~30 write sites — both `<taskId>/` and `<taskId>/subagents/<id>/` levels
+under the current project's `.claude/amicus_sessions/`); both sweeps only remove files older than
+60 seconds, so a live writer's in-flight tmp file is never touched. `amicus doctor` (without
+`--fix`) just reports the counts.
 
 ### Session storage
 
