@@ -43,10 +43,11 @@ All notable changes to Amicus are documented here. Format follows
   exit 1) instead of crashing mid-write (renameSync `TypeError`) and orphaning a
   `true.tmp-<pid>` temp file. Behavior change, per the v4.6.3 R1 ruling.
 - **README corrections from the v4.6.3 accuracy review**: the Node.js floor is
-  22.12 (required since v3.0 — the README, install scripts, and landing page
-  still said 18), and the optional-council-elements list now matches the
-  shipped skill (four opt-ins; the chair's verdict scale has been standard,
-  not opt-in).
+  22.12 (required since v3.0 — the README, install scripts, landing page, and
+  `amicus doctor`'s node check still said 18), and the optional-council-elements
+  list now matches the shipped skill (four opt-ins; the chair's verdict scale
+  has been standard, not opt-in). The doctor's `node` row now errors below
+  22.12 (it previously passed anything ≥ 18).
 
 ### CI
 
