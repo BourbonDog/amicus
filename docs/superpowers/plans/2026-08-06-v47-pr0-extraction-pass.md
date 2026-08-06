@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-06-v4.7-count-is-the-count-design.md` §4 (PR0). Recon measured 2026-08-06 at `main` @ `6fa6c05`.
 
-**⚠️ Deviation from the standing ruling, surfaced at plan review:** the ruling said "next edit extracts; `cli-council-run-render.js` receives." Measured reality: the render-shaped movers total ~21 lines (< the ≥30 target), the ≥30 movers are input-resolution code, and the render file's pinned docblock declares it render-only with zero requires. The bulk mover therefore goes to a NEW `src/cli-council-run-bench.js`; the render file is untouched. The ruling's intent (extract before the next edit) is honored; its named receiver is not. **PENDING owner approval at plan review — do not execute Task 3 until this line is updated to record the ruling.**
+**⚠️ Deviation from the standing ruling, surfaced at plan review:** the ruling said "next edit extracts; `cli-council-run-render.js` receives." Measured reality: the render-shaped movers total ~21 lines (< the ≥30 target), the ≥30 movers are input-resolution code, and the render file's pinned docblock declares it render-only with zero requires. The bulk mover therefore goes to a NEW `src/cli-council-run-bench.js`; the render file is untouched. The ruling's intent (extract before the next edit) is honored; its named receiver is not. **RULED 2026-08-06 (Christian, at plan review): the bench receiver stands** — `cli-council-run-bench.js` supersedes the render-file shorthand for the bulk mover; the render file stays render-only.
 
 ## Global Constraints
 
