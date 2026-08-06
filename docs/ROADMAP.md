@@ -151,6 +151,24 @@ after the owner's ruling, blind-masked (#102, #103); chair-attempt records — t
 is diagnosable from `run.json` (`chairAttempts[]`, #105). The v4.6 announcement invariant now
 reaches the surface users watch and the artifact they keep.
 
+### v4.6.3 — the post-train sweep *(patch)* — ✅ SHIPPED v4.6.3, 2026-08-05
+A four-PR correction patch: the models audit stops crying wolf, the seats panel stops being
+fooled, and a handful of proven small defects land with tests.
+- **Audit routing-choice + fable direct route** — `models --check` stops flagging deliberate
+  gateway-only routes like `gpt-pro` STALE (no more harmful downgrade suggestion); fable gains an
+  authored `anthropic/claude-fable-5` route and routes direct-first with an Anthropic key — #107
+- **Role-aware, old-run-resilient dead-seat rows + openRun guard** — a model dead as critic but
+  alive as chair now renders its dead row; pre-v4.6 runs render dead rows from
+  `verdict.degrades`/`seatLoss.deadBenchSeats`; the third F09-class stale-reply hole
+  (`openRun`'s `get-run` reply) closes — #108
+- **Valueless `-o` + save-shadow notice + metadata tmp sweep** — a trailing bare `-o`/`--out`
+  now errors instead of orphaning a tmp file; `council save` announces when it shadows a
+  built-in bench; `doctor --fix` sweeps orphaned `metadata.json` tmp files — #109
+- **Registry body assert + Node-floor truth sweep + `makeBaseDeps()`** — the MCP-Registry
+  skip-check verifies the version *and* status it trusts, fail-toward-publish on every other
+  path; the README/install scripts/doctor all agree on the real Node ≥22.12 floor; eleven
+  duplicated doctor test fixtures consolidate into one factory — #110
+
 ## v4.7 — "Compose your councils" *(renumbered from v4.6, 2026-08-02 — spec + fresh plan at kickoff per the anti-rot rule)*
 **Benefit:** councils chain — generate → critique → refine with no manual copy-paste — and history
 becomes navigable.
@@ -159,8 +177,8 @@ becomes navigable.
 - **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)*
 - **GUI power ergonomics** (F10: focus-follows fold hotkey, distinguishable window titles, tiling
   presets) *(S each)*
-- Deferred-item candidates per the v4.5 design doc's §8: RN-2, TST-1/TST-2, REL-2, CA-4, LC-5,
-  remainder of TST-7
+- Deferred-item candidates per the v4.5 design doc's §8: RN-2, TST-1/TST-2, REL-2, CA-4
+  (repair-solos half — the failed-chair half shipped v4.6.2), remainder of TST-7
 - **README + docs update** *(S)*
 > The 2026-07-19 combined spec (`2026-07-19-v4.5-policy-packs-composition-design.md`) holds the
 > approved chaining/tagging/F10 design detail and is the primary input to the v4.7 brainstorm; it
