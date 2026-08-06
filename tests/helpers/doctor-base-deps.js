@@ -25,8 +25,12 @@
  *       present-but-undefined key does not trigger the same fall-through in
  *       a plain object spread/merge).
  *     - doctor-local-providers.test.js needs `getLocalProviders` and
- *       `probeLocalProvider` genuinely missing so each test can inject its
- *       own pair without fighting a pinned base value.
+ *       `probeLocalProvider` genuinely missing — not because a pinned base
+ *       value would otherwise fight the per-test override (spreading
+ *       `{...baseDeps, ...deps}` already lets `deps` win either way, and
+ *       every call site in that file supplies both keys). The omission is
+ *       preserved byte-conservatively: it matches the pre-consolidation
+ *       fixture's exact shape, which this factory does not silently change.
  *   `omit` deletes the keys from the freshly-built object before returning
  *   it, so `Object.keys(makeBaseDeps({ omit: ['x'] }))` truly excludes `x`.
  *
