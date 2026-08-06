@@ -309,6 +309,7 @@ src/
 ├── cli-handlers-council-run.js
 ├── cli-handlers-council.js
 ├── cli-handlers-doctor.js
+├── cli-handlers-fanout.js  # CLI handler for `amicus fanout` — extracted verbatim from
 ├── cli-handlers-init.js  # `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the
 ├── cli-handlers-key-local.js  # amicus key <localId> — bearer lifecycle for a config-defined local /
 ├── cli-handlers-pack.js
@@ -438,6 +439,7 @@ evals/
 | `cli-handlers-council-run.js` |  | `handleCouncilRun()`, `renderRunHuman()`, `CHAIR_DEFAULT()` |
 | `cli-handlers-council.js` |  | `handleCouncil()` |
 | `cli-handlers-doctor.js` |  | `runDoctorChecks()`, `handleDoctor()`, `MAX_CATALOG_AGE_MS()` |
+| `cli-handlers-fanout.js` | CLI handler for `amicus fanout` — extracted verbatim from | `handleFanout()` |
 | `cli-handlers-init.js` | `amicus init [--claude] [--desktop] [--json]` (v4.2 §4.8, C2). Re-runs the | `handleInit()` |
 | `cli-handlers-key-local.js` | amicus key <localId> — bearer lifecycle for a config-defined local / | `handleLocalKey()`, `formatLocalKeyList()`, `maskKey()` |
 | `cli-handlers-pack.js` |  | `handlePack()` |

@@ -31,7 +31,7 @@ describe('fanout CLI surface', () => {
     const fs = require('fs');
     const path = require('path');
     // handleFanout was extracted from bin/amicus.js to src/cli-handlers-run.js (WS-2 #6)
-    const src = fs.readFileSync(path.join(__dirname, '../src/cli-handlers-run.js'), 'utf-8');
+    const src = fs.readFileSync(path.join(__dirname, '../src/cli-handlers-fanout.js'), 'utf-8');
     expect(src).toContain('--timeout must be a positive number');
     expect(src).toContain('at least one non-empty entry');
   });
