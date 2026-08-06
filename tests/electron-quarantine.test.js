@@ -184,39 +184,8 @@ describe('ensureElectron surfaces the quarantine reason (#53 B-quarantine)', () 
 // sidecar entry. Pinning scanElectronInstalls also stops the electron-mcp
 // check from consuming this suite's repairElectron mock (#76), keeping the
 // exactly-once assertion deterministic. baseDeps mirrors allGood's shape.
-const baseDeps = {
-  nodeVersion: 'v20.0.0',
-  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
-  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
-  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
-  getCwd: () => 'C:\\Users\\me\\code\\amicus',
-  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
-  getConfigDir: () => '/cfg',
-  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
-  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
-  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
-  findStaleAliases: () => [],
-  hasOpencodeBinary: () => true,
-  getElectronPath: () => '/path/to/electron',
-  hasAmicusRegistration: () => true,
-  discoverCoworkMcps: () => ({ amicus: {} }),
-  inspectLegacyMcpEntries: () => [
-    { target: 'Claude Code', status: 'absent' },
-    { target: 'Claude Desktop', status: 'absent' },
-  ],
-  migrateLegacyMcpEntries: () => [],
-  skillInstalled: () => true,
-  listSessionIndexTmpFiles: () => [],
-  listSessionMetadataTmpFiles: () => [], // D8 — inert pin, same hermeticity class as the sibling above
-  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  repairEngine: async () => ({ repaired: false }),
-  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  getLocalProviders: () => ({}),
-  probeLocalProvider: jest.fn(),
-  // v4.6.2-pr1 forward-pin: the anthropic-base-url check in flight on PR #95
-  // reads d.env -- a harmless extra key until that check lands on main.
-  env: {},
-};
+const { makeBaseDeps } = require('./helpers/doctor-base-deps');
+const baseDeps = makeBaseDeps();
 
 describe('doctor --fix surfaces the quarantine instruction (#53 B-quarantine)', () => {
   const doctor = require('../src/cli-handlers-doctor');

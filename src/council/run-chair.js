@@ -143,12 +143,14 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     emitStageStarted(o.runDir, o.runId, 'chair', null, o.follow);
     // Fallback chain (spec §4): retry same chair once → promote best
     // non-bench model from the ledger → give up (no Claude fallback headless).
-    let attempt = await attemptChair(o.chair, `${o.runId}-ch1`);
-    recordAttempt(attempt, `${o.runId}-ch1`, o.chair);
+    const waveId1 = `${o.runId}-ch1`;
+    let attempt = await attemptChair(o.chair, waveId1);
+    recordAttempt(attempt, waveId1, o.chair);
     if (isAbortExit(attempt.exitCode) || isSignalled()) { return bail(attempt.exitCode || isSignalled()); }
     if (!attempt.leg && !overBudget()) {
-      attempt = await attemptChair(o.chair, `${o.runId}-ch2`);
-      recordAttempt(attempt, `${o.runId}-ch2`, o.chair);
+      const waveId2 = `${o.runId}-ch2`;
+      attempt = await attemptChair(o.chair, waveId2);
+      recordAttempt(attempt, waveId2, o.chair);
       if (isAbortExit(attempt.exitCode) || isSignalled()) { return bail(attempt.exitCode || isSignalled()); }
     }
     if (attempt.leg) { actualChair = o.chair; }
@@ -157,8 +159,9 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       try { statsRows = statsFn(); } catch { /* no ledger yet */ }
       const fallback = pickFallbackChair(statsRows, o.models, o.chair);
       if (fallback) {
-        attempt = await attemptChair(fallback, `${o.runId}-ch3`);
-        recordAttempt(attempt, `${o.runId}-ch3`, fallback);
+        const waveId3 = `${o.runId}-ch3`;
+        attempt = await attemptChair(fallback, waveId3);
+        recordAttempt(attempt, waveId3, fallback);
         if (isAbortExit(attempt.exitCode) || isSignalled()) { return bail(attempt.exitCode || isSignalled()); }
         if (attempt.leg) { actualChair = fallback; }
       }

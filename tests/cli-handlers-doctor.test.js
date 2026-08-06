@@ -2,60 +2,12 @@
 'use strict';
 const { runDoctorChecks } = require('../src/cli-handlers-doctor');
 const HINTS = require('../src/utils/remediation-hints');
+const { makeBaseDeps } = require('./helpers/doctor-base-deps');
 
-const allGood = {
-  nodeVersion: 'v20.0.0',
-  readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
-  readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
-  checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),
-  getCwd: () => 'C:\\Users\\me\\code\\amicus',
-  readProjectMarkers: () => ({ hasGit: true, hasPackageJson: true, hasClaude: false }),
-  getConfigDir: () => '/cfg',
-  resolveModel: () => 'openrouter/google/gemini-3.5-flash',
-  readCache: () => ({ fetchedAt: Date.now(), models: [{ id: 'openrouter/google/gemini-3.5-flash' }] }),
-  collectAliasSources: () => [{ alias: 'gemini', model: 'openrouter/google/gemini-3.5-flash', source: 'defaults' }],
-  findStaleAliases: () => [],
-  hasOpencodeBinary: () => true,
-  getElectronPath: () => '/path/to/electron',
-  // B14: hasAmicusRegistration (raw, unstripped read) is the PRIMARY 'mcp'
-  // check signal — discoverClaudeCodeMcps can never produce { amicus: {} }
-  // because it always strips the amicus entry (recursive-spawn guard).
-  hasAmicusRegistration: () => true,
-  discoverCoworkMcps: () => ({ amicus: {} }),
-  inspectLegacyMcpEntries: () => [
-    { target: 'Claude Code', status: 'absent' },
-    { target: 'Claude Desktop', status: 'absent' },
-  ],
-  migrateLegacyMcpEntries: () => [],
-  skillInstalled: () => true,
-  // B15: deterministic fixture — without this the check would fall through to
-  // the real config dir on whatever machine runs the suite (non-deterministic).
-  listSessionIndexTmpFiles: () => [],
-  // D8: same rationale, one level down — without this the metadata sweep
-  // would fall through to the real cwd's .claude/amicus_sessions.
-  listSessionMetadataTmpFiles: () => [],
-  // engine-mcp: deterministic scan — without it the check probes the real
-  // machine's installs (non-deterministic). 'none' → the check reports ok.
-  scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  // engine self-heal (--fix): deterministic no-op unless a test overrides it.
-  repairEngine: async () => ({ repaired: false }),
-  // electron-mcp (#76): deterministic scan, same rationale as scanEngineInstalls.
-  scanElectronInstalls: () => ({ installs: [], mcpLaunch: 'none' }),
-  // M14: deterministic fixture — without this the local-providers check would
-  // fall through to the real config dir (and, worse, fire a REAL probe against
-  // it) on whatever machine runs this "pure" doctor suite. probeLocalProvider
-  // must never be called with the empty map above.
-  getLocalProviders: () => ({}),
-  probeLocalProvider: jest.fn(),
-  // v4.6.2 PR1: the anthropic-base-url check reads d.env (falling through to the
-  // real process.env only when a caller omits it — see
-  // src/utils/doctor-base-url-check.js). Pinning it empty here keeps this fixture
-  // "healthy" deterministic regardless of the host/parent-process env, same
-  // rationale as the M14 getLocalProviders() pin above (a dev or CI process that
-  // happens to carry ANTHROPIC_BASE_URL, e.g. set by the Claude Code app itself,
-  // must not turn this into a warn).
-  env: {},
-};
+// Canonical fixture — see tests/helpers/doctor-base-deps.js for the full
+// 26-key shape and the institutional comments (M14/B14/B15/D8/#76/v4.6.2 PR1
+// env forward-pin) that used to live inline here.
+const allGood = makeBaseDeps();
 
 const byId = (checks) => Object.fromEntries(checks.map(c => [c.id, c]));
 
