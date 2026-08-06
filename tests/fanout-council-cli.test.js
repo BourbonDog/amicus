@@ -9,7 +9,7 @@ describe('fanout --council (CLI surface + wiring)', () => {
   });
 
   it('handleFanout source enforces mutual exclusion and string-value guard', () => {
-    const src = fs.readFileSync(path.join(__dirname, '../src/cli-handlers-run.js'), 'utf-8');
+    const src = fs.readFileSync(path.join(__dirname, '../src/cli-handlers-fanout.js'), 'utf-8');
     expect(src).toContain('resolveCouncilMembers');
     expect(src).toContain('exactly one of --models / --council'); // error text
     expect(src).toContain("typeof args.council"); // boolean-true guard

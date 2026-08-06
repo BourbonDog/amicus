@@ -1,0 +1,81 @@
+/**
+ * Bench and input resolution for the council run command.
+ *
+ * Exports parseList, sanitizeCouncilName, resolveBench, extracted verbatim
+ * from cli-handlers-council-run.js (v4.7 PR0). ⚠️ The top-level cli*.js
+ * name is LOAD-BEARING: the known-flags source scan covers only src/cli*.js,
+ * and resolveBench reads args['dropped-members'].
+ */
+
+'use strict';
+
+const { failJson, ERROR_CODES } = require('./utils/error-doc');
+
+function parseList(value) {
+  return String(value).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Sanitize the internal `--council-name` passthrough before it can reach the
+ * spend ledger's `councilName` column (v4.3 Task 4 review fix, spec §7.3:
+ * spend docs hold only ids/numbers/paths "by construction"). That value is
+ * user-supplied (via mcp-council-run.js, ultimately an MCP caller's `input`),
+ * unbounded, and unvalidated — unlike a real `--council <preset>`, which is
+ * catalog-validated upstream. Strips control/non-printable characters, trims,
+ * and caps length so a hostile/malformed passthrough can't land raw in a
+ * `--group-by council` rollup. Precedence is untouched by this: it's applied
+ * only to the passthrough branch, never to the catalog-validated preset name.
+ * @param {string} name @returns {string|null} sanitized name, or null if empty after cleanup
+ */
+function sanitizeCouncilName(name) {
+  // eslint-disable-next-line no-control-regex -- deliberately stripping C0/DEL control chars
+  const cleaned = String(name).replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, 64);
+  return cleaned || null;
+}
+
+/**
+ * Resolve bench models from --models XOR --council (mirrors handleFanout).
+ * Also returns `presetName` (v4.3 Task 3, spec §7.1: trimmed --council name,
+ * else null) and `droppedMembers`: a preset's own drops, or — bare --models —
+ * the parsed `--dropped-members` MCP→child passthrough (v4.6 Plan 4 Task 4b).
+ */
+function resolveBench(args, useJson) {
+  const hasModels = typeof args.models === 'string' && args.models.trim();
+  const hasCouncil = args.council !== undefined && args.council !== false;
+  if (hasModels && hasCouncil) {
+    return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: pass exactly one of --models / --council, not both' }) };
+  }
+  if (!hasModels && !hasCouncil) {
+    return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: council run needs --models a,b,c or --council <preset> (at least 2 seats)' }) };
+  }
+  if (hasCouncil) {
+    if (typeof args.council !== 'string' || !args.council.trim()) {
+      return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+        message: 'Error: --council requires a council name (e.g. --council budget)' }) };
+    }
+    const { resolveCouncilMembers } = require('./utils/config');
+    const { readCache } = require('./utils/model-catalog');
+    const catalog = (readCache() || {}).models || [];
+    const presetName = args.council.trim();
+    const expanded = resolveCouncilMembers(presetName, catalog);
+    if (expanded.error) {
+      return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: ${expanded.error}` }) };
+    }
+    // v4.5 Wave 2 → Plan 4 Task 4: threaded into runCouncil's options — the
+    // sink now announces each dropped member, with reason, on every transport and surface.
+    return { bench: expanded.models, presetName, droppedMembers: expanded.droppedMembers || [] };
+  }
+  if (args['dropped-members'] === undefined) {
+    return { bench: parseList(args.models), presetName: null, droppedMembers: [] };
+  }
+  let dm; try { dm = JSON.parse(args['dropped-members']); } catch { dm = null; }
+  if (!Array.isArray(dm) || !dm.every(d => d && typeof d.member === 'string' && typeof d.reason === 'string')) {
+    return { fail: failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --dropped-members must be a JSON array of {member, reason} entries' }) };
+  }
+  return { bench: parseList(args.models), presetName: null, droppedMembers: dm };
+}
+
+module.exports = { parseList, sanitizeCouncilName, resolveBench };

@@ -8,6 +8,7 @@
  * new tally input plus the debate.json findings rows. run.js then re-runs
  * tally() on the returned input and decorates the record. Keeps run.js under the
  * line gate.
+ * Also holds the pure pre-debate helpers (target selection, dispute detection, re-vote bundling) moved from run-debate.js (v4.7 PR0).
  */
 
 const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
@@ -95,4 +96,63 @@ function debateRunStatsRows({ defenseLegs, revoteLegs }) {
   return [...(defenseLegs || []).map(mk('rebuttal')), ...(revoteLegs || []).map(mk('revote'))];
 }
 
-module.exports = { applyDebate, decorateRecord, debateRunStatsRows, PAST_TENSE, DEBATE_ROLES };
+/** Spec §5.7 fallback: a dead/unparseable defense means every bundled id's original stands. */
+function allNoResponse(ids) {
+  const byId = {};
+  for (const id of ids) { byId[id] = { action: 'no-response' }; }
+  return byId;
+}
+
+/** True when there is nothing to challenge (spec §5.1). */
+function nothingToDebate(provisionalRecord) {
+  if (!provisionalRecord || provisionalRecord.judged === false) { return true; }
+  const n = provisionalRecord.findings.filter(f => f.tier === 'Contested' || f.tier === 'Disputed').length;
+  return n === 0;
+}
+
+/** Judges whose provisional adjudications dispute at least one bundled id. */
+function disputingJudges(provisionalRecord, bundledIds) {
+  const ids = new Set(bundledIds);
+  const judges = new Set();
+  for (const f of provisionalRecord.findings) {
+    if (!ids.has(f.id)) { continue; }
+    for (const adj of f.adjudications || []) {
+      if (adj.verdict === 'dispute') { judges.add(adj.judge); }
+    }
+  }
+  return [...judges];
+}
+
+/** Group Contested+Disputed findings by raiser (defense targets). */
+function debateTargets(provisionalRecord, tallyInput) {
+  const claimById = new Map(tallyInput.findings.map(f => [f.id, f]));
+  const byRaiser = {};
+  const previousTier = {};
+  for (const f of provisionalRecord.findings) {
+    if (f.tier !== 'Contested' && f.tier !== 'Disputed') { continue; }
+    previousTier[f.id] = f.tier;
+    const src = claimById.get(f.id) || {};
+    const peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser).map(a => a.verdict);
+    (byRaiser[f.raiser] = byRaiser[f.raiser] || []).push({ id: f.id, claim: src.claim,
+      severity: f.severity, location: src.location, peerVerdicts, disputeReasons: [] });
+  }
+  return { byRaiser, previousTier };
+}
+
+/** The re-vote bundle: defended-or-amended findings ONLY (spec §5.1 — withdrawn never appear). */
+function bundleFor(defenseResults, tallyInput) {
+  const out = [];
+  for (const dr of defenseResults) {
+    for (const [id, resp] of Object.entries(dr.byId)) {
+      if (resp.action !== 'defend' && resp.action !== 'amend') { continue; }
+      const src = tallyInput.findings.find(f => f.id === id) || {};
+      out.push({ id, severity: src.severity, amended: resp.action === 'amend',
+        claim: resp.action === 'amend' ? resp.claim : src.claim,
+        argument: resp.argument || 'defended without extra argument' });
+    }
+  }
+  return out;
+}
+
+module.exports = { applyDebate, decorateRecord, debateRunStatsRows, PAST_TENSE, DEBATE_ROLES,
+  allNoResponse, nothingToDebate, disputingJudges, debateTargets, bundleFor };
