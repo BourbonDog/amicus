@@ -12,7 +12,7 @@ Hand Claude a plan, a design, a diff, an architecture decision, a manuscript —
 
 [![npm version](https://img.shields.io/npm/v/amicus?color=D97757&labelColor=1A1C29)](https://www.npmjs.com/package/amicus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?labelColor=1A1C29)](./LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen?labelColor=1A1C29)](https://nodejs.org)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen?labelColor=1A1C29)](https://nodejs.org)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?labelColor=1A1C29)](./CONTRIBUTING.md)
 
 **[Quick start ↓](#quick-start)** · [Commands](#commands) · [Documentation](#documentation) · [Troubleshooting](#troubleshooting)
@@ -99,12 +99,11 @@ flowchart LR
   findings-by-tier, cost — no chair prose). This is the default artifact handed to the user.
 - For an **editable source**, the accepted edits land in `<stem>-reviewed.<ext>` next to the original.
 
-**Optional council elements** (v2.2.0, all default off): five opt-in behaviors, offered once as a menu at launch — nothing turns on unless you name it, and the confirmation lists exactly what's on.
+**Optional council elements** (v2.2.0, all default off): four opt-in behaviors, offered once as a menu at launch — nothing turns on unless you name it, and the confirmation lists exactly what's on. **Chair verdict scale** *(standard since v2.2.0's follow-ups — no longer opt-in)*: the chair always closes with 3–5 hard questions and one parseable `VERDICT: Ship it | Fix these first | Fundamental rethink` line.
 
 - **Critic seat** — one reviewer swaps to a four-pass adversarial brief (adversarial pass, edge-case hunt, consistency check, executability test). Its findings enter the same anonymized bundle as everyone else's, so the bench disciplines the critic: manufactured negativity lands Disputed and dies in the tally.
 - **Expert lenses** — each reviewer takes a distinct expert perspective; you pick the panel domain (business, technical, customer, financial, or custom). Lens runs never feed the reliability ledger, and the report discloses the weakened cross-review anonymity.
 - **Debate mode** — after cross-review, every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw**, and the disputing judges re-vote. Exactly one rebuttal round, then the final tally.
-- **Chair verdict scale** — the chair closes with 3–5 hard questions and one parseable line: `VERDICT: Ship it | Fix these first | Fundamental rethink`.
 - **Claude in the council** — Claude adds its own fresh review to the bundle so the bench ranks and adjudicates it. Claude is *judged* but never votes or chairs, so the verdict stays independent.
 
 The critic and lens methodologies are adapted from the `/critic` and `/debate` agents in [John Renaldi's product-kit](https://github.com/jrenaldi79/plugin-marketplace) (MIT); the briefing boilerplate lives in [`skills/second-opinion/SEAT-BRIEFS.md`](./skills/second-opinion/SEAT-BRIEFS.md).
@@ -192,7 +191,7 @@ Every path delivers the MCP server and both skills. They differ in what else you
 
 #### With npm — recommended
 
-The canonical path, and the one that gets you the full interactive experience (needs [Node.js](https://nodejs.org) ≥ 18):
+The canonical path, and the one that gets you the full interactive experience (needs [Node.js](https://nodejs.org) ≥ 22.12):
 
 ```bash
 npm install -g amicus
@@ -202,7 +201,7 @@ This is the path to pick unless you specifically want the plugin's slash command
 
 #### With the install script
 
-Same result as npm, one command — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 18):
+Same result as npm, one command — macOS, Linux, or Windows (needs [Node.js](https://nodejs.org) ≥ 22.12):
 
 ```bash
 # macOS / Linux
@@ -333,7 +332,7 @@ Everything you need before your first run, and what's optional.
 
 **Runtime**
 
-- **Node.js ≥ 18** — `node --version` to check. This is the only hard runtime prerequisite.
+- **Node.js ≥ 22.12** — `node --version` to check. This is the only hard runtime prerequisite.
 - **An active Claude Code or Cowork session** — Amicus is orchestrated by Claude; it is not a standalone chatbot.
 
 **Install path & the git toolchain**
