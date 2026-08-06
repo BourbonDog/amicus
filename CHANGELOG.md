@@ -40,8 +40,8 @@ All notable changes to Amicus are documented here. Format follows
   `get-run` reply from a run you navigated away from can no longer repaint the
   run now open.
 - **A valueless `-o`/`--out` on `council verdict` now errors** (`BAD_ARGS`, flag named,
-  exit 1) instead of writing a file literally named `true` — and, under `--render`,
-  crashing in `path.dirname`. Behavior change, per the v4.6.3 R1 ruling.
+  exit 1) instead of crashing mid-write (renameSync `TypeError`) and orphaning a
+  `true.tmp-<pid>` temp file. Behavior change, per the v4.6.3 R1 ruling.
 
 ## [4.6.2] - 2026-08-05
 
