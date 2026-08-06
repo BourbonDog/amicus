@@ -1,6 +1,6 @@
 {
   "name": "amicus",
-  "version": "4.6.2",
+  "version": "4.6.3",
   "description": "Multi-model LLM Council + parallel AI window for Claude Code. Run structured council reviews across Gemini, GPT, DeepSeek and more — or fork a conversation to any model and fold the results back.",
   "author": {
     "name": "Christian Wagner"

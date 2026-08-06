@@ -196,23 +196,24 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 
 ## Phase 11 whole-phase review triage (2026-07-02)
 
-- [ ] **Test-hygiene bundle** — land as one commit next time these test files are open. Null-guard the
-  `.match(...)[1]` frontmatter parses in `tests/skill-second-opinion-docs.test.js` and its reference twin
-  `tests/skill-sidecar-docs.test.js` (a non-matching frontmatter regex currently throws on `[1]` of `null`
-  instead of failing with a readable assertion). Tighten the `/multi-model/i` pin to the quoted "multi-model
-  review" trigger string so it can't false-match unrelated prose. Step-scope the file-wide `::notice::`/
-  `::error::` `toContain` pins in `tests/scripts/publish-workflow.test.js` (currently whole-file, should be
-  scoped to the step they claim to pin). Tighten `tests/scripts/package-manifest.test.js`'s
-  `yml.indexOf('npm publish')` ordering pin, which now matches a B04 comment rather than the actual command
-  — coverage is currently held by the new suite's ordering test (`tests/scripts/publish-workflow.test.js`),
-  so this is cleanup, not a live gap.
+- [x] **Test-hygiene bundle — publish-workflow + package-manifest half.** **DONE (v4.6.3 #110):**
+  the file-wide `::notice::`/`::error::` `toContain` pins in `tests/scripts/publish-workflow.test.js`
+  are now step-scoped (not whole-file) and mutant-proofed, and `tests/scripts/package-manifest.test.js`'s
+  `yml.indexOf('npm publish')` ordering pin was retargeted off the stale B04-comment match onto the
+  actual command.
+- [ ] **Test-hygiene bundle — skill-docs remainder.** Still open (explicitly filed as unopened in
+  #110's own riders). Null-guard the `.match(...)[1]` frontmatter parses in
+  `tests/skill-second-opinion-docs.test.js` and its reference twin `tests/skill-sidecar-docs.test.js`
+  (a non-matching frontmatter regex currently throws on `[1]` of `null` instead of failing with a
+  readable assertion). Tighten the `/multi-model/i` pin to the quoted "multi-model review" trigger
+  string so it can't false-match unrelated prose.
 - [x] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — **DONE**: no `/v0.1` reference
   remains in the file (synced in the Phase 13 docs lane; re-verified 2026-08-03).
-- [ ] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** The pre-check that skips
-  re-publishing to the MCP Registry (`.github/workflows/publish.yml`, "Publish to MCP Registry" step) keys
-  entirely on `STATUS = "200"`. Assert the response body actually carries the expected version (not just a
-  200 status code) to close a fail-unsafe drift if the registry's not-found contract ever changes shape
-  (e.g. a 200 with an empty/error body during the registry's PREVIEW-API schema churn).
+- [x] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** **DONE (v4.6.3 #110):**
+  the skip now fires only on three ANDed conditions — HTTP 200, the body names the exact
+  `$VERSION`, and the body reports status `active` — with every failure path (transport failure,
+  empty body, schema churn, deleted status, missing `_meta`) routing toward publishing, proven by
+  mutant testing and an independent live-body harness.
 
 ## Phase 12 whole-phase review triage (2026-07-02)
 
@@ -240,13 +241,10 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 
 ## Phase 15 whole-phase review triage (2026-07-03)
 
-- [ ] **Per-session `metadata.json` `writeFileAtomic` tmp orphans in session dirs.** B09 introduced roughly
-  30 potential orphan sites (every `writeFileAtomic(path.join(sessionDir, 'metadata.json'), ...)` call
-  across `src/mcp-server.js`, `src/session-manager.js`, `src/utils/session-abort.js`, and the fanout/wave
-  paths) — a kill between the tmp-write and rename leaves a stray `.metadata.json.<pid>.<hex>.tmp` file
-  behind, same failure mode B15's `src/utils/session-index-tmp-sweep.js` already sweeps for
-  `sessions-index.json.*.tmp`. Extend that same age-gated list/sweep pattern to per-session dirs and wire
-  it into `amicus doctor --fix`.
+- [x] **Per-session `metadata.json` `writeFileAtomic` tmp orphans in session dirs.** **DONE
+  (v4.6.3 #109):** `src/utils/session-metadata-tmp-sweep.js` ports the sibling's age-gated
+  list/sweep pattern (cwd-scoped enumeration across taskId + `subagents/<id>` dirs), wired into
+  `amicus doctor --fix` as the `session-metadata-tmp` check.
 - [x] **Resume nonce-echo hazard.** `buildResumeUserMessage` (`src/sidecar/resume.js`) replays the prior
   conversation verbatim, including the previous turn's valid nonced `[SIDECAR_FOLD:<nonce>]` marker — since
   each run mints a fresh nonce, the echoed old marker can't itself trigger a premature fold today, but the
@@ -294,8 +292,14 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 - **Free-picker missing-`name` fallback** (`r.name || r.id`) covered by inspection, not a test pin — one-liner test someday. [nit]
 - **`mode: 'interactive'` spend rows untested directly** — the interactive finalize path shares its ledger-append call site with the tested headless path, but has no dedicated test exercising it through an interactive harness. [nit]
 - **Surface `waveId` (and optionally the council name) in spend rows/rollup** so wave-level cost questions ("what did this council run cost in total?") are answerable directly from `amicus spend` instead of cross-referencing run docs. [S] **DONE (v4.3.0)** — waveId/council/project attributed on every spend row + queryable `spend query` (E3/E4/E9).
-- **`council save` silently shadows a built-in on first save** — the overwrite-notice check only looks at user config, not the built-in bench names, so saving a user council named e.g. `budget` gives no "this now shadows a built-in" notice even though `council list`/`show` later report it as shadowed. Add the notice at save time. [nit]
-- **`-o` with no following value writes a file literally named `true`** (`runVerdict`'s `args.out || './verdict.json'` — when `-o` is the last token, the parser sets `result.out = true`, which is truthy and gets used as the output path). Validate that `--out`/`-o` resolves to a string before using it. [nit]
+- **`council save` silently shadows a built-in on first save.** **DONE (v4.6.3 #109, D7):** the
+  save doc gains an always-present `shadowsBuiltin` field (from `listBuiltinCouncilNames()`), and
+  human mode prints the shadow notice beside the existing `(overwritten)` marker. [nit]
+- **`-o` with no following value writes a file literally named `true`.** **DONE (v4.6.3 #109,
+  R1) — mechanics corrected on investigation:** it never actually wrote a file named `true`;
+  `writeVerdictAtomic` string-coerces the boolean, writes `true.tmp-<pid>`, then `renameSync`
+  throws a TypeError, orphaning that tmp file. Now validated: a valueless `-o`/`--out` errors
+  `BAD_ARGS` with the flag named, exit 1, `--json` enveloped. [nit]
 
 ## Phase 19 smoke note (2026-07-03)
 
@@ -303,7 +307,12 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
 
 ## Phase 20 whole-phase review triage (2026-07-04)
 
-- **Model-resolution failures (`resolveModelFromArgs`/`validateFallbackModel`, `src/utils/start-helpers.js`) `console.error`+`exit(1)` and bypass the `--json` envelope** across the whole surface incl. `start` — route through `failJson(BAD_MODEL)` in a future pass. (Pre-existing class, deliberately not fixed in Phase 20.) [S]
+- **Model-resolution failures bypass the `--json` envelope.** **VERIFIED ALREADY FIXED** (found
+  during the 2026-08-05 v4.6.3 triage, no code change needed): `resolveModelFromArgs`/
+  `validateFallbackModel` were retired (#61 Task 4.7) in favor of `resolveLaunchModel`
+  (`src/utils/start-helpers.js`), which routes every exit site — the no-default miss (`:69-78`),
+  the interactive-picker cancel, and the router `error` result — through `failJson(BAD_MODEL)`
+  under `--json`. [S]
 
 ## v4.1.2 divergent-vendor sweep (2026-07-22)
 
@@ -869,11 +878,10 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   executes (an early-validation "pre-creation" path) would hit the `const` temporal dead zone and
   throw `ReferenceError` on a naive reference to `metaPack` inside the closure. Guard for that if
   `errorWave` ever grows an earlier call site.
-- [ ] **T19-m5 — stale-reply guard missing on `openRun`'s `workspace:get-run` reply.** The debate
-  fetch in `workspace-app.js` already guards against a stale reply; `openRun`'s `get-run` reply
-  doesn't — same F09/unreadable-run class this release closed twice elsewhere. Consequence:
-  `loadPanel` can pair one run's file names with a different run's identity if two opens race.
-  Pre-existing, out of scope for v4.5 — carried as-is.
+- [x] **T19-m5 — stale-reply guard missing on `openRun`'s `workspace:get-run` reply.** **DONE
+  (v4.6.3 #108, D5):** `openRun`'s `get-run` reply now captures `runId` and bails on movement
+  before writing `state.detail` or repainting — the third and final F09-class hole in this family
+  (after the debate fetch and `workspace-panels.js:110`).
 - [ ] **T15-m5 — export the three MCP paramMaps.** `tests/mcp-pack-params.test.js`'s
   `TEST_COUNCIL_PARAM_MAP` is a hand-copied mirror of production and has already diverged once (it
   omits `template`). Export the real council/fanout/start paramMaps from their source modules and
@@ -1110,3 +1118,64 @@ GOA-1; GOA-2/3/4 and GOA-7's prerequisite are independent of it.
   re-probe). Resolved by authoring the direct route (ruling R2); the gpt-pro half
   fixed by audit provenance. Both in v4.6.3 PR1.]
   Disposition: backlog rider, no code change mid-cut (#101's sol-pro choice stands).
+
+---
+
+## v4.6.3 sweep riders (transcribed at the release cut, 2026-08-05)
+
+Transcribed from the "Riders / follow-ups" sections of the four v4.6.3 sweep PR bodies
+(#107–#110) per the spec's §9 rule — a deferral that exists only in a closed PR's text is the
+same lost-deferral class this file exists to prevent. One PR109 rider (the realDeps/baseDeps
+duplication debt) is excluded here: it was resolved within the same sweep by #110's
+`makeBaseDeps()` consolidation, so it never went stale.
+
+- [ ] `tests/sidecar/models-command.test.js:~419`'s fable divergent-missing rendering fixture is
+  now historical (the real fable entry can't reproduce it post-#107; still valid as a rendering
+  test for the fixture case). — #107
+- [ ] Comment-only fixture staleness trio: `provider-default-picker.test.js:132`,
+  `gateway-router.test.js:103`, `gateway-route-catalog.test.js:43` — each comment claims fable
+  "mirrors" an OpenRouter-only entry, now a historical example rather than current fact. — #107
+- [ ] `model-fetcher-anthropic`'s floor-containment test is redundant against the newer exact-list
+  pin (the deleted guard's mandated replacement) — documents the inversion, not a live gap. — #107
+- [ ] `gateway-route-audit.test.js`'s "non-annotated alias" comment wording is defensible as-is
+  (an explicit `gatewayOnly:false` provenance value is what a non-annotated entry produces) but
+  flagged for a future wording pass. — #107
+- [ ] Bare-object candidate/suppression maps (`seen`/`reviewing`/`byRole` in the seats-panel dead
+  logic) inherit `Object.prototype` keys — a model literally named `toString` would be silently
+  suppressed. Pre-existing pattern, effectively unreachable; fix as one `Object.create(null)`
+  family sweep, not piecemeal. — #108
+- [ ] Role `'claude'` is absent from `isReviewing`'s allowlist — unreachable today (claude is
+  rejected as bench/chair/critic), but `isReviewing` is the single place to extend if that
+  reservation ever loosens. — #108
+- [ ] Hidden dependency, documented in `deadSeats`'s docblock: recovered-critic suppression relies
+  on `roleFor`'s critic branch, which the `--critic`/`--lenses` mutual exclusion keeps reachable —
+  revisit if that exclusion ever loosens. — #108
+- [ ] `--out -x` parser asymmetry: `--out -x` consumes `-x` as a value while `-o -x` yields boolean
+  `true` — out of R1's scope (the valueless-flag fix); the parser itself is untouched. — #109
+- [ ] The metadata-tmp sweep reads `process.cwd()` directly instead of doctor's injected `getCwd`
+  — revisit if a `doctor --cwd` mode ever lands. — #109
+- [ ] A directory named like an orphan tmp file lands in the sweep's "unremovable" bucket via
+  EISDIR (inherited from the session-index-tmp-sweep sibling; the throwing-unlink test pins
+  never-crash, not a fix). — #109
+- [ ] Two `doctor` rows share message prose, disambiguated only by row name (deliberate
+  byte-parallel with the sibling sweep; `fixDetail` strings differ). — #109
+- [ ] No combined `overwritten`+`shadowsBuiltin` human-render test for `council save` (hand-traced
+  correct; the `--json` compose case is covered). — #109
+- [ ] The registry pre-check's two body greps (version, status) scan independently — sound for a
+  single-version endpoint, revisit if the registry ever returns collections. — #110
+- [ ] The version grep's BRE dots are unescaped (false-match direction is fail-toward-skip, not
+  real-world exploitable, but worth tightening). — #110
+- [ ] `run-chair.js`'s `ch4` still carries the same duplicated-literal pair (`:186`/`:192`) that
+  `ch1`–`ch3` were converged out of — out of PR4's scope, filed. — #110
+- [ ] The 3-file second-layer `base` duplicate in the doctor suites (optional further
+  `makeBaseDeps()` consolidation beyond this sweep's pass). — #110
+- [ ] `doctor-local-providers`'s preserved `env` omission is comment-marked as deliberate — revisit
+  if it ever drifts unnoticed. — #110
+- [ ] `makeBaseDeps()`'s new test helper sits outside the `src/`/`electron/` lint gates (manually
+  linted clean today; no automated enforcement). — #110
+- [ ] Phase-11 test-hygiene bundle's skill-docs remainder (frontmatter null-guards on
+  `tests/skill-second-opinion-docs.test.js`/`tests/skill-sidecar-docs.test.js`, the `/multi-model/i`
+  pin tighten) — files not opened during this sweep; also tracked in this file's Phase 11 section
+  above. — #110
+- [ ] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
+  generated count or leave it deliberately count-neutral. — #110
