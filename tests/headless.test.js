@@ -132,6 +132,13 @@ describe('Headless Mode Runner', () => {
     const testUserMessage = 'Please complete the task';
     const testTaskId = 'abc12345';
 
+    // Explicit timeout: this test has a deterministic ~2.8s real-timer floor
+    // (2000ms first-poll sleep + 2×400ms usage-settle sleeps in runHeadless),
+    // and as the FIRST test in the suite it also absorbs worker warmup. Jest's
+    // default 5000ms budget left ~2.2s of headroom, which a loaded runner ate:
+    // windows-latest/node-24 leg of CI run 31066903163 (2026-08-06, main@8d0584a)
+    // failed this test at 5012ms with zero assertion failures — pure timing.
+    // 15000 matches the suite's convention for real-timer polling tests.
     it('should start server using SDK startServer', async () => {
       mockCheckHealth.mockResolvedValue(true);
       mockCreateSession.mockResolvedValue('session-123');
@@ -144,7 +151,7 @@ describe('Headless Mode Runner', () => {
       await runHeadless(testModel, testSystemPrompt, testUserMessage, testTaskId, testProject, 5000);
 
       expect(mockStartServer).toHaveBeenCalled();
-    });
+    }, 15000);
 
     describe('SDK Integration', () => {
       it('should use createSession from SDK client', async () => {
