@@ -112,10 +112,10 @@ async function runDoctorChecks(depsOverride = {}) {
   const checks = [];
 
   checks.push(guard('node', 'Node.js', () => {
-    const major = parseInt(String(d.nodeVersion).replace(/^v/, '').split('.')[0], 10);
-    return major >= 18
+    const [maj, min] = String(d.nodeVersion).replace(/^v/, '').split('.').map(n => parseInt(n, 10));
+    return (maj > 22 || (maj === 22 && min >= 12))
       ? { id: 'node', name: 'Node.js', status: 'ok', message: d.nodeVersion, hint: null }
-      : { id: 'node', name: 'Node.js', status: 'error', message: `${d.nodeVersion} (need >=18)`, hint: 'Install Node 18 or newer from https://nodejs.org' };
+      : { id: 'node', name: 'Node.js', status: 'error', message: `${d.nodeVersion} (need >=22.12)`, hint: 'Install Node 22.12 or newer from https://nodejs.org' };
   }));
 
   checks.push(guard('config-dir', 'Config directory', () => (

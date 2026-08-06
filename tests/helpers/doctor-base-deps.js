@@ -46,7 +46,7 @@
  */
 function makeBaseDeps({ omit = [], ...overrides } = {}) {
   const base = {
-    nodeVersion: 'v20.0.0',
+    nodeVersion: 'v22.12.0',
     readApiKeys: () => ({ openrouter: true, google: false, openai: false, anthropic: false, deepseek: false }),
     readApiKeyValues: () => ({ openrouter: 'sk-or-good' }),
     checkOpenRouterCredit: () => Promise.resolve({ warning: null, isFreeTier: false, limitRemaining: 5, limit: 10, usage: 5 }),

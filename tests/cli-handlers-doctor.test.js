@@ -18,6 +18,16 @@ describe('runDoctorChecks', () => {
     expect(byId(checks).keys.status).toBe('ok');
   });
 
+  test.each(['v22.0.0', 'v20.0.0'])('node %s is below the real 22.12 floor → error (final review)', async (nodeVersion) => {
+    const checks = await runDoctorChecks({ ...allGood, nodeVersion });
+    expect(byId(checks).node.status).toBe('error');
+  });
+
+  test.each(['v22.12.0', 'v23.1.0'])('node %s meets the 22.12 floor → ok (final review)', async (nodeVersion) => {
+    const checks = await runDoctorChecks({ ...allGood, nodeVersion });
+    expect(byId(checks).node.status).toBe('ok');
+  });
+
   test('M14: local-providers check is injected via allGood — never falls through to the real probe', async () => {
     const checks = await runDoctorChecks(allGood);
     const c = byId(checks)['local-providers'];
