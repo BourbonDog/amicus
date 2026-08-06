@@ -31,6 +31,9 @@ const allGood = {
   // B15: deterministic fixture — without this the check would fall through to
   // the real config dir on whatever machine runs the suite (non-deterministic).
   listSessionIndexTmpFiles: () => [],
+  // D8: same rationale, one level down — without this the metadata sweep
+  // would fall through to the real cwd's .claude/amicus_sessions.
+  listSessionMetadataTmpFiles: () => [],
   // engine-mcp: deterministic scan — without it the check probes the real
   // machine's installs (non-deterministic). 'none' → the check reports ok.
   scanEngineInstalls: () => ({ installs: [], mcpLaunch: 'none' }),

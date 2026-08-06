@@ -66,4 +66,10 @@ describe('unverified-cause voice (v4.6 Plan 3)', () => {
     expect(hints.sweepSessionIndexTmp).toMatch(/left by an interrupted write/);
     expect(hints.sweepSessionIndexTmp).not.toMatch(/unverified/i);
   });
+
+  // v4.6.3 PR3 Task 3 (D8): same ruling applies to the metadata sibling sweep.
+  test('sweepSessionMetadataTmp keeps its confident voice: the cause is definitional, not guessed', () => {
+    expect(hints.sweepSessionMetadataTmp).toMatch(/left by an interrupted write/);
+    expect(hints.sweepSessionMetadataTmp).not.toMatch(/unverified/i);
+  });
 });

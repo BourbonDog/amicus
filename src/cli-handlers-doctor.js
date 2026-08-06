@@ -80,10 +80,14 @@ function realDeps() {
     now: () => Date.now(),
     listSessionIndexTmpFiles: () => tmpSweep.listSessionIndexTmpFiles(), // B15
     unlinkSessionIndexTmp: (n) => tmpSweep.unlinkSessionIndexTmp(n),
+    listSessionMetadataTmpFiles: () => metaSweep.listSessionMetadataTmpFiles(), // D8
+    unlinkSessionMetadataTmp: (n) => metaSweep.unlinkSessionMetadataTmp(n),
   };
 }
 // B15: sweep logic in utils/session-index-tmp-sweep.js (mirrors mcp-legacy's split).
 const tmpSweep = require('./utils/session-index-tmp-sweep');
+// D8: per-session metadata.json sibling sweep — utils/session-metadata-tmp-sweep.js.
+const metaSweep = require('./utils/session-metadata-tmp-sweep');
 
 /** Run one guarded check; a thrown fn becomes an error line. */
 function guard(id, name, fn) {
@@ -200,6 +204,8 @@ async function runDoctorChecks(depsOverride = {}) {
   checks.push(guard('mcp-legacy', 'Legacy sidecar MCP entry', () => mcpChecks.evaluateLegacyMcpEntry(d)));
 
   checks.push(guard('sessions-index-tmp', 'Session index tmp files', () => tmpSweep.evaluateSessionIndexTmpSweep(d)));
+
+  checks.push(guard('session-metadata-tmp', 'Session metadata tmp files', () => metaSweep.evaluateSessionMetadataTmpSweep(d)));
 
   // #43: OpenRouter credit/free-tier — warns (never errors); skipped when no key.
   checks.push(await guardAsync('openrouter-credit', 'OpenRouter credit', async () => {

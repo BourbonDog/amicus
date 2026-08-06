@@ -284,6 +284,7 @@ src/
 │   ├── session-index-tmp-sweep.js
 │   ├── session-index.js  # Global session index (issue #40).
 │   ├── session-lock.js
+│   ├── session-metadata-tmp-sweep.js
 │   ├── session-path.js  # Session path resolution.
 │   ├── shared-server.js
 │   ├── spend-ledger.js
@@ -642,6 +643,7 @@ evals/
 | `utils/session-index-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionIndexTmpFiles()`, `unlinkSessionIndexTmp()`, `evaluateSessionIndexTmpSweep()` |
 | `utils/session-index.js` | Global session index (issue #40). | `INDEX_FILENAME()`, `recordSession()`, `lookupSessionProject()` |
 | `utils/session-lock.js` |  | `acquireLock()`, `releaseLock()`, `isLockStale()`, `isPidAlive()` |
+| `utils/session-metadata-tmp-sweep.js` |  | `AGE_THRESHOLD_MS()`, `listSessionMetadataTmpFiles()`, `unlinkSessionMetadataTmp()`, `evaluateSessionMetadataTmpSweep()` |
 | `utils/session-path.js` | Session path resolution. | `safeSessionDir()`, `safeSessionDirUnder()` |
 | `utils/shared-server.js` |  | `SharedServerManager()` |
 | `utils/spend-ledger.js` |  | `appendSpend()`, `readSpendRows()`, `SPEND_LEDGER_FILE()`, `SPEND_LEDGER_SCHEMA_VERSION()` |
