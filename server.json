@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://bourbondog.github.io/amicus/",
-  "version": "4.6.2",
+  "version": "4.6.3",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "amicus",
-      "version": "4.6.2",
+      "version": "4.6.3",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

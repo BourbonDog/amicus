@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.6.3] - 2026-08-05
+
 ### Added
 
 - **`fable` now carries an authored direct-Anthropic route** (`anthropic/claude-fable-5`,
