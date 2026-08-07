@@ -231,17 +231,26 @@ async function runCouncil(options, deps = {}) {
       packet, degrade, statsFn, isSignalled: () => signalled,
     });
     if (chairRes.aborted !== null) { return finalize(chairRes.aborted); }
-    const { chairLeg, actualChair, chairText, chairConformance, overallVerdict } = chairRes;
+    const { chairLeg, actualChair, chairText, chairConformance, overallVerdict, chairRows, chairAttempts } = chairRes;
 
     // ---- Final tally (chair row included) + ledger + artifacts ----
     const chairStats = chairLeg ? asm.buildRunStatsEntry({
       leg: chairLeg, model: actualChair, role: 'chair', wasChair: true,
       conformance: chairConformance,
     }) : null;
+    // v4.7 D2: a give-up (no chairLeg) with at least one recorded attempt gets
+    // an explicit error row so the walk's outcome isn't silently absorbed.
+    // Keyed on chairAttempts, NOT chairRows — attempts that die pre-wave (no
+    // money spent) record an outcome but yield no row (errata E3).
+    const giveUpRow = (!chairLeg && chairAttempts && chairAttempts.length)
+      ? asm.buildRunStatsEntry({ leg: null, model: o.chair, role: 'chair', wasChair: false })
+      : null;
     // Built on the (possibly debated) input so the debate's amended claims, replaced
     // adjudications and rebuttal/revote runStats rows all reach the final record.
     const finalInput = { ...debatedInput, meta: { ...debatedInput.meta, chair: actualChair || o.chair } };
     if (chairStats) { finalInput.runStats = [...(finalInput.runStats || []), chairStats]; }
+    finalInput.runStats = [...(finalInput.runStats || []), ...chairRows];
+    if (giveUpRow) { finalInput.runStats = [...finalInput.runStats, giveUpRow]; }
     const record = tally(finalInput);
     if (debateFindings) { decorateRecord(record, debateFindings); }
     if (!o.lenses) {

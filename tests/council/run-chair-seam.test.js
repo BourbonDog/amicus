@@ -100,6 +100,15 @@ describe('abort-cascade registration + degraded propagation across the seam', ()
     expect(fs.existsSync(path.join(runDir(), 'tally.json'))).toBe(true);
     expect(readInput().runStats.some(r => r.wasChair)).toBe(false);
     expect(runState.readRun(runDir()).chair).toBe('deepseek');  // give-up keeps the requested chair
+    // v4.7 D2: give-up still leaves NO wasChair:true row, and now yields
+    // exactly one explicit error row for the requested chair so the walk's
+    // outcome isn't silently absorbed.
+    const rows = readInput().runStats;
+    expect(rows.some(r => r.wasChair === true)).toBe(false);
+    const giveUpRows = rows.filter(r => r.role === 'chair' && r.status === 'error');
+    expect(giveUpRows).toHaveLength(1);
+    expect(giveUpRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, usage: null });
+    expect('waveId' in giveUpRows[0]).toBe(false);
   });
 });
 

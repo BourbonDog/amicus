@@ -197,6 +197,84 @@ describe('chairAttempts[] recording (LC-5)', () => {
   });
 });
 
+// v4.7 D2: chair-class rows beyond the primary — a chair-attempt row per
+// FAILED attempt that produced a wave (spend is attributable), a repair row
+// for a launched ch4 VERDICT re-prompt, and a give-up error row when the
+// whole walk dies. The successful attempt's leg is never duplicated here —
+// it becomes the primary 'chair' row (wasChair:true) via chairStats in run.js.
+describe('chair-class runStats rows (v4.7 D2)', () => {
+  test('a failed ch1 followed by a successful ch2 yields one chair-attempt row carrying ch1 usage', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error', 0.02, 'abc123-ch1')], 1, 'error');
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', 'Synthesis.\nVERDICT: Ship it', 'complete', 0.03, 'abc123-ch2')]);
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const attemptRows = input.runStats.filter(r => r.role === 'chair-attempt');
+    expect(attemptRows).toHaveLength(1);
+    expect(attemptRows[0]).toMatchObject({
+      model: 'deepseek', wasChair: false, status: 'error', waveId: 'abc123-ch1',
+    });
+    expect(attemptRows[0].usage.cost.amount).toBeCloseTo(0.02);
+    // The successful ch2 leg becomes the primary chair row, not a second chair-attempt row.
+    expect(input.runStats.find(r => r.wasChair))
+      .toMatchObject({ model: 'deepseek', role: 'chair', waveId: 'abc123-ch2' });
+  });
+
+  test('a launched ch4 repair yields a repair row; an unlaunched one yields none', async () => {
+    // Scenario A: no VERDICT on the first pass -> ch4 launches and produces a
+    // leg -> a role:'repair' row is added.
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose only, no verdict.', 'complete', 0.03, 'abc123-ch1')]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'VERDICT: Ship it', 'complete', 0.01, 'abc123-ch4')]);
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(0);
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const repairRows = input.runStats.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(1);
+    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, waveId: 'abc123-ch4' });
+
+    // Scenario B: a VERDICT line lands on the first attempt -> ch4 never
+    // launches -> no repair row at all.
+    const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'council-chair-repair2-'));
+    try {
+      const script2 = happyScript();
+      script2['abc123-ch1'] = () =>
+        okWave([mkLeg('deepseek', 'Synthesis.\nVERDICT: Ship it', 'complete', 0.03, 'abc123-ch1')]);
+      const { exitCode: exit2 } = await runCouncil(baseOptions(tmp2), {
+        launchers: scriptedLaunchers(script2), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+      });
+      expect(exit2).toBe(0);
+      const input2 = JSON.parse(fs.readFileSync(path.join(tmp2, 'council-abc123', 'tally-input.json'), 'utf-8'));
+      expect(input2.runStats.filter(r => r.role === 'repair')).toHaveLength(0);
+    } finally {
+      fs.rmSync(tmp2, { recursive: true, force: true });
+    }
+  });
+
+  test('give-up after a walk: chairRows carry every failed attempt; no row has wasChair true', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error', 0.02, 'abc123-ch1')], 1, 'error');
+    script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'timeout', 0.01, 'abc123-ch2')], 1, 'error');
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.some(r => r.wasChair === true)).toBe(false);
+    const attemptRows = input.runStats.filter(r => r.role === 'chair-attempt');
+    expect(attemptRows.map(r => r.waveId)).toEqual(['abc123-ch1', 'abc123-ch2']);
+    const giveUpRows = input.runStats.filter(r => r.role === 'chair' && r.status === 'error');
+    expect(giveUpRows).toHaveLength(1);
+    expect(giveUpRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, usage: null });
+    expect('waveId' in giveUpRows[0]).toBe(false);
+  });
+});
+
 describe('chair VERDICT-line repair (one re-prompt)', () => {
   // v4.3 Task 3 (spec §7.2): the ch4 VERDICT-repair launch is a SEPARATE call
   // site from the ch1/ch2/ch3 chain (attemptChair) — its own attribution wiring.
