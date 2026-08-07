@@ -18,9 +18,12 @@ const { deriveChain } = require('./fallback-chains');
 
 /**
  * Append ONE attributed ledger row for a single attempt (spec 6.2/7.1). At
- * `attempt:0` this is byte-identical to today's pre-fallback appendSpend row
- * (same fields, sourced from `leg.attempt`/`leg.substitutedFor`/
- * `leg.retryOfWaveId`, all undefined -> omitted for a plain leg). A
+ * `attempt:0` this row's LINKAGE fields (attempt/substitutedFor/retryOfWaveId,
+ * all undefined -> omitted for a plain leg) are byte-identical to today's
+ * pre-fallback appendSpend row. v4.7 F8 D16 adds `tag` — a NULLABLE dim, not a
+ * linkage field, so every row now carries it (null-default when the leg was
+ * never tagged) rather than omitting it; the byte-identity claim above applies
+ * only to the linkage-field convention, not to the full row shape. A
  * substitution (`attempt` param > 0, the LOOP's attempt index) overrides
  * `row.attempt`/`row.substitutedFor` with the substitution's own values.
  * Best-effort — never throws, never affects the leg. `deps.spendDir` (tests)
@@ -42,6 +45,7 @@ function recordAttemptSpend({ doc, leg, currentModel, legId, waveId, project, at
       councilRunId: leg && leg.councilRunId, councilName: leg && leg.councilName,
       project, attempt: leg && leg.attempt, substitutedFor: leg && leg.substitutedFor,
       retryOfWaveId: leg && leg.retryOfWaveId,
+      tag: (leg && leg.tag) || null,
     };
     if (attempt > 0) { row.attempt = attempt; row.substitutedFor = originalModel; }
     appendSpend(row, deps.spendDir ? { dir: deps.spendDir } : undefined);

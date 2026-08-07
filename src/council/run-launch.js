@@ -63,10 +63,13 @@ function createLaunchers(deps = {}) {
   /**
    * @param {{models: string[], prompt: string, project: string, waveId: string,
    *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string,
-   *   councilRunId?: string, councilName?: string, fallback?: object, catalog?: Array}} opts
+   *   councilRunId?: string, councilName?: string, tag?: string, fallback?: object,
+   *   catalog?: Array}} opts
    *   councilRunId/councilName (v4.3 Task 3, spec §7.2) are additive attribution
    *   ids forwarded verbatim into the runFanout call so it can stamp them onto
-   *   every leg. fallback/catalog (v4.3 Task 18, spec §6.2) are likewise
+   *   every leg. tag (v4.7 F8 D16) rides the same forward — every call site
+   *   below that sets councilRunId/councilName sets `tag: o.tag` alongside it.
+   *   fallback/catalog (v4.3 Task 18, spec §6.2) are likewise
    *   additive/opt-in — omitted by callers that must never substitute (the
    *   chair, debate legs); run-stages.js's Stage-1/Stage-2 launches pass them.
    * @returns {Promise<{wave: object|null, exitCode: number}>}
@@ -111,6 +114,10 @@ function createLaunchers(deps = {}) {
       noValidateModel: opts.noValidateModel,
       councilRunId: opts.councilRunId,
       councilName: opts.councilName,
+      // v4.7 F8 D16: rides the SAME forward as councilRunId/councilName above —
+      // undefined when no --tag, so stampLegAttribution's `if (options.tag)`
+      // guard (fanout-wave-io.js) simply no-ops, byte-identical to today.
+      tag: opts.tag,
       // v4.3 Task 18 (spec §6.2): additive/opt-in. Callers that must never
       // substitute (run-chair.js, run-debate.js) simply omit these — runLeg's
       // fallback path only activates when `fallback.enabled` is true.

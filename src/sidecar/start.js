@@ -230,6 +230,11 @@ async function startSidecar(options) {
         gateway: String(model).startsWith('openrouter/') ? 'openrouter' : 'direct',
         // (To also attribute v4.2 'local': thread the resolved route gateway — dropped today at
         // cli-handlers-run.js:47 — into createSessionMetadata and read `meta.gateway`, as continue.js:111 does.)
+        // v4.7 F8 D16: same in-scope-value rule as gateway above — `m` is the
+        // just-re-read metadata (line 214), which carries `tag` when
+        // createSessionMetadata stored one (absent otherwise); `|| null` folds
+        // that into spend-ledger.js's null-not-absent dim convention.
+        tag: m.tag || null,
       });
     } catch { /* best-effort */ }
   }

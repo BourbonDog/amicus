@@ -169,6 +169,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
     const common = { project: o.runDir, timeout: o.timeout, gateway: o.gateway,
       noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
       councilRunId: o.runId, councilName: o.councilName,
+      tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
       fallback: o.fallback, catalog: o.catalog,
       waveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, prompt: briefingFor(o, unit) };
     // Dispatch by UNIT TYPE, not model count (spec §4: bench is always a wave —

@@ -78,6 +78,18 @@ describe('council leg spend attribution (spec §7.2)', () => {
     expect(seen).toMatchObject({ councilRunId: 'c1', councilName: 'default' });
   });
 
+  // D16 (v4.7 F8): tag rides the SAME forward as councilRunId/councilName —
+  // same DI seam, same assertion shape as the test directly above.
+  test('launchSolo forwards tag into the runFanout options (D16, same forward as councilRunId/councilName)', async () => {
+    let seen = null;
+    const launchers = createLaunchers({ fanoutFn: async (opts) => { seen = opts; return { status: 'complete', legs: [] }; } });
+    await launchers.launchSolo({
+      role: 'chair', model: 'deepseek', councilRunId: 'c1', councilName: 'default', tag: 'sprint42', project: tmp(),
+      systemPrompt: 's', userMessage: 'u', prompt: 'p',
+    });
+    expect(seen).toMatchObject({ councilRunId: 'c1', councilName: 'default', tag: 'sprint42' });
+  });
+
   describe('real fanout chain (AMICUS_CONFIG_DIR ledger dir, no live server)', () => {
     let prevConfigDir;
     let ledgerDir;
@@ -129,6 +141,21 @@ describe('council leg spend attribution (spec §7.2)', () => {
       const rows = readSpendRows(ledgerDir);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ op: 'leg', councilRunId: 'c2', councilName: 'default', model: 'deepseek' });
+    });
+
+    // D16 (v4.7 F8): a council leg launched with BOTH councilRunId and tag
+    // carries both on its ledger row — the two attribution dims stamped in
+    // the same stampLegAttribution pass (fanout-wave-io.js) must not clobber
+    // each other.
+    test('a council leg launched with a tag carries both councilRunId and tag', async () => {
+      await runFanout({
+        models: 'deepseek', prompt: 'do the thing', project,
+        includeContext: false, noValidateModel: true, json: true, quiet: true,
+        waveId: 'ledgerwave-tag', councilRunId: 'c3', councilName: 'default', tag: 'sprint42',
+      });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ op: 'leg', councilRunId: 'c3', councilName: 'default', tag: 'sprint42' });
     });
 
     // An ordinary (non-council) fanout caller must see byte-for-byte the same

@@ -65,6 +65,31 @@ describe('groupRows', () => {
     const g = groupRows(rows, 'council');
     expect(g.some(x => x.key === '(unattributed)')).toBe(true);
   });
+
+  // D16 (v4.7 F8): tag is GROUP_DIMS' new last entry. Real keys ('a') AND
+  // untagged rows (null -> '(unattributed)') must both survive grouping — this
+  // is the mutation-kill assertion: delete rowKey's `case 'tag':` arm and
+  // EVERY row (including the two genuinely tagged 'a') falls through to the
+  // default arm and collapses into a single '(unattributed)' bucket, which
+  // would make `g).toHaveLength(2)` and `a.runs === 2` both fail.
+  test('group-by tag buckets real keys and null under (unattributed) — kills the rowKey default-arm mutant', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spend-q-tag-'));
+    const u = (amt) => ({ tokens: { input: 10, output: 5 }, cost: { amount: amt, currency: 'USD', source: 'reported' } });
+    appendSpend({ taskId: 'ta', model: 'gpt', mode: 'leg', usage: u(0.10), op: 'leg', tag: 'a' }, { dir });
+    appendSpend({ taskId: 'tb', model: 'gpt', mode: 'leg', usage: u(0.05), op: 'leg', tag: 'a' }, { dir });
+    appendSpend({ taskId: 'tc', model: 'gpt', mode: 'leg', usage: u(0.20), op: 'leg' }, { dir }); // no tag -> null
+    const tagRows = readSpendRows(dir);
+    const g = groupRows(tagRows, 'tag');
+    expect(g).toHaveLength(2);
+    const a = g.find(x => x.key === 'a');
+    const unattributed = g.find(x => x.key === '(unattributed)');
+    expect(a).toBeDefined();
+    expect(a.runs).toBe(2);
+    expect(a.amount).toBeCloseTo(0.15, 5);
+    expect(unattributed).toBeDefined();
+    expect(unattributed.runs).toBe(1);
+    expect(unattributed.amount).toBeCloseTo(0.20, 5);
+  });
 });
 
 describe('computeWasted (spec 6.3, resolved Q6)', () => {

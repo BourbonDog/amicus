@@ -85,6 +85,31 @@ describe('appendSpend', () => {
     expect(Object.keys(readSpendRows(dir)[0])).not.toContain('subtreeUnknown');
   });
 
+  // D16 (v4.7 F8): `tag` is DELIBERATELY the opposite convention from
+  // subtreeUnknown above — a nullable dimension (like councilRunId/project),
+  // so it is ALWAYS present (null when absent), never omitted. This is what
+  // lets `--group-by tag` bucket every historical row, tagged or not, instead
+  // of silently dropping rows that predate the dimension.
+  it('an ordinary (untagged) leg carries tag:null — PRESENT, not omitted (contrast with subtreeUnknown above)', () => {
+    const dir = mkTmpDir();
+    appendSpend({
+      taskId: 't2b', model: 'm', mode: 'leg',
+      usage: { tokens: {}, cost: { amount: 0.02, currency: 'USD', source: 'reported' } },
+    }, { dir });
+    const row = readSpendRows(dir)[0];
+    expect('tag' in row).toBe(true);
+    expect(row.tag).toBeNull();
+  });
+
+  it('carries the given tag on the row', () => {
+    const dir = mkTmpDir();
+    appendSpend({
+      taskId: 't2c', model: 'm', mode: 'leg', tag: 'sprint42',
+      usage: { tokens: {}, cost: { amount: 0.02, currency: 'USD', source: 'reported' } },
+    }, { dir });
+    expect(readSpendRows(dir)[0].tag).toBe('sprint42');
+  });
+
   it('is a no-op (never throws) when usage is null — nothing priced to record', () => {
     const dir = mkTmpDir();
     expect(() => appendSpend({ taskId: 't1', model: 'opus', mode: 'headless', usage: null }, { dir })).not.toThrow();

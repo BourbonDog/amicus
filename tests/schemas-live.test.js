@@ -72,6 +72,40 @@ describe('spend schema still validates the enriched spend doc', () => {
     expect(Object.keys(doc.wasted.byStatus).length).toBeGreaterThan(0);
     expect(validate(doc)).toBe(true);
   });
+
+  // D16 (v4.7 F8) NEW PIN: spend.schema.json's groupBy enum is a HAND-COPY
+  // that nothing else pins — this locks it to spend-query.js's GROUP_DIMS
+  // (the single source of truth cli-handlers-spend.js/mcp-tools.js already
+  // share) so a future 7th dimension added to GROUP_DIMS and forgotten here
+  // fails loudly instead of drifting silently.
+  test('groupBy enum is lockstepped to spend-query.js GROUP_DIMS', () => {
+    const { GROUP_DIMS } = require('../src/spend-query');
+    const schema = load('spend.schema.json');
+    expect(schema.properties.groupBy.enum).toEqual(GROUP_DIMS);
+  });
+
+  // D16: a real groupBy:'tag' doc (tagged + untagged rows) validates against
+  // the schema now that 'tag' is a live GROUP_DIMS member.
+  test('a doc grouped by tag validates', () => {
+    const { appendSpend, readSpendRows } = require('../src/utils/spend-ledger');
+    const { buildSpendDoc, groupRows, computeWasted, aggregateSpend } = require('../src/cli-handlers-spend');
+    const dir = tmp();
+    const usage = (amount) => ({ tokens: { input: 10, output: 5 }, cost: { amount, currency: 'USD', source: 'reported' } });
+    appendSpend({ taskId: 'tag-a', model: 'gpt', mode: 'leg', usage: usage(0.10), op: 'leg', tag: 'sprint42' }, { dir });
+    appendSpend({ taskId: 'tag-b', model: 'gpt', mode: 'leg', usage: usage(0.20), op: 'leg' }, { dir });
+
+    const rows = readSpendRows(dir);
+    const { total, byModel } = aggregateSpend(rows);
+    const groups = groupRows(rows, 'tag');
+    const wasted = computeWasted(rows);
+    const doc = buildSpendDoc({ total, byModel, windowDays: null, credit: null,
+      filters: {}, groupBy: 'tag', groups, wasted });
+
+    expect(doc.groupBy).toBe('tag');
+    expect(doc.groups.some(g => g.key === 'sprint42')).toBe(true);
+    expect(doc.groups.some(g => g.key === '(unattributed)')).toBe(true);
+    expect(validate(doc)).toBe(true);
+  });
 });
 
 /** Write one session's metadata.json (mirrors tests/mcp-status-enrichment.test.js). */

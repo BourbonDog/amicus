@@ -835,6 +835,32 @@ describe('runFanout orchestrator', () => {
       expect(localRow).toMatchObject({ gateway: 'local' });
       expect(openrouterRow).toMatchObject({ gateway: 'openrouter' });
     });
+
+    // D16 (v4.7 F8): a fanout launched with --tag stamps that tag onto every
+    // leg (stampLegAttribution, fanout-wave-io.js) so each leg's ledger row
+    // carries it — driven through the REAL runFanout -> runLeg -> appendSpend
+    // chain, same as the wave/gateway rows above.
+    it('a fanout launched with tag carries it on every leg ledger row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave4', tag: 'sprint42' });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) { expect(row.tag).toBe('sprint42'); }
+    });
+
+    // D16: the convention pin at the other end — an ordinary (untagged) fanout
+    // leg's row carries tag:null (present, not omitted — spend-ledger.js's
+    // nullable-dim convention), not undefined/absent.
+    it('an untagged fanout leg carries tag:null on its ledger row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave5' });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect('tag' in row).toBe(true);
+        expect(row.tag).toBeNull();
+      }
+    });
   });
 
   // v4.5 final-review F2: an MCP-spawned child fanout process never receives

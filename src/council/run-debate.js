@@ -26,7 +26,8 @@ function legOpts(ctx, waveId) {
   return { project: ctx.scratchDir, waveId, timeout: ctx.o.timeout, gateway: ctx.o.gateway,
     noValidateModel: ctx.o.noValidateModel, noCostGate: ctx.o.noCostGate,
     // v4.3 Task 3 (spec §7.2): attribution ids for every defense/re-vote leg.
-    councilRunId: ctx.o.runId, councilName: ctx.o.councilName };
+    councilRunId: ctx.o.runId, councilName: ctx.o.councilName,
+    tag: ctx.o.tag }; // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
 }
 
 /**

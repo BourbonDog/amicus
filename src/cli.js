@@ -636,7 +636,7 @@ Options for 'spend':
   --model <id-or-prefix>        Only rows whose model starts with this
   --op <start|continue|resume|leg>   Only rows with this operation
   --failed                      Only non-complete (wasted) rows
-  --group-by <model|wave|council|project|op|day>   Rollup dimension (default model)
+  --group-by <model|wave|council|project|op|day|tag>   Rollup dimension (default model)
   --rows                        Include matching raw rows (capped at 1000)
   --json                        Machine-readable output (versioned spend doc)
   Reads ~/.config/amicus/spend-ledger.jsonl (one row per completed run/leg).

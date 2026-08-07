@@ -81,6 +81,7 @@ function stampLegAttribution(legs, options) {
   if (options.councilRunId || options.councilName) {
     legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
   }
+  if (options.tag) { legs.forEach(l => { l.tag = options.tag; }); }
 }
 
 module.exports = { writeWaveMetadata, writeWaveDoc, finishWave, stampLegAttribution };
