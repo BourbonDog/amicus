@@ -160,5 +160,10 @@ describe('cost ceiling still skips the chair without launching it', () => {
     expect(chairStage(run).status).toBe('skipped');
     expect(JSON.parse(fs.readFileSync(path.join(runDir(), 'verdict.json'), 'utf-8')).overallVerdict)
       .toBeNull();
+    // v4.7 D2 review fix: a cost-skipped chair never calls recordAttempt, so
+    // chairAttempts AND chairRows both stay empty — zero rows of any
+    // chair-class role, not just no wasChair:true row.
+    expect(readInput().runStats.filter(r => ['chair', 'chair-attempt', 'repair'].includes(r.role)))
+      .toHaveLength(0);
   });
 });

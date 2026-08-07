@@ -273,6 +273,32 @@ describe('chair-class runStats rows (v4.7 D2)', () => {
     expect(giveUpRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, usage: null });
     expect('waveId' in giveUpRows[0]).toBe(false);
   });
+
+  // v4.7 D2 review fix (errata E3): both attempts die PRE-WAVE — no leg
+  // document at all (a pre-flight refusal, the errorDoc path classifyChairAttempt
+  // already models; scriptedLaunchers surfaces this as {wave: null, ...}, which
+  // launchSolo collapses to leg:null, so attemptChair's rawLeg is null too — no
+  // money spent, no chair-attempt row). chairAttempts still records both
+  // outcomes. This pins the give-up row to chairAttempts.length, NOT
+  // chairRows.length: keying on chairRows would wrongly suppress the give-up
+  // row here since chairRows is empty.
+  test('give-up when both attempts die pre-wave: zero chair-attempt rows, chairAttempts still length 2, one give-up row', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => ({ wave: null, exitCode: 1, errorDoc: { message: 'OpenRouter spend limit' } });
+    script['abc123-ch2'] = () => ({ wave: null, exitCode: 1, errorDoc: { message: 'OpenRouter spend limit' } });
+    const { exitCode, run } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(run.chairAttempts).toHaveLength(2);
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    expect(input.runStats.filter(r => r.role === 'chair-attempt')).toHaveLength(0);
+    const giveUpRows = input.runStats.filter(r => r.role === 'chair');
+    expect(giveUpRows).toHaveLength(1);
+    expect(giveUpRows[0]).toMatchObject({
+      model: 'deepseek', status: 'error', wasChair: false, usage: null,
+    });
+  });
 });
 
 describe('chair VERDICT-line repair (one re-prompt)', () => {
