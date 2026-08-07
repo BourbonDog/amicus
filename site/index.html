@@ -94,7 +94,11 @@ nav.nav-vis{transform:none}
 #release-pill:hover{background:rgba(217,119,87,.2);border-color:rgba(217,119,87,.35)}
 h1{font-weight:800;font-size:clamp(3.4rem,6vw,5.6rem);line-height:.92;letter-spacing:-.05em;margin-bottom:1.4rem}
 h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero-sub{font-size:clamp(1.5rem,2.8vw,2.1rem);font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:1.4rem;color:var(--t1)}
+.hero-sub{font-size:clamp(1.3rem,2vw,1.45rem);font-weight:700;letter-spacing:-.02em;line-height:1.25;margin-bottom:1rem;color:var(--t1)}
+.hero-flow{font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:1.9;color:var(--t2);margin-bottom:1.6rem;display:flex;flex-wrap:wrap;align-items:center;gap:.1rem .55rem}
+.hero-flow .step{white-space:nowrap}
+.hero-flow .arw{color:var(--accent);font-weight:600}
+.hero-flow .last{color:var(--green)}
 .hero-desc{font-size:1.05rem;color:#c5c5c3;line-height:1.65;margin-bottom:2.2rem}
 .hero-btns{display:flex;gap:.6rem;flex-wrap:wrap}
 .cmd{display:flex;align-items:center;gap:.6rem;padding:.55rem .9rem;border-radius:7px;background:var(--s1);border:1px solid var(--border2);font-family:'IBM Plex Mono',monospace;font-size:.82rem;color:var(--t1);cursor:pointer;transition:border-color .15s}
@@ -103,6 +107,10 @@ h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--ac
 .cmd .d{color:var(--t3);user-select:none}
 .cmd .cp{flex-shrink:0;margin-left:auto;font-size:.6rem;color:var(--t3);padding:.12rem .35rem;border:1px solid var(--border);border-radius:3px;font-family:'IBM Plex Mono',monospace;transition:color .15s}
 .cmd:hover .cp{color:var(--t2)}
+.cmd-steps{align-items:flex-start;padding:.7rem .9rem}
+.cmd-steps .cmd-txt{display:flex;flex-direction:column;gap:.35rem}
+.cmd-steps .cmd-line{display:flex;align-items:baseline;gap:.5rem}
+.cmd-note{font-size:.66rem;font-weight:500;color:var(--t3);white-space:nowrap}
 .btn-o{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1rem;border-radius:7px;border:1px solid var(--border2);font-size:.82rem;font-weight:600;transition:background .15s}
 .btn-o:hover{background:var(--s1)}
 .btn-o svg{width:15px;height:15px;fill:currentColor}
@@ -282,6 +290,9 @@ h2.v .w-anim{opacity:1;transform:none}
   .hero-btns .cmd{flex:1;min-width:0}
   /* Long slash-command wraps instead of overflowing the narrow mobile row */
   .cmd .cmd-txt{white-space:normal;overflow-wrap:anywhere}
+  /* Two-step install box: drop the inline note, keep both commands */
+  .cmd-note{display:none}
+  .cmd-steps .cmd-txt{gap:.25rem}
   /* Code blocks: scroll instead of overflow, smaller font on mobile */
   pre,code,[style*="font-family:'IBM Plex Mono'"]{overflow-x:auto;max-width:100%}
   pre{font-size:.68rem!important;padding:1rem 1.1rem!important}
@@ -350,15 +361,16 @@ h2.v .w-anim{opacity:1;transform:none}
       </a>
     </div>
     <h1 class="rv">Every model.<br><em>One verdict.</em></h1>
-    <p class="hero-sub rv">LLM Council. Parallel window.</p>
-    <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em>: Amicus routes it through models from different families, has them cross-review each other anonymously, and a non-Claude chair synthesizes the verdict. Or skip the ceremony — fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
+    <p class="hero-sub rv">A multi-model AI council and ad-hoc sidecar, with Claude as orchestrator.</p>
+    <p class="hero-flow rv"><span class="step">independent reviews</span><span class="arw">→</span><span class="step">anonymized peer cross-review</span><span class="arw">→</span><span class="step">non-Claude chair verdict</span><span class="arw">→</span><span class="step last">tiered accept/deny</span></p>
+    <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em> — Amicus runs the ritual and hands back a decision. Or skip the ceremony: fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
     <div class="hero-btns rv">
       <div style="flex:1;display:flex;flex-direction:column;gap:.5rem">
-        <div class="cmd" onclick="copyCmd(this)" data-cmd="/plugin marketplace add BourbonDog/amicus" style="background:rgba(196,164,220,.07);border-color:rgba(196,164,220,.25)">
-          <span class="cmd-txt" style="color:#c4a4dc;font-weight:600"><span class="d" style="color:#c4a4dc">/</span>plugin marketplace add BourbonDog/amicus</span><span class="cp" style="border-color:rgba(196,164,220,.3);color:rgba(196,164,220,.6)">copy</span>
-        </div>
-        <div class="cmd" onclick="copyCmd(this)" data-cmd="npm install -g amicus" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
-          <span class="cmd-txt" style="color:#4ade80;font-weight:600"><span class="d" style="color:#4ade80">$</span>&nbsp;npm install -g amicus</span><span class="cp" style="border-color:rgba(74,222,128,.3);color:rgba(74,222,128,.6)">copy</span>
+        <div class="cmd cmd-steps" onclick="copyCmd(this)" data-cmd="npm install -g amicus&#10;amicus setup" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
+          <span class="cmd-txt" style="color:#4ade80;font-weight:600">
+            <span class="cmd-line"><span class="d" style="color:#4ade80">$</span>&nbsp;npm install -g amicus</span>
+            <span class="cmd-line"><span class="d" style="color:#4ade80">$</span>&nbsp;amicus setup<span class="cmd-note">← don't skip: adds your API keys</span></span>
+          </span><span class="cp" style="border-color:rgba(74,222,128,.3);color:rgba(74,222,128,.6)">copy</span>
         </div>
       </div>
       <a href="https://github.com/BourbonDog/amicus" class="btn-o">
@@ -2843,13 +2855,13 @@ h2.v .w-anim{opacity:1;transform:none}
   <div class="cta-i">
     <div class="tag rv">Get Started</div>
     <h2 class="rv">Install in 30 Seconds.</h2>
-    <p class="lead rv">A Claude Code plugin, one script, or one npm install — each gets you the CLI, both skills, and the MCP server.</p>
+    <p class="lead rv">Two commands: one installs the CLI, both skills, and the MCP server — the other configures your keys and default model. Amicus can't reach a model until <code style="font-family:'IBM Plex Mono',monospace;font-size:.9em;color:var(--green)">amicus setup</code> has run.</p>
     <div class="rv" style="display:flex;flex-direction:column;align-items:center;gap:1rem">
-      <div class="cmd" onclick="copyCmd(this)" data-cmd="/plugin marketplace add BourbonDog/amicus" style="font-size:.88rem">
-        <span class="cmd-txt"><span class="d">/</span>plugin marketplace add BourbonDog/amicus</span><span class="cp">copy</span>
-      </div>
-      <div class="cmd" onclick="copyCmd(this)" data-cmd="npm install -g amicus" style="font-size:.88rem">
-        <span class="cmd-txt"><span class="d">$</span>&nbsp;npm install -g amicus</span><span class="cp">copy</span>
+      <div class="cmd cmd-steps" onclick="copyCmd(this)" data-cmd="npm install -g amicus&#10;amicus setup" style="font-size:.88rem">
+        <span class="cmd-txt">
+          <span class="cmd-line"><span class="d">$</span>&nbsp;npm install -g amicus</span>
+          <span class="cmd-line"><span class="d">$</span>&nbsp;amicus setup<span class="cmd-note">← don't skip: adds your API keys</span></span>
+        </span><span class="cp">copy</span>
       </div>
       <a href="https://github.com/BourbonDog/amicus" class="btn-f">
         Read the Docs
