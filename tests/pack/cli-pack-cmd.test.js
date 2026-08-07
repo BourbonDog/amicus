@@ -126,6 +126,23 @@ describe('handlePack: save -> list -> show -> rm roundtrip', () => {
   });
 });
 
+describe('handlePack: save maps the seven remaining usage-block option flags (T14-m5; --debate has its own describe)', () => {
+  test('timeout/max-cost/gateway/agent/thinking/summary-length -> pack.options; --template -> briefing.template', async () => {
+    const code = await handlePack(pa([
+      'save', 'flag-map', '--kind', 'fanout', '--bench', 'alpha,beta',
+      '--timeout', '25', '--max-cost', '3.5', '--gateway', 'direct', '--agent', 'code',
+      '--thinking', 'high', '--summary-length', 'verbose', '--template', 'review',
+    ]));
+    expect(code).toBe(0);
+    const { pack } = store().readPack('flag-map');
+    expect(pack.options).toEqual({
+      timeout: 25, maxCost: 3.5, gateway: 'direct', agent: 'code',
+      thinking: 'high', summaryLength: 'verbose',
+    });
+    expect(pack.briefing).toEqual({ template: 'review' });
+  });
+});
+
 describe('handlePack: list with no packs', () => {
   test('human mode prints "No packs."', async () => {
     const code = await handlePack(pa(['list']));
@@ -146,9 +163,8 @@ describe('handlePack: list with no packs', () => {
   });
 });
 
-// ---- --json doc shapes ----
 describe('handlePack: list with nameless pack entry', () => {
-  test('JSON-valid pack with no name key alongside good pack: renders both without throwing', async () => {
+  test('JSON-valid pack with no name/kind/version key alongside good pack: renders both without throwing', async () => {
     // Save a good pack first
     let code = await handlePack(pa([
       'save', 'good-pack', '--kind', 'solo', '--model', 'alpha',
@@ -156,23 +172,26 @@ describe('handlePack: list with nameless pack entry', () => {
     expect(code).toBe(0);
     out.mockClear();
 
-    // Manually write a JSON-valid pack with missing name key
+    // Manually write a JSON-valid pack missing name, kind, AND version
     const packsDir = store().packsDir();
     fs.writeFileSync(path.join(packsDir, 'nameless.json'), JSON.stringify({
-      schemaVersion: 1, type: 'pack', version: '1.0.0', kind: 'solo', model: 'alpha',
+      schemaVersion: 1, type: 'pack', model: 'alpha',
     }));
 
     code = await handlePack(pa(['list']));
     expect(code).toBe(0);
     const output = stdout();
-    // Should render both packs (one good, one unnamed)
+    // Should render both packs (one good, one unnamed with every fallback applied)
     expect(output).toContain('Packs:');
     expect(output).toContain('good-pack');
     expect(output).toContain('(unnamed)');
-    expect(output).toContain('[solo]');
+    expect(output).toContain('[(unknown)]');  // kind fallback
+    expect(output).toContain('v0.0.0');       // version fallback
+    expect(output).toContain('[solo]');       // the good pack still renders its real kind
   });
 });
 
+// ---- --json doc shapes ----
 describe('handlePack: --json doc shapes', () => {
   test('save/list/show/rm each emit their documented schemaVersion + type', async () => {
     let code = await handlePack(pa(['save', 'json-pack', '--kind', 'solo', '--model', 'alpha', '--json']));

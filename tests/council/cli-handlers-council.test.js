@@ -642,6 +642,15 @@ describe('council save', () => {
       handleCouncil({ _: ['council', 'save', 'frontier'], models: 'deepseek,glm' }));
     expect(out).toMatch(/shadows the built-in bench of the same name/);
   });
+
+  test('human-mode re-save of a shadowing name prints BOTH the overwritten marker and the shadow notice', async () => {
+    await capture(() => handleCouncil({ _: ['council', 'save', 'budget'], models: 'deepseek,glm' }));
+    const { code, out } = await capture(() =>
+      handleCouncil({ _: ['council', 'save', 'budget'], models: 'haiku,opus' }));
+    expect(code).toBe(0);
+    expect(out).toContain("Saved council 'budget' (overwritten): haiku, opus");
+    expect(out).toMatch(/shadows the built-in bench of the same name/);
+  });
 });
 
 describe('council list', () => {

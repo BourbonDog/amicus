@@ -87,7 +87,7 @@ const SOLO_PACK = () => ({
   description: 'x', model: 'vendorx/solo-model', options: { noUi: true }, briefing: {},
 });
 const COUNCIL_KIND_PACK = () => ({
-  schemaVersion: 1, type: 'pack', name: 'wrong-kind-for-fanout', version: '1.0.0', kind: 'council',
+  schemaVersion: 1, type: 'pack', name: 'wrong-kind', version: '1.0.0', kind: 'council',
   description: 'x', bench: ['alpha', 'beta'], chair: null, critic: null, lenses: null,
   options: {}, briefing: {},
 });
@@ -113,12 +113,85 @@ describe('--pack kind mismatch', () => {
   test('a council pack passed to fanout fails PACK_KIND_MISMATCH; message names fanout', async () => {
     store().writePack(COUNCIL_KIND_PACK());
     await expect(handleFanout(parseArgs([
-      'fanout', '--pack', 'wrong-kind-for-fanout', '--prompt-file', briefingFile, '--json',
+      'fanout', '--pack', 'wrong-kind', '--prompt-file', briefingFile, '--json',
     ]))).rejects.toThrow('exit 1');
     expect(runFanout).not.toHaveBeenCalled();
     const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
     expect(doc.error.code).toBe(ERROR_CODES.PACK_KIND_MISMATCH);
-    expect(doc.error.message).toContain('fanout');
+    expect(doc.error.message).toBe(
+      "Error: pack 'wrong-kind' is kind 'council' — fanout accepts kind 'fanout'; make two packs if you want both shapes",
+    );
+  });
+});
+
+describe('explicit --models over the pack bench (T13-m4)', () => {
+  test('the override notice reaches stderr through handleFanout, and the typed value wins', async () => {
+    store().writePack(FANOUT_PACK());
+    const code = await handleFanout(parseArgs([
+      'fanout', '--pack', 'fanout-review', '--models', 'vendorx/model-z',
+      '--prompt-file', briefingFile, '--json',
+    ]));
+    expect(code).toBe(0);
+    expect(err.mock.calls.map((c) => c[0]).join(''))
+      .toContain("Notice: --models overrides the bench from pack 'fanout-review'");
+    expect(runFanout).toHaveBeenCalledTimes(1);
+    expect(runFanout.mock.calls[0][0].models).toBe('vendorx/model-z');
+  });
+});
+
+// T11-c: a string-bench (by-name) FANOUT pack fills args.council (not
+// args.models — see pack-resolve.test.js's unit coverage of the fill
+// itself); handleFanout then expands it via resolveCouncilMembers exactly
+// like a typed --council would (cli-handlers-fanout.js:85-95). Seeds a USER
+// council (not a built-in) so this proves the real expansion call, not just
+// a name passing through untouched.
+describe('string-bench FANOUT pack expands via resolveCouncilMembers (T11-c)', () => {
+  test('pack-filled args.council reaches runFanout as the expanded, comma-joined member list', async () => {
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({
+      aliases: { alpha: 'vendorx/alpha-model', beta: 'vendorx/beta-model' },
+      councils: { mybench: ['alpha', 'beta'] },
+    }));
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'fanout-bench-pack', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: 'mybench', options: {}, briefing: {},
+    });
+    const code = await handleFanout(parseArgs([
+      'fanout', '--pack', 'fanout-bench-pack', '--prompt-file', briefingFile, '--json',
+    ]));
+    expect(code).toBe(0);
+    expect(runFanout).toHaveBeenCalledTimes(1);
+    // resolveCouncilMembers returns members RAW (alias, not resolved id) —
+    // pinned directly against src/utils/config.js's classifyCouncilMembers
+    // (`models.push(member)`, never the resolved `id`) and against
+    // tests/council-members-local.test.js, which proves the same contract
+    // on the council-run surface (`r.models` holds the alias, e.g. 'gemini',
+    // not the resolved provider/model id).
+    expect(runFanout.mock.calls[0][0].models).toBe('alpha,beta');
+    expect(err).not.toHaveBeenCalled(); // neither --models nor --council was typed: no override notice
+  });
+});
+
+// T11-c Step 4 (decision procedure): Step 1 verified BOTH the fanout and
+// council-run surfaces reject --models+--council both typed, and on BOTH
+// surfaces the pack apply (which can print the both-typed notice) runs
+// BEFORE that guard — so pin the fanout half of that ordering fact directly:
+// a both-typed run prints the notice AND THEN hits the hard exit, in that
+// order, never reaching runFanout.
+describe('both --models and --council typed: notice fires, then the exactly-one-of guard exits (T11-c ordering pin)', () => {
+  test('pack apply\'s notice reaches stderr before the BAD_ARGS exit; runFanout never called', async () => {
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'fanout-both-typed', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: 'budget', options: {}, briefing: {},
+    });
+    await expect(handleFanout(parseArgs([
+      'fanout', '--pack', 'fanout-both-typed', '--models', 'vendorx/model-z', '--council', 'budget',
+      '--prompt-file', briefingFile, '--json',
+    ]))).rejects.toThrow('exit 1');
+    expect(err.mock.calls.map((c) => c[0]).join(''))
+      .toContain("Notice: --models overrides the bench from pack 'fanout-both-typed'");
+    const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
+    expect(doc.error.message).toBe('Error: pass exactly one of --models / --council, not both');
+    expect(runFanout).not.toHaveBeenCalled();
   });
 });
 
@@ -155,8 +228,9 @@ describe('explicit --model beats pack.model silently (spec §5.4)', () => {
 
 // v4.7 F8 (D13): --tag is reject-style (unlike sanitizeCouncilName, which
 // cleans) — a stored tag is a user-chosen search key, so silent truncation/
-// stripping would make --search/--group-by tag miss it. handleStart's check
-// sits past resolveLaunchModel, so it needs this suite's mocked passthrough.
+// stripping would make --search/--group-by tag miss it. (handleStart validates
+// --tag BEFORE resolveLaunchModel since the v4.7 PR3 consolidated wave — this
+// suite's passthrough mock serves the pack-wiring seam, not the tag guard.)
 describe('--tag validation (v4.7 F8)', () => {
   test('start --tag with an invalid value exits 1 before startAmicus is called', async () => {
     await expect(handleStart(parseArgs([

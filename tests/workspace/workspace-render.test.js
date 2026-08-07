@@ -424,6 +424,22 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
       expect(tbody.children[2]).toBe(rowAFirstRef);
     });
 
+    test('RN-11 + removal in one render: [A, B, C] -> [C, A] reorders survivors and drops the leaver', () => {
+      const tbody = document.createElement('tbody');
+      const seatA = { id: 'a', model: 'model-a', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.01' };
+      const seatB = { id: 'b', model: 'model-b', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.02' };
+      const seatC = { id: 'c', model: 'model-c', role: 'seat', status: 'running', stalled: false, costDisplay: '$0.03' };
+      AmicusRender.renderSeats(tbody, [seatA, seatB, seatC], false, () => null);
+      expect(tbody.children.length).toBe(3);
+      const rowARef = tbody.children[0];
+      const rowCRef = tbody.children[2];
+      AmicusRender.renderSeats(tbody, [seatC, seatA], false, () => null);
+      expect(tbody.children.length).toBe(2);
+      expect(tbody.children.map((r) => r.dataset.key)).toEqual(['c', 'a']);
+      expect(tbody.children[0]).toBe(rowCRef); // moved, not rebuilt
+      expect(tbody.children[1]).toBe(rowARef);
+    });
+
     // RN-11 update-branch className fix — WHAT THIS TEST ACTUALLY PINS: source-text parity
     // between the create and update branches' className expressions, not a runtime
     // regression. Review finding: live-model.js's seatCells() always returns a FIXED

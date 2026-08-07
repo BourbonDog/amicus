@@ -219,8 +219,8 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       return Promise.resolve(null);
     });
     await global.window.AmicusApp.openRun('aaaa1111');
-    await Promise.resolve();
-    await Promise.resolve(); // let the fire-and-forget debate.json fetch land before the drill-in
+    expect(global.window.AmicusApp.state.debateFetch).not.toBeNull(); // T18-m1 seam: a --debate run must expose the fetch
+    await global.window.AmicusApp.state.debateFetch; // the debate.json fetch, exposed (T18-m1)
     await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
     const revoteCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'revote-gpt.md');
     expect(revoteCalls.length).toBeGreaterThan(0);
@@ -242,8 +242,8 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       return Promise.resolve(null);
     });
     await global.window.AmicusApp.openRun('aaaa1111');
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(global.window.AmicusApp.state.debateFetch).not.toBeNull(); // T18-m1 seam: a --debate run must expose the fetch
+    await global.window.AmicusApp.state.debateFetch; // the debate.json fetch, exposed (T18-m1)
     await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
     const judgeCalls = invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact' && c[2] === 'judge-gpt.md');
     expect(judgeCalls.length).toBeGreaterThan(0);
@@ -390,9 +390,8 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       return Promise.resolve({ text: 'prose' });
     });
     await expect(global.window.AmicusApp.openRun('aaaa1111')).resolves.toBeUndefined();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(global.window.AmicusApp.state.debateFetch).not.toBeNull(); // T18-m1 seam: a --debate run must expose the fetch, even one whose read-artifact call rejects (the .catch absorbs it)
+    await global.window.AmicusApp.state.debateFetch; // the debate.json fetch, exposed (T18-m1)
     expect(global.window.AmicusApp.state.debate).toBeNull();
   });
 
@@ -546,8 +545,8 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       return Promise.resolve(null);
     });
     await global.window.AmicusApp.openRun('aaaa1111');
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(global.window.AmicusApp.state.debateFetch).not.toBeNull(); // T18-m1 seam: a --debate run must expose the fetch
+    await global.window.AmicusApp.state.debateFetch; // the debate.json fetch, exposed (T18-m1)
     await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
     await global.window.AmicusPanels.drillIntoJudge({ model: 'gpt', label: null }, 'A1');
     const judgesBody = global.document.getElementById('judges-body');
@@ -855,8 +854,8 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       const invokeMock2 = jest.fn(collisionRevoteInvoke);
       global.window.amicusWorkspace.invoke = invokeMock2;
       await global.window.AmicusApp.openRun('cccc3333');
-      await Promise.resolve();
-      await Promise.resolve(); // let the fire-and-forget debate.json fetch land before the drill-in
+      expect(global.window.AmicusApp.state.debateFetch).not.toBeNull(); // T18-m1 seam: a --debate run must expose the fetch
+      await global.window.AmicusApp.state.debateFetch; // the debate.json fetch, exposed (T18-m1)
 
       await global.window.AmicusPanels.drillIntoJudge({ model: 'vendor?a', label: null }, 'A1');
 
@@ -879,8 +878,8 @@ describe('workspace-ui namespace boundary (Task 13 F05 split: app / panels / ver
       const invokeMock2 = jest.fn(collisionRevoteInvoke);
       global.window.amicusWorkspace.invoke = invokeMock2;
       await global.window.AmicusApp.openRun('cccc3333');
-      await Promise.resolve();
-      await Promise.resolve();
+      expect(global.window.AmicusApp.state.debateFetch).not.toBeNull(); // T18-m1 seam: a --debate run must expose the fetch
+      await global.window.AmicusApp.state.debateFetch; // the debate.json fetch, exposed (T18-m1)
 
       await global.window.AmicusPanels.drillIntoJudge({ model: 'vendor/a', label: null }, 'A1');
 

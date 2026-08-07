@@ -86,6 +86,8 @@ All notable changes to Amicus are documented here. Format follows
   `timed-out`/`idle-timeout` — always real statuses, previously rejected outright by MCP's schema
   even though the CLI already accepted them — now filter correctly there too. The CLI table
   gained a `TAG` column.
+- Test/comment/docs sweep (v4.7 PR4, theme a): ~30 census nits dispositioned — no behavior
+  changes.
 
 ### Fixed
 

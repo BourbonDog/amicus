@@ -19,7 +19,7 @@ describe('second-opinion SKILL.md frontmatter (B27)', () => {
   it('key trigger phrases are present', () => {
     expect(desc).toMatch(/second opinion/i);
     expect(desc).toMatch(/council review/i);
-    expect(desc).toMatch(/multi-model/i);
+    expect(desc).toMatch(/multi-model review/);
   });
   it('name is unchanged', () => {
     expect(fm).toMatch(/^name: second-opinion\s*$/m);

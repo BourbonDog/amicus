@@ -54,6 +54,9 @@ function resolveBenchKnob(pack, args, explicit) {
     else if (Array.isArray(bench)) { args.models = bench.join(','); }
     return null;
   }
+  // Both-typed names --models here, but every consuming surface — fanout (cli-handlers-fanout.js:77),
+  // council run (cli-council-run-bench.js:45), MCP (mcp-council-bench.js:29) — rejects
+  // --models+--council with BAD_ARGS after pack apply, so a both-typed notice is never actionable.
   const flag = modelsExplicit ? '--models' : '--council';
   return `Notice: ${flag} overrides the bench from pack '${pack.name}'`;
 }

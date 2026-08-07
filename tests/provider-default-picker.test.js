@@ -129,8 +129,9 @@ describe('buildProviderDefaultChoices — anthropic divergent-vendor id fabricat
   // OpenRouter-only id would fabricate a non-direct-callable dot-form id.
 
   const orOnlyAnthropicCatalog = [
-    // Mirrors the real 'fable' cardless entry (curated-models.js): an
-    // OpenRouter-only model with NO direct twin at all.
+    // Fixture models an OpenRouter-only entry with NO direct twin at all. (fable
+    // WAS the live example until 2026-08-05, when its direct route was authored —
+    // the shape stays worth pinning even with no current curated example.)
     { id: 'openrouter/anthropic/claude-fable-5', name: 'Claude Fable 5', contextLength: 200000,
       pricing: { prompt: '0.000002', completion: '0.00001' } },
   ];

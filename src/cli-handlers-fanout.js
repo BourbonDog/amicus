@@ -32,6 +32,8 @@ async function handleFanout(args) {
   // --models — the original wave's failed legs supply their own saved
   // context) — dispatch BEFORE any of that validation runs. --models here is
   // optional and, when present, filters which failed legs get retried.
+  // --pack is likewise ignored on this path (deliberate, same precedent: retry
+  // replays the wave's recorded per-leg config; flags that reshape a wave don't apply).
   if (args['retry-failed']) {
     const { retryFailedWave } = require('./sidecar/fanout-retry');
     const { parseModelsList } = require('./sidecar/fanout-validate');

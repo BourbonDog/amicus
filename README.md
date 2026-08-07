@@ -486,7 +486,7 @@ Full details, the API-key/prefix table, and the migration notice are in **[docs/
 
 ## MCP integration
 
-The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes sixteen tools:
+The MCP server is auto-registered on install (Claude Code and Claude Desktop / Cowork). It exposes these tools:
 
 | Tool | What it does |
 |------|--------------|

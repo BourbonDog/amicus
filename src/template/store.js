@@ -18,7 +18,7 @@ function _getConfigDir() { return require('../utils/config').getConfigDir(); }
 
 /**
  * v4.5 ships `review` only. `critique`/`refine` are {{input}}-centric and
- * arrive with v4.6's chaining (--input-from).
+ * arrive with composable waves (--input-from).
  */
 const BUILTIN_TEMPLATES = Object.freeze({
   review: [

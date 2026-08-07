@@ -201,12 +201,14 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   are now step-scoped (not whole-file) and mutant-proofed, and `tests/scripts/package-manifest.test.js`'s
   `yml.indexOf('npm publish')` ordering pin was retargeted off the stale B04-comment match onto the
   actual command.
-- [ ] **Test-hygiene bundle — skill-docs remainder.** Still open (explicitly filed as unopened in
+- [x] **Test-hygiene bundle — skill-docs remainder.** Still open (explicitly filed as unopened in
   #110's own riders). Null-guard the `.match(...)[1]` frontmatter parses in
   `tests/skill-second-opinion-docs.test.js` and its reference twin `tests/skill-sidecar-docs.test.js`
   (a non-matching frontmatter regex currently throws on `[1]` of `null` instead of failing with a
   readable assertion). Tighten the `/multi-model/i` pin to the quoted "multi-model review" trigger
   string so it can't false-match unrelated prose.
+  — done v4.7 PR4; pin tightened, null-guard half already resolved by 7cf3f18 (mustMatch), filed
+  sight-unseen. Also tracked in "v4.6.3 sweep riders" (:1207).
 - [x] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — **DONE**: no `/v0.1` reference
   remains in the file (synced in the Phase 13 docs lane; re-verified 2026-08-03).
 - [x] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** **DONE (v4.6.3 #110):**
@@ -867,7 +869,7 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
 
 ### Fix-sized carries
 
-- [ ] **errorWave pack-inherit** (`src/sidecar/fanout.js`). The `errorWave` helper (defined `:88`,
+- [x] **errorWave pack-inherit** (`src/sidecar/fanout.js`). The `errorWave` helper (defined `:88`,
   sole call site `:228`, the server-start-failure path) builds its error wave doc with
   `pack: options.pack` — unlike this file's other two `buildWaveResult` call sites (`:174`, `:285`),
   it doesn't fall back to `metaPack` (the pack pre-seeded onto an MCP-spawned child's
@@ -878,14 +880,16 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   executes (an early-validation "pre-creation" path) would hit the `const` temporal dead zone and
   throw `ReferenceError` on a naive reference to `metaPack` inside the closure. Guard for that if
   `errorWave` ever grows an earlier call site.
+  — superseded: shipped in #123 (fix/v47-pr3-riders)
 - [x] **T19-m5 — stale-reply guard missing on `openRun`'s `workspace:get-run` reply.** **DONE
   (v4.6.3 #108, D5):** `openRun`'s `get-run` reply now captures `runId` and bails on movement
   before writing `state.detail` or repainting — the third and final F09-class hole in this family
   (after the debate fetch and `workspace-panels.js:110`).
-- [ ] **T15-m5 — export the three MCP paramMaps.** `tests/mcp-pack-params.test.js`'s
+- [x] **T15-m5 — export the three MCP paramMaps.** `tests/mcp-pack-params.test.js`'s
   `TEST_COUNCIL_PARAM_MAP` is a hand-copied mirror of production and has already diverged once (it
   omits `template`). Export the real council/fanout/start paramMaps from their source modules and
   import them in the tests instead of re-typing them.
+  — done v4.7 PR4
 - [ ] **T15-m2 — MCP council path drops template provenance (now council-only).**
   `mcp-council-run.js`'s template path (`:117-123`) discards `promptMeta` — `run.json` records pack
   provenance but no template `{name,hash}`, unlike the CLI path's `run.template`. Wave 1's D1
@@ -903,80 +907,100 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
 degrade-invariant milestone that actually shipped as v4.6.0 was not a sweep of this list —
 unchecked items ride to the next rev.)*
 
-- [ ] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
+- [x] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
   comment in a sibling edit; restore a reworded version.
+  — done v4.7 PR4
 - [ ] **T3-m1** — `{{var.}}` empty-key template error message has a cosmetic hole
   (`--var =<value>`); fails safe.
-- [ ] **T5-m1** — `preflight-json-envelope.test.js` engine mocks return `undefined`, swallowed by
+- [x] **T5-m1** — `preflight-json-envelope.test.js` engine mocks return `undefined`, swallowed by
   `captureStdout`; add `mockResolvedValue({exitCode:0})` in `beforeEach` before any success-path test
   lands.
-- [ ] **T5-m2** — run-state absent-case test should pass `template: null` (real production shape),
+  — done v4.7 PR4
+- [x] **T5-m2** — run-state absent-case test should pass `template: null` (real production shape),
   not omit the key.
+  — done v4.7 PR4
 - [ ] **T5-m3** — template block + `BAD_ARGS` string verbatim-triplicated across the three CLI
   handlers; a shared `applyTemplateForArgs` would collapse the drift risk.
 - [ ] **T5-m4** — `{{project}}` isn't path-normalized (unlike `artifact_path`); `TEMPLATE_RENDER`
   errors carry `hint: null`.
-- [ ] **T5-m5** — guard-matrix gaps: fanout×`--artifact`, fanout×`--var`, council×`--var`, positive
+- [x] **T5-m5** — guard-matrix gaps: fanout×`--artifact`, fanout×`--var`, council×`--var`, positive
   council `{{prompt}}`-slot case, all untested.
+  — done v4.7 PR4
 - [ ] **T5-m6** — fanout help-text wraps at column 31 vs. neighbors' 32; cosmetic.
 - [ ] **T11-a** — `PACK_NOT_FOUND` catches four distinct `readPack` failure modes; `PACK_INVALID` is
   reserved for structural failures only.
-- [ ] **T11-b** — `packRecord` tests don't round-trip hash against `canonicalHash`/`readPack`;
+- [x] **T11-b** — `packRecord` tests don't round-trip hash against `canonicalHash`/`readPack`;
   `source:'path'` (`--pack ./x.json`) branch unexercised.
-- [ ] **T11-c** — string bench tested only on council kind; fanout by-name bench → `args.council`
+  — done v4.7 PR4
+- [x] **T11-c** — string bench tested only on council kind; fanout by-name bench → `args.council`
   consumption unverified; typing both `--models`+`--council` produces a notice naming only
   `--models`.
+  — done v4.7 PR4
 - [ ] **T11-d** — a council pack with both `critic`+`lenses` and a by-name bench survives run-mode
   validation; the handler's mutual-exclusion error can name a flag the user never typed — narrow
   sibling of the closed XOR case.
 - [ ] **T13-m1** — `pack-cli.js:33-34` iterates `pr.notices` on an unreachable-in-prod error branch;
   add else/early-return before a future test stub `TypeError`s there.
-- [ ] **T13-m2** — kind-mismatch test assertion is non-discriminating (fixture name happens to
+- [x] **T13-m2** — kind-mismatch test assertion is non-discriminating (fixture name happens to
   contain `'fanout'`); assert the full phrase against a neutral fixture.
-- [ ] **T13-m3** — `--retry-failed` + `--pack` silently ignores the pack (deliberate, file-wide
+  — done v4.7 PR4
+- [x] **T13-m3** — `--retry-failed` + `--pack` silently ignores the pack (deliberate, file-wide
   precedent); add a code comment at `cli-handlers-run.js:146` recording it.
-- [ ] **T13-m4** — the pack-cli helper's notice branch (fanout bench-override) is untested through
+  — done v4.7 PR4 (site moved: cli-handlers-fanout.js:30-36)
+- [x] **T13-m4** — the pack-cli helper's notice branch (fanout bench-override) is untested through
   the newer code path; Task 12 only covered council's copy.
+  — done v4.7 PR4
 - [ ] **T14-m1** — `pack list` warnings print to stdout, `pack save` warnings to stderr (both say
   "Warning:"); `pack list | grep` mixes diagnostics into data. `--json` unaffected.
-- [ ] **T14-m2** — `cli-pack-cmd.test.js`'s `---- --json doc shapes ----` banner sits two lines above
+- [x] **T14-m2** — `cli-pack-cmd.test.js`'s `---- --json doc shapes ----` banner sits two lines above
   where a fix-wave insertion should have moved it.
-- [ ] **T14-m3** — `renderPackList`'s `(unknown)` kind / `0.0.0` version fallbacks are unasserted
+  — done v4.7 PR4
+- [x] **T14-m3** — `renderPackList`'s `(unknown)` kind / `0.0.0` version fallbacks are unasserted
   (only `(unnamed)` covered); neither can throw.
-- [ ] **T14-m5** — 7 usage-block flags
+  — done v4.7 PR4
+- [x] **T14-m5** — 7 usage-block flags
   (`--template/--timeout/--max-cost/--gateway/--agent/--thinking/--summary-length`) lack positive
   mapping tests; one table-driven test closes it.
+  — done v4.7 PR4
 - [ ] **T14-m6** — the `pack` usage block in `cli.js` (~:672) is 30 lines vs. siblings' 4-11;
   compress to match.
 - [ ] **T14-m7** — duplicate lazy `fs`/`path`/`session-manager` requires in `cli-handlers-pack.js`
   (:77-79, :123-125); hoist to module top.
 - [ ] **T16-m1** — workspace-auto-open helper throws if `env` is undefined on a Linux call, though
   the contract documents `env` as always an object; optional hardening.
-- [ ] **T18-m1** — fake-DOM debate tests sequence the fire-and-forget `debate.json` fetch by
+- [x] **T18-m1** — fake-DOM debate tests sequence the fire-and-forget `debate.json` fetch by
   counting microtask hops (2×`await Promise.resolve()`); sturdier fix is to expose/await the real
   fetch promise.
+  — done v4.7 PR4
 - [ ] **T19-m1** — a sub-round-trip double blind-toggle can leave a panel on stale masking
   (`loadPanel`'s completion guard fences on run id only); self-heals on next toggle. Fix: capture
   `A.state.blind` at issue time, bail on mismatch, beside `workspace-panels.js:111`.
 - [ ] **T19-m2** — RN-5's fix wave added a second uncaught `loadPanel()` call site; a rejected invoke
   leaves `loading[id]` cached and the panel broken until the run changes (pre-existing at `:127`, now
   hit more often).
-- [ ] **T19-m3** — the terminal-refresh test drives `openRun(sameId)` directly rather than the
+- [x] **T19-m3** — the terminal-refresh test drives `openRun(sameId)` directly rather than the
   live-tick seam (`workspace-verbs.js:95`).
-- [ ] **T19-m4** — a blind-flip test reads titles via `children[0]` instead of the house pattern
+  — done v4.7 PR4
+- [x] **T19-m4** — a blind-flip test reads titles via `children[0]` instead of the house pattern
   `querySelectorAll('h3')` (boundary test `:444`).
+  — done v4.7 PR4
 - [ ] **T20-m2** — the seat-reorder pass is O(n²) (`find()` per seat); immaterial at real council
   seat counts.
-- [ ] **T20-m3** — reorder runs before the departed-row removal pass; the combined reorder+removal
+- [x] **T20-m3** — reorder runs before the departed-row removal pass; the combined reorder+removal
   render is untested (hand-traced correct).
-- [ ] **T21-m1** — a new test's comment says the F09/unreadable-run tests sit "above" in the file;
+  — done v4.7 PR4
+- [x] **T21-m1** — a new test's comment says the F09/unreadable-run tests sit "above" in the file;
   they sit below (right facts, wrong direction).
-- [ ] **T21-m2** — the new abort e2e test uses a 600ms post-confirm wait vs. the file's 400ms
+  — done v4.7 PR4
+- [x] **T21-m2** — the new abort e2e test uses a 600ms post-confirm wait vs. the file's 400ms
   convention elsewhere; unexplained magic number.
-- [ ] **T22-m1** — the docs' worked `run.json` excerpt elides `version` from the pack record while
+  — done v4.7 PR4
+- [x] **T22-m1** — the docs' worked `run.json` excerpt elides `version` from the pack record while
   the prose states a 4-key shape (dodges the docs-quick-sync version-regex).
-- [ ] **T22-m2** — v4.6 is named "`--input-from`" in `render.js`'s docblock vs. "composable waves"
+  — done v4.7 PR4
+- [x] **T22-m2** — v4.6 is named "`--input-from`" in `render.js`'s docblock vs. "composable waves"
   in the docs; same feature, two names.
+  — done v4.7 PR4
 - [ ] **W1-M4** — the wave-1 pack pre-seed's briefing is raw, not rendered, until the child
   re-renders it; eventually consistent.
 - [ ] **W1-M5** — the budget-ceiling hint text is CLI-flavored even when the run came in over MCP;
@@ -1129,17 +1153,21 @@ same lost-deferral class this file exists to prevent. One PR109 rider (the realD
 duplication debt) is excluded here: it was resolved within the same sweep by #110's
 `makeBaseDeps()` consolidation, so it never went stale.
 
-- [ ] `tests/sidecar/models-command.test.js:~419`'s fable divergent-missing rendering fixture is
+- [x] `tests/sidecar/models-command.test.js:~419`'s fable divergent-missing rendering fixture is
   now historical (the real fable entry can't reproduce it post-#107; still valid as a rendering
   test for the fixture case). — #107
-- [ ] Comment-only fixture staleness trio: `provider-default-picker.test.js:132`,
+  — done v4.7 PR4
+- [x] Comment-only fixture staleness trio: `provider-default-picker.test.js:132`,
   `gateway-router.test.js:103`, `gateway-route-catalog.test.js:43` — each comment claims fable
   "mirrors" an OpenRouter-only entry, now a historical example rather than current fact. — #107
-- [ ] `model-fetcher-anthropic`'s floor-containment test is redundant against the newer exact-list
+  — done v4.7 PR4
+- [x] `model-fetcher-anthropic`'s floor-containment test is redundant against the newer exact-list
   pin (the deleted guard's mandated replacement) — documents the inversion, not a live gap. — #107
-- [ ] `gateway-route-audit.test.js`'s "non-annotated alias" comment wording is defensible as-is
+  — done v4.7 PR4
+- [x] `gateway-route-audit.test.js`'s "non-annotated alias" comment wording is defensible as-is
   (an explicit `gatewayOnly:false` provenance value is what a non-annotated entry produces) but
   flagged for a future wording pass. — #107
+  — done v4.7 PR4
 - [ ] Bare-object candidate/suppression maps (`seen`/`reviewing`/`byRole` in the seats-panel dead
   logic) inherit `Object.prototype` keys — a model literally named `toString` would be silently
   suppressed. Pre-existing pattern, effectively unreachable; fix as one `Object.create(null)`
@@ -1159,26 +1187,32 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   never-crash, not a fix). — #109
 - [ ] Two `doctor` rows share message prose, disambiguated only by row name (deliberate
   byte-parallel with the sibling sweep; `fixDetail` strings differ). — #109
-- [ ] No combined `overwritten`+`shadowsBuiltin` human-render test for `council save` (hand-traced
+- [x] No combined `overwritten`+`shadowsBuiltin` human-render test for `council save` (hand-traced
   correct; the `--json` compose case is covered). — #109
+  — done v4.7 PR4
 - [ ] The registry pre-check's two body greps (version, status) scan independently — sound for a
   single-version endpoint, revisit if the registry ever returns collections. — #110
 - [ ] The version grep's BRE dots are unescaped (false-match direction is fail-toward-skip, not
   real-world exploitable, but worth tightening). — #110
 - [ ] `run-chair.js`'s `ch4` still carries the same duplicated-literal pair (`:186`/`:192`) that
   `ch1`–`ch3` were converged out of — out of PR4's scope, filed. — #110
-- [ ] The 3-file second-layer `base` duplicate in the doctor suites (optional further
+- [x] The 3-file second-layer `base` duplicate in the doctor suites (optional further
   `makeBaseDeps()` consolidation beyond this sweep's pass). — #110
+  — done v4.7 PR4
 - [ ] `doctor-local-providers`'s preserved `env` omission is comment-marked as deliberate — revisit
   if it ever drifts unnoticed. — #110
-- [ ] `makeBaseDeps()`'s new test helper sits outside the `src/`/`electron/` lint gates (manually
+- [x] `makeBaseDeps()`'s new test helper sits outside the `src/`/`electron/` lint gates (manually
   linted clean today; no automated enforcement). — #110
-- [ ] Phase-11 test-hygiene bundle's skill-docs remainder (frontmatter null-guards on
+  — done v4.7 PR4
+- [x] Phase-11 test-hygiene bundle's skill-docs remainder (frontmatter null-guards on
   `tests/skill-second-opinion-docs.test.js`/`tests/skill-sidecar-docs.test.js`, the `/multi-model/i`
   pin tighten) — files not opened during this sweep; also tracked in this file's Phase 11 section
   above. — #110
-- [ ] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
+  — done v4.7 PR4: pin tightened; the null-guard half was already resolved by 7cf3f18
+  (mustMatch), filed sight-unseen. Canonical entry: Phase 11 (:204).
+- [x] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
   generated count or leave it deliberately count-neutral. — #110
+  — done v4.7 PR4 (R6 count-neutral)
 
 ## v4.7 PR1 findings (2026-08-06)
 

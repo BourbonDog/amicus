@@ -40,6 +40,10 @@ describe('pairAcrossGateways — verbatim, conservative cross-gateway pairing', 
     });
   });
 
+  // Synthetic fixture: pairAcrossGateways only ever sees the catalogInfo handed
+  // to it here, never a live catalog -- what makes this shape historical is that
+  // the live catalog now confirms a direct route for fable (authored 2026-08-05).
+  // Kept to pin how the helper handles a model with genuinely no direct-side key.
   test('fable: OpenRouter-only model returns just the openrouter side, no direct key at all', () => {
     const catalogInfo = cat([
       'openrouter/anthropic/claude-fable-5',

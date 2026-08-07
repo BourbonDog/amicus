@@ -50,6 +50,8 @@ test('anthropic with no key returns the floor without a network call', async () 
 // but a stale floor still misleads offline/keyless users, so pin the exact
 // current-family ids here rather than letting this suite pass tautologically
 // against whatever ANTHROPIC_MODELS happens to contain.
+// (Subsumes the old fable floor-containment check, deleted in the v4.7 PR4 sweep:
+// an exact toEqual IS containment. The 2026-08-05 route-inversion history lives in git.)
 test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapshot', async () => {
   const f = loadFetcher(fakeHttps({ statusCode: 200, body: '{}' }));
   expect(f.ANTHROPIC_MODELS.map(m => m.id)).toEqual([
@@ -70,10 +72,4 @@ test('ANTHROPIC_MODELS floor is the current Anthropic family, not a stale snapsh
   expect(ids).not.toContain('anthropic/claude-opus-4-6');
   expect(ids).not.toContain('anthropic/claude-sonnet-4-5');
   expect(ids).not.toContain('anthropic/claude-3-5-haiku');
-});
-
-test('fable IS on the floor (direct route authored 2026-08-05 — the old never-list guard inverted)', () => {
-  const f = loadFetcher(fakeHttps({ statusCode: 200, body: '{}' }));
-  const ids = f.ANTHROPIC_MODELS.map(m => m.id);
-  expect(ids).toContain('anthropic/claude-fable-5');
 });

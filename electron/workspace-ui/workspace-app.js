@@ -26,6 +26,9 @@
     debate: null,   // ⚠️ DE-ROT (F38): parsed debate.json, fetched once per run-open; stays
                      // null on a non-debate run, an aborted/skipped debate, or a parse failure —
                      // drillIntoJudge's judge-*.md fallback covers all three.
+    debateFetch: null, // T18-m1: test seam — the fire-and-forget debate.json fetch promise
+                        // (null when no fetch was issued for the open run). Nothing renders
+                        // from this; tests may `await state.debateFetch` to sequence past it.
     blind: false,
     // Task 19 (RN-5) + fix-wave (RN-5 amendment): the (run id, status) pair renderDetail() last
     // computed state.blind's default for. Together they gate the recompute (in renderDetail(),
@@ -66,6 +69,13 @@
   function openRun(runId) {
     state.runId = runId;
     state.debate = null;
+    // Fix-wave item 2: reset synchronously alongside state.debate so the contract comment
+    // above ("null when no fetch was issued for the open run") holds in EVERY window —
+    // including between this openRun(runId) call and its get-run reply, where the old
+    // in-.then reset left state.debateFetch pointing at the PREVIOUS run's promise. The F09
+    // stale-reply guard (below) early-returns before ever touching debateFetch again, so
+    // moving the reset here changes no other behavior.
+    state.debateFetch = null;
     return invoke('workspace:get-run', runId).then(function (detail) {
       // F09 guard (v4.6.3 PR2): a reply for a run the user has since
       // navigated away from must never overwrite the run now open. Guard on
@@ -83,8 +93,9 @@
       // navigated away from must never overwrite the run now open. Capture `runId` and check
       // it's still `state.runId` before writing; a rejection (dead channel, closed window) is
       // caught too, so it never surfaces as an unhandled rejection in the renderer.
+      // (state.debateFetch reset moved synchronously above, beside state.debate — fix-wave item 2.)
       if (detail && detail.run && detail.run.debate) {
-        invoke('workspace:read-artifact', runId, 'debate.json').then(function (res) {
+        state.debateFetch = invoke('workspace:read-artifact', runId, 'debate.json').then(function (res) {
           if (state.runId !== runId) { return; }
           try { state.debate = JSON.parse(res.text); } catch (err) { state.debate = null; }
         }).catch(function () {
