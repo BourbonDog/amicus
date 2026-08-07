@@ -24,7 +24,6 @@ const findCheck = (checks, id) => checks.find((c) => c.id === id);
 // listSessionIndexTmpFiles/unlinkSessionIndexTmp overrides still drive the
 // real sweep wiring this file exists to test.
 const { makeBaseDeps } = require('./helpers/doctor-base-deps');
-const baseDeps = makeBaseDeps();
 // These suites pass fix:true; before baseDeps existed, unlisted deps inherited
 // realDeps() — which made the inherited electron/engine checks SELF-HEAL for
 // real: on a box where node_modules/electron/dist is missing
@@ -33,13 +32,12 @@ const baseDeps = makeBaseDeps();
 // suite, racing the repair lock across jest workers. Keep the probe green and
 // both self-heal seams pinned inert; only the sessions-index-tmp check is
 // under test here.
-const base = {
-  ...baseDeps,
+const base = makeBaseDeps({
   readApiKeyValues: () => ({}), // offline credit probe
   getElectronPath: () => '/fake/electron', // electron check: ok — repair unreachable
   repairElectron: async () => ({ repaired: true }), // never the real binary self-heal
   repairEngine: async () => ({ repaired: true }), // never the real npx-cache copy-heal
-};
+});
 
 const NOW = 1_800_000_000_000; // fixed epoch ms for deterministic age math
 const fresh = (name) => ({ name, mtimeMs: NOW - 5_000 }); // 5s old — a live writer

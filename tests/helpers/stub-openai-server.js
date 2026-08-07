@@ -34,8 +34,7 @@ function startStub(opts = {}) {
       return;
     }
     if (req.method === 'POST' && req.url.startsWith('/v1/chat/completions')) {
-      let body = '';
-      req.on('data', (c) => { body += c; });
+      req.on('data', () => {}); // drain the request body; nothing in the fixed response reads it
       req.on('end', () => {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({
