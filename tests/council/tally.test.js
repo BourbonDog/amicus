@@ -189,4 +189,22 @@ describe('tally() — runStats carries what qualifies `conformance` (review F3)'
     });
     expect(record.runStats[0].waveId).toBe('r1-s1');
   });
+
+  test('resolvedModel survives the tally allowlist when set (v4.7 GOA-7 D8)', () => {
+    const record = tally({
+      ...baseInput,
+      runStats: [{ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+        resolvedModel: 'openai/gpt-5.2', status: 'complete', durationMs: 5, usage: null }],
+    });
+    expect(record.runStats[0].resolvedModel).toBe('openai/gpt-5.2');
+  });
+
+  test('absent resolvedModel stays absent through tally (legacy/hand-assembled rows)', () => {
+    const record = tally({
+      ...baseInput,
+      runStats: [{ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+        status: 'complete', durationMs: 5, usage: null }],
+    });
+    expect('resolvedModel' in record.runStats[0]).toBe(false);
+  });
 });

@@ -40,6 +40,9 @@ function worseConformance(a, b) {
  * leg doc yields durationMs/usage null (never invent a value). `model` (the
  * council alias) overrides leg.model (the resolved executable id) so ledger
  * rows join meta.models by exact string (ledger.js:20-24).
+ * `resolvedModel` (v4.7 GOA-7) preserves leg.model — the executable id that
+ * actually served, post-fallback-substitution — emit-only-when-set and never
+ * sourced from modelInput (an alias must never masquerade as a resolved id).
  *
  * ⚠️ LC-11 / review F1: `findingsUnverified` and `repairRefused` are the same
  * class of fact as `conformance` and ride the same row. They are the two halves
@@ -61,6 +64,7 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     ...(findingsUnverified ? { findingsUnverified: true } : {}),
     ...(repairRefused ? { repairRefused } : {}),
     ...(leg && leg.waveId ? { waveId: leg.waveId } : {}),
+    ...(leg && leg.model ? { resolvedModel: leg.model } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,
