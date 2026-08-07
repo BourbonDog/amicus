@@ -215,15 +215,21 @@ describe('Phase 17 whole-phase review — status --json version is current and t
   const usage = read('docs/usage.md');
   const pkgVersion = require('../package.json').version;
   const versionPin = /"version":\s*"(\d+\.\d+\.\d+)"/;
+  // Anchor on the `amicus status <id> --json` command line so the match lands on that
+  // example's output specifically, not on any other `"version"` key earlier in the doc
+  // (e.g. a pack-record excerpt legitimately carries its own "version" too — T22-m1).
+  const statusJsonAnchor = 'amicus status demo123 --json';
 
   it('README status --json example version matches package.json (regex-pinned, not a literal string)', () => {
-    const match = readme.match(versionPin);
+    const statusSection = readme.slice(readme.indexOf(statusJsonAnchor));
+    const match = statusSection.match(versionPin);
     expect(match).toBeTruthy();
     expect(match[1]).toBe(pkgVersion);
   });
 
   it('usage.md status --json example version matches package.json (regex-pinned, not a literal string)', () => {
-    const match = usage.match(versionPin);
+    const statusSection = usage.slice(usage.indexOf(statusJsonAnchor));
+    const match = statusSection.match(versionPin);
     expect(match).toBeTruthy();
     expect(match[1]).toBe(pkgVersion);
   });
