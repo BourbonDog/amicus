@@ -26,6 +26,9 @@
     debate: null,   // ⚠️ DE-ROT (F38): parsed debate.json, fetched once per run-open; stays
                      // null on a non-debate run, an aborted/skipped debate, or a parse failure —
                      // drillIntoJudge's judge-*.md fallback covers all three.
+    debateFetch: null, // T18-m1: test seam — the fire-and-forget debate.json fetch promise
+                        // (null when no fetch was issued for the open run). Nothing renders
+                        // from this; tests may `await state.debateFetch` to sequence past it.
     blind: false,
     // Task 19 (RN-5) + fix-wave (RN-5 amendment): the (run id, status) pair renderDetail() last
     // computed state.blind's default for. Together they gate the recompute (in renderDetail(),
@@ -83,8 +86,9 @@
       // navigated away from must never overwrite the run now open. Capture `runId` and check
       // it's still `state.runId` before writing; a rejection (dead channel, closed window) is
       // caught too, so it never surfaces as an unhandled rejection in the renderer.
+      state.debateFetch = null;
       if (detail && detail.run && detail.run.debate) {
-        invoke('workspace:read-artifact', runId, 'debate.json').then(function (res) {
+        state.debateFetch = invoke('workspace:read-artifact', runId, 'debate.json').then(function (res) {
           if (state.runId !== runId) { return; }
           try { state.debate = JSON.parse(res.text); } catch (err) { state.debate = null; }
         }).catch(function () {
