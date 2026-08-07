@@ -523,6 +523,16 @@ describe('handlePack: save --from-run (solo session)', () => {
     expect(saved.options).toEqual({ agent: 'code', thinking: 'high' });
   });
 
+  test('--pack-version is honored on the --from-run path too', async () => {
+    seedSolo('so3');
+    const code = await handlePack(pa([
+      'save', 'from-solo-versioned', '--from-run', 'so3', '--cwd', project,
+      '--pack-version', '3.1.4',
+    ]));
+    expect(code).toBe(0);
+    expect(store().readPack('from-solo-versioned').pack.version).toBe('3.1.4');
+  });
+
   test('agent/thinking absent from metadata -> options key omitted entirely (not {})', async () => {
     seedSolo('so2');
     const code = await handlePack(pa(['save', 'from-solo-bare', '--from-run', 'so2', '--cwd', project]));
@@ -558,5 +568,68 @@ describe('handlePack: save --from-run unknown id -> BAD_SESSION', () => {
     } finally {
       fs.rmSync(project, { recursive: true, force: true });
     }
+  });
+});
+
+// v4.7 — `--version` could never reach this handler. `version` is a global
+// BOOLEAN_FLAG (src/cli.js), so parseArgs set args.version=true, dropped the
+// semver into positionals, and bin/amicus.js printed the version banner BEFORE
+// command dispatch: exit 0, no pack written. The per-pack version is spelled
+// `--pack-version`; the trap combination is rejected by packSaveVersionConflict
+// (tests/bin/pack-save-version-guard.test.js).
+describe('handlePack: save --pack-version', () => {
+  test('flags path honors --pack-version', async () => {
+    const code = await handlePack(pa([
+      'save', 'versioned', '--kind', 'council', '--bench', 'alpha,beta',
+      '--pack-version', '2.0.0',
+    ]));
+    expect(code).toBe(0);
+    expect(stdout()).toContain("Saved pack 'versioned' v2.0.0");
+    expect(store().readPack('versioned').pack.version).toBe('2.0.0');
+  });
+
+  test('absent --pack-version still defaults to 1.0.0', async () => {
+    const code = await handlePack(pa([
+      'save', 'unversioned', '--kind', 'council', '--bench', 'alpha,beta',
+    ]));
+    expect(code).toBe(0);
+    expect(store().readPack('unversioned').pack.version).toBe('1.0.0');
+  });
+
+  // The net that makes the rename safe: a valueless `--pack-version` parses to
+  // boolean true, and validatePack's semver check turns that into a loud
+  // PACK_INVALID rather than a pack carrying `"version": true`.
+  test('--pack-version with no value -> PACK_INVALID, no pack written', async () => {
+    const code = await handlePack(pa([
+      'save', 'novalue', '--kind', 'council', '--bench', 'alpha,beta', '--pack-version',
+    ]));
+    expect(code).toBe(1);
+    expect(stderr()).toContain('version must be semver-shaped');
+    expect(store().readPack('novalue').error).toBeTruthy();
+  });
+
+  test('--pack-version with a non-semver value -> PACK_INVALID', async () => {
+    const code = await handlePack(pa([
+      'save', 'badver', '--kind', 'council', '--bench', 'alpha,beta',
+      '--pack-version', 'not-a-semver',
+    ]));
+    expect(code).toBe(1);
+    expect(stderr()).toContain('version must be semver-shaped');
+  });
+});
+
+// Anti-rot: help text must describe the flag that actually works.
+describe('pack usage block advertises the flag that actually works', () => {
+  const { getUsage } = require('../../src/cli');
+
+  test('advertises --pack-version <semver> and no longer offers --version <semver>', () => {
+    const usage = getUsage('pack');
+    expect(usage).toContain('--pack-version <semver>');
+    // Pin the OPTION form, not any occurrence: the block deliberately mentions
+    // `--version` in prose ("Not --version, which is amicus's own global flag")
+    // and that disambiguation must survive. What must never come back is the
+    // unreachable option line `--version <semver>`. Note `--version` cannot
+    // match inside `--pack-version` — only one hyphen precedes that `version`.
+    expect(usage).not.toMatch(/--version\s+<semver>/);
   });
 });
