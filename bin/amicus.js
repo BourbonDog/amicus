@@ -23,6 +23,8 @@ const { handleResume, handleContinue } = require('../src/cli-handlers-resume-con
 const { isOneShotCommand, armExitWatchdog } = require('../src/utils/lifecycle');
 const { suggestCommand } = require('../src/utils/input-validators');
 const { unknownFlags, getKnownFlags } = require('../src/utils/known-flags');
+const { packSaveVersionConflict } = require('../src/utils/cli-preflight');
+const { failJson } = require('../src/utils/error-doc');
 const { logger } = require('../src/utils/logger');
 
 const VERSION = require('../package.json').version;
@@ -84,6 +86,16 @@ async function main() {
         );
       });
     }
+  }
+
+  // `pack save` documents a per-pack `--pack-version <semver>`. `--version` is a
+  // global BOOLEAN_FLAG, so `pack save … --version 2.0.0` used to fall straight
+  // into the banner below: exit 0, no pack written, the semver stranded in
+  // positionals. Reject that one combination by name instead of silently doing
+  // something else; every other --version still prints the banner.
+  const versionConflict = packSaveVersionConflict(args);
+  if (versionConflict) {
+    process.exit(failJson(!!args.json, versionConflict));
   }
 
   // Handle --version
