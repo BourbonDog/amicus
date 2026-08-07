@@ -208,7 +208,7 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   readable assertion). Tighten the `/multi-model/i` pin to the quoted "multi-model review" trigger
   string so it can't false-match unrelated prose.
   — done v4.7 PR4; pin tightened, null-guard half already resolved by 7cf3f18 (mustMatch), filed
-  sight-unseen. Also tracked in "v4.6.3 sweep riders" (:1176).
+  sight-unseen. Also tracked in "v4.6.3 sweep riders" (:1207).
 - [x] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — **DONE**: no `/v0.1` reference
   remains in the file (synced in the Phase 13 docs lane; re-verified 2026-08-03).
 - [x] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** **DONE (v4.6.3 #110):**
@@ -907,8 +907,9 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
 degrade-invariant milestone that actually shipped as v4.6.0 was not a sweep of this list —
 unchecked items ride to the next rev.)*
 
-- [ ] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
+- [x] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
   comment in a sibling edit; restore a reworded version.
+  — done v4.7 PR4
 - [ ] **T3-m1** — `{{var.}}` empty-key template error message has a cosmetic hole
   (`--var =<value>`); fails safe.
 - [x] **T5-m1** — `preflight-json-envelope.test.js` engine mocks return `undefined`, swallowed by
@@ -945,7 +946,7 @@ unchecked items ride to the next rev.)*
   — done v4.7 PR4
 - [x] **T13-m3** — `--retry-failed` + `--pack` silently ignores the pack (deliberate, file-wide
   precedent); add a code comment at `cli-handlers-run.js:146` recording it.
-  — done v4.7 PR4
+  — done v4.7 PR4 (site moved: cli-handlers-fanout.js:30-36)
 - [x] **T13-m4** — the pack-cli helper's notice branch (fanout bench-override) is untested through
   the newer code path; Task 12 only covered council's copy.
   — done v4.7 PR4
@@ -1207,7 +1208,7 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   `tests/skill-second-opinion-docs.test.js`/`tests/skill-sidecar-docs.test.js`, the `/multi-model/i`
   pin tighten) — files not opened during this sweep; also tracked in this file's Phase 11 section
   above. — #110
-  — done v4.7 PR4 — pin tightened v4.7 PR4; the null-guard half was already resolved by 7cf3f18
+  — done v4.7 PR4: pin tightened; the null-guard half was already resolved by 7cf3f18
   (mustMatch), filed sight-unseen. Canonical entry: Phase 11 (:204).
 - [x] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
   generated count or leave it deliberately count-neutral. — #110
