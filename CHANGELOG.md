@@ -88,6 +88,19 @@ All notable changes to Amicus are documented here. Format follows
   gained a `TAG` column.
 - Test/comment/docs sweep (v4.7 PR4, theme a): ~30 census nits dispositioned — no behavior
   changes.
+- **`--out`/`-o` no longer accepts a flag-shaped value as a filename.** `--out -x` and
+  `--out=-x` previously wrote a file literally named `-x` (the dash-leading value was accepted
+  at face value); both forms now fail fast with `BAD_ARGS` ("-o/--out requires a value") instead.
+  `-o -x` was already rejected before this change, via a separate internal check — its
+  user-visible outcome is unchanged.
+- **`{{project}}` template variable is now path-resolved** (absolute, normalized via
+  `path.resolve`), matching `{{artifact_path}}`'s existing behavior — it previously rendered the
+  raw `--cwd`/`process.cwd()` string verbatim. All three `TEMPLATE_RENDER` error paths also gain a
+  real, followable `hint` instead of `hint: null`.
+- **MCP-launched council runs now record `run.template` provenance**, closing the one remaining
+  gap after Wave 1's D1 forwarded it on fanout/start — `mcp-council-run.js`'s template path no
+  longer discards `promptMeta`, so `run.json` carries `{name,hash}` the same way the CLI path
+  already did.
 
 ### Fixed
 
@@ -116,6 +129,28 @@ All notable changes to Amicus are documented here. Format follows
   global sessions-index. They now sandbox under `os.tmpdir()`, pinned by
   `tests/hermetic-tmp-guard.test.js`. This residue was what made `--all` an 8-second, 21k-row
   dump on a developer machine.
+- **`pack list` warnings now print to stderr, not stdout.** They previously shared stdout with
+  `pack list`'s data output — unlike `pack save`, which already used stderr for the same
+  "Warning:" text — so `pack list | grep` mixed diagnostics into data. `--json` output is
+  unaffected.
+- **A council pack combining `critic` and `lenses` with a by-name (string) bench is now rejected
+  at validate-time (`PACK_INVALID`), matching the array-bench form.** It previously survived
+  run-mode validation and could later surface a mutual-exclusion error naming a flag the user
+  never typed. One consequence: a string-bench pack naming both `critic` and `lenses` — even
+  invoked with an explicit flag — now hard-fails `PACK_INVALID` instead of running; array-bench
+  packs already behaved this way, so this closes a bench-shape-dependent inconsistency rather
+  than introducing a new restriction.
+- **The `{{var.}}` (empty variable key) template error now has a followable message.** It
+  previously told the user to run `--var =<value>` — a form the CLI's own `--var` parser rejects,
+  making the remedy unfollowable by construction; it now correctly explains that
+  `{{var.<key>}}` requires a key and lists the known variables.
+- **`doctor`'s tmp-sweep checks no longer report a name-shaped directory as an unremovable
+  orphan.** A directory whose name happened to match the tmp-file pattern (e.g.
+  `.metadata.json.<pid>.<rand>.tmp`) was picked up by the orphan scan, then permanently failed to
+  unlink — parking the check at `warn` forever ("swept 0, N remaining (too fresh or
+  unremovable)") even after every real orphan was cleared. Directories (and symlinks/sockets/
+  FIFOs) are now excluded before the scan ever returns them, so the check reports `ok` once
+  nothing real is left.
 
 ### Added (follow-up)
 
@@ -124,6 +159,15 @@ All notable changes to Amicus are documented here. Format follows
   `--json` mode that notice goes to stderr so stdout stays a single parseable document. Caps
   output only — `--all` still enumerates every project, since capping the walk would rank rows it
   never saw.
+
+### CI
+
+- **The MCP-Registry skip-check's version match is no longer a BRE with unescaped dots.**
+  `$VERSION` (a semver like `4.7.0`) was interpolated directly into the grep pattern, where an
+  unescaped `.` matches any character; the fail direction is fail-toward-skip (a false match
+  would silently drop a publish), so the dots are now backslash-escaped before matching. Not
+  exploitable in practice, but tightens the same idempotency check the v4.6.3 CI fix below
+  hardened.
 
 ## [4.6.3] - 2026-08-05
 
