@@ -385,6 +385,43 @@ describe('MCP spawn arg building', () => {
     });
   });
 
+  // v4.7 F8 (D13, T4 review): behavioral twin of tests/mcp-fanout.test.js's
+  // source-scan pin — proves the argv actually carries --tag, not just that
+  // the source text mentions it. Same idiom as the --gateway pair above.
+  test('amicus_fanout forwards --tag to the spawned CLI child when provided (F8 D13)', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout(
+        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], tag: 'sprint-42' }, '/tmp'
+      );
+      const idx = capturedArgs.indexOf('--tag');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('sprint-42');
+    });
+  });
+
+  test('amicus_fanout omits --tag when not supplied', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      expect(capturedArgs).not.toContain('--tag');
+    });
+  });
+
   test('amicus_fanout success message recommends amicus_wait before amicus_status (B16)', async () => {
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({

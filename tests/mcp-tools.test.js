@@ -409,6 +409,20 @@ describe('MCP Tool Definitions', () => {
       const parsed = z.object(tool.inputSchema).parse({ ...extra });
       expect('tag' in parsed).toBe(false);
     });
+
+    // v4.7 F8 (D13, T4 review): regex-parity pin — the MCP schema's tag regex
+    // is a duplicated literal (mcp-tools.js), not an import of
+    // utils/validators.js's TAG_PATTERN (the CLI's own --tag validator). This
+    // locks the two in sync: if either ever drifts, a value the CLI accepts
+    // could be rejected over MCP (or vice versa) with no other test to catch it.
+    test.each(TAG_TOOLS)('$name: tag regex source matches utils/validators.js TAG_PATTERN exactly', ({ name }) => {
+      const { TAG_PATTERN } = require('../src/utils/validators');
+      const tool = TOOLS.find(t => t.name === name);
+      const inner = tool.inputSchema.tag.unwrap(); // ZodOptional -> ZodString
+      const regexCheck = inner._def.checks.find(c => c.kind === 'regex');
+      expect(regexCheck).toBeDefined();
+      expect(regexCheck.regex.source).toBe(TAG_PATTERN.source);
+    });
   });
 
   describe('polling guidance in descriptions', () => {

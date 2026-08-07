@@ -4,9 +4,11 @@
  * Covers both amicus_start write sites:
  *  - spawn-fallback initial metadata (exercised end-to-end via a mocked
  *    child_process, AMICUS_SHARED_SERVER='0')
- *  - shared-server metadata write (source-contract check; the real shared
- *    path needs a live OpenCode server, so we pin the write's contents at
- *    the source level, matching tests/mcp-shared-server.test.js style)
+ *  - shared-server metadata write (source-contract check here; a live
+ *    OpenCode server isn't needed to drive this branch behaviorally —
+ *    mockCommonSeams() in tests/mcp-server-wait-wiring.test.js stubs the
+ *    seams and exercises it end-to-end, reading metadata.json off disk —
+ *    so this file's source-level pin is a supplement, not the only coverage)
  */
 
 const fs = require('fs');
