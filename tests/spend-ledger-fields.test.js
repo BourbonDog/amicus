@@ -40,6 +40,20 @@ describe('appendSpend additive attribution fields (spec 7.1)', () => {
     expect(row.gateway).toBeNull();
     expect(row.project).toBeNull();
     expect(row.status).toBeNull();
+    // D16 (v4.7 F8): `tag` follows spend-ledger.js's file convention — the SAME
+    // null-not-absent shape as the other nullable dims above (councilRunId,
+    // project, ...), and is DELIBERATELY the opposite of createSessionMetadata's
+    // absent-not-null `tag` convention (D13) — see spend-ledger.js:79-81.
+    expect(row.tag).toBeNull();
+  });
+
+  test('carries tag when provided (D16, v4.7 F8)', () => {
+    const dir = tmp();
+    appendSpend({
+      taskId: 't2t', model: 'gpt', mode: 'headless', usage, op: 'start', tag: 'sprint42',
+    }, { dir });
+    const [row] = readSpendRows(dir);
+    expect(row.tag).toBe('sprint42');
   });
 
   test('fallback substitution fields ride when present', () => {

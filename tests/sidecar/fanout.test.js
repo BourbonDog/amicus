@@ -632,6 +632,33 @@ describe('runFanout orchestrator', () => {
     expect(mockRunHeadless).not.toHaveBeenCalled();
   });
 
+  // v4.7 F8 (D13) — T3 review finding: errorWave (the closure defined near
+  // the top of runFanout, invoked here when startOpenCodeServer rejects) is
+  // a THIRD buildWaveResult call site the original Task 3 pass missed — it
+  // carried pack but not tag, so a tagged wave whose server failed to start
+  // would have persisted wave.json WITHOUT the tag (silent drop, since
+  // `amicus read --json` prefers wave.json over the metadata rebuild).
+  // Same fixture as the "server start failure" test immediately above.
+  it('server start failure: the error wave still carries options.tag (T3 review, errorWave call site)', async () => {
+    mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag5', tag: 'sprint-42' });
+    expect(wave.status).toBe('error');
+    expect(wave.tag).toBe('sprint-42');
+    const stored = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag5', 'wave.json'), 'utf-8'));
+    expect(stored.tag).toBe('sprint-42');
+  });
+
+  it('server start failure without --tag: the error wave has NO tag key (absent, not null)', async () => {
+    mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag6' });
+    expect(wave.status).toBe('error');
+    expect('tag' in wave).toBe(false);
+    const stored = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag6', 'wave.json'), 'utf-8'));
+    expect('tag' in stored).toBe(false);
+  });
+
   it('per-leg watchdog timeout marks ONLY that leg aborted (no process.exit, no server.close)', async () => {
     let capturedWatchdog;
     mockRunHeadless.mockImplementationOnce(async (_m, _s, _u, taskId, _p, _t, _a, options) => {
@@ -808,6 +835,32 @@ describe('runFanout orchestrator', () => {
       expect(localRow).toMatchObject({ gateway: 'local' });
       expect(openrouterRow).toMatchObject({ gateway: 'openrouter' });
     });
+
+    // D16 (v4.7 F8): a fanout launched with --tag stamps that tag onto every
+    // leg (stampLegAttribution, fanout-wave-io.js) so each leg's ledger row
+    // carries it — driven through the REAL runFanout -> runLeg -> appendSpend
+    // chain, same as the wave/gateway rows above.
+    it('a fanout launched with tag carries it on every leg ledger row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave4', tag: 'sprint42' });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) { expect(row.tag).toBe('sprint42'); }
+    });
+
+    // D16: the convention pin at the other end — an ordinary (untagged) fanout
+    // leg's row carries tag:null (present, not omitted — spend-ledger.js's
+    // nullable-dim convention), not undefined/absent.
+    it('an untagged fanout leg carries tag:null on its ledger row', async () => {
+      const { readSpendRows } = require('../../src/utils/spend-ledger');
+      await runFanout({ ...baseOpts(), waveId: 'ledgerwave5' });
+      const rows = readSpendRows(ledgerDir);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect('tag' in row).toBe(true);
+        expect(row.tag).toBeNull();
+      }
+    });
   });
 
   // v4.5 final-review F2: an MCP-spawned child fanout process never receives
@@ -865,6 +918,61 @@ describe('runFanout orchestrator', () => {
       const stored = JSON.parse(fsReal.readFileSync(
         pathReal.join(project, '.claude', 'amicus_sessions', 'cafepack4', 'wave.json'), 'utf-8'));
       expect('pack' in stored).toBe(false);
+    });
+  });
+
+  // v4.7 F8 (D13): --tag storage — same absent-not-null idiom, and the same
+  // metaTag inherit-from-pre-seeded-metadata mechanism as pack above (mirrors
+  // the describe block immediately above it; that block is the scaffolding
+  // authority). Both buildWaveResult call sites (the normal-completion path
+  // and the all-legs-unroutable short-circuit) are exercised here exactly as
+  // they are for pack.
+  describe('tag inheritance from pre-seeded metadata.json and pass-through (F8 D13)', () => {
+    function preSeedMetadataWithTag(waveId) {
+      const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', waveId);
+      fsReal.mkdirSync(waveDir, { recursive: true });
+      fsReal.writeFileSync(pathReal.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: waveId, type: 'wave', status: 'running', tag: 'sprint-42',
+      }, null, 2));
+      return waveDir;
+    }
+
+    it('normal completion: wave.json inherits the pre-seeded tag when options.tag is absent', async () => {
+      preSeedMetadataWithTag('cafetag1');
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag1' });
+      expect(wave.tag).toBe('sprint-42');
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag1', 'wave.json'), 'utf-8'));
+      expect(stored.tag).toBe('sprint-42');
+    });
+
+    it('all-legs-unroutable short-circuit: wave.json inherits the pre-seeded tag when options.tag is absent', async () => {
+      preSeedMetadataWithTag('cafetag2');
+      const routingFailure = async () => ({
+        kind: 'error', type: 'model_route_error', field: 'model', requested: 'x',
+        reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [],
+      });
+      mockResolveRouteForLaunch.mockImplementationOnce(routingFailure).mockImplementationOnce(routingFailure);
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag2' });
+      expect(wave.status).toBe('error');
+      expect(wave.tag).toBe('sprint-42');
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag2', 'wave.json'), 'utf-8'));
+      expect(stored.tag).toBe('sprint-42');
+    });
+
+    it('an explicitly-passed options.tag still wins (precedence holds even if metadata.json seeded differently)', async () => {
+      preSeedMetadataWithTag('cafetag3');
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag3', tag: 'explicit-tag' });
+      expect(wave.tag).toBe('explicit-tag');
+    });
+
+    it('no tag anywhere: wave.json has NO tag key (absent, not null)', async () => {
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag4' });
+      expect('tag' in wave).toBe(false);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag4', 'wave.json'), 'utf-8'));
+      expect('tag' in stored).toBe(false);
     });
   });
 });

@@ -72,4 +72,16 @@ async function finishWave({ wave, waveDir, waveId, project, exitCode, completedA
   return { wave, exitCode };
 }
 
-module.exports = { writeWaveMetadata, writeWaveDoc, finishWave };
+/**
+ * v4.3 §7.2 (moved here v4.7 PR3 Task 1): stamp council attribution onto every
+ * leg — fanout-leg's appendSpend reads it; no-op for every non-council caller.
+ * v4.7 F8 (Task 7) adds tag stamping in the same pass.
+ */
+function stampLegAttribution(legs, options) {
+  if (options.councilRunId || options.councilName) {
+    legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
+  }
+  if (options.tag) { legs.forEach(l => { l.tag = options.tag; }); }
+}
+
+module.exports = { writeWaveMetadata, writeWaveDoc, finishWave, stampLegAttribution };

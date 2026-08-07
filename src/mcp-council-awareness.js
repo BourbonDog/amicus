@@ -223,6 +223,7 @@ function listCouncilRuns(project) {
       model: null, agent: 'Plan', createdAt: run.createdAt,
       briefing: sanitizePreview(briefing, 80),
       stage: active ? active.name : null,
+      ...(run.tag ? { tag: run.tag } : {}),
     });
   }
   return out;

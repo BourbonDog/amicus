@@ -407,7 +407,7 @@ When you don't need a full council — just one other model's take — fork a co
 |---------|--------------|
 | `amicus start` | Launch a new session (interactive or `--no-ui`). |
 | `amicus fanout` | Run N models on the same prompt in parallel (headless). |
-| `amicus list` | Show previous sessions. |
+| `amicus list` | Show previous sessions — shows the `--tag <t>` set at launch, `--search <q>` filters, `--all` spans every known project. |
 | `amicus resume` | Reopen a previous session with full history. |
 | `amicus continue` | Start a new session building on a previous one. |
 | `amicus read` | Output a session's summary / conversation / metadata. |
@@ -456,7 +456,7 @@ $ amicus status demo123 --json
 }
 ```
 
-`amicus list --status` accepts `running`, `complete`, `error`, `timed-out`, `aborted`, `crashed`, `idle-timeout`. Full field-by-field docs (a running session's `messages`/`STALLED` reporting, wave-ID status shape, etc.) are in [docs/usage.md](./docs/usage.md).
+`amicus list --status` accepts `running`, `complete`, `error`, `timed-out`, `aborted`, `crashed`, `idle-timeout`. Rows carry a `TAG` column (set at launch with `--tag <t>`); `--search <q>` filters by id/tag/briefing substring, and `--all` lists across every known project. Full field-by-field docs (a running session's `messages`/`STALLED` reporting, wave-ID status shape, etc.) are in [docs/usage.md](./docs/usage.md).
 
 ---
 
@@ -494,7 +494,7 @@ The MCP server is auto-registered on install (Claude Code and Claude Desktop / C
 | `amicus_status` | Poll a task (or a fanout wave) for completion. |
 | `amicus_wait` | Block inside one tool call until a session/wave finishes or the wait window closes. |
 | `amicus_read` | Read results: summary, conversation, metadata, or JSON. |
-| `amicus_list` | List past sessions. |
+| `amicus_list` | List past sessions (`tag` field; `search` filters by id/tag/briefing substring). |
 | `amicus_resume` | Reopen a session. |
 | `amicus_continue` | New session building on a previous one. |
 | `amicus_abort` | Stop a running session. |

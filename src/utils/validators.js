@@ -24,6 +24,20 @@ const { PROVIDER_KEY_MAP } = require('./provider-registry');
 /** Task ID format: alphanumeric, hyphens, underscores, 1-64 chars */
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
+const TAG_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+/**
+ * v4.7 F8 (D13): tag validation REJECTS (unlike sanitizeCouncilName, which
+ * cleans) — a stored tag is a user-chosen search key, so silent truncation
+ * or charset-stripping would make `--search`/`--group-by tag` miss it.
+ * Non-string guards the valueless `--tag` parse (cli.js turns it into true).
+ */
+function validateTag(value) {
+  if (typeof value !== 'string' || !TAG_PATTERN.test(value)) {
+    return { ok: false, error: 'Invalid --tag: 1-64 chars, letters/digits/_/- only' };
+  }
+  return { ok: true, tag: value };
+}
+
 /**
  * Validate a task ID format (safe for use in file paths)
  * @param {string} taskId
@@ -249,6 +263,8 @@ module.exports = {
   MODEL_THINKING_SUPPORT,
   TASK_ID_PATTERN,
   validateTaskId,
+  TAG_PATTERN,
+  validateTag,
   safeSessionDir,
   validatePromptContent,
   validateCwdPath,

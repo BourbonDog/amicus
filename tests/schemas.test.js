@@ -66,6 +66,15 @@ describe('published result-family schemas validate real builder output (v4.0 §7
     expectValid(compile('run'), doc);
   });
 
+  // v4.7 F8 (D13): additive — present only when the solo session was launched via --tag.
+  test('run.schema.json accepts buildRunResult output with a recorded tag', () => {
+    const doc = buildRunResult({
+      taskId: 'sch-run-2b',
+      metadata: { model: 'openrouter/deepseek/deepseek-v4', status: 'complete', tag: 'sprint-42' },
+    });
+    expectValid(compile('run'), doc);
+  });
+
   test('wave.schema.json accepts buildWaveResult output', () => {
     const doc = buildWaveResult({
       waveId: 'sch-wave-1', legs: [runDoc],
@@ -98,6 +107,30 @@ describe('published result-family schemas validate real builder output (v4.0 §7
       createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
     });
     doc.pack = null; // simulates a hand-rolled/legacy doc; buildWaveResult itself never does this
+    expect(compile('wave')(doc)).toBe(false);
+  });
+
+  // v4.7 F8 (D13): additive — present only when the wave was launched via --tag.
+  test('wave.schema.json accepts buildWaveResult output with a recorded tag', () => {
+    const doc = buildWaveResult({
+      waveId: 'sch-wave-4', legs: [runDoc],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      tag: 'sprint-42',
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    expectValid(compile('wave'), doc);
+  });
+
+  // tag is a plain string (schemas.test.js:94-102 pack:null-rejection
+  // precedent): never ["string","null"], so an explicit tag:null must reject
+  // exactly like pack:null does above.
+  test('wave.schema.json rejects an explicit tag:null (absent-not-null, same rule as pack)', () => {
+    const doc = buildWaveResult({
+      waveId: 'sch-wave-5', legs: [runDoc],
+      promptMeta: { source: 'file', file: 'briefing.md', chars: 42 },
+      createdAt: '2026-07-19T10:00:00.000Z', completedAt: '2026-07-19T10:05:00.000Z',
+    });
+    doc.tag = null;
     expect(compile('wave')(doc)).toBe(false);
   });
 
@@ -227,6 +260,8 @@ describe('published council-family schemas validate real builder output (v4.0 §
       pack: { name: 'sec-review', version: '1.0.0', hash: 'abc123def456', source: 'dir' },
       // v4.5 Task 5 (F3): template metadata — present only when the run was launched via --template.
       template: { name: 'x', hash: 'abcdef123456' },
+      // v4.7 F8 (D13): additive — present only when the run was launched via --tag.
+      tag: 'sprint-42',
       usage: { cost: { amount: 1.1, source: 'reported' } },
       exitCode: 0
     };

@@ -108,6 +108,10 @@ function initCouncilRun(o) {
     // Preserved across a later MCP-child initRun whose own seed omits it —
     // mergeRun's plain shallow merge never drops a key patch doesn't mention.
     ...(o.pack ? { pack: o.pack } : {}),
+    // v4.7 F8 (D13): additive-only — absent (not null) without --tag. Same
+    // merge-preserve precedent as pack above (mergeRun's shallow merge never
+    // drops a key a later patch doesn't mention).
+    ...(o.tag ? { tag: o.tag } : {}),
     // v4.5 Wave 2 (post-HOLD chip, task-23-report.md Anomaly 1): additive-only
     // — absent (never an empty array) when nothing was dropped. Handler-computed
     // (cli-handlers-council-run.js's resolveBench, via resolveCouncilMembers) so

@@ -19,7 +19,7 @@ const { ERROR_CODES } = require('../utils/error-doc');
 // Wave-document persistence lives in ./fanout-wave-io (size-gate split, v4.4.1
 // Task 0.5). writeWaveMetadata is re-exported below — fanout-retry.js and the
 // fanout tests import it from here.
-const { writeWaveMetadata, writeWaveDoc, finishWave } = require('./fanout-wave-io');
+const { writeWaveMetadata, writeWaveDoc, finishWave, stampLegAttribution } = require('./fanout-wave-io');
 
 /**
  * Derive leg task IDs: <waveId>-1 .. <waveId>-N (matches TASK_ID_PATTERN).
@@ -86,7 +86,8 @@ async function runFanout(options) {
   // `reason` in metadata.json, no wave.json, and stage1 recorded 'complete'.
   // waveDir is optional (only the post-creation caller has one).
   const errorWave = (waveId, message, waveDir) => {
-    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack, createdAt, completedAt: new Date().toISOString(), status: 'error' });
+    // v4.7 F8 (D13, T3 review): tag: options.tag || metaTag, TDZ-safe (sole call site runs after `const metaTag` below).
+    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack, tag: options.tag || metaTag, createdAt, completedAt: new Date().toISOString(), status: 'error' });
     doc.error = message;
     doc.reason = message; // classifier alias, same as fanout-leg.js's run docs
     // best-effort: an unwritable wave dir must not mask the real error
@@ -119,11 +120,7 @@ async function runFanout(options) {
   });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
-  // v4.3 §7.2: stamp council attribution onto every leg (fanout-leg.js's
-  // existing appendSpend reads it); no-op for every non-council caller.
-  if (options.councilRunId || options.councilName) {
-    legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
-  }
+  stampLegAttribution(legs, options);
   const okLegs = legs.filter(l => l.ok);
   // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
   // stderr to land on — surface it on the wave doc instead, deduped in case
@@ -149,6 +146,7 @@ async function runFanout(options) {
     briefing: String(options.prompt).slice(0, 200),
     promptMeta: options.promptMeta || null,
     ...(options.pack ? { pack: options.pack } : {}), // v4.5 Task 13: absent-not-null.
+    ...(options.tag ? { tag: options.tag } : {}), // v4.7 F8 (D13): absent-not-null, same idiom as pack above.
     pid: process.pid, project, createdAt,
   });
   // v4.5 final-review F2: an MCP-spawned child never gets --pack (single-
@@ -161,6 +159,7 @@ async function runFanout(options) {
   // result-schema-rebuild.js:93, which reads meta.pack off a metadata.json
   // it loaded for an unrelated reason).
   const metaPack = waveMeta.pack;
+  const metaTag = waveMeta.tag; // v4.7 F8 (D13): same pre-seed inherit mechanism as metaPack above.
   emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds, follow);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
@@ -171,7 +170,7 @@ async function runFanout(options) {
     const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
     const completedAt = new Date().toISOString();
     const wave = buildWaveResult({
-      waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, createdAt, completedAt, notices,
+      waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, tag: options.tag || metaTag, createdAt, completedAt, notices,
     });
     return finishWave({ wave, waveDir, waveId, project, completedAt, follow, emit,
       exitCode: waveExitCode(wave.status),
@@ -282,7 +281,7 @@ async function runFanout(options) {
   const completedAt = new Date().toISOString();
   const signalled = waveAbort.signal();
   const wave = buildWaveResult({
-    waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, createdAt, completedAt,
+    waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, tag: options.tag || metaTag, createdAt, completedAt,
     status: signalled ? 'aborted' : null, notices,
   });
   const exitCode = signalled

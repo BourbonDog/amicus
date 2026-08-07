@@ -4,9 +4,11 @@
  * Covers both amicus_start write sites:
  *  - spawn-fallback initial metadata (exercised end-to-end via a mocked
  *    child_process, AMICUS_SHARED_SERVER='0')
- *  - shared-server metadata write (source-contract check; the real shared
- *    path needs a live OpenCode server, so we pin the write's contents at
- *    the source level, matching tests/mcp-shared-server.test.js style)
+ *  - shared-server metadata write (source-contract check here; a live
+ *    OpenCode server isn't needed to drive this branch behaviorally —
+ *    mockCommonSeams() in tests/mcp-server-wait-wiring.test.js stubs the
+ *    seams and exercises it end-to-end, reading metadata.json off disk —
+ *    so this file's source-level pin is a supplement, not the only coverage)
  */
 
 const fs = require('fs');
@@ -101,5 +103,19 @@ describe('shared-server path metadata keys (source contract)', () => {
     expect(sharedWrite).toContain('briefing: renderedPrompt');
     expect(sharedWrite).toContain("mode: 'headless'");
     expect(sharedWrite).toContain("agent: agent || 'build'");
+  });
+
+  // v4.7 F8 (D13, errata E-PR3-2): THE critical site. This shared-server branch
+  // (sharedServer.enabled && input.noUi, the DEFAULT MCP headless path) never
+  // spawns a CLI child, so argv forwarding (mcp-server.test.js's --tag tests)
+  // can never reach it — input.tag must be stamped directly into this write,
+  // same additive-only "absent (not null)" idiom as packRecord immediately
+  // above it. Presence-only source-contract slice, same idiom as the pack
+  // window tests above (mcp-pack-params.test.js).
+  test('shared-server metadata write stamps input.tag additive-only (absent without a tag)', () => {
+    const start = src.indexOf('opencodeSessionId: sessionId');
+    const end = src.indexOf('buildContext(cwd');
+    const sharedWrite = src.slice(start, end);
+    expect(sharedWrite).toContain('...(input.tag ? { tag: input.tag } : {})');
   });
 });

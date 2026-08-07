@@ -86,6 +86,57 @@ describe('runLegWithFallback (spec 6.2)', () => {
     expect(doc.fallback).toBeUndefined();
   });
 
+  // D16 (v4.7 F8): stampLegAttribution (fanout-wave-io.js) stamps `l.tag` onto
+  // every leg before runLeg/runLegWithFallback ever sees it — recordAttemptSpend
+  // (fanout-leg-fallback.js) must carry that tag onto EVERY attempt's row,
+  // substitute included (not just the primary).
+  test('a tagged leg carries the tag on every attempt row, substitute included', async () => {
+    const project = tmp();
+    let call = 0;
+    const fakeRunOnce = async ({ model }) => {
+      call += 1;
+      if (model === 'anthropic/claude-opus-5') {
+        return { legId: 'w1-1', status: 'error', model, reason: 'HTTP 429 Too Many Requests',
+          usage: { tokens: { input: 50, output: 0 }, cost: { amount: 0.01, source: 'reported' } } };
+      }
+      return { legId: 'w1-1', status: 'complete', model,
+        usage: { tokens: { input: 100, output: 60 }, cost: { amount: 0.03, source: 'reported' } } };
+    };
+    await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus', tag: 'sprint42' }, legId: 'w1-1', waveId: 'w1', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: {} },
+      catalog: [{ id: 'anthropic/claude-opus-5' }, { id: 'anthropic/claude-sonnet-5' }],
+    }, {
+      runOnce: fakeRunOnce,
+      resolveRoute: async ({ model }) => ({ kind: 'resolved', executableId: model, gateway: 'direct' }),
+      spendDir: project,
+    });
+    expect(call).toBe(2);
+    const rows = readSpendRows(project);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) { expect(row.tag).toBe('sprint42'); }
+  });
+
+  // D16 convention pin: an untagged leg's attempt row carries tag:null.
+  test('an untagged leg carries tag:null on its attempt row', async () => {
+    const project = tmp();
+    const fakeRunOnce = async ({ model }) => ({ legId: 'w1-1', status: 'complete', model,
+      usage: { tokens: { input: 100, output: 60 }, cost: { amount: 0.03, source: 'reported' } } });
+    await runLegWithFallback({
+      leg: { model: 'anthropic/claude-opus-5', modelInput: 'opus' }, legId: 'w1-1', waveId: 'w1', project,
+      fallback: { enabled: true, maxSubstitutions: 2, chains: {} },
+      catalog: [{ id: 'anthropic/claude-opus-5' }],
+    }, {
+      runOnce: fakeRunOnce,
+      resolveRoute: async ({ model }) => ({ kind: 'resolved', executableId: model, gateway: 'direct' }),
+      spendDir: project,
+    });
+    const rows = readSpendRows(project);
+    expect(rows).toHaveLength(1);
+    expect('tag' in rows[0]).toBe(true);
+    expect(rows[0].tag).toBeNull();
+  });
+
   test('chain exhausted -> fails with the ORIGINAL error, attempts recorded', async () => {
     const project = tmp();
     const fakeRunOnce = async ({ model }) => ({ legId: 'w1-1', status: 'error', model, reason: '429 rate limit',

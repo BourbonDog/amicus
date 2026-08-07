@@ -10,6 +10,10 @@ const path = require('path');
 const { safeSessionDir, TASK_ID_PATTERN } = require('../utils/validators');
 const { SESSIONS_DIR } = require('../session-manager');
 const { fenceSidecarOutput } = require('../utils/untrusted-fence');
+// F8 D15 (errata E-PR3-5) search core — split out (T6 review) to keep this
+// file under its line budget; both list surfaces still reach it through
+// this module's own searchSessions re-export below.
+const { searchSessions } = require('./list-search');
 
 /**
  * Format a timestamp as relative age
@@ -54,6 +58,8 @@ function enumerateSessions(project, opts = {}) {
           type: meta.type || 'run',
           parentWave: meta.parentWave || null,
           legCount: Array.isArray(meta.legs) ? meta.legs.length : null,
+          mode: meta.mode || (meta.headless ? 'headless' : 'interactive'),
+          ...(meta.tag ? { tag: meta.tag } : {}),
         });
       } catch { /* skip unreadable */ }
     }
@@ -68,18 +74,71 @@ function enumerateSessions(project, opts = {}) {
 }
 
 /**
+ * Enumerate sessions across every project the global sessions-index
+ * (src/utils/session-index.js) knows about, plus the current project. --all
+ * support (F8 D14): the index is a navigation aid, never authoritative, so a
+ * stale entry pointing at a missing/unreadable project directory is skipped
+ * silently rather than surfaced as an error.
+ *
+ * Dedup is by CANONICAL identity (T5 review fix-wave): the index stores
+ * canonical spellings (canonicalProjectPath — forward slashes, upper-cased
+ * drive letter) while `project` arrives however the caller spelled it
+ * (process.cwd() is backslashed on Windows). A raw string Set treated those
+ * as two different projects, double-counting every row of the current
+ * project whenever it was also present in the index (which it usually is —
+ * every session start records itself). The current project is seeded FIRST
+ * so its rows keep the caller's spelling rather than the index's.
+ * @param {{status?: string, project?: string}} [opts]
+ * @returns {Array<object>} enumerateSessions rows, each stamped with `project`
+ */
+function enumerateAllProjects(opts = {}) {
+  const { status, project = process.cwd() } = opts;
+  const { readIndex } = require('../utils/session-index');
+  const { canonicalProjectPath } = require('../utils/project-path');
+  const index = readIndex();
+
+  const byCanonical = new Map();
+  for (const p of [project, ...Object.values(index)]) {
+    if (!p || typeof p !== 'string') { continue; }
+    const key = canonicalProjectPath(p);
+    if (!byCanonical.has(key)) { byCanonical.set(key, p); }
+  }
+
+  let sessions = [];
+  for (const p of byCanonical.values()) {
+    try {
+      const rows = enumerateSessions(p, {}).map(s => ({ ...s, project: p }));
+      sessions = sessions.concat(rows);
+    } catch { /* unreadable project — skip silently */ }
+  }
+
+  sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (status && status !== 'all') {
+    sessions = sessions.filter(s => s.status === status);
+  }
+  return sessions;
+}
+
+/**
  * List previous sidecar sessions
  * Spec Reference: §4.2
  *
  * @param {object} options
  * @param {string} [options.status] - Filter by status (all, running, complete)
+ * @param {boolean} [options.all] - Cross-project via the global sessions-index (F8 D14)
  * @param {boolean} [options.json] - Output as JSON
  * @param {string} [options.project] - Project directory
+ * @param {string|boolean} [options.search] - id/tag/briefing substring filter (F8 D15); `true` = valueless flag (usage error)
  */
 async function listSidecars(options) {
-  const { status, json, project = process.cwd() } = options;
+  const { status, all, json, search, project = process.cwd() } = options;
+  // Mirrors models.js:279-281's valueless-flag shape.
+  if (search === true) { throw new Error('--search requires a value'); }
 
-  const sessions = enumerateSessions(project, { status });
+  let sessions = all
+    ? enumerateAllProjects({ status, project })
+    : enumerateSessions(project, { status });
+  if (search) { sessions = searchSessions(sessions, search, { project }); }
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
     return;
@@ -88,8 +147,12 @@ async function listSidecars(options) {
   if (json) {
     console.log(JSON.stringify(sessions, null, 2));
   } else {
-    console.log('ID        MODEL                  STATUS     AGE         BRIEFING');
-    console.log('─'.repeat(80));
+    console.log(
+      'ID'.padEnd(10) + 'MODEL'.padEnd(23) + 'STATUS'.padEnd(11) +
+      'TAG'.padEnd(12) + 'AGE'.padEnd(12) + 'BRIEFING' +
+      (all ? '  PROJECT' : '')
+    );
+    console.log('─'.repeat(all ? 100 : 80));
     sessions.forEach(s => {
       const age = formatAge(s.createdAt);
       const briefingShort = (s.briefing || '').slice(0, 30) +
@@ -98,8 +161,10 @@ async function listSidecars(options) {
         `${(s.id || '').padEnd(10)}` +
         `${(s.type === 'wave' ? `wave(${s.legCount ?? 0} legs)` : (s.model || '')).padEnd(23)}` +
         `${(s.status || 'unknown').padEnd(11)}` +
+        `${(s.tag || '').padEnd(12)}` +
         `${age.padEnd(12)}` +
-        `${briefingShort}`
+        `${briefingShort}` +
+        (all ? `  ${s.project || ''}` : '')
       );
     });
   }
@@ -184,6 +249,8 @@ async function readSidecar(options) {
 module.exports = {
   formatAge,
   enumerateSessions,
+  enumerateAllProjects,
+  searchSessions,
   listSidecars,
   readSidecar
 };

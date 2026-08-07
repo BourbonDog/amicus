@@ -195,6 +195,9 @@ async function handleCouncilRunTool(input, project, helpers) {
   if (input.debate) { args.push('--debate'); }
   if (input.claudeReviewFile) { args.push('--claude-review', path.resolve(project, String(input.claudeReviewFile))); }
   if (input.noCostGate) { args.push('--no-cost-gate'); }
+  // v4.7 F8 (D13): the spawned CLI child's own cli-handlers-council-run.js
+  // stores the tag on the run.json seed (Task 3) — this handler only forwards.
+  if (input.tag) { args.push('--tag', input.tag); }
 
   let child;
   try { child = helpers.spawnFn(args, runDir); } catch (err) {

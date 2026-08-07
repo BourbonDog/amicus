@@ -21,6 +21,7 @@ async function launchStage1(ctx) {
     // v4.3 Task 3 (spec §7.2): attribution ids, forwarded verbatim to runFanout
     // via run-launch.js so every Stage-1 leg's ledger row carries them.
     councilRunId: o.runId, councilName: o.councilName,
+    tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
     // v4.3 Task 18 (spec §6.2): fallback chains apply to STAGE legs only —
     // the chair (run-chair.js) and debate legs (run-debate.js) never receive
     // this, so they never substitute via chains.

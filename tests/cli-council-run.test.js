@@ -40,6 +40,9 @@ describe('pre-flight validation (error envelope, exit 1, before any spend)', () 
     ['bad gateway', { gateway: 'carrier-pigeon' }, /--gateway must be one of/],
     ['bad max-cost', { 'max-cost': -1 }, /--max-cost must be a positive number/],
     ['bad timeout', { timeout: 0 }, /--timeout must be a positive number/],
+    // v4.7 F8 (D13): --tag rejects rather than cleans (unlike sanitizeCouncilName).
+    ['bad tag', { tag: 'bad tag!' }, /Invalid --tag/],
+    ['valueless --tag (boolean true)', { tag: true }, /Invalid --tag/],
   ])('%s', async (_name, extra, msgRe) => {
     const code = await handleCouncilRun(argsBase(extra));
     expect(code).toBe(1);
@@ -83,6 +86,15 @@ describe('engine invocation', () => {
     const opts = runCouncil.mock.calls[0][0];
     expect(opts.runId).toBe('feedc0de');
     expect(opts.runDir).toBe(path.resolve(tmp, 'X'));
+  });
+
+  // v4.7 F8 (T9-m4/final-review Important): regression pin for
+  // cli-handlers-council-run.js's `tag: args.tag,` forward — the final review
+  // flagged this site as mutation-viable (no test failed if it were deleted).
+  test('--tag is forwarded into runCouncil options', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: {} });
+    await handleCouncilRun(argsBase({ tag: 'sprint-42' }));
+    expect(runCouncil.mock.calls[0][0].tag).toBe('sprint-42');
   });
 
   test('bad --run-id → BAD_SESSION', async () => {

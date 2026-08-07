@@ -5,6 +5,7 @@
  * and the amicus_guide text content.
  */
 
+const { z } = require('zod');
 const { getTools, getGuideText, safeTaskId, safeModel } = require('../src/mcp-tools');
 const { mustIndexOf } = require('./helpers/docs-extract');
 const TOOLS = getTools();
@@ -238,6 +239,32 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_list');
       expect(tool.inputSchema).toHaveProperty('status');
     });
+
+    // v4.7 F8 (D14): status relaxes from a fixed enum to any string, so
+    // 'aborted'/'error'/'crashed'/'idle-timeout' (schema-legal statuses this
+    // enum never listed) pass through the MCP schema layer, not just the
+    // in-process handler.
+    test('status accepts any string value, not just the former enum (schema relax, D14)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
+      const parsed = z.object(tool.inputSchema).parse({ status: 'aborted' });
+      expect(parsed.status).toBe('aborted');
+    });
+
+    test('status remains optional', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
+      const parsed = z.object(tool.inputSchema).parse({});
+      expect('status' in parsed).toBe(false);
+    });
+
+    // F8 D15 (errata E-PR3-5): case-insensitive substring filter over
+    // id/tag/briefing material, shared with the CLI's --search.
+    test('has an optional search string in the input schema', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
+      expect(tool.inputSchema).toHaveProperty('search');
+      const parsed = z.object(tool.inputSchema).parse({ search: 'needle' });
+      expect(parsed.search).toBe('needle');
+      expect('search' in z.object(tool.inputSchema).parse({})).toBe(false);
+    });
   });
 
   describe('amicus_resume', () => {
@@ -365,6 +392,63 @@ describe('MCP Tool Definitions', () => {
     test('description recommends amicus_wait, with sleep+amicus_status as fallback (B16)', () => {
       expect(fanoutTool.description).toContain('amicus_wait');
       expect(fanoutTool.description).toContain('amicus_status');
+    });
+  });
+
+  describe('tag input (F8 D13, errata E-PR3-2)', () => {
+    // amicus_start/amicus_fanout share `prompt` as their sole required field;
+    // amicus_council_run requires `briefingFile` instead — each `extra` supplies
+    // just enough to satisfy the schema's OTHER required keys so z.object(...).parse
+    // exercises `tag` in isolation.
+    const TAG_TOOLS = [
+      { name: 'amicus_start', extra: { prompt: 'hi' } },
+      { name: 'amicus_fanout', extra: { prompt: 'hi' } },
+      { name: 'amicus_council_run', extra: { briefingFile: '/tmp/briefing.md' } },
+    ];
+
+    test.each(TAG_TOOLS)('$name declares tag as optional with no Zod default', ({ name }) => {
+      const tool = TOOLS.find(t => t.name === name);
+      expect(tool.inputSchema).toHaveProperty('tag');
+      const schema = tool.inputSchema.tag;
+      expect(schema._def.typeName).toBe('ZodOptional');
+      expect(schema.isOptional()).toBe(true);
+    });
+
+    test.each(TAG_TOOLS)('$name accepts a valid tag', ({ name, extra }) => {
+      const tool = TOOLS.find(t => t.name === name);
+      const parsed = z.object(tool.inputSchema).parse({ ...extra, tag: 'sprint-42_v2' });
+      expect(parsed.tag).toBe('sprint-42_v2');
+    });
+
+    test.each(TAG_TOOLS)('$name rejects a tag with disallowed characters', ({ name, extra }) => {
+      const tool = TOOLS.find(t => t.name === name);
+      expect(() => z.object(tool.inputSchema).parse({ ...extra, tag: 'bad tag!' })).toThrow();
+    });
+
+    test.each(TAG_TOOLS)('$name rejects a tag over 64 chars', ({ name, extra }) => {
+      const tool = TOOLS.find(t => t.name === name);
+      expect(() => z.object(tool.inputSchema).parse({ ...extra, tag: 'a'.repeat(65) })).toThrow();
+    });
+
+    test.each(TAG_TOOLS)('$name leaves tag genuinely absent from the parsed result when omitted', ({ name, extra }) => {
+      const tool = TOOLS.find(t => t.name === name);
+      const parsed = z.object(tool.inputSchema).parse({ ...extra });
+      expect('tag' in parsed).toBe(false);
+    });
+
+    // v4.7 F8 (D13, T4 review): regex-parity pin — the MCP schema's tag regex
+    // is a duplicated literal (mcp-tools.js), not an import of
+    // utils/validators.js's TAG_PATTERN (the CLI's own --tag validator). This
+    // locks the two in sync: if either ever drifts, a value the CLI accepts
+    // could be rejected over MCP (or vice versa) with no other test to catch it.
+    test.each(TAG_TOOLS)('$name: tag regex source matches utils/validators.js TAG_PATTERN exactly', ({ name }) => {
+      const { TAG_PATTERN } = require('../src/utils/validators');
+      const tool = TOOLS.find(t => t.name === name);
+      const inner = tool.inputSchema.tag.unwrap(); // ZodOptional -> ZodString
+      const regexCheck = inner._def.checks.find(c => c.kind === 'regex');
+      expect(regexCheck).toBeDefined();
+      expect(regexCheck.regex.source).toBe(TAG_PATTERN.source);
+      expect(regexCheck.regex.flags).toBe(TAG_PATTERN.flags);
     });
   });
 

@@ -65,6 +65,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
     noCostGate: o.noCostGate,
     councilRunId: o.runId, councilName: o.councilName,
+    tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
     fallback: o.fallback, catalog: o.catalog,
   });
   ctx.addWave(wave);
@@ -106,6 +107,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         project: ctx.scratchDir, waveId, timeout: o.timeout,
         gateway: o.gateway, noValidateModel: o.noValidateModel, noCostGate: o.noCostGate,
         councilRunId: o.runId, councilName: o.councilName,
+        tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
         fallback: o.fallback, catalog: o.catalog,
       });
       ctx.addWave(solo.wave);

@@ -27,7 +27,7 @@ describe('getKnownFlags', () => {
 
   it('derives the bulk from the usage text rather than a hand-maintained list', () => {
     // Sample of flags that only exist in USAGE_COMMAND_BLOCKS.
-    for (const f of ['model', 'prompt', 'chair', 'critic', 'lenses', 'max-cost', 'out-dir']) {
+    for (const f of ['model', 'prompt', 'chair', 'critic', 'lenses', 'max-cost', 'out-dir', 'tag']) {
       expect(known.has(f)).toBe(true);
     }
   });
@@ -47,6 +47,13 @@ describe('getKnownFlags', () => {
       expect(known.has(f)).toBe(true);
       expect(INTERNAL_FLAGS.has(f)).toBe(true);
     }
+  });
+
+  // v4.7 F8: --tag is documented in the start/fanout/council-run usage blocks
+  // (not INTERNAL_FLAGS — it's user-facing), so it must register the same way
+  // every other usage-derived flag does. MCP spawns forward it unchanged.
+  it("'tag' is a known flag (F8 — forwarded by MCP spawns)", () => {
+    expect(getKnownFlags().has('tag')).toBe(true);
   });
 
   it('includes undocumented-but-working flags so the fix breaks nothing', () => {

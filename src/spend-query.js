@@ -17,7 +17,7 @@
  * NOT hand-copy this array elsewhere: a 7th dimension added here must reach
  * both surfaces automatically, not just the one someone remembered to edit.
  */
-const GROUP_DIMS = ['model', 'wave', 'council', 'project', 'op', 'day'];
+const GROUP_DIMS = ['model', 'wave', 'council', 'project', 'op', 'day', 'tag'];
 
 /** Cap on rows returned when a caller opts into raw rows (CLI --rows / MCP rows:true). */
 const ROWS_CAP = 1000;
@@ -55,6 +55,7 @@ function rowKey(row, dimension) {
     case 'project': return row.project || '(unattributed)';
     case 'op': return row.op || '(unattributed)';
     case 'day': return typeof row.ts === 'string' ? row.ts.slice(0, 10) : '(unattributed)';
+    case 'tag': return row.tag || '(unattributed)';
     default: return '(unattributed)';
   }
 }

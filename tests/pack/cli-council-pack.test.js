@@ -268,6 +268,31 @@ describe('run.json records the pack (run-state.js, v4.5 Task 12)', () => {
   });
 });
 
+// v4.7 F8 (D13): --tag on `council run` — same absent-not-null seed idiom as
+// pack above, mirrored verbatim (this describe's own siblings are the
+// scaffolding authority).
+describe('run.json records the tag (run-state.js, v4.7 F8)', () => {
+  let rsTmp;
+  beforeEach(() => { rsTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-tag-state-')); });
+  afterEach(() => { fs.rmSync(rsTmp, { recursive: true, force: true }); });
+
+  const runDirOf = () => path.join(rsTmp, 'council-tg123');
+  const baseOpts = () => ({
+    runId: 'tg123', runDir: runDirOf(), project: rsTmp,
+    models: ['alpha', 'beta'], chair: 'chairmodel', critic: null, lenses: null,
+  });
+
+  test('o.tag present -> readRun(runDir).tag equals it', () => {
+    runState.initCouncilRun({ ...baseOpts(), tag: 'sprint-42' });
+    expect(runState.readRun(runDirOf()).tag).toBe('sprint-42');
+  });
+
+  test('o.tag absent -> "tag" key is absent from run.json, not null', () => {
+    runState.initCouncilRun(baseOpts());
+    expect('tag' in runState.readRun(runDirOf())).toBe(false);
+  });
+});
+
 describe('--pack flag surface (Step 3)', () => {
   test('--pack <name|path> is documented for council run, fanout, and start', () => {
     expect(getUsage('council')).toContain('--pack <name|path>');

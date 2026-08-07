@@ -147,6 +147,44 @@ describe('spend ledger append on start finalize (B24)', () => {
     });
   });
 
+  // D16 (v4.7 F8): a solo `start --tag` run's ledger row carries the tag —
+  // read back off `m` (the re-read metadata at start.js's finalize site), the
+  // same in-scope value its neighboring gateway comment enforces.
+  it('a headless run started with --tag carries the tag on its ledger row', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      usage: { tokens: { input: 200, output: 80, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.02 },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0004', tag: 'sprint42',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].tag).toBe('sprint42');
+  });
+
+  // D16: the convention pin at the other end — an untagged solo run's row
+  // carries tag:null (present, not omitted), matching spend-ledger.js's
+  // nullable-dim convention (contrast with metadata.json's own absent-not-null
+  // tag, D13 — createSessionMetadata.js:50).
+  it('an untagged headless run carries tag:null on its ledger row', async () => {
+    mockRunHeadless.mockResolvedValue({
+      summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],
+      usage: { tokens: { input: 5, output: 5, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.001 },
+    });
+    const { readSpendRows } = require('../src/utils/spend-ledger');
+    await startSidecar({
+      model: 'openrouter/a/b', prompt: 'task', noUi: true, cwd: project,
+      includeContext: false, json: true, taskId: 'spend0005',
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows).toHaveLength(1);
+    expect('tag' in rows[0]).toBe(true);
+    expect(rows[0].tag).toBeNull();
+  });
+
   it('a run with no usage on the result does not append a row', async () => {
     mockRunHeadless.mockResolvedValue({
       summary: 'done', completed: true, timedOut: false, aborted: false, taskId: 'x', toolCalls: [],

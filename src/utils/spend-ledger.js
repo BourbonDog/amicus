@@ -55,13 +55,17 @@ const SPEND_LEDGER_FILE = 'spend-ledger.jsonl';
  * @param {string} [opts.councilName] council name (additive attribution)
  * @param {string} [opts.project] project directory (additive attribution)
  * @param {string} [opts.gateway] resolved gateway ('direct'|'openrouter'|'local', additive attribution)
+ * @param {string} [opts.tag] user-chosen tag (v4.7 F8 D16, additive attribution) —
+ *   nullable dim, same null-not-absent convention as councilRunId/project below;
+ *   deliberately the OPPOSITE convention from createSessionMetadata's tag (D13,
+ *   absent-not-null) — see the dim-list comment below.
  * @param {number} [opts.attempt] fallback attempt count (omitted if absent)
  * @param {string} [opts.substitutedFor] substituted model (omitted if absent)
  * @param {string} [opts.retryOfWaveId] wave id being retried (omitted if absent)
  * @param {{dir?:string}} [ctx] test seam — dir overrides getConfigDir()
  */
 function appendSpend({ taskId, waveId, model, mode, usage,
-  op, status, councilRunId, councilName, project, gateway,
+  op, status, councilRunId, councilName, project, gateway, tag,
   attempt, substitutedFor, retryOfWaveId }, ctx = {}) {
   if (!usage) { return; }
   try {
@@ -76,15 +80,18 @@ function appendSpend({ taskId, waveId, model, mode, usage,
       mode: mode || null,
       tokens: usage.tokens || null,
       cost: usage.cost || null,
-      // v4.3 additive attribution (spec 7.1). Nullable dimensions default to
-      // null (so a row is always groupable); linkage fields are OMITTED unless
-      // present (they only exist on fallback/retry rows).
+      // v4.3 additive attribution (spec 7.1), extended v4.7 F8 D16 with `tag`.
+      // Nullable dimensions (op/status/councilRunId/councilName/project/
+      // gateway/tag) default to null (so a row is always groupable); linkage
+      // fields are OMITTED unless present (they only exist on fallback/retry
+      // rows).
       op: op || null,
       status: status || null,
       councilRunId: councilRunId || null,
       councilName: councilName || null,
       project: project || null,
       gateway: gateway || null,
+      tag: tag || null,
     };
     if (attempt !== undefined) { row.attempt = attempt; }
     if (substitutedFor !== undefined) { row.substitutedFor = substitutedFor; }

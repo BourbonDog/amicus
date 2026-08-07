@@ -94,4 +94,5 @@ module.exports = {
   INDEX_FILENAME,
   recordSession,
   lookupSessionProject,
+  readIndex,
 };

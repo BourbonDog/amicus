@@ -30,6 +30,29 @@ All notable changes to Amicus are documented here. Format follows
   first — `aliases[0]` is the launch-preferred name) **and a `legacy` mark** on groups whose rows
   all lack `resolvedModel`; the human table sizes the model column to the longest key (16-char
   floor) and marks `legacy` in the notes column beside `low-N`.
+- **`--tag <t>` on `start`/`fanout`/`council run`** (CLI + MCP, v4.7 F8 D13): labels a session
+  for `list`/`--search`/`spend --group-by tag`. Reject-style validation
+  (`^[A-Za-z0-9_-]{1,64}$`) — an invalid tag fails fast rather than being silently truncated or
+  charset-stripped the way `sanitizeCouncilName` cleans, since a stored tag is a search key.
+  Stored absent-not-null on `metadata.json`/`wave.json`/`run.json` and every result doc; the MCP
+  shared-server's in-process start path stamps it too. `--tag` is rejected alongside
+  `--retry-failed` (`BAD_ARGS`).
+  Council sub-waves (Stage-1, critic/lens solos, Stage-2, chair, debate) all carry the run's tag
+  on their own wave metadata. Riders: `continue`/`resume` don't yet inherit the parent session's
+  tag (their rows group under `(unattributed)` for `--group-by tag`), and `--retry-failed` doesn't
+  yet inherit the original wave's tag either — both are future work, not oversights.
+- **`amicus list --search <q>` / MCP `amicus_list {search}`** (F8 D15, errata E-PR3-5):
+  case-insensitive substring filter over `id`, `tag`, and briefing material. Fan-out wave rows
+  match against the full `briefing.md` text (falling back to the row's 200-char excerpt when
+  unreadable); council-run rows match `briefing.md` written at MCP launch, or the
+  post-`--- MATERIAL / BRIEFING ---` portion of `briefing-stage1.md` for CLI-launched runs; leg
+  rows (spawned by a wave) match `id`/`tag` only, so a wave's briefing never surfaces once per
+  leg it spawned. A bare `--search` with no value is a usage error.
+- **`amicus spend --group-by tag`** (F8 D16): spend-ledger rows now carry `tag` (leg and solo
+  rows alike); untagged history groups under `(unattributed)`, matching every other dimension's
+  convention. `SPEND_LEDGER_SCHEMA_VERSION` stays at `1` — this is an additive field, not the kind
+  of change that forced the council-ledger's `LEDGER_SCHEMA_VERSION` 1 → 2 bump above, which
+  existed to segment history by resolved-model id, a different need.
 
 ### Changed
 
@@ -56,6 +79,26 @@ All notable changes to Amicus are documented here. Format follows
 - **Chair fallback promotion (`pickFallbackChair`) excludes candidates by their full name set**
   (group key + `aliases[]`) and launches the group's most-recent alias (`aliases[0]`) — a bench
   seat's resolved-keyed group can no longer be promoted as its own chair.
+- **`amicus list` and the MCP `amicus_list` tool now share one enumeration**
+  (`src/sidecar/read.js`, F8 D14): MCP rows gain `type`/`parentWave`/`legCount`, CLI rows gain
+  `mode`, and both gain `tag`. The MCP `status` input relaxed from a 3-value enum
+  (`'all' | 'running' | 'complete'`) to a free string, so `error`/`aborted`/`crashed`/
+  `timed-out`/`idle-timeout` — always real statuses, previously rejected outright by MCP's schema
+  even though the CLI already accepted them — now filter correctly there too. The CLI table
+  gained a `TAG` column.
+
+### Fixed
+
+- **`amicus list --all` now actually lists every project.** The flag has been documented since
+  before v4.7 (`--all` / "Show all projects" in `amicus list`'s help text) but `listSidecars`
+  never read it, so it silently behaved exactly like a bare `amicus list`. It now enumerates
+  every project the global sessions-index knows about (an advisory navigation aid, not
+  authoritative — a stale entry pointing at a missing or unreadable project is skipped, not
+  surfaced as an error), deduped by canonical project identity.
+- **`amicus list --search` was accepted and silently ignored.** The generic CLI arg parser took
+  any `--search <value>`, but nothing downstream read it, so the flag — whose sibling convention,
+  `amicus models --search`, was already a repo-wide pattern — quietly did nothing. It's now
+  implemented; see Added, above.
 
 ## [4.6.3] - 2026-08-05
 

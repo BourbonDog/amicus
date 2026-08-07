@@ -130,6 +130,43 @@ describe('MCP spawn arg building', () => {
     });
   });
 
+  // v4.7 F8 (D13, errata E-PR3-2): this argv is DEAD on the shared-server
+  // branch (the default MCP headless path — see tests/mcp-start-metadata.test.js
+  // for that write) but forwarded anyway for the spawn-fallback path, which
+  // these tests exercise (sharedServer.ensureServer() has no real OpenCode
+  // binary in this test env and always falls through to spawn).
+  test('amicus_start passes --tag when provided', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', tag: 'sprint-42' }, '/tmp');
+      const idx = capturedArgs.indexOf('--tag');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('sprint-42');
+    });
+  });
+
+  test('amicus_start omits --tag when not provided (argv byte-unchanged)', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      expect(capturedArgs).not.toContain('--tag');
+    });
+  });
+
   test('amicus_continue returns a NEW taskId, not the parent taskId', async () => {
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({
@@ -345,6 +382,43 @@ describe('MCP spawn arg building', () => {
       const { handlers: h } = require('../src/mcp-server');
       await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
       expect(capturedArgs).not.toContain('--gateway');
+    });
+  });
+
+  // v4.7 F8 (D13, T4 review): behavioral twin of tests/mcp-fanout.test.js's
+  // source-scan pin — proves the argv actually carries --tag, not just that
+  // the source text mentions it. Same idiom as the --gateway pair above.
+  test('amicus_fanout forwards --tag to the spawned CLI child when provided (F8 D13)', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout(
+        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], tag: 'sprint-42' }, '/tmp'
+      );
+      const idx = capturedArgs.indexOf('--tag');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('sprint-42');
+    });
+  });
+
+  test('amicus_fanout omits --tag when not supplied', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      expect(capturedArgs).not.toContain('--tag');
     });
   });
 
@@ -678,6 +752,39 @@ describe('MCP Server Handlers', () => {
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed[0].id).toBe('newer');
         expect(parsed[1].id).toBe('older');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
+
+    // v4.7 F8 (D15, errata E-PR3-5): search runs on RAW briefing material
+    // BEFORE this handler's sanitizePreview(…, 80) pass — proven here by
+    // planting the needle past character 80 and confirming both the match
+    // AND the returned preview's truncation.
+    test('--search filters by raw briefing text, and the returned preview is still sanitized (F8 D15)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+      const sessionsBase = path.join(tmpDir, '.claude', 'amicus_sessions');
+
+      const hitDir = path.join(sessionsBase, 'hit00001');
+      fs.mkdirSync(hitDir, { recursive: true });
+      fs.writeFileSync(path.join(hitDir, 'metadata.json'), JSON.stringify({
+        taskId: 'hit00001', status: 'complete', model: 'gemini',
+        briefing: 'a'.repeat(90) + ' zebraphrase ' + 'b'.repeat(90),
+        createdAt: new Date().toISOString(),
+      }));
+      const missDir = path.join(sessionsBase, 'miss0001');
+      fs.mkdirSync(missDir, { recursive: true });
+      fs.writeFileSync(path.join(missDir, 'metadata.json'), JSON.stringify({
+        taskId: 'miss0001', status: 'complete', model: 'gemini',
+        briefing: 'nothing relevant here', createdAt: new Date().toISOString(),
+      }));
+
+      try {
+        const result = await handlers.amicus_list({ search: 'zebraphrase' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.map(r => r.id)).toEqual(['hit00001']);
+        expect(parsed[0].briefing.length).toBeLessThanOrEqual(81);
+        expect(parsed[0].briefing).toContain('…');
       } finally {
         fs.rmSync(tmpDir, { recursive: true });
       }

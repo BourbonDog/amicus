@@ -135,6 +135,46 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
     expect(capturedTaskId).not.toBeNull();
   });
 
+  // v4.7 F8 (D13, errata E-PR3-2, T4 review): behavioral pin of the shared-
+  // server metadata write's tag stamp — THE critical D13 site, since this
+  // in-process branch never spawns a CLI child and argv forwarding can never
+  // reach it. tests/mcp-start-metadata.test.js pins this same write at the
+  // source level (no live OpenCode server there); this file's mockCommonSeams
+  // stubs exactly the seams needed to drive handlers.amicus_start through the
+  // REAL branch and read the real metadata.json off disk, so it closes the
+  // behavioral gap the source-contract test alone can't.
+  test('shared-server path: metadata.json carries input.tag when provided', async () => {
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({
+        runHeadlessImpl: async () => ({ completed: true, summary: 'all done' }),
+      });
+
+      const { handlers } = require('../src/mcp-server');
+      const startResult = await handlers.amicus_start(
+        { prompt: 'p', noUi: true, model: 'google/gemini-test', tag: 'sprint-42' }, tmpDir);
+      const { taskId } = JSON.parse(startResult.content[0].text);
+
+      expect(readMeta(path.join(tmpDir, '.claude', 'amicus_sessions', taskId)).tag).toBe('sprint-42');
+      await drain();
+    });
+  });
+
+  test('shared-server path: metadata.json has no tag key when omitted', async () => {
+    await jest.isolateModulesAsync(async () => {
+      mockCommonSeams({
+        runHeadlessImpl: async () => ({ completed: true, summary: 'all done' }),
+      });
+
+      const { handlers } = require('../src/mcp-server');
+      const startResult = await handlers.amicus_start(
+        { prompt: 'p', noUi: true, model: 'google/gemini-test' }, tmpDir);
+      const { taskId } = JSON.parse(startResult.content[0].text);
+
+      expect('tag' in readMeta(path.join(tmpDir, '.claude', 'amicus_sessions', taskId))).toBe(false);
+      await drain();
+    });
+  });
+
   test('failure path: the waiter settles after error metadata is written, even when the run rejects', async () => {
     await jest.isolateModulesAsync(async () => {
       mockCommonSeams({

@@ -21,13 +21,14 @@ function seedSession(taskId, meta) {
     briefing: 'ordinary session', mode: 'headless', ...meta,
   }));
 }
-function seedCouncil(runId, status, createdAt) {
+function seedCouncil(runId, status, createdAt, extra = {}) {
   const runDir = path.join(tmp, `council-${runId}`);
   runState.initRun(runDir, {
     schemaVersion: 2, type: 'council-run', runId, status,
     stages: [{ name: 'stage1', status: status === 'running' ? 'running' : 'complete' }],
     bench: ['gemini', 'gpt'], chair: 'deepseek', critic: null, lenses: null,
     labelMap: null, options: { outDir: runDir }, usage: null, createdAt,
+    ...extra,
   });
   fs.writeFileSync(path.join(runDir, 'briefing.md'), 'council briefing text');
   runState.writePointer(tmp, runId, runDir);
@@ -58,5 +59,81 @@ describe('amicus_list merges council runs', () => {
     const rows = parse(await handlers.amicus_list({}, tmp));
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe('council-run');
+  });
+
+  // v4.7 F8 (D14): mcp-council-awareness.js's listCouncilRuns row literal gains
+  // tag, absent-not-null (same idiom as the ordinary-session rows).
+  test('council rows carry tag when the run recorded one (D14)', async () => {
+    seedCouncil('tagged11', 'complete', '2026-07-19T02:00:00.000Z', { tag: 'sprint-42' });
+    const rows = parse(await handlers.amicus_list({}, tmp));
+    expect(rows.find(r => r.id === 'tagged11').tag).toBe('sprint-42');
+  });
+
+  test('council rows omit tag entirely when the run recorded none', async () => {
+    seedCouncil('notagged1', 'complete', '2026-07-19T02:00:00.000Z');
+    const rows = parse(await handlers.amicus_list({}, tmp));
+    expect('tag' in rows.find(r => r.id === 'notagged1')).toBe(false);
+  });
+});
+
+// v4.7 F8 (D15, errata E-PR3-5): --search over council-run rows on the MCP
+// surface. Material resolution re-derives runDir from the pointer file
+// (never trusts anything already on the row) and re-fences it with
+// containsOnDisk, same as listCouncilRuns itself does at :214.
+function seedCouncilNoBriefingMd(runId, status, createdAt, stage1Material) {
+  const runDir = path.join(tmp, `council-${runId}`);
+  runState.initRun(runDir, {
+    schemaVersion: 2, type: 'council-run', runId, status,
+    stages: [{ name: 'stage1', status: status === 'running' ? 'running' : 'complete' }],
+    bench: ['gemini', 'gpt'], chair: 'deepseek', critic: null, lenses: null,
+    labelMap: null, options: { outDir: runDir }, usage: null, createdAt,
+  });
+  // No briefing.md — mirrors a CLI-launched `amicus council run`, which only
+  // ever writes briefing-stage1.md (src/council/run.js:129).
+  fs.writeFileSync(path.join(runDir, 'briefing-stage1.md'),
+    `some findings-contract prose\n\n--- MATERIAL / BRIEFING ---\n\n${stage1Material}`);
+  runState.writePointer(tmp, runId, runDir);
+}
+
+describe('amicus_list --search over council rows (F8 D15, errata E-PR3-5)', () => {
+  test('matches a council row via its briefing.md text', async () => {
+    seedCouncil('needle01', 'complete', '2026-07-19T02:00:00.000Z');
+    fs.writeFileSync(path.join(tmp, 'council-needle01', 'briefing.md'), 'council material with FLAMINGO inside');
+    seedCouncil('other001', 'complete', '2026-07-19T02:00:00.000Z');
+    const rows = parse(await handlers.amicus_list({ search: 'flamingo' }, tmp));
+    expect(rows.map(r => r.id)).toEqual(['needle01']);
+  });
+
+  test('matches via briefing-stage1.md (post-separator) when briefing.md is absent', async () => {
+    seedCouncilNoBriefingMd('stage1a1', 'complete', '2026-07-19T02:00:00.000Z', 'material text with PELICAN inside');
+    seedCouncil('other002', 'complete', '2026-07-19T02:00:00.000Z');
+    const rows = parse(await handlers.amicus_list({ search: 'pelican' }, tmp));
+    expect(rows.map(r => r.id)).toEqual(['stage1a1']);
+  });
+
+  // T6 review fold: pin the extraction to AFTER the separator — a needle that
+  // only appears in the findings-contract prose BEFORE it must never hit,
+  // proving the slice isn't accidentally matching the whole stage1 file.
+  test('does NOT match on the findings-contract prose before the separator', async () => {
+    seedCouncilNoBriefingMd('prestage1', 'complete', '2026-07-19T02:00:00.000Z', 'material text with OTTER inside');
+    const noMatch = await handlers.amicus_list({ search: 'findings-contract' }, tmp);
+    expect(noMatch.content[0].text).toContain('No amicus sessions found');
+  });
+
+  test('a council row with neither briefing.md nor briefing-stage1.md degrades to id/tag matching, never throws', async () => {
+    const runDir = path.join(tmp, 'council-nomatc1');
+    runState.initRun(runDir, {
+      schemaVersion: 2, type: 'council-run', runId: 'nomatc1', status: 'complete',
+      stages: [{ name: 'stage1', status: 'complete' }],
+      bench: ['gemini'], chair: 'deepseek', critic: null, lenses: null,
+      labelMap: null, options: { outDir: runDir }, usage: null, createdAt: '2026-07-19T02:00:00.000Z',
+    });
+    runState.writePointer(tmp, 'nomatc1', runDir);
+
+    const noMatch = await handlers.amicus_list({ search: 'anything' }, tmp);
+    expect(noMatch.content[0].text).toContain('No amicus sessions found');
+
+    const byId = parse(await handlers.amicus_list({ search: 'nomatc1' }, tmp));
+    expect(byId.map(r => r.id)).toEqual(['nomatc1']);
   });
 });

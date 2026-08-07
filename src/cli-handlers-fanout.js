@@ -8,7 +8,7 @@
 
 'use strict';
 
-const { validateTaskId } = require('./utils/validators');
+const { validateTaskId, validateTag } = require('./utils/validators');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
 
@@ -19,6 +19,13 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
  */
 async function handleFanout(args) {
   const useJson = !!args.json;
+
+  // v4.7 F8 (D13): a retried wave replays each leg's own saved context
+  // byte-identical — there is no fresh session to attach a new --tag to, so
+  // reject the combination before the retry-failed dispatch below.
+  if (args.tag !== undefined && args['retry-failed']) {
+    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --tag cannot be combined with --retry-failed' }));
+  }
 
   // --retry-failed <waveId> (v4.3 Task 19, spec 6.1): a completely different
   // path from the --prompt/--models launch below (no briefing, no required
@@ -103,6 +110,15 @@ async function handleFanout(args) {
   if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc <= 0)) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
+  // v4.7 F8 (D13): reject-style (unlike sanitizeCouncilName, which cleans) —
+  // a stored tag is a user-chosen search key, so silent truncation/stripping
+  // would make --search/--group-by tag miss it.
+  if (args.tag !== undefined) {
+    const tagCheck = validateTag(args.tag);
+    if (!tagCheck.ok) {
+      process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: tagCheck.error }));
+    }
+  }
   const { parseModelsList } = require('./sidecar/fanout');
   if (parseModelsList(args.models).length === 0) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --models must contain at least one non-empty entry' }));
@@ -156,6 +172,7 @@ async function handleFanout(args) {
     }),
     catalog: (readCache() || {}).models || [],
     pack: packRecord, // v4.5 Task 13: null when no --pack; additive on wave metadata.json + wave.json.
+    tag: args.tag, // v4.7 F8: undefined when no --tag; Task 3 stores it on wave metadata.
   });
   return exitCode;
 }

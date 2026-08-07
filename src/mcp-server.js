@@ -423,6 +423,10 @@ const handlers = {
     // gate / template pre-render) for parity between the two paths.
     if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
     if (packForward.template !== undefined) { args.push('--template', packForward.template); }
+    // v4.7 F8 (D13, errata E-PR3-2): forwarded for the spawn-fallback path
+    // below — DEAD on the shared-server branch (args is never read there);
+    // that branch stamps input.tag directly into its own metadata write instead.
+    if (input.tag) { args.push('--tag', input.tag); }
     args.push('--cwd', cwd);
 
     if (sharedServer.enabled && input.noUi) {
@@ -500,6 +504,10 @@ const handlers = {
           briefing: renderedPrompt,
           // v4.5 Task 15: additive-only — absent (not null) without a pack.
           ...(packRecord ? { pack: packRecord } : {}),
+          // v4.7 F8 (D13, errata E-PR3-2): THE critical site — this shared-server
+          // branch never spawns a CLI child, so the --tag argv forward above
+          // (dead here) can never reach it. Same additive-only idiom as pack.
+          ...(input.tag ? { tag: input.tag } : {}),
         }, null, 2), { mode: 0o600 });
 
         // Build context from parent conversation (unless --no-context)
@@ -984,37 +992,11 @@ const handlers = {
     const root = path.join(cwd, '.claude', SESSIONS_DIR);
     if (!fs.existsSync(root)) { return textResult('No amicus sessions found.'); }
 
+    // v4.7 F8 (D14): one enumeration behind both the CLI and MCP list surfaces
+    // — enumerateSessions is the shared core (src/sidecar/read.js).
+    const { enumerateSessions, searchSessions } = require('./sidecar/read');
     const byId = new Map();
-    for (const d of fs.readdirSync(root)) {
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
-      if (byId.has(d)) { continue; }
-      const metaPath = path.join(root, d, 'metadata.json');
-      if (!fs.existsSync(metaPath)) { continue; }
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        const entry = {
-          id: d, model: meta.model, status: meta.status, agent: meta.agent,
-          briefing: sanitizePreview(String(meta.briefing || ''), 80),
-          createdAt: meta.createdAt,
-          mode: meta.mode
-            || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
-        };
-        // Live-progress enrichment for RUNNING sessions only — readProgress
-        // parses conversation.jsonl, so terminal rows stay cheap.
-        if (meta.status === 'running') {
-          try {
-            const p = readProgress(path.join(root, d));
-            entry.phase = deriveStage(meta.status, p.stage);
-            entry.messageCount = p.messages;
-            entry.lastActivityAt = p.lastActivityAt;
-            entry.latestPreview = p.latestPreview;
-          } catch { /* progress optional */ }
-        }
-        byId.set(d, entry);
-      } catch {
-        // Skip unreadable metadata
-      }
-    }
+    for (const row of enumerateSessions(cwd, {})) { byId.set(row.id, row); }
 
     // v4.0 §8: council runs are pointer files in the same sessions root — merge
     // them as first-class rows (type 'council-run') before sorting/filtering.
@@ -1025,7 +1007,33 @@ const handlers = {
     if (input.status && input.status !== 'all') {
       sessions = sessions.filter(s => s.status === input.status);
     }
+    // v4.7 F8 (D15, errata E-PR3-5): search runs on RAW briefing material —
+    // BEFORE the sanitize/enrich pass below truncates row.briefing to an
+    // 80-char preview. Council rows' material is read straight off disk
+    // inside searchSessions; the `briefing` merged onto them here is already
+    // listCouncilRuns' own sanitized preview and is never used for matching.
+    if (input.search) { sessions = searchSessions(sessions, input.search, { project: cwd }); }
     if (sessions.length === 0) { return textResult('No amicus sessions found.'); }
+
+    // Rows are re-grafted here with the EXACT decorations this handler always
+    // applied: sanitized (not raw) briefing, and running-only live-progress
+    // enrichment. Council rows already carry a sanitized briefing from
+    // listCouncilRuns, so they're left alone.
+    for (const row of sessions) {
+      if (row.type === 'council-run') { continue; }
+      row.briefing = sanitizePreview(String(row.briefing || ''), 80);
+      // Live-progress enrichment for RUNNING sessions only — readProgress
+      // parses conversation.jsonl, so terminal rows stay cheap.
+      if (row.status === 'running') {
+        try {
+          const p = readProgress(path.join(root, row.id));
+          row.phase = deriveStage(row.status, p.stage);
+          row.messageCount = p.messages;
+          row.lastActivityAt = p.lastActivityAt;
+          row.latestPreview = p.latestPreview;
+        } catch { /* progress optional */ }
+      }
+    }
 
     return textResult(JSON.stringify(sessions, null, 2));
   },
@@ -1317,6 +1325,12 @@ const handlers = {
     // itself is never forwarded, only the two knobs it resolved to).
     if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
     if (packForward.template !== undefined) { args.push('--template', packForward.template); }
+    // v4.7 F8 (D13, errata E-PR3-2): argv-only forward — unlike pack, this does
+    // NOT pre-seed the wave metadata (no single-resolution rule forces it here);
+    // the spawned CLI child's own cli-handlers-fanout.js stores the tag on wave
+    // metadata itself (Task 3), so fanout.js's metaTag inherit arm has no MCP
+    // producer and is defense-in-depth only.
+    if (input.tag) { args.push('--tag', input.tag); }
 
     let child;
     try { child = spawnSidecarProcess(args, waveDir); } catch (err) {

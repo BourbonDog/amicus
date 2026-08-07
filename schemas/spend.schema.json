@@ -33,7 +33,7 @@
     },
     "credit": { "type": ["object", "null"] },
     "filters": { "type": "object" },
-    "groupBy": { "enum": ["model", "wave", "council", "project", "op", "day"] },
+    "groupBy": { "enum": ["model", "wave", "council", "project", "op", "day", "tag"] },
     "groups": {
       "type": "array",
       "items": {

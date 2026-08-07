@@ -27,51 +27,11 @@ const { mapAgentToOpenCode } = require('../utils/agent-mapping');
 const { discoverParentMcps } = require('../utils/mcp-discovery');
 const { stripSelfMcpEntries } = require('../utils/mcp-self-identity');
 const { generateFoldNonce } = require('../utils/fold-marker');
+const { createSessionMetadata } = require('./start-metadata');
 
 /** Generate a unique 8-character hex task ID */
 function generateTaskId() {
   return crypto.randomBytes(4).toString('hex');
-}
-
-/** Create session directory and save metadata */
-function createSessionMetadata(taskId, project, options) {
-  const { model, prompt, briefing, noUi, headless, agent, thinking, pack } = options;
-
-  const sessionDir = SessionPaths.sessionDir(project, taskId);
-  fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
-
-  const effectiveBriefing = prompt || briefing;
-  const isHeadless = noUi !== undefined ? noUi : headless;
-
-  // Preserve fields from existing metadata (e.g., pid written by MCP handler)
-  const metaPath = SessionPaths.metadataFile(sessionDir);
-  let existing = {};
-  if (fs.existsSync(metaPath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-    } catch {
-      // ignore corrupt metadata
-    }
-  }
-
-  const metadata = {
-    ...existing,
-    taskId,
-    model,
-    project,
-    briefing: effectiveBriefing,
-    mode: isHeadless ? 'headless' : 'interactive',
-    agent: agent || (isHeadless ? 'build' : 'chat'),
-    thinking: thinking || 'medium',
-    status: 'running',
-    pid: existing.pid || process.pid,
-    createdAt: existing.createdAt || new Date().toISOString(),
-    ...(pack ? { pack } : {}), // v4.5 Task 13: absent-not-null; ...existing above preserves a prior write when this call omits pack.
-  };
-
-  writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });
-
-  return sessionDir;
 }
 
 /**
@@ -154,7 +114,7 @@ async function startSidecar(options) {
     contextMaxTokens = 80000, noUi, headless = false, timeout = 15,
     agent, mcp, mcpConfig, summaryLength = 'normal', thinking,
     client, sessionDir, noMcp, excludeMcp, opencodePort, coworkProcess, includeContext = true,
-    position = 'right', json = false, modelInput = null, pack = null
+    position = 'right', json = false, modelInput = null, pack = null, tag
   } = options;
 
   const effectivePrompt = prompt || briefing;
@@ -183,7 +143,7 @@ async function startSidecar(options) {
   );
 
   const sessDir = createSessionMetadata(taskId, effectiveProject, {
-    model, prompt: effectivePrompt, noUi: effectiveHeadless, agent, thinking, pack
+    model, prompt: effectivePrompt, noUi: effectiveHeadless, agent, thinking, pack, tag
   });
   saveInitialContext(sessDir, systemPrompt, userMessage);
   acquireLock(sessDir, effectiveHeadless ? 'headless' : 'interactive');
@@ -270,6 +230,11 @@ async function startSidecar(options) {
         gateway: String(model).startsWith('openrouter/') ? 'openrouter' : 'direct',
         // (To also attribute v4.2 'local': thread the resolved route gateway — dropped today at
         // cli-handlers-run.js:47 — into createSessionMetadata and read `meta.gateway`, as continue.js:111 does.)
+        // v4.7 F8 D16: same in-scope-value rule as gateway above — `m` is the
+        // just-re-read metadata (line 214), which carries `tag` when
+        // createSessionMetadata stored one (absent otherwise); `|| null` folds
+        // that into spend-ledger.js's null-not-absent dim convention.
+        tag: m.tag || null,
       });
     } catch { /* best-effort */ }
   }

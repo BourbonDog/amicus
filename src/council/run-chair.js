@@ -117,6 +117,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       // v4.3 Task 3 (spec §7.2 named defect): without this, chair spend is
       // ledgered with councilRunId:null and is unattributable.
       councilRunId: o.runId, councilName: o.councilName,
+      tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
     });
     addWave(solo.wave);
     const ok = solo.leg && solo.leg.status === 'complete'
@@ -224,6 +225,7 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
       timeout: o.timeout, gateway: o.gateway, noValidateModel: o.noValidateModel,
       noCostGate: o.noCostGate,
       councilRunId: o.runId, councilName: o.councilName,
+      tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
     });
     addWave(repair.wave);
     if (isAbortExit(repair.exitCode) || isSignalled()) { return bail(repair.exitCode || isSignalled()); }

@@ -11,7 +11,7 @@
 
 const path = require('path');
 const { failJson, buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
-const { validateTaskId } = require('./utils/validators');
+const { validateTaskId, validateTag } = require('./utils/validators');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
 // v4.6 Plan 4 Task 2: renderRunHuman moved to its own leaf (size gate); this
 // file re-exports it below so every existing require() of this path still
@@ -146,6 +146,15 @@ async function handleCouncilRun(args, depsOverride = {}) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: `Error: --gateway must be one of: ${GATEWAY_MODES.join(', ')}` });
   }
+  // v4.7 F8 (D13): reject-style (unlike sanitizeCouncilName, which cleans) —
+  // a stored tag is a user-chosen search key, so silent truncation/stripping
+  // would make --search/--group-by tag miss it.
+  if (args.tag !== undefined) {
+    const tagCheck = validateTag(args.tag);
+    if (!tagCheck.ok) {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: tagCheck.error });
+    }
+  }
   let runId;
   if (args['run-id']) {
     const check = validateTaskId(String(args['run-id']));
@@ -188,6 +197,7 @@ async function handleCouncilRun(args, depsOverride = {}) {
     councilName,
     template: templateMeta, // F9 (v4.5): null when no --template; additive on the run.json seed (run-state.js).
     pack: packRecord, // v4.5 Task 12 (B7/F5): null when no --pack; additive on the run.json seed (run-state.js).
+    tag: args.tag, // v4.7 F8: undefined when no --tag; Task 3 stores it on the run.json seed.
     droppedMembers: benchRes.droppedMembers, // v4.5 Wave 2: [] when nothing dropped; additive on the run.json seed (run-state.js).
     // v4.1 §4.5b/§4.5d. `--claude-review` is resolved here but VALIDATED by the
     // engine's preflightClaudeReview (run-assemble.js): the reserved-seat and

@@ -99,6 +99,22 @@ describe('amicus_status enrichment (F6)', () => {
     expect(row.briefing.length).toBeLessThanOrEqual(81); // 80 chars + ellipsis
     expect(row.briefing.endsWith('…')).toBe(true);
   });
+
+  // v4.7 F8 (D14): amicus_list now consumes the shared enumerateSessions core.
+  // Ordinary rows additively gain tag (when stored) and type/parentWave/legCount
+  // (previously MCP-only fields were id/model/status/agent/briefing/createdAt/mode).
+  test('amicus_list: rows carry tag when stored, and additively carry type/parentWave/legCount (D14)', async () => {
+    createSession(tmpDir, 'ls-tagged', { status: 'complete', tag: 'sprint-42', briefing: 'b3' });
+    createSession(tmpDir, 'ls-notag', { status: 'complete', briefing: 'b4' });
+    const body = parse(await handlers.amicus_list({}, tmpDir));
+    const tagged = body.find(s => s.id === 'ls-tagged');
+    const notag = body.find(s => s.id === 'ls-notag');
+    expect(tagged.tag).toBe('sprint-42');
+    expect('tag' in notag).toBe(false);
+    expect(tagged.type).toBe('run');
+    expect('parentWave' in tagged).toBe(true);
+    expect('legCount' in tagged).toBe(true);
+  });
 });
 
 describe('Surface C: composed live doc (Task 9 — view:live + read-time leg usage)', () => {

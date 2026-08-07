@@ -13,7 +13,7 @@
 'use strict';
 
 const { validateStartArgs } = require('./cli');
-const { validateTaskId } = require('./utils/validators');
+const { validateTaskId, validateTag } = require('./utils/validators');
 const { resolveLaunchModel, maybeOfferProviderDefaults } = require('./utils/start-helpers');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
@@ -53,6 +53,18 @@ async function handleStart(args) {
   const mc = args['max-cost'];
   if (mc !== undefined && (typeof mc !== 'number' || !Number.isFinite(mc) || mc <= 0)) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
+  }
+
+  // v4.7 F8 (D13): --tag rejects (unlike sanitizeCouncilName, which cleans) —
+  // a stored tag is a user-chosen search key, so silent truncation/stripping
+  // would make --search/--group-by tag miss it. Checked here, beside the other
+  // pre-flight arg checks, so a bad tag exits before model resolution / the
+  // one-time onboarding tip (T2-m1: was previously after resolveLaunchModel).
+  if (args.tag !== undefined) {
+    const tagCheck = validateTag(args.tag);
+    if (!tagCheck.ok) {
+      process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: tagCheck.error }));
+    }
   }
 
   const { model, alias } = await resolveLaunchModel(args);
@@ -118,6 +130,7 @@ async function handleStart(args) {
     modelInput: alias || null,
     template: templateMeta, // F9 (v4.5): startSidecar ignores unknown keys; inert until a future task reads it.
     pack: packRecord, // v4.5 Task 13: null when no --pack; additively recorded on solo session metadata.
+    tag: args.tag, // v4.7 F8: undefined when no --tag; Task 3 stores it on session metadata.
   });
 }
 
