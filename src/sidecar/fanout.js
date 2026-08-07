@@ -86,7 +86,8 @@ async function runFanout(options) {
   // `reason` in metadata.json, no wave.json, and stage1 recorded 'complete'.
   // waveDir is optional (only the post-creation caller has one).
   const errorWave = (waveId, message, waveDir) => {
-    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack, createdAt, completedAt: new Date().toISOString(), status: 'error' });
+    // v4.7 F8 (D13, T3 review): tag: options.tag || metaTag, TDZ-safe (sole call site runs after `const metaTag` below).
+    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack, tag: options.tag || metaTag, createdAt, completedAt: new Date().toISOString(), status: 'error' });
     doc.error = message;
     doc.reason = message; // classifier alias, same as fanout-leg.js's run docs
     // best-effort: an unwritable wave dir must not mask the real error

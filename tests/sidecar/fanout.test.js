@@ -632,6 +632,33 @@ describe('runFanout orchestrator', () => {
     expect(mockRunHeadless).not.toHaveBeenCalled();
   });
 
+  // v4.7 F8 (D13) — T3 review finding: errorWave (the closure defined near
+  // the top of runFanout, invoked here when startOpenCodeServer rejects) is
+  // a THIRD buildWaveResult call site the original Task 3 pass missed — it
+  // carried pack but not tag, so a tagged wave whose server failed to start
+  // would have persisted wave.json WITHOUT the tag (silent drop, since
+  // `amicus read --json` prefers wave.json over the metadata rebuild).
+  // Same fixture as the "server start failure" test immediately above.
+  it('server start failure: the error wave still carries options.tag (T3 review, errorWave call site)', async () => {
+    mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag5', tag: 'sprint-42' });
+    expect(wave.status).toBe('error');
+    expect(wave.tag).toBe('sprint-42');
+    const stored = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag5', 'wave.json'), 'utf-8'));
+    expect(stored.tag).toBe('sprint-42');
+  });
+
+  it('server start failure without --tag: the error wave has NO tag key (absent, not null)', async () => {
+    mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+    const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag6' });
+    expect(wave.status).toBe('error');
+    expect('tag' in wave).toBe(false);
+    const stored = JSON.parse(fsReal.readFileSync(
+      pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag6', 'wave.json'), 'utf-8'));
+    expect('tag' in stored).toBe(false);
+  });
+
   it('per-leg watchdog timeout marks ONLY that leg aborted (no process.exit, no server.close)', async () => {
     let capturedWatchdog;
     mockRunHeadless.mockImplementationOnce(async (_m, _s, _u, taskId, _p, _t, _a, options) => {
