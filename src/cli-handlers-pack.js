@@ -211,7 +211,7 @@ async function handlePack(args) {
     // T14-m1: warnings are diagnostics, not data — keep them off stdout so
     // `amicus pack list | grep`/`--json` consumers never see them mixed into
     // the list itself. `pack save` already writes this identical string to
-    // stderr (below); `--json` is untouched: `warnings` stays a field on doc.
+    // stderr (above); `--json` is untouched: `warnings` stays a field on doc.
     if (!useJson) { for (const w of warnings) { process.stderr.write(`Warning: ${w}\n`); } }
     return 0;
   }

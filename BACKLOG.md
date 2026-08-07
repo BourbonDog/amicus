@@ -1047,6 +1047,26 @@ unchecked items ride to the next rev.)*
   shared core, but the two outer wrappers still evolve independently — same drift shape as T15-m5's
   paramMap divergence. Nothing wrong today; watch if one's validation rules change without the other
   following.
+- [ ] **PR5F-1** — `amicus pack save <n> --version 2.0.0` exits 0 having written NOTHING. `version`
+  is a boolean flag (`src/cli.js` `BOOLEAN_FLAGS`, `:143`), so `parseArgs` sets `version: true` and
+  `bin/amicus.js:90` intercepts it as the version banner before dispatch — `cli-handlers-pack.js:26`
+  (and `:123`) read `args.version || '1.0.0'` expecting a value they can never receive. Both old and
+  new `pack:` help document `--version <semver>`. Confirmed live, pre-existing; the
+  "accepted-and-silently-ignored" class the product principle rejects. Found during the v4.7 PR5
+  final-review consolidated wave, 2026-08-07.
+- [ ] **PR5F-2** — a bare `--out-dir` (no value) yields a directory literally named `true`.
+  `cli-handlers-council-run.js:178-179` does `path.resolve(project, String(args['out-dir']))`
+  with no dash-leading/non-string guard — the same R1/R5 class fixed for `-o/--out`, one flag over.
+  Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
+- [ ] **PR5F-3** — SR-3's metadata tmp-sweep behavior delta is untested: a symlink named like a tmp
+  file now moves from *swept* (unlink removed the link, a safe success) to *silently ignored* (the
+  new `lstatSync`-based directory exclusion also excludes symlinks). Sanctioned by the brief and
+  consistent with the module's never-follow policy, but a real, untested behavior delta. Needs one
+  test or one docblock line. Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
+- [ ] **PR5F-4** — `session-index-tmp-sweep.js:37`'s comment cross-references
+  `session-metadata-tmp-sweep.js:27-31` by line number; currently exact, but a rot risk the same
+  class as T6-m2 above — a future edit to either file can silently invalidate the other's citation.
+  Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
 
 ### Closed at ship — do not re-file
 
@@ -1272,7 +1292,8 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   `resolveBenchInput`), not the CLI handler: the MCP path creates the run dir, writes
   `briefing.md`, seeds `run.json` as `running`, and writes the pointer **before** spawning, so a
   handler-only guard leaves an orphaned `running` run. Rider: `amicus council save` accepts
-  duplicate members too. Deferred to PR6 (needs a design ruling recorded before implementation).
+  duplicate members too. Deferred to its own TDD pass, as originally filed (needs a design ruling
+  recorded first).
 
 - [ ] **`legRow` (`src/council/run-debate.js:39`) is the THIRD hand-rolled runStats-row
   builder** — [S, defer-with-record] alongside `buildRunStatsEntry` (`src/council/run-assemble.js:54`,

@@ -176,7 +176,7 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(skipCond[0]).not.toMatch(/\\"\$VERSION\\"/);
     // and VERSION_RE must actually be derived by escaping literal dots
     // before the `if`, in the same step block.
-    expect(preCheckBlock).toMatch(/VERSION_RE=\$\(printf '%s' "\$VERSION" \| sed 's\/\[\.\]\/\\+\.\/g'\)/);
+    expect(preCheckBlock).toMatch(/VERSION_RE=\$\(printf '%s' "\$VERSION" \| sed 's\/\[\.\]\/\\\\\.\/g'\)/);
   });
 
   test('GitHub Release creation is guarded by an existence check (gh release view)', () => {

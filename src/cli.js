@@ -700,10 +700,10 @@ Options for 'template':
 Options for 'pack':
   amicus pack save <name> --kind council|fanout|solo [flags]
   amicus pack save <name> --from-run <id>   Build from an existing run (models/
-                                options/template reference only — briefing never captured)
-  amicus pack list [--json]    List saved packs
-  amicus pack show <name|path> [--json]   Print a pack + validation report
-  amicus pack rm <name> [--json]   Remove a saved pack
+                                            options/template reference only — briefing never captured)
+  amicus pack list [--json]                 List saved packs
+  amicus pack show <name|path> [--json]     Print a pack + validation report
+  amicus pack rm <name> [--json]            Remove a saved pack
   Flags: --bench <a,b,c|name> (council/fanout) · --model (solo) · --chair/--critic/--lenses
   (council) · --debate/--no-debate (council) · --timeout/--max-cost/--gateway (shared) ·
   --agent/--thinking/--summary-length (fanout/solo) · --template <name|path> (reference only,

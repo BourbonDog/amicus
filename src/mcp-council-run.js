@@ -162,7 +162,7 @@ async function handleCouncilRunTool(input, project, helpers) {
       ...(droppedMembers.length ? { droppedMembers } : {}),
       // T15-m2 (v4.7): additive-only — absent (not null) without a pack-forwarded
       // template. Same preserved-across-the-child's-own-initRun precedent as
-      // `pack`/`droppedMembers` above (run-state.js:104-106).
+      // `pack`/`droppedMembers` above (run-state.js:104-110).
       ...(templateMeta ? { template: templateMeta } : {}),
       usage: null, createdAt: new Date().toISOString(),
     });

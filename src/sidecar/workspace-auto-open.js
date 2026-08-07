@@ -23,7 +23,7 @@
  * @param {'ok'|'package-missing'|'binary-missing'} [options.electronState] - 3-state probe (#76); takes precedence
  * @param {string|null} [options.electronDir] - Resolved electron dir, named in the electron-broken reason
  * @param {string} options.platform - The platform (e.g., 'win32', 'darwin', 'linux')
- * @param {object} options.env - Environment variables object
+ * @param {object} [options.env] - Environment variables object
  * @param {boolean} options.autoOpenConfig - The config.workspace.autoOpen setting
  * @param {boolean|undefined} options.uiParam - Explicit UI parameter (true, false, or undefined)
  * @returns {{open: boolean, reason: string}}

@@ -177,7 +177,10 @@ function runVerdict(args, useJson) {
   // and writes a file literally named '-x' in cwd. Same failure class as R1,
   // one form short.
   if (args.out !== undefined && (typeof args.out !== 'string' || args.out === '' || args.out.startsWith('-'))) {
-    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: '-o/--out requires a value',
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: (typeof args.out !== 'string' || args.out === '')
+        ? '-o/--out requires a value'
+        : `-o/--out cannot start with '-': got '${args.out}'`,
       hint: 'amicus council verdict <tally.json> [--decisions <decisions.json>] [-o|--out <out.json>]' });
   }
   const outPath = args.out || './verdict.json';

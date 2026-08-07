@@ -422,15 +422,18 @@ function getCouncilWithSource(name, catalog = []) {
  *
  *   Standing note (D18, v4.7 PR5): each `droppedMembers` entry is `{member, reason}`
  *   (that is the real key — BACKLOG.md's description of this shape had drifted to
- *   `{ref, reason}`). The two `reason` literals produced below (`:434`, `:441`) are
- *   free text, not a coded enum, and today NO consumer branches on the string — both
- *   are display-only: `council/presets-cli.js` (`amicus council show`, `:149-150`)
- *   renders `${member} (${reason})`, and `council/run.js` (`:80-87`) carries it
- *   verbatim into a degrade-note payload. `cli-council-run-bench.js` (`:74`) only
- *   type-checks that `reason` is a string when round-tripping `--dropped-members`
- *   across the MCP→CLI spawn boundary. The tripwire: if a THIRD reason string is
- *   ever added here, stop and re-decide whether `reason` should become a coded enum
- *   instead of free text — this note marks that decision point, it does not make it.
+ *   `{ref, reason}`). The two `reason` literals are produced below, in the
+ *   alias-miss and catalog-miss branches of `classifyCouncilMembers`; they are
+ *   free text, not a coded enum, and today NO consumer branches on the string. They
+ *   are not display-only: `council/presets-cli.js` (`amicus council show`,
+ *   `:149-150`) renders `${member} (${reason})`, `council/run.js` (`:80-87`) carries
+ *   it verbatim into a degrade-note payload, and `reason` is also persisted into
+ *   `run.json` (`run-state.js`, `mcp-council-run.js`) — not merely shown to a human.
+ *   `cli-council-run-bench.js` (`:74`) only type-checks that `reason` is a string
+ *   when round-tripping `--dropped-members` across the MCP→CLI spawn boundary. The
+ *   tripwire: if a THIRD reason string is ever added here, stop and re-decide
+ *   whether `reason` should become a coded enum instead of free text — this note
+ *   marks that decision point, it does not make it.
  */
 function classifyCouncilMembers(members, catalog = []) {
   const aliases = getEffectiveAliases();

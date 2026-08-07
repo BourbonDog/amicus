@@ -90,9 +90,9 @@ All notable changes to Amicus are documented here. Format follows
   changes.
 - **`--out`/`-o` no longer accepts a flag-shaped value as a filename.** `--out -x` and
   `--out=-x` previously wrote a file literally named `-x` (the dash-leading value was accepted
-  at face value); both forms now fail fast with `BAD_ARGS` ("-o/--out requires a value") instead.
-  `-o -x` was already rejected before this change, via a separate internal check — its
-  user-visible outcome is unchanged.
+  at face value); both forms now fail fast with `BAD_ARGS` ("-o/--out cannot start with '-':
+  got '-x'") instead. `-o -x` was already rejected before this change, via a separate internal
+  check — its user-visible outcome is unchanged.
 - **`{{project}}` template variable is now path-resolved** (absolute, normalized via
   `path.resolve`), matching `{{artifact_path}}`'s existing behavior — it previously rendered the
   raw `--cwd`/`process.cwd()` string verbatim. All three `TEMPLATE_RENDER` error paths also gain a
@@ -148,8 +148,9 @@ All notable changes to Amicus are documented here. Format follows
   orphan.** A directory whose name happened to match the tmp-file pattern (e.g.
   `.metadata.json.<pid>.<rand>.tmp`) was picked up by the orphan scan, then permanently failed to
   unlink — parking the check at `warn` forever ("swept 0, N remaining (too fresh or
-  unremovable)") even after every real orphan was cleared. Directories (and symlinks/sockets/
-  FIFOs) are now excluded before the scan ever returns them, so the check reports `ok` once
+  unremovable)") even after every real orphan was cleared. Directories are now excluded from
+  both sweeps (the metadata sweep, which never follows symlinks, also excludes
+  symlinks/sockets/FIFOs) before the scan ever returns them, so the check reports `ok` once
   nothing real is left.
 
 ### Added (follow-up)
