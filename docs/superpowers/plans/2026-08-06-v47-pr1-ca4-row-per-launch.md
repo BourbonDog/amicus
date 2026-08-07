@@ -18,7 +18,7 @@
 - **E2 (D4 correction):** the ledger-join allowlist must include legacy role `'council'` (ledger.js:34 default; av-receiver golden fixture rows carry it) → allowlist = `seat`, `critic`, `lens:*`, `chair`, `claude`, `council`; `judge` stays excluded (#83).
 - **E3 (D2 refinement):** the give-up chair error row carries **`wasChair: false`** — nobody chaired; this keeps run-chair-seam.test.js:101's "no wasChair row on give-up" pin TRUE in spirit (pin updated to also assert the new error row). A cost-SKIPPED chair (never walked, no launch, already degrade-announced) gets **no row** — bijection: no leg, no row.
 - **E4 (D2 gap):** two billed classes the spec's list missed, forced by D1's bijection: **failed SL-2 retry legs** and **failed debate-repair legs**. Unifying rule: *the primary row of a requested seat attributes the seat's FINAL leg; every earlier leg of that seat gets a `superseded` row; every repair launch gets a `repair` row (error status when it failed).* Dead-WAVE-origin healed seats have no first leg at all — no superseded row exists for them (state this in the invariant test comments).
-- **E5 (scope pins):** `run-retry.js` (280) and `run-budget.js` (283) take ZERO edits — superseded pairs are computed in run-stages.js from `deadLegs0` (:139) × recovered seats, mirroring the healed-set idiom at :149-152; the invariant test only READS `usageBlock()`.
+- **E5 (scope pins) — AMENDED by owner ruling 2026-08-06 (Task-4 review adjudication):** `run-budget.js` (283) takes ZERO edits; `run-retry.js` takes exactly the two-line additive return widening (`out.stillDeadRetryLegs = []` + one push beside the :236 original-leg push) because the failed-retry leg is otherwise unreachable in memory and its addWave'd usage would break D1 — the review proved failed retry legs routinely carry real usage (the timed-out class especially). Original E5 text: ZERO edits to both — superseded pairs are computed in run-stages.js from `deadLegs0` (:139) × recovered seats, mirroring the healed-set idiom at :149-152; the invariant test only READS `usageBlock()`.
 
 ## Global Constraints
 
@@ -207,7 +207,7 @@ expect(rows.reportedLegs).toBe(run2.run.usage.reportedLegs);
 expect(rows.unpricedLegs).toBe(run2.run.usage.unpricedLegs);
 // bijection literally: every budget-counted leg's waveId+model appears on exactly one row
 ```
-Scenarios: clean run (cross-foot identity — the 120636cb shape); repair run (the 12c96b6b divergence shape, RECONSTRUCTED with a repairing fake — never referencing the gitignored archive); chair-walk-failure run; debate-repair run; retry-healed run. Non-legged rows (claude, give-up chair) explicitly excluded with a comment citing E3/E5 and the dead-wave asymmetry (E4).
+Scenarios: clean run (cross-foot identity — the 120636cb shape); repair run (the 12c96b6b divergence shape, RECONSTRUCTED with a repairing fake — never referencing the gitignored archive); chair-walk-failure run; debate-repair run; retry-healed run; **retry-FAILED run (the E5-amendment class: a timed-out retry leg with real usage must land on the primary error row and the identity must hold)**. Non-legged rows (claude, give-up chair) explicitly excluded with a comment citing E3/E5 and the dead-wave asymmetry (E4).
 - [ ] **Step 2:** `npx jest tests/council/run-cost-bijection.test.js` → PASS; the scratch-revert proof documented.
 - [ ] **Step 3:** Commit: `test(council): the count is the count — leg-row bijection invariant suite (v4.7 D5)`
 
