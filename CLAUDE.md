@@ -550,7 +550,7 @@ evals/
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |
 | `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
-| `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `enumerateAllProjects()`, `listSidecars()`, `readSidecar()` |
+| `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `enumerateAllProjects()`, `searchSessions()`, `listSidecars()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |

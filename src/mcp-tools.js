@@ -217,6 +217,9 @@ function getTools() {
       status: z.string().optional().describe(
         "Filter by status ('all', 'running', 'complete', 'error', 'aborted', …). Default: show all."
       ),
+      search: z.string().optional().describe(
+        'Case-insensitive substring filter over id, tag, and briefing material (F8 D15).'
+      ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),

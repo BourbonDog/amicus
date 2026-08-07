@@ -513,6 +513,7 @@ Options for 'models':
 Options for 'list':
   --status <filter>            Filter by status (running, complete)
   --all                        Show all projects
+  --search <q>                 Case-insensitive substring filter over id, tag, and briefing
   --json                       Output as JSON
 `,
   status: `

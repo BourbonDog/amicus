@@ -756,6 +756,39 @@ describe('MCP Server Handlers', () => {
         fs.rmSync(tmpDir, { recursive: true });
       }
     });
+
+    // v4.7 F8 (D15, errata E-PR3-5): search runs on RAW briefing material
+    // BEFORE this handler's sanitizePreview(…, 80) pass — proven here by
+    // planting the needle past character 80 and confirming both the match
+    // AND the returned preview's truncation.
+    test('--search filters by raw briefing text, and the returned preview is still sanitized (F8 D15)', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-test-'));
+      const sessionsBase = path.join(tmpDir, '.claude', 'amicus_sessions');
+
+      const hitDir = path.join(sessionsBase, 'hit00001');
+      fs.mkdirSync(hitDir, { recursive: true });
+      fs.writeFileSync(path.join(hitDir, 'metadata.json'), JSON.stringify({
+        taskId: 'hit00001', status: 'complete', model: 'gemini',
+        briefing: 'a'.repeat(90) + ' zebraphrase ' + 'b'.repeat(90),
+        createdAt: new Date().toISOString(),
+      }));
+      const missDir = path.join(sessionsBase, 'miss0001');
+      fs.mkdirSync(missDir, { recursive: true });
+      fs.writeFileSync(path.join(missDir, 'metadata.json'), JSON.stringify({
+        taskId: 'miss0001', status: 'complete', model: 'gemini',
+        briefing: 'nothing relevant here', createdAt: new Date().toISOString(),
+      }));
+
+      try {
+        const result = await handlers.amicus_list({ search: 'zebraphrase' }, tmpDir);
+        const parsed = JSON.parse(result.content[0].text);
+        expect(parsed.map(r => r.id)).toEqual(['hit00001']);
+        expect(parsed[0].briefing.length).toBeLessThanOrEqual(81);
+        expect(parsed[0].briefing).toContain('…');
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    });
   });
 
   describe('amicus_status', () => {

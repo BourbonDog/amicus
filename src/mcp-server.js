@@ -993,12 +993,34 @@ const handlers = {
     if (!fs.existsSync(root)) { return textResult('No amicus sessions found.'); }
 
     // v4.7 F8 (D14): one enumeration behind both the CLI and MCP list surfaces
-    // — enumerateSessions is the shared core (src/sidecar/read.js). Rows are
-    // re-grafted here with the EXACT decorations this handler always applied:
-    // sanitized (not raw) briefing, and running-only live-progress enrichment.
-    const { enumerateSessions } = require('./sidecar/read');
+    // — enumerateSessions is the shared core (src/sidecar/read.js).
+    const { enumerateSessions, searchSessions } = require('./sidecar/read');
     const byId = new Map();
-    for (const row of enumerateSessions(cwd, {})) {
+    for (const row of enumerateSessions(cwd, {})) { byId.set(row.id, row); }
+
+    // v4.0 §8: council runs are pointer files in the same sessions root — merge
+    // them as first-class rows (type 'council-run') before sorting/filtering.
+    const councilRows = require('./mcp-council-run').listCouncilRuns(cwd);
+    let sessions = Array.from(byId.values()).concat(councilRows)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (input.status && input.status !== 'all') {
+      sessions = sessions.filter(s => s.status === input.status);
+    }
+    // v4.7 F8 (D15, errata E-PR3-5): search runs on RAW briefing material —
+    // BEFORE the sanitize/enrich pass below truncates row.briefing to an
+    // 80-char preview. Council rows' material is read straight off disk
+    // inside searchSessions; the `briefing` merged onto them here is already
+    // listCouncilRuns' own sanitized preview and is never used for matching.
+    if (input.search) { sessions = searchSessions(sessions, input.search, { project: cwd }); }
+    if (sessions.length === 0) { return textResult('No amicus sessions found.'); }
+
+    // Rows are re-grafted here with the EXACT decorations this handler always
+    // applied: sanitized (not raw) briefing, and running-only live-progress
+    // enrichment. Council rows already carry a sanitized briefing from
+    // listCouncilRuns, so they're left alone.
+    for (const row of sessions) {
+      if (row.type === 'council-run') { continue; }
       row.briefing = sanitizePreview(String(row.briefing || ''), 80);
       // Live-progress enrichment for RUNNING sessions only — readProgress
       // parses conversation.jsonl, so terminal rows stay cheap.
@@ -1011,19 +1033,7 @@ const handlers = {
           row.latestPreview = p.latestPreview;
         } catch { /* progress optional */ }
       }
-      byId.set(row.id, row);
     }
-
-    // v4.0 §8: council runs are pointer files in the same sessions root — merge
-    // them as first-class rows (type 'council-run') before sorting/filtering.
-    const councilRows = require('./mcp-council-run').listCouncilRuns(cwd);
-    let sessions = Array.from(byId.values()).concat(councilRows)
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    if (input.status && input.status !== 'all') {
-      sessions = sessions.filter(s => s.status === input.status);
-    }
-    if (sessions.length === 0) { return textResult('No amicus sessions found.'); }
 
     return textResult(JSON.stringify(sessions, null, 2));
   },

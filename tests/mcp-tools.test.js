@@ -255,6 +255,16 @@ describe('MCP Tool Definitions', () => {
       const parsed = z.object(tool.inputSchema).parse({});
       expect('status' in parsed).toBe(false);
     });
+
+    // F8 D15 (errata E-PR3-5): case-insensitive substring filter over
+    // id/tag/briefing material, shared with the CLI's --search.
+    test('has an optional search string in the input schema', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
+      expect(tool.inputSchema).toHaveProperty('search');
+      const parsed = z.object(tool.inputSchema).parse({ search: 'needle' });
+      expect(parsed.search).toBe('needle');
+      expect('search' in z.object(tool.inputSchema).parse({})).toBe(false);
+    });
   });
 
   describe('amicus_resume', () => {

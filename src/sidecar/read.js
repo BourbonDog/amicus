@@ -115,6 +115,52 @@ function enumerateAllProjects(opts = {}) {
   return sessions;
 }
 
+const COUNCIL_MATERIAL_SEPARATOR = '--- MATERIAL / BRIEFING ---';
+
+// Council row search material (MCP-only): runDir/briefing.md when readable
+// (MCP-launched runs write one before the engine spawns), else the portion of
+// briefing-stage1.md after the separator (CLI-launched runs have only this),
+// else null. Re-derives runDir from the pointer and re-fences it with
+// containsOnDisk exactly as mcp-council-awareness.js:214 — never a bare join.
+function councilSearchMaterial(project, runId) {
+  if (!project) { return null; }
+  const { readPointer } = require('../council/run-state');
+  const { containsOnDisk } = require('../utils/path-fence');
+  const ptr = readPointer(project, runId);
+  if (!ptr || !containsOnDisk(project, ptr.runDir)) { return null; }
+  try { return fs.readFileSync(path.join(ptr.runDir, 'briefing.md'), 'utf-8'); } catch { /* try stage1 */ }
+  try {
+    const s1 = fs.readFileSync(path.join(ptr.runDir, 'briefing-stage1.md'), 'utf-8');
+    const idx = s1.indexOf(COUNCIL_MATERIAL_SEPARATOR);
+    return idx === -1 ? null : s1.slice(idx + COUNCIL_MATERIAL_SEPARATOR.length);
+  } catch { return null; }
+}
+
+// Wave material: waveDir/briefing.md (full prompt) when readable, else the 200-char excerpt already on the row (fanout.js:146).
+function waveSearchMaterial(project, waveId, excerpt) {
+  try { return fs.readFileSync(path.join(project, '.claude', SESSIONS_DIR, waveId, 'briefing.md'), 'utf-8'); }
+  catch { return String(excerpt || ''); }
+}
+
+// LEG rows (parentWave set) are id/tag ONLY — briefing embeds the parent's material; matching it would hit every leg N+1 times per wave.
+function rowMatchesSearch(row, needle, project) {
+  if (String(row.id || '').toLowerCase().includes(needle)) { return true; }
+  if (String(row.tag || '').toLowerCase().includes(needle)) { return true; }
+  if (row.parentWave) { return false; }
+  const material = row.type === 'council-run' ? councilSearchMaterial(project, row.id)
+    : row.type === 'wave' ? waveSearchMaterial(project, row.id, row.briefing) : row.briefing;
+  return String(material || '').toLowerCase().includes(needle);
+}
+
+// Case-insensitive substring filter behind both list surfaces (CLI `amicus list
+// --search`, MCP `amicus_list {search}` — F8 D15, errata E-PR3-5), mirroring
+// the models.js:70-73 idiom. Missing material never throws — it degrades to
+// an id/tag-only match (read.js:58 idiom).
+function searchSessions(rows, q, ctx) {
+  const needle = String(q).toLowerCase();
+  return rows.filter(row => rowMatchesSearch(row, needle, ctx && ctx.project));
+}
+
 /**
  * List previous sidecar sessions
  * Spec Reference: §4.2
@@ -124,13 +170,17 @@ function enumerateAllProjects(opts = {}) {
  * @param {boolean} [options.all] - Cross-project via the global sessions-index (F8 D14)
  * @param {boolean} [options.json] - Output as JSON
  * @param {string} [options.project] - Project directory
+ * @param {string|boolean} [options.search] - id/tag/briefing substring filter (F8 D15); `true` = valueless flag (usage error)
  */
 async function listSidecars(options) {
-  const { status, all, json, project = process.cwd() } = options;
+  const { status, all, json, search, project = process.cwd() } = options;
+  // Mirrors models.js:279-281's valueless-flag shape.
+  if (search === true) { throw new Error('--search requires a value'); }
 
-  const sessions = all
+  let sessions = all
     ? enumerateAllProjects({ status, project })
     : enumerateSessions(project, { status });
+  if (search) { sessions = searchSessions(sessions, search, { project }); }
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
     return;
@@ -242,6 +292,7 @@ module.exports = {
   formatAge,
   enumerateSessions,
   enumerateAllProjects,
+  searchSessions,
   listSidecars,
   readSidecar
 };
