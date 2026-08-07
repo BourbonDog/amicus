@@ -8,7 +8,8 @@
  * (and therefore counted into run.json's terminal `usage` block, via
  * run-budget.js's usageBlock() -> sumWaveUsage(allLegs)) must appear on
  * EXACTLY ONE tally.json runStats row — no leg silently dropped from the
- * total, no leg double-counted, no row inventing money nobody spent.
+ * total, no leg double-counted, no row inventing money nobody spent, and no
+ * leg's money credited to the wrong seat.
  *
  * Each scenario below drives a FULL `runCouncil` through fake launchers (the
  * same DI seam the other ~19 driver suites use), stamping an explicit
@@ -105,12 +106,45 @@ const cleanChair = () =>
   okWave([wLeg('deepseek', 'abc123-ch1', 'Synthesis of the bench.\n\nVERDICT: Ship it', 'complete', 0.03)]);
 
 /**
+ * Wrap scriptedLaunchers(script) so every leg any script function actually
+ * hands back is recorded as it's emitted — the GROUND TRUTH for "what model
+ * should this leg's row carry" (`leg.modelInput || leg.model`, the alias
+ * every fixture in this file passes to `wLeg`), independent of whatever
+ * model a row builder (buildRunStatsEntry, debate.js's legRow) actually
+ * stamps onto the row it produces. `driveAndAssertBijection` compares this
+ * against the row-key multiset to catch a MIS-ATTRIBUTION bug a totals-only
+ * check cannot see — for every scenario that uses this helper, not just the
+ * ones with their own per-scenario `toMatchObject` pins (review fix wave,
+ * Important #2). Instrumenting `launchWave` alone would miss nothing here
+ * either — `scriptedLaunchers`'s own `launchSolo` delegates to its own
+ * `launchWave` internally — but both are wrapped explicitly so this stays
+ * true even if that internal delegation ever changes.
+ */
+function instrumentedLaunchers(script) {
+  const emittedLegs = [];
+  const base = scriptedLaunchers(script);
+  const record = (wave) => {
+    for (const leg of ((wave && wave.legs) || [])) {
+      if (leg && leg.waveId) { emittedLegs.push(`${leg.waveId}::${leg.modelInput || leg.model}`); }
+    }
+  };
+  return {
+    emittedLegs,
+    launchWave: async (opts) => { const r = await base.launchWave(opts); record(r.wave); return r; },
+    launchSolo: async (opts) => { const r = await base.launchSolo(opts); record(r.wave); return r; },
+  };
+}
+
+/**
  * Drive a full runCouncil, then assert the D5 invariant against its output.
  * @param {object} opts runCouncil options (must carry the real runDir)
- * @param {object} launchers a scriptedLaunchers(...) instance
- * @returns {Promise<{run: object, tallyDoc: object, legged: Array}>}
+ * @param {object} script a `{waveId: (opts) => {wave, exitCode}}` map (the
+ *   scriptedLaunchers(...) shape) — wrapped into instrumented launchers here
+ *   so every scenario's emitted legs are recorded automatically.
+ * @returns {Promise<{run: object, tallyDoc: object, legged: Array, rows: object}>}
  */
-async function driveAndAssertBijection(opts, launchers) {
+async function driveAndAssertBijection(opts, script) {
+  const launchers = instrumentedLaunchers(script);
   const { run } = await runCouncil(opts, {
     launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
   });
@@ -121,37 +155,108 @@ async function driveAndAssertBijection(opts, launchers) {
   // The cross-foot identity: independently summing the "legged" rows must
   // land on EXACTLY the same total run-budget.js already computed by folding
   // sumWaveUsage over every addWave'd leg (run.json's terminal usage block).
+  // All FOUR cost axes are checked, not just `amount` (review fix wave,
+  // Important #1) — an estimated leg (the shipped free/local-tier class,
+  // pricing.js:110-111's `hasObservedTokens` + catalog-pricing branch) or an
+  // unknown-cost leg can each leave `amount` untouched (a near-zero estimate,
+  // or a null amount that never gets summed either way) while its row
+  // silently vanishes or doubles — `estimatedLegs`/`unpricedLegs` are the
+  // axes that actually move for those, and scenario 1 exercises both
+  // non-vacuously (every OTHER scenario is 'reported'-only, so those two
+  // axes would otherwise stay a vacuous 0≡0 everywhere).
   expect(rows.cost.amount).toBeCloseTo(run.usage.cost.amount, 10);
   expect(rows.cost.reportedLegs).toBe(run.usage.cost.reportedLegs);
+  expect(rows.cost.estimatedLegs).toBe(run.usage.cost.estimatedLegs);
   expect(rows.cost.unpricedLegs).toBe(run.usage.cost.unpricedLegs);
 
   // The bijection, literally: every billed leg's (waveId, model) pair
-  // appears on EXACTLY one row. Never zero — the cost/count identity above
+  // appears on EXACTLY one row. Never zero — the FOUR cost/count axes above
   // would already have failed for a leg silently dropped from `legged` while
-  // still counted in run.usage. Never two — a doubled row would inflate
-  // `rows` past `run.usage` even if some OTHER leg were dropped to
+  // still counted in run.usage (reportedLegs/estimatedLegs/unpricedLegs
+  // between them cover every `cost.source` a leg can carry, so nothing can
+  // vanish invisibly regardless of source). Never two — a doubled row would
+  // inflate `rows` past `run.usage` even if some OTHER leg were dropped to
   // compensate and net the totals out by coincidence.
   const keys = legged.map(r => `${r.waveId}::${r.model}`);
+  // Minor (reviewer): this key assumes one leg per (wave, model) pair — the
+  // shape every launch site in this codebase actually produces. A council
+  // with duplicate `--models` entries (two seats sharing one alias) would
+  // collide here; nothing in the bench path dedups that today, so this
+  // suite does not attempt to model it.
   expect(new Set(keys).size).toBe(keys.length);
 
-  return { run, tallyDoc, legged };
+  // Literal bijection against the ACTUAL legs handed out, not just
+  // accounting totals (review fix wave, Important #2): compare the multiset
+  // of `${waveId}::${model}` keys every script fn's returned legs actually
+  // carried (instrumentedLaunchers, above) against the row-key multiset.
+  // This closes the mis-attribution seam the totals-only checks above cannot
+  // — a row stamped with the WRONG model (buildRunStatsEntry's `model`
+  // override, or debate.js's legRow, disagreeing with the leg it actually
+  // priced) leaves every total untouched, since the leg's cost is still
+  // counted once, just credited to the wrong seat, while this assertion
+  // catches it directly — for every future scenario using this helper, not
+  // only the six with their own per-scenario `toMatchObject` pins below.
+  const emittedKeys = launchers.emittedLegs.slice().sort();
+  expect(keys.slice().sort()).toEqual(emittedKeys);
+
+  return { run, tallyDoc, legged, rows };
 }
 
 describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")', () => {
   test('scenario 1 — clean run: the cross-foot identity holds with no repairs, retries or failures', async () => {
     const script = {
       'abc123-s1': (opts) => okWave(opts.models.map(m => wLeg(m, 'abc123-s1', review(m)))),
-      'abc123-s2': cleanStage2,
+      // Cost-source diversity (review fix wave, Important #1/#3): gemini's
+      // judge leg is ESTIMATED (tokens observed, catalog-priced — the
+      // free/local-tier shape pricing.js's resolveLegCost produces when no
+      // reported cost arrives but a catalog price does) and qwen's is
+      // UNKNOWN (tokens observed, no catalog price found at all). Every
+      // other leg in this suite is 'reported', which left
+      // `estimatedLegs`/`unpricedLegs` vacuously 0≡0 everywhere — these two
+      // make BOTH axes genuinely non-vacuous, in the one scenario ("clean
+      // run") that should hold regardless of cost-source mix.
+      'abc123-s2': () => okWave([
+        {
+          ...wLeg('gemini', 'abc123-s2', judgeOut(['Review B', 'Review C', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }])),
+          usage: { tokens: { input: 50, output: 20 }, cost: { amount: 0.002, source: 'estimated' } },
+        },
+        wLeg('gpt', 'abc123-s2', judgeOut(['Review A', 'Review C', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'dispute' }])),
+        {
+          ...wLeg('qwen', 'abc123-s2', judgeOut(['Review A', 'Review B', 'Review C'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }, { id: 'C1', verdict: 'agree' }])),
+          usage: { tokens: { input: 100, output: 5 }, cost: { amount: null, source: 'unknown' } },
+        },
+      ]),
       'abc123-ch1': cleanChair,
     };
-    const { run, legged } = await driveAndAssertBijection(
-      baseOptions(tmp), scriptedLaunchers(script));
+    const { run, legged, rows } = await driveAndAssertBijection(baseOptions(tmp), script);
 
     expect(run.exitCode).toBe(0);
     // 3 seat rows + 3 judge rows + 1 chair row — the pre-v4.7 #83 shape (run-happy.test.js:69),
-    // every one of them now also carrying its waveId.
+    // every one of them now also carrying its waveId. Row COUNT is unaffected
+    // by cost source — a leg still gets exactly one row whether its cost
+    // resolved reported, estimated, or unknown.
     expect(legged).toHaveLength(7);
     expect(legged.every(r => r.waveId)).toBe(true);
+    // Non-vacuous cost-source axes: both sides move off zero together, for
+    // the newly-added estimatedLegs axis AND the previously-always-0
+    // unpricedLegs axis.
+    expect(rows.cost.estimatedLegs).toBe(1);
+    expect(run.usage.cost.estimatedLegs).toBe(1);
+    expect(rows.cost.unpricedLegs).toBe(1);
+    expect(run.usage.cost.unpricedLegs).toBe(1);
+    // The tokens half of the identity, exercised through the ROW machinery
+    // (reviewer, Minor #3): buildRunStatsEntry copies a leg's `usage`
+    // verbatim (never invents or drops fields), so the unknown-cost leg's
+    // observed tokens must still be readable off its OWN row, and must still
+    // flow into sumWaveUsage's rollup — proof the row, not just the
+    // addWave-side total, actually carries them.
+    const qwenJudgeRow = legged.find(r => r.model === 'qwen' && r.role === 'judge');
+    expect(qwenJudgeRow.usage).toEqual({ tokens: { input: 100, output: 5 }, cost: { amount: null, source: 'unknown' } });
+    expect(rows.tokens.input).toBeGreaterThanOrEqual(100);
+    expect(rows.tokens.output).toBeGreaterThanOrEqual(5);
   });
 
   test('scenario 2 — repair run: a Stage-1 findings-repair leg rides its OWN row, distinct from the seat\'s primary review (E4)', async () => {
@@ -167,8 +272,7 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       'abc123-s2': cleanStage2,
       'abc123-ch1': cleanChair,
     };
-    const { run, legged } = await driveAndAssertBijection(
-      baseOptions(tmp), scriptedLaunchers(script));
+    const { run, legged } = await driveAndAssertBijection(baseOptions(tmp), script);
 
     expect(run.exitCode).toBe(0);
     const repairRows = legged.filter(r => r.role === 'repair');
@@ -188,8 +292,7 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       'abc123-ch2': () =>
         okWave([wLeg('deepseek', 'abc123-ch2', 'Synthesis.\n\nVERDICT: Ship it', 'complete', 0.03)]),
     };
-    const { run, legged } = await driveAndAssertBijection(
-      baseOptions(tmp), scriptedLaunchers(script));
+    const { run, legged } = await driveAndAssertBijection(baseOptions(tmp), script);
 
     expect(run.exitCode).toBe(0);
     const attemptRows = legged.filter(r => r.role === 'chair-attempt');
@@ -229,7 +332,7 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       'r-ch1': () =>
         okWave([wLeg('deepseek', 'r-ch1', 'Synthesis after debate.\n\nVERDICT: Fix these first', 'complete', 0.03)]),
     };
-    const { run, legged } = await driveAndAssertBijection(e2eOpts, scriptedLaunchers(script));
+    const { run, legged } = await driveAndAssertBijection(e2eOpts, script);
 
     expect(run.exitCode).toBe(0);
     const superseded = legged.find(r => r.role === 'superseded');
@@ -251,8 +354,7 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       'abc123-s2': cleanStage2,
       'abc123-ch1': cleanChair,
     };
-    const { run, legged } = await driveAndAssertBijection(
-      baseOptions(tmp), scriptedLaunchers(script));
+    const { run, legged } = await driveAndAssertBijection(baseOptions(tmp), script);
 
     expect(run.exitCode).toBe(0); // SL-2: a healed seat is NOT a degrade
     const superseded = legged.filter(r => r.role === 'superseded');
@@ -287,8 +389,7 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       ]),
       'abc123-ch1': cleanChair,
     };
-    const { run, legged } = await driveAndAssertBijection(
-      baseOptions(tmp), scriptedLaunchers(script));
+    const { run, legged } = await driveAndAssertBijection(baseOptions(tmp), script);
 
     expect(run.exitCode).toBe(2); // qwen never recovers a review — the run degrades
     const superseded = legged.find(r => r.role === 'superseded' && r.model === 'qwen');
