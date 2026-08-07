@@ -9,7 +9,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 amicus start --model <model> --prompt "<task>"
 amicus start --model <model> --prompt-file briefing.md --no-ui --json
 amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this" --json
-amicus list [--status <filter>] [--all] [--json]
+amicus list [--status <filter>] [--all] [--search <q>] [--json]
 amicus resume <task_id> [--no-ui --json]
 amicus continue <task_id> --prompt "Next step..." [--no-ui --json]
 amicus read <task_id> [--conversation|--metadata|--json]
@@ -96,6 +96,7 @@ amicus start --model deepseek --prompt "Generate tests" --no-ui --timeout 30
 | `--template <name\|path>` | Render a [briefing template](#briefing-templates) (`{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.*}}`). | |
 | `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. | |
 | `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. | |
+| `--tag <t>` | Label this session for `list`/`--search`/`spend --group-by tag` (1-64 chars, `[A-Za-z0-9_-]`; invalid values are rejected, never silently cleaned). | *(none)* |
 
 > Agents: **Chat** auto-approves reads and asks before writes/bash (interactive default); **Build** has full tool access (headless default); **Plan** is read-only analysis. `--agent Chat` is interactive-only and incompatible with `--no-ui`.
 
@@ -134,6 +135,7 @@ amicus fanout --council free --prompt "Review this design" --json
 | `--template <name\|path>` | Render a [briefing template](#briefing-templates) (`{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.*}}`), shared by every leg. |
 | `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. |
 | `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. |
+| `--tag <t>` | Label this wave (and every leg) for `list`/`--search`/`spend --group-by tag` (1-64 chars, `[A-Za-z0-9_-]`; rejected, not cleaned). Mutually exclusive with `--retry-failed` (`BAD_ARGS`). |
 
 **Shared per-leg knobs.** Every leg in the wave also accepts the same per-leg options as `start`:
 `--agent`, `--thinking`, `--timeout`, `--summary-length`, `--no-context`, `--context-*`, `--mcp*`,
@@ -199,6 +201,7 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--template <name\|path>` | Render a [briefing template](#briefing-templates) (`{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}`, `{{project}}`, `{{var.*}}`). |
 | `--artifact <file>` | File whose content fills `{{artifact}}`/`{{artifact_path}}` (256 KB cap). Requires `--template`. |
 | `--var <k=v>` | Set `{{var.<key>}}`; repeatable. Requires `--template`. |
+| `--tag <t>` | Label this run for `list`/`--search`/`spend --group-by tag` (1-64 chars, `[A-Za-z0-9_-]`; rejected, not cleaned). Every stage's sub-waves (Stage-1, critic/lens solos, Stage-2, chair, debate) carry the same tag on their wave metadata. |
 
 **Exit codes:** `0` full run · `2` degraded but reportable (fewer than 2 judges, chair failure —
 `overallVerdict: null` — a cost ceiling hit after the tally, or a `--max-cost` ceiling set over a
@@ -424,7 +427,8 @@ Each stored alias resolves to one of three outcomes:
 amicus list                          # Current project
 amicus list --status running         # Filter: running, complete, error, timed-out,
                                       #         aborted, crashed, idle-timeout
-amicus list --all                    # All projects
+amicus list --all                    # All projects (cross-project, via the session index)
+amicus list --search foo             # Substring match: id, tag, briefing material (case-insensitive)
 amicus list --json                   # Machine-readable
 
 amicus read <id>                     # Fold summary (default)
@@ -449,6 +453,23 @@ amicus abort --all --json            # Machine-readable abort result (scope: "al
 amicus setup --api-keys              # Open just the API-key window
 amicus setup --add-alias fast=google/gemini-2.5-flash   # Add/override one alias (bare canonical)
 ```
+
+**`amicus list` flags.** One enumeration (`src/sidecar/read.js`) backs both the CLI and the MCP
+`amicus_list` tool, so rows carry the same shape everywhere: `id`, `model`, `status`, `tag`
+(omitted, not `null`, when the session has none), `mode` (`interactive`/`headless`), and — for
+fan-out rows — `type`/`parentWave`/`legCount`. The human-readable table adds a `TAG` column.
+`--all` (CLI only) enumerates every project the global, advisory sessions-index knows about,
+deduped by canonical project identity; a stale index entry pointing at a missing or unreadable
+project is skipped rather than surfaced as an error. `--search <q>` (both surfaces) is a
+case-insensitive substring filter over `id`, `tag`, and briefing material: a fan-out wave row
+reads its full `briefing.md` off disk (falling back to the row's 200-char excerpt if that file
+isn't readable), a council-run row reads `briefing.md` written at MCP launch time or falls back
+to the portion of `briefing-stage1.md` after `--- MATERIAL / BRIEFING ---` (CLI-launched runs
+only have the latter), and a leg row (one spawned by a wave) matches on `id`/`tag` only — its
+briefing is the parent wave's, and matching it there would surface the same wave once per leg.
+A bare `--search` with no value is a usage error on the CLI. Tag itself is set at launch with
+`--tag <t>` on `start`/`fanout`/`council run` (see those sections above) and doubles as a
+`amicus spend --group-by tag` dimension.
 
 **`amicus status <id>` output.** Human-readable:
 
@@ -575,7 +596,7 @@ Reads `~/.config/amicus/spend-ledger.jsonl` (one row per completed run/leg) and 
 | `--model <id-or-prefix>` | rows whose model id starts with the given string |
 | `--op <op>` | rows for one operation (`start`, `leg`, `continue`, `resume`, …) |
 | `--failed` | rows with an explicit non-`complete` status (see the caveat below) |
-| `--group-by <dim>` | bucket totals by `model` (default) \| `wave` \| `council` \| `project` \| `op` \| `day` |
+| `--group-by <dim>` | bucket totals by `model` (default) \| `wave` \| `council` \| `project` \| `op` \| `day` \| `tag` (untagged rows group under `(unattributed)`) |
 | `--rows` | also emit the raw filtered rows (capped at 1000; `--json` sets `rowsTruncated: true` past the cap) |
 
 All filters compose, e.g. `amicus spend --project . --group-by model --since 7d`.
