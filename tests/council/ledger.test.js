@@ -324,3 +324,86 @@ describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a be
     expect(alpha.conformance).toBe('clean'); // the {} fallback, NOT the row's 'repaired'
   });
 });
+
+describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
+  });
+
+  // Small local helpers: `row` builds one persisted ledger-row object with
+  // the file's standard base-row fields (buildLedgerRows' own output shape,
+  // ledger.js:75-87 region); `resolvedModel` is present ONLY when the
+  // override supplies it — mirrors production's emit-only-when-set contract
+  // (D9), and lets these tests exercise both v1 alias-only rows and v2
+  // resolved rows. `appendRows` writes each row as one JSONL line into the
+  // describe's fresh tmp dir (closure over `dir`, reset per test above).
+  function row(overrides = {}) {
+    const base = {
+      schemaVersion: LEDGER_SCHEMA_VERSION,
+      runId: 'r1', date: '2026-08-01', runType: 'headless',
+      model: 'alpha', role: 'seat', wasChair: false, judged: true,
+      streetCredWithSelf: 1, streetCredPeersOnly: 1,
+      findingsRaised: 0, bySeverity: { blocker: 0, major: 0, minor: 0, nit: 0 },
+      confirmRate: 1, factErrorRate: 0, conformance: 'clean',
+    };
+    const merged = { ...base, ...overrides };
+    if (!('resolvedModel' in overrides)) { delete merged.resolvedModel; }
+    return merged;
+  }
+
+  function appendRows(rows) {
+    const file = path.join(dir, 'council-ledger.jsonl');
+    for (const r of rows) { fs.appendFileSync(file, JSON.stringify(r) + '\n'); }
+  }
+
+  test('v2 rows group by resolvedModel; aliases[] collects row aliases most-recent-first', () => {
+    // Append, in order: alias 'gpt' → openai/gpt-5.2; alias 'gpt4' → openai/gpt-5.2
+    // (two aliases, one executable id, second observed later)
+    appendRows([
+      row({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+      row({ model: 'gpt4', resolvedModel: 'openai/gpt-5.2' }),
+    ]);
+    const agg = deriveReliability({ dir });
+    expect(agg).toHaveLength(1);
+    expect(agg[0].model).toBe('openai/gpt-5.2');
+    expect(agg[0].runs).toBe(2);
+    expect(agg[0].aliases).toEqual(['gpt4', 'gpt']);   // most recent FIRST
+    expect('legacy' in agg[0]).toBe(false);
+  });
+
+  test('rows without resolvedModel stay alias-keyed and marked legacy: true (R2)', () => {
+    appendRows([row({ model: 'gemini' }), row({ model: 'gemini' })]);
+    const agg = deriveReliability({ dir });
+    expect(agg[0]).toMatchObject({ model: 'gemini', legacy: true, aliases: ['gemini'] });
+  });
+
+  test('history splits at the bump: legacy alias group + resolved group coexist for one lineage', () => {
+    appendRows([
+      row({ model: 'gpt' }),                                    // pre-v2 history
+      row({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),   // post-v2
+    ]);
+    const agg = deriveReliability({ dir });
+    const keys = agg.map(a => a.model).sort();
+    expect(keys).toEqual(['gpt', 'openai/gpt-5.2']);
+    expect(agg.find(a => a.model === 'gpt').legacy).toBe(true);
+    expect('legacy' in agg.find(a => a.model === 'openai/gpt-5.2')).toBe(false);
+  });
+
+  test('a mixed group merges honestly when a legacy full-id row equals a v2 key — no legacy mark', () => {
+    appendRows([
+      row({ model: 'openai/gpt-5.2' }),                                   // old row launched by full id
+      row({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+    ]);
+    const agg = deriveReliability({ dir });
+    expect(agg).toHaveLength(1);
+    expect('legacy' in agg[0]).toBe(false);
+    expect(agg[0].aliases).toEqual(['gpt', 'openai/gpt-5.2']);
+  });
+
+  test('the claude group is legacy-keyed forever (spec §3.4) — leg-less rows never resolve', () => {
+    appendRows([row({ model: 'claude', role: 'claude' })]);
+    const agg = deriveReliability({ dir });
+    expect(agg[0]).toMatchObject({ model: 'claude', legacy: true });
+  });
+});
