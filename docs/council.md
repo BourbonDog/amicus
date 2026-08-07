@@ -552,7 +552,7 @@ assembly recipe"). It needs **all five top-level keys** — `tally()` throws
 | `findings[]` | array | One entry per finding across all reviews: `{id, raiser, severity}` (`claim` may ride along but isn't required by the tally engine). `id` is the run-global label (e.g. `A1`, `B2`) assigned during Stage-2 assembly, not the reviewer's local integer id. |
 | `adjudications[]` | array | One entry per (judge × finding): `{findingId, judge, verdict}`, `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding, **including the raiser's own adjudication of its own finding** — the engine excludes it automatically when scoring (don't pre-filter it). |
 | `rankings[]` | array | One entry per judge: `{judge, order}`. `order` is that judge's `FINAL RANKING:` block translated to model ids, e.g. `["gpt", "deepseek"]` (ties may use a nested array, e.g. `[["gpt","deepseek"], "mistral"]`). |
-| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?}`. May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. |
+| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?, resolvedModel?}`. May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. `resolvedModel?` (v4.7) — the executable id that actually served the row's leg, emit-only-when-set; leg-less rows (the give-up chair row, dead seats with no leg, the claude row) never carry it. `model` stays the council alias. |
 
 **`runStats[].role` roster (v4.7 row-per-launch).** Every leg the run budget counts gets exactly
 one row, so a seat that needed a repair or lost a leg to a retry can now show up more than once.
@@ -576,14 +576,16 @@ leg backs the row** — e.g. the synthetic `claude` row, a give-up chair's error
 leg-less dead-seat/critic/lens primary error row (the two SL-2 retry note-classes that never
 produced a real leg for the seat at all) carry none. It's the join key the leg–row bijection
 invariant suite (`tests/council/run-cost-bijection.test.js`) uses to prove every budget-counted
-leg lands on exactly one row.
+leg lands on exactly one row. `resolvedModel` follows the same emit-only-when-set discipline and
+the same never-invent rule — it is never derived from the alias.
 
 **Ledger-join consequence.** `council stats`'s reliability aggregation (`ledger.js`) only reads
 rows whose role is in the allowlist above (`seat`, `critic`, `lens:*`, `chair`, `claude`,
 `council`, `redteam`) — everything else, including all three new non-primary roles and any
 custom/free-form label a skill or caller invents, is fail-closed excluded and never contributes
 role/wasChair/conformance to reliability stats, even though it still renders in the tally/report
-artifact.
+artifact. Since v4.7 the ledger row copies the joined row's `resolvedModel` and `council stats`
+groups by `resolvedModel || model` — see the stats section below.
 
 ### Tally-record schema (what `tally()` returns / prints)
 
@@ -760,7 +762,10 @@ Since v4.0 (council schema v2), `--json` wraps the rows in the family envelope �
 `{ "schemaVersion": 2, "type": "council-stats", "models": [ … ] }` — the per-model row
 shape below is unchanged. (Pre-4.0 emitted the bare array.)
 
-**Output**, one row per model that has ever appeared in `meta.models`:
+**Output**: one row per RESOLVED model (v4.7 — rows that carry `resolvedModel` group by the
+executable id that served; rows without one group by alias and are marked `legacy`). Each row
+also lists `aliases[]` — every alias observed for the group, most recent first; the chair
+fallback promotion launches `aliases[0]`.
 
 | Field | Meaning |
 |---|---|
@@ -770,6 +775,8 @@ shape below is unchanged. (Pre-4.0 emitted the bare array.)
 | `lifetimeConfirmRate` | Mean, across runs, of `(findings this model raised that landed Confirmed) / (findings this model raised)`. `null` when `judged` was false for every run or the model raised nothing. |
 | `lifetimeFactErrorRate` | Same shape, but for the `Disputed` tier — a proxy for how often the bench caught this model asserting something wrong. |
 | `conformance` | Tally of `{clean, repaired, unstructured}` counts — how often this model's Stage-1 findings JSON needed a repair re-prompt. |
+| `aliases` | Every alias (row-level `model` value) observed for this group, most recently observed first (v4.7). `aliases[0]` is the launch-preferred name. |
+| `legacy` | `true` when every row in the group lacks `resolvedModel` — alias-keyed history from before resolved-id segmentation, or leg-less rows whose resolution is unknowable (v4.7). Omitted (not `false`) when the group has any resolved rows. |
 
 This is the data source the `second-opinion` skill's Stage 0 model recommendations and the
 `MODEL-NOTES.md` quantitative table both read — **never hand-edit reliability numbers there**;
@@ -947,11 +954,14 @@ _Legend: ✓ agree · ✗ dispute · – neutral · `*` raiser's own vote_
 ```bash
 $ amicus council stats
 model            runs  avg-cred  confirm  fact-err  notes
-deepseek            1  2.00     1.00    0.00   low-N
-gpt                 1  1.00     0.00    0.00   low-N
+deepseek            1  2.00     1.00    0.00   low-N   legacy
+gpt                 1  1.00     0.00    0.00   low-N   legacy
 ```
 
-(`low-N` because each model has only 1 recorded run — `runs < 3`.)
+(`low-N` because each model has only 1 recorded run — `runs < 3`. `legacy` because this
+hand-assembled `tally-input.json` never sets `runStats[].resolvedModel` — v4.7 groups by
+alias and marks the group `legacy` whenever none of its rows carry a resolved id; see
+[`amicus council stats`](#amicus-council-stats) above.)
 
 **7. Presets**, for reference (independent of the run above):
 

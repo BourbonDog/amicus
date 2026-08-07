@@ -23,6 +23,13 @@ All notable changes to Amicus are documented here. Format follows
   terminal run now proves Σ(`runStats` legged-row usage) equals `run.json`'s `usage` block —
   cost, and the reported/estimated/unpriced/subtreeUnknown leg counts — across clean, repair,
   chair-walk-failure, debate-repair, retry-healed, and retry-failed scenarios.
+- **`runStats[].resolvedModel`** (v4.7 GOA-7, emit-only-when-set): every row built from a served
+  leg now records the executable id that actually served (post-fallback-substitution), never the
+  alias; carried verbatim through `tally.json`/`verdict.json` and onto `council-ledger.jsonl` rows.
+- **`council stats` rows gain `aliases[]`** (every alias observed for the group, most recent
+  first — `aliases[0]` is the launch-preferred name) **and a `legacy` mark** on groups whose rows
+  all lack `resolvedModel`; the human table sizes the model column to the longest key and marks
+  `legacy` in the notes column beside `low-N`.
 
 ### Changed
 
@@ -39,6 +46,15 @@ All notable changes to Amicus are documented here. Format follows
 - **The Workspace seats panel no longer renders the three new non-seat launch rows**
   (`chair-attempt`, `repair`, `superseded`) — they still appear in the report/tally cost tables,
   just not as a seat.
+- **`LEDGER_SCHEMA_VERSION` 1 → 2** (v4.7 GOA-7). Legacy-read, no migration: rows without
+  `resolvedModel` (all pre-v4.7 history, plus leg-less rows whose resolution is unknowable)
+  aggregate under their alias, marked `legacy`.
+- **`council stats` groups reliability by resolved model id** (`resolvedModel || model`) instead
+  of by alias alone — history splits honestly at the bump; a retargeted alias's new rows start
+  a fresh `low-N` group.
+- **Chair fallback promotion (`pickFallbackChair`) excludes candidates by their full name set**
+  (group key + `aliases[]`) and launches the group's most-recent alias (`aliases[0]`) — a bench
+  seat's resolved-keyed group can no longer be promoted as its own chair.
 
 ## [4.6.3] - 2026-08-05
 
