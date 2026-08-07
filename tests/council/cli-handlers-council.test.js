@@ -487,6 +487,35 @@ describe('renderStats (v4.7 GOA-7 D10 surfaces)', () => {
     const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
     expect(code).toBe(0);
     expect(out).not.toContain('legacy');
+    // Non-vacuous: the resolved id must actually appear in the rendered row,
+    // so this test can't pass against an empty/blank table.
+    expect(out).toContain('openai/gpt-5.2');
+  });
+
+  // Final-review consolidated wave (item 3b): pins BOTH co-occurrence and
+  // column ORDER of the two notes markers on one row — low-N (runs < 3) and
+  // legacy (every row in the group lacks resolvedModel) are independent
+  // conditions that a single group can satisfy simultaneously, and renderStats
+  // always appends low-N before legacy (cli-handlers-council.js's `${a.lowN ?
+  // '   low-N' : ''}${a.legacy ? '   legacy' : ''}`).
+  test('a low-N legacy group renders both markers on one row, low-N before legacy', async () => {
+    appendLedgerRows([ledgerRow({ model: 'gemini' })]);  // runs=1 → lowN; no resolvedModel → legacy
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    const row = out.split('\n').find(l => l.startsWith('gemini'));
+    expect(row).toContain('low-N   legacy');
+  });
+
+  // Final-review consolidated wave (item 3c): byte-identity pin on the fixed
+  // header layout for the common case (all keys ≤ 16 chars, so the model
+  // column floors at 16) — guards the exact column widths/spacing against an
+  // accidental reformat, not just substring presence.
+  test('header line is byte-identical to the fixed 16-char-floor layout when all keys are short', async () => {
+    appendLedgerRows([ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' })]);
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    const [header] = out.split('\n');
+    expect(header).toBe('model            runs  avg-cred  confirm  fact-err  notes');
   });
 });
 

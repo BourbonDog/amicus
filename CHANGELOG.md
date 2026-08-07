@@ -28,8 +28,8 @@ All notable changes to Amicus are documented here. Format follows
   alias; carried verbatim through `tally.json`/`verdict.json` and onto `council-ledger.jsonl` rows.
 - **`council stats` rows gain `aliases[]`** (every alias observed for the group, most recent
   first — `aliases[0]` is the launch-preferred name) **and a `legacy` mark** on groups whose rows
-  all lack `resolvedModel`; the human table sizes the model column to the longest key and marks
-  `legacy` in the notes column beside `low-N`.
+  all lack `resolvedModel`; the human table sizes the model column to the longest key (16-char
+  floor) and marks `legacy` in the notes column beside `low-N`.
 
 ### Changed
 
@@ -48,7 +48,8 @@ All notable changes to Amicus are documented here. Format follows
   just not as a seat.
 - **`LEDGER_SCHEMA_VERSION` 1 → 2** (v4.7 GOA-7). Legacy-read, no migration: rows without
   `resolvedModel` (all pre-v4.7 history, plus leg-less rows whose resolution is unknowable)
-  aggregate under their alias, marked `legacy`.
+  aggregate under their alias; a group is marked `legacy` only when every row in it lacks
+  `resolvedModel`.
 - **`council stats` groups reliability by resolved model id** (`resolvedModel || model`) instead
   of by alias alone — history splits honestly at the bump; a retargeted alias's new rows start
   a fresh `low-N` group.

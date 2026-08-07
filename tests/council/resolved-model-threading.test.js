@@ -45,6 +45,7 @@ describe('resolvedModel threading (GOA-7 D8/D9 end-to-end)', () => {
       launchers: scriptedLaunchers(resolvedScript()),
       appendRunFn, statsFn: () => [], installSignalAbortFn: () => () => {},
     });
+    expect(appendRunFn).toHaveBeenCalledTimes(1);
     expect(res.exitCode).toBe(0);
   });
 
@@ -87,7 +88,7 @@ describe('resolvedModel threading (GOA-7 D8/D9 end-to-end)', () => {
 });
 
 describe('leg-less rows stay resolvedModel-free (the R2/E-PR2-7 absence class)', () => {
-  test('the give-up chair error row and untouched fixtures carry no resolvedModel', async () => {
+  test('the give-up chair error row carries no resolvedModel (the R2/E-PR2-7 absence class)', async () => {
     // Chair walk dies: ch1/ch2 return dead legs, no ledger rows to promote a ch3.
     // Mirrors tests/council/run-chair.test.js's give-up idiom exactly (mkLeg
     // dead legs, statsFn empty so no ch3 promotion).
@@ -95,8 +96,9 @@ describe('leg-less rows stay resolvedModel-free (the R2/E-PR2-7 absence class)',
     script['abc123-ch1'] = () => okWave([mkLeg('deepseek', '', 'error')], 1, 'error');
     script['abc123-ch2'] = () => okWave([mkLeg('deepseek', '', 'error')], 1, 'error');
     const opts = baseOptions(tmp);
-    await runCouncil(opts, { launchers: scriptedLaunchers(script), appendRunFn: jest.fn(),
+    const res = await runCouncil(opts, { launchers: scriptedLaunchers(script), appendRunFn: jest.fn(),
       statsFn: () => [], installSignalAbortFn: () => () => {} });
+    expect(res.exitCode).toBe(2);
     const input = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'tally-input.json'), 'utf-8'));
     const giveUp = input.runStats.find(r => r.role === 'chair' && r.status === 'error');
     expect(giveUp).toBeDefined();

@@ -154,7 +154,7 @@ described above — no contract change here — but any code or report template 
 should be a **tolerant reader** (filter by role rather than assume one row per model), since an
 engine-produced tally.json can now carry rows this recipe never does. Hand-assembled `runStats`
 rows carry no `resolvedModel`; their ledger rows therefore aggregate as alias-keyed `legacy`
-groups in `council stats` — expected and by design (R2 legacy-by-absence), not an error. Add
+groups in `council stats` (legacy-by-absence, by design) — expected, not an error. Add
 `resolvedModel` (the executable id that served) to a row only if you know it; never copy the
 alias into it.
 

@@ -113,25 +113,41 @@ test('rows are stamped with the CURRENT schema version (2 after GOA-7 D9)', () =
 });
 
 test('resolvedModel is copied from the JOINED runStats row when present (D9)', () => {
-  const record = baseRecord();
-  record.runStats = [{ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+  const rec = baseRecord();
+  rec.runStats = [{ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
     resolvedModel: 'openai/gpt-5.2', status: 'complete', durationMs: 5, usage: null }];
-  record.meta.models = ['gpt'];
-  const rows = buildLedgerRows(record);
+  rec.meta.models = ['gpt'];
+  const rows = buildLedgerRows(rec);
   expect(rows[0].resolvedModel).toBe('openai/gpt-5.2');
 });
 
 test('absent resolvedModel on the joined row ⇒ NO resolvedModel key on the ledger row (legacy-by-absence, R2)', () => {
-  const record = baseRecord();  // its runStats rows carry no resolvedModel
-  const rows = buildLedgerRows(record);
+  const rec = baseRecord();  // its runStats rows carry no resolvedModel
+  const rows = buildLedgerRows(rec);
   for (const row of rows) { expect('resolvedModel' in row).toBe(false); }
 });
 
 test('a model with NO joining runStats row gets no resolvedModel (the {} join fallback)', () => {
-  const record = baseRecord();
-  record.runStats = [];  // nothing joins; role/conformance fall back
-  const rows = buildLedgerRows(record);
+  const rec = baseRecord();
+  rec.runStats = [];  // nothing joins; role/conformance fall back
+  const rows = buildLedgerRows(rec);
   for (const row of rows) { expect('resolvedModel' in row).toBe(false); }
+});
+
+// Final-review consolidated wave (item 2b): the join allowlist (joinsLedger,
+// ledger.js) is the ONLY gate for whether a runStats row's fields — including
+// resolvedModel — win the model-keyed join. A non-allowlisted role (e.g.
+// 'judge', excluded by the #83 overwrite-guard) must not leak resolvedModel
+// onto the ledger row even when the row itself carries one — pinning this
+// against a refactor that might key the resolvedModel copy on "row carries
+// resolvedModel" instead of "row's role passed joinsLedger".
+test('a NON-allowlisted role carrying resolvedModel does not join it onto the ledger row (allowlist is the only gate)', () => {
+  const rec = baseRecord();
+  rec.runStats = [{ model: 'gpt', role: 'judge', wasChair: false, conformance: 'clean',
+    resolvedModel: 'openai/gpt-5.2', status: 'complete', durationMs: 5, usage: null }];
+  rec.meta.models = ['gpt'];
+  const rows = buildLedgerRows(rec);
+  expect('resolvedModel' in rows[0]).toBe(false);
 });
 
 test('aggregates rows written under a FUTURE schemaVersion', () => {
