@@ -24,6 +24,10 @@ const { runFanout } = require('../../src/sidecar/fanout');
 beforeEach(() => {
   startAmicus.mockClear();
   runFanout.mockClear();
+  // T5-m1: bare jest.fn() resolves undefined, which captureStdout's .catch(e => e)
+  // silently swallows on any success-path test — give both engines a real shape.
+  startAmicus.mockResolvedValue({ exitCode: 0 });
+  runFanout.mockResolvedValue({ exitCode: 0 });
 });
 
 function captureStdout(fn) {
@@ -130,13 +134,27 @@ describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', 
     expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'TEMPLATE_NOT_FOUND' } });
     expect(runFanout).not.toHaveBeenCalled();
   });
+
+  it('fanout --json --artifact without --template → BAD_ARGS envelope', async () => {
+    const out = await captureStdout(() => handleFanout({ json: true, prompt: 'hi', models: 'a,b', artifact: __filename }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(doc.error.message).toMatch(/--artifact\/--var require --template/);
+    expect(runFanout).not.toHaveBeenCalled();
+  });
+
+  it('fanout --json --var without --template → BAD_ARGS envelope', async () => {
+    const out = await captureStdout(() => handleFanout({ json: true, prompt: 'hi', models: 'a,b', var: ['a=1'] }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(runFanout).not.toHaveBeenCalled();
+  });
 });
 
 // v4.7 F8 (D13): --tag is reject-style (unlike sanitizeCouncilName, which
 // cleans) — a bad tag must fail fast with the validator's message, engine
-// never invoked. (handleStart's --tag check sits past model resolution —
-// see tests/pack/cli-fanout-start-pack.test.js, which mocks resolveLaunchModel,
-// for that handler's rejection case.)
+// never invoked. (Both handlers validate --tag before any model resolution —
+// handleStart's rejection case lives in tests/pack/cli-fanout-start-pack.test.js.)
 describe('--tag pre-flight validation emits BAD_ARGS envelope on stdout (v4.7 F8)', () => {
   it('fanout --json --tag "bad tag!" → BAD_ARGS envelope, engine never invoked', async () => {
     const out = await captureStdout(() => handleFanout({

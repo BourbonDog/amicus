@@ -227,8 +227,9 @@ describe('explicit --model beats pack.model silently (spec §5.4)', () => {
 
 // v4.7 F8 (D13): --tag is reject-style (unlike sanitizeCouncilName, which
 // cleans) — a stored tag is a user-chosen search key, so silent truncation/
-// stripping would make --search/--group-by tag miss it. handleStart's check
-// sits past resolveLaunchModel, so it needs this suite's mocked passthrough.
+// stripping would make --search/--group-by tag miss it. (handleStart validates
+// --tag BEFORE resolveLaunchModel since the v4.7 PR3 consolidated wave — this
+// suite's passthrough mock serves the pack-wiring seam, not the tag guard.)
 describe('--tag validation (v4.7 F8)', () => {
   test('start --tag with an invalid value exits 1 before startAmicus is called', async () => {
     await expect(handleStart(parseArgs([

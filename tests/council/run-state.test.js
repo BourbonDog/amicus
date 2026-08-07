@@ -118,8 +118,8 @@ describe('initCouncilRun template seeding (F9 v4.5)', () => {
     expect(rs.readRun(runDirOf()).template).toEqual({ name: 'x', hash: 'abcdef123456' });
   });
 
-  test('o.template absent -> "template" key is absent from run.json, not null', () => {
-    rs.initCouncilRun(baseOpts());
+  test('o.template null (the production shape run.js passes) -> "template" key is absent from run.json, not null', () => {
+    rs.initCouncilRun({ ...baseOpts(), template: null });
     expect('template' in rs.readRun(runDirOf())).toBe(false);
   });
 });

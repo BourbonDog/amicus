@@ -74,6 +74,31 @@ test('--artifact without --template is BAD_ARGS', async () => {
   expect(doc.error.code).toBe('BAD_ARGS');
 });
 
+test('--var without --template is BAD_ARGS (council)', async () => {
+  const briefing = path.join(tmp, 'b.md');
+  fs.writeFileSync(briefing, 'body');
+  const code = await handleCouncilRun(parseArgs([
+    'council', 'run', '--models', 'a,b', '--prompt-file', briefing, '--var', 'a=1', '--json', '--cwd', tmp,
+  ]));
+  expect(code).toBe(1);
+  expect(runCouncil).not.toHaveBeenCalled();
+  const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
+  expect(doc.error.code).toBe('BAD_ARGS');
+});
+
+test('council run --template with a {{prompt}} slot renders --prompt-file into the briefing', async () => {
+  fs.writeFileSync(path.join(tmp, 'templates', 'wrap.md'), 'W:{{prompt}}');
+  const briefing = path.join(tmp, 'b.md');
+  fs.writeFileSync(briefing, 'body');
+  const code = await handleCouncilRun(parseArgs([
+    'council', 'run', '--models', 'a,b,c', '--prompt-file', briefing, '--template', 'wrap', '--json', '--cwd', tmp,
+  ]));
+  expect(code).toBe(0);
+  const opts = runCouncil.mock.calls[0][0];
+  expect(opts.briefing).toBe('W:body');
+  expect(opts.template).toEqual({ name: 'wrap', hash: expect.any(String) });
+});
+
 test('a TEMPLATE_RENDER violation fails through the envelope pre-spend', async () => {
   fs.writeFileSync(path.join(tmp, 'templates', 'p.md'), 'no slots');
   const briefing = path.join(tmp, 'b.md');
