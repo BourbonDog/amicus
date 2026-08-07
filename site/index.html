@@ -377,46 +377,46 @@ h2.v .w-anim{opacity:1;transform:none}
       <path d="M110 126v10a150 56 0 0 0 300 0v-10" stroke="#26262b" stroke-width="1.4"/>
 
       <!-- the material under review -->
-      <path d="M248 102h16l8 8v20a2 2 0 0 1-2 2h-22a2 2 0 0 1-2-2v-26a2 2 0 0 1 2-2z" fill="#111113" stroke="#d97757" stroke-width="1.1"/>
+      <path d="M248 102h16l8 8v20a2 2 0 0 1-2 2h-22a2 2 0 0 1-2-2v-26a2 2 0 0 1 2-2z" fill="#111113" stroke="#d97757" stroke-width="1.1"><animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/></path>
       <path d="M264 102v8h8" stroke="#d97757" stroke-width="1.1"/>
       <rect x="252" y="115" width="14" height="1.6" rx=".8" fill="#d97757" opacity=".55"/>
       <rect x="252" y="120" width="10" height="1.6" rx=".8" fill="#d97757" opacity=".35"/>
       <rect x="252" y="125" width="12" height="1.6" rx=".8" fill="#d97757" opacity=".35"/>
       <text x="260" y="147" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#d97757">plan.md</text>
 
-      <!-- spokes -->
-      <g stroke="#3a3a40" stroke-width="1">
-        <path d="M112 62 L166 84"/>
-        <path d="M408 62 L354 84"/>
-        <path d="M94 126 L110 126"/>
-        <path d="M426 126 L410 126"/>
-        <path d="M260 194 L260 182"/>
+      <!-- spokes: every seat feeds the same material, identical rhythm -->
+      <g stroke="#4a4a52" stroke-width="1" stroke-dasharray="3,3">
+        <path d="M140 62 L236 108"><animate attributeName="stroke-dashoffset" values="12;0" dur="1.6s" begin="0s" repeatCount="indefinite"/></path>
+        <path d="M380 62 L284 108"><animate attributeName="stroke-dashoffset" values="12;0" dur="1.6s" begin="0s" repeatCount="indefinite"/></path>
+        <path d="M96 126 L238 122"><animate attributeName="stroke-dashoffset" values="12;0" dur="1.6s" begin="0s" repeatCount="indefinite"/></path>
+        <path d="M424 126 L282 122"><animate attributeName="stroke-dashoffset" values="12;0" dur="1.6s" begin="0s" repeatCount="indefinite"/></path>
+        <path d="M260 192 L260 140"><animate attributeName="stroke-dashoffset" values="12;0" dur="1.6s" begin="0s" repeatCount="indefinite"/></path>
       </g>
 
       <!-- seats: one heartbeat, five equal members -->
       <g font-family="IBM Plex Mono,monospace">
         <!-- gemini · upper left -->
-        <rect x="56" y="36" width="90" height="26" rx="6" fill="#111113" stroke="#4285F4" stroke-width="1.2"/>
+        <rect x="56" y="36" width="90" height="26" rx="6" fill="#111113" stroke="#4285F4" stroke-width="1.2"><animate attributeName="stroke-opacity" values="1;0.5;1" dur="2.4s" begin="0s" repeatCount="indefinite"/></rect>
         <circle cx="69" cy="49" r="3" fill="#4285F4"><animate attributeName="opacity" values=".35;1;.35" dur="2.4s" repeatCount="indefinite"/></circle>
         <text x="77" y="52" font-size="7" font-weight="600" fill="#7aafff">gemini</text>
         <text x="139" y="52" text-anchor="end" font-size="6" fill="#555">$0.14</text>
         <!-- gpt · upper right -->
-        <rect x="374" y="36" width="90" height="26" rx="6" fill="#111113" stroke="#10a37f" stroke-width="1.2"/>
+        <rect x="374" y="36" width="90" height="26" rx="6" fill="#111113" stroke="#10a37f" stroke-width="1.2"><animate attributeName="stroke-opacity" values="1;0.5;1" dur="2.4s" begin="0s" repeatCount="indefinite"/></rect>
         <circle cx="387" cy="49" r="3" fill="#10a37f"><animate attributeName="opacity" values=".35;1;.35" dur="2.4s" repeatCount="indefinite"/></circle>
         <text x="395" y="52" font-size="7" font-weight="600" fill="#10a37f">gpt</text>
         <text x="457" y="52" text-anchor="end" font-size="6" fill="#555">$0.09</text>
         <!-- glm · left -->
-        <rect x="6" y="113" width="88" height="26" rx="6" fill="#111113" stroke="#6a6a70" stroke-width="1.2"/>
+        <rect x="6" y="113" width="88" height="26" rx="6" fill="#111113" stroke="#6a6a70" stroke-width="1.2"><animate attributeName="stroke-opacity" values="1;0.5;1" dur="2.4s" begin="0s" repeatCount="indefinite"/></rect>
         <circle cx="19" cy="126" r="3" fill="#f5f5f3"><animate attributeName="opacity" values=".35;1;.35" dur="2.4s" repeatCount="indefinite"/></circle>
         <text x="27" y="129" font-size="7" font-weight="600" fill="#f5f5f3">glm</text>
         <text x="87" y="129" text-anchor="end" font-size="6" fill="#555">$0.04</text>
         <!-- deepseek · right -->
-        <rect x="426" y="113" width="88" height="26" rx="6" fill="#111113" stroke="#738ADB" stroke-width="1.2"/>
+        <rect x="426" y="113" width="88" height="26" rx="6" fill="#111113" stroke="#738ADB" stroke-width="1.2"><animate attributeName="stroke-opacity" values="1;0.5;1" dur="2.4s" begin="0s" repeatCount="indefinite"/></rect>
         <circle cx="439" cy="126" r="3" fill="#738ADB"><animate attributeName="opacity" values=".35;1;.35" dur="2.4s" repeatCount="indefinite"/></circle>
         <text x="447" y="129" font-size="7" font-weight="600" fill="#738ADB">deepseek</text>
         <text x="507" y="129" text-anchor="end" font-size="6" fill="#555">$0.06</text>
         <!-- llama3 · local · bottom, equal seat -->
-        <rect x="192" y="194" width="136" height="28" rx="6" fill="#111113" stroke="#a1a1a0" stroke-width="1.2"/>
+        <rect x="192" y="194" width="136" height="28" rx="6" fill="#111113" stroke="#a1a1a0" stroke-width="1.2"><animate attributeName="stroke-opacity" values="1;0.5;1" dur="2.4s" begin="0s" repeatCount="indefinite"/></rect>
         <circle cx="206" cy="208" r="3" fill="#f5f5f3"><animate attributeName="opacity" values=".35;1;.35" dur="2.4s" repeatCount="indefinite"/></circle>
         <path d="M214 205l4-3.5 4 3.5v5h-8z" fill="none" stroke="#a1a1a0" stroke-width=".9"/>
         <text x="226" y="211" font-size="7" font-weight="600" fill="#f5f5f3">llama3 · LOCAL</text>
