@@ -85,9 +85,15 @@ Three things to hold onto:
    changed for them.** The skill's opt-in elements (critic seat, expert lenses, debate mode, chair
    verdict scale — see [SKILL.md](../skills/second-opinion/SKILL.md) and
    [SEAT-BRIEFS.md](../skills/second-opinion/SEAT-BRIEFS.md)) ride on existing engine surfaces:
-   seat roles travel as free-form `runStats[].role` labels (`"critic"`, `"lens:<slug>"`), debate
-   mode runs the Stage-2 tally with `--no-ledger` (provisional) and re-tallies after the rebuttal
-   round (that second, post-rebuttal tally is the ledger-recorded one), and lens runs always pass
+   seat roles travel as free-form `runStats[].role` labels in the tally/verdict artifact
+   (`"critic"`, `"lens:<slug>"`, or any other skill-authored label) — **but since v4.7 the
+   council-ledger join reads only an allowlist** (`seat`, `critic`, `lens:*`, `chair`, `claude`,
+   `council`, `redteam` — see the `runStats[]` row inventory under
+   [`amicus council tally`](#amicus-council-tally)), so a custom/free-form label outside that set
+   still renders in the tally/report artifact but no longer contributes its
+   role/wasChair/conformance to `amicus council stats` reliability numbers. Debate mode runs the
+   Stage-2 tally with `--no-ledger` (provisional) and re-tallies after the rebuttal round (that
+   second, post-rebuttal tally is the ledger-recorded one), and lens runs always pass
    `--no-ledger` so non-comparable reviews never feed `stats`.
 
 ---
@@ -546,7 +552,38 @@ assembly recipe"). It needs **all five top-level keys** — `tally()` throws
 | `findings[]` | array | One entry per finding across all reviews: `{id, raiser, severity}` (`claim` may ride along but isn't required by the tally engine). `id` is the run-global label (e.g. `A1`, `B2`) assigned during Stage-2 assembly, not the reviewer's local integer id. |
 | `adjudications[]` | array | One entry per (judge × finding): `{findingId, judge, verdict}`, `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding, **including the raiser's own adjudication of its own finding** — the engine excludes it automatically when scoring (don't pre-filter it). |
 | `rankings[]` | array | One entry per judge: `{judge, order}`. `order` is that judge's `FINAL RANKING:` block translated to model ids, e.g. `["gpt", "deepseek"]` (ties may use a nested array, e.g. `[["gpt","deepseek"], "mistral"]`). |
-| `runStats[]` | array | One entry per model call: `{model, role, wasChair, conformance, status, durationMs, usage}`. May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. |
+| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?}`. May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. |
+
+**`runStats[].role` roster (v4.7 row-per-launch).** Every leg the run budget counts gets exactly
+one row, so a seat that needed a repair or lost a leg to a retry can now show up more than once.
+
+*Primary rows* — exactly one per requested reviewing seat, unchanged in shape from pre-v4.7:
+`seat`, `critic`, `lens:<slug>`, `judge`, `chair` (`wasChair: true`), synthetic `claude`, and the
+legacy default `council` (pre-#83 rows, or hand-assembled tally input that never set a role). A
+dead seat/critic/lens with no recovery, and a chair walk that gives up entirely, get an honest
+primary **error** row too — the #83 judge treatment extended to every seat (`usage: null` on the
+give-up chair; the dead leg's own usage on a dead seat/critic/lens).
+
+*Non-primary rows* — new in v4.7, `wasChair` always `false`: `chair-attempt` (a failed ch1–ch3
+chair launch), `repair` (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r`
+solo — a failed defense or re-vote repair), `superseded` (a first leg a later attempt replaced —
+an SL-2 retry or a debate repair). These still cost money and appear in the `council
+report`/`council tally` cost tables (suffixed the same way judge rows are), but the Workspace
+seats panel filters them out — they aren't seats.
+
+`runStats[].waveId` names the exact wave/leg a row was built from, present **iff a real billed
+leg backs the row** — e.g. the synthetic `claude` row, a give-up chair's error row, and a
+leg-less dead-seat/critic/lens primary error row (the two SL-2 retry note-classes that never
+produced a real leg for the seat at all) carry none. It's the join key the leg–row bijection
+invariant suite (`tests/council/run-cost-bijection.test.js`) uses to prove every budget-counted
+leg lands on exactly one row.
+
+**Ledger-join consequence.** `council stats`'s reliability aggregation (`ledger.js`) only reads
+rows whose role is in the allowlist above (`seat`, `critic`, `lens:*`, `chair`, `claude`,
+`council`, `redteam`) — everything else, including all three new non-primary roles and any
+custom/free-form label a skill or caller invents, is fail-closed excluded and never contributes
+role/wasChair/conformance to reliability stats, even though it still renders in the tally/report
+artifact.
 
 ### Tally-record schema (what `tally()` returns / prints)
 

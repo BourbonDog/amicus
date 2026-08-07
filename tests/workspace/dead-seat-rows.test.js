@@ -160,6 +160,32 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(0);
   });
 
+  // v4.7 CA-4 dead-seat convergence (owner-ruled, final-review consolidated wave): D6's
+  // "already present in liveSeats" suppression predates row-per-launch and was written when
+  // the only way a dead seat could have a live cost row was a healed retry (see (b) above).
+  // v4.7 changed that premise — a dead seat that NEVER recovers still gets its own honest
+  // primary ERROR row (role 'seat'/'critic', status 'error') from the row-per-launch
+  // machinery, so "has a live row" no longer implies "healed". This is the terminal-path
+  // proof that the SAME suppression still fires correctly on that new case: one row total
+  // (the seat's own errored cost row), never a second "did not review" ghost row beside it.
+  test('(b2) a dead seat whose OWN reviewing-role ERROR row is present (v4.7 primary error row, not a healed retry) renders exactly ONE row — no dead-row duplicate', () => {
+    const costRows = [
+      { model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' },
+      { model: 'bravo', role: 'seat', status: 'error', durationMs: 1000, costDisplay: '$0.05' }, // v4.7 primary error row — never healed
+    ];
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat bravo did not review',
+      why: "the leg ended 'error' with no usable output", effect: '1 of 2 seats reviewed',
+      data: { seat: 'bravo', status: 'error', reason: 'timed out' },
+    }];
+
+    const tbody = paint(costRows, degrades, null, false, () => null);
+
+    expect(tbody.children.length).toBe(2); // alpha (complete) + bravo (its OWN error row) — no ghost third row
+    expect(tbody.children.filter((r) => r.classList.contains('seat-dead')).length).toBe(0);
+    expect(tbody.children[1].children[2].textContent).toBe('error'); // bravo's honest status renders
+  });
+
   test('(c) blind mode masks the dead row name exactly as live rows', () => {
     const costRows = [{ model: 'alpha', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' }];
     const degrades = [{

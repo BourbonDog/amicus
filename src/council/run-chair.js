@@ -20,6 +20,7 @@ const { parseChairVerdict } = require('./parse-stage2');
 const runState = require('./run-state');
 const { isAbortExit } = require('./run-stages');
 const { emitStageStarted, emitStageTerminal } = require('../observe/events');
+const { buildRunStatsEntry } = require('./run-assemble');
 
 /**
  * Chair fallback promotion (spec §4): the highest peers-only street-cred
@@ -117,12 +118,24 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
   // cost-skipped chair (the `if` branch) simply never calls recordAttempt —
   // chairAttempts is never checkpointed and the key stays absent on run.json.
   const chairAttempts = [];
+  // v4.7 D2 (spec "the count is the count"): a non-primary row per launch so
+  // spend is fully attributable — one 'chair-attempt' row per FAILED attempt
+  // that produced a rawLeg (null rawLeg = no wave = no money = no row), plus
+  // one 'repair' row for a launched ch4 (pushed below, after the ch4 block).
+  // The eventual SUCCESSFUL attempt's leg is never pushed here — it becomes
+  // the primary 'chair' row (wasChair:true) via run.js's own chairStats.
+  const chairRows = [];
   const recordAttempt = (attempt, waveId, model) => {
     const cls = classifyChairAttempt(attempt.rawLeg, attempt.errorDoc);
     chairAttempts.push({ waveId, model, outcome: cls.outcome, reason: cls.reason });
     // Checkpointed HERE, before the caller's own isAbortExit bail — a mid-walk
     // kill must not lose the attempts already resolved (spec §8 kill-mid-walk).
     runState.checkpoint(o.runDir, { chairAttempts });
+    if (!attempt.leg && attempt.rawLeg) {
+      chairRows.push(buildRunStatsEntry({
+        leg: attempt.rawLeg, model, role: 'chair-attempt', wasChair: false,
+      }));
+    }
   };
   if (overBudget()) {
     // Ceiling hit after the tally is computable: skip the chair, write the
@@ -196,6 +209,22 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     });
     addWave(repair.wave);
     if (isAbortExit(repair.exitCode) || isSignalled()) { return bail(repair.exitCode || isSignalled()); }
+    // repair.leg is the raw leg document — launchSolo DOES null it, but only
+    // on a wave-less failure (a pre-flight refusal with no wave launched at
+    // all: run-launch.js's launchSolo derives `leg` from `wave.legs[0]`, so
+    // no wave means no leg, no waveId, no money spent — the errata E3 "no
+    // leg = no wave = no money = no row" case). A wave that DID launch
+    // always yields a leg document, whatever its status. The `if
+    // (repair.leg)` guard below is therefore load-bearing on that exact
+    // distinction: a launched ch4 (a leg document exists, whatever its
+    // status) gets its own row so the repair's spend is attributed even when
+    // it never supplies a VERDICT; a ch4 that never even launched gets no
+    // row at all, because there is nothing billed to attribute.
+    if (repair.leg) {
+      chairRows.push(buildRunStatsEntry({
+        leg: repair.leg, model: actualChair, role: 'repair', wasChair: false,
+      }));
+    }
     overallVerdict = parseChairVerdict((repair.leg && repair.leg.summary) || '');
     chairConformance = overallVerdict ? 'repaired' : 'unstructured';
   }
@@ -216,6 +245,12 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
 
   return {
     aborted: null, chairLeg, actualChair, chairText, chairConformance, overallVerdict,
+    // Additive (v4.7 D2): chairRows holds the non-primary rows (attempts +
+    // repair); chairAttempts is handed back too so run.js can key the
+    // give-up row on "the walk actually happened" without re-reading disk —
+    // NOT on chairRows, since attempts that die pre-wave record an outcome
+    // but produce no row (errata E3: no wave = no money = no row).
+    chairRows, chairAttempts,
   };
 }
 

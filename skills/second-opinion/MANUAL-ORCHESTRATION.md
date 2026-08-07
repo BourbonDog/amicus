@@ -146,6 +146,14 @@ As each judge's ranking + adjudication response returns, collect it (the raw per
 3. **Translate each judge's `FINAL RANKING:` block** — convert the label order (`1. Review C / 2. Review A / 3. Review B`) into a model `order` array via the same map (e.g. `{C→mistral, A→deepseek, B→gpt}` ⇒ `order: ["mistral","deepseek","gpt"]`). This is each entry in `rankings[]`.
 4. **Populate `runStats`** from the per-leg run documents emitted by `fanout --json` (and any solo red-team/chair `start --json` docs): copy `model`, `status`, `durationMs`, `usage` verbatim. Any leg with no run doc gets `durationMs: null` and `usage: null` — never invent a value. Attach `role` (`council` | `redteam` | `claude`), `wasChair`, and `conformance` (`clean` | `repaired` | `unstructured`) as council-domain labels.
 
+⚠️ **v4.7 CA-4 note:** the headless engine driver (`amicus council run`) now emits extra
+non-primary `runStats` rows (`chair-attempt`/`repair`/`superseded` — failed chair launches,
+repair solos, and superseded legs) alongside one seat-primary row per model. This manual
+orchestration path is unaffected and still produces exactly one seat-primary row per model as
+described above — no contract change here — but any code or report template reading `runStats`
+should be a **tolerant reader** (filter by role rather than assume one row per model), since an
+engine-produced tally.json can now carry rows this recipe never does.
+
 **Five-keys checklist — verify `tally-input.json` has ALL of:** `meta` (with `meta.models`), `findings`, `adjudications`, `rankings`, `runStats` (`runStats` may be `[]`; the other four are required). Do not call `tally` until all five are present.
 
 Then call, saving the printed `record` to `<run-folder>/tally.json` (Stage 5's `amicus council verdict` reads it back from disk):

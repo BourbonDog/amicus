@@ -36,7 +36,10 @@ function fakeLaunchers(script, seen) {
     launchWave: async (opts) => { if (seen) { seen.push(opts); } return { wave: script.waves[opts.waveId], exitCode: 0 }; },
   };
 }
-function leg(model, summary) { return { model, modelInput: model, status: 'complete', summary, taskId: `${model}-t` }; }
+function leg(model, summary, waveId) {
+  return { model, modelInput: model, status: 'complete', summary, taskId: `${model}-t`,
+    ...(waveId !== undefined ? { waveId } : {}) };
+}
 function wave(legs) { return { status: 'complete', legs }; }
 const defenseOut = (resp) => `Defending.\n\`\`\`json\n${JSON.stringify({ responses: resp })}\n\`\`\`\n`;
 const revoteOut = (rv) => `Re-voting.\n\`\`\`json\n${JSON.stringify({ revotes: rv })}\n\`\`\`\n`;
@@ -458,6 +461,60 @@ describe('runDebate — re-vote repair branch', () => {
         expect.objectContaining({ judge: 'qwen', id: 'A1', verdict: 'agree', applied: true }),
       ]));
     });
+  });
+});
+
+// ---- v4.7 D2/E4: superseded pre-repair legs + failed-repair rows, end to end ----
+describe('runDebate — v4.7 D2/E4 debate rows: superseded pre-repair legs and failed-repair rows', () => {
+  test('a successful defense repair supersedes the original leg — waveIds -d1 (superseded) vs -d1r (primary)', async () => {
+    const tmp = mkTmp('run-debate-repair-superseded-');
+    const input = provisionalInput();
+    const provisionalRecord = tally(input);
+    const good = defenseOut([{ id: 'A1', action: 'defend', argument: 'measured' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        const summary = opts.waveId === 'r-d1' ? 'prose only, no json block' : good;
+        return { wave: wave([leg('gemini', summary, opts.waveId)]), leg: leg('gemini', summary, opts.waveId), exitCode: 0 };
+      },
+      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv')]), exitCode: 0 }),
+    }), { provisionalRecord, tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gemini');
+    expect(rows).toHaveLength(2);                            // exactly one extra row, never two
+    const primary = rows.find(r => r.role === 'rebuttal');
+    const superseded = rows.find(r => r.role === 'superseded');
+    expect(primary).toMatchObject({ waveId: 'r-d1r', conformance: 'repaired' });
+    expect(superseded).toMatchObject({ waveId: 'r-d1', conformance: 'unstructured', wasChair: false });
+  });
+
+  test('a re-vote repair that never completes keeps the primary on the original and adds its own repair row', async () => {
+    const tmp = mkTmp('run-debate-repair-failed-row-');
+    const input = provisionalInput();
+    const provisionalRecord = tally(input);
+    const defended = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
+    const result = await runDebate(ctxFor(tmp, {
+      launchSolo: async (opts) => {
+        if (opts.waveId === 'r-d1') { return { wave: wave([leg('gemini', defended, 'r-d1')]), leg: leg('gemini', defended, 'r-d1'), exitCode: 0 }; }
+        if (opts.waveId === 'r-rv-gptr') {
+          // A repair that LAUNCHED but never reached 'complete' (timeout) — the
+          // real leg carries its own waveId, unlike a wholesale-dead wave.
+          const dead = { model: 'gpt', modelInput: 'gpt', status: 'timeout', summary: '', waveId: 'r-rv-gptr', durationMs: 5000, usage: null };
+          return { wave: { status: 'timeout', legs: [dead] }, leg: dead, exitCode: 0 };
+        }
+        throw new Error(`unscripted solo waveId ${opts.waveId}`);
+      },
+      launchWave: async () => ({
+        wave: wave([leg('gpt', 'prose only, no json block', 'r-rv'), leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv')]),
+        exitCode: 0,
+      }),
+    }), { provisionalRecord, tallyInput: input });
+
+    const rows = result.debatedInput.runStats.filter(r => r.model === 'gpt');
+    expect(rows).toHaveLength(2);                            // exactly one extra row, never two
+    const primary = rows.find(r => r.role === 'revote');
+    const repair = rows.find(r => r.role === 'repair');
+    expect(primary).toMatchObject({ waveId: 'r-rv', conformance: 'unstructured' }); // primary stays on the ORIGINAL
+    expect(repair).toMatchObject({ waveId: 'r-rv-gptr', status: 'timeout', conformance: 'unstructured', wasChair: false });
   });
 });
 

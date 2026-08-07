@@ -207,9 +207,15 @@ async function runCouncil(options, deps = {}) {
     }
 
     // ---- Chair synthesis (provisional tally feeds the packet) ----
+    // v4.7 D2: two independent extraRows channels — Stage 1's findings-repair
+    // rows and Stage 2's judge-repair rows — concatenate into the ONE array
+    // buildTallyInput appends after the primary review rows (run-assemble.js
+    // docblock). Neither stage invents a second mechanism for the other's kind
+    // of row.
     const mkInput = (chairStats, chairModel) => asm.buildTallyInput({
       runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
       reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
+      extraRows: [...s1.extraRows, ...s2.extraRows],
     });
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);
@@ -231,17 +237,35 @@ async function runCouncil(options, deps = {}) {
       packet, degrade, statsFn, isSignalled: () => signalled,
     });
     if (chairRes.aborted !== null) { return finalize(chairRes.aborted); }
-    const { chairLeg, actualChair, chairText, chairConformance, overallVerdict } = chairRes;
+    const { chairLeg, actualChair, chairText, chairConformance, overallVerdict, chairRows, chairAttempts } = chairRes;
 
     // ---- Final tally (chair row included) + ledger + artifacts ----
     const chairStats = chairLeg ? asm.buildRunStatsEntry({
       leg: chairLeg, model: actualChair, role: 'chair', wasChair: true,
       conformance: chairConformance,
     }) : null;
+    // v4.7 D2: a give-up (no chairLeg) with at least one recorded attempt gets
+    // an explicit error row so the walk's outcome isn't silently absorbed.
+    // Keyed on chairAttempts, NOT chairRows — attempts that die pre-wave (no
+    // money spent) record an outcome but yield no row (errata E3).
+    const giveUpRow = (!chairLeg && chairAttempts && chairAttempts.length)
+      ? asm.buildRunStatsEntry({ leg: null, model: o.chair, role: 'chair', wasChair: false })
+      : null;
     // Built on the (possibly debated) input so the debate's amended claims, replaced
     // adjudications and rebuttal/revote runStats rows all reach the final record.
     const finalInput = { ...debatedInput, meta: { ...debatedInput.meta, chair: actualChair || o.chair } };
-    if (chairStats) { finalInput.runStats = [...(finalInput.runStats || []), chairStats]; }
+    // Item 8, final-review consolidated wave: was three sequential
+    // reassignments (chairStats, then chairRows, then giveUpRow), each
+    // rebuilding finalInput.runStats from scratch — collapsed into the one
+    // spread that was always the net effect. The `|| []` fallbacks were
+    // dead: `runStats` is a real array on every debatedInput
+    // (asm.buildTallyInput always returns one via .map()), never undefined.
+    finalInput.runStats = [
+      ...finalInput.runStats,
+      ...(chairStats ? [chairStats] : []),
+      ...chairRows,
+      ...(giveUpRow ? [giveUpRow] : []),
+    ];
     const record = tally(finalInput);
     if (debateFindings) { decorateRecord(record, debateFindings); }
     if (!o.lenses) {

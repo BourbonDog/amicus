@@ -23,6 +23,7 @@ const stage2 = require('./briefings-stage2');
 const { parseJudgeOutput } = require('./parse-stage2');
 const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
+const { buildRunStatsEntry } = require('./run-assemble');
 
 /**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
@@ -31,7 +32,12 @@ const runState = require('./run-state');
  *   extraLabeled?: Array<{label: string, text: string}>}} args
  *   `extraLabeled` (v4.1 §4.4) are labeled reviews sourced from a FILE rather than
  *   a leg (the Claude review): they join the judged BUNDLE, never the judge ROSTER.
- * @returns {Promise<{aborted: number|null, judgeResults: Array}>}
+ * @returns {Promise<{aborted: number|null, judgeResults: Array, extraRows: Array}>}
+ *   `extraRows` (v4.7 D2, mirroring runStage1's channel) is one `role:'repair'`
+ *   row per `-q<N>` judge-repair solo (error status when the repair itself
+ *   failed) — the judge's own judgeResults entry keeps attributing its ORIGINAL
+ *   Stage-2 wave leg throughout (the #83 comment below), so a repair never
+ *   overwrites the primary judge row; it only adds this separate one.
  */
 async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = [] }) {
   const { o } = ctx;
@@ -62,9 +68,14 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     fallback: o.fallback, catalog: o.catalog,
   });
   ctx.addWave(wave);
-  if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [] }; }
+  if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [], extraRows: [] }; }
 
   const judgeResults = [];
+  // v4.7 D2: every judge-repair launch is a billed leg of its own, distinct from
+  // the judge's original Stage-2 wave leg it is trying to fix — it gets its own
+  // row so its cost is never folded into, or lost from, the judge's row (mirrors
+  // runStage1's -p<N> extraRows, ./run-stages.js:117-120).
+  const extraRows = [];
   let repairSeq = 0;
   for (const leg of (wave && wave.legs) || []) {
     const judge = leg.modelInput || leg.model;
@@ -98,7 +109,15 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
         fallback: o.fallback, catalog: o.catalog,
       });
       ctx.addWave(solo.wave);
-      if (isAbortExit(solo.exitCode)) { return { aborted: solo.exitCode, judgeResults }; }
+      if (isAbortExit(solo.exitCode)) {
+        // Abort paths add no rows (aborted runs never reach tally) — extraRows
+        // is returned only for shape consistency, never read past this point.
+        return { aborted: solo.exitCode, judgeResults, extraRows };
+      }
+      // Every -q<N> launch gets a row — INCLUDING a repair that failed: the
+      // error status rides naturally off solo.leg (null/'error'-status leg ⇒
+      // buildRunStatsEntry's own never-invent defaults), no special-casing needed.
+      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: judge, role: 'repair', wasChair: false }));
       const out = (solo.leg && solo.leg.summary) || '';
       if (out.trim()) { judging = out; }
       parsed = parseJudgeOutput(out, parseCtx);
@@ -120,7 +139,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     judgeResults.push({ judge, ok: true, order, adjudications: parsed.adjudications, conformance,
       leg: leg || null });
   }
-  return { aborted: null, judgeResults };
+  return { aborted: null, judgeResults, extraRows };
 }
 
 module.exports = { runStage2 };

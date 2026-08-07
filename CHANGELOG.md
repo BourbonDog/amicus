@@ -5,6 +5,41 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`runStats` gains a row for every paid launch, not just one per requested seat** (v4.7 CA-4,
+  the row-per-launch design — closes the chair-cost accounting gap). Three new roles cover legs
+  that were billed but never rowed: `chair-attempt` (a failed ch1–ch3 chair launch), `repair`
+  (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r` solo — a failed
+  defense or re-vote repair), and `superseded` (a first leg a later attempt replaced — an SL-2
+  retry or a debate repair); `wasChair` is always `false` on these. Every dead seat/critic/lens
+  with no recovery, and a chair walk that gives up entirely, now get an honest primary error row
+  too, extending the #83 judge treatment to every seat.
+- **`runStats[].waveId`** (emit-only-when-set): every row backed by a real billed leg now names
+  the exact wave/leg it came from; e.g. the synthetic `claude` row, a give-up chair's error row,
+  and a leg-less dead-seat/critic/lens primary error row (the two SL-2 retry note-classes that
+  never produced a real leg for the seat at all) carry none.
+- **The run-cost bijection invariant suite** (`tests/council/run-cost-bijection.test.js`): every
+  terminal run now proves Σ(`runStats` legged-row usage) equals `run.json`'s `usage` block —
+  cost, and the reported/estimated/unpriced/subtreeUnknown leg counts — across clean, repair,
+  chair-walk-failure, debate-repair, retry-healed, and retry-failed scenarios.
+
+### Changed
+
+- **Tally/report/GUI cost totals now include legs that used to be silently dropped** — repairs,
+  failed chair attempts, and superseded/replaced legs all get a row now. Totals read HIGHER than
+  v4.6.x for an identical run, intentionally: this is the fix for the two-numbers-disagree
+  symptom (`council tally`'s sum vs. `run.json`'s total quietly diverging by the omitted spend).
+- **The council-ledger join is now an explicit allowlist, not a skip-set**: `seat`, `critic`,
+  `lens:*`, `chair`, `claude`, `council`, `redteam`. Fail-closed by design — consumers keying
+  `runStats` by model must now exclude every role outside that set, the v4.7 analogue of v4.6's
+  "must exclude `role: 'judge'`" rule: a custom/free-form `role` label (e.g. a skill-authored tag)
+  still renders in the tally/report artifact but no longer contributes role/wasChair/conformance
+  to `amicus council stats` reliability numbers.
+- **The Workspace seats panel no longer renders the three new non-seat launch rows**
+  (`chair-attempt`, `repair`, `superseded`) — they still appear in the report/tally cost tables,
+  just not as a seat.
+
 ## [4.6.3] - 2026-08-05
 
 ### Added

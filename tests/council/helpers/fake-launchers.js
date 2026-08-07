@@ -9,9 +9,10 @@ const review = (n, findings) => `Prose ${n}.\n\n\`\`\`json\n${JSON.stringify({
 const judgeOut = (ranking, adjudications) =>
   `Judged.\n\n\`\`\`json\n${JSON.stringify({ ranking, adjudications })}\n\`\`\`\n`;
 
-const mkLeg = (model, summary, status = 'complete', cost = 0.01) => ({
+const mkLeg = (model, summary, status = 'complete', cost = 0.01, waveId) => ({
   taskId: `${model}-leg`, model, modelInput: model, status, summary,
   durationMs: 1000, usage: { cost: { amount: cost, source: 'reported' } },
+  ...(waveId !== undefined ? { waveId } : {}),
 });
 
 const okWave = (legs, exitCode = 0, status = 'complete') =>

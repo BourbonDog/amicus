@@ -103,6 +103,15 @@ describe('debateRunStatsRows', () => {
     expect([...DEBATE_ROLES].sort()).toEqual(['rebuttal', 'revote']);
   });
 
+  test('waveId rides the row when the leg carries one, absent otherwise (byte-compat with the row above)', () => {
+    const rows = debateRunStatsRows({
+      defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'clean', waveId: 'r-d1' }],
+      revoteLegs: [{ model: 'gpt', status: 'complete', durationMs: 60, usage: null, conformance: 'unstructured' }],
+    });
+    expect(rows[0].waveId).toBe('r-d1');
+    expect('waveId' in rows[1]).toBe(false);
+  });
+
   // A debate leg is an EXTRA leg by a model that already has a bench row. buildLedgerRows
   // joins runStats by model with a last-wins Map, so without the ledger.js guard these rows
   // would clobber the bench row's role/wasChair/conformance. Pin that they do not.
@@ -124,5 +133,56 @@ describe('debateRunStatsRows', () => {
     expect(gemini.conformance).toBe('clean');   // NOT the defense leg's 'unstructured'
     expect(gpt.role).toBe('critic');            // NOT 'revote'
     expect(gpt.conformance).toBe('clean');      // NOT the re-vote leg's 'repaired'
+  });
+
+  // ---- v4.7 D2/E4: superseded pre-repair legs + failed-repair rows ----
+  describe('v4.7 D2/E4 — superseded and failed-repair rows', () => {
+    // Repair SUCCEEDED (leg2 usable): the primary keeps the post-repair leg
+    // (today's rebuttal/revote row, unchanged) and the ORIGINAL pre-repair leg
+    // becomes a separate role:'superseded' row — never lost, never billed twice
+    // as the primary.
+    test('a successful repair supersedes the original leg; primary keeps the post-repair leg (waveId -d1r vs -d1)', () => {
+      const rows = debateRunStatsRows({
+        defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 60, usage: null, conformance: 'repaired', waveId: 'r-d1r' }],
+        revoteLegs: [],
+        supersededLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'unstructured', waveId: 'r-d1' }],
+        repairLegs: [],
+      });
+      expect(rows).toEqual([
+        { model: 'gemini', role: 'rebuttal', wasChair: false, conformance: 'repaired', status: 'complete', durationMs: 60, usage: null, waveId: 'r-d1r' },
+        { model: 'gemini', role: 'superseded', wasChair: false, conformance: 'unstructured', status: 'complete', durationMs: 50, usage: null, waveId: 'r-d1' },
+      ]);
+    });
+
+    // Repair FAILED (leg2 launched but never became usable — a dead/timeout
+    // attempt, not merely unparseable content): the primary keeps the
+    // ORIGINAL leg (today's behavior) and the failed repair attempt gets its
+    // own role:'repair' row, error status riding naturally off the raw leg.
+    test('a failed repair keeps the primary on the original; the failed attempt gets its own repair row (waveId -rv-gptr)', () => {
+      const rows = debateRunStatsRows({
+        defenseLegs: [],
+        revoteLegs: [{ model: 'gpt', status: 'complete', durationMs: 40, usage: null, conformance: 'unstructured', waveId: 'r-rv' }],
+        supersededLegs: [],
+        repairLegs: [{ model: 'gpt', status: 'timeout', durationMs: 5000, usage: null, conformance: 'unstructured', waveId: 'r-rv-gptr' }],
+      });
+      expect(rows).toEqual([
+        { model: 'gpt', role: 'revote', wasChair: false, conformance: 'unstructured', status: 'complete', durationMs: 40, usage: null, waveId: 'r-rv' },
+        { model: 'gpt', role: 'repair', wasChair: false, conformance: 'unstructured', status: 'timeout', durationMs: 5000, usage: null, waveId: 'r-rv-gptr' },
+      ]);
+    });
+
+    test('no repair attempted: supersededLegs/repairLegs absent or empty leaves rows byte-identical to today', () => {
+      const withoutParams = debateRunStatsRows({
+        defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'clean' }],
+        revoteLegs: [{ model: 'gpt', status: 'complete', durationMs: 60, usage: null, conformance: 'clean' }],
+      });
+      const withEmptyParams = debateRunStatsRows({
+        defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'clean' }],
+        revoteLegs: [{ model: 'gpt', status: 'complete', durationMs: 60, usage: null, conformance: 'clean' }],
+        supersededLegs: [], repairLegs: [],
+      });
+      expect(withoutParams).toEqual(withEmptyParams);
+      expect(withoutParams).toHaveLength(2);
+    });
   });
 });

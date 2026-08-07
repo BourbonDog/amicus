@@ -94,9 +94,27 @@
     ];
   }
 
+  // v4.7 D6/E1: three row-per-launch producer roles added alongside the
+  // existing chair-attempt (run-chair.js), repair (run-stages.js/
+  // run-stage2.js/run-chair.js) and superseded (run-stages.js + debate.js)
+  // rows — launch-accounting extras, not seats, and unlike rebuttal/revote
+  // (F37, kept rendering on purpose below) they have no seats-panel meaning
+  // of their own. There is no pre-existing allowlist in this function (E1) —
+  // this is a plain exclusion added on top of the untouched id/shape logic.
+  // Object.create(null): a plain `{...}` literal inherits Object.prototype, so a role
+  // literally named 'constructor'/'toString'/etc would resolve to an inherited (truthy)
+  // function via bracket lookup instead of `undefined` — silently mis-excluding (or
+  // mis-including) that seat. A null-prototype object has no inherited keys to collide with.
+  var SEATS_PANEL_EXCLUDED_ROLES = Object.create(null);
+  SEATS_PANEL_EXCLUDED_ROLES['chair-attempt'] = true;
+  SEATS_PANEL_EXCLUDED_ROLES.repair = true;
+  SEATS_PANEL_EXCLUDED_ROLES.superseded = true;
+
   /** Terminal fallback: derive seat-shaped rows from tally runStats cost rows. */
   function seatsFromRunStats(costRows) {
-    return (costRows || []).map(function (r) {
+    return (costRows || []).filter(function (r) {
+      return !SEATS_PANEL_EXCLUDED_ROLES[r.role];
+    }).map(function (r) {
       return {
         // ⚠️ DE-ROT (F37): composite id — a v4.1 `--debate` run emits extra runStats rows for
         // the SAME bench alias (role 'rebuttal'/'revote', src/council/debate.js:88-96). With no
@@ -130,13 +148,23 @@
    * loss, an out-of-range index, or a zero-model unit) carry neither, so they
    * correctly fall back to the plain phrasing.
    *
-   * D6 filter (zero usable legs ONLY, "no ghost when a retry succeeded"): a
-   * candidate already present in `liveSeats` (it has a cost row — SL-2 healed
-   * it) is dropped. This is the one thing standing between a recovered seat
-   * and a duplicate/ghost row — same failure family as the F37 debate-role
-   * collision and the RN-11 keyed-row lessons just above (seatsFromRunStats,
-   * seatCells): an identity that is not carefully matched silently
-   * duplicates or overwrites instead of failing loud.
+   * D6 filter (zero usable legs ONLY, "no ghost when a live row already
+   * exists"): a candidate already present in `liveSeats` is dropped. Two
+   * different things can put it there, and both are reasons to suppress:
+   * an SL-2 retry actually healed it (a real recovered review), OR
+   * (owner-ruled, v4.7 CA-4 dead-seat convergence) the seat never recovered
+   * at all but the row-per-launch machinery still gives its dead leg an
+   * honest primary ERROR row (every billed leg gets a row now, including
+   * failures — run-stages.js/run-assemble.js) — so "it has a cost row" no
+   * longer implies "it healed". Either way that live row IS the seat's
+   * record; rendering a second "did not review" ghost row beside it would
+   * be a duplicate, not new information, so suppressing it here is the
+   * ACCEPTED terminal-path behavior: exactly one row per seat, whatever its
+   * status. This is the one thing standing between a recovered (or
+   * honestly-erred) seat and a duplicate/ghost row — same failure family as
+   * the F37 debate-role collision and the RN-11 keyed-row lessons just above
+   * (seatsFromRunStats, seatCells): an identity that is not carefully
+   * matched silently duplicates or overwrites instead of failing loud.
    *
    * Role-aware D6 (v4.6.3 PR2, spec D3): a bare model match used to suppress
    * regardless of what the LIVE row's role was — so a model that died as

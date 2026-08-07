@@ -117,6 +117,7 @@ src/
 │   ├── run-retry-notes.js
 │   ├── run-retry.js
 │   ├── run-server.js
+│   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
 │   ├── run-stage2.js
 │   ├── run-stages.js
 │   ├── run-state.js
@@ -498,6 +499,7 @@ evals/
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
+| `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |

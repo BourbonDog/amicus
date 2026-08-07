@@ -104,6 +104,32 @@ describe('seatsFromRunStats (terminal fallback, spec §5.2)', () => {
     ]);
     expect(rows.map((r) => r.id)).toEqual(['gemini:seat', 'gemini:rebuttal', 'gemini:revote']);
   });
+
+  // v4.7 D6/E1: three new row-per-launch producer roles (chair-attempt,
+  // repair, superseded) are launch-accounting rows, not seats — a bench
+  // model can now carry these alongside its real seat row, and unlike
+  // rebuttal/revote (F37, above — kept rendering on purpose) these three
+  // have no seats-panel meaning of their own and must not produce a row.
+  test('chair-attempt/repair/superseded rows produce no seat row (v4.7 D6/E1)', () => {
+    const rows = seatsFromRunStats([
+      { model: 'gemini', role: 'seat', status: 'complete', durationMs: 120000, costDisplay: '$0.11' },
+      { model: 'gemini', role: 'chair-attempt', status: 'complete', durationMs: 9000, costDisplay: '$0.03' },
+      { model: 'gpt', role: 'repair', status: 'timeout', durationMs: 5000, costDisplay: '$0.02' },
+      { model: 'qwen', role: 'superseded', status: 'complete', durationMs: 3000, costDisplay: '$0.01' },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ model: 'gemini', role: 'seat' });
+  });
+
+  // Judge/chair rows keep rendering exactly as before this filter — the new
+  // exclusion set is {'chair-attempt','repair','superseded'} only.
+  test('judge and chair rows still render (unaffected by the new filter)', () => {
+    const rows = seatsFromRunStats([
+      { model: 'alpha', role: 'judge', status: 'complete', durationMs: 5000, costDisplay: '$0.01' },
+      { model: 'deep', role: 'chair', status: 'complete', durationMs: 7000, costDisplay: '$0.02' },
+    ]);
+    expect(rows.map((r) => r.role)).toEqual(['judge', 'chair']);
+  });
 });
 
 /**

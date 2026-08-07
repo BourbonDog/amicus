@@ -1179,3 +1179,63 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   above. — #110
 - [ ] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
   generated count or leave it deliberately count-neutral. — #110
+
+## v4.7 PR1 findings (2026-08-06)
+
+- [ ] **Duplicated aliases in `--models`/council presets can yield two primary rows for one
+  seat** — [S, needs a product decision] `parseModelsList` (`src/sidecar/fanout-validate.js:22`)
+  allows duplicate aliases by design (its own docstring: "duplicates allowed"), and council
+  callers pass the parsed list through unchecked. Both `lensIndexOf`
+  (`src/council/run-retry.js:24`, via `o.models.indexOf(model)`) and `roleFor`
+  (`src/council/run-stages.js:34`, via `o.models.indexOf(alias)`) resolve a duplicated alias by
+  first occurrence only. A duplicated alias whose second occurrence dies could therefore produce
+  both a review-based primary row (attributed to the first, surviving occurrence) and a dead-seat
+  primary row (from `roleFor`'s first-occurrence resolution) for the same model — two primary
+  rows where the row-per-launch bijection expects one per requested seat. Pre-existing; not
+  touched by PR1's row-per-launch work. Found during PR1 Task-4 review, 2026-08-06. Needs a
+  product decision: reject duplicate aliases outright (parse-time error) vs. dedupe silently
+  before use.
+
+- [ ] **`legRow` (`src/council/run-debate.js:39`) is the THIRD hand-rolled runStats-row
+  builder** — [S, defer-with-record] alongside `buildRunStatsEntry` (`src/council/run-assemble.js:54`,
+  the general one every non-debate producer uses) and `claudeRunStatsRow` (the synthesized
+  claude-review row). `legRow` independently reimplements the same "verbatim leg fields +
+  emit-`waveId`-only-when-set" shape `buildRunStatsEntry` already owns, just keyed on an explicit
+  `model` param instead of `leg.model` (debate needs this because a leg-absent attempt has no
+  `.model` of its own). Three builders for one row shape is a drift risk — a future field added to
+  one (e.g. `findingsUnverified`/`repairRefused`, which `buildRunStatsEntry` already carries and
+  `legRow` does not) silently fails to reach debate-born rows. Unify `legRow` into
+  `buildRunStatsEntry` (it would need an optional explicit-`model` override for the leg-absent
+  case) in its own dedicated TDD pass — out of scope for the final-review consolidated wave, which
+  only fixed comment/test-armor items, not a producer-unification refactor. Found during the v4.7
+  PR1 final-review consolidated wave, 2026-08-06.
+
+- [ ] **Conformance drift between producers of the same non-primary role** — [S, defer-with-record]
+  `buildRunStatsEntry` (`src/council/run-assemble.js:60`) defaults `conformance` to `'clean'` when
+  the caller doesn't pass one explicitly — every engine-born `chair-attempt` row (`run-chair.js`'s
+  `recordAttempt`) takes that default. `legRow` (`src/council/run-debate.js:39`, see above) has no
+  default at all; every debate-born `repair`/`superseded` row is called with an explicit
+  `'unstructured'` literal (`run-debate.js:85-86,141-142`). The net effect: a `repair`-role row's
+  `conformance` value depends on which producer built it, not on anything about the row itself —
+  an engine-born `repair` row (chair ch4) can read `'clean'`, a debate-born `repair` row
+  (`-d<N>r`/`-rv-…r`) never can. Nothing consumes `conformance` on a non-primary row today (the
+  ledger join excludes all of them — see `ledger.js`'s `LEDGER_JOIN_ROLES`), so this is silent
+  drift, not a live defect; record it before something starts reading it. Found during the v4.7
+  PR1 final-review consolidated wave, 2026-08-06.
+
+- [ ] **The dead-seat retry-reason text ("did not review — retried once") has no terminal-path
+  home since the v4.7 CA-4 dead-seat convergence** — [S, defer-with-record, owner-accepted] Before
+  v4.7, a dead seat that had been retried and still failed rendered `deadSeats()`'s
+  `statusText: 'did not review — retried once'` (vs. the plain `'did not review'` — the
+  `retryWaveId`/`firstFailure` branch in `electron/workspace-ui/live-model.js`'s `deadSeats`). Now
+  that same seat carries its own row-per-launch primary ERROR row (v4.7 CA-4), and D6's "already
+  present in liveSeats" suppression (see the updated comment at `live-model.js`'s `deadSeats`
+  docblock, and `tests/workspace/dead-seat-rows.test.js`'s `(b2)` pin) drops the ghost dead row
+  entirely — which means the retried-once phrasing is dropped with it; the errored cost row
+  carries no distinct "this was retried" text today, just its raw `status`. This was an
+  owner-accepted consequence of the dead-seat convergence ruling (one row, not two), not an
+  oversight, but the information itself is still useful and worth restoring on the surviving row:
+  render the retry-reason text into the errored cost row's own status cell (the seat-row
+  equivalent of what the now-suppressed dead row used to say), sourced from the same
+  `retryWaveId`/`firstFailure` degrade-record fields `deadSeats` already reads. Found during the
+  v4.7 PR1 final-review consolidated wave, 2026-08-06.

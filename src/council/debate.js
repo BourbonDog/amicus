@@ -13,8 +13,12 @@
 
 const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
 
-// runStats roles the ledger join must skip (ledger.js): a debate leg is an extra leg by an
-// already-benched model, never an extra ledger row and never that model's ledger identity.
+// The debate-role vocabulary: a debate leg is an extra leg by an already-benched model,
+// never an extra ledger row and never that model's ledger identity. Through v4.6 this Set
+// ALSO drove ledger.js's join skip-set directly; Task 7 (v4.7 D4) replaced that with
+// ledger.js's own LEDGER_JOIN_ROLES allowlist (fail-closed: everything not named there is
+// excluded, not just DEBATE_ROLES), so this Set no longer has any runtime consumer outside
+// this module — kept exported because debate.test.js pins its exact contents.
 const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
 
 /**
@@ -79,21 +83,35 @@ function decorateRecord(record, debateFindings) {
 }
 
 /**
- * runStats rows for the debate legs (spec §5.5). role is 'rebuttal' | 'revote';
- * these legs never enter meta.models, so the ledger stays one row per (run×model),
- * and ledger.js skips DEBATE_ROLES when joining runStats so a debate leg cannot
- * overwrite the bench row's role/wasChair/conformance on that model's ledger row.
- * @param {{defenseLegs: Array, revoteLegs: Array}} args leg metadata
+ * runStats rows for the debate legs (spec §5.5), plus v4.7 D2/E4's row-per-launch
+ * extras: role is 'rebuttal' | 'revote' for the primary defense/re-vote legs,
+ * 'superseded' for an original leg a successful repair replaced, and 'repair' for
+ * a repair attempt that itself never became usable (error status rides naturally
+ * off the raw leg). The rebuttal/revote legs never enter meta.models, so the
+ * ledger stays one row per (run×model). DEBATE_ROLES remains the debate-role
+ * vocabulary (rebuttal/revote); the ledger's overwrite protection for ALL FOUR
+ * of these row-per-launch roles — rebuttal, revote, superseded AND repair —
+ * lives in ledger.js's own LEDGER_JOIN_ROLES allowlist (v4.7 D4, Task 7):
+ * a role not named there never joins, full stop, regardless of which module
+ * produced the row or whether it is even in DEBATE_ROLES.
+ * @param {{defenseLegs: Array, revoteLegs: Array, supersededLegs?: Array,
+ *   repairLegs?: Array}} args leg metadata
  * @returns {Array<object>}
  */
-function debateRunStatsRows({ defenseLegs, revoteLegs }) {
+function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLegs }) {
   const mk = (role) => (l) => ({
     model: l.model, role, wasChair: false, conformance: l.conformance || 'clean',
     status: l.status || 'unknown',
     durationMs: typeof l.durationMs === 'number' ? l.durationMs : null,
     usage: l.usage || null,
+    ...(l.waveId ? { waveId: l.waveId } : {}),
   });
-  return [...(defenseLegs || []).map(mk('rebuttal')), ...(revoteLegs || []).map(mk('revote'))];
+  return [
+    ...(defenseLegs || []).map(mk('rebuttal')),
+    ...(revoteLegs || []).map(mk('revote')),
+    ...(supersededLegs || []).map(mk('superseded')),
+    ...(repairLegs || []).map(mk('repair')),
+  ];
 }
 
 /** Spec §5.7 fallback: a dead/unparseable defense means every bundled id's original stands. */
