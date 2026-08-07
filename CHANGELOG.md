@@ -36,7 +36,7 @@ All notable changes to Amicus are documented here. Format follows
   charset-stripped the way `sanitizeCouncilName` cleans, since a stored tag is a search key.
   Stored absent-not-null on `metadata.json`/`wave.json`/`run.json` and every result doc; the MCP
   shared-server's in-process start path stamps it too. `--tag` is rejected alongside
-  `--retry-failed` (`BAD_ARGS`) — a retry replays the original wave's own tag, not a new one.
+  `--retry-failed` (`BAD_ARGS`).
   Council sub-waves (Stage-1, critic/lens solos, Stage-2, chair, debate) all carry the run's tag
   on their own wave metadata. Riders: `continue`/`resume` don't yet inherit the parent session's
   tag (their rows group under `(unattributed)` for `--group-by tag`), and `--retry-failed` doesn't

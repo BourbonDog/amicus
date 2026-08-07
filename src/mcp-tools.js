@@ -212,8 +212,8 @@ function getTools() {
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description:
       'List all Amicus sessions for the current project. Shows task ID, ' +
-      'model, status, tag, age, and briefing excerpt. Use `search` to filter ' +
-      'by id/tag/briefing substring.',
+      'model, status, tag, createdAt, and briefing excerpt. Use `search` to ' +
+      'filter by id/tag/briefing substring.',
     inputSchema: {
       status: z.string().optional().describe(
         "Filter by status ('all', 'running', 'complete', 'error', 'aborted', …). Default: show all."

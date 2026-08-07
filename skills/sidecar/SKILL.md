@@ -367,15 +367,20 @@ The catalog is cached at `~/.config/amicus/model-catalog.json` and refreshes aut
 ```bash
 amicus list
 amicus list --status complete
-amicus list --all  # All projects
-amicus list --json # Output as JSON
+amicus list --all          # All projects
+amicus list --search foo   # Substring match: id, tag, briefing material
+amicus list --json         # Output as JSON
 ```
 
 **Optional:**
 - `--status <filter>`: Filter by status (`running`, `complete`)
 - `--all`: Show sessions from all projects
+- `--search <q>`: Case-insensitive substring filter over id/tag/briefing material
 - `--json`: Output as JSON format (for programmatic use)
 - `--cwd <path>`: Project directory (default: current directory)
+
+Rows show the `--tag <t>` label set at launch time (`start`/`fanout`/`council run` —
+not a `list` flag itself); untagged sessions show blank.
 
 ### Resume a Sidecar
 
