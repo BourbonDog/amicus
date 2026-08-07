@@ -132,14 +132,17 @@ function claudeRunStatsRow() {
  * @param {{runId: string, date: string, bench: string[], chair: string,
  *   reviews: Array<{model, role, conformance, leg, globalFindings}>,
  *   judgeResults: Array<{judge, ok, order, adjudications}>,
- *   chairStats: object|null, claudeReview?: object|null}} args
+ *   chairStats: object|null, claudeReview?: object|null, extraRows?: Array<object>}} args
  *   `claudeReview` (v4.1 §4.4) amends the v4.0 meta pin: present ⇒ claudeInCouncil
  *   true, 'claude' joins meta.models (the street-cred universe), its findings join
  *   the pool and it gets the synthesized null-usage runStats row. Absent ⇒ v4.0
- *   output byte-for-byte.
+ *   output byte-for-byte. `extraRows` (v4.7 D2/E4) are pre-built runStats rows
+ *   (repair/superseded/dead-seat-error, from runStage1 today) appended right
+ *   after the primary review rows, before judge/chair accounting — absent or
+ *   empty ⇒ byte-for-byte unchanged, so the pre-v4.7 length-7 pins stay green.
  */
 function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, chairStats,
-  claudeReview }) {
+  claudeReview, extraRows }) {
   const meta = {
     runId, date, runType: 'headless',
     models: bench.slice(),          // bench seats exactly: critic included, chair excluded
@@ -155,6 +158,10 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
     findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused,
   }));
+  // v4.7 D2/E4: pre-built rows (repair/superseded/dead-seat-error) ride right
+  // after the primary review rows — same "primary-adjacent" shape, just not
+  // sourced from a surviving review. Absent/empty ⇒ no-op (pre-v4.7 byte parity).
+  runStats.push(...(extraRows || []));
   if (claudeReview) {
     meta.models.push(CLAUDE_SEAT);      // last, mirroring its review-N+1 label
     meta.claudeInCouncil = true;

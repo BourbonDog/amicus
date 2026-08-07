@@ -78,6 +78,42 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
   });
 });
 
+// Task 4 (v4.7 D2/E4): extraRows is the row-per-launch channel runStage1 now
+// returns (repair/dead-seat-error/superseded rows) — buildTallyInput appends
+// it right after the primary review rows, before judge/chair accounting.
+test('Task 4: buildTallyInput appends extraRows right after the primary review rows', () => {
+  const extraRows = [
+    { model: 'gpt', role: 'repair', wasChair: false, conformance: 'clean',
+      status: 'complete', durationMs: 500, usage: null, waveId: 'abc123-p1' },
+  ];
+  const input = asm.buildTallyInput({
+    runId: 'abc123', date: '2026-07-19', bench: ['gemini', 'gpt', 'qwen'],
+    chair: 'deepseek', reviews: REVIEWS, judgeResults: JUDGES,
+    chairStats: asm.buildRunStatsEntry({ leg: leg('deepseek', 0.03), role: 'chair', wasChair: true, conformance: 'clean' }),
+    extraRows,
+  });
+  // 3 primary review rows + 1 extraRow + 3 judge rows + 1 chair row = 8.
+  expect(input.runStats).toHaveLength(8);
+  expect(input.runStats[3]).toEqual(extraRows[0]);           // right after the 3 primary rows
+  expect(input.runStats.filter(r => r.role === 'judge')).toHaveLength(3);
+});
+
+test('Task 4: extraRows absent/empty ⇒ byte-for-byte unchanged (the length-7 pin stays valid)', () => {
+  const withoutKey = asm.buildTallyInput({
+    runId: 'abc123', date: '2026-07-19', bench: ['gemini', 'gpt', 'qwen'],
+    chair: 'deepseek', reviews: REVIEWS, judgeResults: JUDGES,
+    chairStats: asm.buildRunStatsEntry({ leg: leg('deepseek', 0.03), role: 'chair', wasChair: true, conformance: 'clean' }),
+  });
+  const withEmpty = asm.buildTallyInput({
+    runId: 'abc123', date: '2026-07-19', bench: ['gemini', 'gpt', 'qwen'],
+    chair: 'deepseek', reviews: REVIEWS, judgeResults: JUDGES,
+    chairStats: asm.buildRunStatsEntry({ leg: leg('deepseek', 0.03), role: 'chair', wasChair: true, conformance: 'clean' }),
+    extraRows: [],
+  });
+  expect(withoutKey.runStats).toHaveLength(7);
+  expect(withEmpty).toEqual(withoutKey);
+});
+
 test('#83: buildTallyInput emits a runStats row per judge, role judge', () => {
   const input = asm.buildTallyInput({
     runId: 'r1', date: '2026-08-01', bench: ['alpha', 'beta'], chair: 'deepseek',

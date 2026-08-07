@@ -24,6 +24,7 @@ const { retryStage1Losses } = require('./run-retry');
 const runState = require('./run-state');
 const { runStage2 } = require('./run-stage2');
 const { launchStage1 } = require('./run-stage1-launch');
+const { buildRunStatsEntry } = require('./run-assemble');
 
 function slug(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
@@ -41,8 +42,15 @@ function roleFor(o, alias) {
 /**
  * Stage 1: independent reviews + findings validation + bounded repair.
  * @returns {Promise<{aborted: number|null, reviews: Array, deadLegs: Array,
- *   deadWaves: Array, degraded: boolean}>} `degraded` covers BOTH ways a seat
- *   can go missing: a leg that ran and died (deadLegs) and a whole sub-wave that
+ *   deadWaves: Array, degraded: boolean, extraRows: Array}>} `extraRows` (v4.7
+ *   D2/E4) is the row-per-launch channel for legs that never became — or
+ *   stopped being — a seat's primary review: one `role:'repair'` row per
+ *   findings-repair solo (error status when the repair itself failed), one
+ *   `role:'superseded'` row per first leg a later attempt replaced (healed OR
+ *   still-dead — either way the first leg stopped being primary), and one
+ *   PRIMARY error row per seat with no surviving review at all.
+ *   `degraded` covers BOTH ways a seat can go missing: a leg that ran and died
+ *   (deadLegs) and a whole sub-wave that
  *   died before its legs existed (deadWaves). A pushed review carries
  *   `findingsUnverified: true` (LC-11) when its findings came from a repair whose
  *   contract could not be checked — the original block was absent or unparseable,
@@ -53,7 +61,7 @@ function roleFor(o, alias) {
 async function runStage1(ctx) {
   const { o } = ctx;
   const { aborted, legs, deadWaves } = await launchStage1(ctx);
-  if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false }; }
+  if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false, extraRows: [] }; }
 
   const firstPass = materializeReviews(o.runDir, legs);
   const alive0 = new Set(firstPass.map(m => m.leg));
@@ -68,7 +76,7 @@ async function runStage1(ctx) {
     // abort fixed ~87 lines below ("Must be the post-retry set") — subtract
     // whatever retry.recoveredLegs already healed before this abort landed.
     const healed = new Set(retry.recoveredLegs.map(l => l.modelInput || l.model));
-    return { aborted: retry.aborted, reviews: [], degraded: false,
+    return { aborted: retry.aborted, reviews: [], degraded: false, extraRows: [],
       deadLegs: deadLegs0.filter(l => !healed.has(l.modelInput || l.model)),
       deadWaves: deadWaves.map(w => ({ ...w, models: (w.models || []).filter(m => !healed.has(m)) })).filter(w => w.models.length > 0) };
   }
@@ -106,6 +114,10 @@ async function runStage1(ctx) {
   const stillDeadWaves = [...retry.skippedDeadWaves, ...retry.stillDeadWaves];
 
   const reviews = [];
+  // v4.7 D2/E4: every repair launch is a billed leg of its own, distinct from
+  // the seat's own review leg (m.leg) it is trying to fix — it gets its own
+  // row so its cost is never folded into, or lost from, the review's row.
+  const extraRows = [];
   let repairSeq = 0;
   for (const m of materialized) {
     let conformance = 'clean';
@@ -157,8 +169,15 @@ async function runStage1(ctx) {
         // short-circuit, so a heal-then-abort run was recording seats as dead
         // that had actually reviewed on retry. Must be the post-retry set,
         // same as the normal-completion return below.
-        return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves, degraded: false };
+        // Abort paths add no rows (aborted runs never reach tally) — extraRows
+        // is returned only for shape consistency, never read past this point.
+        return { aborted: solo.exitCode, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
+          degraded: false, extraRows };
       }
+      // Every -p<N> launch gets a row — INCLUDING a repair that failed: the
+      // error status rides naturally off solo.leg (null/'error'-status leg ⇒
+      // buildRunStatsEntry's own never-invent defaults), no special-casing needed.
+      extraRows.push(buildRunStatsEntry({ leg: solo.leg, model: m.modelInput, role: 'repair', wasChair: false }));
       const repaired = (solo.leg && solo.leg.summary) || '';
       if (repaired.trim()) { repairing = repaired; }
       res = validateFindings(repaired);
@@ -206,8 +225,54 @@ async function runStage1(ctx) {
       ...(repairRefused ? { repairRefused } : {}),
     });
   }
+
+  // v4.7 D2/E4 — superseded rows: a leg-origin seat's FIRST leg stops being
+  // primary the moment a retry was actually attempted for it, healed or not
+  // (deadLegs0 × recovered-or-still-dead seats — mirrors the healed-set idiom
+  // above, extended to the still-dead half E4 also requires). A skipped seat
+  // (cost ceiling / unmappable — never got a second leg) keeps NO superseded
+  // row: nothing replaced it. Wave-origin seats never had a first leg at all,
+  // so they can never appear here regardless of healed/dead outcome (E4).
+  const supersededAliases = new Set([
+    ...retry.recoveredLegs.map(l => l.modelInput || l.model),
+    ...retry.stillDeadLegs.map(l => l.modelInput || l.model),
+  ]);
+  for (const dead of deadLegs0) {
+    const alias = dead.modelInput || dead.model;
+    if (supersededAliases.has(alias)) {
+      extraRows.push(buildRunStatsEntry({ leg: dead, model: alias, role: 'superseded', wasChair: false }));
+    }
+  }
+
+  // v4.7 D2/E4 — primary error rows: one per seat with NO surviving review
+  // (every alias still in stillDeadLegs/stillDeadWaves after retry). A retry
+  // unit's OWN outcome (status + its waveId) is visible only through its
+  // still-dead note — run-retry.js's structured return keeps the ORIGINAL leg
+  // in stillDeadLegs regardless (E5: run-retry.js takes no edits), so the note
+  // is the only place the retry's own status/waveId survive. No matching note
+  // ⇒ this seat's retry was never attempted (skipped for cost/unmappable) ⇒
+  // the original dead leg IS the seat's only, and therefore final, leg.
+  const retryFacts = new Map();
+  for (const n of retry.stillDeadNotes) {
+    if (n.channel === 'dead-leg' && n.data && n.data.seat) { retryFacts.set(n.data.seat, n.data); }
+  }
+  const deadAliases = new Set([
+    ...stillDeadLegs.map(l => l.modelInput || l.model),
+    ...stillDeadWaves.flatMap(w => w.models || []),
+  ]);
+  for (const alias of deadAliases) {
+    const fact = retryFacts.get(alias);
+    // durationMs/usage are never invented: a fact-only leg (from a note) never
+    // carries them, so buildRunStatsEntry's leg-absent defaults (null/null)
+    // apply honestly rather than borrowing the first attempt's spend.
+    const finalLeg = fact
+      ? { model: alias, status: fact.status || 'error', waveId: fact.retryWaveId }
+      : (deadLegs0.find(l => (l.modelInput || l.model) === alias) || null);
+    extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias, role: roleFor(o, alias), wasChair: false }));
+  }
+
   return { aborted: null, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
-    degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0 };
+    degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0, extraRows };
 }
 
 // runStage2 lives in ./run-stage2.js (300-line gate) but is re-exported here so

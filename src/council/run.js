@@ -210,6 +210,7 @@ async function runCouncil(options, deps = {}) {
     const mkInput = (chairStats, chairModel) => asm.buildTallyInput({
       runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
       reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
+      extraRows: s1.extraRows,
     });
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);

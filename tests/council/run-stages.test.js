@@ -556,6 +556,99 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
   });
 });
 
+describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)', () => {
+  test('a repair launch gets its own extraRows row: role repair, its own waveId, usage attributed', async () => {
+    const ctx = makeCtx({
+      onWave: (opts) => okWave(opts.models.map(m =>
+        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m)))),
+      onSolo: (opts) => okWave([{ ...mkLeg('gpt', review('gpt')), waveId: opts.waveId }]),
+    });
+    const { extraRows } = await runStage1(ctx);
+    expect(extraRows).toHaveLength(1);
+    expect(extraRows[0]).toMatchObject({ model: 'gpt', role: 'repair', wasChair: false, waveId: 'abc123-p1' });
+    expect(extraRows[0].usage.cost.amount).toBe(0.01);
+    expect(extraRows[0].durationMs).toBe(1000);
+  });
+
+  test('a repair whose own leg dies still gets its row — error status rides naturally, no special-casing', async () => {
+    const ctx = makeCtx({
+      models: ['gemini'],
+      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, 'prose without json'))),
+      onSolo: (opts) => okWave([{ ...deadLeg('gemini'), waveId: opts.waveId }]),
+    });
+    const { extraRows } = await runStage1(ctx);
+    const repairRows = extraRows.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(2);                          // cap = 2 re-prompts; BOTH get a row
+    expect(repairRows.map(r => r.waveId)).toEqual(['abc123-p1', 'abc123-p2']);
+    expect(repairRows.every(r => r.status === 'error')).toBe(true);
+  });
+
+  test('a dead seat with no retry attempted gets a primary error row from its own (only) dead leg', async () => {
+    const ctx = makeCtx({ overBudget: () => true, models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({
+      wave: { waveId: 'abc123-s1', legs: [usableLeg('a'), { ...deadLeg('b'), waveId: 'abc123-s1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const errRow = r.extraRows.find(x => x.model === 'b');
+    expect(errRow).toMatchObject({ role: 'seat', wasChair: false, status: 'error', waveId: 'abc123-s1' });
+    expect(errRow.usage.cost.amount).toBe(0.01);          // the dead leg's own usage — never invented
+    expect(errRow.durationMs).toBe(1000);
+    expect(r.extraRows.filter(x => x.role === 'superseded')).toHaveLength(0); // never retried — no 2nd leg, no supersession
+  });
+
+  test('a healed seat gets a superseded row for its first leg; the primary review still carries the retry leg (unchanged)', async () => {
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a'), { ...deadLeg('b'), waveId: 'abc123-s1' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [{ ...usableLeg('b'), waveId: 'abc123-s1r1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const bReview = r.reviews.find(v => v.model === 'b');
+    expect(bReview.leg.waveId).toBe('abc123-s1r1');               // primary carries the RETRY leg — today's behavior, pinned
+    const superseded = r.extraRows.filter(x => x.role === 'superseded');
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0]).toMatchObject({ model: 'b', wasChair: false, status: 'error', waveId: 'abc123-s1' });
+    // healed ⇒ a surviving review exists ⇒ no primary ERROR row for 'b'.
+    expect(r.extraRows.some(x => x.model === 'b' && x.role === 'seat')).toBe(false);
+  });
+
+  test('a failed-retry seat gets its primary error row from the retry leg, and its original leg superseded', async () => {
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a'), { ...deadLeg('b'), waveId: 'abc123-s1' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [{ ...deadLeg('b', 'timeout', null), waveId: 'abc123-s1r1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(r.reviews.map(v => v.model)).toEqual(['a']);           // 'b' never got a surviving review
+    const superseded = r.extraRows.filter(x => x.role === 'superseded' && x.model === 'b');
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0].waveId).toBe('abc123-s1');                // the ORIGINAL leg is what's superseded
+    const primaryErr = r.extraRows.find(x => x.model === 'b' && x.role === 'seat');
+    expect(primaryErr).toBeDefined();
+    expect(primaryErr.waveId).toBe('abc123-s1r1');                 // FROM THE RETRY leg, not the original
+    expect(primaryErr.status).toBe('timeout');                     // the RETRY's own status — not silently coerced
+    expect(primaryErr.usage).toBeNull();                           // never invent: run-retry.js (E5) keeps only
+    expect(primaryErr.durationMs).toBeNull();                      // the ORIGINAL leg structurally — retry cost is unknown here
+  });
+
+  test('no seat appears twice as primary, and every extraRow with a real leg carries its waveId', async () => {
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a'), { ...deadLeg('b'), waveId: 'abc123-s1' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [{ ...usableLeg('b'), waveId: 'abc123-s1r1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primaryModels = [...r.reviews.map(v => v.model), ...r.extraRows.filter(x => x.role === 'seat').map(x => x.model)];
+    expect(new Set(primaryModels).size).toBe(primaryModels.length);   // each seat: at most one primary
+    // 'b' healed — this fixture's only extraRow is its superseded original leg,
+    // which carries real usage/duration, so it must carry the real waveId too.
+    const superseded = r.extraRows.find(x => x.role === 'superseded' && x.model === 'b');
+    expect(superseded.waveId).toBe('abc123-s1');
+  });
+});
+
 describe('runStage2', () => {
   function stage1Reviews() {
     return [
