@@ -190,6 +190,7 @@ src/
 │   ├── setup-local.js  # The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12).
 │   ├── setup-window.js  # Setup Window Launcher
 │   ├── setup.js  # Sidecar Setup Wizard
+│   ├── start-metadata.js
 │   ├── start.js  # Sidecar Start Operations - Handles starting new sidecar sessions
 │   ├── tool-part.js
 │   ├── unzip.js  # Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24).
@@ -539,7 +540,7 @@ evals/
 | `sidecar/fanout-retry.js` |  | `ELIGIBLE_RETRY()`, `parseInitialContext()`, `buildRetryPlan()`, `retryFailedWave()` |
 | `sidecar/fanout-signals.js` |  | `installWaveAbort()`, `WAVE_FORCE_EXIT_MS()` |
 | `sidecar/fanout-validate.js` |  | `parseModelsList()`, `DEFAULT_MAX_LEGS()`, `validateFanoutModels()` |
-| `sidecar/fanout-wave-io.js` |  | `writeWaveMetadata()`, `writeWaveDoc()`, `finishWave()` |
+| `sidecar/fanout-wave-io.js` |  | `writeWaveMetadata()`, `writeWaveDoc()`, `finishWave()`, `stampLegAttribution()` |
 | `sidecar/fanout.js` |  | `parseModelsList()`, `deriveLegIds()`, `validateFanoutModels()`, `DEFAULT_MAX_LEGS()`, `runFanout()` |
 | `sidecar/interactive-abort.js` |  | `startAbortWatch()`, `markResultAborted()`, `readAbortedMarker()`, `DEFAULT_INTERVAL_MS()` |
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
@@ -556,6 +557,7 @@ evals/
 | `sidecar/setup-local.js` | The readline setup wizard's local / self-hosted provider add step (v4.2 §4.6, Task 12). | `addLocalProviderInteractive()` |
 | `sidecar/setup-window.js` | Setup Window Launcher | `launchSetupWindow()` |
 | `sidecar/setup.js` | Sidecar Setup Wizard | `addAlias()`, `addLocalProviderInteractive()`, `createDefaultConfig()`, `deriveFreeAlias()`, `detectApiKeys()` |
+| `sidecar/start-metadata.js` |  | `createSessionMetadata()` |
 | `sidecar/start.js` | Sidecar Start Operations - Handles starting new sidecar sessions | `generateTaskId()`, `createSessionMetadata()`, `buildMcpConfig()`, `checkElectronAvailable()`, `runInteractive()` |
 | `sidecar/tool-part.js` |  | `TERMINAL_TOOL_STATUSES()`, `LIVE_TOOL_STATUSES()`, `isToolPart()`, `toolPartName()`, `toolPartInput()` |
 | `sidecar/unzip.js` | Robust unzip for the electron self-heal (#53 follow-up; extract-zip-node24). | `robustExtract()`, `nativeUnzipPlan()`, `IDLE_MS()`, `MAX_MS()` |

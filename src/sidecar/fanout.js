@@ -19,7 +19,7 @@ const { ERROR_CODES } = require('../utils/error-doc');
 // Wave-document persistence lives in ./fanout-wave-io (size-gate split, v4.4.1
 // Task 0.5). writeWaveMetadata is re-exported below — fanout-retry.js and the
 // fanout tests import it from here.
-const { writeWaveMetadata, writeWaveDoc, finishWave } = require('./fanout-wave-io');
+const { writeWaveMetadata, writeWaveDoc, finishWave, stampLegAttribution } = require('./fanout-wave-io');
 
 /**
  * Derive leg task IDs: <waveId>-1 .. <waveId>-N (matches TASK_ID_PATTERN).
@@ -119,11 +119,7 @@ async function runFanout(options) {
   });
   if (validated.error) { return failPre(validated.code || 'BAD_ARGS', validated.error); }
   const legs = validated.legs;
-  // v4.3 §7.2: stamp council attribution onto every leg (fanout-leg.js's
-  // existing appendSpend reads it); no-op for every non-council caller.
-  if (options.councilRunId || options.councilName) {
-    legs.forEach(l => { l.councilRunId = options.councilRunId; l.councilName = options.councilName; });
-  }
+  stampLegAttribution(legs, options);
   const okLegs = legs.filter(l => l.ok);
   // FIX 2 (#61 whole-branch review): a leg's migration notice has no CLI
   // stderr to land on — surface it on the wave doc instead, deduped in case
