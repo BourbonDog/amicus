@@ -708,10 +708,14 @@ Options for 'pack':
                                 --debate / --no-debate   council kind only
                                 --template <name|path>   briefing template
                                                          reference (not rendered)
-                                --version <semver>       default 1.0.0 (an
-                                                         unchanged re-save is a
-                                                         no-op; a changed one
-                                                         auto-bumps the patch)
+                                --pack-version <semver>  the SAVED PACK's
+                                                         version, default 1.0.0
+                                                         (an unchanged re-save
+                                                         is a no-op; a changed
+                                                         one auto-bumps the
+                                                         patch). Not --version,
+                                                         which is amicus's own
+                                                         global flag.
                                 --description <text>
   amicus pack save <name> --from-run <id>
                                 Build a pack from an existing council run /
