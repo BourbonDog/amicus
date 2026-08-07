@@ -99,6 +99,60 @@ describe('searchSessions — core matcher', () => {
   });
 });
 
+// T6 review: --all rows are stamped with their OWN project (enumerateAllProjects),
+// which can differ from the caller's cwd. rowMatchesSearch must resolve wave/council
+// material against the ROW's project, not the ctx project, or a cross-project wave's
+// full briefing.md is silently unreachable and search quietly degrades to the 200-char
+// excerpt with no signal that anything went wrong.
+describe('searchSessions — cross-project wave material under --all (T6 review)', () => {
+  let project, projB, configDir, prevConfigDir;
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-search-a-'));
+    projB = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-search-b-'));
+    configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-search-idxcfg-'));
+    prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    process.env.AMICUS_CONFIG_DIR = configDir;
+  });
+
+  afterEach(() => {
+    if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+    else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+    fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(projB, { recursive: true, force: true });
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("finds a cross-project wave needle past the 200-char excerpt, via that row's OWN project", () => {
+    const { enumerateAllProjects } = require('../src/sidecar/read');
+    const { recordSession } = require('../src/utils/session-index');
+
+    // A DIFFERENT session recorded under projB is what puts projB into the
+    // session-index's values — the thing enumerateAllProjects reads to learn
+    // which projects to scan. Deliberately NOT recording 'crosswave1' itself:
+    // safeSessionDir has its own taskId->project index fallback (T6 review
+    // fold 4), and recording this wave's own taskId would let THAT self-heal
+    // mask the bug this test exists to catch. enumerateAllProjects discovers
+    // crosswave1 by directory listing once projB is a known project — no
+    // individual per-taskId index entry is required for that part.
+    writeSession(projB, 'anchor01', { status: 'complete', briefing: 'x', createdAt: '2026-01-01T00:00:00.000Z' });
+    recordSession('anchor01', projB);
+
+    const full = 'x'.repeat(220) + ' CROSSNEEDLE ' + 'y'.repeat(20);
+    const waveDir = writeSession(projB, 'crosswave1', {
+      type: 'wave', status: 'running', legs: [], briefing: full.slice(0, 200), createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    fs.writeFileSync(path.join(waveDir, 'briefing.md'), full);
+
+    // rows are stamped with `project: projB` for the cross-project row; ctx here
+    // is deliberately the OTHER project (`project`, projA) — the caller's cwd —
+    // to prove material resolution uses the row's own project, not ctx's.
+    const rows = enumerateAllProjects({ project });
+    const matched = searchSessions(rows, 'crossneedle', { project });
+    expect(matched.map(r => r.id)).toEqual(['crosswave1']);
+  });
+});
+
 describe('listSidecars (CLI) — --search wiring', () => {
   let project, logSpy;
   beforeEach(() => {

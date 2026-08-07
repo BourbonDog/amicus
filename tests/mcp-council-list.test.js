@@ -111,6 +111,15 @@ describe('amicus_list --search over council rows (F8 D15, errata E-PR3-5)', () =
     expect(rows.map(r => r.id)).toEqual(['stage1a1']);
   });
 
+  // T6 review fold: pin the extraction to AFTER the separator — a needle that
+  // only appears in the findings-contract prose BEFORE it must never hit,
+  // proving the slice isn't accidentally matching the whole stage1 file.
+  test('does NOT match on the findings-contract prose before the separator', async () => {
+    seedCouncilNoBriefingMd('prestage1', 'complete', '2026-07-19T02:00:00.000Z', 'material text with OTTER inside');
+    const noMatch = await handlers.amicus_list({ search: 'findings-contract' }, tmp);
+    expect(noMatch.content[0].text).toContain('No amicus sessions found');
+  });
+
   test('a council row with neither briefing.md nor briefing-stage1.md degrades to id/tag matching, never throws', async () => {
     const runDir = path.join(tmp, 'council-nomatc1');
     runState.initRun(runDir, {
