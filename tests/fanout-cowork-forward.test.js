@@ -49,6 +49,34 @@ describe('handleFanout forwards --cowork-process into runFanout', () => {
   });
 });
 
+// v4.7 PR3 rider: `quiet` is a repo-wide known flag (utils/known-flags.js), so
+// `amicus fanout --quiet` PARSES and exits 0 — but handleFanout never forwarded
+// it, so runFanout printed the launch banner and per-leg lines anyway. That is
+// the accepted-but-silently-ignored class known-flags.js exists to prevent (the
+// v4.5.2 `start --headless` field bug), so it gets the same forwarding pin the
+// #10 coworkProcess gap got above.
+describe('handleFanout forwards --quiet into runFanout (v4.7 PR3 rider)', () => {
+  beforeEach(() => {
+    runFanout.mockClear();
+  });
+
+  it('passes args.quiet through as runFanout({ quiet: true })', async () => {
+    await handleFanout({ prompt: 'hi', models: 'opus', quiet: true });
+
+    expect(runFanout).toHaveBeenCalledTimes(1);
+    const opts = runFanout.mock.calls[0][0];
+    expect(opts.quiet).toBe(true);
+  });
+
+  it('normalizes an absent --quiet to false (matches the json/follow idiom)', async () => {
+    await handleFanout({ prompt: 'hi', models: 'opus' });
+
+    expect(runFanout).toHaveBeenCalledTimes(1);
+    const opts = runFanout.mock.calls[0][0];
+    expect(opts.quiet).toBe(false);
+  });
+});
+
 // #61 whole-branch review FIX 4 (cheap parity): handleStart validates
 // --gateway via validateStartArgs (cli.js) — fanout never did, so a typo'd
 // value silently fell through to resolveGatewayMode's pass-through instead

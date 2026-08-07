@@ -99,6 +99,29 @@ All notable changes to Amicus are documented here. Format follows
   any `--search <value>`, but nothing downstream read it, so the flag — whose sibling convention,
   `amicus models --search`, was already a repo-wide pattern — quietly did nothing. It's now
   implemented; see Added, above.
+- **`amicus fanout --quiet` was accepted and silently ignored.** `quiet` is a repo-wide known
+  flag, so the command parsed and exited 0 — but `handleFanout` never forwarded it into
+  `runFanout`, which printed the launch banner and per-leg lines anyway. Same
+  accepted-but-ignored shape as `list --search` above.
+- **A fanout whose server fails to start no longer drops its pack.** `errorWave` — the third
+  `buildWaveResult` call site — inherited a pre-seeded `tag` from `metadata.json` but not a
+  pre-seeded `pack`, so an MCP-spawned wave that died at server start persisted a `wave.json`
+  missing the pack it was launched with (and `amicus read --json` prefers `wave.json`). The two
+  other call sites already inherited both; this was the lone holdout.
+- **The test suite no longer writes session directories outside its sandbox.** Several suites
+  passed the literal `'/tmp'` as a project cwd — on Windows that resolves to `C:\tmp`, a real
+  directory — so every run leaked real session dirs onto the developer's filesystem and into the
+  global sessions-index. They now sandbox under `os.tmpdir()`, pinned by
+  `tests/hermetic-tmp-guard.test.js`. This residue was what made `--all` an 8-second, 21k-row
+  dump on a developer machine.
+
+### Added (follow-up)
+
+- **`amicus list --limit <n>`**: show only the *n* newest rows (`0` = unlimited, and absent
+  behaves exactly as before). When the cap elides rows it says so, naming the real total; in
+  `--json` mode that notice goes to stderr so stdout stays a single parseable document. Caps
+  output only — `--all` still enumerates every project, since capping the walk would rank rows it
+  never saw.
 
 ## [4.6.3] - 2026-08-05
 

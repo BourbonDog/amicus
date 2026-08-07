@@ -10,6 +10,16 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// v4.7 PR3 rider (hermeticity): these handlers create REAL session dirs under
+// whatever cwd they are handed. This file used to hand them the literal
+// '/tmp' — which on Windows is C:\tmp, a real directory outside any sandbox —
+// so every run leaked session dirs onto the developer's filesystem (28,192 had
+// piled up by 2026-08-07, +25 per run of this file alone) and into the global
+// sessions-index, which is what made `amicus list --all` a 21k-row, 8-second
+// dump. Use a per-run sandbox instead. Pinned by tests/hermetic-tmp-guard.test.js.
+const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-mcp-'));
+afterAll(() => { fs.rmSync(PROJECT, { recursive: true, force: true }); });
+
 // amicus_start now routes the model through resolveRouteForLaunch (#61 Task
 // 6.2). This file's tests use synthetic vendor/model strings (e.g.
 // 'google/gemini-test', 'openrouter/test/model') purely to exercise OTHER
@@ -53,7 +63,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT);
       const { taskId } = JSON.parse(result.content[0].text);
       const idx = capturedArgs.indexOf('--task-id');
       expect(idx).toBeGreaterThan(-1);
@@ -72,7 +82,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
-      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp', claudeCodeServer);
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT, claudeCodeServer);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('code-local');
@@ -89,7 +99,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('cowork');
@@ -106,7 +116,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', parentSession: 'f58f2782-fc8c-41bc-afbc-e0c130b91aaf' }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', parentSession: 'f58f2782-fc8c-41bc-afbc-e0c130b91aaf' }, PROJECT);
       const idx = capturedArgs.indexOf('--session-id');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('f58f2782-fc8c-41bc-afbc-e0c130b91aaf');
@@ -123,7 +133,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', timeout: 30 }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', timeout: 30 }, PROJECT);
       const idx = capturedArgs.indexOf('--timeout');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('30');
@@ -145,7 +155,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', tag: 'sprint-42' }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', tag: 'sprint-42' }, PROJECT);
       const idx = capturedArgs.indexOf('--tag');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('sprint-42');
@@ -162,7 +172,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT);
       expect(capturedArgs).not.toContain('--tag');
     });
   });
@@ -178,7 +188,7 @@ describe('MCP spawn arg building', () => {
       const { handlers: h } = require('../src/mcp-server');
       const parentTaskId = 'parent123';
       const result = await h.amicus_continue(
-        { taskId: parentTaskId, prompt: 'follow-up task', noUi: true }, '/tmp'
+        { taskId: parentTaskId, prompt: 'follow-up task', noUi: true }, PROJECT
       );
       const { taskId } = JSON.parse(result.content[0].text);
       expect(taskId).not.toBe(parentTaskId);
@@ -197,7 +207,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       const result = await h.amicus_continue(
-        { taskId: 'old-parent', prompt: 'new task', noUi: true }, '/tmp'
+        { taskId: 'old-parent', prompt: 'new task', noUi: true }, PROJECT
       );
       const { taskId: newTaskId } = JSON.parse(result.content[0].text);
       const idx = capturedArgs.indexOf('--task-id');
@@ -220,7 +230,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       await h.amicus_continue(
-        { taskId: 'old-gw', prompt: 'follow-up', noUi: true, gateway: 'openrouter' }, '/tmp'
+        { taskId: 'old-gw', prompt: 'follow-up', noUi: true, gateway: 'openrouter' }, PROJECT
       );
       const idx = capturedArgs.indexOf('--gateway');
       expect(idx).toBeGreaterThan(-1);
@@ -238,7 +248,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_continue({ taskId: 'old-nogw', prompt: 'follow-up', noUi: true }, '/tmp');
+      await h.amicus_continue({ taskId: 'old-nogw', prompt: 'follow-up', noUi: true }, PROJECT);
       expect(capturedArgs).not.toContain('--gateway');
     });
   });
@@ -254,7 +264,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
-      await h.amicus_resume({ taskId: 'res1' }, '/tmp', claudeCodeServer);
+      await h.amicus_resume({ taskId: 'res1' }, PROJECT, claudeCodeServer);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('code-local');
@@ -271,7 +281,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_resume({ taskId: 'res1' }, '/tmp');
+      await h.amicus_resume({ taskId: 'res1' }, PROJECT);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('cowork');
@@ -289,7 +299,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
-      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, '/tmp', claudeCodeServer);
+      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, PROJECT, claudeCodeServer);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('code-local');
@@ -306,7 +316,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, '/tmp');
+      await h.amicus_continue({ taskId: 'old1', prompt: 'follow up' }, PROJECT);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('cowork');
@@ -324,7 +334,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       const claudeCodeServer = { server: { getClientVersion: () => ({ name: 'claude-code', version: '1.0.0' }) } };
-      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp', claudeCodeServer);
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, PROJECT, claudeCodeServer);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('code-local');
@@ -341,7 +351,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, PROJECT);
       const idx = capturedArgs.indexOf('--client');
       expect(idx).toBeGreaterThan(-1);
       expect(capturedArgs[idx + 1]).toBe('cowork');
@@ -362,7 +372,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       await h.amicus_fanout(
-        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], gateway: 'direct' }, '/tmp'
+        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], gateway: 'direct' }, PROJECT
       );
       const idx = capturedArgs.indexOf('--gateway');
       expect(idx).toBeGreaterThan(-1);
@@ -380,7 +390,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, PROJECT);
       expect(capturedArgs).not.toContain('--gateway');
     });
   });
@@ -399,7 +409,7 @@ describe('MCP spawn arg building', () => {
       }));
       const { handlers: h } = require('../src/mcp-server');
       await h.amicus_fanout(
-        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], tag: 'sprint-42' }, '/tmp'
+        { prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'], tag: 'sprint-42' }, PROJECT
       );
       const idx = capturedArgs.indexOf('--tag');
       expect(idx).toBeGreaterThan(-1);
@@ -417,7 +427,7 @@ describe('MCP spawn arg building', () => {
         }),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, PROJECT);
       expect(capturedArgs).not.toContain('--tag');
     });
   });
@@ -428,7 +438,7 @@ describe('MCP spawn arg building', () => {
         spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } })),
       }));
       const { handlers: h } = require('../src/mcp-server');
-      const result = await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, '/tmp');
+      const result = await h.amicus_fanout({ prompt: 'test task', models: ['google/gemini-test', 'openai/gpt-test'] }, PROJECT);
       const body = JSON.parse(result.content[0].text);
       expect(body.message).toContain('amicus_wait');
       expect(body.message).toContain('amicus_status');
@@ -1264,7 +1274,7 @@ describe('MCP Server Handlers', () => {
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT);
         const reminder = result.content[1].text;
         expect(reminder).toContain('amicus_wait');
         expect(reminder).toContain('sleep 25');
@@ -1747,7 +1757,7 @@ describe('MCP Server Handlers', () => {
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, PROJECT);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.mode).toBe('interactive');
         expect(parsed.message).toContain('Do NOT poll');
@@ -1761,7 +1771,7 @@ describe('MCP Server Handlers', () => {
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.amicus_start({ prompt: 'implement feature', noUi: true, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'implement feature', noUi: true, model: 'google/gemini-test' }, PROJECT);
         const parsed = JSON.parse(result.content[0].text);
         expect(parsed.mode).toBe('headless');
         expect(parsed.message).toContain('headless');
@@ -1774,7 +1784,7 @@ describe('MCP Server Handlers', () => {
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, PROJECT);
         expect(result.content).toHaveLength(2);
         expect(result.content[1].text).toContain('<system-reminder>');
         expect(result.content[1].text).toContain('sleep 25');
@@ -1787,7 +1797,7 @@ describe('MCP Server Handlers', () => {
           spawn: jest.fn(() => ({ pid: 12345, unref: jest.fn() })),
         }));
         const { handlers: h } = require('../src/mcp-server');
-        const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, '/tmp');
+        const result = await h.amicus_start({ prompt: 'analyze auth', noUi: false, model: 'google/gemini-test' }, PROJECT);
         expect(result.content).toHaveLength(1);
         expect(result.content[0].text).not.toContain('<system-reminder>');
       });

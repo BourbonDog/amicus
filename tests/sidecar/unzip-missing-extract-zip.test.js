@@ -24,6 +24,7 @@
  * be DECLARED (so the guard is a safety net, not the normal path).
  */
 
+const os = require('os');
 const path = require('path');
 const { robustExtract } = require('../../src/sidecar/unzip');
 
@@ -40,7 +41,9 @@ function makeFs({ filesAfterNative = ['electron.exe'] } = {}) {
 }
 
 describe('robustExtract when extract-zip cannot be required', () => {
-  const dir = path.join('/tmp', 'amicus-electron-test');
+  // makeFs() is an in-memory double, so this path is never touched on disk —
+  // but it stays os.tmpdir()-based so the hermeticity guard needs no exceptions.
+  const dir = path.join(os.tmpdir(), 'amicus-electron-test');
 
   it('falls back to native unzip instead of throwing MODULE_NOT_FOUND', async () => {
     const fs = makeFs();

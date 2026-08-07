@@ -222,6 +222,7 @@ async function handleList(args) {
     all: args.all,
     json: args.json,
     search: args.search,
+    limit: args.limit,
     project: args.cwd
   });
 }

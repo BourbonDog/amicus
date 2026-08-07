@@ -905,6 +905,33 @@ describe('runFanout orchestrator', () => {
       expect(stored.pack).toEqual(PACK_RECORD);
     });
 
+    // v4.7 PR3 rider: errorWave is the THIRD buildWaveResult site. The T3
+    // review gave it the tag inherit (`options.tag || metaTag`) but left pack
+    // at bare `options.pack` — so an MCP-spawned wave whose server fails to
+    // start persisted wave.json WITHOUT the pre-seeded pack, while the very
+    // same wave's tag survived. Asymmetry, not intent: same silent-drop shape
+    // the tag fix closed, and `amicus read --json` prefers wave.json.
+    it('server start failure: the error wave inherits the pre-seeded pack (third buildWaveResult site)', async () => {
+      preSeedMetadataWithPack('cafepack4');
+      mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafepack4' });
+      expect(wave.status).toBe('error');
+      expect(wave.pack).toEqual(PACK_RECORD);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafepack4', 'wave.json'), 'utf-8'));
+      expect(stored.pack).toEqual(PACK_RECORD);
+    });
+
+    it('server start failure without any pack: the error wave has NO pack key (absent, not null)', async () => {
+      mockStartOpenCodeServer.mockRejectedValueOnce(new Error('no server'));
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafepack5' });
+      expect(wave.status).toBe('error');
+      expect('pack' in wave).toBe(false);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafepack5', 'wave.json'), 'utf-8'));
+      expect('pack' in stored).toBe(false);
+    });
+
     it('an explicitly-passed options.pack still wins (precedence holds even if metadata.json seeded differently)', async () => {
       preSeedMetadataWithPack('cafepack3');
       const EXPLICIT_PACK = { name: 'explicit-pack', version: '2.0.0', hash: 'deadbeefcafe', source: 'dir' };

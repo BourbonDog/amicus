@@ -87,7 +87,10 @@ async function runFanout(options) {
   // waveDir is optional (only the post-creation caller has one).
   const errorWave = (waveId, message, waveDir) => {
     // v4.7 F8 (D13, T3 review): tag: options.tag || metaTag, TDZ-safe (sole call site runs after `const metaTag` below).
-    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack, tag: options.tag || metaTag, createdAt, completedAt: new Date().toISOString(), status: 'error' });
+    // v4.7 PR3 rider: pack got the same `|| metaPack` inherit the other two
+    // buildWaveResult sites have — it was the lone holdout, so an MCP-spawned
+    // wave whose server died dropped its pre-seeded pack while keeping its tag.
+    const doc = buildWaveResult({ waveId: waveId || null, legs: [], promptMeta: options.promptMeta || null, pack: options.pack || metaPack, tag: options.tag || metaTag, createdAt, completedAt: new Date().toISOString(), status: 'error' });
     doc.error = message;
     doc.reason = message; // classifier alias, same as fanout-leg.js's run docs
     // best-effort: an unwritable wave dir must not mask the real error

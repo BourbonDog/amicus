@@ -14,6 +14,7 @@ const { fenceSidecarOutput } = require('../utils/untrusted-fence');
 // file under its line budget; both list surfaces still reach it through
 // this module's own searchSessions re-export below.
 const { searchSessions } = require('./list-search');
+const { normalizeLimit, truncationNotice } = require('./list-limit');
 
 /**
  * Format a timestamp as relative age
@@ -129,11 +130,13 @@ function enumerateAllProjects(opts = {}) {
  * @param {boolean} [options.json] - Output as JSON
  * @param {string} [options.project] - Project directory
  * @param {string|boolean} [options.search] - id/tag/briefing substring filter (F8 D15); `true` = valueless flag (usage error)
+ * @param {number|string|boolean} [options.limit] - cap printed rows (PR3 rider); 0/absent = unlimited, `true` = valueless flag (usage error)
  */
 async function listSidecars(options) {
-  const { status, all, json, search, project = process.cwd() } = options;
+  const { status, all, json, search, limit, project = process.cwd() } = options;
   // Mirrors models.js:279-281's valueless-flag shape.
   if (search === true) { throw new Error('--search requires a value'); }
+  const cap = normalizeLimit(limit); // throws on valueless/non-integer/negative
 
   let sessions = all
     ? enumerateAllProjects({ status, project })
@@ -143,6 +146,14 @@ async function listSidecars(options) {
     console.log('No amicus sessions found.');
     return;
   }
+
+  // v4.7 PR3 rider: cap OUTPUT only — the newest-first sort has already run, so
+  // slicing here yields the N most recent. Enumeration is deliberately NOT
+  // capped: `--all` must still walk every project or the sort would rank rows
+  // it never saw.
+  const total = sessions.length;
+  const truncated = cap > 0 && total > cap;
+  if (truncated) { sessions = sessions.slice(0, cap); }
 
   if (json) {
     console.log(JSON.stringify(sessions, null, 2));
@@ -167,6 +178,13 @@ async function listSidecars(options) {
         (all ? `  ${s.project || ''}` : '')
       );
     });
+  }
+
+  // No silent caps: say what was elided, and how to see it all. In --json mode
+  // this goes to stderr so stdout stays a single parseable document.
+  if (truncated) {
+    const notice = truncationNotice(cap, total);
+    if (json) { console.error(notice); } else { console.log(notice); }
   }
 }
 
