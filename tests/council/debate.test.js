@@ -100,9 +100,7 @@ describe('debateRunStatsRows', () => {
       { model: 'gemini', role: 'rebuttal', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 50, usage: null },
       { model: 'gpt', role: 'revote', wasChair: false, conformance: 'unstructured', status: 'complete', durationMs: 60, usage: null },
     ]);
-    // v4.7 D2/E4 widened DEBATE_ROLES to also cover the superseded/repair debate
-    // rows added below in this file — same ledger-identity guard, wider role set.
-    expect([...DEBATE_ROLES].sort()).toEqual(['rebuttal', 'repair', 'revote', 'superseded']);
+    expect([...DEBATE_ROLES].sort()).toEqual(['rebuttal', 'revote']);
   });
 
   test('waveId rides the row when the leg carries one, absent otherwise (byte-compat with the row above)', () => {
@@ -187,29 +185,5 @@ describe('debateRunStatsRows', () => {
       expect(withoutParams).toHaveLength(2);
     });
 
-    test('DEBATE_ROLES also covers the new superseded/repair roles', () => {
-      expect([...DEBATE_ROLES].sort()).toEqual(['rebuttal', 'repair', 'revote', 'superseded']);
-    });
-
-    // Same clobbering hazard as the pinned test above, extended to the two new
-    // roles: a raiser/judge's superseded-original or failed-repair row must
-    // never win the ledger join over that model's real bench (seat) row.
-    test('superseded/repair rows never overwrite a bench model ledger row either', () => {
-      const input = baseInput();
-      input.runStats = [
-        { model: 'gemini', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 100, usage: null },
-        ...debateRunStatsRows({
-          defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 60, usage: null, conformance: 'repaired', waveId: 'r-d1r' }],
-          revoteLegs: [],
-          supersededLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'unstructured', waveId: 'r-d1' }],
-          repairLegs: [],
-        }),
-      ];
-      const rows = buildLedgerRows(tally(input));
-      expect(rows).toHaveLength(3);
-      const gemini = rows.find(r => r.model === 'gemini');
-      expect(gemini.role).toBe('seat');            // NOT 'superseded'
-      expect(gemini.conformance).toBe('clean');    // NOT the superseded leg's 'unstructured'
-    });
   });
 });

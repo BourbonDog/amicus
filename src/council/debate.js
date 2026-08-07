@@ -15,10 +15,7 @@ const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn'
 
 // runStats roles the ledger join must skip (ledger.js): a debate leg is an extra leg by an
 // already-benched model, never an extra ledger row and never that model's ledger identity.
-// v4.7 D2/E4 widened this to the debate round's own superseded/failed-repair rows (a
-// raiser's/judge's superseded pre-repair leg, or its failed repair attempt) — same reasoning:
-// neither is that model's primary ledger identity, so neither may win the ledger join.
-const DEBATE_ROLES = new Set(['rebuttal', 'revote', 'superseded', 'repair']);
+const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
 
 /**
  * Reassemble the tally input after the debate round.
@@ -86,10 +83,12 @@ function decorateRecord(record, debateFindings) {
  * extras: role is 'rebuttal' | 'revote' for the primary defense/re-vote legs,
  * 'superseded' for an original leg a successful repair replaced, and 'repair' for
  * a repair attempt that itself never became usable (error status rides naturally
- * off the raw leg). None of these legs enter meta.models, so the ledger stays one
- * row per (run×model), and ledger.js skips DEBATE_ROLES when joining runStats so
- * none of them can overwrite the bench row's role/wasChair/conformance on that
- * model's ledger row.
+ * off the raw leg). The rebuttal/revote legs never enter meta.models, so the
+ * ledger stays one row per (run×model), and ledger.js skips DEBATE_ROLES when
+ * joining runStats so a rebuttal/revote row cannot overwrite the bench row's
+ * role/wasChair/conformance on that model's ledger row. (The new
+ * superseded/repair roles are not yet in DEBATE_ROLES — Task 7 owns widening
+ * that allowlist.)
  * @param {{defenseLegs: Array, revoteLegs: Array, supersededLegs?: Array,
  *   repairLegs?: Array}} args leg metadata
  * @returns {Array<object>}
