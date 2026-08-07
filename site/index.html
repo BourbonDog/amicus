@@ -94,7 +94,11 @@ nav.nav-vis{transform:none}
 #release-pill:hover{background:rgba(217,119,87,.2);border-color:rgba(217,119,87,.35)}
 h1{font-weight:800;font-size:clamp(3.4rem,6vw,5.6rem);line-height:.92;letter-spacing:-.05em;margin-bottom:1.4rem}
 h1 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero-sub{font-size:clamp(1.5rem,2.8vw,2.1rem);font-weight:700;letter-spacing:-.03em;line-height:1;margin-bottom:1.4rem;color:var(--t1)}
+.hero-sub{font-size:clamp(1.3rem,2vw,1.45rem);font-weight:700;letter-spacing:-.02em;line-height:1.25;margin-bottom:1rem;color:var(--t1)}
+.hero-flow{font-family:'IBM Plex Mono',monospace;font-size:.78rem;line-height:1.9;color:var(--t2);margin-bottom:1.6rem;display:flex;flex-wrap:wrap;align-items:center;gap:.1rem .55rem}
+.hero-flow .step{white-space:nowrap}
+.hero-flow .arw{color:var(--accent);font-weight:600}
+.hero-flow .last{color:var(--green)}
 .hero-desc{font-size:1.05rem;color:#c5c5c3;line-height:1.65;margin-bottom:2.2rem}
 .hero-btns{display:flex;gap:.6rem;flex-wrap:wrap}
 .cmd{display:flex;align-items:center;gap:.6rem;padding:.55rem .9rem;border-radius:7px;background:var(--s1);border:1px solid var(--border2);font-family:'IBM Plex Mono',monospace;font-size:.82rem;color:var(--t1);cursor:pointer;transition:border-color .15s}
@@ -357,8 +361,9 @@ h2.v .w-anim{opacity:1;transform:none}
       </a>
     </div>
     <h1 class="rv">Every model.<br><em>One verdict.</em></h1>
-    <p class="hero-sub rv">LLM Council. Parallel window.</p>
-    <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em>: Amicus routes it through models from different families, has them cross-review each other anonymously, and a non-Claude chair synthesizes the verdict. Or skip the ceremony — fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
+    <p class="hero-sub rv">A multi-model AI council and ad-hoc sidecar, with Claude as orchestrator.</p>
+    <p class="hero-flow rv"><span class="step">independent reviews</span><span class="arw">→</span><span class="step">anonymized peer cross-review</span><span class="arw">→</span><span class="step">non-Claude chair verdict</span><span class="arw">→</span><span class="step last">tiered accept/deny</span></p>
+    <p class="hero-desc rv">Hand Claude a doc, a diff, or a design and say <em>council review this</em> — Amicus runs the ritual and hands back a decision. Or skip the ceremony: fork a single conversation to Gemini, GPT, DeepSeek, or any other model, work in parallel with full context, and fold the result back.</p>
     <div class="hero-btns rv">
       <div style="flex:1;display:flex;flex-direction:column;gap:.5rem">
         <div class="cmd cmd-steps" onclick="copyCmd(this)" data-cmd="npm install -g amicus&#10;amicus setup" style="background:rgba(74,222,128,.07);border-color:rgba(74,222,128,.25)">
