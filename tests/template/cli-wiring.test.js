@@ -84,6 +84,7 @@ test('--var without --template is BAD_ARGS (council)', async () => {
   expect(runCouncil).not.toHaveBeenCalled();
   const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
   expect(doc.error.code).toBe('BAD_ARGS');
+  expect(doc.error.message).toMatch(/--artifact\/--var require --template/);
 });
 
 test('council run --template with a {{prompt}} slot renders --prompt-file into the briefing', async () => {

@@ -134,6 +134,7 @@ describe('explicit --models over the pack bench (T13-m4)', () => {
     expect(code).toBe(0);
     expect(err.mock.calls.map((c) => c[0]).join(''))
       .toContain("Notice: --models overrides the bench from pack 'fanout-review'");
+    expect(runFanout).toHaveBeenCalledTimes(1);
     expect(runFanout.mock.calls[0][0].models).toBe('vendorx/model-z');
   });
 });

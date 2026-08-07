@@ -106,7 +106,7 @@ describe('run.json init + checkpoint', () => {
 });
 
 // F1 (Task-5 review): initCouncilRun's `...(o.template ? { template: o.template } : {})`
-// seed (line 106) had zero direct coverage — pin both the present and absent cases.
+// seed (line 106) had zero direct coverage — pin both the present and null cases.
 describe('initCouncilRun template seeding (F9 v4.5)', () => {
   const baseOpts = () => ({
     runId: 'abc123', runDir: runDirOf(), project: tmp,

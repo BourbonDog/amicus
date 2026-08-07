@@ -126,7 +126,7 @@ describe('handlePack: save -> list -> show -> rm roundtrip', () => {
   });
 });
 
-describe('handlePack: save maps every usage-block option flag (T14-m5)', () => {
+describe('handlePack: save maps the seven remaining usage-block option flags (T14-m5; --debate has its own describe)', () => {
   test('timeout/max-cost/gateway/agent/thinking/summary-length -> pack.options; --template -> briefing.template', async () => {
     const code = await handlePack(pa([
       'save', 'flag-map', '--kind', 'fanout', '--bench', 'alpha,beta',

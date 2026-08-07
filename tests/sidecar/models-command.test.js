@@ -419,7 +419,7 @@ describe('amicus models', () => {
     it('reports divergent-missing and divergent-mismatch findings with distinct, readable text', async () => {
       const findings = [
         // HISTORICAL fixture: fable's direct route was authored 2026-08-05, so the
-        // live catalog can no longer produce divergent-missing for it. Kept as a
+        // curated route table can no longer produce divergent-missing for it. Kept as a
         // pure rendering-path fixture — the renderer must handle the kind regardless.
         { alias: 'fable', gateway: 'direct', kind: 'divergent-missing', model: 'anthropic/claude-fable-5' },
         { alias: 'haiku', gateway: 'direct', kind: 'divergent-mismatch',

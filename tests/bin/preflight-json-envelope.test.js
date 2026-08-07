@@ -147,13 +147,14 @@ describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', 
     const out = await captureStdout(() => handleFanout({ json: true, prompt: 'hi', models: 'a,b', var: ['a=1'] }));
     const doc = JSON.parse(out);
     expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(doc.error.message).toMatch(/--artifact\/--var require --template/);
     expect(runFanout).not.toHaveBeenCalled();
   });
 });
 
 // v4.7 F8 (D13): --tag is reject-style (unlike sanitizeCouncilName, which
 // cleans) — a bad tag must fail fast with the validator's message, engine
-// never invoked. (Both handlers validate --tag before any model resolution —
+// never invoked. (Both handlers validate --tag before the engine is invoked —
 // handleStart's rejection case lives in tests/pack/cli-fanout-start-pack.test.js.)
 describe('--tag pre-flight validation emits BAD_ARGS envelope on stdout (v4.7 F8)', () => {
   it('fanout --json --tag "bad tag!" → BAD_ARGS envelope, engine never invoked', async () => {
