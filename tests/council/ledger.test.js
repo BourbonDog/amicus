@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc } = require('../../src/council/ledger');
+const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_SCHEMA_VERSION } = require('../../src/council/ledger');
 const { tally } = require('../../src/council/tally');
 const { debateRunStatsRows } = require('../../src/council/debate');
 const avInput = require('./fixtures/av-receiver-input');
@@ -41,6 +41,22 @@ function singleModelRecord(extraRow) {
     runStats: [
       { model: 'alpha', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 100, usage: null },
       extraRow,
+    ],
+  };
+}
+
+// Minimal single-model record, same shape as singleModelRecord() above minus
+// the extra (non-primary) row — the baseline fixture for the D9 schema-stamp
+// and resolvedModel-join tests below. A fresh object literal per call (not a
+// tally(avInput) reuse) so mutating record.meta.models / record.runStats in
+// one test can never leak into another.
+function baseRecord() {
+  return {
+    meta: { runId: 'r1', date: '2026-08-01', runType: 'headless', models: ['alpha'], chair: 'c' },
+    findings: [], streetCred: [{ model: 'alpha', withSelf: 1, peersOnly: 1 }],
+    judged: true,
+    runStats: [
+      { model: 'alpha', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 100, usage: null },
     ],
   };
 }
@@ -90,11 +106,39 @@ test('peersOnly:null rows are excluded from the average', () => {
   expect(gpt.avgStreetCredPeersOnly).toBeCloseTo(1.0);
 });
 
-test('aggregates rows written under a newer schemaVersion', () => {
+test('rows are stamped with the CURRENT schema version (2 after GOA-7 D9)', () => {
+  const rows = buildLedgerRows(baseRecord());
+  expect(LEDGER_SCHEMA_VERSION).toBe(2);
+  for (const row of rows) { expect(row.schemaVersion).toBe(2); }
+});
+
+test('resolvedModel is copied from the JOINED runStats row when present (D9)', () => {
+  const record = baseRecord();
+  record.runStats = [{ model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+    resolvedModel: 'openai/gpt-5.2', status: 'complete', durationMs: 5, usage: null }];
+  record.meta.models = ['gpt'];
+  const rows = buildLedgerRows(record);
+  expect(rows[0].resolvedModel).toBe('openai/gpt-5.2');
+});
+
+test('absent resolvedModel on the joined row ⇒ NO resolvedModel key on the ledger row (legacy-by-absence, R2)', () => {
+  const record = baseRecord();  // its runStats rows carry no resolvedModel
+  const rows = buildLedgerRows(record);
+  for (const row of rows) { expect('resolvedModel' in row).toBe(false); }
+});
+
+test('a model with NO joining runStats row gets no resolvedModel (the {} join fallback)', () => {
+  const record = baseRecord();
+  record.runStats = [];  // nothing joins; role/conformance fall back
+  const rows = buildLedgerRows(record);
+  for (const row of rows) { expect('resolvedModel' in row).toBe(false); }
+});
+
+test('aggregates rows written under a FUTURE schemaVersion', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-'));
   appendRun(record, { dir });
   const gptRow = buildLedgerRows(record).find(r => r.model === 'gpt');
-  const future = { ...gptRow, schemaVersion: 2 };
+  const future = { ...gptRow, schemaVersion: LEDGER_SCHEMA_VERSION + 1 };
   fs.appendFileSync(path.join(dir, 'council-ledger.jsonl'), JSON.stringify(future) + '\n');
   expect(deriveReliability({ dir }).find(a => a.model === 'gpt').runs).toBe(2);
 });

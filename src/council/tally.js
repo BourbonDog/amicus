@@ -122,7 +122,8 @@ function tally(input) {
       // when set, and the runStats schema declares no additionalProperties, so a
       // run without either is byte-for-byte unchanged. v4.7 GOA-7 exercised the
       // ledger's schema-versioned extension slot: `resolvedModel` rides this
-      // allowlist into the ledger's v2 rows (ledger.js, LEDGER_SCHEMA_VERSION 2).
+      // allowlist and reaches ledger rows via the ledger's model-keyed join of
+      // primary rows (ledger.js, LEDGER_SCHEMA_VERSION 2).
       ...(r.findingsUnverified ? { findingsUnverified: true } : {}),
       ...(r.repairRefused ? { repairRefused: r.repairRefused } : {}),
       ...(r.waveId ? { waveId: r.waveId } : {}),

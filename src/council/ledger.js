@@ -4,7 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const { getConfigDir } = require('../utils/config');
 
-const LEDGER_SCHEMA_VERSION = 1;
+// v4.7 GOA-7 D9: v2 rows may carry `resolvedModel` (the executable id that
+// served, copied from the joined runStats row, emit-only-when-set). Absent
+// resolvedModel ⇒ legacy row, aggregated under its alias (spec R2) — this
+// covers ALL pre-v2 history AND leg-less v2 rows (give-up chair, dead seats,
+// claude, hand-assembled tally input), whose resolution is genuinely
+// unknowable. Legacy-READ only: readers never inspect schemaVersion, rows are
+// never migrated.
+const LEDGER_SCHEMA_VERSION = 2;
 const LEDGER_FILE = 'council-ledger.jsonl';
 
 // v4.7 D4/E1/E2/E6 (Task-7, task-6/task-7 adjudications): fail-closed
@@ -76,6 +83,7 @@ function buildLedgerRows(record) {
       confirmRate: judged && denom ? raised.filter(f => f.tier === 'Confirmed').length / denom : null,
       factErrorRate: judged && denom ? raised.filter(f => f.tier === 'Disputed').length / denom : null,
       conformance: r.conformance || 'clean',
+      ...(r.resolvedModel ? { resolvedModel: r.resolvedModel } : {}),
     };
   });
 }
