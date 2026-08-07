@@ -1179,3 +1179,19 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   above. — #110
 - [ ] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
   generated count or leave it deliberately count-neutral. — #110
+
+## v4.7 PR1 findings (2026-08-06)
+
+- [ ] **Duplicated aliases in `--models`/council presets can yield two primary rows for one
+  seat** — [S, needs a product decision] `parseModelsList` (`src/sidecar/fanout-validate.js:22`)
+  allows duplicate aliases by design (its own docstring: "duplicates allowed"), and council
+  callers pass the parsed list through unchecked. Both `lensIndexOf`
+  (`src/council/run-retry.js:24`, via `o.models.indexOf(model)`) and `roleFor`
+  (`src/council/run-stages.js:34`, via `o.models.indexOf(alias)`) resolve a duplicated alias by
+  first occurrence only. A duplicated alias whose second occurrence dies could therefore produce
+  both a review-based primary row (attributed to the first, surviving occurrence) and a dead-seat
+  primary row (from `roleFor`'s first-occurrence resolution) for the same model — two primary
+  rows where the row-per-launch bijection expects one per requested seat. Pre-existing; not
+  touched by PR1's row-per-launch work. Found during PR1 Task-4 review, 2026-08-06. Needs a
+  product decision: reject duplicate aliases outright (parse-time error) vs. dedupe silently
+  before use.
