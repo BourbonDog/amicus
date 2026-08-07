@@ -66,13 +66,16 @@ function toModel(verdict, wave) {
       .map(f => ({ id: f.id, previousTier: f.debate.previousTier, tier: f.tier })),
   };
   const runStats = verdict.runStats || [];
-  // Cost-row role tag (Plan 2 final review F1): #83 gave judges their own
-  // runStats row, so a bench model can now appear twice (seat + judge),
-  // indistinguishable by `model` alone. Tag ONLY judge rows — old verdicts have
-  // no judge rows at all, so chair/critic/lens/seat rows stay byte-identical to
-  // their historical rendering.
+  // Cost-row role tag (Plan 2 final review F1, extended v4.7 D6): #83 gave
+  // judges their own runStats row, so a bench model can now appear twice
+  // (seat + judge), indistinguishable by `model` alone. v4.7's row-per-launch
+  // producers (chair-attempt/repair/superseded) create the exact same
+  // collision for their model. Tag ONLY these four roles — old verdicts have
+  // none of them, so chair/critic/lens/seat rows stay byte-identical to their
+  // historical rendering (report.test.js:189-199 pins the judge case exactly).
+  const ROLE_SUFFIX = { judge: 'judge', 'chair-attempt': 'chair-attempt', repair: 'repair', superseded: 'superseded' };
   const costRows = runStats.map(r => ({
-    model: r.role === 'judge' ? `${r.model} (judge)` : r.model,
+    model: ROLE_SUFFIX[r.role] ? `${r.model} (${ROLE_SUFFIX[r.role]})` : r.model,
     status: r.status, durationMs: r.durationMs,
     cost: r.usage && r.usage.cost ? r.usage.cost : null,
   }));

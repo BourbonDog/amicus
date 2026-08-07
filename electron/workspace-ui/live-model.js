@@ -94,9 +94,20 @@
     ];
   }
 
+  // v4.7 D6/E1: three row-per-launch producer roles added alongside the
+  // existing chair-attempt (run-chair.js), repair (run-stages.js/
+  // run-stage2.js/run-chair.js) and superseded (run-stages.js + debate.js)
+  // rows — launch-accounting extras, not seats, and unlike rebuttal/revote
+  // (F37, kept rendering on purpose below) they have no seats-panel meaning
+  // of their own. There is no pre-existing allowlist in this function (E1) —
+  // this is a plain exclusion added on top of the untouched id/shape logic.
+  var SEATS_PANEL_EXCLUDED_ROLES = { 'chair-attempt': true, repair: true, superseded: true };
+
   /** Terminal fallback: derive seat-shaped rows from tally runStats cost rows. */
   function seatsFromRunStats(costRows) {
-    return (costRows || []).map(function (r) {
+    return (costRows || []).filter(function (r) {
+      return !SEATS_PANEL_EXCLUDED_ROLES[r.role];
+    }).map(function (r) {
       return {
         // ⚠️ DE-ROT (F37): composite id — a v4.1 `--debate` run emits extra runStats rows for
         // the SAME bench alias (role 'rebuttal'/'revote', src/council/debate.js:88-96). With no

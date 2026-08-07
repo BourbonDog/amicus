@@ -5,7 +5,45 @@ const os = require('os');
 const path = require('path');
 const { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc } = require('../../src/council/ledger');
 const { tally } = require('../../src/council/tally');
+const { debateRunStatsRows } = require('../../src/council/debate');
 const avInput = require('./fixtures/av-receiver-input');
+
+// A provisional tally-input: 3 findings, judges gpt+qwen adjudicated. Carried
+// in verbatim from tests/council/debate.test.js (pre-d279384-fix-wave) as the
+// fixture for the ledger-join test below — see that test's own comment.
+function debateBaseInput() {
+  return {
+    meta: { runId: 'r', models: ['gemini', 'gpt', 'qwen'], chair: 'deepseek', claudeInCouncil: false },
+    findings: [
+      { id: 'A1', raiser: 'gemini', severity: 'major', claim: 'infinite retry' },
+      { id: 'A2', raiser: 'gemini', severity: 'minor', claim: 'log leak' },
+      { id: 'B1', raiser: 'gpt', severity: 'nit', claim: 'typo' },
+    ],
+    adjudications: [
+      { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+      { findingId: 'A1', judge: 'qwen', verdict: 'dispute' },
+      { findingId: 'A2', judge: 'gpt', verdict: 'dispute' },
+      { findingId: 'B1', judge: 'gemini', verdict: 'neutral' },
+    ],
+    rankings: [{ judge: 'gpt', order: ['gemini', 'qwen'] }, { judge: 'qwen', order: ['gemini', 'gpt'] }],
+    runStats: [{ model: 'gemini', role: 'seat', status: 'complete', durationMs: 100, usage: null }],
+  };
+}
+
+// Minimal single-model record shape shared by the #83-pattern guards below
+// (extends the pattern to the other three producer classes named in the
+// Task-6 review amendment: chair-attempt, repair, and the debate pair).
+function singleModelRecord(extraRow) {
+  return {
+    meta: { runId: 'r1', date: '2026-08-01', runType: 'headless', models: ['alpha'], chair: 'c' },
+    findings: [], streetCred: [{ model: 'alpha', withSelf: 1, peersOnly: 1 }],
+    judged: true,
+    runStats: [
+      { model: 'alpha', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 100, usage: null },
+      extraRow,
+    ],
+  };
+}
 
 const record = tally(avInput);
 
@@ -87,4 +125,81 @@ test('#83 guard: judge rows never shadow seat rows in the reliability join', () 
   };
   const rows = buildLedgerRows(rec);
   expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+});
+
+// ---- v4.7 D4/D6/E1/E2 — fail-closed allowlist join (Task-7 amendment) ----
+// The skip-set this test file's #83 guard exercised only ever named
+// DEBATE_ROLES + 'judge'. v4.7 added three more non-primary runStats
+// producers that share a model with that model's real bench (seat) row —
+// chair-attempt (run-chair.js), repair (run-stages.js/run-stage2.js/
+// run-chair.js) and superseded (run-stages.js + debate.js) — and none of
+// them were ever in the skip-set, so each is today's live instance of the
+// #83 clobbering bug. These four guards (extending the #83 pattern to the
+// remaining two direct producer classes, plus the debate pair which the
+// skip-set DID already cover) are the RED the amendment requires for ALL
+// FOUR producer classes before ledger.js's skip-set becomes an allowlist.
+describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a bench model row', () => {
+  test('chair-attempt rows never overwrite a bench model ledger row', () => {
+    const rows = buildLedgerRows(singleModelRecord(
+      { model: 'alpha', role: 'chair-attempt', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 50, usage: null }));
+    expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+  });
+
+  test('repair rows never overwrite a bench model ledger row', () => {
+    const rows = buildLedgerRows(singleModelRecord(
+      { model: 'alpha', role: 'repair', wasChair: false, conformance: 'unstructured', status: 'timeout', durationMs: 50, usage: null }));
+    expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+  });
+
+  // The debate pair was already excluded via DEBATE_ROLES under the OLD
+  // skip-set; carried forward as regression pins so the swap to an
+  // allowlist mechanism cannot silently drop this existing protection.
+  test('rebuttal rows (debate pair) never overwrite a bench model ledger row', () => {
+    const rows = buildLedgerRows(singleModelRecord(
+      { model: 'alpha', role: 'rebuttal', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 50, usage: null }));
+    expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+  });
+
+  test('revote rows (debate pair) never overwrite a bench model ledger row', () => {
+    const rows = buildLedgerRows(singleModelRecord(
+      { model: 'alpha', role: 'revote', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 50, usage: null }));
+    expect(rows.find(r => r.model === 'alpha').role).toBe('seat');
+  });
+
+  // Carried in VERBATIM from tests/council/debate.test.js (commit d279384,
+  // pre-fix-wave) per Task-6's report ("Review fix wave" §5): the fix wave
+  // reverted DEBATE_ROLES and deleted this test because it would fail under
+  // the reverted Set by design, forwarding it to Task 7 — this IS Task 7.
+  // Same clobbering hazard as the #83 guard above, extended to the two new
+  // debate-born roles: a raiser/judge's superseded-original row must never
+  // win the ledger join over that model's real bench (seat) row.
+  test('superseded/repair rows never overwrite a bench model ledger row either', () => {
+    const input = debateBaseInput();
+    input.runStats = [
+      { model: 'gemini', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 100, usage: null },
+      ...debateRunStatsRows({
+        defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 60, usage: null, conformance: 'repaired', waveId: 'r-d1r' }],
+        revoteLegs: [],
+        supersededLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'unstructured', waveId: 'r-d1' }],
+        repairLegs: [],
+      }),
+    ];
+    const rows = buildLedgerRows(tally(input));
+    expect(rows).toHaveLength(3);
+    const gemini = rows.find(r => r.model === 'gemini');
+    expect(gemini.role).toBe('seat');            // NOT 'superseded'
+    expect(gemini.conformance).toBe('clean');    // NOT the superseded leg's 'unstructured'
+  });
+
+  // Errata E2: 'council' is the legacy default role (pre-#83 runs, and the
+  // av-receiver golden fixture) and MUST keep joining — an allowlist that
+  // silently dropped it would zero out every legacy row's role/wasChair/
+  // conformance on the reliability join without any test ever going red.
+  test('council (legacy default role) still joins — errata E2', () => {
+    const record = tally(avInput);
+    const rows = buildLedgerRows(record);
+    const gpt = rows.find(r => r.model === 'gpt');
+    expect(gpt.role).toBe('council');
+    expect(gpt.wasChair).toBe(false);
+  });
 });

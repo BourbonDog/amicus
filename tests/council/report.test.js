@@ -197,4 +197,25 @@ describe('What was lost (v4.6 Plan 2)', () => {
     expect(md).toContain('alpha (judge)');
     expect(md).not.toContain('deep (chair)');   // historical byte-identity: only judges tagged
   });
+
+  // v4.7 D6: extend the judge-suffix pattern to the three new row-per-launch
+  // producer roles so their cost rows read unambiguously in the report
+  // instead of colliding, unlabeled, with their model's primary cost row.
+  test('cost rows also tag chair-attempt/repair/superseded rows; seat/chair/critic stay untagged', () => {
+    const v = lostVerdict();
+    v.runStats = [
+      { model: 'alpha', role: 'seat', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 10, usage: null },
+      { model: 'alpha', role: 'chair-attempt', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 4, usage: null },
+      { model: 'beta', role: 'repair', wasChair: false, conformance: 'unstructured', status: 'timeout', durationMs: 3, usage: null },
+      { model: 'gemini', role: 'superseded', wasChair: false, conformance: 'unstructured', status: 'complete', durationMs: 2, usage: null },
+      { model: 'deep', role: 'chair', wasChair: true, conformance: 'clean', status: 'complete', durationMs: 7, usage: null },
+      { model: 'critic1', role: 'critic', wasChair: false, conformance: 'clean', status: 'complete', durationMs: 6, usage: null },
+    ];
+    const md = buildReport({ verdict: v }, { format: 'md' });
+    expect(md).toContain('alpha (chair-attempt)');
+    expect(md).toContain('beta (repair)');
+    expect(md).toContain('gemini (superseded)');
+    expect(md).not.toContain('deep (chair)');
+    expect(md).not.toContain('critic1 (critic)');
+  });
 });
