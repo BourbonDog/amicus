@@ -430,6 +430,29 @@ test('verdict: an empty --out= value errors the same way, never silently default
   expect(fs.readdirSync(dir).sort()).toEqual(['tally.json']);
 });
 
+test('verdict: a dash-leading -o/--out value errors instead of writing a file literally named that token (R5)', async () => {
+  // Before R5, parseArgs treated '-x' as a legitimate string value (only a
+  // bare/empty -o/--out tripped the v4.6.3 R1 guard above), so this resolved
+  // straight through to writeVerdictAtomic('-x', verdict) — a file named
+  // '-x' landing in cwd. Same failure class as R1, one form short.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-verdict-'));
+  const tallyPath = writeTally(dir);
+  const cwd = process.cwd();
+  process.chdir(dir);
+  let result;
+  try {
+    result = await capture(() => handleCouncil({ _: ['council', 'verdict', tallyPath], out: '-x', json: true }));
+  } finally {
+    process.chdir(cwd);
+  }
+  expect(result.code).toBe(1);
+  const doc = JSON.parse(result.out);
+  expect(doc.error.code).toBe('BAD_ARGS');
+  expect(doc.error.message).toMatch(/-o\/--out/);
+  // Verify no artifacts leaked: directory should only contain the seeded tally file (no '-x')
+  expect(fs.readdirSync(dir).sort()).toEqual(['tally.json']);
+});
+
 // ---------------------------------------------------------------------------
 // renderStats (v4.7 GOA-7 D10 surfaces)
 // ---------------------------------------------------------------------------

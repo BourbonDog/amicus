@@ -105,8 +105,12 @@ function parseArgs(argv) {
       // Single short-flag alias, scoped to exactly '-o' (council verdict's
       // --out shorthand). No general short-flag support is implemented —
       // any other leading-dash token still falls through to positionals.
+      // R5: deliberately lockstep with the long-option branch above
+      // (`!next.startsWith('--')`) — '-o' and '--out' must consume values
+      // identically. A dash-leading value is still accepted here (parsing
+      // only normalizes); cli-handlers-council.js's R1 guard rejects it.
       const next = argv[i + 1];
-      if (next && !next.startsWith('-')) {
+      if (next && !next.startsWith('--')) {
         result.out = next;
         i++;
       } else {
