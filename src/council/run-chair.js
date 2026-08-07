@@ -32,15 +32,33 @@ const { buildRunStatsEntry } = require('./run-assemble');
  * a --claude-review run puts a real 'claude' row in the ledger, so without this
  * filter a LATER run could promote it and walk straight past the pre-flight
  * --chair claude guard — with no Claude leg to launch.
+ *
+ * v4.7 GOA-7 D11: exclusions test the group key AND aliases[]; the promoted
+ * name is aliases[0] (most-recent alias) so the launch string stays routable
+ * through the same alias policy both call sites (run.js mid-walk, run-server.js
+ * pre-seed) already resolve.
  * @returns {string|null}
  */
 function pickFallbackChair(statsRows, bench, failedChair) {
   const benchSet = new Set(bench);
+  // v4.7 GOA-7 D11: an aggregate's identity is its key PLUS every alias it was
+  // observed under — post-D10 keys may be executable ids while bench/o.chair
+  // stay alias-space, so every exclusion tests the whole name set (a bench
+  // seat's resolved-keyed group must never be promoted as its own chair).
+  // The LAUNCHED name is aliases[0] (most-recent alias): alias-space names
+  // re-enter the router's alias bridge and current key/gateway policy; a raw
+  // executable id would dodge them (divergent-vendor forms, openrouter-
+  // literals under --gateway direct, dropped aliases). aliases[] is non-empty
+  // for every ledger-derived group; the bare-model fallback covers pre-D10
+  // aggregate shapes only.
+  const names = (r) => [r.model, ...(Array.isArray(r.aliases) ? r.aliases : [])];
+  const excluded = (r) => names(r).some(n => n === 'claude' || benchSet.has(n) || n === failedChair);
   const candidates = (statsRows || [])
-    .filter(r => r.model !== 'claude' && !benchSet.has(r.model) && r.model !== failedChair
-      && typeof r.avgStreetCredPeersOnly === 'number')
+    .filter(r => !excluded(r) && typeof r.avgStreetCredPeersOnly === 'number')
     .sort((a, b) => a.avgStreetCredPeersOnly - b.avgStreetCredPeersOnly);
-  return candidates.length ? candidates[0].model : null;
+  if (!candidates.length) { return null; }
+  const top = candidates[0];
+  return (Array.isArray(top.aliases) && top.aliases.length) ? top.aliases[0] : top.model;
 }
 
 /**

@@ -88,6 +88,14 @@ describe('claude is never a fallback chair (spec §4.4 "never chairs")', () => {
     expect(pickFallbackChair([{ model: 'claude', avgStreetCredPeersOnly: 1.0 }],
       ['gemini', 'gpt', 'qwen'], 'deepseek')).toBe(null);
   });
+
+  test('a resolvedModel-bearing rowset still never yields claude (v4.7 D11 guard pin)', () => {
+    const rows = [
+      { model: 'claude', aliases: ['claude'], avgStreetCredPeersOnly: 0.5 },
+      { model: 'x/exec', aliases: ['x'], avgStreetCredPeersOnly: 3.0 },
+    ];
+    expect(pickFallbackChair(rows, [], null)).toBe('x');
+  });
 });
 
 describe('--claude-review invalid file → pre-flight error, zero spend', () => {
