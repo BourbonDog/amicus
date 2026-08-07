@@ -115,6 +115,10 @@ describe("doctor 'sessions-index-tmp' orphan sweep (B15)", () => {
     expect(c.message).toMatch(/swept 1/i);
   });
 
+  // Pins never-crash for a genuinely unremovable *file* (permissions, AV lock,
+  // etc.) — a different contract from SR-3's directory exclusion below, which
+  // keeps name-shaped directories out of this list by design so they never
+  // reach unlink in the first place.
   test('a throwing unlink degrades gracefully (never crashes doctor)', async () => {
     const unlinkSessionIndexTmp = jest.fn(() => { throw new Error('EPERM'); });
     const checks = await doctor.runDoctorChecks({ ...base, fix: true,
@@ -209,6 +213,19 @@ describe('session-index-tmp-sweep real fs glue', () => {
   test('returns [] when the config dir does not exist yet', () => {
     fs.rmSync(configDir, { recursive: true, force: true });
     const { listSessionIndexTmpFiles } = require('../src/utils/session-index-tmp-sweep');
+    expect(listSessionIndexTmpFiles()).toEqual([]);
+  });
+
+  // SR-3 (mirrors the same fixture in tests/doctor-metadata-tmp-sweep.test.js):
+  // a directory can carry a name shaped exactly like an orphan tmp file. The
+  // name-only filter would let it through, statSync would supply an
+  // mtimeMs (a directory has one), it would survive the
+  // `.filter((f) => f.mtimeMs !== null)` gate, and get reported as an orphan
+  // — then unlinkSync would throw EPERM on it forever. It must be excluded.
+  test('a name-shaped directory is excluded, not reported as an orphan', () => {
+    const { listSessionIndexTmpFiles } = require('../src/utils/session-index-tmp-sweep');
+    fs.mkdirSync(path.join(configDir, '.sessions-index.json.111.aaa111aaa111.tmp'));
+
     expect(listSessionIndexTmpFiles()).toEqual([]);
   });
 
