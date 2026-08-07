@@ -68,6 +68,13 @@ function buildFixtureDetail(runId, status) {
 
 describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () => {
   let invokeMock;
+  // T19-m3: lets the terminal-refresh test below swap in a terminal live doc so the REAL
+  // live-tick seam (workspace-verbs.js:95's startLiveLoop terminal branch) drives the
+  // running -> terminal openRun() call, instead of the test calling openRun() itself. Same
+  // idiom as tests/workspace/live-loop.test.js's `getLiveImpl` closure variable. Every other
+  // test in this file never advances fake timers, so this default is never actually invoked
+  // outside that one test.
+  let getLiveImpl;
 
   function defaultInvoke(channel, ...args) {
     if (channel === 'workspace:list-runs') { return Promise.resolve([]); }
@@ -78,7 +85,7 @@ describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () 
       const status = args[0] === 'bbbb2222' ? 'complete' : 'running';
       return Promise.resolve(buildFixtureDetail(args[0], status));
     }
-    if (channel === 'workspace:get-live') { return Promise.resolve(null); }
+    if (channel === 'workspace:get-live') { return getLiveImpl(args[0]); }
     if (channel === 'workspace:read-artifact') { return Promise.resolve({ text: 'prose' }); }
     return Promise.resolve(null);
   }
@@ -91,6 +98,7 @@ describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () 
     global.document.visibilityState = 'visible';
     global.document.hasFocus = () => true;
     global.NodeFilter = fake.NodeFilter;
+    getLiveImpl = () => Promise.resolve(null);
     invokeMock = jest.fn(defaultInvoke);
     global.window.amicusWorkspace.invoke = invokeMock;
     loadOrderedScripts();
@@ -179,7 +187,7 @@ describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () 
     expect(panel.dataset.loaded).toBe('1');
 
     function sectionTitles() {
-      return global.document.getElementById('reviews-body').children.map((s) => s.children[0].textContent);
+      return global.document.getElementById('reviews-body').querySelectorAll('h3').map((h) => h.textContent);
     }
     // Blind OFF: sections are titled by raw model id.
     expect(sectionTitles()).toEqual(['gemini', 'gpt']);
@@ -205,22 +213,45 @@ describe('Blind flip preserves open panels and paints once (Task 19: RN-5)', () 
   // never intended to remove. Amending the gate to key on run id AND status recomputes on that
   // transition while still preserving a same-run/same-status call (the blind toggle, covered by
   // the flip test above, which continues to pass unchanged after this amendment).
+  //
+  // T19-m3: reworked to drive the REAL live-tick seam (workspace-verbs.js:95's startLiveLoop
+  // terminal branch, `A.openRun(runId)`) instead of calling openRun() a second time by hand —
+  // same tick-driving harness as tests/workspace/live-loop.test.js's "a terminal live status
+  // stops polling…" test (fake timers already active per this file's beforeEach;
+  // jest.advanceTimersByTime(0) fires the loop's immediate first tick, then the microtask queue
+  // is drained with repeated `await Promise.resolve()`). Same final assertion as before
+  // (state.blind flips false), but now this test goes RED if workspace-verbs.js's tick stops
+  // calling A.openRun on terminal — mutation-proven by commenting out that call (see task
+  // report). Left untouched on purpose: the boundary-test twin
+  // (workspace-app-boundary.test.js:363-379, "a same-runId re-open (the live-loop
+  // terminal-refresh path) still applies its reply") pins the SAME-run F09 guard + status
+  // recompute inside openRun()/renderDetail() itself by calling openRun() directly twice — it
+  // is not exercising the live-tick seam, so it does not need reworking here.
   test('a running -> terminal refresh on the SAME run id auto-reveals the blind default (fix-wave, Fix 2)', async () => {
-    await global.window.AmicusApp.openRun('aaaa1111'); // running fixture -> blind default ON
+    await global.window.AmicusApp.openRun('aaaa1111'); // running fixture -> blind default ON; starts the live loop
     expect(global.window.AmicusApp.state.blind).toBe(true);
 
-    // Simulate the live loop's terminal refresh: workspace-verbs.js's startLiveLoop tick calls
-    // A.openRun(runId) with the SAME run id once workspace:get-live reports terminal — the
-    // refetched workspace:get-run reply is the only thing that changes, from 'running' to a
-    // terminal status.
+    // Simulate the live loop's terminal refresh: workspace:get-live now reports terminal, and
+    // the refetched workspace:get-run reply is the only thing that changes, from 'running' to a
+    // terminal status — but this time via the REAL tick (workspace-verbs.js:95's
+    // `A.openRun(runId)`), not a second direct openRun() call from the test.
+    getLiveImpl = (runId) => Promise.resolve({
+      ok: true, view: 'live', runId, status: 'complete', stageName: null,
+      stages: null, seats: [], degrades: [], legsTotal: null, legsComplete: null,
+      costDisplay: null, costAmount: null,
+      flags: { crashed: false, stalled: false, stalledForSeconds: null },
+      terminal: true,
+    });
     invokeMock.mockImplementation((channel, ...args) => {
       if (channel === 'workspace:get-run') { return Promise.resolve(buildFixtureDetail(args[0], 'complete')); }
       return defaultInvoke(channel, ...args);
     });
-    await global.window.AmicusApp.openRun('aaaa1111'); // SAME run id, CHANGED status
+    jest.advanceTimersByTime(0); // fire the live loop's immediate first tick
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
 
     // Pre-fix (gate keyed on run id alone) this stays `true` (RED): d.runId === state.detailRunId
-    // so the recompute never runs, and a completed run is stranded blinded.
+    // so the recompute never runs, and a completed run is stranded blinded. Also goes RED if the
+    // tick's `A.openRun(runId)` call is removed entirely — nothing re-opens the run at all.
     expect(global.window.AmicusApp.state.blind).toBe(false);
   });
 });
