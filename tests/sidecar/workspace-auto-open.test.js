@@ -31,6 +31,10 @@ describe('shouldAutoOpenWorkspace', () => {
     [{ platform: 'linux', env: {} }, false, 'no-display'],
     [{ platform: 'linux', env: {}, uiParam: true }, false, 'no-display'],
     [{ platform: 'linux', env: { DISPLAY: ':0' } }, true, 'ok'],
+    // T16-m1: env is documented (JSDoc :26) as always an object, but callers
+    // can still pass `env: undefined` — must not throw, must fall through
+    // the linux/no-display guard the same as an empty object would.
+    [{ platform: 'linux', env: undefined }, false, 'no-display'],
     [{ platform: 'darwin' }, true, 'ok'],
     // #76: electronState (3-state probe) splits the old electron-absent reason.
     // When provided it takes precedence over the legacy electronUsable boolean.

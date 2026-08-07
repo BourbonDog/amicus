@@ -34,7 +34,7 @@ function shouldAutoOpenWorkspace({
   electronState,
   electronDir,
   platform,
-  env,
+  env = {},
   autoOpenConfig,
   uiParam,
 }) {

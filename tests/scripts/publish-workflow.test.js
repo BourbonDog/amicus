@@ -161,6 +161,24 @@ describe('publish workflow (Phase 11 release-rail hardening — B04 + B05)', () 
     expect(preCheckBlock).not.toMatch(/exit 1/);
   });
 
+  test('SR-4: the version grep matches an escaped VERSION_RE, not a raw $VERSION BRE needle', () => {
+    const y = yml();
+    const stepStart = y.indexOf('- name: Publish to MCP Registry');
+    const loginStepIdx = y.indexOf('mcp-publisher login github-oidc');
+    const preCheckBlock = y.slice(stepStart, loginStepIdx);
+    const skipCond = preCheckBlock.match(/if \[ "\$STATUS" = "200" \][\s\S]*?then/);
+    expect(skipCond).not.toBeNull();
+    // the version grep's quoted needle interpolates VERSION_RE, not a bare
+    // $VERSION — a bare semver like "4.7.0" is a BRE where `.` matches any
+    // character, so a false match there would silently skip a genuine
+    // release (the opposite of this block's fail-toward-publish design).
+    expect(skipCond[0]).toMatch(/VERSION_RE/);
+    expect(skipCond[0]).not.toMatch(/\\"\$VERSION\\"/);
+    // and VERSION_RE must actually be derived by escaping literal dots
+    // before the `if`, in the same step block.
+    expect(preCheckBlock).toMatch(/VERSION_RE=\$\(printf '%s' "\$VERSION" \| sed 's\/\[\.\]\/\\+\.\/g'\)/);
+  });
+
   test('GitHub Release creation is guarded by an existence check (gh release view)', () => {
     const y = yml();
     const stepStart = y.indexOf('- name: Create GitHub Release');

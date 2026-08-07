@@ -127,7 +127,9 @@ jobs:
           # above (a duplicate publish attempt is registry-idempotent; a false
           # skip would silently drop the release).
           # ...and the version must be ACTIVE — a deleted/deprecated version's 200 must not skip (fail direction: publish).
-          if [ "$STATUS" = "200" ] && grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION\"" "$BODY_FILE" && grep -q "\"status\"[[:space:]]*:[[:space:]]*\"active\"" "$BODY_FILE"; then
+          # SR-4: $VERSION is interpolated into a BRE grep where an unescaped `.` matches any character, so VERSION_RE backslash-escapes the dots — otherwise a false match on the version grep would flip this fail-toward-publish block to fail-toward-skip, silently dropping the release.
+          VERSION_RE=$(printf '%s' "$VERSION" | sed 's/[.]/\\./g')
+          if [ "$STATUS" = "200" ] && grep -q "\"version\"[[:space:]]*:[[:space:]]*\"$VERSION_RE\"" "$BODY_FILE" && grep -q "\"status\"[[:space:]]*:[[:space:]]*\"active\"" "$BODY_FILE"; then
             echo "::notice::io.github.BourbonDog/amicus@$VERSION already on the MCP Registry; skipping registry publish"
             exit 0
           fi
