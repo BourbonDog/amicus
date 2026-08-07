@@ -65,6 +65,19 @@ describe('getKnownFlags', () => {
   it('does NOT include the flag that started this', () => {
     expect(known.has('headless')).toBe(false);
   });
+
+  /**
+   * Six flags appear in NO usage block except `pack:` — --kind, --bench,
+   * --no-debate, --version, --description, --from-run. If a future edit
+   * compresses that block and drops one, `amicus pack save --kind …` starts
+   * failing with an unknown-flag rejection. This is the net.
+   */
+  it('the pack usage block is the sole source of six flags — compressing it must not drop them', () => {
+    const flags = getKnownFlags();
+    for (const f of ['kind', 'bench', 'no-debate', 'version', 'description', 'from-run']) {
+      expect(flags.has(f)).toBe(true);
+    }
+  });
 });
 
 describe('unknownFlags', () => {

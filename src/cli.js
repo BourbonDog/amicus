@@ -466,27 +466,27 @@ Options for 'fanout':
                                ~32KB Windows argument cap). Mutually exclusive
                                with --prompt. Also works with 'start'.
   --wave-id <id>               Explicit wave ID (leg IDs become <id>-1..N)
-  --retry-failed <waveId>       Relaunch ONLY that wave's failed/timed-out/crashed/
-                                aborted legs as a NEW linked wave, using each leg's
-                                own saved context (byte-identical retry). Skips
-                                --prompt/--models; --models filters which failed
-                                legs to retry. wave.json is never modified.
+  --retry-failed <waveId>      Relaunch ONLY that wave's failed/timed-out/crashed/
+                               aborted legs as a NEW linked wave, using each leg's
+                               own saved context (byte-identical retry). Skips
+                               --prompt/--models; --models filters which failed
+                               legs to retry. wave.json is never modified.
   --json                       Emit the wave result as stable JSON on stdout
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
   --fallback / --no-fallback   Opt-in cheaper-model substitution on a classified
                                rate-limit/overload leg failure (spec 6.2). Overrides
                                config fallbacks.enabled when passed; default: config, else off.
-  --gateway <mode>              Routing: auto (direct-first), direct, or openrouter
-  --follow                      Stream this run's events to stderr as they happen (--json -> NDJSON)
-  --on-complete <cmd>           Run a shell command once, at terminal state, after
-                                wave.json is durable. The command is user-authored
-                                on THIS command line (CLI-only — never sourced from
-                                config/briefings/model output); payload rides via
-                                env only (AMICUS_TASK_ID/TYPE/STATUS/EXIT_CODE/
-                                RESULT_FILE/EVENTS_FILE/COST/PROJECT), never model
-                                text. Child stdout/stderr go to amicus stderr.
-                                Never changes the wave's exit code, docs, or events.
+  --gateway <mode>             Routing: auto (direct-first), direct, or openrouter
+  --follow                     Stream this run's events to stderr as they happen (--json -> NDJSON)
+  --on-complete <cmd>          Run a shell command once, at terminal state, after
+                               wave.json is durable. The command is user-authored
+                               on THIS command line (CLI-only — never sourced from
+                               config/briefings/model output); payload rides via
+                               env only (AMICUS_TASK_ID/TYPE/STATUS/EXIT_CODE/
+                               RESULT_FILE/EVENTS_FILE/COST/PROJECT), never model
+                               text. Child stdout/stderr go to amicus stderr.
+                               Never changes the wave's exit code, docs, or events.
   --template <name|path>       Render a briefing template ({{prompt}}, {{artifact}}, {{var.*}})
   --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
   --var <k=v>                  Template variable, repeatable (needs --template)
@@ -695,34 +695,16 @@ Options for 'template':
   pack: `
 Options for 'pack':
   amicus pack save <name> --kind council|fanout|solo [flags]
-                                Save a pack built from flags:
-                                --bench <a,b,c|name>    council/fanout: comma-
-                                                         separated members, or a
-                                                         saved council name
-                                --model <model>          solo kind only
-                                --chair/--critic/--lenses    council kind only
-                                --timeout/--max-cost/--gateway   shared run
-                                                         options
-                                --agent/--thinking/--summary-length   fanout/
-                                                         solo kind only
-                                --debate / --no-debate   council kind only
-                                --template <name|path>   briefing template
-                                                         reference (not rendered)
-                                --version <semver>       default 1.0.0 (an
-                                                         unchanged re-save is a
-                                                         no-op; a changed one
-                                                         auto-bumps the patch)
-                                --description <text>
-  amicus pack save <name> --from-run <id>
-                                Build a pack from an existing council run /
-                                fanout wave / solo session instead of flags
-                                (models, options, and a template REFERENCE only
-                                — briefing text is never captured)
+  amicus pack save <name> --from-run <id>   Build from an existing run (models/
+                                options/template reference only — briefing never captured)
   amicus pack list [--json]    List saved packs
-  amicus pack show <name|path> [--json]
-                                Print a pack plus its validation report (never
-                                fails on an invalid pack — see 'validation')
+  amicus pack show <name|path> [--json]   Print a pack + validation report
   amicus pack rm <name> [--json]   Remove a saved pack
+  Flags: --bench <a,b,c|name> (council/fanout) · --model (solo) · --chair/--critic/--lenses
+  (council) · --debate/--no-debate (council) · --timeout/--max-cost/--gateway (shared) ·
+  --agent/--thinking/--summary-length (fanout/solo) · --template <name|path> (reference only,
+  not rendered) · --version <semver> (default 1.0.0; unchanged re-save is a no-op, changed
+  auto-bumps patch) · --description <text>
 `
 };
 
