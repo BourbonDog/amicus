@@ -375,6 +375,7 @@ describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
   test('rows without resolvedModel stay alias-keyed and marked legacy: true (R2)', () => {
     appendRows([row({ model: 'gemini' }), row({ model: 'gemini' })]);
     const agg = deriveReliability({ dir });
+    expect(agg).toHaveLength(1);
     expect(agg[0]).toMatchObject({ model: 'gemini', legacy: true, aliases: ['gemini'] });
   });
 
@@ -404,6 +405,37 @@ describe('deriveReliability — resolved-id grouping (v4.7 GOA-7 D10)', () => {
   test('the claude group is legacy-keyed forever (spec §3.4) — leg-less rows never resolve', () => {
     appendRows([row({ model: 'claude', role: 'claude' })]);
     const agg = deriveReliability({ dir });
+    expect(agg).toHaveLength(1);
     expect(agg[0]).toMatchObject({ model: 'claude', legacy: true });
+  });
+
+  // T4 review: the four tests above don't distinguish last-seen-index
+  // ordering from first-seen-index ordering (each alias only ever appears
+  // once, or the repeat isn't interleaved with a third alias), and none of
+  // them puts a legacy row LAST in a group that also has resolved rows (so a
+  // `!rows[rows.length-1].resolvedModel` shortcut would agree with the real
+  // `rows.every(...)` check by coincidence). This test kills both: 'gpt' is
+  // observed at non-adjacent positions 0 and 2, so only a true last-seen
+  // index (not first-seen, and not merely "seen") puts it ahead of 'gpt4'
+  // (seen once, at 1); and the final row is a legacy (no-resolvedModel) row
+  // whose bare model equals the group's resolved key, ordered LAST, so only
+  // rows.every() — not a last-row-only check — correctly declines to mark
+  // the group legacy.
+  test('aliases[0] is the LAST-observed alias, and a legacy row ordered last cannot fake a legacy group', () => {
+    // gpt observed at positions 0 and 2 (non-adjacent), gpt4 at 1 —
+    // last-seen indexing puts gpt first; first-seen indexing would put gpt4 first.
+    // The final row is a LEGACY row (no resolvedModel) whose model equals the
+    // group key — a rows[rows.length-1] legacy shortcut would mark the group
+    // legacy; rows.every() must not.
+    appendRows([
+      row({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+      row({ model: 'gpt4', resolvedModel: 'openai/gpt-5.2' }),
+      row({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+      row({ model: 'openai/gpt-5.2' }),   // legacy full-id row, ordered LAST, merges into the same group
+    ]);
+    const agg = deriveReliability({ dir });
+    expect(agg).toHaveLength(1);
+    expect(agg[0].aliases).toEqual(['openai/gpt-5.2', 'gpt', 'gpt4']);
+    expect('legacy' in agg[0]).toBe(false);
   });
 });
