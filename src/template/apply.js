@@ -70,7 +70,10 @@ function applyTemplate({ templateRef, prompt, artifactFile, varList, project }) 
     vars,
   });
   if (res.error) {
-    return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: res.error, hint: "amicus template show <name>  (compare the template's slots against the known variables: {{prompt}}, {{artifact}}, {{artifact_path}}, {{date}}, {{project}}, {{var.<key>}})" } };
+    // No variable list here on purpose: renderTemplate's own message already ends
+    // with a knownList()-derived "Known: ..." line. A copy would be a third
+    // hand-maintained KNOWN_VARIABLES mirror, which BACKLOG's T3-m2 hard gate forbids.
+    return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: res.error, hint: 'amicus template show <name>' } };
   }
 
   return {
