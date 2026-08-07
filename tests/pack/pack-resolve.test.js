@@ -294,6 +294,25 @@ describe('applyPackToArgs: bench — string form fills args.council; notice name
     expect(args.models).toBe('z,y');
     expect(res.notices).toEqual(['Notice: --models overrides the bench from pack \'fanout-review\'']);
   });
+
+  // T11-c: bench-by-name (string) is not council-only — a FANOUT pack can
+  // carry it too (pack-validate.js's string-bench check has no kind gate),
+  // and resolveBenchKnob's string branch fills args.council regardless of
+  // pack.kind. Proves the fill path on the FANOUT surface specifically,
+  // since every other string-bench test above uses a council pack.
+  const FANOUT_PACK_STRING_BENCH = () => ({
+    schemaVersion: 1, type: 'pack', name: 'fanout-preset', version: '1.0.0', kind: 'fanout',
+    description: 'x', bench: 'budget', options: {}, briefing: {},
+  });
+
+  test('string bench on a FANOUT pack fills args.council when nothing is typed (T11-c)', () => {
+    store().writePack(FANOUT_PACK_STRING_BENCH());
+    const args = parseArgs(['fanout']);
+    const res = resolve()({ packRef: 'fanout-preset', expectedKind: 'fanout', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(args.council).toBe('budget');
+    expect(args.models).toBeUndefined();
+  });
 });
 
 describe('packRecord provenance (T11-b)', () => {

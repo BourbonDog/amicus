@@ -54,6 +54,9 @@ function resolveBenchKnob(pack, args, explicit) {
     else if (Array.isArray(bench)) { args.models = bench.join(','); }
     return null;
   }
+  // Both-typed names --models here, but both surfaces reject --models+--council
+  // with BAD_ARGS immediately after pack apply (fanout: cli-handlers-fanout.js:75-77;
+  // council run: cli-council-run-bench.js:45-48) — the pick only ever labels a single-flag notice.
   const flag = modelsExplicit ? '--models' : '--council';
   return `Notice: ${flag} overrides the bench from pack '${pack.name}'`;
 }

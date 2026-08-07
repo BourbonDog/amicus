@@ -138,6 +138,62 @@ describe('explicit --models over the pack bench (T13-m4)', () => {
   });
 });
 
+// T11-c: a string-bench (by-name) FANOUT pack fills args.council (not
+// args.models — see pack-resolve.test.js's unit coverage of the fill
+// itself); handleFanout then expands it via resolveCouncilMembers exactly
+// like a typed --council would (cli-handlers-fanout.js:85-95). Seeds a USER
+// council (not a built-in) so this proves the real expansion call, not just
+// a name passing through untouched.
+describe('string-bench FANOUT pack expands via resolveCouncilMembers (T11-c)', () => {
+  test('pack-filled args.council reaches runFanout as the expanded, comma-joined member list', async () => {
+    fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({
+      aliases: { alpha: 'vendorx/alpha-model', beta: 'vendorx/beta-model' },
+      councils: { mybench: ['alpha', 'beta'] },
+    }));
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'fanout-bench-pack', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: 'mybench', options: {}, briefing: {},
+    });
+    const code = await handleFanout(parseArgs([
+      'fanout', '--pack', 'fanout-bench-pack', '--prompt-file', briefingFile, '--json',
+    ]));
+    expect(code).toBe(0);
+    expect(runFanout).toHaveBeenCalledTimes(1);
+    // resolveCouncilMembers returns members RAW (alias, not resolved id) —
+    // pinned directly against src/utils/config.js's classifyCouncilMembers
+    // (`models.push(member)`, never the resolved `id`) and against
+    // tests/council-members-local.test.js, which proves the same contract
+    // on the council-run surface (`r.models` holds the alias, e.g. 'gemini',
+    // not the resolved provider/model id).
+    expect(runFanout.mock.calls[0][0].models).toBe('alpha,beta');
+    expect(err).not.toHaveBeenCalled(); // neither --models nor --council was typed: no override notice
+  });
+});
+
+// T11-c Step 4 (decision procedure): Step 1 verified BOTH the fanout and
+// council-run surfaces reject --models+--council both typed, and on BOTH
+// surfaces the pack apply (which can print the both-typed notice) runs
+// BEFORE that guard — so pin the fanout half of that ordering fact directly:
+// a both-typed run prints the notice AND THEN hits the hard exit, in that
+// order, never reaching runFanout.
+describe('both --models and --council typed: notice fires, then the exactly-one-of guard exits (T11-c ordering pin)', () => {
+  test('pack apply\'s notice reaches stderr before the BAD_ARGS exit; runFanout never called', async () => {
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'fanout-both-typed', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: 'budget', options: {}, briefing: {},
+    });
+    await expect(handleFanout(parseArgs([
+      'fanout', '--pack', 'fanout-both-typed', '--models', 'vendorx/model-z', '--council', 'budget',
+      '--prompt-file', briefingFile, '--json',
+    ]))).rejects.toThrow('exit 1');
+    expect(err.mock.calls.map((c) => c[0]).join(''))
+      .toContain("Notice: --models overrides the bench from pack 'fanout-both-typed'");
+    const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
+    expect(doc.error.message).toBe('Error: pass exactly one of --models / --council, not both');
+    expect(runFanout).not.toHaveBeenCalled();
+  });
+});
+
 describe('--pack reaches startAmicus (happy path)', () => {
   test('solo pack fills model + no-ui when neither is explicit; opts.pack matches', async () => {
     store().writePack(SOLO_PACK());
