@@ -239,6 +239,22 @@ describe('MCP Tool Definitions', () => {
       const tool = TOOLS.find(t => t.name === 'amicus_list');
       expect(tool.inputSchema).toHaveProperty('status');
     });
+
+    // v4.7 F8 (D14): status relaxes from a fixed enum to any string, so
+    // 'aborted'/'error'/'crashed'/'idle-timeout' (schema-legal statuses this
+    // enum never listed) pass through the MCP schema layer, not just the
+    // in-process handler.
+    test('status accepts any string value, not just the former enum (schema relax, D14)', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
+      const parsed = z.object(tool.inputSchema).parse({ status: 'aborted' });
+      expect(parsed.status).toBe('aborted');
+    });
+
+    test('status remains optional', () => {
+      const tool = TOOLS.find(t => t.name === 'amicus_list');
+      const parsed = z.object(tool.inputSchema).parse({});
+      expect('status' in parsed).toBe(false);
+    });
   });
 
   describe('amicus_resume', () => {

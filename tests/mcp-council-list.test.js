@@ -21,13 +21,14 @@ function seedSession(taskId, meta) {
     briefing: 'ordinary session', mode: 'headless', ...meta,
   }));
 }
-function seedCouncil(runId, status, createdAt) {
+function seedCouncil(runId, status, createdAt, extra = {}) {
   const runDir = path.join(tmp, `council-${runId}`);
   runState.initRun(runDir, {
     schemaVersion: 2, type: 'council-run', runId, status,
     stages: [{ name: 'stage1', status: status === 'running' ? 'running' : 'complete' }],
     bench: ['gemini', 'gpt'], chair: 'deepseek', critic: null, lenses: null,
     labelMap: null, options: { outDir: runDir }, usage: null, createdAt,
+    ...extra,
   });
   fs.writeFileSync(path.join(runDir, 'briefing.md'), 'council briefing text');
   runState.writePointer(tmp, runId, runDir);
@@ -58,5 +59,19 @@ describe('amicus_list merges council runs', () => {
     const rows = parse(await handlers.amicus_list({}, tmp));
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe('council-run');
+  });
+
+  // v4.7 F8 (D14): mcp-council-awareness.js's listCouncilRuns row literal gains
+  // tag, absent-not-null (same idiom as the ordinary-session rows).
+  test('council rows carry tag when the run recorded one (D14)', async () => {
+    seedCouncil('tagged11', 'complete', '2026-07-19T02:00:00.000Z', { tag: 'sprint-42' });
+    const rows = parse(await handlers.amicus_list({}, tmp));
+    expect(rows.find(r => r.id === 'tagged11').tag).toBe('sprint-42');
+  });
+
+  test('council rows omit tag entirely when the run recorded none', async () => {
+    seedCouncil('notagged1', 'complete', '2026-07-19T02:00:00.000Z');
+    const rows = parse(await handlers.amicus_list({}, tmp));
+    expect('tag' in rows.find(r => r.id === 'notagged1')).toBe(false);
   });
 });

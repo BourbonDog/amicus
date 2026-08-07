@@ -54,6 +54,8 @@ function enumerateSessions(project, opts = {}) {
           type: meta.type || 'run',
           parentWave: meta.parentWave || null,
           legCount: Array.isArray(meta.legs) ? meta.legs.length : null,
+          mode: meta.mode || (meta.headless ? 'headless' : 'interactive'),
+          ...(meta.tag ? { tag: meta.tag } : {}),
         });
       } catch { /* skip unreadable */ }
     }
@@ -68,18 +70,69 @@ function enumerateSessions(project, opts = {}) {
 }
 
 /**
+ * Tolerantly read the global sessions-index.json (src/utils/session-index.js).
+ * The index is advisory only — session-index.js's own readIndex() is not
+ * exported, so this mirrors its guard: missing/unreadable/corrupt yields an
+ * empty map rather than throwing, and --all degrades to the current project.
+ * @returns {Record<string, string>} taskId -> canonical project path
+ */
+function readSessionsIndexTolerant() {
+  try {
+    const { getConfigDir } = require('../utils/config');
+    const { INDEX_FILENAME } = require('../utils/session-index');
+    const raw = fs.readFileSync(path.join(getConfigDir(), INDEX_FILENAME), 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) { return parsed; }
+  } catch { /* missing/unreadable/corrupt index -> no cross-project entries */ }
+  return {};
+}
+
+/**
+ * Enumerate sessions across every project the global sessions-index knows
+ * about, plus the current project. --all support (F8 D14): the index is a
+ * navigation aid, never authoritative, so a stale entry pointing at a
+ * missing/unreadable project directory is skipped silently rather than
+ * surfaced as an error.
+ * @param {{status?: string, project?: string}} [opts]
+ * @returns {Array<object>} enumerateSessions rows, each stamped with `project`
+ */
+function enumerateAllProjects(opts = {}) {
+  const { status, project = process.cwd() } = opts;
+  const index = readSessionsIndexTolerant();
+  const projects = new Set([...Object.values(index), project]);
+
+  let sessions = [];
+  for (const p of projects) {
+    if (!p || typeof p !== 'string') { continue; }
+    try {
+      const rows = enumerateSessions(p, {}).map(s => ({ ...s, project: p }));
+      sessions = sessions.concat(rows);
+    } catch { /* unreadable project — skip silently */ }
+  }
+
+  sessions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (status && status !== 'all') {
+    sessions = sessions.filter(s => s.status === status);
+  }
+  return sessions;
+}
+
+/**
  * List previous sidecar sessions
  * Spec Reference: §4.2
  *
  * @param {object} options
  * @param {string} [options.status] - Filter by status (all, running, complete)
+ * @param {boolean} [options.all] - Cross-project via the global sessions-index (F8 D14)
  * @param {boolean} [options.json] - Output as JSON
  * @param {string} [options.project] - Project directory
  */
 async function listSidecars(options) {
-  const { status, json, project = process.cwd() } = options;
+  const { status, all, json, project = process.cwd() } = options;
 
-  const sessions = enumerateSessions(project, { status });
+  const sessions = all
+    ? enumerateAllProjects({ status, project })
+    : enumerateSessions(project, { status });
   if (sessions.length === 0) {
     console.log('No amicus sessions found.');
     return;
@@ -88,8 +141,12 @@ async function listSidecars(options) {
   if (json) {
     console.log(JSON.stringify(sessions, null, 2));
   } else {
-    console.log('ID        MODEL                  STATUS     AGE         BRIEFING');
-    console.log('─'.repeat(80));
+    console.log(
+      'ID'.padEnd(10) + 'MODEL'.padEnd(23) + 'STATUS'.padEnd(11) +
+      'TAG'.padEnd(12) + 'AGE'.padEnd(12) + 'BRIEFING' +
+      (all ? '  PROJECT' : '')
+    );
+    console.log('─'.repeat(all ? 100 : 80));
     sessions.forEach(s => {
       const age = formatAge(s.createdAt);
       const briefingShort = (s.briefing || '').slice(0, 30) +
@@ -98,8 +155,10 @@ async function listSidecars(options) {
         `${(s.id || '').padEnd(10)}` +
         `${(s.type === 'wave' ? `wave(${s.legCount ?? 0} legs)` : (s.model || '')).padEnd(23)}` +
         `${(s.status || 'unknown').padEnd(11)}` +
+        `${(s.tag || '').padEnd(12)}` +
         `${age.padEnd(12)}` +
-        `${briefingShort}`
+        `${briefingShort}` +
+        (all ? `  ${s.project || ''}` : '')
       );
     });
   }
@@ -184,6 +243,7 @@ async function readSidecar(options) {
 module.exports = {
   formatAge,
   enumerateSessions,
+  enumerateAllProjects,
   listSidecars,
   readSidecar
 };

@@ -214,8 +214,8 @@ function getTools() {
       'List all Amicus sessions for the current project. Shows task ID, ' +
       'model, status, age, and briefing excerpt.',
     inputSchema: {
-      status: z.enum(['all', 'running', 'complete']).optional().describe(
-        'Filter by status. Default: show all.'
+      status: z.string().optional().describe(
+        "Filter by status ('all', 'running', 'complete', 'error', 'aborted', …). Default: show all."
       ),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'

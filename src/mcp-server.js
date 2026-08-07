@@ -992,36 +992,26 @@ const handlers = {
     const root = path.join(cwd, '.claude', SESSIONS_DIR);
     if (!fs.existsSync(root)) { return textResult('No amicus sessions found.'); }
 
+    // v4.7 F8 (D14): one enumeration behind both the CLI and MCP list surfaces
+    // — enumerateSessions is the shared core (src/sidecar/read.js). Rows are
+    // re-grafted here with the EXACT decorations this handler always applied:
+    // sanitized (not raw) briefing, and running-only live-progress enrichment.
+    const { enumerateSessions } = require('./sidecar/read');
     const byId = new Map();
-    for (const d of fs.readdirSync(root)) {
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(d)) { continue; }
-      if (byId.has(d)) { continue; }
-      const metaPath = path.join(root, d, 'metadata.json');
-      if (!fs.existsSync(metaPath)) { continue; }
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        const entry = {
-          id: d, model: meta.model, status: meta.status, agent: meta.agent,
-          briefing: sanitizePreview(String(meta.briefing || ''), 80),
-          createdAt: meta.createdAt,
-          mode: meta.mode
-            || (meta.headless === undefined ? undefined : (meta.headless ? 'headless' : 'interactive')),
-        };
-        // Live-progress enrichment for RUNNING sessions only — readProgress
-        // parses conversation.jsonl, so terminal rows stay cheap.
-        if (meta.status === 'running') {
-          try {
-            const p = readProgress(path.join(root, d));
-            entry.phase = deriveStage(meta.status, p.stage);
-            entry.messageCount = p.messages;
-            entry.lastActivityAt = p.lastActivityAt;
-            entry.latestPreview = p.latestPreview;
-          } catch { /* progress optional */ }
-        }
-        byId.set(d, entry);
-      } catch {
-        // Skip unreadable metadata
+    for (const row of enumerateSessions(cwd, {})) {
+      row.briefing = sanitizePreview(String(row.briefing || ''), 80);
+      // Live-progress enrichment for RUNNING sessions only — readProgress
+      // parses conversation.jsonl, so terminal rows stay cheap.
+      if (row.status === 'running') {
+        try {
+          const p = readProgress(path.join(root, row.id));
+          row.phase = deriveStage(row.status, p.stage);
+          row.messageCount = p.messages;
+          row.lastActivityAt = p.lastActivityAt;
+          row.latestPreview = p.latestPreview;
+        } catch { /* progress optional */ }
       }
+      byId.set(row.id, row);
     }
 
     // v4.0 §8: council runs are pointer files in the same sessions root — merge
