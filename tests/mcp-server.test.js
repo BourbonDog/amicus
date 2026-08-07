@@ -2265,7 +2265,10 @@ describe('council MCP handlers', () => {
       const real = jest.requireActual('../src/council/ledger');
       return {
         ...real,
-        deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4 }],
+        // v4.7 GOA-7 D10: documentation pin — aliases/legacy on the mocked
+        // row must survive the MCP fence/parse round-trip unchanged.
+        deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4,
+          aliases: ['deepseek'], legacy: true }],
       };
     });
     const h = require('../src/mcp-server').handlers;
@@ -2274,6 +2277,8 @@ describe('council MCP handlers', () => {
     const doc = JSON.parse(unfence(res.content[0].text));
     expect(doc.type).toBe('council-stats');
     expect(doc.models[0].model).toBe('gpt');
+    expect(doc.models[0].aliases).toEqual(['deepseek']);
+    expect(doc.models[0].legacy).toBe(true);
     jest.dontMock('../src/council/ledger');
     jest.resetModules();
   });
@@ -2282,5 +2287,19 @@ describe('council MCP handlers', () => {
     const res = await handlers.amicus_council_tally({ meta: { models: [] } }, process.cwd());
     expect(res.isError).toBe(true);
     expect(res.content[0].text).not.toContain('<untrusted_sidecar_output');
+  });
+
+  test('the tally append path writes v2 rows carrying resolvedModel (GOA-7 D9 — the silent best-effort site)', async () => {
+    // Reuse the block's existing valid-record fixture, adding resolvedModel
+    // to one allowlist-role row ('council' — see av-receiver-input.js).
+    const input = { ...avInput, runStats: avInput.runStats.map(r =>
+      r.model === 'gpt' ? { ...r, resolvedModel: 'openai/gpt-5.2' } : r) };
+    const res = await handlers.amicus_council_tally(input, process.cwd());
+    expect(res.isError).toBeFalsy();
+    const lines = fs.readFileSync(path.join(ledgerDir, 'council-ledger.jsonl'), 'utf-8')
+      .trim().split('\n').map(JSON.parse);
+    const row = lines.find(r => r.model === 'gpt');
+    expect(row.schemaVersion).toBe(2);
+    expect(row.resolvedModel).toBe('openai/gpt-5.2');
   });
 });

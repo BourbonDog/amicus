@@ -60,10 +60,14 @@ function renderRecord(r) {
 }
 function renderStats(agg) {
   if (!agg.length) { return 'No council runs recorded yet.\n'; }
-  return 'model            runs  avg-cred  confirm  fact-err  notes\n' +
-    agg.map(a => `${a.model.padEnd(16)} ${String(a.runs).padStart(4)}  ` +
+  // v4.7 GOA-7 D10: group keys may be executable ids (>16 chars) — size the
+  // model column to the longest key; legacy (alias-keyed) groups get a notes
+  // marker beside low-N.
+  const w = Math.max(16, ...agg.map(a => String(a.model).length));
+  return 'model'.padEnd(w) + ' runs  avg-cred  confirm  fact-err  notes\n' +
+    agg.map(a => `${String(a.model).padEnd(w)} ${String(a.runs).padStart(4)}  ` +
       `${fmt(a.avgStreetCredPeersOnly)}     ${fmt(a.lifetimeConfirmRate)}    ${fmt(a.lifetimeFactErrorRate)}` +
-      `${a.lowN ? '   low-N' : ''}`).join('\n') + '\n';
+      `${a.lowN ? '   low-N' : ''}${a.legacy ? '   legacy' : ''}`).join('\n') + '\n';
 }
 function fmt(v) { return (v === null || v === undefined) ? '  —  ' : v.toFixed(2); }
 

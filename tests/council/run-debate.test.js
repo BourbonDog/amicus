@@ -8,7 +8,7 @@ const { tally } = require('../../src/council/tally');
 const runState = require('../../src/council/run-state');
 const { runCouncil } = require('../../src/council/run');
 const flh = require('./helpers/fake-launchers');
-const { scriptedLaunchers, debateScriptMap, debateScript, okWave, mkLeg } = flh;
+const { scriptedLaunchers, debateScriptMap, debateScript, okWave, mkLeg, launchersFromScript } = flh;
 
 function provisionalInput() {
   return {
@@ -719,6 +719,33 @@ describe('runCouncil --debate happy path (fake launchers)', () => {
     expect(run.debate.outcome).toBe('nothing-to-debate');
     expect(appends).toBe(1);
     expect(fs.existsSync(path.join(tmp, 'debate.json'))).toBe(false);
+  });
+});
+
+describe('runCouncil --debate rows carry resolvedModel (v4.7 GOA-7 D8)', () => {
+  test('debate rows carry resolvedModel from the raw legs', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'run-debate-resolved-'));
+    const resolved = (m) => ({ gemini: 'google/gemini-3.5-pro', gpt: 'openai/gpt-5.2',
+      qwen: 'qwen/qwen3-max', deepseek: 'deepseek/deepseek-v4' }[m] || m);
+    const script = debateScriptMap();
+    // Re-wrap every scripted wave so each leg's .model is the executable id
+    // while .modelInput stays the alias (mkLeg sets both to the alias).
+    for (const [k, fn] of Object.entries(script)) {
+      script[k] = (opts) => {
+        const r = fn(opts);
+        r.wave.legs = r.wave.legs.map(l => ({ ...l, model: resolved(l.model) }));
+        return r;
+      };
+    }
+    const { exitCode } = await runCouncil(e2eOpts(tmp),
+      { launchers: launchersFromScript(script), appendRunFn: () => {} });
+    expect(exitCode).toBe(0);
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'tally-input.json'), 'utf-8'));
+    const rebuttal = input.runStats.find(r => r.role === 'rebuttal');
+    const revote = input.runStats.find(r => r.role === 'revote');
+    expect(rebuttal.resolvedModel).toBe('google/gemini-3.5-pro');
+    expect(rebuttal.model).toBe('gemini');
+    expect(revote.resolvedModel).toBe('openai/gpt-5.2');
   });
 });
 

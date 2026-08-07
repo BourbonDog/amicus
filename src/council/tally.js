@@ -120,11 +120,14 @@ function tally(input) {
       // travel with it: LC-11's `findingsUnverified` (contract uncheckable) and
       // F1's `repairRefused` (contract checked and broken). Additive, emitted only
       // when set, and the runStats schema declares no additionalProperties, so a
-      // run without either is byte-for-byte unchanged. The append-only LEDGER is
-      // deliberately NOT extended — that is a schema-versioned product decision.
+      // run without either is byte-for-byte unchanged. v4.7 GOA-7 exercised the
+      // ledger's schema-versioned extension slot: `resolvedModel` rides this
+      // allowlist and reaches ledger rows via the ledger's model-keyed join of
+      // primary rows (ledger.js, LEDGER_SCHEMA_VERSION 2).
       ...(r.findingsUnverified ? { findingsUnverified: true } : {}),
       ...(r.repairRefused ? { repairRefused: r.repairRefused } : {}),
       ...(r.waveId ? { waveId: r.waveId } : {}),
+      ...(r.resolvedModel ? { resolvedModel: r.resolvedModel } : {}),
       status: r.status || 'unknown',
       durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
       usage: r.usage || null,

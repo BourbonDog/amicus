@@ -105,6 +105,7 @@ function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLeg
     durationMs: typeof l.durationMs === 'number' ? l.durationMs : null,
     usage: l.usage || null,
     ...(l.waveId ? { waveId: l.waveId } : {}),
+    ...(l.resolvedModel ? { resolvedModel: l.resolvedModel } : {}),
   });
   return [
     ...(defenseLegs || []).map(mk('rebuttal')),

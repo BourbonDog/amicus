@@ -4,7 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const { getConfigDir } = require('../utils/config');
 
-const LEDGER_SCHEMA_VERSION = 1;
+// v4.7 GOA-7 D9: v2 rows may carry `resolvedModel` (the executable id that
+// served, copied from the joined runStats row, emit-only-when-set). Absent
+// resolvedModel ⇒ legacy row, aggregated under its alias (spec R2) — this
+// covers ALL pre-v2 history AND leg-less v2 rows (give-up chair, dead seats,
+// claude, hand-assembled tally input), whose resolution is genuinely
+// unknowable. Legacy-READ only: readers never inspect schemaVersion, rows are
+// never migrated.
+const LEDGER_SCHEMA_VERSION = 2;
 const LEDGER_FILE = 'council-ledger.jsonl';
 
 // v4.7 D4/E1/E2/E6 (Task-7, task-6/task-7 adjudications): fail-closed
@@ -76,6 +83,7 @@ function buildLedgerRows(record) {
       confirmRate: judged && denom ? raised.filter(f => f.tier === 'Confirmed').length / denom : null,
       factErrorRate: judged && denom ? raised.filter(f => f.tier === 'Disputed').length / denom : null,
       conformance: r.conformance || 'clean',
+      ...(r.resolvedModel ? { resolvedModel: r.resolvedModel } : {}),
     };
   });
 }
@@ -98,25 +106,41 @@ function readRows(dir) {
 
 function avg(nums) { return nums.length ? nums.reduce((s, x) => s + x, 0) / nums.length : null; }
 
-/** Aggregate the ledger per model. peersOnly nulls excluded; lowN flags < 3 runs. */
+/**
+ * Aggregate the ledger per model. peersOnly nulls excluded; lowN flags < 3 runs.
+ * v4.7 GOA-7 D10: groups by `row.resolvedModel || row.model` — v2 rows segment
+ * by the executable id that actually served; rows without a resolvedModel
+ * (pre-v2 history, leg-less rows, hand-assembled tally input) stay alias-keyed
+ * with `legacy: true`. `aliases` lists every row-level `model` (alias) observed
+ * for the group, most recently observed FIRST — ledger append order is the only
+ * recency signal (`date` is day-granular, free-form on the MCP path), so
+ * aliases[0] is the launch-preferred name (pickFallbackChair, D11).
+ * Version-blind by design: schemaVersion is never read (legacy-read, R2).
+ */
 function deriveReliability(opts = {}) {
   const dir = opts.dir || getConfigDir();
-  const byModel = new Map();
+  const byKey = new Map();
   for (const row of readRows(dir)) {
-    if (!byModel.has(row.model)) { byModel.set(row.model, []); }
-    byModel.get(row.model).push(row);
+    const key = row.resolvedModel || row.model;
+    if (!byKey.has(key)) { byKey.set(key, []); }
+    byKey.get(key).push(row);
   }
-  return [...byModel.entries()].map(([model, rows]) => {
+  return [...byKey.entries()].map(([model, rows]) => {
     const peers = rows.map(r => r.streetCredPeersOnly).filter(v => typeof v === 'number');
     const confirms = rows.map(r => r.confirmRate).filter(v => typeof v === 'number');
     const facts = rows.map(r => r.factErrorRate).filter(v => typeof v === 'number');
     const conformance = rows.reduce((acc, r) => { acc[r.conformance] = (acc[r.conformance] || 0) + 1; return acc; }, {});
+    const lastSeen = new Map();
+    rows.forEach((r, i) => { lastSeen.set(r.model, i); });
+    const aliases = [...lastSeen.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
     return {
       model, runs: rows.length, lowN: rows.length < 3,
       avgStreetCredPeersOnly: avg(peers),
       lifetimeConfirmRate: avg(confirms),
       lifetimeFactErrorRate: avg(facts),
       conformance,
+      aliases,
+      ...(rows.every(r => !r.resolvedModel) ? { legacy: true } : {}),
     };
   });
 }

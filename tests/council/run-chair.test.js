@@ -33,6 +33,37 @@ describe('pickFallbackChair (highest peers-only street-cred = LOWEST mean rank)'
   });
 });
 
+describe('pickFallbackChair under resolved-id keys (v4.7 GOA-7 D11)', () => {
+  const agg = (model, cred, aliases) => ({ model, avgStreetCredPeersOnly: cred,
+    ...(aliases ? { aliases } : {}) });
+
+  test('a bench seat is excluded even when its group is keyed by executable id', () => {
+    const rows = [agg('google/gemini-3.5-pro', 1.0, ['gemini']), agg('grok', 2.0, ['grok'])];
+    // 'gemini' is on the bench — its resolved-keyed group must NOT be promoted.
+    expect(pickFallbackChair(rows, ['gemini', 'gpt'], 'deepseek')).toBe('grok');
+  });
+
+  test('the just-failed chair is excluded via aliases[] too', () => {
+    const rows = [agg('deepseek/deepseek-v4', 1.0, ['deepseek']), agg('grok', 2.0, ['grok'])];
+    expect(pickFallbackChair(rows, ['gemini'], 'deepseek')).toBe('grok');
+  });
+
+  test('the promoted name is the most-recent ALIAS (aliases[0]), never the raw key', () => {
+    const rows = [agg('openai/gpt-5.2', 1.0, ['gpt4', 'gpt'])];
+    expect(pickFallbackChair(rows, ['gemini'], 'deepseek')).toBe('gpt4');
+  });
+
+  test('rows without aliases (pre-D10 shape) fall back to the key — old fixtures stay valid', () => {
+    const rows = [agg('grok', 1.5)];
+    expect(pickFallbackChair(rows, ['gemini'], 'deepseek')).toBe('grok');
+  });
+
+  test("a group with 'claude' anywhere in its name set is never promoted (paranoia pin)", () => {
+    const rows = [agg('some/exec-id', 0.5, ['claude']), agg('grok', 2.0, ['grok'])];
+    expect(pickFallbackChair(rows, ['gemini'], 'deepseek')).toBe('grok');
+  });
+});
+
 // v4.3 Task 3 (spec §7.2 named defect): "council chair spend is invisible"
 // without this — a chair solo's launch options must carry councilRunId/
 // councilName end-to-end (run.js's o.runId/o.councilName -> run-chair.js's

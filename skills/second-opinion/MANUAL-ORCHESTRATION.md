@@ -152,7 +152,11 @@ repair solos, and superseded legs) alongside one seat-primary row per model. Thi
 orchestration path is unaffected and still produces exactly one seat-primary row per model as
 described above — no contract change here — but any code or report template reading `runStats`
 should be a **tolerant reader** (filter by role rather than assume one row per model), since an
-engine-produced tally.json can now carry rows this recipe never does.
+engine-produced tally.json can now carry rows this recipe never does. Hand-assembled `runStats`
+rows carry no `resolvedModel`; their ledger rows therefore aggregate as alias-keyed `legacy`
+groups in `council stats` (legacy-by-absence, by design) — expected, not an error. Add
+`resolvedModel` (the executable id that served) to a row only if you know it; never copy the
+alias into it.
 
 **Five-keys checklist — verify `tally-input.json` has ALL of:** `meta` (with `meta.models`), `findings`, `adjudications`, `rankings`, `runStats` (`runStats` may be `[]`; the other four are required). Do not call `tally` until all five are present.
 

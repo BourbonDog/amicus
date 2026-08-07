@@ -49,7 +49,16 @@ This is the one non-additive shape change in the envelope unification; migrate `
 
 ## Documented exclusions
 
-- **The two JSONL ledgers** (`council-ledger.jsonl`, `spend-ledger.jsonl`): internal append-only storage, each stays at its own v1 row format (`SPEND_LEDGER_SCHEMA_VERSION` is 1, unrelated to and unbumped by the result/council envelope versions above) — not an emitted/published doc. `spend.schema.json` (the `amicus spend --json` output) is the published, versioned doc built *from* `spend-ledger.jsonl` rows — the ledger row shape itself is not published.
+- **The two JSONL ledgers** (`council-ledger.jsonl`, `spend-ledger.jsonl`): internal
+  append-only storage, not emitted/published docs. `spend-ledger.jsonl` stays at its own v1
+  row format (`SPEND_LEDGER_SCHEMA_VERSION` is 1, unrelated to the envelope versions above).
+  `council-ledger.jsonl` is at `LEDGER_SCHEMA_VERSION` **2** (v4.7 GOA-7): v2 rows may carry
+  `resolvedModel` — the executable id that actually served. **Legacy-read, no migration:**
+  readers never inspect a row's schemaVersion; a row without `resolvedModel` (all pre-v2
+  history, plus leg-less rows whose resolution is unknowable) simply aggregates under its
+  alias — a group is marked `legacy` in `council stats` output only when EVERY row in it
+  lacks `resolvedModel`. `spend.schema.json` (above) is still the published doc built from
+  `spend-ledger.jsonl` rows — neither ledger's row shape itself is published.
 - **`amicus_list`** (MCP): returns a bare JSON array of session rows; a wrap would be a second breaking change and is deliberately not taken.
 - **`setup` / `update` / `key`**: interactive-only commands with no `--json` mode.
 - **MCP acks and live-status snapshots** (start/resume/continue/abort acks, `amicus_status`/`amicus_wait` bodies): carry the envelope keys with subject-family types (`run`/`wave`/`abort`) but are point-in-time snapshots, not the durable result docs the published schemas describe.

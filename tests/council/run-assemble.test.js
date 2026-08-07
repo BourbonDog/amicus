@@ -188,6 +188,30 @@ describe('buildRunStatsEntry / worseConformance', () => {
     expect(row.model).toBe('gpt');
   });
 
+  describe('resolvedModel (v4.7 GOA-7 D8)', () => {
+    test('carries leg.model (the executable id) alongside the alias override', () => {
+      const row = asm.buildRunStatsEntry({
+        leg: { model: 'openai/gpt-5.2', modelInput: 'gpt', status: 'complete', durationMs: 5, usage: null },
+        model: 'gpt', role: 'seat',
+      });
+      expect(row.model).toBe('gpt');
+      expect(row.resolvedModel).toBe('openai/gpt-5.2');
+    });
+
+    test('leg:null emits NO resolvedModel key (give-up chair / dead-seat shape)', () => {
+      const row = asm.buildRunStatsEntry({ leg: null, model: 'gpt', role: 'chair' });
+      expect('resolvedModel' in row).toBe(false);
+    });
+
+    test('a leg with model:null (routing-failure/setup-throw class) emits NO resolvedModel — and never falls back to modelInput', () => {
+      const row = asm.buildRunStatsEntry({
+        leg: { model: null, modelInput: 'gpt', status: 'error', durationMs: null, usage: null },
+        model: 'gpt', role: 'seat',
+      });
+      expect('resolvedModel' in row).toBe(false);
+    });
+  });
+
   test('LC-11: findingsUnverified rides the row, but ONLY when true', () => {
     // Same class of fact as `conformance`: a 'repaired' seat whose repair contract
     // could not be checked (no original count to compare) is recorded as unchecked

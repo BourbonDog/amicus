@@ -185,4 +185,14 @@ describe('debateRunStatsRows', () => {
       expect(withoutParams).toHaveLength(2);
     });
   });
+
+  test('mk passes resolvedModel through when the normalized leg carries it (v4.7 GOA-7 D8)', () => {
+    const rows = debateRunStatsRows({
+      defenseLegs: [{ model: 'gemini', resolvedModel: 'google/gemini-3.5-pro', status: 'complete',
+        durationMs: 5, usage: null, conformance: 'clean', waveId: 'r-d1' }],
+      revoteLegs: [{ model: 'gpt', status: 'complete', durationMs: 5, usage: null, conformance: 'clean' }],
+    });
+    expect(rows[0]).toMatchObject({ role: 'rebuttal', resolvedModel: 'google/gemini-3.5-pro' });
+    expect('resolvedModel' in rows[1]).toBe(false);
+  });
 });

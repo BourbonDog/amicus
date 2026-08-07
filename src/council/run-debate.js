@@ -35,12 +35,14 @@ function legOpts(ctx, waveId) {
  * discipline as buildRunStatsEntry (run-assemble.js) — only spread `waveId` when
  * the leg genuinely carries one — but keyed on an explicit `model` (the raiser or
  * judge identity), since a leg-absent attempt has no `.model` of its own to read.
+ * Threads resolvedModel (the raw leg's .model, the executable id) emit-only-when-set — v4.7 GOA-7 D8.
  */
 function legRow(model, leg, conformance) {
   return leg
     ? { model, status: leg.status, durationMs: typeof leg.durationMs === 'number' ? leg.durationMs : null,
         usage: leg.usage || null, conformance, summary: leg.summary || '',
-        ...(leg.waveId ? { waveId: leg.waveId } : {}) }
+        ...(leg.waveId ? { waveId: leg.waveId } : {}),
+        ...(leg.model ? { resolvedModel: leg.model } : {}) }
     : { model, status: 'error', durationMs: null, usage: null, conformance, summary: '' };
 }
 
@@ -89,7 +91,9 @@ async function runDefenseSolo(ctx, raiser, findings, idx) {
   // repair is a debate degradation (spec §5.7) — surfaced via the returned leg.
   const stub = { model: raiser, status: 'error', durationMs: null, usage: null, conformance: 'unstructured', summary: '' };
   return { raiser, byId: parsed.byId,
-    leg: leg ? { model: raiser, status: leg.status, durationMs: leg.durationMs, usage: leg.usage, conformance, summary: leg.summary, waveId: leg.waveId } : stub,
+    leg: leg ? { model: raiser, status: leg.status, durationMs: leg.durationMs, usage: leg.usage,
+      conformance, summary: leg.summary, waveId: leg.waveId,
+      ...(leg.model ? { resolvedModel: leg.model } : {}) } : stub,
     supersededLeg, repairLeg };
 }
 
@@ -142,7 +146,9 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
       else { repairLegs.push(legRow(judge, r2.leg, 'unstructured')); }
     }
     byJudge[judge] = parsed.byId;
-    legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage, conformance, summary: outLeg.summary || '', waveId: outLeg.waveId });
+    legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage,
+      conformance, summary: outLeg.summary || '', waveId: outLeg.waveId,
+      ...(outLeg.model ? { resolvedModel: outLeg.model } : {}) });
   }
   return { byJudge, legs, supersededLegs, repairLegs };
 }
