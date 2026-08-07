@@ -7,8 +7,9 @@
  * happens ONLY in template files (spec carried decision 7) — --prompt text is
  * always literal, so this module never sees non-template input.
  *
- * v4.5 variable set. {{input}} is deliberately ABSENT — it ships with v4.6's
- * --input-from; on v4.5 it fails as an unknown variable, which is accurate.
+ * v4.5 variable set. {{input}} is deliberately ABSENT — it ships with
+ * composable waves (--input-from), a future rev; on v4.5 it fails as an
+ * unknown variable, which is accurate.
  * No {{model}}: prompts are built once per wave, model-independent.
  */
 

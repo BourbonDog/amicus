@@ -257,7 +257,7 @@ amicus template show review                # Print a template's raw text
 amicus start --model gemini --template review --artifact plan.md --var focus=performance --no-ui --json
 ```
 
-**Known variables** (`src/template/render.js`): `{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}` (`YYYY-MM-DD`), `{{project}}`, `{{var.<key>}}` (from repeatable `--var key=value`). There is no `{{input}}` in v4.5 — that chaining variable, and the `critique`/`refine` built-ins that need it, arrive with v4.6's composable waves.
+**Known variables** (`src/template/render.js`): `{{prompt}}`, `{{artifact}}`, `{{artifact_path}}`, `{{date}}` (`YYYY-MM-DD`), `{{project}}`, `{{var.<key>}}` (from repeatable `--var key=value`). There is no `{{input}}` in v4.5 — that chaining variable, and the `critique`/`refine` built-ins that need it, arrive with composable waves (`--input-from`) in a future release.
 
 **Strict by design — a typo fails loudly instead of silently dropping text:**
 
@@ -359,7 +359,7 @@ pack. Confirmed against the run's own `run.json` for this exact invocation (irre
 {
   "bench": ["gemini", "deepseek", "gpt"],
   "chair": "opus",
-  "pack": { "name": "review-bench", "hash": "da084ba56162", "source": "dir" },
+  "pack": { "name": "review-bench", "version": "1.0.0", "hash": "da084ba56162", "source": "dir" },
   "options": { "timeout": 20, "maxCost": 2, "gateway": "auto", "outDir": "..." }
 }
 ```
