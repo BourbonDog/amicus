@@ -192,6 +192,18 @@ describe('validatePack: by-name bench', () => {
     expect(res.warnings.join(' | ')).toContain('member-level checks');
     expect(res.warnings.join(' | ')).toContain('deferred to run time');
   });
+
+  test('a string bench does NOT excuse critic+lenses (T11-d)', () => {
+    const { validatePack } = load();
+    const pack = {
+      schemaVersion: 1, type: 'pack', name: 'by-name-conflict', version: '1.0.0', kind: 'council',
+      description: 'x', bench: 'trio', chair: null, critic: 'alpha', lenses: ['sec', 'perf'],
+      options: {}, briefing: {},
+    };
+    const res = validatePack(pack, { mode: 'run' });
+    expect(res.ok).toBe(false);
+    expect(res.errors).toContain('critic and lenses are mutually exclusive');
+  });
 });
 
 describe('validatePack: briefing.template resolution', () => {

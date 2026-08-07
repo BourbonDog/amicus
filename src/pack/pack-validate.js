@@ -74,6 +74,11 @@ function validatePack(pack, { mode } = { mode: 'run' }) {
     if (typeof pack.model !== 'string' || !pack.model.trim()) { errors.push('solo pack requires model'); }
     else if (!seatOk(pack.model)) { errors.push(`unresolvable model '${pack.model}'`); }
   } else {
+    // T11-d: bench-independent — a by-name bench used to skip this entirely, so a pack
+    // could carry both and only fail (mis-attributed) at handler time.
+    if (pack.kind === 'council' && pack.critic && pack.lenses) {
+      errors.push('critic and lenses are mutually exclusive');
+    }
     const bench = pack.bench;
     if (typeof bench === 'string') {
       const { members } = getCouncilWithSource(bench, []);
@@ -87,7 +92,6 @@ function validatePack(pack, { mode } = { mode: 'run' }) {
       if (pack.kind === 'council') {
         if (pack.chair && bench.includes(pack.chair)) { errors.push(`chair '${pack.chair}' is a bench seat — the chair must not review`); }
         if (pack.critic && !bench.includes(pack.critic)) { errors.push(`critic '${pack.critic}' must be one of the bench seats`); }
-        if (pack.critic && pack.lenses) { errors.push('critic and lenses are mutually exclusive'); }
         if (Array.isArray(pack.lenses) && pack.lenses.length !== bench.length) {
           errors.push(`lenses needs exactly one lens per seat (${bench.length} seats, got ${pack.lenses.length})`);
         }

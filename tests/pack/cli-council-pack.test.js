@@ -200,13 +200,22 @@ describe('pack-attributed pre-flight errors (2026-07-28 ruling a)', () => {
     expect(doc.error.message).toContain("(set by pack 'critic-conflict')");
   });
 
-  test('critic×lenses mutual exclusion names the pack when both were pack-filled', async () => {
+  // T11-d: critic+lenses is now bench-independent (pack-validate.js), so a
+  // pack supplying both — even on a by-name (string) bench, which used to
+  // defer this check to the handler — is now rejected at pack-resolve time,
+  // before the handler's own pre-flight checks (and packSuffix attribution)
+  // ever run. The old test's subject — the HANDLER's mutual-exclusion error
+  // naming the pack via packSuffix — no longer exists: that code path is
+  // unreachable now that pack-validate catches the conflict first. This test
+  // pins the new behavior instead.
+  test('a pack supplying BOTH critic and lenses fails PACK_INVALID pre-spend (T11-d)', async () => {
     store().writePack(CRITIC_LENSES_CONFLICT_PACK());
     const code = await handleCouncilRun(runArgs(['--pack', 'critic-lenses-conflict']));
     expect(code).toBe(1);
     const doc = JSON.parse(out.mock.calls[0][0]);
-    expect(doc.error.message).toContain('--critic and --lenses are mutually exclusive');
-    expect(doc.error.message).toContain("(set by pack 'critic-lenses-conflict')");
+    expect(doc.error.code).toBe(ERROR_CODES.PACK_INVALID);
+    expect(doc.error.message).toMatch(/critic and lenses are mutually exclusive/);
+    expect(runCouncil).not.toHaveBeenCalled();
   });
 
   test('explicit --chair equal to a bench seat fails WITHOUT pack attribution (explicit wins, no suffix)', async () => {
