@@ -1328,193 +1328,202 @@ h2.v .w-anim{opacity:1;transform:none}
         <svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect width="400" height="180" fill="#0a0a0a"/>
         
-          <!-- round table (top-down) -->
-          <ellipse cx="200" cy="68" rx="95" ry="32" fill="#111113" stroke="#222225"/>
+          <ellipse cx="200" cy="74" rx="78" ry="24" fill="#111113" stroke="#222225"/>
+          <rect x="192" y="62" width="16" height="20" rx="1.5" fill="#d97757" opacity=".14">
+            <animate attributeName="opacity" values=".14;.26;.14" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+          </rect>
+          <rect x="192" y="62" width="16" height="20" rx="1.5" stroke="#d97757" stroke-width="1"/>
+          <path d="M203.5 62 L203.5 66.5 L208 66.5" stroke="#d97757" stroke-width=".8" opacity=".55"/>
+          <rect x="195.5" y="69" width="9" height="1.2" rx=".6" fill="#d97757" opacity=".55"/>
+          <rect x="195.5" y="73" width="9" height="1.2" rx=".6" fill="#d97757" opacity=".55"/>
+          <rect x="195.5" y="77" width="6" height="1.2" rx=".6" fill="#d97757" opacity=".55"/>
+          <text x="200" y="92" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">schema-plan.md</text>
         
-          <!-- spokes to seats -->
-          <path d="M144 42 L134 38" stroke="#222225"/>
-          <path d="M256 42 L266 38" stroke="#222225"/>
-          <path d="M110 78 L103 81" stroke="#222225"/>
-          <path d="M290 78 L297 81" stroke="#222225"/>
-          <path d="M200 100 L200 104" stroke="#222225"/>
+          <path d="M200 34 L200 50" stroke="#10a37f" stroke-width="1.2" stroke-dasharray="3,3">
+            <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+          </path>
+          <path d="M289 62.6 L272 64.8" stroke="#4285F4" stroke-width="1.2" stroke-dasharray="3,3">
+            <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+          </path>
+          <path d="M255.7 104 L238.7 94.9" stroke="#738ADB" stroke-width="1.2" stroke-dasharray="3,3">
+            <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+          </path>
+          <path d="M144.3 104 L161.3 94.9" stroke="#a1a1a0" stroke-width="1.2" stroke-dasharray="3,3">
+            <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+          </path>
+          <path d="M111 62.6 L128 64.8" stroke="#f5f5f3" stroke-width="1.2" stroke-dasharray="3,3">
+            <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+          </path>
         
-          <!-- artifact under review (the ONLY terracotta element in the scene) -->
-          <path d="M193 54 h10 l4 4 v14 h-14 z" fill="#d97757" fill-opacity=".12" stroke="#d97757"/>
-          <path d="M203 54 v4 h4" stroke="#d97757" stroke-width=".8"/>
-          <path d="M196.5 62 h7 M196.5 66 h7 M196.5 70 h4" stroke="#d97757" stroke-width=".8" stroke-linecap="round"/>
-          <text x="200" y="82" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">schema-plan.md</text>
+          <rect x="164" y="10" width="72" height="24" rx="5" fill="#111113" stroke="#10a37f" stroke-width="1.2">
+            <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+          </rect>
+          <text x="185" y="20" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#10a37f">gpt</text>
+          <text x="185" y="30" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.09</text>
+          <g>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+            <circle cx="175" cy="22" r="5" fill="#4ade80" opacity=".15"/>
+            <path d="M172 22 L174 24 L178 20" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
         
-          <!-- seat: gemini (top-left) -->
-          <rect x="94" y="16" width="56" height="22" rx="4" fill="#111113" stroke="#4285F4"/>
-          <circle cx="100" cy="23.5" r="2" fill="#4285F4">
-            <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite"/>
-          </circle>
-          <text x="105" y="26" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#4285F4">gemini</text>
-          <text x="105" y="35" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">$0.14</text>
-          <circle cx="142" cy="28" r="3.5" fill="#4ade80" opacity=".15"/>
-          <path d="M140 28 L141.5 29.5 L144.5 26" stroke="#4ade80" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="289" y="46" width="72" height="24" rx="5" fill="#111113" stroke="#4285F4" stroke-width="1.2">
+            <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+          </rect>
+          <text x="310" y="56" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#4285F4">gemini</text>
+          <text x="310" y="66" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.14</text>
+          <g>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+            <circle cx="300" cy="58" r="5" fill="#4ade80" opacity=".15"/>
+            <path d="M297 58 L299 60 L303 56" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
         
-          <!-- seat: gpt (top-right) -->
-          <rect x="250" y="16" width="56" height="22" rx="4" fill="#111113" stroke="#10a37f"/>
-          <circle cx="256" cy="23.5" r="2" fill="#10a37f">
-            <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite"/>
-          </circle>
-          <text x="261" y="26" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#10a37f">gpt</text>
-          <text x="261" y="35" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">$0.09</text>
-          <circle cx="298" cy="28" r="3.5" fill="#4ade80" opacity=".15"/>
-          <path d="M296 28 L297.5 29.5 L300.5 26" stroke="#4ade80" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="242" y="104" width="72" height="24" rx="5" fill="#111113" stroke="#738ADB" stroke-width="1.2">
+            <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+          </rect>
+          <text x="263" y="114" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#738ADB">deepseek</text>
+          <text x="263" y="124" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.06</text>
+          <g>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+            <circle cx="253" cy="116" r="5" fill="#4ade80" opacity=".15"/>
+            <path d="M250 116 L252 118 L256 114" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
         
-          <!-- seat: deepseek (left) -->
-          <rect x="46" y="72" width="56" height="22" rx="4" fill="#111113" stroke="#738ADB"/>
-          <circle cx="52" cy="79.5" r="2" fill="#738ADB">
-            <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite"/>
-          </circle>
-          <text x="57" y="82" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#738ADB">deepseek</text>
-          <text x="57" y="91" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">$0.06</text>
-          <circle cx="94" cy="84" r="3.5" fill="#4ade80" opacity=".15"/>
-          <path d="M92 84 L93.5 85.5 L96.5 82" stroke="#4ade80" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="39" y="46" width="72" height="24" rx="5" fill="#111113" stroke="#f5f5f3" stroke-width="1.2">
+            <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+          </rect>
+          <text x="60" y="56" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">glm</text>
+          <text x="60" y="66" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.04</text>
+          <g>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+            <circle cx="50" cy="58" r="5" fill="#4ade80" opacity=".15"/>
+            <path d="M47 58 L49 60 L53 56" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
         
-          <!-- seat: glm (right) -->
-          <rect x="298" y="72" width="56" height="22" rx="4" fill="#111113" stroke="#f5f5f3" stroke-opacity=".7"/>
-          <circle cx="304" cy="79.5" r="2" fill="#f5f5f3">
-            <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite"/>
-          </circle>
-          <text x="309" y="82" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#f5f5f3">glm</text>
-          <text x="309" y="91" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">$0.04</text>
-          <circle cx="346" cy="84" r="3.5" fill="#4ade80" opacity=".15"/>
-          <path d="M344 84 L345.5 85.5 L348.5 82" stroke="#4ade80" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="78" y="104" width="88" height="24" rx="5" fill="#111113" stroke="#a1a1a0" stroke-width="1.2">
+            <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+          </rect>
+          <path d="M97.5 111.2 L101 107.8 L104.5 111.2 M98.6 110.3 V114.4 H103.4 V110.3" stroke="#a1a1a0" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="108" y="114" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">llama3</text>
+          <text x="135" y="114" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">· LOCAL</text>
+          <text x="108" y="124" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">$0.00</text>
+          <rect x="134" y="119.4" width="6" height="4.6" rx="1" stroke="#a1a1a0" stroke-width=".8"/>
+          <path d="M135.6 119.4 V118.1 a1.4 1.4 0 0 1 2.8 0 V119.4" stroke="#a1a1a0" stroke-width=".8"/>
+          <g>
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+            <circle cx="89" cy="116" r="5" fill="#e25555" opacity=".15"/>
+            <path d="M89 112.6 L89 116.6" stroke="#e25555" stroke-width="1.4" stroke-linecap="round"/>
+            <circle cx="89" cy="118.9" r=".85" fill="#e25555"/>
+          </g>
         
-          <!-- seat: llama3 LOCAL (bottom, equal member) -->
-          <rect x="152" y="105" width="96" height="26" rx="5" fill="#111113" stroke="#a1a1a0"/>
-          <circle cx="160" cy="112" r="2" fill="#f5f5f3">
-            <animate attributeName="opacity" values="0.35;1;0.35" dur="2.4s" repeatCount="indefinite"/>
-          </circle>
-          <path d="M164.5 112.8 L168 109.4 L171.5 112.8" stroke="#a1a1a0" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M165.8 112.4 v3.6 h4.4 v-3.6" stroke="#a1a1a0" stroke-width=".9" stroke-linejoin="round"/>
-          <text x="176" y="114.5" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#f5f5f3">llama3 · LOCAL</text>
-          <circle cx="238" cy="112" r="4.5" fill="#e25555" opacity=".15"/>
-          <text x="238" y="114.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="700" fill="#e25555">!</text>
-          <text x="176" y="126" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="700" fill="#f5f5f3">$0.00</text>
-          <path d="M203.4 121 v-1.4 a1.6 1.6 0 0 1 3.2 0 V121" stroke="#a1a1a0" stroke-width=".8"/>
-          <rect x="201.8" y="121" width="6.4" height="4.6" rx=".8" stroke="#a1a1a0" stroke-width=".8"/>
-          <text x="252" y="120" font-family="IBM Plex Mono,monospace" font-size="5" fill="#e25555">#the local seat caught it</text>
+          <text x="76" y="137" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e25555">↑</text>
+          <text x="84" y="137" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">the local seat caught it</text>
+          <text x="386" y="137" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">a member, not a mode</text>
         
-          <!-- footer -->
-          <text x="200" y="138" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">a member, not a mode</text>
-        
-          <!-- captions -->
           <text x="200" y="152" text-anchor="middle" font-family="Outfit,sans-serif" font-size="9" fill="#555">Local models take an equal seat — private and $0</text>
           <text x="200" y="166" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#d97757">amicus council run --prompt-file schema-plan.md --models gemini,gpt,llama3</text>
         </svg>
         <div class="vig-body">
           <h3>Same Table</h3>
-          <p>Your local Llama isn't a fallback — it's a full council member. Same debate, same vote, $0.00 a round, and your code never leaves your machine.</p>
+          <p>Seat a local model at the same table as the cloud ones — same prompt, same vote, $0.00, and nothing leaves your machine. Sometimes the free seat is the one that catches it.</p>
         </div>
       </div>
-      <!-- Five Families -->
+      <!-- Build the Bench -->
       <div class="vig-card vig-card-wide rv r5">
         <svg viewBox="0 0 800 180" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect width="800" height="180" fill="#0a0a0a"/>
+          <defs>
+            <g id="gK" stroke-linecap="round"><circle cx="0" cy="0" r="2"/><path d="M2 0H8M5.2 0V1.8M7.2 0V1.8"/></g>
+            <g id="gK2" stroke-linecap="round"><circle cx="0" cy="-2" r="1.8"/><path d="M1.8 -2H7.4M5.4 -2V-0.4"/><circle cx="1.2" cy="2.4" r="1.8"/><path d="M3 2.4H8.6M6.6 2.4V4"/></g>
+            <g id="gH" stroke-linecap="round" stroke-linejoin="round"><path d="M-3.4 0.4L0 -2.8L3.4 0.4M-2.3 -0.2V3H2.3V-0.2"/></g>
+          </defs>
         
-          <!-- LEFT: prompt card -->
-          <rect x="30" y="48" width="140" height="84" rx="8" fill="#111113" stroke="#222225"/>
-          <rect x="30" y="48" width="140" height="16" rx="8" fill="#161618"/><rect x="30" y="58" width="140" height="6" fill="#111113"/>
-          <text x="100" y="60" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#a1a1a0">extraction-prompt v7</text>
-          <rect x="40" y="74" width="104" height="2" rx="1" fill="#2c2c30"/>
-          <rect x="40" y="84" width="88" height="2" rx="1" fill="#2c2c30"/>
-          <rect x="40" y="94" width="112" height="2" rx="1" fill="#2c2c30"/>
-          <rect x="40" y="104" width="72" height="2" rx="1" fill="#2c2c30"/>
-          <rect x="40" y="114" width="96" height="2" rx="1" fill="#2c2c30"/>
+          <!-- LEFT: three source panels -->
+          <rect x="24" y="16" width="150" height="42" rx="6" fill="#111113" stroke="#222225"/>
+          <use href="#gK" transform="translate(36,25.5)" stroke="#a1a1a0" stroke-width="1"/>
+          <text x="50" y="28.5" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" letter-spacing="1" fill="#a1a1a0">DIRECT</text>
+          <circle cx="122" cy="26" r="2.2" fill="#4285F4"><animate attributeName="opacity" values="1;.5;1" dur="2.8s" begin="0s" repeatCount="indefinite"/></circle>
+          <circle cx="133" cy="26" r="2.2" fill="#10a37f"><animate attributeName="opacity" values="1;.5;1" dur="2.8s" begin=".3s" repeatCount="indefinite"/></circle>
+          <circle cx="144" cy="26" r="2.2" fill="#738ADB"><animate attributeName="opacity" values="1;.5;1" dur="2.8s" begin=".6s" repeatCount="indefinite"/></circle>
+          <circle cx="155" cy="26" r="2.2" fill="#8E75B2"><animate attributeName="opacity" values="1;.5;1" dur="2.8s" begin=".9s" repeatCount="indefinite"/></circle>
+          <text x="36" y="47" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">your API keys</text>
         
-          <!-- CENTER: five lanes fanning out, one simultaneous wave -->
-          <g stroke-width="1" stroke-dasharray="4,3" stroke-opacity=".55">
-            <path d="M172 90 C220 90 235 26 282 26 L334 26" stroke="#4285F4">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M172 90 C220 90 235 56 282 56 L334 56" stroke="#10a37f">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M172 90 C220 90 235 86 282 86 L334 86" stroke="#738ADB">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M172 90 C220 90 235 116 282 116 L334 116" stroke="#f5f5f3">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M172 90 C220 90 235 146 282 146 L334 146" stroke="#8E75B2">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
+          <rect x="24" y="66" width="150" height="42" rx="6" fill="#111113" stroke="#222225"/>
+          <use href="#gK" transform="translate(36,75.5)" stroke="#a1a1a0" stroke-width="1"/>
+          <text x="50" y="78.5" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" letter-spacing="1" fill="#a1a1a0">OPENROUTER</text>
+          <text x="36" y="97" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">200+ models · one key</text>
+        
+          <rect x="24" y="116" width="150" height="42" rx="6" fill="#111113" stroke="#222225"/>
+          <use href="#gH" transform="translate(37,126)" stroke="#a1a1a0" stroke-width="1"/>
+          <text x="50" y="128.5" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" letter-spacing="1" fill="#a1a1a0">LOCAL</text>
+          <text x="36" y="147" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">ollama · lm studio · no key</text>
+        
+          <!-- CENTER: dashed delivery lanes -->
+          <path d="M174 28 C240 28 300 30 366 30" stroke="#4285F4" stroke-opacity=".35" stroke-width="1" stroke-dasharray="4,3"><animate attributeName="stroke-dashoffset" values="14;0" dur="1.2s" repeatCount="indefinite"/></path>
+          <path d="M174 46 C260 46 330 60 406 60" stroke="#10a37f" stroke-opacity=".35" stroke-width="1" stroke-dasharray="4,3"><animate attributeName="stroke-dashoffset" values="14;0" dur="1.3s" repeatCount="indefinite"/></path>
+          <path d="M174 80 C260 80 340 90 421 90" stroke="#f5f5f3" stroke-opacity=".22" stroke-width="1" stroke-dasharray="4,3"><animate attributeName="stroke-dashoffset" values="14;0" dur="1.25s" repeatCount="indefinite"/></path>
+          <path d="M174 94 C250 94 330 120 406 120" stroke="#8E75B2" stroke-opacity=".35" stroke-width="1" stroke-dasharray="4,3"><animate attributeName="stroke-dashoffset" values="14;0" dur="1.35s" repeatCount="indefinite"/></path>
+          <path d="M174 138 C240 138 300 150 366 150" stroke="#777777" stroke-opacity=".35" stroke-width="1" stroke-dasharray="4,3"><animate attributeName="stroke-dashoffset" values="14;0" dur="1.2s" repeatCount="indefinite"/></path>
+        
+          <!-- FIVE seat chips (staggered fade-in, then hold) -->
+          <g opacity="0"><animate attributeName="opacity" values="0;1" dur=".5s" begin="0s" fill="freeze"/>
+            <rect x="370" y="18" width="80" height="24" rx="5" fill="#111113" stroke="#4285F4" stroke-width="1"/>
+            <text x="410" y="28" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#7aafff">gemini-pro</text>
+            <text x="410" y="37" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">long context</text>
+            <use href="#gK" transform="translate(438,25) scale(.7)" stroke="#555" stroke-width="1.2"/>
+          </g>
+          <g opacity="0"><animate attributeName="opacity" values="0;1" dur=".5s" begin=".25s" fill="freeze"/>
+            <rect x="410" y="48" width="80" height="24" rx="5" fill="#111113" stroke="#10a37f" stroke-width="1"/>
+            <text x="450" y="58" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#10a37f">gpt</text>
+            <text x="450" y="67" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">reasoning</text>
+            <use href="#gK" transform="translate(478,55) scale(.7)" stroke="#555" stroke-width="1.2"/>
+          </g>
+          <g opacity="0"><animate attributeName="opacity" values="0;1" dur=".5s" begin=".5s" fill="freeze"/>
+            <rect x="425" y="78" width="80" height="24" rx="5" fill="#111113" stroke="#f5f5f3" stroke-opacity=".55" stroke-width="1"/>
+            <text x="465" y="88" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#f5f5f3">glm</text>
+            <text x="465" y="97" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">$0.04/run</text>
+            <use href="#gK2" transform="translate(493,85) scale(.7)" stroke="#555" stroke-width="1.2"/>
+          </g>
+          <g opacity="0"><animate attributeName="opacity" values="0;1" dur=".5s" begin=".75s" fill="freeze"/>
+            <rect x="410" y="108" width="80" height="24" rx="5" fill="#111113" stroke="#8E75B2" stroke-width="1"/>
+            <text x="450" y="118" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#8E75B2">qwen</text>
+            <text x="450" y="127" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">code specialist</text>
+            <use href="#gK2" transform="translate(478,115) scale(.7)" stroke="#555" stroke-width="1.2"/>
+          </g>
+          <g opacity="0"><animate attributeName="opacity" values="0;1" dur=".5s" begin="1s" fill="freeze"/>
+            <rect x="370" y="138" width="80" height="24" rx="5" fill="#111113" stroke="#555555" stroke-width="1"/>
+            <text x="410" y="148" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#a1a1a0">llama3</text>
+            <text x="410" y="157" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">$0 · private</text>
+            <use href="#gH" transform="translate(438,146) scale(.7)" stroke="#555" stroke-width="1.2"/>
           </g>
         
-          <!-- five model chips (no arrows between lanes — a fanout never cross-reviews) -->
-          <rect x="336" y="18" width="68" height="16" rx="4" fill="#111113" stroke="#4285F4"/>
-          <text x="370" y="28.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#4285F4">gemini</text>
-          <rect x="336" y="48" width="68" height="16" rx="4" fill="#111113" stroke="#10a37f"/>
-          <text x="370" y="58.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#10a37f">gpt</text>
-          <rect x="336" y="78" width="68" height="16" rx="4" fill="#111113" stroke="#738ADB"/>
-          <text x="370" y="88.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#738ADB">deepseek</text>
-          <rect x="336" y="108" width="68" height="16" rx="4" fill="#111113" stroke="#f5f5f3"/>
-          <text x="370" y="118.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">grok</text>
-          <rect x="336" y="138" width="68" height="16" rx="4" fill="#111113" stroke="#8E75B2"/>
-          <text x="370" y="148.5" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#8E75B2">qwen</text>
-        
-          <!-- RIGHT: lanes converge into wave.json -->
-          <g stroke-width="1" stroke-dasharray="4,3" stroke-opacity=".45">
-            <path d="M406 26 C452 26 500 70 552 70" stroke="#4285F4">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M406 56 C452 56 500 80 552 80" stroke="#10a37f">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M406 86 C452 86 500 90 552 90" stroke="#738ADB">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M406 116 C452 116 500 100 552 100" stroke="#f5f5f3">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-            <path d="M406 146 C452 146 500 110 552 110" stroke="#8E75B2">
-              <animate attributeName="stroke-dashoffset" from="0" to="-14" dur="1.2s" begin="0s" repeatCount="indefinite"/>
-            </path>
-          </g>
-          <polygon points="552,67 558,70 552,73" fill="#d97757"/>
-          <polygon points="552,77 558,80 552,83" fill="#d97757"/>
-          <polygon points="552,87 558,90 552,93" fill="#d97757"/>
-          <polygon points="552,97 558,100 552,103" fill="#d97757"/>
-          <polygon points="552,107 558,110 552,113" fill="#d97757"/>
-        
-          <!-- wave.json panel -->
-          <rect x="560" y="34" width="210" height="112" rx="8" fill="#111113" stroke="#222225"/>
-          <rect x="560" y="34" width="210" height="16" rx="8" fill="#161618"/><rect x="560" y="44" width="210" height="6" fill="#111113"/>
-          <text x="665" y="46" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#e8b24a">wave.json</text>
-          <text x="572" y="62" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">legs[]</text>
-          <g font-family="IBM Plex Mono,monospace" font-size="6">
-            <g>
-              <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.15;0.19;0.93;1" dur="8s" repeatCount="indefinite"/>
-              <text x="572" y="74" fill="#4285F4">gemini</text><text x="672" y="74" fill="#4ade80">complete</text><text x="756" y="74" text-anchor="end" fill="#a1a1a0">1.2s</text>
-            </g>
-            <g>
-              <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.11;0.15;0.93;1" dur="8s" repeatCount="indefinite"/>
-              <text x="572" y="87" fill="#10a37f">gpt</text><text x="672" y="87" fill="#4ade80">complete</text><text x="756" y="87" text-anchor="end" fill="#a1a1a0">0.9s</text>
-            </g>
-            <g>
-              <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.175;0.215;0.93;1" dur="8s" repeatCount="indefinite"/>
-              <text x="572" y="100" fill="#738ADB">deepseek</text><text x="672" y="100" fill="#4ade80">complete</text><text x="756" y="100" text-anchor="end" fill="#a1a1a0">1.4s</text>
-            </g>
-            <g>
-              <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.14;0.18;0.93;1" dur="8s" repeatCount="indefinite"/>
-              <text x="572" y="113" fill="#f5f5f3">grok</text><text x="672" y="113" fill="#4ade80">complete</text><text x="756" y="113" text-anchor="end" fill="#a1a1a0">1.1s</text>
-            </g>
-            <g>
-              <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.35;0.39;0.93;1" dur="8s" repeatCount="indefinite"/>
-              <text x="572" y="126" fill="#8E75B2">qwen</text><text x="672" y="126" fill="#4ade80">complete</text><text x="756" y="126" text-anchor="end" fill="#e2a855">2.8s</text>
-            </g>
+          <!-- RIGHT: convergence spokes to one table -->
+          <g opacity="0"><animate attributeName="opacity" values="0;1" dur=".6s" begin="1.3s" fill="freeze"/>
+            <path d="M450 30 L643 69" stroke="#3f3f46" stroke-width="1" stroke-dasharray="3,2"><animate attributeName="stroke-dashoffset" values="10;0" dur="1.2s" repeatCount="indefinite"/></path>
+            <path d="M490 60 L637 76" stroke="#3f3f46" stroke-width="1" stroke-dasharray="3,2"><animate attributeName="stroke-dashoffset" values="10;0" dur="1.3s" repeatCount="indefinite"/></path>
+            <path d="M505 90 L630 84" stroke="#3f3f46" stroke-width="1" stroke-dasharray="3,2"><animate attributeName="stroke-dashoffset" values="10;0" dur="1.25s" repeatCount="indefinite"/></path>
+            <path d="M490 120 L638 92" stroke="#3f3f46" stroke-width="1" stroke-dasharray="3,2"><animate attributeName="stroke-dashoffset" values="10;0" dur="1.35s" repeatCount="indefinite"/></path>
+            <path d="M450 150 L644 99" stroke="#3f3f46" stroke-width="1" stroke-dasharray="3,2"><animate attributeName="stroke-dashoffset" values="10;0" dur="1.2s" repeatCount="indefinite"/></path>
+            <polygon points="-5,-3 0,0 -5,3" transform="translate(648,70) rotate(11.4)" fill="#d97757"/>
+            <polygon points="-5,-3 0,0 -5,3" transform="translate(642,77) rotate(6.4)" fill="#d97757"/>
+            <polygon points="-5,-3 0,0 -5,3" transform="translate(634,84) rotate(-2.7)" fill="#d97757"/>
+            <polygon points="-5,-3 0,0 -5,3" transform="translate(642,91) rotate(-10.8)" fill="#d97757"/>
+            <polygon points="-5,-3 0,0 -5,3" transform="translate(648,98) rotate(-14.7)" fill="#d97757"/>
           </g>
         
-          <!-- footer -->
-          <text x="400" y="172" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">one wave · one document</text>
+          <ellipse cx="688" cy="84" rx="52" ry="20" fill="#17171a" stroke="#2f2f35"/>
+          <g><animate attributeName="opacity" values="1;.7;1" dur="3.5s" repeatCount="indefinite"/>
+            <path d="M681 75h9l5 5v13h-14z" stroke="#d97757" stroke-width="1" fill="#d97757" fill-opacity=".08" stroke-linejoin="round"/>
+            <path d="M690 75v5h5" stroke="#d97757" stroke-width="1" stroke-linejoin="round"/>
+            <path d="M685 85h7M685 88h7M685 91h4" stroke="#d97757" stroke-width=".8" stroke-linecap="round"/>
+          </g>
+          <text x="688" y="116" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6" fill="#555">3, 5, 7 — any bench size</text>
+        
+          <!-- FOOTER thesis -->
+          <text x="400" y="172" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#555">different families, different blind spots</text>
         </svg>
         <div class="vig-body">
-          <h3>Five Families</h3>
-          <p>Fan one prompt across five model families in a single parallel wave — Gemini, GPT, DeepSeek, Grok, and Qwen answer simultaneously, and every leg lands in one document with timings attached.</p>
+          <h3>Build the Bench</h3>
+          <p>Models from the same family share the same blind spots — so build a bench that mixes families. Seat 3, 5, or 7 from your own API keys, one OpenRouter key, or local runtimes, each pick earning its chair on specialty, price, or privacy.</p>
         </div>
       </div>
       <!-- Priced Up Front -->
@@ -1522,54 +1531,74 @@ h2.v .w-anim{opacity:1;transform:none}
         <svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect width="400" height="180" fill="#0a0a0a"/>
         
-          <text x="22" y="26" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">queue</text>
+          <!-- column labels -->
+          <text x="100" y="16" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">queue</text>
+          <text x="205" y="16" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">max-cost $2</text>
+          <text x="295" y="16" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">launched</text>
         
-          <g>
-            <animateTransform attributeName="transform" type="translate" values="0 0;0 0;186 0;186 0" keyTimes="0;0.06;0.22;1" calcMode="spline" keySplines="0 0 1 1;.4 0 .2 1;0 0 1 1" dur="9s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.04;0.96;1" dur="9s" repeatCount="indefinite"/>
-            <rect x="22" y="30" width="84" height="32" rx="4" fill="#111113" stroke="#222225"/>
-            <text x="28" y="42" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">3 reviewers + chair</text>
-            <text x="28" y="51" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#f5f5f3">~7 calls · est $0.42</text>
-            <rect x="28" y="55" width="36" height="2" rx="1" fill="#2c2c30"/>
-          </g>
+          <!-- approach lanes (ambient flow) -->
+          <path d="M35 120 L196 120" stroke="#555" stroke-width="1" stroke-dasharray="4,4" opacity=".6">
+            <animate attributeName="stroke-dashoffset" values="8;0" dur="0.7s" repeatCount="indefinite"/>
+          </path>
+          <polygon points="194,117 200,120 194,123" fill="#555" opacity=".6"/>
+          <path d="M214 120 L350 120" stroke="#555" stroke-width="1" stroke-dasharray="4,4" opacity=".35">
+            <animate attributeName="stroke-dashoffset" values="8;0" dur="0.7s" repeatCount="indefinite"/>
+          </path>
+          <polygon points="350,117 356,120 350,123" fill="#555" opacity=".35"/>
         
-          <g opacity="0">
-            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.23;0.26;0.96;1" dur="9s" repeatCount="indefinite"/>
-            <circle cx="294" cy="46" r="5" fill="#4ade80" opacity=".15"/>
-            <path d="M291 46 L293 48 L297 44" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-          </g>
-        
-          <g>
-            <animateTransform attributeName="transform" type="translate" values="0 0;0 0;94 0;94 0" keyTimes="0;0.32;0.44;1" calcMode="spline" keySplines="0 0 1 1;.4 0 .2 1;0 0 1 1" dur="9s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.04;0.96;1" dur="9s" repeatCount="indefinite"/>
-            <rect x="22" y="80" width="84" height="32" rx="4" fill="#111113" stroke="#222225"/>
-            <text x="28" y="92" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">(o3-pro bench)</text>
-            <text x="28" y="101" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e2a855">est $31.80</text>
-            <rect x="28" y="105" width="36" height="2" rx="1" fill="#2c2c30"/>
-          </g>
-        
-          <path d="M203.2 10.7 V9.2 a2 2 0 0 1 4 0 v1.5" stroke="#d97757" stroke-width="1.1" fill="none"/>
-          <rect x="201" y="10.5" width="8.4" height="6.3" rx="1.2" fill="#d97757"/>
-          <circle cx="205.2" cy="13.5" r="0.9" fill="#0a0a0a"/>
-          <rect x="204.1" y="20" width="2.2" height="105" rx="1.1" fill="#d97757">
-            <animate attributeName="fill" values="#d97757;#d97757;#e25555;#e25555;#d97757;#d97757" keyTimes="0;0.44;0.46;0.5;0.53;1" dur="9s" repeatCount="indefinite"/>
+          <!-- toll gate: glow, bar, caps, padlock (the focal terracotta) -->
+          <rect x="196" y="18" width="18" height="109" rx="9" fill="#d97757" opacity=".1">
+            <animate attributeName="opacity" values="0.1;0.1;0.4;0.4;0.1" keyTimes="0;0.46;0.54;0.92;1" dur="5s" repeatCount="indefinite"/>
           </rect>
-          <text x="205" y="133" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">--max-cost 2</text>
+          <rect x="203" y="20" width="4" height="105" rx="2" fill="#d97757"/>
+          <rect x="199" y="18" width="12" height="3" rx="1.5" fill="#d97757"/>
+          <rect x="199" y="124" width="12" height="3" rx="1.5" fill="#d97757"/>
+          <circle cx="205" cy="72" r="9" fill="#0a0a0a" stroke="#d97757" stroke-width="1"/>
+          <path d="M202 71 v-3 a3 3 0 0 1 6 0 v3" stroke="#d97757" stroke-width="1.2" fill="none"/>
+          <rect x="200.5" y="71" width="9" height="7" rx="1.5" fill="#d97757"/>
         
-          <g opacity="0">
-            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.45;0.48;0.96;1" dur="9s" repeatCount="indefinite"/>
-            <rect x="212" y="90" width="46" height="11" rx="2" fill="#e25555" opacity=".12"/>
-            <text x="216" y="98" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e25555">BUDGET GATE</text>
+          <!-- top run-card, left copy (fades out ~1s) -->
+          <g opacity="1">
+            <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.18;0.26;0.92;1" dur="5s" repeatCount="indefinite"/>
+            <rect x="45" y="30" width="110" height="32" rx="4" fill="#111113" stroke="#222225"/>
+            <text x="53" y="42" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">3 reviewers + chair</text>
+            <text x="53" y="53" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">~7 calls · est $0.42</text>
+            <rect x="53" y="57" width="34" height="2" rx="1" fill="#2c2c30"/>
           </g>
         
-          <text x="302" y="31" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">receipt</text>
-          <rect x="302" y="36" width="76" height="34" rx="4" fill="#111113" stroke="#222225"/>
-          <text x="308" y="50" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">est $0.42</text>
+          <!-- top run-card, right copy (fades in ~1s, passed the gate) -->
           <g opacity="0">
-            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.24;0.28;0.96;1" dur="9s" repeatCount="indefinite"/>
-            <text x="308" y="61" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#f5f5f3">charged $0.42</text>
-            <circle cx="364" cy="56" r="4.5" fill="#4ade80" opacity=".15"/>
-            <path d="M361.5 56 L363.5 58 L366.5 54" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.18;0.26;0.92;1" dur="5s" repeatCount="indefinite"/>
+            <rect x="240" y="30" width="110" height="32" rx="4" fill="#111113" stroke="#222225"/>
+            <text x="248" y="42" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">3 reviewers + chair</text>
+            <text x="248" y="53" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">~7 calls · est $0.42</text>
+            <rect x="248" y="57" width="34" height="2" rx="1" fill="#2c2c30"/>
+            <circle cx="336" cy="46" r="5" fill="#4ade80" opacity=".15"/>
+            <path d="M333 46 L335 48 L339 44" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+        
+          <!-- bottom run-card (stays queued) -->
+          <rect x="45" y="76" width="110" height="32" rx="4" fill="#111113" stroke="#222225"/>
+          <text x="53" y="88" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">(o3-pro bench)</text>
+          <text x="53" y="99" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">est $31.80</text>
+          <rect x="53" y="103" width="28" height="2" rx="1" fill="#2c2c30"/>
+        
+          <!-- budget-gate badge (pulses in ~2.5s) -->
+          <g opacity="0">
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.46;0.54;0.92;1" dur="5s" repeatCount="indefinite"/>
+            <rect x="152" y="84" width="48" height="12" rx="3" fill="#e25555" opacity=".12"/>
+            <rect x="152" y="84" width="48" height="12" rx="3" stroke="#e25555" stroke-width=".8"/>
+            <text x="176" y="93" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" font-weight="600" fill="#e25555">BUDGET GATE</text>
+          </g>
+        
+          <!-- receipt chip (fades in ~3.5s) -->
+          <g opacity="0">
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.66;0.74;0.94;1" dur="5s" repeatCount="indefinite"/>
+            <rect x="256" y="84" width="94" height="30" rx="4" fill="#161618" stroke="#222225"/>
+            <text x="264" y="96" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">est $0.42</text>
+            <text x="264" y="107" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">charged $0.42</text>
+            <circle cx="333" cy="99" r="5" fill="#4ade80" opacity=".15"/>
+            <path d="M330 99 L332 101 L336 97" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
           </g>
         
           <text x="200" y="152" text-anchor="middle" font-family="Outfit,sans-serif" font-size="9" fill="#555">Cost shown before launch — runaway runs never start</text>
@@ -1577,7 +1606,7 @@ h2.v .w-anim{opacity:1;transform:none}
         </svg>
         <div class="vig-body">
           <h3>Priced Up Front</h3>
-          <p>Every run prints its estimate before a single call fires. Set a budget cap and the $30 run you didn't mean to launch bounces at the gate — while the one you did launch comes back with a receipt that matches the quote.</p>
+          <p>Every council prints its estimated cost before a single call goes out — and a hard budget cap bounces the run you didn't mean to launch. The receipt matches the estimate, not your worst fear.</p>
         </div>
       </div>
       <!-- Verdict on Anything -->
@@ -1670,6 +1699,91 @@ h2.v .w-anim{opacity:1;transform:none}
         <div class="vig-body">
           <h3>Verdict on Anything</h3>
           <p>Not just code — hand the council a spec, a plan, even a book chapter, plus the criteria that matter to you. Reviewers judge it independently and you get one adjudicated verdict: what to fix first.</p>
+        </div>
+      </div>
+      <!-- Dial It Up -->
+      <div class="vig-card vig-card-wide rv r5">
+        <svg viewBox="0 0 800 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="800" height="180" fill="#0a0a0a"/>
+        
+          <!-- LEFT: base council block — the ritual -->
+          <rect x="30" y="38" width="184" height="104" rx="8" fill="#111113" stroke="#222225"/>
+          <text x="122" y="56" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">amicus council run</text>
+          <rect x="40" y="64" width="164" height="16" rx="3" fill="#161618"/>
+          <text x="46" y="74" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">reviews → cross-review → tally → chair</text>
+          <text x="122" y="94" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">the ritual — always the same</text>
+          <rect x="40" y="104" width="100" height="2" rx="1" fill="#2c2c30"/>
+          <rect x="40" y="112" width="70" height="2" rx="1" fill="#2c2c30"/>
+          <rect x="40" y="120" width="85" height="2" rx="1" fill="#2c2c30"/>
+        
+          <!-- connector: ritual → extras -->
+          <path d="M220 90 L244 90" stroke="#555" stroke-width="1" stroke-dasharray="3,2"/>
+          <polygon points="242,87 248,90 242,93" fill="#555"/>
+        
+          <!-- CENTER: opt-in toggles -->
+          <text x="342" y="37" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">all default off — nothing turns on unless you name it</text>
+        
+          <!-- toggle 1: critic seat (flips ON at ~0.8s) -->
+          <g>
+            <rect x="256" y="46" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+            <circle cx="260.5" cy="50.5" r="3" fill="#555"/>
+            <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.16;0.2;0.94;1" dur="5s" repeatCount="indefinite"/>
+          </g>
+          <g opacity="0">
+            <rect x="256" y="46" width="18" height="9" rx="4.5" fill="#d97757"/>
+            <circle cx="269.5" cy="50.5" r="3" fill="#f5f5f3"/>
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.16;0.2;0.94;1" dur="5s" repeatCount="indefinite"/>
+          </g>
+          <text x="282" y="53" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">critic seat</text>
+          <text x="282" y="62" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">one reviewer turns adversarial</text>
+        
+          <!-- toggle 2: expert lenses (stays OFF) -->
+          <rect x="256" y="70" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+          <circle cx="260.5" cy="74.5" r="3" fill="#555"/>
+          <text x="282" y="77" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">expert lenses</text>
+          <text x="282" y="86" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">business · technical · customer · financial</text>
+        
+          <!-- toggle 3: debate round (flips ON at ~1.4s) -->
+          <g>
+            <rect x="256" y="94" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+            <circle cx="260.5" cy="98.5" r="3" fill="#555"/>
+            <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.28;0.32;0.94;1" dur="5s" repeatCount="indefinite"/>
+          </g>
+          <g opacity="0">
+            <rect x="256" y="94" width="18" height="9" rx="4.5" fill="#d97757"/>
+            <circle cx="269.5" cy="98.5" r="3" fill="#f5f5f3"/>
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.28;0.32;0.94;1" dur="5s" repeatCount="indefinite"/>
+          </g>
+          <text x="282" y="101" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">debate round</text>
+          <text x="282" y="110" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">contested findings defend, amend, or withdraw</text>
+        
+          <!-- toggle 4: claude in the council (stays OFF) -->
+          <rect x="256" y="118" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+          <circle cx="260.5" cy="122.5" r="3" fill="#555"/>
+          <text x="282" y="125" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">claude in the council</text>
+          <text x="282" y="134" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">judged by the bench — never votes, never chairs</text>
+        
+          <!-- connector: extras → run shape -->
+          <path d="M440 90 L552 90" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>
+          <polygon points="550,87 556,90 550,93" fill="#555"/>
+        
+          <!-- RIGHT: run-shape disclosure card -->
+          <rect x="566" y="40" width="204" height="100" rx="6" fill="#111113"/>
+          <rect x="566" y="40" width="204" height="16" rx="6" fill="#161618"/>
+          <rect x="566" y="50" width="204" height="6" fill="#111113"/>
+          <rect x="566" y="40" width="204" height="100" rx="6" stroke="#e8b24a" stroke-width="1.2"/>
+          <text x="668" y="52" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#e8b24a">run shape</text>
+          <text x="578" y="74" font-family="IBM Plex Mono,monospace" font-size="6" fill="#f5f5f3">3 models × 2 waves + 1 chair</text>
+          <text x="578" y="88" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0" opacity="0">critic seat + debate ON<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.4;0.44;0.94;1" dur="5s" repeatCount="indefinite"/></text>
+          <text x="578" y="102" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8b24a">~7 base runs + up to 6 rebuttal calls</text>
+          <text x="578" y="119" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">proceed?</text>
+          <rect x="613" y="112" width="4" height="8" fill="#e8b24a">
+            <animate attributeName="opacity" values="1;0;1" keyTimes="0;0.5;1" dur="1s" repeatCount="indefinite"/>
+          </rect>
+        </svg>
+        <div class="vig-body">
+          <h3>Dial It Up</h3>
+          <p>The ritual never changes — critic seat, expert lenses, debate rounds, and a Claude seat are all off until you name them. Dial up what you need and see the exact run shape before anything launches.</p>
         </div>
       </div>
       <!-- Never Silent -->

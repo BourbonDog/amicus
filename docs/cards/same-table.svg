@@ -1,0 +1,97 @@
+<svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="180" fill="#0a0a0a"/>
+
+  <ellipse cx="200" cy="74" rx="78" ry="24" fill="#111113" stroke="#222225"/>
+  <rect x="192" y="62" width="16" height="20" rx="1.5" fill="#d97757" opacity=".14">
+    <animate attributeName="opacity" values=".14;.26;.14" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="192" y="62" width="16" height="20" rx="1.5" stroke="#d97757" stroke-width="1"/>
+  <path d="M203.5 62 L203.5 66.5 L208 66.5" stroke="#d97757" stroke-width=".8" opacity=".55"/>
+  <rect x="195.5" y="69" width="9" height="1.2" rx=".6" fill="#d97757" opacity=".55"/>
+  <rect x="195.5" y="73" width="9" height="1.2" rx=".6" fill="#d97757" opacity=".55"/>
+  <rect x="195.5" y="77" width="6" height="1.2" rx=".6" fill="#d97757" opacity=".55"/>
+  <text x="200" y="92" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">schema-plan.md</text>
+
+  <path d="M200 34 L200 50" stroke="#10a37f" stroke-width="1.2" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+  </path>
+  <path d="M289 62.6 L272 64.8" stroke="#4285F4" stroke-width="1.2" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+  </path>
+  <path d="M255.7 104 L238.7 94.9" stroke="#738ADB" stroke-width="1.2" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+  </path>
+  <path d="M144.3 104 L161.3 94.9" stroke="#a1a1a0" stroke-width="1.2" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+  </path>
+  <path d="M111 62.6 L128 64.8" stroke="#f5f5f3" stroke-width="1.2" stroke-dasharray="3,3">
+    <animate attributeName="stroke-dashoffset" values="0;6" dur="1.6s" begin="0s" repeatCount="indefinite"/>
+  </path>
+
+  <rect x="164" y="10" width="72" height="24" rx="5" fill="#111113" stroke="#10a37f" stroke-width="1.2">
+    <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+  </rect>
+  <text x="185" y="20" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#10a37f">gpt</text>
+  <text x="185" y="30" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.09</text>
+  <g>
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    <circle cx="175" cy="22" r="5" fill="#4ade80" opacity=".15"/>
+    <path d="M172 22 L174 24 L178 20" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="289" y="46" width="72" height="24" rx="5" fill="#111113" stroke="#4285F4" stroke-width="1.2">
+    <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+  </rect>
+  <text x="310" y="56" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#4285F4">gemini</text>
+  <text x="310" y="66" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.14</text>
+  <g>
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    <circle cx="300" cy="58" r="5" fill="#4ade80" opacity=".15"/>
+    <path d="M297 58 L299 60 L303 56" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="242" y="104" width="72" height="24" rx="5" fill="#111113" stroke="#738ADB" stroke-width="1.2">
+    <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+  </rect>
+  <text x="263" y="114" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#738ADB">deepseek</text>
+  <text x="263" y="124" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.06</text>
+  <g>
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    <circle cx="253" cy="116" r="5" fill="#4ade80" opacity=".15"/>
+    <path d="M250 116 L252 118 L256 114" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="39" y="46" width="72" height="24" rx="5" fill="#111113" stroke="#f5f5f3" stroke-width="1.2">
+    <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+  </rect>
+  <text x="60" y="56" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">glm</text>
+  <text x="60" y="66" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">$0.04</text>
+  <g>
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    <circle cx="50" cy="58" r="5" fill="#4ade80" opacity=".15"/>
+    <path d="M47 58 L49 60 L53 56" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <rect x="78" y="104" width="88" height="24" rx="5" fill="#111113" stroke="#a1a1a0" stroke-width="1.2">
+    <animate attributeName="stroke-opacity" values="1;0.55;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+  </rect>
+  <path d="M97.5 111.2 L101 107.8 L104.5 111.2 M98.6 110.3 V114.4 H103.4 V110.3" stroke="#a1a1a0" stroke-width=".9" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="108" y="114" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">llama3</text>
+  <text x="135" y="114" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">· LOCAL</text>
+  <text x="108" y="124" font-family="IBM Plex Mono,monospace" font-size="6.5" font-weight="600" fill="#f5f5f3">$0.00</text>
+  <rect x="134" y="119.4" width="6" height="4.6" rx="1" stroke="#a1a1a0" stroke-width=".8"/>
+  <path d="M135.6 119.4 V118.1 a1.4 1.4 0 0 1 2.8 0 V119.4" stroke="#a1a1a0" stroke-width=".8"/>
+  <g>
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    <circle cx="89" cy="116" r="5" fill="#e25555" opacity=".15"/>
+    <path d="M89 112.6 L89 116.6" stroke="#e25555" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="89" cy="118.9" r=".85" fill="#e25555"/>
+  </g>
+
+  <text x="76" y="137" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e25555">↑</text>
+  <text x="84" y="137" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">the local seat caught it</text>
+  <text x="386" y="137" text-anchor="end" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">a member, not a mode</text>
+
+  <text x="200" y="152" text-anchor="middle" font-family="Outfit,sans-serif" font-size="9" fill="#555">Local models take an equal seat — private and $0</text>
+  <text x="200" y="166" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#d97757">amicus council run --prompt-file schema-plan.md --models gemini,gpt,llama3</text>
+</svg>
