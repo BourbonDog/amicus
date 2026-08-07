@@ -744,7 +744,8 @@ describe('runCouncil --debate rows carry resolvedModel (v4.7 GOA-7 D8)', () => {
     const rebuttal = input.runStats.find(r => r.role === 'rebuttal');
     const revote = input.runStats.find(r => r.role === 'revote');
     expect(rebuttal.resolvedModel).toBe('google/gemini-3.5-pro');
-    expect(revote.resolvedModel).toBeDefined();
+    expect(rebuttal.model).toBe('gemini');
+    expect(revote.resolvedModel).toBe('openai/gpt-5.2');
   });
 });
 
