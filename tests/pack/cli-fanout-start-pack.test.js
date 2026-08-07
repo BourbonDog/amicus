@@ -153,6 +153,32 @@ describe('explicit --model beats pack.model silently (spec §5.4)', () => {
   });
 });
 
+// v4.7 F8 (D13): --tag is reject-style (unlike sanitizeCouncilName, which
+// cleans) — a stored tag is a user-chosen search key, so silent truncation/
+// stripping would make --search/--group-by tag miss it. handleStart's check
+// sits past resolveLaunchModel, so it needs this suite's mocked passthrough.
+describe('--tag validation (v4.7 F8)', () => {
+  test('start --tag with an invalid value exits 1 before startAmicus is called', async () => {
+    await expect(handleStart(parseArgs([
+      'start', '--model', 'vendorx/explicit-model', '--prompt', 'hi', '--no-ui', '--json', '--no-cost-gate',
+      '--tag', 'bad tag!',
+    ]))).rejects.toThrow('exit 1');
+    expect(startAmicus).not.toHaveBeenCalled();
+    const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
+    expect(doc.error.code).toBe(ERROR_CODES.BAD_ARGS);
+    expect(doc.error.message).toMatch(/Invalid --tag/);
+  });
+
+  test('start --tag with a valid value forwards tag to startAmicus', async () => {
+    const code = await handleStart(parseArgs([
+      'start', '--model', 'vendorx/explicit-model', '--prompt', 'hi', '--no-ui', '--json', '--no-cost-gate',
+      '--tag', 'sprint-42',
+    ]));
+    expect(code).toBe(0);
+    expect(startAmicus.mock.calls[0][0].tag).toBe('sprint-42');
+  });
+});
+
 describe('no-pack invocations are unaffected', () => {
   test('fanout without --pack: opts.pack is null', async () => {
     const code = await handleFanout(parseArgs([

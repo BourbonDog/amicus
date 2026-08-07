@@ -40,6 +40,9 @@ describe('pre-flight validation (error envelope, exit 1, before any spend)', () 
     ['bad gateway', { gateway: 'carrier-pigeon' }, /--gateway must be one of/],
     ['bad max-cost', { 'max-cost': -1 }, /--max-cost must be a positive number/],
     ['bad timeout', { timeout: 0 }, /--timeout must be a positive number/],
+    // v4.7 F8 (D13): --tag rejects rather than cleans (unlike sanitizeCouncilName).
+    ['bad tag', { tag: 'bad tag!' }, /Invalid --tag/],
+    ['valueless --tag (boolean true)', { tag: true }, /Invalid --tag/],
   ])('%s', async (_name, extra, msgRe) => {
     const code = await handleCouncilRun(argsBase(extra));
     expect(code).toBe(1);

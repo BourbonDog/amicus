@@ -131,3 +131,30 @@ describe('--template pre-flight failures emit an envelope on stdout (v4.5 F9)', 
     expect(runFanout).not.toHaveBeenCalled();
   });
 });
+
+// v4.7 F8 (D13): --tag is reject-style (unlike sanitizeCouncilName, which
+// cleans) — a bad tag must fail fast with the validator's message, engine
+// never invoked. (handleStart's --tag check sits past model resolution —
+// see tests/pack/cli-fanout-start-pack.test.js, which mocks resolveLaunchModel,
+// for that handler's rejection case.)
+describe('--tag pre-flight validation emits BAD_ARGS envelope on stdout (v4.7 F8)', () => {
+  it('fanout --json --tag "bad tag!" → BAD_ARGS envelope, engine never invoked', async () => {
+    const out = await captureStdout(() => handleFanout({
+      json: true, prompt: 'hi', models: 'a,b', tag: 'bad tag!',
+    }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(doc.error.message).toMatch(/Invalid --tag/);
+    expect(runFanout).not.toHaveBeenCalled();
+  });
+
+  it('fanout --json --retry-failed <id> --tag x → BAD_ARGS, cannot combine, engine never invoked', async () => {
+    const out = await captureStdout(() => handleFanout({
+      json: true, 'retry-failed': 'wave-123', tag: 'x',
+    }));
+    const doc = JSON.parse(out);
+    expect(doc).toMatchObject({ type: 'error', ok: false, error: { code: 'BAD_ARGS' } });
+    expect(doc.error.message).toMatch(/--tag cannot be combined with --retry-failed/);
+    expect(runFanout).not.toHaveBeenCalled();
+  });
+});

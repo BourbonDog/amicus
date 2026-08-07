@@ -455,6 +455,7 @@ Options for 'start':
   --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
   --var <k=v>                  Template variable, repeatable (needs --template)
   --pack <name|path>           Load a saved pack (model/options/template); explicit flags override it
+  --tag <t>                Label this session for list/search/spend grouping (1-64 chars, [A-Za-z0-9_-])
 `,
   fanout: `
 Options for 'fanout':
@@ -490,6 +491,7 @@ Options for 'fanout':
   --artifact <file>            File whose content fills {{artifact}} (256 KB cap; needs --template)
   --var <k=v>                  Template variable, repeatable (needs --template)
   --pack <name|path>           Load a saved pack (bench/options/template); explicit flags override it
+  --tag <t>                Label this session for list/search/spend grouping (1-64 chars, [A-Za-z0-9_-])
   Shared per-leg knobs: --agent, --thinking, --timeout, --summary-length,
   --no-context, --context-*, --mcp*, --no-validate-model, --cwd
   Exit codes: 0 all legs complete, 2 partial, 1 none complete / hard failure
@@ -580,7 +582,7 @@ Subcommands for 'council':
       [--debate] [--claude-review <file>] [--no-cost-gate] [--follow]
       [--fallback] [--no-fallback] [--on-complete <cmd>]
       [--template <name|path>] [--artifact <file>] [--var <k=v>]
-      [--pack <name|path>]
+      [--pack <name|path>] [--tag <t>]
                                 Run the full headless council engine (v4.0).
                                 Chair default: deepseek (must NOT be a bench seat).
                                 --critic and --lenses are mutually exclusive.
