@@ -87,7 +87,7 @@ const SOLO_PACK = () => ({
   description: 'x', model: 'vendorx/solo-model', options: { noUi: true }, briefing: {},
 });
 const COUNCIL_KIND_PACK = () => ({
-  schemaVersion: 1, type: 'pack', name: 'wrong-kind-for-fanout', version: '1.0.0', kind: 'council',
+  schemaVersion: 1, type: 'pack', name: 'wrong-kind', version: '1.0.0', kind: 'council',
   description: 'x', bench: ['alpha', 'beta'], chair: null, critic: null, lenses: null,
   options: {}, briefing: {},
 });
@@ -113,12 +113,28 @@ describe('--pack kind mismatch', () => {
   test('a council pack passed to fanout fails PACK_KIND_MISMATCH; message names fanout', async () => {
     store().writePack(COUNCIL_KIND_PACK());
     await expect(handleFanout(parseArgs([
-      'fanout', '--pack', 'wrong-kind-for-fanout', '--prompt-file', briefingFile, '--json',
+      'fanout', '--pack', 'wrong-kind', '--prompt-file', briefingFile, '--json',
     ]))).rejects.toThrow('exit 1');
     expect(runFanout).not.toHaveBeenCalled();
     const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
     expect(doc.error.code).toBe(ERROR_CODES.PACK_KIND_MISMATCH);
-    expect(doc.error.message).toContain('fanout');
+    expect(doc.error.message).toBe(
+      "Error: pack 'wrong-kind' is kind 'council' — fanout accepts kind 'fanout'; make two packs if you want both shapes",
+    );
+  });
+});
+
+describe('explicit --models over the pack bench (T13-m4)', () => {
+  test('the override notice reaches stderr through handleFanout, and the typed value wins', async () => {
+    store().writePack(FANOUT_PACK());
+    const code = await handleFanout(parseArgs([
+      'fanout', '--pack', 'fanout-review', '--models', 'vendorx/model-z',
+      '--prompt-file', briefingFile, '--json',
+    ]));
+    expect(code).toBe(0);
+    expect(err.mock.calls.map((c) => c[0]).join(''))
+      .toContain("Notice: --models overrides the bench from pack 'fanout-review'");
+    expect(runFanout.mock.calls[0][0].models).toBe('vendorx/model-z');
   });
 });
 

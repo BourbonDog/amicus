@@ -296,6 +296,28 @@ describe('applyPackToArgs: bench — string form fills args.council; notice name
   });
 });
 
+describe('packRecord provenance (T11-b)', () => {
+  test('packRecord.hash round-trips canonicalHash and readPack', () => {
+    store().writePack(COUNCIL_PACK());
+    const args = parseArgs(['council', 'run']);
+    const res = resolve()({ packRef: 'sec-review', expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    const rp = store().readPack('sec-review');
+    expect(res.packRecord.hash).toBe(rp.hash);
+    expect(res.packRecord.hash).toBe(store().canonicalHash(rp.pack));
+  });
+
+  test("a .json path packRef resolves with packRecord.source 'path'", () => {
+    const w = store().writePack(COUNCIL_PACK());
+    const args = parseArgs(['council', 'run']);
+    const res = resolve()({ packRef: w.path, expectedKind: 'council', args, explicit: args.__explicit, useJson: false });
+    expect(res.error).toBeUndefined();
+    expect(res.packRecord).toEqual({
+      name: 'sec-review', version: '1.0.0', hash: expect.stringMatching(/^[0-9a-f]{12}$/), source: 'path',
+    });
+  });
+});
+
 describe('applyPackToArgs: absent pack fields (undefined, not just null) leave args untouched', () => {
   test('a pack that omits chair/options/briefing entirely does not disturb those args', () => {
     store().writePack(SPARSE_COUNCIL_PACK());
