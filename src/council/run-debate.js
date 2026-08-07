@@ -29,6 +29,21 @@ function legOpts(ctx, waveId) {
     councilRunId: ctx.o.runId, councilName: ctx.o.councilName };
 }
 
+/**
+ * v4.7 D2/E4: normalize a raw (possibly leg-absent) leg into the shape
+ * debateRunStatsRows' superseded/repair lists expect. Same never-invent-a-waveId
+ * discipline as buildRunStatsEntry (run-assemble.js) — only spread `waveId` when
+ * the leg genuinely carries one — but keyed on an explicit `model` (the raiser or
+ * judge identity), since a leg-absent attempt has no `.model` of its own to read.
+ */
+function legRow(model, leg, conformance) {
+  return leg
+    ? { model, status: leg.status, durationMs: typeof leg.durationMs === 'number' ? leg.durationMs : null,
+        usage: leg.usage || null, conformance, summary: leg.summary || '',
+        ...(leg.waveId ? { waveId: leg.waveId } : {}) }
+    : { model, status: 'error', durationMs: null, usage: null, conformance, summary: '' };
+}
+
 async function runDefenseSolo(ctx, raiser, findings, idx) {
   const brief = dbrief.buildDefenseBrief({ findings, date: ctx.o.date });
   const waveId = `${ctx.o.runId}-d${idx + 1}`;
@@ -48,6 +63,12 @@ async function runDefenseSolo(ctx, raiser, findings, idx) {
   let parsed = leg ? parseDebateDefense(leg.summary, expectedIds)
     : { ok: false, byId: allNoResponse(expectedIds), errors: [{ code: 'DEAD_LEG', detail: 'no summary' }] };
   let conformance = leg ? 'clean' : 'unstructured';
+  // v4.7 D2/E4: the repair's loser leg — the ORIGINAL when the repair produced a
+  // usable (complete) leg (today's leg-swap below is unchanged), or the failed
+  // repair attempt itself when it did not — retained so runDebate can turn it
+  // into an extra debate-defense runStats row. Both stay null when no repair is
+  // attempted at all (today's single-row shape, byte-identical).
+  let supersededLeg = null, repairLeg = null;
   if (leg && !parsed.ok) {
     const repairId = `${waveId}r`;
     runState.appendStageWave(ctx.o.runDir, 'debate-defense', repairId);
@@ -61,13 +82,15 @@ async function runDefenseSolo(ctx, raiser, findings, idx) {
     const leg2 = res2.leg && res2.leg.status === 'complete' ? res2.leg : null;
     parsed = leg2 ? parseDebateDefense(leg2.summary, expectedIds) : parsed;
     conformance = parsed.ok ? 'repaired' : 'unstructured';
-    if (leg2) { leg = leg2; }
+    if (leg2) { supersededLeg = legRow(raiser, leg, 'unstructured'); leg = leg2; }
+    else { repairLeg = legRow(raiser, res2.leg, 'unstructured'); }
   }
   // A dead leg (no complete summary) OR an 'unstructured' conformance after the one
   // repair is a debate degradation (spec §5.7) — surfaced via the returned leg.
   const stub = { model: raiser, status: 'error', durationMs: null, usage: null, conformance: 'unstructured', summary: '' };
   return { raiser, byId: parsed.byId,
-    leg: leg ? { model: raiser, status: leg.status, durationMs: leg.durationMs, usage: leg.usage, conformance, summary: leg.summary, waveId: leg.waveId } : stub };
+    leg: leg ? { model: raiser, status: leg.status, durationMs: leg.durationMs, usage: leg.usage, conformance, summary: leg.summary, waveId: leg.waveId } : stub,
+    supersededLeg, repairLeg };
 }
 
 async function runRevoteWave(ctx, judges, bundleFindings) {
@@ -89,6 +112,9 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
   ctx.addWave(res.wave);
   if (isAbortExit(res.exitCode)) { return { aborted: res.exitCode }; }
   const byJudge = {}, legs = [];
+  // v4.7 D2/E4: mirrors runDefenseSolo's supersededLeg/repairLeg — one list each,
+  // accumulated across every judge in this wave (most judges contribute neither).
+  const supersededLegs = [], repairLegs = [];
   for (const leg of ((res.wave && res.wave.legs) || [])) {
     // The council ALIAS, not the resolved executable id — runStats rows join
     // meta.models by exact string (run-assemble.js's buildRunStatsEntry).
@@ -112,12 +138,13 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
       conformance = parsed.ok ? 'repaired' : 'unstructured';
       // Symmetric with runDefenseSolo's `if (leg2) { leg = leg2; }` — otherwise
       // revote-<model>.md and the runStats row keep the PRE-repair output.
-      if (leg2) { outLeg = leg2; }
+      if (leg2) { supersededLegs.push(legRow(judge, leg, 'unstructured')); outLeg = leg2; }
+      else { repairLegs.push(legRow(judge, r2.leg, 'unstructured')); }
     }
     byJudge[judge] = parsed.byId;
     legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage, conformance, summary: outLeg.summary || '', waveId: outLeg.waveId });
   }
-  return { byJudge, legs };
+  return { byJudge, legs, supersededLegs, repairLegs };
 }
 
 /**
@@ -164,7 +191,7 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   const stampedInput = { ...tallyInput, findings: tallyInput.findings.map(f => ({ ...f, previousTier: previousTier[f.id] })) };
 
   // ---- Re-vote mini-wave (disputing judges only) ----
-  let revoteByJudge = {}, revoteLegs = [];
+  let revoteByJudge = {}, revoteLegs = [], revoteSuperseded = [], revoteRepairs = [];
   const defendedOrAmended = bundleFor(defenseResults, tallyInput);
   const judges = disputingJudges(provisionalRecord, defendedOrAmended.map(f => f.id));
   // A re-vote is warranted only when something was defended/amended AND ≥1 judge disputed it.
@@ -181,6 +208,8 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
     if (rv.aborted) { return { aborted: rv.aborted, contested, disputed }; }
     revoteByJudge = rv.byJudge;
     revoteLegs = rv.legs;
+    revoteSuperseded = rv.supersededLegs;
+    revoteRepairs = rv.repairLegs;
     // revote-<model>.md per surviving judge leg, mirroring rebuttal-<model>.md
     // (spec §5.1 'raw outputs revote-<model>.md').
     materializeDebate(ctx.o.runDir, revoteLegs, 'revote');
@@ -190,7 +219,12 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   const { input: debatedInput, debateFindings } = applyDebate({
     tallyInput: stampedInput, provisionalRecord, defenseByRaiser, revoteByJudge });
   debatedInput.runStats = [...(debatedInput.runStats || []),
-    ...debateRunStatsRows({ defenseLegs: defenseResults.map(d => d.leg), revoteLegs })];
+    ...debateRunStatsRows({ defenseLegs: defenseResults.map(d => d.leg), revoteLegs,
+      // v4.7 D2/E4: the retained loser legs from every raiser's defense repair
+      // plus every judge's re-vote repair — same append, no new channel into
+      // buildTallyInput.
+      supersededLegs: [...defenseResults.map(d => d.supersededLeg).filter(Boolean), ...revoteSuperseded],
+      repairLegs: [...defenseResults.map(d => d.repairLeg).filter(Boolean), ...revoteRepairs] })];
 
   // verdictChanges: findings whose tier moved from provisional to debated.
   const provTierById = new Map(provisionalRecord.findings.map(f => [f.id, f.tier]));

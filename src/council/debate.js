@@ -15,7 +15,10 @@ const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn'
 
 // runStats roles the ledger join must skip (ledger.js): a debate leg is an extra leg by an
 // already-benched model, never an extra ledger row and never that model's ledger identity.
-const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
+// v4.7 D2/E4 widened this to the debate round's own superseded/failed-repair rows (a
+// raiser's/judge's superseded pre-repair leg, or its failed repair attempt) — same reasoning:
+// neither is that model's primary ledger identity, so neither may win the ledger join.
+const DEBATE_ROLES = new Set(['rebuttal', 'revote', 'superseded', 'repair']);
 
 /**
  * Reassemble the tally input after the debate round.
@@ -79,14 +82,19 @@ function decorateRecord(record, debateFindings) {
 }
 
 /**
- * runStats rows for the debate legs (spec §5.5). role is 'rebuttal' | 'revote';
- * these legs never enter meta.models, so the ledger stays one row per (run×model),
- * and ledger.js skips DEBATE_ROLES when joining runStats so a debate leg cannot
- * overwrite the bench row's role/wasChair/conformance on that model's ledger row.
- * @param {{defenseLegs: Array, revoteLegs: Array}} args leg metadata
+ * runStats rows for the debate legs (spec §5.5), plus v4.7 D2/E4's row-per-launch
+ * extras: role is 'rebuttal' | 'revote' for the primary defense/re-vote legs,
+ * 'superseded' for an original leg a successful repair replaced, and 'repair' for
+ * a repair attempt that itself never became usable (error status rides naturally
+ * off the raw leg). None of these legs enter meta.models, so the ledger stays one
+ * row per (run×model), and ledger.js skips DEBATE_ROLES when joining runStats so
+ * none of them can overwrite the bench row's role/wasChair/conformance on that
+ * model's ledger row.
+ * @param {{defenseLegs: Array, revoteLegs: Array, supersededLegs?: Array,
+ *   repairLegs?: Array}} args leg metadata
  * @returns {Array<object>}
  */
-function debateRunStatsRows({ defenseLegs, revoteLegs }) {
+function debateRunStatsRows({ defenseLegs, revoteLegs, supersededLegs, repairLegs }) {
   const mk = (role) => (l) => ({
     model: l.model, role, wasChair: false, conformance: l.conformance || 'clean',
     status: l.status || 'unknown',
@@ -94,7 +102,12 @@ function debateRunStatsRows({ defenseLegs, revoteLegs }) {
     usage: l.usage || null,
     ...(l.waveId ? { waveId: l.waveId } : {}),
   });
-  return [...(defenseLegs || []).map(mk('rebuttal')), ...(revoteLegs || []).map(mk('revote'))];
+  return [
+    ...(defenseLegs || []).map(mk('rebuttal')),
+    ...(revoteLegs || []).map(mk('revote')),
+    ...(supersededLegs || []).map(mk('superseded')),
+    ...(repairLegs || []).map(mk('repair')),
+  ];
 }
 
 /** Spec §5.7 fallback: a dead/unparseable defense means every bundled id's original stands. */
