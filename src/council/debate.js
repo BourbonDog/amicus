@@ -13,8 +13,12 @@
 
 const PAST_TENSE = { defend: 'defended', amend: 'amended', withdraw: 'withdrawn', 'no-response': 'no-response' };
 
-// runStats roles the ledger join must skip (ledger.js): a debate leg is an extra leg by an
-// already-benched model, never an extra ledger row and never that model's ledger identity.
+// The debate-role vocabulary: a debate leg is an extra leg by an already-benched model,
+// never an extra ledger row and never that model's ledger identity. Through v4.6 this Set
+// ALSO drove ledger.js's join skip-set directly; Task 7 (v4.7 D4) replaced that with
+// ledger.js's own LEDGER_JOIN_ROLES allowlist (fail-closed: everything not named there is
+// excluded, not just DEBATE_ROLES), so this Set no longer has any runtime consumer outside
+// this module — kept exported because debate.test.js pins its exact contents.
 const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
 
 /**
@@ -84,11 +88,12 @@ function decorateRecord(record, debateFindings) {
  * 'superseded' for an original leg a successful repair replaced, and 'repair' for
  * a repair attempt that itself never became usable (error status rides naturally
  * off the raw leg). The rebuttal/revote legs never enter meta.models, so the
- * ledger stays one row per (run×model), and ledger.js skips DEBATE_ROLES when
- * joining runStats so a rebuttal/revote row cannot overwrite the bench row's
- * role/wasChair/conformance on that model's ledger row. (The new
- * superseded/repair roles are not yet in DEBATE_ROLES — Task 7 owns widening
- * that allowlist.)
+ * ledger stays one row per (run×model). DEBATE_ROLES remains the debate-role
+ * vocabulary (rebuttal/revote); the ledger's overwrite protection for ALL FOUR
+ * of these row-per-launch roles — rebuttal, revote, superseded AND repair —
+ * lives in ledger.js's own LEDGER_JOIN_ROLES allowlist (v4.7 D4, Task 7):
+ * a role not named there never joins, full stop, regardless of which module
+ * produced the row or whether it is even in DEBATE_ROLES.
  * @param {{defenseLegs: Array, revoteLegs: Array, supersededLegs?: Array,
  *   repairLegs?: Array}} args leg metadata
  * @returns {Array<object>}

@@ -7,18 +7,28 @@ const { getConfigDir } = require('../utils/config');
 const LEDGER_SCHEMA_VERSION = 1;
 const LEDGER_FILE = 'council-ledger.jsonl';
 
-// v4.7 D4/E1/E2 (Task-7, task-6 adjudication): fail-closed ALLOWLIST of
-// runStats roles the ledger join (below) may consume as a model's ledger
-// identity. 'council' is the legacy default role (pre-#83 runs, and the
-// av-receiver golden fixture — errata E2, must stay green). 'judge' stays
-// excluded (#83's overwrite-guard: judges ARE bench models, and their Stage-2
-// cost-attribution row must never win over the seat row). Every OTHER
-// non-primary row-per-launch producer — 'chair-attempt', 'repair',
+// v4.7 D4/E1/E2/E6 (Task-7, task-6/task-7 adjudications): fail-closed
+// ALLOWLIST of runStats roles the ledger join (below) may consume as a
+// model's ledger identity. 'council' is the legacy default role (pre-#83
+// runs, and the av-receiver golden fixture — errata E2, must stay green).
+// 'redteam' is the second-opinion skill's documented primary-seat role
+// (skills/second-opinion/MANUAL-ORCHESTRATION.md:147; red-team runs record
+// to the ledger per COUNCIL-DESIGN.md:266 — errata E6, task-7 review: without
+// it a red-team row's role/wasChair/conformance never join, silently
+// fabricating conformance:'clean' via the `|| 'clean'` fallback below).
+// 'judge' stays excluded (#83's overwrite-guard: judges ARE bench models, and
+// their Stage-2 cost-attribution row must never win over the seat row). Every
+// OTHER non-primary row-per-launch producer — 'chair-attempt', 'repair',
 // 'superseded', and the debate pair 'rebuttal'/'revote' — shares a model with
 // that model's real bench row and must never join either: skipped by
 // omission, including any future role never added here (fail-closed, not a
-// skip-list that a new producer could silently slip past).
-const LEDGER_JOIN_ROLES = new Set(['seat', 'critic', 'chair', 'claude', 'council']);
+// skip-list that a new producer could silently slip past). This is the E6
+// trade, made explicit: any free-form/custom role label a future producer
+// invents is rejected BY DESIGN until someone deliberately adds it here —
+// the allowlist would rather silently drop a legitimate new role's
+// role/wasChair/conformance (falling back to 'council'/false/'clean') than
+// ever let an unreviewed role win the model-keyed join.
+const LEDGER_JOIN_ROLES = new Set(['seat', 'critic', 'chair', 'claude', 'council', 'redteam']);
 function joinsLedger(role) {
   return LEDGER_JOIN_ROLES.has(role) || (typeof role === 'string' && role.startsWith('lens:'));
 }

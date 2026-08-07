@@ -191,15 +191,46 @@ describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a be
     expect(gemini.conformance).toBe('clean');    // NOT the superseded leg's 'unstructured'
   });
 
-  // Errata E2: 'council' is the legacy default role (pre-#83 runs, and the
-  // av-receiver golden fixture) and MUST keep joining — an allowlist that
-  // silently dropped it would zero out every legacy row's role/wasChair/
-  // conformance on the reliability join without any test ever going red.
+  // Errata E2 (task-7 review IMPORTANT: the original version of this test was
+  // vacuous — 'council' and wasChair:false are ledger.js's OWN fallback
+  // values (`r.role || 'council'`, `!!r.wasChair`), so it passed identically
+  // whether or not the join ever ran. Fixed to assert on deepseek's
+  // wasChair:true (av-receiver-input.js: `wasChair: m === 'deepseek'`) — the
+  // un-joined default is `!!undefined` === false, so `true` can ONLY survive
+  // if the 'council'-role row actually won the join. Mutation-proof: verified
+  // by temporarily removing 'council' from LEDGER_JOIN_ROLES (see task-7
+  // fix-wave report) — this assertion fails; role's own fallback would not
+  // have caught that mutation at all.
   test('council (legacy default role) still joins — errata E2', () => {
     const record = tally(avInput);
     const rows = buildLedgerRows(record);
-    const gpt = rows.find(r => r.model === 'gpt');
-    expect(gpt.role).toBe('council');
-    expect(gpt.wasChair).toBe(false);
+    const ds = rows.find(r => r.model === 'deepseek');
+    expect(ds.role).toBe('council');
+    expect(ds.wasChair).toBe(true);
+  });
+
+  // Errata E6 (task-7 review CRITICAL): 'redteam' is the second-opinion
+  // skill's documented primary-seat role (skills/second-opinion/
+  // MANUAL-ORCHESTRATION.md:147; red-team runs record to the ledger per
+  // COUNCIL-DESIGN.md:266) and was missing from the allowlist — a redteam
+  // row's role/wasChair/conformance never joined, silently fabricating
+  // conformance:'clean' via ledger.js's `r.conformance || 'clean'` fallback.
+  // Non-vacuous: asserts conformance:'repaired', a value that cannot come
+  // from EITHER fallback (`|| 'council'` for role, `|| 'clean'` for
+  // conformance) — this only passes if the join actually consumed the
+  // redteam row's own data.
+  test('redteam rows join the ledger — errata E6', () => {
+    const rec = {
+      meta: { runId: 'r1', date: '2026-08-01', runType: 'headless', models: ['alpha'], chair: 'c' },
+      findings: [], streetCred: [{ model: 'alpha', withSelf: 1, peersOnly: 1 }],
+      judged: true,
+      runStats: [
+        { model: 'alpha', role: 'redteam', wasChair: false, conformance: 'repaired', status: 'complete', durationMs: 80, usage: null },
+      ],
+    };
+    const rows = buildLedgerRows(rec);
+    const alpha = rows.find(r => r.model === 'alpha');
+    expect(alpha.role).toBe('redteam');
+    expect(alpha.conformance).toBe('repaired');
   });
 });
