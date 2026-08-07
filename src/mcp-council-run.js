@@ -278,6 +278,7 @@ const awareness = require('./mcp-council-awareness');
 
 module.exports = {
   handleCouncilRunTool,
+  COUNCIL_PACK_PARAM_MAP,
   buildCouncilStatusPayload: awareness.buildCouncilStatusPayload,
   listCouncilRuns: awareness.listCouncilRuns,
   abortCouncilRun: awareness.abortCouncilRun,

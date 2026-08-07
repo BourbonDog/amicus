@@ -1520,4 +1520,5 @@ async function startMcpServer() {
 
 module.exports = {
   handlers, startMcpServer, getProjectDir, resolveProjectDir, getClientRoot,
+  FANOUT_PACK_PARAM_MAP, SOLO_PACK_PARAM_MAP,
 };

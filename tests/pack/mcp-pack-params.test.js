@@ -57,27 +57,11 @@ const FANOUT_KIND_PACK = () => ({
   description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: {}, briefing: {},
 });
 
-// ---- fix wave 2 (Task 15 review, Findings 1-3) fixtures ----
-// Test-local mirrors of mcp-server.js's FANOUT_PACK_PARAM_MAP / SOLO_PACK_PARAM_MAP
-// and mcp-council-run.js's COUNCIL_PACK_PARAM_MAP. Neither module exports its map —
-// these are plain MCP-key -> CLI-arg-key rename tables (not knob logic), so a
-// same-shaped local copy exercises applyPackToMcpInput directly without reaching
-// into another module's internals.
-const TEST_FANOUT_PARAM_MAP = {
-  models: 'models', council: 'council', gateway: 'gateway', agent: 'agent', thinking: 'thinking',
-  timeout: 'timeout', summaryLength: 'summary-length',
-  includeContext: { argKey: 'no-context', invert: true },
-};
-const TEST_SOLO_PARAM_MAP = {
-  model: 'model', gateway: 'gateway', agent: 'agent', noUi: 'no-ui', thinking: 'thinking',
-  timeout: 'timeout', contextTurns: 'context-turns', contextMaxTokens: 'context-max-tokens',
-  summaryLength: 'summary-length',
-  includeContext: { argKey: 'no-context', invert: true },
-};
-const TEST_COUNCIL_PARAM_MAP = {
-  models: 'models', council: 'council', chair: 'chair', critic: 'critic', lenses: 'lenses',
-  debate: 'debate', timeoutMinutes: 'timeout', maxCost: 'max-cost', gateway: 'gateway',
-};
+// Production maps imported directly (T15-m5): the previous hand-copied mirrors
+// diverged once (the council copy silently dropped `template`) — importing the
+// real tables makes that class of drift impossible.
+const { COUNCIL_PACK_PARAM_MAP } = require('../../src/mcp-council-run');
+const { FANOUT_PACK_PARAM_MAP, SOLO_PACK_PARAM_MAP } = require('../../src/mcp-server');
 
 const FANOUT_TEST_PACK = () => ({
   schemaVersion: 1, type: 'pack', name: 'fanout-direct-pack', version: '1.0.0', kind: 'fanout',
@@ -382,7 +366,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_TEST_PACK());
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.includeContext).toBe(false);
@@ -392,7 +376,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_TEST_PACK()); // pack also sets options.noContext: true
     const input = { includeContext: false };
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.includeContext).toBe(false);
@@ -402,7 +386,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_TEST_PACK()); // bench: ['vendorx/model-a', 'vendorx/model-b']
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.models).toEqual(['vendorx/model-a', 'vendorx/model-b']);
@@ -412,7 +396,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(COUNCIL_LENSES_PACK()); // lenses: ['lensA', 'lensB']
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'council-lenses-pack', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+      packRef: 'council-lenses-pack', expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.lenses).toEqual(['lensA', 'lensB']);
@@ -422,7 +406,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_TEST_PACK()); // pack.bench differs from the caller's models
     const input = { models: ['explicit/a', 'explicit/b'] };
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.models).toEqual(['explicit/a', 'explicit/b']);
@@ -432,7 +416,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_TEST_PACK()); // pack sets options.gateway: 'openrouter'
     const input = { gateway: 'direct' };
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.gateway).toBe('direct');
@@ -442,7 +426,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(SOLO_TEST_PACK()); // options: { noUi: true, agent: 'Plan' }
     const input = {}; // no noUi/agent key at all — the post-fix Zod-parsed shape
     const res = applyPackToMcpInput({
-      packRef: 'solo-direct-pack', expectedKind: 'solo', input, paramMap: TEST_SOLO_PARAM_MAP,
+      packRef: 'solo-direct-pack', expectedKind: 'solo', input, paramMap: SOLO_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(input.noUi).toBe(true);
@@ -454,7 +438,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_TEST_PACK()); // options.maxCost: 5
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(res.forward).toEqual(expect.objectContaining({ maxCost: 5 }));
@@ -466,7 +450,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack({ ...FANOUT_TEST_PACK(), options: { noContext: true, gateway: 'openrouter' } });
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(res.forward).toEqual({});
@@ -476,7 +460,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack({ ...SOLO_TEST_PACK(), briefing: { template: 'review' } });
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'solo-direct-pack', expectedKind: 'solo', input, paramMap: TEST_SOLO_PARAM_MAP,
+      packRef: 'solo-direct-pack', expectedKind: 'solo', input, paramMap: SOLO_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(res.forward.template).toBe('review');
@@ -488,10 +472,31 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(COUNCIL_PACK()); // no maxCost/template set in this fixture's options, but destinations exist either way
     const input = { maxCost: 3, template: 'review' };
     const res = applyPackToMcpInput({
-      packRef: 'sec-review', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+      packRef: 'sec-review', expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     expect(res.forward).toEqual({});
+  });
+
+  // T15-m5: mirror of the solo test above — a council pack's briefing.template
+  // (no explicit input.template) must round-trip onto input.template via
+  // COUNCIL_PACK_PARAM_MAP's real `template` destination, never fall through to
+  // res.forward. This is the regression lock for the divergence that motivated
+  // importing the production map: the old hand-copied TEST_COUNCIL_PARAM_MAP
+  // silently omitted `template`, which would (if reintroduced) misroute the
+  // pack's template into `forward` instead of `input.template` — and
+  // handleCouncilRunTool (mcp-council-run.js) only ever reads input.template
+  // to render the briefing, never res.forward, so the template would silently
+  // never apply.
+  test('template round trip (T15-m5): a council pack briefing.template with no explicit input.template lands on input.template via the real paramMap destination, never on res.forward', () => {
+    store().writePack({ ...COUNCIL_PACK(), briefing: { template: 'review' } });
+    const input = {};
+    const res = applyPackToMcpInput({
+      packRef: 'sec-review', expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
+    });
+    expect(res.error).toBeUndefined();
+    expect(input.template).toBe('review');
+    expect(res.forward.template).toBeUndefined();
   });
 
   // ---- v4.5 HOLD-gate decision 1b (T15-m10): remaining orphan notices name the pack's own camelCase option key ----
@@ -502,7 +507,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     });
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: TEST_FANOUT_PARAM_MAP,
+      packRef: 'fanout-direct-pack', expectedKind: 'fanout', input, paramMap: FANOUT_PACK_PARAM_MAP,
     });
     expect(res.error).toBeUndefined();
     const turnsNotice = res.notices.find((n) => n.includes('contextTurns'));
@@ -521,7 +526,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(COUNCIL_DROPPED_OPTION_PACK()); // options.agent: 'Plan'
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'council-dropped-option-pack', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+      packRef: 'council-dropped-option-pack', expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
     });
     expect(res.error).toBeDefined();
     expect(res.error.code).toBe(ERROR_CODES.PACK_INVALID);
@@ -532,7 +537,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     store().writePack(FANOUT_KIND_PACK()); // kind: 'fanout', name: 'wrong-kind-for-council'
     const input = {};
     const res = applyPackToMcpInput({
-      packRef: 'wrong-kind-for-council', expectedKind: 'council', input, paramMap: TEST_COUNCIL_PARAM_MAP,
+      packRef: 'wrong-kind-for-council', expectedKind: 'council', input, paramMap: COUNCIL_PACK_PARAM_MAP,
     });
     expect(res.error).toBeDefined();
     expect(res.error.code).toBe(ERROR_CODES.PACK_KIND_MISMATCH);
