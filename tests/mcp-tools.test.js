@@ -448,6 +448,7 @@ describe('MCP Tool Definitions', () => {
       const regexCheck = inner._def.checks.find(c => c.kind === 'regex');
       expect(regexCheck).toBeDefined();
       expect(regexCheck.regex.source).toBe(TAG_PATTERN.source);
+      expect(regexCheck.regex.flags).toBe(TAG_PATTERN.flags);
     });
   });
 

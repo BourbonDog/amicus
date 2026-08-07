@@ -88,6 +88,15 @@ describe('engine invocation', () => {
     expect(opts.runDir).toBe(path.resolve(tmp, 'X'));
   });
 
+  // v4.7 F8 (T9-m4/final-review Important): regression pin for
+  // cli-handlers-council-run.js's `tag: args.tag,` forward — the final review
+  // flagged this site as mutation-viable (no test failed if it were deleted).
+  test('--tag is forwarded into runCouncil options', async () => {
+    runCouncil.mockResolvedValue({ exitCode: 0, run: {} });
+    await handleCouncilRun(argsBase({ tag: 'sprint-42' }));
+    expect(runCouncil.mock.calls[0][0].tag).toBe('sprint-42');
+  });
+
   test('bad --run-id → BAD_SESSION', async () => {
     const code = await handleCouncilRun(argsBase({ 'run-id': 'no/slash' }));
     expect(code).toBe(1);

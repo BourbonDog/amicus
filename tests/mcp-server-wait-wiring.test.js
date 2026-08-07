@@ -155,6 +155,7 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
       const { taskId } = JSON.parse(startResult.content[0].text);
 
       expect(readMeta(path.join(tmpDir, '.claude', 'amicus_sessions', taskId)).tag).toBe('sprint-42');
+      await drain();
     });
   });
 
@@ -170,6 +171,7 @@ describe('shared-server amicus_start settle wiring (Minor #4)', () => {
       const { taskId } = JSON.parse(startResult.content[0].text);
 
       expect('tag' in readMeta(path.join(tmpDir, '.claude', 'amicus_sessions', taskId))).toBe(false);
+      await drain();
     });
   });
 

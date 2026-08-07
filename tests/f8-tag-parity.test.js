@@ -158,6 +158,7 @@ describe('Scenario 1: CLI solo chain (--tag alpha)', () => {
 
   afterEach(() => {
     fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(ledgerDir, { recursive: true, force: true });
     if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
     else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
   });
@@ -173,41 +174,45 @@ describe('Scenario 1: CLI solo chain (--tag alpha)', () => {
   // the first (and only) regression pin on cli-handlers-run.js:131's
   // `tag: args.tag,` forward. See task-9-report.md for the mutation-check
   // proof (commenting that line out fails this exact assertion).
-  test('metadata.json, the run doc, the enumerateSessions row, searchSessions, and the spend row all carry tag "alpha"', async () => {
+  // T9-m5: the tag literal is distinctive from any fixture id substring
+  // ('tagneedle_q7' — not 'alpha', which reads as tag-branch-unambiguous only
+  // by fixture luck) so a match below can ONLY be attributed to the tag path,
+  // never an accidental substring hit on the task-id or other fixture text.
+  test('metadata.json, the run doc, the enumerateSessions row, searchSessions, and the spend row all carry tag "tagneedle_q7"', async () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {
       const code = await handleStart(parseArgs([
         'start', '--model', 'vendorx/solo-model', '--prompt', 'do the solo task',
         '--no-ui', '--json', '--no-cost-gate', '--cwd', project,
-        '--task-id', 'solotagT9a', '--tag', 'alpha',
+        '--task-id', 'solotagT9a', '--tag', 'tagneedle_q7',
       ]));
       expect(code).toBe(0);
 
       // metadata.json
       const metaPath = path.join(project, '.claude', 'amicus_sessions', 'solotagT9a', 'metadata.json');
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-      expect(meta.tag).toBe('alpha');
+      expect(meta.tag).toBe('tagneedle_q7');
 
       // run doc (the ONLY stdout write in --json mode)
       expect(logSpy).toHaveBeenCalledTimes(1);
       const doc = JSON.parse(logSpy.mock.calls[0][0]);
-      expect(doc.tag).toBe('alpha');
+      expect(doc.tag).toBe('tagneedle_q7');
 
       // enumerateSessions row
       const rows = enumerateSessions(project, {});
       const row = rows.find((r) => r.id === 'solotagT9a');
       expect(row).toBeDefined();
-      expect(row.tag).toBe('alpha');
+      expect(row.tag).toBe('tagneedle_q7');
 
-      // searchSessions matches 'alpha' by tag
-      const matches = searchSessions(rows, 'alpha', { project });
+      // searchSessions matches 'tagneedle_q7' by tag
+      const matches = searchSessions(rows, 'tagneedle_q7', { project });
       expect(matches.map((r) => r.id)).toContain('solotagT9a');
 
       // spend row
       const spendRows = readSpendRows(ledgerDir);
       const spendRow = spendRows.find((r) => r.taskId === 'solotagT9a');
       expect(spendRow).toBeDefined();
-      expect(spendRow.tag).toBe('alpha');
+      expect(spendRow.tag).toBe('tagneedle_q7');
     } finally {
       logSpy.mockRestore();
     }
@@ -231,6 +236,7 @@ describe('Scenario 2: CLI wave chain (--tag alpha)', () => {
 
   afterEach(() => {
     fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(ledgerDir, { recursive: true, force: true });
     if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
     else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
   });
@@ -246,7 +252,7 @@ describe('Scenario 2: CLI wave chain (--tag alpha)', () => {
       const code = await handleFanout(parseArgs([
         'fanout', '--models', 'openrouter/a/b,openrouter/c/d', '--prompt', briefingText,
         '--json', '--no-cost-gate', '--no-validate-model', '--cwd', project,
-        '--wave-id', 'wavetagT9b', '--tag', 'alpha',
+        '--wave-id', 'wavetagT9b', '--tag', 'alpha', '--quiet',
       ]));
       expect(code).toBe(0);
 
@@ -282,8 +288,15 @@ describe('Scenario 2: CLI wave chain (--tag alpha)', () => {
 // Scenario 3: Council chain — runCouncil / real council-leg transport, tagged
 // ============================================================================
 describe('Scenario 3: Council chain (--tag alpha)', () => {
-  test('runCouncil: run.json carries tag, the Stage-1 launch call carries it, and listCouncilRuns\' MCP row carries it', async () => {
+  test('runCouncil: run.json carries tag, EVERY recorded launcher call carries it, and listCouncilRuns\' MCP row carries it', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f8-council-'));
+    // T9-m3: guard AMICUS_CONFIG_DIR even though this test's launchers are
+    // fully scripted/injected (no real disk spend-ledger write happens today)
+    // — copy the suite's own save/restore idiom so the invariant is explicit
+    // rather than implicit-and-accidental.
+    const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f8-council-scripted-ledger-'));
+    const prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    process.env.AMICUS_CONFIG_DIR = ledgerDir;
     try {
       const launchers = scriptedLaunchers(happyScript());
       const { exitCode, run } = await runCouncil(
@@ -297,9 +310,14 @@ describe('Scenario 3: Council chain (--tag alpha)', () => {
       const onDisk = runState.readRun(path.join(tmp, 'council-abc123'));
       expect(onDisk.tag).toBe('alpha');
 
-      // the primary Stage-1 seat-wave launch call carries the tag forward
+      // T9-m4: EVERY recorded launcher call carries the tag forward, not just
+      // the primary Stage-1 seat-wave — happyScript() drives s1/s2/ch1.
       const s1 = launchers.calls.find((c) => c.waveId === 'abc123-s1');
       expect(s1.tag).toBe('alpha');
+      const s2 = launchers.calls.find((c) => c.waveId === 'abc123-s2');
+      expect(s2.tag).toBe('alpha');
+      const ch1 = launchers.calls.find((c) => c.waveId === 'abc123-ch1');
+      expect(ch1.tag).toBe('alpha');
 
       // MCP surface (mcp-council-list.test.js idiom, direct — listCouncilRuns
       // is exactly what amicus_list's handler calls for council rows):
@@ -309,6 +327,9 @@ describe('Scenario 3: Council chain (--tag alpha)', () => {
       expect(row.tag).toBe('alpha');
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
+      fs.rmSync(ledgerDir, { recursive: true, force: true });
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
     }
   });
 
@@ -335,6 +356,7 @@ describe('Scenario 3: Council chain (--tag alpha)', () => {
 
     afterEach(() => {
       fs.rmSync(project, { recursive: true, force: true });
+      fs.rmSync(ledgerDir, { recursive: true, force: true });
       if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
       else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
     });
@@ -379,6 +401,7 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
 
     afterEach(() => {
       fs.rmSync(project, { recursive: true, force: true });
+      fs.rmSync(ledgerDir, { recursive: true, force: true });
       if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
       else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
     });
@@ -424,6 +447,7 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
 
     afterEach(() => {
       fs.rmSync(project, { recursive: true, force: true });
+      fs.rmSync(ledgerDir, { recursive: true, force: true });
       if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
       else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
     });
@@ -434,7 +458,7 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
         const code = await handleFanout(parseArgs([
           'fanout', '--models', 'openrouter/a/b,openrouter/c/d', '--prompt', 'untagged wave task',
           '--json', '--no-cost-gate', '--no-validate-model', '--cwd', project,
-          '--wave-id', 'wavuntagT9d',
+          '--wave-id', 'wavuntagT9d', '--quiet',
         ]));
         expect(code).toBe(0);
 
@@ -459,6 +483,13 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
   describe('4c. Council chain, untagged', () => {
     test('runCouncil: run.json and listCouncilRuns\' MCP row have NO tag key', async () => {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'f8-council-untag-'));
+      // T9-m3: guard AMICUS_CONFIG_DIR even though this test's launchers are
+      // fully scripted/injected (no real disk spend-ledger write happens today)
+      // — copy the suite's own save/restore idiom so the invariant is explicit
+      // rather than implicit-and-accidental.
+      const ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f8-council-untag-scripted-ledger-'));
+      const prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+      process.env.AMICUS_CONFIG_DIR = ledgerDir;
       try {
         const launchers = scriptedLaunchers(happyScript());
         const { exitCode, run } = await runCouncil(
@@ -476,6 +507,9 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
         expect('tag' in row).toBe(false);
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
+        fs.rmSync(ledgerDir, { recursive: true, force: true });
+        if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+        else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
       }
     });
 
@@ -493,6 +527,7 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
 
       afterEach(() => {
         fs.rmSync(project, { recursive: true, force: true });
+        fs.rmSync(ledgerDir, { recursive: true, force: true });
         if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
         else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
       });
@@ -531,6 +566,7 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
 
     afterEach(() => {
       fs.rmSync(project, { recursive: true, force: true });
+      fs.rmSync(ledgerDir, { recursive: true, force: true });
       if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
       else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
     });
@@ -547,7 +583,7 @@ describe('Scenario 4: Untagged parity (no --tag)', () => {
         const waveCode = await handleFanout(parseArgs([
           'fanout', '--models', 'openrouter/a/b,openrouter/c/d', '--prompt', 'unattributed wave',
           '--json', '--no-cost-gate', '--no-validate-model', '--cwd', project,
-          '--wave-id', 'unattrwaveB',
+          '--wave-id', 'unattrwaveB', '--quiet',
         ]));
         expect(waveCode).toBe(0);
 

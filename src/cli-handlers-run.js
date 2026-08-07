@@ -55,6 +55,18 @@ async function handleStart(args) {
     process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --max-cost must be a positive number' }));
   }
 
+  // v4.7 F8 (D13): --tag rejects (unlike sanitizeCouncilName, which cleans) —
+  // a stored tag is a user-chosen search key, so silent truncation/stripping
+  // would make --search/--group-by tag miss it. Checked here, beside the other
+  // pre-flight arg checks, so a bad tag exits before model resolution / the
+  // one-time onboarding tip (T2-m1: was previously after resolveLaunchModel).
+  if (args.tag !== undefined) {
+    const tagCheck = validateTag(args.tag);
+    if (!tagCheck.ok) {
+      process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: tagCheck.error }));
+    }
+  }
+
   const { model, alias } = await resolveLaunchModel(args);
   args.model = model;
 
@@ -85,16 +97,6 @@ async function handleStart(args) {
     const budget = checkBudget([soloLeg], { maxCostPerMtok: cfg.maxCostPerMtok, maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost, promptChars });
     if (!budget.ok) {
       process.exit(failJson(useJson, { code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run', hint: formatBudgetError(budget) }));
-    }
-  }
-
-  // v4.7 F8 (D13): --tag rejects (unlike sanitizeCouncilName, which cleans) —
-  // a stored tag is a user-chosen search key, so silent truncation/stripping
-  // would make --search/--group-by tag miss it.
-  if (args.tag !== undefined) {
-    const tagCheck = validateTag(args.tag);
-    if (!tagCheck.ok) {
-      process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: tagCheck.error }));
     }
   }
 
