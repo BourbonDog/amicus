@@ -119,6 +119,16 @@ All notable changes to Amicus are documented here. Format follows
   flag, so the command parsed and exited 0 — but `handleFanout` never forwarded it into
   `runFanout`, which printed the launch banner and per-leg lines anyway. Same
   accepted-but-ignored shape as `list --search` above.
+- **`amicus pack save --version <semver>` was accepted and silently ignored — it wrote no pack at
+  all.** `version` is a global boolean flag, so `parseArgs` set `args.version = true`, stranded the
+  semver in positionals, and `bin/amicus.js` printed the amicus version banner *before* command
+  dispatch — `handlePack` never ran, and the command exited 0 having saved nothing.
+  `--version=2.0.0` failed identically. Meanwhile the handler read `args.version` for a value it
+  could never receive, and both the help text and `docs/usage.md` documented `--version <semver>`
+  as a real option. The pack's own version is now spelled **`--pack-version <semver>`** (honored on
+  both the flags and `--from-run` paths), and `pack save --version` fails fast with `BAD_ARGS`
+  naming the right spelling. Every other `--version` still prints the banner. Third instance of the
+  accepted-but-ignored shape, after `list --search` and `fanout --quiet` above.
 - **A fanout whose server fails to start no longer drops its pack.** `errorWave` — the third
   `buildWaveResult` call site — inherited a pre-seeded `tag` from `metadata.json` but not a
   pre-seeded `pack`, so an MCP-spawned wave that died at server start persisted a `wave.json`

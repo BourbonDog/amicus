@@ -305,6 +305,8 @@ Then invoke it with `--pack <name|path>` on `start` / `fanout` / `council run` �
 
 Every kind may also carry `description`, `version` (semver, default `1.0.0`), and `briefing.template` (a template **reference**, not rendered text — a pack never captures briefing prose).
 
+The `version` field is set with **`--pack-version <semver>`**, not `--version` — the latter is amicus's own global "print the version" flag, which is intercepted before command dispatch and so can never carry a pack's version. `pack save --version` is rejected with `BAD_ARGS` naming the right spelling.
+
 **Precedence: flag > pack > config default > built-in default.** A pack only fills in values you didn't type explicitly on the command line — anything you do pass always wins, and the pack is recorded on the run either way (see below), so a hand-tuned invocation of a saved pack is never ambiguous about what actually ran.
 
 **`--from-run <id>`** builds a pack from an existing council run, fanout wave, or solo session instead of flags — resolution order is council pointer → wave `metadata.json` → solo `metadata.json`. It captures the bench/model, chair/critic/lenses, and the run options that were actually used; **briefing text is never captured**, only a template *reference* when the source run recorded one.

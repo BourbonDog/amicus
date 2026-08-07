@@ -707,8 +707,9 @@ Options for 'pack':
   Flags: --bench <a,b,c|name> (council/fanout) · --model (solo) · --chair/--critic/--lenses
   (council) · --debate/--no-debate (council) · --timeout/--max-cost/--gateway (shared) ·
   --agent/--thinking/--summary-length (fanout/solo) · --template <name|path> (reference only,
-  not rendered) · --version <semver> (default 1.0.0; unchanged re-save is a no-op, changed
-  auto-bumps patch) · --description <text>
+  not rendered) · --pack-version <semver> (the SAVED PACK's version, default 1.0.0; unchanged
+  re-save is a no-op, changed auto-bumps patch — NOT --version, which is amicus's own global
+  flag) · --description <text>
 `
 };
 

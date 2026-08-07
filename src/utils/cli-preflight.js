@@ -40,4 +40,30 @@ function requireValidTaskId(args, useJson, commandLabel, usage) {
   return taskId;
 }
 
-module.exports = { requireNoUiForJson, requireValidTaskId };
+/**
+ * `pack save --version <semver>` can never work, and used to fail SILENTLY:
+ * `version` is a global BOOLEAN_FLAG (src/cli.js), so parseArgs sets
+ * `args.version = true` and drops the semver into positionals, then
+ * bin/amicus.js prints the version banner BEFORE command dispatch — so
+ * `handlePack` never runs and no pack is written, at exit 0. `--version=2.0.0`
+ * fails identically (the inline value is discarded at the isBooleanFlag branch,
+ * ahead of the --key=value branch). The pack's own version is `--pack-version`.
+ *
+ * Returns the failure rather than exiting, so bin/amicus.js keeps one exit site
+ * and this stays unit-testable (bin/amicus.js is a script, not a module).
+ *
+ * @param {object} args - parsed CLI args
+ * @returns {{code: string, message: string, hint: string}|null} null when there is no conflict
+ */
+function packSaveVersionConflict(args) {
+  if (!args || !args.version) { return null; }
+  const argv = Array.isArray(args._) ? args._ : [];
+  if (argv[0] !== 'pack' || argv[1] !== 'save') { return null; }
+  return {
+    code: ERROR_CODES.BAD_ARGS,
+    message: "Error: --version is amicus's own global flag, not the saved pack's version",
+    hint: 'Use --pack-version <semver> to set the version of the pack being saved.',
+  };
+}
+
+module.exports = { requireNoUiForJson, requireValidTaskId, packSaveVersionConflict };

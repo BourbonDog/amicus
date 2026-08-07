@@ -1047,13 +1047,16 @@ unchecked items ride to the next rev.)*
   shared core, but the two outer wrappers still evolve independently — same drift shape as T15-m5's
   paramMap divergence. Nothing wrong today; watch if one's validation rules change without the other
   following.
-- [ ] **PR5F-1** — `amicus pack save <n> --version 2.0.0` exits 0 having written NOTHING. `version`
+- [x] **PR5F-1** — `amicus pack save <n> --version 2.0.0` exits 0 having written NOTHING. `version`
   is a boolean flag (`src/cli.js` `BOOLEAN_FLAGS`, `:143`), so `parseArgs` sets `version: true` and
   `bin/amicus.js:90` intercepts it as the version banner before dispatch — `cli-handlers-pack.js:26`
   (and `:123`) read `args.version || '1.0.0'` expecting a value they can never receive. Both old and
   new `pack:` help document `--version <semver>`. Confirmed live, pre-existing; the
   "accepted-and-silently-ignored" class the product principle rejects. Found during the v4.7 PR5
   final-review consolidated wave, 2026-08-07.
+  — superseded: fixed in [#125](https://github.com/BourbonDog/amicus/pull/125) (`fix/pack-save-version`),
+  which renamed the pack's own flag to `--pack-version` and added a preflight guard. Filed and closed
+  the same day; PR5's `pack:` help block carries the new spelling via the merge of `origin/main`.
 - [ ] **PR5F-2** — a bare `--out-dir` (no value) yields a directory literally named `true`.
   `cli-handlers-council-run.js:178-179` does `path.resolve(project, String(args['out-dir']))`
   with no dash-leading/non-string guard — the same R1/R5 class fixed for `-o/--out`, one flag over.

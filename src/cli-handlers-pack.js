@@ -23,7 +23,9 @@ const { ERROR_CODES, failJson } = require('./utils/error-doc');
 /** Build a pack object from `pack save <name> --kind ... <flags>`. */
 function buildPackFromFlags(name, args) {
   const kind = args.kind;
-  const pack = { schemaVersion: 1, type: 'pack', name, version: args.version || '1.0.0', kind };
+  // `--pack-version`, NOT `--version`: the latter is a global BOOLEAN_FLAG that
+  // bin/amicus.js intercepts before dispatch, so it could never arrive here.
+  const pack = { schemaVersion: 1, type: 'pack', name, version: args['pack-version'] || '1.0.0', kind };
   if (args.description) { pack.description = String(args.description); }
   if (kind === 'solo') { pack.model = args.model; }
   else if (typeof args.bench === 'string') {
@@ -120,7 +122,7 @@ function packFromSolo(name, version, meta) {
  */
 function buildPackFromRun(name, id, project, args) {
   const runState = require('./council/run-state');
-  const version = args.version || '1.0.0';
+  const version = args['pack-version'] || '1.0.0'; // see buildPackFromFlags — never args.version
 
   const ptr = runState.readPointer(project, id); // {runId, runDir}|null (run-state.js:156)
   const run = ptr ? runState.readRun(ptr.runDir) : null;

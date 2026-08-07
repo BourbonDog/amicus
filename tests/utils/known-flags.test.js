@@ -68,17 +68,18 @@ describe('getKnownFlags', () => {
 
   /**
    * Six flags appear in NO usage block except `pack:` — --kind, --bench,
-   * --no-debate, --version, --description, --from-run. If a future edit
+   * --no-debate, --pack-version, --description, --from-run. If a future edit
    * compresses that block and drops one, `amicus pack save --kind …` starts
    * failing with an unknown-flag rejection. This is the net.
+   *
+   * All six bite. (This list read `--version` until #125 renamed the pack's
+   * own version flag to `--pack-version`; the old spelling was the one entry
+   * that could NOT fail here, since `version` is also in BOOLEAN_FLAGS and so
+   * survives in getKnownFlags() no matter what this block says.)
    */
   it('the pack usage block is the sole source of six flags — compressing it must not drop them', () => {
     const flags = getKnownFlags();
-    // NOTE: the 'version' assertion below is vacuous — 'version' is also in
-    // BOOLEAN_FLAGS (src/cli.js), so getKnownFlags() carries it regardless of
-    // what the pack usage block names. Five of six flags actually bite; kept
-    // for the pair's symmetry with the six-flag comment above, not deleted.
-    for (const f of ['kind', 'bench', 'no-debate', 'version', 'description', 'from-run']) {
+    for (const f of ['kind', 'bench', 'no-debate', 'pack-version', 'description', 'from-run']) {
       expect(flags.has(f)).toBe(true);
     }
   });
