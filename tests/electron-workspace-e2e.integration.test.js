@@ -442,8 +442,8 @@ describeE2E('council workspace e2e (CDP)', () => {
   // documents, for the same reason. A sloppy-mode reassignment there silently no-ops, so the
   // real, unstubbed invoke would fire a genuine workspace:abort-run at this fixture's fake pid on
   // the confirm click. Stub instead at `window.AmicusApp.invoke`/`.openRun` — plain, non-frozen
-  // page globals workspace-app.js itself publishes (the F09/unreadable-run tests below also call
-  // `.openRun`) — which reaches the same two effective boundaries the brief names (the abort IPC
+  // page globals workspace-app.js itself publishes (the unreadable-run test below also calls
+  // `.openRun` directly) — which reaches the same two effective boundaries the brief names (the abort IPC
   // never reaches the real handler; the post-abort re-read's status is patched to terminal)
   // through the one interception point actually reachable from page script. Verified harmless
   // beforehand against a throwaway fixture copy: zero bytes of the real run.json change on disk,
@@ -470,7 +470,7 @@ describeE2E('council workspace e2e (CDP)', () => {
       await new Promise((r) => setTimeout(r, 150));
       expect(await cdp.evaluate(`document.getElementById('dialog-abort').hidden`)).toBe(false);
       await cdp.evaluate(`document.getElementById('dialog-abort-confirm').click()`);
-      await new Promise((r) => setTimeout(r, 600)); // 600 vs the file's 400ms convention: inherited from the original fix wave, untightened — this suite doesn't run in the keyless gate to verify a shorter wait
+      await new Promise((r) => setTimeout(r, 400));
       expect(await cdp.evaluate(`document.getElementById('dialog-abort').hidden`)).toBe(true);
       expect(await cdp.evaluate(`document.getElementById('abort-btn').hidden`)).toBe(true);
     } finally { cdp.close(); await kill(child); }
