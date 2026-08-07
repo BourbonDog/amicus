@@ -100,9 +100,12 @@ describe('resolveRoute — per-gateway ids (req.gatewayIds, Task 2)', () => {
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: 'openrouter/anthropic/claude-opus-4.8' });
   });
 
+  // Synthetic fixture: fable's direct route was authored 2026-08-05, so this
+  // gatewayIds override is now historical for fable — kept to pin the
+  // fallback-to-OR routing shape when a model has no direct form.
   test('auto + direct key but model NOT on direct (fable) falls back to OR', () => {
     const r = resolveRoute(req('anthropic/claude-fable-5', {
-      gatewayIds: { openrouter: 'openrouter/anthropic/claude-fable-5' }, // no direct form
+      gatewayIds: { openrouter: 'openrouter/anthropic/claude-fable-5' }, // no direct form (synthetic)
       keys: { ...NO_KEYS, anthropic: true, openrouter: true },
       catalogInfo: cat(['openrouter/anthropic/claude-fable-5']) }));
     expect(r).toMatchObject({ kind: 'resolved', gateway: 'openrouter', executableId: 'openrouter/anthropic/claude-fable-5' });

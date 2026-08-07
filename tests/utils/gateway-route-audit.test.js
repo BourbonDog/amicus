@@ -92,8 +92,9 @@ describe('auditGatewayRoutes — DIVERGENT', () => {
   it('flags divergent-missing when the alias lacks a direct form but the catalog authoritatively confirms one', () => {
     // Renamed off 'fable' (v4.6.3 PR1 Task 1 gave the real fable alias an
     // authored direct route, which would make this fixture misleading) --
-    // this still pins the positive direction: gatewayOnly: false must NOT
-    // suppress the finding for a non-annotated alias.
+    // this still pins the positive direction: an explicit gatewayOnly:false — the
+    // same provenance value a non-annotated entry defaults to — must NOT suppress
+    // the finding
     const { auditGatewayRoutes } = loadAudit(
       { nova: { openrouter: 'openrouter/anthropic/claude-nova-5' } }, // no direct form authored
       { nova: { directForm: 'none', gatewayOnly: false } }

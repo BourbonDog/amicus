@@ -40,6 +40,9 @@ describe('pairAcrossGateways — verbatim, conservative cross-gateway pairing', 
     });
   });
 
+  // Synthetic fixture: fable's direct route was authored 2026-08-05, so this
+  // is now a historical shape for fable specifically -- kept to pin how the
+  // helper handles a model that genuinely has no direct-side key at all.
   test('fable: OpenRouter-only model returns just the openrouter side, no direct key at all', () => {
     const catalogInfo = cat([
       'openrouter/anthropic/claude-fable-5',

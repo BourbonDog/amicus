@@ -512,6 +512,13 @@ describe('a JSON body of literal `null` degrades instead of throwing (review C)'
     expect(validateFindings(`${F}json\n123\n${F}`).errors[0].code).toBe('EMPTY_FINDINGS');
   });
 
+  // null = "could not verify" (no parsable findings block); 0 would assert a
+  // VERIFIED count of zero. Never-fabricate: absence of evidence stays null —
+  // downstream, run-stages.js turns a null attemptedCount into
+  // findingsUnverified:true (an additive flag persisted in runStats /
+  // tally.json / verdict.json); a real 0 never sets that flag. Verified: no
+  // CLI or report renderer (report.js, report-html.js, cli-council-run-render.js)
+  // currently prints a distinct glyph for either value -- the flag is JSON-only.
   test('countAttemptedFindings stays null (unverifiable) and NEVER 0', () => {
     expect(countAttemptedFindings(nullBody)).toBeNull();
   });
