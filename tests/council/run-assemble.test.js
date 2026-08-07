@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const asm = require('../../src/council/run-assemble');
 const { tally } = require('../../src/council/tally');
+const { mkLeg } = require('./helpers/fake-launchers');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-asm-')); });
@@ -214,6 +215,13 @@ describe('buildRunStatsEntry / worseConformance', () => {
     expect(asm.worseConformance('clean', 'repaired')).toBe('repaired');
     expect(asm.worseConformance('unstructured', 'repaired')).toBe('unstructured');
     expect(asm.worseConformance('clean', 'clean')).toBe('clean');
+  });
+
+  test('buildRunStatsEntry carries the leg waveId, absent when the leg has none', () => {
+    const row = asm.buildRunStatsEntry({ leg: { ...mkLeg('m1'), waveId: 'r1-s1' }, model: 'm1', role: 'seat', wasChair: false });
+    expect(row.waveId).toBe('r1-s1');
+    const bare = asm.buildRunStatsEntry({ leg: null, model: 'claude', role: 'claude', wasChair: false });
+    expect('waveId' in bare).toBe(false);
   });
 });
 

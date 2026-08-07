@@ -67,7 +67,7 @@ async function runDefenseSolo(ctx, raiser, findings, idx) {
   // repair is a debate degradation (spec §5.7) — surfaced via the returned leg.
   const stub = { model: raiser, status: 'error', durationMs: null, usage: null, conformance: 'unstructured', summary: '' };
   return { raiser, byId: parsed.byId,
-    leg: leg ? { model: raiser, status: leg.status, durationMs: leg.durationMs, usage: leg.usage, conformance, summary: leg.summary } : stub };
+    leg: leg ? { model: raiser, status: leg.status, durationMs: leg.durationMs, usage: leg.usage, conformance, summary: leg.summary, waveId: leg.waveId } : stub };
 }
 
 async function runRevoteWave(ctx, judges, bundleFindings) {
@@ -115,7 +115,7 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
       if (leg2) { outLeg = leg2; }
     }
     byJudge[judge] = parsed.byId;
-    legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage, conformance, summary: outLeg.summary || '' });
+    legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage, conformance, summary: outLeg.summary || '', waveId: outLeg.waveId });
   }
   return { byJudge, legs };
 }

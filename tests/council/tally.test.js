@@ -180,4 +180,13 @@ describe('tally() — runStats carries what qualifies `conformance` (review F3)'
     expect(Object.keys(record.runStats[0]))
       .toEqual(['model', 'role', 'wasChair', 'conformance', 'status', 'durationMs', 'usage']);
   });
+
+  test('waveId survives the allowlist when set; the no-waveId row above stays byte-identical', () => {
+    const record = tally({
+      ...baseInput,
+      runStats: [{ model: 'a', role: 'seat', conformance: 'clean', status: 'complete',
+        durationMs: 1, usage: null, waveId: 'r1-s1' }],
+    });
+    expect(record.runStats[0].waveId).toBe('r1-s1');
+  });
 });

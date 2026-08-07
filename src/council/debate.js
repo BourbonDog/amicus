@@ -92,6 +92,7 @@ function debateRunStatsRows({ defenseLegs, revoteLegs }) {
     status: l.status || 'unknown',
     durationMs: typeof l.durationMs === 'number' ? l.durationMs : null,
     usage: l.usage || null,
+    ...(l.waveId ? { waveId: l.waveId } : {}),
   });
   return [...(defenseLegs || []).map(mk('rebuttal')), ...(revoteLegs || []).map(mk('revote'))];
 }

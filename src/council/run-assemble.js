@@ -60,6 +60,7 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     conformance: conformance || 'clean',
     ...(findingsUnverified ? { findingsUnverified: true } : {}),
     ...(repairRefused ? { repairRefused } : {}),
+    ...(leg && leg.waveId ? { waveId: leg.waveId } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,

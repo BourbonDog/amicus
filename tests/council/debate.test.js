@@ -103,6 +103,15 @@ describe('debateRunStatsRows', () => {
     expect([...DEBATE_ROLES].sort()).toEqual(['rebuttal', 'revote']);
   });
 
+  test('waveId rides the row when the leg carries one, absent otherwise (byte-compat with the row above)', () => {
+    const rows = debateRunStatsRows({
+      defenseLegs: [{ model: 'gemini', status: 'complete', durationMs: 50, usage: null, conformance: 'clean', waveId: 'r-d1' }],
+      revoteLegs: [{ model: 'gpt', status: 'complete', durationMs: 60, usage: null, conformance: 'unstructured' }],
+    });
+    expect(rows[0].waveId).toBe('r-d1');
+    expect('waveId' in rows[1]).toBe(false);
+  });
+
   // A debate leg is an EXTRA leg by a model that already has a bench row. buildLedgerRows
   // joins runStats by model with a last-wins Map, so without the ledger.js guard these rows
   // would clobber the bench row's role/wasChair/conformance. Pin that they do not.

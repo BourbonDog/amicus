@@ -124,6 +124,7 @@ function tally(input) {
       // deliberately NOT extended — that is a schema-versioned product decision.
       ...(r.findingsUnverified ? { findingsUnverified: true } : {}),
       ...(r.repairRefused ? { repairRefused: r.repairRefused } : {}),
+      ...(r.waveId ? { waveId: r.waveId } : {}),
       status: r.status || 'unknown',
       durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
       usage: r.usage || null,
