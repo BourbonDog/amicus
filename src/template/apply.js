@@ -52,10 +52,10 @@ function applyTemplate({ templateRef, prompt, artifactFile, varList, project }) 
     try {
       raw = fs.readFileSync(artifactPath);
     } catch (err) {
-      return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: `Error: cannot read --artifact ${artifactFile}: ${err.message}`, hint: null } };
+      return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: `Error: cannot read --artifact ${artifactFile}: ${err.message}`, hint: 'Check that the --artifact path exists and is readable — relative paths resolve from the current working directory.' } };
     }
     if (raw.length > ARTIFACT_CAP_BYTES) {
-      return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: `Error: --artifact ${artifactFile} is ${raw.length} bytes; the cap is 256 KB`, hint: null } };
+      return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: `Error: --artifact ${artifactFile} is ${raw.length} bytes; the cap is 256 KB`, hint: 'Trim --artifact to under 256 KB, or point it at a smaller excerpt.' } };
     }
     artifact = raw.toString('utf-8');
     if (artifact.charCodeAt(0) === 0xFEFF) { artifact = artifact.slice(1); }
@@ -66,11 +66,11 @@ function applyTemplate({ templateRef, prompt, artifactFile, varList, project }) 
     artifact,
     artifactPath,
     date: new Date().toISOString().slice(0, 10),
-    project: String(project),
+    project: path.resolve(String(project)),
     vars,
   });
   if (res.error) {
-    return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: res.error, hint: null } };
+    return { error: { code: ERROR_CODES.TEMPLATE_RENDER, message: res.error, hint: "amicus template show <name>  (compare the template's slots against the known variables: {{prompt}}, {{artifact}}, {{artifact_path}}, {{date}}, {{project}}, {{var.<key>}})" } };
   }
 
   return {

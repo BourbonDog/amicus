@@ -38,6 +38,9 @@ function renderTemplate(text, data) {
   for (const name of used) {
     if (name.startsWith('var.')) {
       const key = name.slice(4);
+      if (key === '') {
+        return { error: `Error: Unknown template variable {{var.}} — {{var.<key>}} requires a key. Known: ${knownList()}` };
+      }
       if (!(key in vars)) {
         return { error: `Error: template uses {{var.${key}}} but no --var ${key}=<value> was given` };
       }

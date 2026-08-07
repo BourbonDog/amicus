@@ -73,6 +73,12 @@ describe('renderTemplate: strict errors', () => {
     expect(res.error).toMatch(/\{\{var\.missing\}\}.*no --var missing=/);
   });
 
+  test('{{var.}} (empty key) errors with a followable message, not the unusable --var =<value> remedy', () => {
+    const res = renderTemplate('Hi {{var.}} there', { ...BASE, vars: {} });
+    expect(res.error).not.toContain('--var =');
+    expect(res.error).toMatch(/requires a key/);
+  });
+
   test('unused --var produces a notice, not an error', () => {
     const res = renderTemplate('static', { ...BASE, vars: { unused: 'v' } });
     expect(res.error).toBeUndefined();

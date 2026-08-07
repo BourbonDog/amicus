@@ -29,7 +29,11 @@ describe('applyTemplate', () => {
     const p = userTemplate('t1', 'Do: {{prompt}} on {{date}} in {{project}}');
     const res = load().applyTemplate({ templateRef: 't1', prompt: 'the task', project: '/proj' });
     expect(res.error).toBeUndefined();
-    expect(res.prompt).toMatch(/^Do: the task on \d{4}-\d{2}-\d{2} in \/proj$/);
+    // T5-m4: {{project}} is path-resolved, so the expected value must be
+    // built with path.resolve() rather than hardcoding the POSIX form —
+    // path.resolve('/proj') is 'C:\proj' (or similar) on Windows.
+    expect(res.prompt).toMatch(/^Do: the task on \d{4}-\d{2}-\d{2} in /);
+    expect(res.prompt.endsWith(` in ${path.resolve('/proj')}`)).toBe(true);
     expect(res.promptMeta.source).toBe('template');
     expect(res.promptMeta.file).toBe(path.resolve(p));
     expect(res.promptMeta.chars).toBe(res.prompt.length);
@@ -52,6 +56,20 @@ describe('applyTemplate', () => {
     const res = load().applyTemplate({ templateRef: 't3', artifactFile: art, project: '/p' });
     expect(res.error.code).toBe('TEMPLATE_RENDER');
     expect(res.error.message).toMatch(/256 KB/);
+    // T5-m4b: real, followable hint (not null) on the size-cap failure.
+    expect(res.error.hint).not.toBeNull();
+    expect(res.error.hint).toMatch(/256 KB/);
+  });
+
+  test('an unreadable --artifact path -> TEMPLATE_RENDER with a path-oriented hint', () => {
+    userTemplate('t3b', '{{artifact}}');
+    const missing = path.join(tmp, 'does-not-exist.txt');
+    const res = load().applyTemplate({ templateRef: 't3b', artifactFile: missing, project: '/p' });
+    expect(res.error.code).toBe('TEMPLATE_RENDER');
+    expect(res.error.message).toMatch(/cannot read --artifact/);
+    // T5-m4b: real, followable hint (not null) on the artifact read-failure.
+    expect(res.error.hint).not.toBeNull();
+    expect(res.error.hint).toMatch(/--artifact/);
   });
 
   test('unknown template -> TEMPLATE_NOT_FOUND with the list hint', () => {
@@ -65,6 +83,10 @@ describe('applyTemplate', () => {
     const res = load().applyTemplate({ templateRef: 't4', prompt: 'dropped?', project: '/p' });
     expect(res.error.code).toBe('TEMPLATE_RENDER');
     expect(res.error.message).toMatch(/silently dropped/);
+    // T5-m4b: real, followable hint (not null) on the strict-render violation,
+    // pointing at the variable contract.
+    expect(res.error.hint).not.toBeNull();
+    expect(res.error.hint).toMatch(/amicus template show/);
   });
 
   test('--var k=v parsing: repeatable, k=v shape enforced', () => {
