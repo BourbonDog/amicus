@@ -109,6 +109,31 @@ describe('--pack reaches runFanout (happy path)', () => {
   });
 });
 
+// T13-m1: pack-cli.js's applyPackOrExit had `if (pr.error) { process.exit(...); }`
+// with no `return` — a non-throwing process.exit stub (as any caller that
+// swaps in its own non-throwing stub would see) falls through to
+// `for (const n of pr.notices)`, and applyPackToArgs' error returns
+// (pack-resolve.js:76/:262) carry no `notices` key, so that loop threw
+// `TypeError: pr.notices is not iterable` instead of surfacing the exit(1).
+describe('T13-m1: applyPackOrExit early-returns past the notices loop on error', () => {
+  test('a missing --pack ref exits 1 with no TypeError, even when process.exit does not throw', async () => {
+    // Override this file's default THROWING process.exit stub (beforeEach,
+    // line ~66) with a non-throwing one for this test only — the whole point
+    // is to prove the code path no longer depends on exit() unwinding the
+    // stack via a throw.
+    exit.mockImplementation(() => undefined);
+
+    await handleFanout(parseArgs([
+      'fanout', '--pack', 'does-not-exist', '--models', 'alpha,beta',
+      '--prompt-file', briefingFile, '--json',
+    ]));
+
+    expect(exit).toHaveBeenCalledWith(1);
+    const doc = JSON.parse(out.mock.calls.map((c) => c[0]).join(''));
+    expect(doc.error.code).toBe(ERROR_CODES.PACK_NOT_FOUND);
+  });
+});
+
 describe('--pack kind mismatch', () => {
   test('a council pack passed to fanout fails PACK_KIND_MISMATCH; message names fanout', async () => {
     store().writePack(COUNCIL_KIND_PACK());
