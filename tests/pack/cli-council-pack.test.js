@@ -8,13 +8,27 @@
  * and recorded on run.json (run-state.js, unmocked).
  *
  * Two Task-11-review rulings pinned here:
- *  (a) pack-attributed pre-flight errors — chair-is-a-bench-seat, critic-not-
- *      in-bench, and critic×lenses all append " (set by pack '<name>')" to the
- *      failing value's mention, ONLY when that value was pack-filled and not
- *      explicit (an explicit flag is never "blamed" on the pack).
+ *  (a) pack-attributed pre-flight errors — chair-is-a-bench-seat and critic-
+ *      not-in-bench append " (set by pack '<name>')" to the failing value's
+ *      mention, ONLY when that value was pack-filled and not explicit (an
+ *      explicit flag is never "blamed" on the pack). critic×lenses is NO
+ *      LONGER part of this pattern as of T11-d (see below): a pack supplying
+ *      both fields now fails PACK_INVALID in pack-resolve.js, before the
+ *      handler's own pre-flight checks (and packSuffix attribution) ever
+ *      run, on EITHER bench shape.
  *  (b) the critic/lenses XOR integration assertion — a pack's critic is
  *      suppressed by a typed --lenses through the REAL handler + pack-resolve
- *      (not a mock), reaching runCouncil with lenses only and no error.
+ *      (not a mock), reaching runCouncil with lenses only and no error. This
+ *      applies only when the PACK ITSELF sets at most one of the two fields;
+ *      see the T11-d describe below for a pack that sets both.
+ *
+ * T11-d (fix wave, 2026-08): critic+lenses mutual exclusion is bench-
+ * independent in pack-validate.js — a council pack supplying both fields
+ * fails PACK_INVALID at resolve time regardless of bench shape (string or
+ * array) and regardless of whether an explicit --lenses/--critic flag would
+ * otherwise have suppressed the pack-filled side (pack-resolve's
+ * explicit-vs-pack fill logic never gets a chance to run — validatePack
+ * rejects the raw pack first). See the dedicated describe near the bottom.
  */
 
 const fs = require('fs');
@@ -36,10 +50,16 @@ beforeEach(() => {
   // Custom aliases + a user-saved council ('trio') so bench resolution is
   // fully under this test's control (no reliance on real default aliases or
   // built-in benches). 'trio' exists specifically so a STRING-bench pack
-  // (chair/critic/lenses-vs-seat checks deferred to run time by pack-validate,
-  // per its own docblock) can reach the handler's OWN pre-flight checks —
-  // an ARRAY-bench pack with the same conflict is rejected earlier as
-  // PACK_INVALID and never reaches them.
+  // (chair-vs-seat and critic-vs-seat checks deferred to run time by
+  // pack-validate, per its own docblock) can reach the handler's OWN
+  // pre-flight checks for THOSE two conflicts — an ARRAY-bench pack with the
+  // same conflict is rejected earlier as PACK_INVALID and never reaches them.
+  // As of T11-d, critic+lenses-together is NOT one of the checks a string
+  // bench defers: pack-validate now rejects it bench-independently, so a
+  // 'trio'-bench pack setting both fields is ALSO caught as PACK_INVALID
+  // before the handler runs (see the T11-d describe below) — 'trio' remains
+  // useful only for the chair-alone and critic-alone (bench-membership)
+  // conflicts.
   fs.writeFileSync(path.join(tmp, 'config.json'), JSON.stringify({
     aliases: {
       alpha: 'vendorx/alpha-model', beta: 'vendorx/beta-model',
@@ -84,9 +104,13 @@ const XOR_PACK = () => ({
   description: 'x', bench: ['alpha', 'beta'], chair: 'chairmodel', critic: 'alpha', lenses: null,
   options: {}, briefing: {},
 });
-// STRING bench ('trio'): pack-validate defers chair/critic/lenses-vs-seat
-// checks to run time (a warning only), so these three deliberately-conflicting
-// packs are VALID and reach the handler's own pre-flight checks unmodified.
+// STRING bench ('trio'): pack-validate defers chair-vs-seat and critic-vs-
+// seat checks to run time (a warning only), so CHAIR_CONFLICT_PACK and
+// CRITIC_CONFLICT_PACK below are VALID packs that reach the handler's own
+// pre-flight checks unmodified. CRITIC_LENSES_CONFLICT_PACK below is
+// different as of T11-d: pack-validate now rejects critic+lenses-together
+// bench-independently, so that fixture is INVALID (PACK_INVALID) and never
+// reaches the handler — see the dedicated T11-d describe further down.
 const CHAIR_CONFLICT_PACK = () => ({
   schemaVersion: 1, type: 'pack', name: 'chair-conflict', version: '1.0.0', kind: 'council',
   description: 'x', bench: 'trio', chair: 'alpha', critic: null, lenses: null,
@@ -200,24 +224,6 @@ describe('pack-attributed pre-flight errors (2026-07-28 ruling a)', () => {
     expect(doc.error.message).toContain("(set by pack 'critic-conflict')");
   });
 
-  // T11-d: critic+lenses is now bench-independent (pack-validate.js), so a
-  // pack supplying both — even on a by-name (string) bench, which used to
-  // defer this check to the handler — is now rejected at pack-resolve time,
-  // before the handler's own pre-flight checks (and packSuffix attribution)
-  // ever run. The old test's subject — the HANDLER's mutual-exclusion error
-  // naming the pack via packSuffix — no longer exists: that code path is
-  // unreachable now that pack-validate catches the conflict first. This test
-  // pins the new behavior instead.
-  test('a pack supplying BOTH critic and lenses fails PACK_INVALID pre-spend (T11-d)', async () => {
-    store().writePack(CRITIC_LENSES_CONFLICT_PACK());
-    const code = await handleCouncilRun(runArgs(['--pack', 'critic-lenses-conflict']));
-    expect(code).toBe(1);
-    const doc = JSON.parse(out.mock.calls[0][0]);
-    expect(doc.error.code).toBe(ERROR_CODES.PACK_INVALID);
-    expect(doc.error.message).toMatch(/critic and lenses are mutually exclusive/);
-    expect(runCouncil).not.toHaveBeenCalled();
-  });
-
   test('explicit --chair equal to a bench seat fails WITHOUT pack attribution (explicit wins, no suffix)', async () => {
     // Same conflicting pack as the first attribution test, but --chair is
     // typed explicitly this time (also a bench seat) — the failure is real
@@ -243,6 +249,58 @@ describe('pack-attributed pre-flight errors (2026-07-28 ruling a)', () => {
     const doc = JSON.parse(out.mock.calls[0][0]);
     expect(doc.error.message).toContain("chair 'deepseek' is a bench seat");
     expect(doc.error.message).not.toContain('set by pack');
+  });
+});
+
+// T11-d: critic+lenses is bench-independent (pack-validate.js), so a pack
+// supplying both — even on a by-name (string) bench, which used to defer
+// this check to the handler — is now rejected at pack-resolve time, before
+// the handler's own pre-flight checks (and packSuffix attribution) ever run.
+// This describe is deliberately separate from 'pack-attributed pre-flight
+// errors' above: these two tests no longer exercise that handler-level
+// attribution logic at all (PACK_INVALID fires first, pre-spend, from
+// pack-resolve.js) — they belong to a different code path.
+describe('critic+lenses conflict is bench-independent (T11-d)', () => {
+  // The old test's subject here ('critic×lenses mutual exclusion names the
+  // pack when both were pack-filled') no longer exists: that was the
+  // HANDLER's own mutual-exclusion error naming the pack via packSuffix.
+  // That code path is unreachable now that pack-validate catches the
+  // conflict first. This test pins the new behavior instead.
+  test('a pack supplying BOTH critic and lenses fails PACK_INVALID pre-spend', async () => {
+    store().writePack(CRITIC_LENSES_CONFLICT_PACK());
+    const code = await handleCouncilRun(runArgs(['--pack', 'critic-lenses-conflict']));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out.mock.calls[0][0]);
+    expect(doc.error.code).toBe(ERROR_CODES.PACK_INVALID);
+    expect(doc.error.message).toMatch(/critic and lenses are mutually exclusive/);
+    expect(runCouncil).not.toHaveBeenCalled();
+  });
+
+  // Fix wave (Task-2 review, Important 2): a behavior change with no prior
+  // pin. Pre-hoist, a STRING-bench pack carrying both critic and lenses,
+  // invoked with an explicit --lenses flag, used to RUN: pack-resolve's
+  // explicit-vs-pack fill logic (pack-resolve.js:140/143) suppresses the
+  // pack-filled critic whenever --lenses is typed explicitly, so the
+  // handler's own mutual-exclusion pre-flight (critic && lenses) never saw
+  // both truthy — the pack passed validatePack (the string-bench branch only
+  // warned, T11-d's hole) and runCouncil ran with critic=null, lenses=the
+  // typed value. Post-hoist, validatePack rejects the RAW pack object
+  // (pack.critic && pack.lenses both set) before pack-resolve's fill logic
+  // ever runs, so an explicit --lenses can no longer rescue it — the pack
+  // now hard-fails PACK_INVALID regardless of what flags were typed. This is
+  // correct: an ARRAY-bench pack with both fields set already behaved this
+  // way pre-hoist (the mutex check lived in the array branch unconditionally,
+  // with no explicit-flag escape hatch either) — the hoist makes the two
+  // bench shapes consistent, which IS T11-d. Pinned here so the behavior
+  // change is documented, not just incidentally true.
+  test('an explicit --lenses does NOT rescue a pack that sets BOTH fields (consistency w/ array-bench)', async () => {
+    store().writePack(CRITIC_LENSES_CONFLICT_PACK()); // bench 'trio'; critic: 'alpha', lenses: ['x','y']
+    const code = await handleCouncilRun(runArgs(['--pack', 'critic-lenses-conflict', '--lenses', 'a,b,c']));
+    expect(code).toBe(1);
+    const doc = JSON.parse(out.mock.calls[0][0]);
+    expect(doc.error.code).toBe(ERROR_CODES.PACK_INVALID);
+    expect(doc.error.message).toMatch(/critic and lenses are mutually exclusive/);
+    expect(runCouncil).not.toHaveBeenCalled();
   });
 });
 
