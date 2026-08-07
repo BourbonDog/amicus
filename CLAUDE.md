@@ -179,6 +179,7 @@ src/
 │   ├── interactive-mirror.js
 │   ├── interactive-process.js  # Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing
 │   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
+│   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
 │   ├── models-probe.js
 │   ├── models.js  # `amicus models` (F5) — list/search the catalog, refresh it, audit aliases.
@@ -547,6 +548,7 @@ evals/
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive-process.js` | Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `runInteractive()` |
+| `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |
 | `sidecar/models.js` | `amicus models` (F5) — list/search the catalog, refresh it, audit aliases. | `handleModels()`, `buildFallbackDriftReport()` |

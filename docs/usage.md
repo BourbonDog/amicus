@@ -9,7 +9,7 @@ The `am` alias is interchangeable with `amicus` everywhere.
 amicus start --model <model> --prompt "<task>"
 amicus start --model <model> --prompt-file briefing.md --no-ui --json
 amicus fanout --models "gemini,deepseek,gpt" --prompt "Review this" --json
-amicus list [--status <filter>] [--all] [--search <q>] [--json]
+amicus list [--status <filter>] [--all] [--search <q>] [--limit <n>] [--json]
 amicus resume <task_id> [--no-ui --json]
 amicus continue <task_id> --prompt "Next step..." [--no-ui --json]
 amicus read <task_id> [--conversation|--metadata|--json]
@@ -429,6 +429,7 @@ amicus list --status running         # Filter: running, complete, error, timed-o
                                       #         aborted, crashed, idle-timeout
 amicus list --all                    # All projects (cross-project, via the session index)
 amicus list --search foo             # Substring match: id, tag, briefing material (case-insensitive)
+amicus list --limit 20               # Only the 20 newest rows (0 = unlimited); pairs well with --all
 amicus list --json                   # Machine-readable
 
 amicus read <id>                     # Fold summary (default)

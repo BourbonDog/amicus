@@ -158,6 +158,9 @@ async function handleFanout(args) {
     // by validateFanoutModels' router call.
     gatewayMode: resolveGatewayMode(args.gateway),
     json: !!args.json,
+    // v4.7 PR3 rider: `quiet` is a repo-wide known flag, so `fanout --quiet`
+    // parsed and exited 0 while runFanout still printed — forward it.
+    quiet: !!args.quiet,
     client: args.client,
     maxCost: args['max-cost'] !== null && args['max-cost'] !== undefined ? args['max-cost'] : cfg.maxCost,
     noCostGate: !!args['no-cost-gate'],

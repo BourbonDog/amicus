@@ -1,4 +1,12 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { createFoldHandler } = require('../electron/fold');
+
+// v4.7 PR3 rider (hermeticity): sandbox, not the literal '/tmp' (= C:\tmp on
+// Windows, outside any sandbox). Pinned by tests/hermetic-tmp-guard.test.js.
+const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-fold-'));
+afterAll(() => { fs.rmSync(PROJECT, { recursive: true, force: true }); });
 
 // Mock dependencies
 jest.mock('../electron/summary', () => ({
@@ -52,7 +60,7 @@ describe('Fold nudge message', () => {
     };
 
     const handler = createFoldHandler({
-      model: 'gemini', client: 'cowork', cwd: '/tmp',
+      model: 'gemini', client: 'cowork', cwd: PROJECT,
       sessionId: 'ses_123', taskId: 'task-1', port: 4096,
     });
 
