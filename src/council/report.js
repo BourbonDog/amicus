@@ -73,7 +73,15 @@ function toModel(verdict, wave) {
   // collision for their model. Tag ONLY these four roles — old verdicts have
   // none of them, so chair/critic/lens/seat rows stay byte-identical to their
   // historical rendering (report.test.js:189-199 pins the judge case exactly).
-  const ROLE_SUFFIX = { judge: 'judge', 'chair-attempt': 'chair-attempt', repair: 'repair', superseded: 'superseded' };
+  // Object.create(null): a plain `{...}` literal inherits Object.prototype, so a role
+  // literally named 'constructor'/'toString'/etc would resolve to an inherited (truthy)
+  // function via bracket lookup instead of `undefined` — silently corrupting that row's
+  // rendered model label. A null-prototype object has no inherited keys to collide with.
+  const ROLE_SUFFIX = Object.create(null);
+  ROLE_SUFFIX.judge = 'judge';
+  ROLE_SUFFIX['chair-attempt'] = 'chair-attempt';
+  ROLE_SUFFIX.repair = 'repair';
+  ROLE_SUFFIX.superseded = 'superseded';
   const costRows = runStats.map(r => ({
     model: ROLE_SUFFIX[r.role] ? `${r.model} (${ROLE_SUFFIX[r.role]})` : r.model,
     status: r.status, durationMs: r.durationMs,

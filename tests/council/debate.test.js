@@ -184,6 +184,5 @@ describe('debateRunStatsRows', () => {
       expect(withoutParams).toEqual(withEmptyParams);
       expect(withoutParams).toHaveLength(2);
     });
-
   });
 });

@@ -254,9 +254,18 @@ async function runCouncil(options, deps = {}) {
     // Built on the (possibly debated) input so the debate's amended claims, replaced
     // adjudications and rebuttal/revote runStats rows all reach the final record.
     const finalInput = { ...debatedInput, meta: { ...debatedInput.meta, chair: actualChair || o.chair } };
-    if (chairStats) { finalInput.runStats = [...(finalInput.runStats || []), chairStats]; }
-    finalInput.runStats = [...(finalInput.runStats || []), ...chairRows];
-    if (giveUpRow) { finalInput.runStats = [...finalInput.runStats, giveUpRow]; }
+    // Item 8, final-review consolidated wave: was three sequential
+    // reassignments (chairStats, then chairRows, then giveUpRow), each
+    // rebuilding finalInput.runStats from scratch — collapsed into the one
+    // spread that was always the net effect. The `|| []` fallbacks were
+    // dead: `runStats` is a real array on every debatedInput
+    // (asm.buildTallyInput always returns one via .map()), never undefined.
+    finalInput.runStats = [
+      ...finalInput.runStats,
+      ...(chairStats ? [chairStats] : []),
+      ...chairRows,
+      ...(giveUpRow ? [giveUpRow] : []),
+    ];
     const record = tally(finalInput);
     if (debateFindings) { decorateRecord(record, debateFindings); }
     if (!o.lenses) {

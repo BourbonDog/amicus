@@ -361,6 +361,32 @@ describe('chair VERDICT-line repair (one re-prompt)', () => {
       .toContain('Prose only, forever.');
   });
 
+  // Item 10, final-review consolidated wave: mirrors the "still missing after
+  // the one repair" test above, but for a ch4 that LAUNCHED and then FAILED
+  // outright (status 'error', no summary at all) rather than one that
+  // completed with prose simply lacking a VERDICT line. run-chair.js's
+  // `if (repair.leg)` guard (item 3's comment fix) pushes a repair row for
+  // ANY launched ch4 leg regardless of its status — repair.leg is the raw,
+  // un-nulled leg — so this pins that the row still appears (carrying the
+  // leg's own error status) and that chairConformance still resolves to
+  // 'unstructured' off the empty/failed repair summary.
+  test('ch4 launches but its own leg FAILS (status error, no VERDICT): the repair row still appears with an error status; chairConformance is unstructured', async () => {
+    const script = happyScript();
+    script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose only, forever.', 'complete', 0.03)]);
+    script['abc123-ch4'] = () => okWave([mkLeg('deepseek', '', 'error', 0.01, 'abc123-ch4')], 1, 'error');
+    const { exitCode } = await runCouncil(baseOptions(tmp), {
+      launchers: scriptedLaunchers(script), appendRunFn: jest.fn(), statsFn: () => [],
+      installSignalAbortFn: noSignals,
+    });
+    expect(exitCode).toBe(2);
+    expect(readVerdict().overallVerdict).toBeNull();
+    const input = JSON.parse(fs.readFileSync(path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const repairRows = input.runStats.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(1);
+    expect(repairRows[0]).toMatchObject({ model: 'deepseek', wasChair: false, status: 'error', waveId: 'abc123-ch4' });
+    expect(input.runStats.find(r => r.wasChair).conformance).toBe('unstructured');
+  });
+
   test('chair completes verdict-less but its cost trips --max-cost: repair skipped, conformance unstructured, exit 2', async () => {
     const script = happyScript();
     script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Prose but no verdict line at all.', 'complete', 0.03)]);

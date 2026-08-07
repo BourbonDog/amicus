@@ -28,9 +28,21 @@ const LEDGER_FILE = 'council-ledger.jsonl';
 // the allowlist would rather silently drop a legitimate new role's
 // role/wasChair/conformance (falling back to 'council'/false/'clean') than
 // ever let an unreviewed role win the model-keyed join.
+//
+// Final-review consolidated wave (owner-ruled): the ABSENCE of a role
+// (null/undefined) is a DIFFERENT case from a NAMED-unknown role and joins
+// too — this is the docs/council.md:562-blessed hand-assembled tally-input
+// shape ("the legacy default `council` … pre-#83 rows, or hand-assembled
+// tally input that never set a role"), and mirrors GOA-7's absent-field⇒
+// legacy pattern elsewhere in this codebase: a field that was never set gets
+// treated as the oldest/legacy shape, not silently dropped like an
+// unreviewed value would be. A NAMED custom label (e.g. 'custom-thing') is
+// still rejected exactly as E6 describes — only the missing-field case is
+// legacy; an actively wrong or unreviewed one is not.
 const LEDGER_JOIN_ROLES = new Set(['seat', 'critic', 'chair', 'claude', 'council', 'redteam']);
 function joinsLedger(role) {
-  return LEDGER_JOIN_ROLES.has(role) || (typeof role === 'string' && role.startsWith('lens:'));
+  return role === null || role === undefined ||
+    LEDGER_JOIN_ROLES.has(role) || (typeof role === 'string' && role.startsWith('lens:'));
 }
 
 function countSeverity(findings) {

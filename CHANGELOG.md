@@ -10,13 +10,15 @@ All notable changes to Amicus are documented here. Format follows
 - **`runStats` gains a row for every paid launch, not just one per requested seat** (v4.7 CA-4,
   the row-per-launch design — closes the chair-cost accounting gap). Three new roles cover legs
   that were billed but never rowed: `chair-attempt` (a failed ch1–ch3 chair launch), `repair`
-  (a Stage-1 `-p`, Stage-2 `-q`, or chair-ch4 solo), and `superseded` (a first leg a later attempt
-  replaced — an SL-2 retry or a debate repair); `wasChair` is always `false` on these. Every dead
-  seat/critic/lens with no recovery, and a chair walk that gives up entirely, now get an honest
-  primary error row too, extending the #83 judge treatment to every seat.
+  (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r` solo — a failed
+  defense or re-vote repair), and `superseded` (a first leg a later attempt replaced — an SL-2
+  retry or a debate repair); `wasChair` is always `false` on these. Every dead seat/critic/lens
+  with no recovery, and a chair walk that gives up entirely, now get an honest primary error row
+  too, extending the #83 judge treatment to every seat.
 - **`runStats[].waveId`** (emit-only-when-set): every row backed by a real billed leg now names
-  the exact wave/leg it came from; the synthetic `claude` row and a give-up chair's error row
-  carry none.
+  the exact wave/leg it came from; e.g. the synthetic `claude` row, a give-up chair's error row,
+  and a leg-less dead-seat/critic/lens primary error row (the two SL-2 retry note-classes that
+  never produced a real leg for the seat at all) carry none.
 - **The run-cost bijection invariant suite** (`tests/council/run-cost-bijection.test.js`): every
   terminal run now proves Σ(`runStats` legged-row usage) equals `run.json`'s `usage` block —
   cost, and the reported/estimated/unpriced/subtreeUnknown leg counts — across clean, repair,

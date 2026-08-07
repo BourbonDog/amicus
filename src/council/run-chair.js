@@ -209,9 +209,17 @@ async function runChair(ctx, { packet, degrade, statsFn, isSignalled }) {
     });
     addWave(repair.wave);
     if (isAbortExit(repair.exitCode) || isSignalled()) { return bail(repair.exitCode || isSignalled()); }
-    // repair.leg is raw (launchSolo never nulls it on failure) — a launched
-    // ch4 (a leg document exists, whatever its status) gets its own row so
-    // the repair's spend is attributed even when it never supplies a VERDICT.
+    // repair.leg is the raw leg document — launchSolo DOES null it, but only
+    // on a wave-less failure (a pre-flight refusal with no wave launched at
+    // all: run-launch.js's launchSolo derives `leg` from `wave.legs[0]`, so
+    // no wave means no leg, no waveId, no money spent — the errata E3 "no
+    // leg = no wave = no money = no row" case). A wave that DID launch
+    // always yields a leg document, whatever its status. The `if
+    // (repair.leg)` guard below is therefore load-bearing on that exact
+    // distinction: a launched ch4 (a leg document exists, whatever its
+    // status) gets its own row so the repair's spend is attributed even when
+    // it never supplies a VERDICT; a ch4 that never even launched gets no
+    // row at all, because there is nothing billed to attribute.
     if (repair.leg) {
       chairRows.push(buildRunStatsEntry({
         leg: repair.leg, model: actualChair, role: 'repair', wasChair: false,

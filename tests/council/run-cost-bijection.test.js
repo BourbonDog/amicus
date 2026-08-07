@@ -130,6 +130,12 @@ function instrumentedLaunchers(script) {
   };
   return {
     emittedLegs,
+    // Item 5(d), final-review consolidated wave: pass `base.calls` (the same
+    // array reference scriptedLaunchers records every launch's opts into)
+    // through so a caller of instrumentedLaunchers can inspect `.calls`
+    // exactly like a bare scriptedLaunchers(...) result — this suite's own
+    // helper was silently dropping that surface.
+    calls: base.calls,
     launchWave: async (opts) => { const r = await base.launchWave(opts); record(r.wave); return r; },
     launchSolo: async (opts) => { const r = await base.launchSolo(opts); record(r.wave); return r; },
   };
@@ -217,9 +223,16 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       // run") that should hold regardless of cost-source mix.
       'abc123-s2': () => okWave([
         {
+          // Item 5(b), final-review consolidated wave: amount:0 is the REAL
+          // free/local-tier shape (pricing.js's v4.2 §4.5 carve-out — a local
+          // provider with no catalog pricing resolves to `{prompt: 0,
+          // completion: 0}`, so an estimated leg with observed tokens but no
+          // catalog price is `estimated $0`, never a positive guess). The
+          // prior 0.002 stand-in didn't match anything the real resolver
+          // produces.
           ...wLeg('gemini', 'abc123-s2', judgeOut(['Review B', 'Review C', 'Review A'],
             [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'neutral' }])),
-          usage: { tokens: { input: 50, output: 20 }, cost: { amount: 0.002, source: 'estimated' } },
+          usage: { tokens: { input: 50, output: 20 }, cost: { amount: 0, source: 'estimated' } },
         },
         wLeg('gpt', 'abc123-s2', judgeOut(['Review A', 'Review C', 'Review B'],
           [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }, { id: 'C1', verdict: 'dispute' }])),
@@ -231,7 +244,7 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
       ]),
       'abc123-ch1': cleanChair,
     };
-    const { run, legged, rows } = await driveAndAssertBijection(baseOptions(tmp), script);
+    const { run, tallyDoc, legged, rows } = await driveAndAssertBijection(baseOptions(tmp), script);
 
     expect(run.exitCode).toBe(0);
     // 3 seat rows + 3 judge rows + 1 chair row — the pre-v4.7 #83 shape (run-happy.test.js:69),
@@ -239,7 +252,14 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
     // by cost source — a leg still gets exactly one row whether its cost
     // resolved reported, estimated, or unknown.
     expect(legged).toHaveLength(7);
-    expect(legged.every(r => r.waveId)).toBe(true);
+    // Item 5(a), final-review consolidated wave: `legged.every(r => r.waveId)`
+    // was a tautology — `legged` is ITSELF `tallyDoc.runStats.filter(r =>
+    // r.waveId)` (line above), so every element trivially carries a waveId
+    // by construction; the assertion could never fail regardless of what
+    // buildRunStatsEntry actually did. The real claim for a CLEAN run — every
+    // single row on tally.json is legged, none leg-less — is checked against
+    // the UNFILTERED source instead.
+    expect(tallyDoc.runStats.filter(r => !r.waveId)).toHaveLength(0);
     // Non-vacuous cost-source axes: both sides move off zero together, for
     // the newly-added estimatedLegs axis AND the previously-always-0
     // unpricedLegs axis.
@@ -247,6 +267,13 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
     expect(run.usage.cost.estimatedLegs).toBe(1);
     expect(rows.cost.unpricedLegs).toBe(1);
     expect(run.usage.cost.unpricedLegs).toBe(1);
+    // Item 5(b): the estimated leg's amount is the REAL free/local-tier shape
+    // (pricing.js's v4.2 §4.5 carve-out: a local provider with no catalog
+    // pricing resolves to `{prompt: 0, completion: 0}`, so an estimated leg
+    // is `estimated $0`, never a positive guessed figure) — $0.002 was an
+    // unrealistic stand-in. Total: 3×$0.01 seats + $0.01 gpt judge + $0 gemini
+    // judge (estimated, free-local) + $0.03 chair = $0.07.
+    expect(run.usage.cost.amount).toBeCloseTo(0.07, 4);
     // The tokens half of the identity, exercised through the ROW machinery
     // (reviewer, Minor #3): buildRunStatsEntry copies a leg's `usage`
     // verbatim (never invents or drops fields), so the unknown-cost leg's
@@ -255,8 +282,12 @@ describe('D5 invariant — the leg-row bijection (v4.7 "the count is the count")
     // addWave-side total, actually carries them.
     const qwenJudgeRow = legged.find(r => r.model === 'qwen' && r.role === 'judge');
     expect(qwenJudgeRow.usage).toEqual({ tokens: { input: 100, output: 5 }, cost: { amount: null, source: 'unknown' } });
-    expect(rows.tokens.input).toBeGreaterThanOrEqual(100);
-    expect(rows.tokens.output).toBeGreaterThanOrEqual(5);
+    // Item 5(c): exact, not a floor — every leg's own observed tokens are
+    // known in this fixture (gemini judge 50/20, qwen judge 100/5, every
+    // other leg carries no `tokens` field and contributes 0), so the rollup
+    // total is a precise fact, not merely "at least this much".
+    expect(rows.tokens.input).toBe(150);
+    expect(rows.tokens.output).toBe(25);
   });
 
   test('scenario 2 — repair run: a Stage-1 findings-repair leg rides its OWN row, distinct from the seat\'s primary review (E4)', async () => {

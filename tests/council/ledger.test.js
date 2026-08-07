@@ -233,4 +233,50 @@ describe('v4.7 fail-closed ledger join — non-primary rows never overwrite a be
     expect(alpha.role).toBe('redteam');
     expect(alpha.conformance).toBe('repaired');
   });
+
+  // Final-review consolidated wave, owner-ruled (item 1): a ROLELESS row
+  // (role null/undefined) is the docs/council.md:562-blessed hand-assembled
+  // shape — "the legacy default `council` (pre-#83 rows, or hand-assembled
+  // tally input that never set a role)" — and must JOIN as legacy, mirroring
+  // GOA-7's absent-field⇒legacy pattern elsewhere in this codebase. Distinct
+  // from a NAMED custom/unknown role (still rejected — E6 unchanged, pinned
+  // right below this test): this is the ABSENCE of a role field, not an
+  // unreviewed one. Non-vacuous: asserts wasChair:true and
+  // conformance:'repaired', neither of which is reachable via the `rs.get()
+  // || {}` non-join fallback (`!!undefined` === false, `undefined ||
+  // 'clean'` === 'clean') — this can ONLY pass if the row actually joined.
+  test('a roleless row (role undefined) JOINS as legacy — its real conformance/wasChair survive, not the fallback defaults', () => {
+    const rec = {
+      meta: { runId: 'r1', date: '2026-08-01', runType: 'headless', models: ['alpha'], chair: 'c' },
+      findings: [], streetCred: [{ model: 'alpha', withSelf: 1, peersOnly: 1 }],
+      judged: true,
+      runStats: [
+        { model: 'alpha', wasChair: true, conformance: 'repaired', status: 'complete', durationMs: 80, usage: null },
+      ],
+    };
+    const rows = buildLedgerRows(rec);
+    const alpha = rows.find(r => r.model === 'alpha');
+    expect(alpha.role).toBe('council');        // legacy default label
+    expect(alpha.wasChair).toBe(true);          // real value — proves the join happened
+    expect(alpha.conformance).toBe('repaired'); // real value — proves the join happened
+  });
+
+  // The E6 twin: a NAMED custom/unknown role must still be rejected by the
+  // allowlist — only the ABSENCE of a role field joins as legacy, not any
+  // string a future producer happens to invent.
+  test('a named custom role (e.g. "custom-thing") still does NOT join — E6 unchanged', () => {
+    const rec = {
+      meta: { runId: 'r1', date: '2026-08-01', runType: 'headless', models: ['alpha'], chair: 'c' },
+      findings: [], streetCred: [{ model: 'alpha', withSelf: 1, peersOnly: 1 }],
+      judged: true,
+      runStats: [
+        { model: 'alpha', role: 'custom-thing', wasChair: true, conformance: 'repaired', status: 'complete', durationMs: 80, usage: null },
+      ],
+    };
+    const rows = buildLedgerRows(rec);
+    const alpha = rows.find(r => r.model === 'alpha');
+    expect(alpha.role).toBe('council');      // fallback default — never joined
+    expect(alpha.wasChair).toBe(false);      // the {} fallback, NOT the row's true wasChair
+    expect(alpha.conformance).toBe('clean'); // the {} fallback, NOT the row's 'repaired'
+  });
 });

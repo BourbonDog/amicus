@@ -565,15 +565,18 @@ primary **error** row too — the #83 judge treatment extended to every seat (`u
 give-up chair; the dead leg's own usage on a dead seat/critic/lens).
 
 *Non-primary rows* — new in v4.7, `wasChair` always `false`: `chair-attempt` (a failed ch1–ch3
-chair launch), `repair` (a Stage-1 `-p`, Stage-2 `-q`, or chair-ch4 solo), `superseded` (a first
-leg a later attempt replaced — an SL-2 retry or a debate repair). These still cost money and
-appear in the `council report`/`council tally` cost tables (suffixed the same way judge rows
-are), but the Workspace seats panel filters them out — they aren't seats.
+chair launch), `repair` (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r`
+solo — a failed defense or re-vote repair), `superseded` (a first leg a later attempt replaced —
+an SL-2 retry or a debate repair). These still cost money and appear in the `council
+report`/`council tally` cost tables (suffixed the same way judge rows are), but the Workspace
+seats panel filters them out — they aren't seats.
 
 `runStats[].waveId` names the exact wave/leg a row was built from, present **iff a real billed
-leg backs the row** — the synthetic `claude` row and a give-up chair's error row carry none. It's
-the join key the leg–row bijection invariant suite (`tests/council/run-cost-bijection.test.js`)
-uses to prove every budget-counted leg lands on exactly one row.
+leg backs the row** — e.g. the synthetic `claude` row, a give-up chair's error row, and a
+leg-less dead-seat/critic/lens primary error row (the two SL-2 retry note-classes that never
+produced a real leg for the seat at all) carry none. It's the join key the leg–row bijection
+invariant suite (`tests/council/run-cost-bijection.test.js`) uses to prove every budget-counted
+leg lands on exactly one row.
 
 **Ledger-join consequence.** `council stats`'s reliability aggregation (`ledger.js`) only reads
 rows whose role is in the allowlist above (`seat`, `critic`, `lens:*`, `chair`, `claude`,
