@@ -62,6 +62,18 @@ test('omitted inputs add no flags (v4.0 argv byte-unchanged)', async () => {
   expect(args).not.toContain('--debate');
   expect(args).not.toContain('--no-cost-gate');
   expect(args).not.toContain('--claude-review');
+  expect(args).not.toContain('--tag'); // v4.7 F8 (D13): extends the byte-unchanged pin
+});
+
+// v4.7 F8 (D13, errata E-PR3-2): tag reaches the spawned council run argv —
+// the child's own cli-handlers-council-run.js stores it on the run.json seed
+// (Task 3), so the MCP handler here only needs to forward the flag.
+test('tag reaches the spawned council run argv', async () => {
+  const calls = [];
+  const res = await handleCouncilRunTool(input({ tag: 'sprint-42' }), tmp, helpers(calls));
+  expect(res.isError).toBeUndefined();
+  const args = calls[0].args;
+  expect(args[args.indexOf('--tag') + 1]).toBe('sprint-42');
 });
 
 test('the three inputs are declared on the amicus_council_run schema; tool count is 16', () => {
@@ -77,6 +89,13 @@ test('the three inputs are declared on the amicus_council_run schema; tool count
 test('the pack input is declared on the amicus_council_run schema', () => {
   const tool = getTools().find(t => t.name === 'amicus_council_run');
   expect(Object.keys(tool.inputSchema)).toEqual(expect.arrayContaining(['pack']));
+});
+
+// v4.7 F8 (D13): `tag?` added to all three run tools — see
+// tests/mcp-tools.test.js for the full Zod accept/reject/omit contract.
+test('the tag input is declared on the amicus_council_run schema', () => {
+  const tool = getTools().find(t => t.name === 'amicus_council_run');
+  expect(Object.keys(tool.inputSchema)).toEqual(expect.arrayContaining(['tag']));
 });
 
 // v4.3 Task 3 (spec §7.1): a `council` preset input reaches the spawned CLI

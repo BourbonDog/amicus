@@ -121,6 +121,7 @@ function getTools() {
           'left: flush against the left edge. center: centered.'
         ),
       pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
+      tag: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, '1-64 chars, letters/digits/_/- only').optional().describe('Label this session for list/search/spend grouping'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -369,6 +370,7 @@ function getTools() {
         'commands are NOT accepted over MCP.'
       ),
       pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
+      tag: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, '1-64 chars, letters/digits/_/- only').optional().describe('Label this session for list/search/spend grouping'),
       project: z.string().optional().describe(
         'Optional project directory path. Auto-detected from working directory if omitted.'
       ),
@@ -509,6 +511,7 @@ function getTools() {
         'commands are NOT accepted over MCP.'
       ),
       pack: z.string().optional().describe('Policy pack name or path — bench/chair/options/template defaults for this run; explicit params override pack values (recorded either way).'),
+      tag: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, '1-64 chars, letters/digits/_/- only').optional().describe('Label this session for list/search/spend grouping'),
       ui: z.boolean().optional().describe(
         'Auto-open the Council Workspace window on this run. Default: opens when the client is ' +
         'Claude Code (local), Electron is installed, a display exists, and config workspace.autoOpen is ' +

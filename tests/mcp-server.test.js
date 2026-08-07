@@ -130,6 +130,43 @@ describe('MCP spawn arg building', () => {
     });
   });
 
+  // v4.7 F8 (D13, errata E-PR3-2): this argv is DEAD on the shared-server
+  // branch (the default MCP headless path — see tests/mcp-start-metadata.test.js
+  // for that write) but forwarded anyway for the spawn-fallback path, which
+  // these tests exercise (sharedServer.ensureServer() has no real OpenCode
+  // binary in this test env and always falls through to spawn).
+  test('amicus_start passes --tag when provided', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test', tag: 'sprint-42' }, '/tmp');
+      const idx = capturedArgs.indexOf('--tag');
+      expect(idx).toBeGreaterThan(-1);
+      expect(capturedArgs[idx + 1]).toBe('sprint-42');
+    });
+  });
+
+  test('amicus_start omits --tag when not provided (argv byte-unchanged)', async () => {
+    let capturedArgs;
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('child_process', () => ({
+        spawn: jest.fn((cmd, args) => {
+          capturedArgs = args;
+          return { pid: 12345, unref: jest.fn(), stdout: { on: jest.fn() }, stderr: { on: jest.fn() } };
+        }),
+      }));
+      const { handlers: h } = require('../src/mcp-server');
+      await h.amicus_start({ prompt: 'test task', noUi: true, model: 'google/gemini-test' }, '/tmp');
+      expect(capturedArgs).not.toContain('--tag');
+    });
+  });
+
   test('amicus_continue returns a NEW taskId, not the parent taskId', async () => {
     await jest.isolateModulesAsync(async () => {
       jest.doMock('child_process', () => ({

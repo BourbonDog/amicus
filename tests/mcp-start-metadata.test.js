@@ -102,4 +102,18 @@ describe('shared-server path metadata keys (source contract)', () => {
     expect(sharedWrite).toContain("mode: 'headless'");
     expect(sharedWrite).toContain("agent: agent || 'build'");
   });
+
+  // v4.7 F8 (D13, errata E-PR3-2): THE critical site. This shared-server branch
+  // (sharedServer.enabled && input.noUi, the DEFAULT MCP headless path) never
+  // spawns a CLI child, so argv forwarding (mcp-server.test.js's --tag tests)
+  // can never reach it — input.tag must be stamped directly into this write,
+  // same additive-only "absent (not null)" idiom as packRecord immediately
+  // above it. Presence-only source-contract slice, same idiom as the pack
+  // window tests above (mcp-pack-params.test.js).
+  test('shared-server metadata write stamps input.tag additive-only (absent without a tag)', () => {
+    const start = src.indexOf('opencodeSessionId: sessionId');
+    const end = src.indexOf('buildContext(cwd');
+    const sharedWrite = src.slice(start, end);
+    expect(sharedWrite).toContain('...(input.tag ? { tag: input.tag } : {})');
+  });
 });

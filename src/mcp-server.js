@@ -423,6 +423,10 @@ const handlers = {
     // gate / template pre-render) for parity between the two paths.
     if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
     if (packForward.template !== undefined) { args.push('--template', packForward.template); }
+    // v4.7 F8 (D13, errata E-PR3-2): forwarded for the spawn-fallback path
+    // below — DEAD on the shared-server branch (args is never read there);
+    // that branch stamps input.tag directly into its own metadata write instead.
+    if (input.tag) { args.push('--tag', input.tag); }
     args.push('--cwd', cwd);
 
     if (sharedServer.enabled && input.noUi) {
@@ -500,6 +504,10 @@ const handlers = {
           briefing: renderedPrompt,
           // v4.5 Task 15: additive-only — absent (not null) without a pack.
           ...(packRecord ? { pack: packRecord } : {}),
+          // v4.7 F8 (D13, errata E-PR3-2): THE critical site — this shared-server
+          // branch never spawns a CLI child, so the --tag argv forward above
+          // (dead here) can never reach it. Same additive-only idiom as pack.
+          ...(input.tag ? { tag: input.tag } : {}),
         }, null, 2), { mode: 0o600 });
 
         // Build context from parent conversation (unless --no-context)
@@ -1317,6 +1325,12 @@ const handlers = {
     // itself is never forwarded, only the two knobs it resolved to).
     if (packForward.maxCost !== undefined) { args.push('--max-cost', String(packForward.maxCost)); }
     if (packForward.template !== undefined) { args.push('--template', packForward.template); }
+    // v4.7 F8 (D13, errata E-PR3-2): argv-only forward — unlike pack, this does
+    // NOT pre-seed the wave metadata (no single-resolution rule forces it here);
+    // the spawned CLI child's own cli-handlers-fanout.js stores the tag on wave
+    // metadata itself (Task 3), so fanout.js's metaTag inherit arm has no MCP
+    // producer and is defense-in-depth only.
+    if (input.tag) { args.push('--tag', input.tag); }
 
     let child;
     try { child = spawnSidecarProcess(args, waveDir); } catch (err) {

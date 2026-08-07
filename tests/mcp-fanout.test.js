@@ -37,6 +37,29 @@ describe('amicus_fanout MCP surface (F4)', () => {
     expect(handler).toContain("'--session-id'");
     expect(handler).toContain('input.parentSession');
   });
+
+  // v4.7 F8 (D13, errata E-PR3-2): argv-only forward — unlike pack, this does
+  // NOT pre-seed the wave metadata (no single-resolution rule forces it here);
+  // the spawned CLI child's own cli-handlers-fanout.js stores the tag on wave
+  // metadata itself (Task 3), so fanout.js's metaTag inherit arm has no MCP
+  // producer and is defense-in-depth only.
+  it('forwards --tag to the spawned fanout legs when provided, argv-only (not pre-seeded on wave metadata) (F8 D13)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.join(__dirname, '../src/mcp-server.js'), 'utf-8');
+    const start = src.indexOf('async amicus_fanout(');
+    const end = src.indexOf('async amicus_council_tally(', start);
+    const handler = src.slice(start, end);
+    expect(handler).toContain("'--tag'");
+    expect(handler).toContain('input.tag');
+    // The push must live in the args-builder section (after `const args = [`),
+    // not inside the pre-spawn metadata.json write above it — confirms this is
+    // an argv-only forward, never a wave-metadata pre-seed.
+    const argsIdx = handler.indexOf('const args = [');
+    const tagPushIdx = handler.indexOf("args.push('--tag'");
+    expect(argsIdx).toBeGreaterThan(-1);
+    expect(tagPushIdx).toBeGreaterThan(argsIdx);
+  });
 });
 
 describe('wave crash detection in amicus_status', () => {
