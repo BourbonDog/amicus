@@ -92,7 +92,8 @@ All notable changes to Amicus are documented here. Format follows
   `--out=-x` previously wrote a file literally named `-x` (the dash-leading value was accepted
   at face value); both forms now fail fast with `BAD_ARGS` ("-o/--out cannot start with '-':
   got '-x'") instead. `-o -x` was already rejected before this change, via a separate internal
-  check — its user-visible outcome is unchanged.
+  check — it still fails with the same code and exit status, now carrying the more accurate
+  message above in place of "-o/--out requires a value".
 - **`{{project}}` template variable is now path-resolved** (absolute, normalized via
   `path.resolve`), matching `{{artifact_path}}`'s existing behavior — it previously rendered the
   raw `--cwd`/`process.cwd()` string verbatim. All three `TEMPLATE_RENDER` error paths also gain a
