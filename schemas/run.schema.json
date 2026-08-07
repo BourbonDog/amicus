@@ -22,6 +22,7 @@
     "sessionDir": { "type": ["string", "null"] },
     "opencodeSessionId": { "type": ["string", "null"] },
     "usage": { "type": ["object", "null"] },
-    "pack": { "type": "object" }
+    "pack": { "type": "object" },
+    "tag": { "type": "string" }
   }
 }

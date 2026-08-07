@@ -15,7 +15,7 @@ const { SessionPaths } = require('./session-utils');
 
 /** Create session directory and save metadata */
 function createSessionMetadata(taskId, project, options) {
-  const { model, prompt, briefing, noUi, headless, agent, thinking, pack } = options;
+  const { model, prompt, briefing, noUi, headless, agent, thinking, pack, tag } = options;
 
   const sessionDir = SessionPaths.sessionDir(project, taskId);
   fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
@@ -47,6 +47,7 @@ function createSessionMetadata(taskId, project, options) {
     pid: existing.pid || process.pid,
     createdAt: existing.createdAt || new Date().toISOString(),
     ...(pack ? { pack } : {}), // v4.5 Task 13: absent-not-null; ...existing above preserves a prior write when this call omits pack.
+    ...(tag ? { tag } : {}), // v4.7 F8 (D13): absent-not-null, same merge-preserve idiom as pack above.
   };
 
   writeFileAtomic(metaPath, JSON.stringify(metadata, null, 2), { mode: 0o600 });

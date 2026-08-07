@@ -867,6 +867,61 @@ describe('runFanout orchestrator', () => {
       expect('pack' in stored).toBe(false);
     });
   });
+
+  // v4.7 F8 (D13): --tag storage — same absent-not-null idiom, and the same
+  // metaTag inherit-from-pre-seeded-metadata mechanism as pack above (mirrors
+  // the describe block immediately above it; that block is the scaffolding
+  // authority). Both buildWaveResult call sites (the normal-completion path
+  // and the all-legs-unroutable short-circuit) are exercised here exactly as
+  // they are for pack.
+  describe('tag inheritance from pre-seeded metadata.json and pass-through (F8 D13)', () => {
+    function preSeedMetadataWithTag(waveId) {
+      const waveDir = pathReal.join(project, '.claude', 'amicus_sessions', waveId);
+      fsReal.mkdirSync(waveDir, { recursive: true });
+      fsReal.writeFileSync(pathReal.join(waveDir, 'metadata.json'), JSON.stringify({
+        taskId: waveId, type: 'wave', status: 'running', tag: 'sprint-42',
+      }, null, 2));
+      return waveDir;
+    }
+
+    it('normal completion: wave.json inherits the pre-seeded tag when options.tag is absent', async () => {
+      preSeedMetadataWithTag('cafetag1');
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag1' });
+      expect(wave.tag).toBe('sprint-42');
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag1', 'wave.json'), 'utf-8'));
+      expect(stored.tag).toBe('sprint-42');
+    });
+
+    it('all-legs-unroutable short-circuit: wave.json inherits the pre-seeded tag when options.tag is absent', async () => {
+      preSeedMetadataWithTag('cafetag2');
+      const routingFailure = async () => ({
+        kind: 'error', type: 'model_route_error', field: 'model', requested: 'x',
+        reason: 'no_key_for_vendor', preferredGateway: 'direct', suggestions: [],
+      });
+      mockResolveRouteForLaunch.mockImplementationOnce(routingFailure).mockImplementationOnce(routingFailure);
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag2' });
+      expect(wave.status).toBe('error');
+      expect(wave.tag).toBe('sprint-42');
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag2', 'wave.json'), 'utf-8'));
+      expect(stored.tag).toBe('sprint-42');
+    });
+
+    it('an explicitly-passed options.tag still wins (precedence holds even if metadata.json seeded differently)', async () => {
+      preSeedMetadataWithTag('cafetag3');
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag3', tag: 'explicit-tag' });
+      expect(wave.tag).toBe('explicit-tag');
+    });
+
+    it('no tag anywhere: wave.json has NO tag key (absent, not null)', async () => {
+      const { wave } = await runFanout({ ...baseOpts(), waveId: 'cafetag4' });
+      expect('tag' in wave).toBe(false);
+      const stored = JSON.parse(fsReal.readFileSync(
+        pathReal.join(project, '.claude', 'amicus_sessions', 'cafetag4', 'wave.json'), 'utf-8'));
+      expect('tag' in stored).toBe(false);
+    });
+  });
 });
 
 // 15a.1/B07: writeWaveMetadata must not let an in-flight init/finalize patch

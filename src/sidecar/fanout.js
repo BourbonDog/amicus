@@ -145,6 +145,7 @@ async function runFanout(options) {
     briefing: String(options.prompt).slice(0, 200),
     promptMeta: options.promptMeta || null,
     ...(options.pack ? { pack: options.pack } : {}), // v4.5 Task 13: absent-not-null.
+    ...(options.tag ? { tag: options.tag } : {}), // v4.7 F8 (D13): absent-not-null, same idiom as pack above.
     pid: process.pid, project, createdAt,
   });
   // v4.5 final-review F2: an MCP-spawned child never gets --pack (single-
@@ -157,6 +158,7 @@ async function runFanout(options) {
   // result-schema-rebuild.js:93, which reads meta.pack off a metadata.json
   // it loaded for an unrelated reason).
   const metaPack = waveMeta.pack;
+  const metaTag = waveMeta.tag; // v4.7 F8 (D13): same pre-seed inherit mechanism as metaPack above.
   emitWaveStarted(waveDir, waveId, legs.map(l => (l.ok ? l.model : l.modelInput)), legIds, follow);
 
   // 2b. All legs failed to route (#61 perf): no leg will ever touch the
@@ -167,7 +169,7 @@ async function runFanout(options) {
     const legDocs = legs.map((leg, i) => buildRoutingFailureLeg({ leg, legId: legIds[i], waveId, quiet: options.quiet }));
     const completedAt = new Date().toISOString();
     const wave = buildWaveResult({
-      waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, createdAt, completedAt, notices,
+      waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, tag: options.tag || metaTag, createdAt, completedAt, notices,
     });
     return finishWave({ wave, waveDir, waveId, project, completedAt, follow, emit,
       exitCode: waveExitCode(wave.status),
@@ -278,7 +280,7 @@ async function runFanout(options) {
   const completedAt = new Date().toISOString();
   const signalled = waveAbort.signal();
   const wave = buildWaveResult({
-    waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, createdAt, completedAt,
+    waveId, legs: legDocs, promptMeta: options.promptMeta || null, pack: options.pack || metaPack, tag: options.tag || metaTag, createdAt, completedAt,
     status: signalled ? 'aborted' : null, notices,
   });
   const exitCode = signalled

@@ -68,4 +68,22 @@ describe('run.json validates against schemas/council-run.schema.json (Plan A con
       baseOptions(tmp, { droppedMembers: [] }), deps(scriptedLaunchers(happyScript())));
     expect('droppedMembers' in run).toBe(false);
   });
+
+  // v4.7 F8 (D13): --tag on `council run` — same additive, absent-not-null
+  // seed contract as droppedMembers/pack above, threaded end-to-end through
+  // the real runCouncil -> run-state.js initCouncilRun seed.
+  test('options.tag survives to the terminal run doc and validates against the schema', async () => {
+    const { run } = await runCouncil(
+      baseOptions(tmp, { tag: 'sprint-42' }), deps(scriptedLaunchers(happyScript())));
+    const ok = validate(run);
+    if (!ok) { throw new Error('schema errors: ' + JSON.stringify(validate.errors, null, 2)); }
+    expect(run.tag).toBe('sprint-42');
+  });
+
+  test('tag is absent (not null) on run.json when --tag was not passed', async () => {
+    const { run } = await runCouncil(baseOptions(tmp), deps(scriptedLaunchers(happyScript())));
+    const ok = validate(run);
+    if (!ok) { throw new Error('schema errors: ' + JSON.stringify(validate.errors, null, 2)); }
+    expect('tag' in run).toBe(false);
+  });
 });

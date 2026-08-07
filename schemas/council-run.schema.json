@@ -45,6 +45,7 @@
     "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
     "options": { "type": "object" },
     "pack": { "type": "object" },
+    "tag": { "type": "string" },
     "template": { "type": "object" },
     "usage": { "type": "object" },
     "exitCode": { "type": ["number", "null"] },

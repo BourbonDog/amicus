@@ -311,3 +311,105 @@ describe('run doc (solo) carries the pack (buildRunResult)', () => {
     expect('pack' in doc).toBe(false);
   });
 });
+
+// v4.7 F8 (D13): --tag storage — the same absent-not-null idiom as --pack
+// above, mirrored verbatim (scaffolding authority: the pack describes this
+// file already carries). tag is a plain string (not a resolved record like
+// pack), so fixtures are simple string literals rather than PACK_RECORD-style
+// objects.
+describe('solo session metadata.json carries the tag (createSessionMetadata, real writer)', () => {
+  let soloTmp;
+  beforeEach(() => { soloTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'start-tag-meta-')); });
+  afterEach(() => { fs.rmSync(soloTmp, { recursive: true, force: true }); });
+
+  test('tag present -> metadata.json .tag equals it', () => {
+    const sessDir = createSessionMetadata('st1', soloTmp, {
+      model: 'vendorx/solo-model', prompt: 'hi', noUi: true, tag: 'sprint-42',
+    });
+    const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+    expect(meta.tag).toBe('sprint-42');
+  });
+
+  test('tag absent -> "tag" key absent from metadata.json, not null', () => {
+    const sessDir = createSessionMetadata('st2', soloTmp, { model: 'vendorx/solo-model', prompt: 'hi', noUi: true });
+    const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+    expect('tag' in meta).toBe(false);
+  });
+
+  test('merge-preserve: a later call omitting tag leaves the recorded tag intact', () => {
+    createSessionMetadata('st3', soloTmp, { model: 'vendorx/solo-model', prompt: 'hi', noUi: true, tag: 'sprint-42' });
+    const sessDir = createSessionMetadata('st3', soloTmp, { model: 'vendorx/solo-model', prompt: 'hi', noUi: true });
+    const meta = JSON.parse(fs.readFileSync(path.join(sessDir, 'metadata.json'), 'utf-8'));
+    expect(meta.tag).toBe('sprint-42');
+  });
+});
+
+describe('run doc (solo) carries the tag (buildRunResult)', () => {
+  test('metadata.tag -> run doc .tag equals it', () => {
+    const doc = buildRunResult({ taskId: 't3', metadata: { status: 'complete', tag: 'sprint-42' } });
+    expect(doc.tag).toBe('sprint-42');
+  });
+
+  test('metadata without tag -> "tag" key is absent from the run doc, not null', () => {
+    const doc = buildRunResult({ taskId: 't4', metadata: { status: 'complete' } });
+    expect('tag' in doc).toBe(false);
+  });
+});
+
+describe('wave metadata + wave.json carry the tag (real writers, mirrors the pack section above)', () => {
+  let waveTmp;
+  beforeEach(() => { waveTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fanout-tag-wave-')); });
+  afterEach(() => { fs.rmSync(waveTmp, { recursive: true, force: true }); });
+
+  test('metadata.json: tag present when writeWaveMetadata is given options.tag', () => {
+    const waveDir = getSessionDir(waveTmp, 'wv-tg-1');
+    fs.mkdirSync(waveDir, { recursive: true });
+    writeWaveMetadata(waveDir, { taskId: 'wv-tg-1', type: 'wave', tag: 'sprint-42' });
+    const meta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
+    expect(meta.tag).toBe('sprint-42');
+  });
+
+  test('metadata.json: "tag" key absent (not null) when no tag was passed', () => {
+    const waveDir = getSessionDir(waveTmp, 'wv-tg-2');
+    fs.mkdirSync(waveDir, { recursive: true });
+    writeWaveMetadata(waveDir, { taskId: 'wv-tg-2', type: 'wave' });
+    const meta = JSON.parse(fs.readFileSync(path.join(waveDir, 'metadata.json'), 'utf-8'));
+    expect('tag' in meta).toBe(false);
+  });
+
+  test('wave.json (buildWaveResult): tag present beside prompt when passed', () => {
+    const doc = buildWaveResult({ waveId: 'wv-tg-3', legs: [], promptMeta: { source: 'file' }, tag: 'sprint-42' });
+    expect(doc.tag).toBe('sprint-42');
+  });
+
+  test('wave.json (buildWaveResult): "tag" key absent (not null) without --tag', () => {
+    const doc = buildWaveResult({ waveId: 'wv-tg-4', legs: [] });
+    expect('tag' in doc).toBe(false);
+  });
+});
+
+describe('the rebuild path carries tag (buildWaveResultFromSession)', () => {
+  let rbTmp;
+  beforeEach(() => { rbTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fanout-tag-rebuild-')); });
+  afterEach(() => { fs.rmSync(rbTmp, { recursive: true, force: true }); });
+
+  test('live rebuild (no wave.json) carries tag from metadata.json', () => {
+    const waveDir = getSessionDir(rbTmp, 'wv-rbtg-1');
+    fs.mkdirSync(waveDir, { recursive: true });
+    fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+      taskId: 'wv-rbtg-1', type: 'wave', legs: [], tag: 'sprint-42', createdAt: '2026-07-28T00:00:00.000Z',
+    }));
+    const doc = buildWaveResultFromSession(rbTmp, 'wv-rbtg-1');
+    expect(doc.tag).toBe('sprint-42');
+  });
+
+  test('live rebuild without a recorded tag omits the key (not null)', () => {
+    const waveDir = getSessionDir(rbTmp, 'wv-rbtg-2');
+    fs.mkdirSync(waveDir, { recursive: true });
+    fs.writeFileSync(path.join(waveDir, 'metadata.json'), JSON.stringify({
+      taskId: 'wv-rbtg-2', type: 'wave', legs: [], createdAt: '2026-07-28T00:00:00.000Z',
+    }));
+    const doc = buildWaveResultFromSession(rbTmp, 'wv-rbtg-2');
+    expect('tag' in doc).toBe(false);
+  });
+});

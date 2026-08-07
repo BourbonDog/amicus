@@ -114,7 +114,7 @@ async function startSidecar(options) {
     contextMaxTokens = 80000, noUi, headless = false, timeout = 15,
     agent, mcp, mcpConfig, summaryLength = 'normal', thinking,
     client, sessionDir, noMcp, excludeMcp, opencodePort, coworkProcess, includeContext = true,
-    position = 'right', json = false, modelInput = null, pack = null
+    position = 'right', json = false, modelInput = null, pack = null, tag
   } = options;
 
   const effectivePrompt = prompt || briefing;
@@ -143,7 +143,7 @@ async function startSidecar(options) {
   );
 
   const sessDir = createSessionMetadata(taskId, effectiveProject, {
-    model, prompt: effectivePrompt, noUi: effectiveHeadless, agent, thinking, pack
+    model, prompt: effectivePrompt, noUi: effectiveHeadless, agent, thinking, pack, tag
   });
   saveInitialContext(sessDir, systemPrompt, userMessage);
   acquireLock(sessDir, effectiveHeadless ? 'headless' : 'interactive');
