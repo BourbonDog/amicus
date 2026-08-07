@@ -204,6 +204,25 @@ describe('read --json and wave-aware list (F4)', () => {
       expect(rows.find(r => r.id === 'remoteone').project).toBe(canonicalProjectPath(projB));
     });
 
+    // Regression (T5 review): the index stores CANONICAL spellings
+    // (canonicalProjectPath — forward slashes, upper-cased drive letter),
+    // while `project` arrives however the caller spelled it (process.cwd() is
+    // backslashed on Windows). A raw-Set dedup treats those as two different
+    // projects, so a session in the CURRENT project that also happens to be
+    // indexed (recordSession runs on every session start) was double-counted.
+    it('does not double-count the current project when it is also present in the sessions-index under its canonical spelling', () => {
+      writeSession('localdup1', {
+        model: 'a/b', status: 'complete', createdAt: '2026-01-01T00:00:00.000Z',
+      });
+      // recordSession canonicalizes internally, so the index stores
+      // canonicalProjectPath(project), not the raw `project` string below.
+      recordSession('localdup1', project);
+
+      const rows = enumerateAllProjects({ project });
+      const matches = rows.filter(r => r.id === 'localdup1');
+      expect(matches).toHaveLength(1);
+    });
+
     it('listSidecars({all:true}) prints rows from both projects with a PROJECT column; without --all only the cwd project appears', async () => {
       writeSession('localtwo', {
         model: 'a/b', status: 'complete', createdAt: '2026-01-01T00:00:00.000Z',

@@ -70,40 +70,38 @@ function enumerateSessions(project, opts = {}) {
 }
 
 /**
- * Tolerantly read the global sessions-index.json (src/utils/session-index.js).
- * The index is advisory only — session-index.js's own readIndex() is not
- * exported, so this mirrors its guard: missing/unreadable/corrupt yields an
- * empty map rather than throwing, and --all degrades to the current project.
- * @returns {Record<string, string>} taskId -> canonical project path
- */
-function readSessionsIndexTolerant() {
-  try {
-    const { getConfigDir } = require('../utils/config');
-    const { INDEX_FILENAME } = require('../utils/session-index');
-    const raw = fs.readFileSync(path.join(getConfigDir(), INDEX_FILENAME), 'utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) { return parsed; }
-  } catch { /* missing/unreadable/corrupt index -> no cross-project entries */ }
-  return {};
-}
-
-/**
- * Enumerate sessions across every project the global sessions-index knows
- * about, plus the current project. --all support (F8 D14): the index is a
- * navigation aid, never authoritative, so a stale entry pointing at a
- * missing/unreadable project directory is skipped silently rather than
- * surfaced as an error.
+ * Enumerate sessions across every project the global sessions-index
+ * (src/utils/session-index.js) knows about, plus the current project. --all
+ * support (F8 D14): the index is a navigation aid, never authoritative, so a
+ * stale entry pointing at a missing/unreadable project directory is skipped
+ * silently rather than surfaced as an error.
+ *
+ * Dedup is by CANONICAL identity (T5 review fix-wave): the index stores
+ * canonical spellings (canonicalProjectPath — forward slashes, upper-cased
+ * drive letter) while `project` arrives however the caller spelled it
+ * (process.cwd() is backslashed on Windows). A raw string Set treated those
+ * as two different projects, double-counting every row of the current
+ * project whenever it was also present in the index (which it usually is —
+ * every session start records itself). The current project is seeded FIRST
+ * so its rows keep the caller's spelling rather than the index's.
  * @param {{status?: string, project?: string}} [opts]
  * @returns {Array<object>} enumerateSessions rows, each stamped with `project`
  */
 function enumerateAllProjects(opts = {}) {
   const { status, project = process.cwd() } = opts;
-  const index = readSessionsIndexTolerant();
-  const projects = new Set([...Object.values(index), project]);
+  const { readIndex } = require('../utils/session-index');
+  const { canonicalProjectPath } = require('../utils/project-path');
+  const index = readIndex();
+
+  const byCanonical = new Map();
+  for (const p of [project, ...Object.values(index)]) {
+    if (!p || typeof p !== 'string') { continue; }
+    const key = canonicalProjectPath(p);
+    if (!byCanonical.has(key)) { byCanonical.set(key, p); }
+  }
 
   let sessions = [];
-  for (const p of projects) {
-    if (!p || typeof p !== 'string') { continue; }
+  for (const p of byCanonical.values()) {
     try {
       const rows = enumerateSessions(p, {}).map(s => ({ ...s, project: p }));
       sessions = sessions.concat(rows);
