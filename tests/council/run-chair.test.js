@@ -73,12 +73,15 @@ describe('chair solo attribution (spec §7.2)', () => {
   test('the chair launch carries councilRunId + the requested councilName', async () => {
     const script = happyScript();
     const launchers = scriptedLaunchers(script);
-    const { exitCode } = await runCouncil(baseOptions(tmp, { councilName: 'nightly-council' }), {
+    const { exitCode } = await runCouncil(baseOptions(tmp, { councilName: 'nightly-council', tag: 'sprint42' }), {
       launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
     });
     expect(exitCode).toBe(0);
     const ch1 = launchers.calls.find(c => c.waveId === 'abc123-ch1');
-    expect(ch1).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council' });
+    // v4.7 F8 D16 (T7 review): tag rides the SAME forward as councilRunId/
+    // councilName — deleting `tag: o.tag` from run-chair.js's attemptChair
+    // launch restores the silent degrade this pins against.
+    expect(ch1).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council', tag: 'sprint42' });
   });
 
   test('--models with no preset leaves councilName null on the chair launch (spec §7.1: never fabricated)', async () => {
@@ -340,11 +343,14 @@ describe('chair VERDICT-line repair (one re-prompt)', () => {
     script['abc123-ch1'] = () => okWave([mkLeg('deepseek', 'Great synthesis, no verdict line.', 'complete', 0.03)]);
     script['abc123-ch4'] = () => okWave([mkLeg('deepseek', 'VERDICT: Fundamental rethink')]);
     const launchers = scriptedLaunchers(script);
-    await runCouncil(baseOptions(tmp, { councilName: 'nightly-council' }), {
+    await runCouncil(baseOptions(tmp, { councilName: 'nightly-council', tag: 'sprint42' }), {
       launchers, appendRunFn: jest.fn(), statsFn: () => [], installSignalAbortFn: noSignals,
     });
     const ch4 = launchers.calls.find(c => c.waveId === 'abc123-ch4');
-    expect(ch4).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council' });
+    // v4.7 F8 D16 (T7 review): the -ch4 repair is its OWN launch site, distinct
+    // from ch1/ch2/ch3 — pinned separately so a fix to one can't hide a
+    // regression in the other.
+    expect(ch4).toMatchObject({ councilRunId: 'abc123', councilName: 'nightly-council', tag: 'sprint42' });
   });
 
   test('LC-12: the -ch4 repair carries the synthesis it must verdict on', async () => {

@@ -48,8 +48,10 @@ function ctxFor(tmp, launchers) {
   return {
     // v4.3 Task 3 (spec §7.2): non-null councilName so legOpts()'s attribution
     // fields can be asserted below, not just checked against a falsy default.
+    // v4.7 F8 D16 (T7 review): tag joins it on the same idiom — non-null so
+    // legOpts()'s `tag: ctx.o.tag` forward can be asserted too.
     o: { runId: 'r', runDir: tmp, timeout: 10, gateway: 'auto', date: '2026-07-19', maxCost: null,
-      noCostGate: false, councilName: 'nightly-council' },
+      noCostGate: false, councilName: 'nightly-council', tag: 'sprint42' },
     launchers, addWave: () => {}, overBudget: () => false, scratchDir: path.join(tmp, '_scratch'),
   };
 }
@@ -163,8 +165,11 @@ describe('runDebate — happy path (defend + partial re-vote flip)', () => {
   test('every debate leg (defense solo and re-vote wave) carries council attribution', () => {
     const d1 = launched.find(o => o.waveId === 'r-d1');
     const rv = launched.find(o => o.waveId === 'r-rv');
-    expect(d1).toMatchObject({ councilRunId: 'r', councilName: 'nightly-council' });
-    expect(rv).toMatchObject({ councilRunId: 'r', councilName: 'nightly-council' });
+    // v4.7 F8 D16 (T7 review): tag rides the SAME legOpts() forward as
+    // councilRunId/councilName — deleting `tag: ctx.o.tag` from run-debate.js's
+    // legOpts restores the silent degrade this pins against.
+    expect(d1).toMatchObject({ councilRunId: 'r', councilName: 'nightly-council', tag: 'sprint42' });
+    expect(rv).toMatchObject({ councilRunId: 'r', councilName: 'nightly-council', tag: 'sprint42' });
   });
 
   // ---- carry-forward gap 3a: previousTier stamping ----

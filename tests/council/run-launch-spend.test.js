@@ -156,6 +156,16 @@ describe('council leg spend attribution (spec §7.2)', () => {
       const rows = readSpendRows(ledgerDir);
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ op: 'leg', councilRunId: 'c3', councilName: 'default', tag: 'sprint42' });
+      // T7 review (ruled, accepted as desirable): the tag forward isn't
+      // ledger-only — run-launch.js's `tag: opts.tag` reaches runFanout's own
+      // options, so the SUB-WAVE's metadata.json inherits it too via the
+      // pre-existing D13 spread (fanout.js's writeWaveMetadata call:
+      // `...(options.tag ? { tag: options.tag } : {})`). A council leg's
+      // tag is therefore visible on the wave record itself, not just the
+      // spend ledger.
+      const waveMeta = JSON.parse(fs.readFileSync(
+        path.join(project, '.claude', 'amicus_sessions', 'ledgerwave-tag', 'metadata.json'), 'utf-8'));
+      expect(waveMeta.tag).toBe('sprint42');
     });
 
     // An ordinary (non-council) fanout caller must see byte-for-byte the same

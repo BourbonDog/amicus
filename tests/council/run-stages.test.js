@@ -49,7 +49,8 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
       runId: 'abc123', runDir, timeout: 10, gateway: 'auto', noValidateModel: false, date: '2026-07-19',
       // v4.3 Task 3 (spec §7.2): non-null so every launch-site assertion below
       // can prove the id actually reached the launcher, not just a falsy default.
-      councilName: 'nightly-council' },
+      // v4.7 F8 D16 (T7 review): tag joins it on the same idiom.
+      councilName: 'nightly-council', tag: 'sprint42' },
     launchers: {
       // jest.fn()-wrapped (not a plain arrow) so the SL-2 tests can queue
       // per-call responses with `.mockResolvedValueOnce(...)` across the
@@ -86,6 +87,10 @@ describe('runStage1', () => {
     // v4.3 Task 3 (spec §7.2): the seat wave carries council attribution.
     expect(waves[0].councilRunId).toBe('abc123');
     expect(waves[0].councilName).toBe('nightly-council');
+    // v4.7 F8 D16 (T7 review): tag rides the same forward — deleting
+    // `tag: o.tag` from run-stage1-launch.js's `common` restores the silent
+    // degrade this pins against.
+    expect(waves[0].tag).toBe('sprint42');
     expect(reviews.map(r => r.model)).toEqual(['gemini', 'gpt', 'qwen']);
     expect(reviews.every(r => r.conformance === 'clean' && r.findings.length === 1)).toBe(true);
     expect(deadLegs).toHaveLength(0);
@@ -133,6 +138,8 @@ describe('runStage1', () => {
     // v4.3 Task 3 (spec §7.2): the findings-repair solo carries council attribution too.
     expect(solos[0].councilRunId).toBe('abc123');
     expect(solos[0].councilName).toBe('nightly-council');
+    // v4.7 F8 D16 (T7 review): tag rides the same forward.
+    expect(solos[0].tag).toBe('sprint42');
     expect(reviews.find(r => r.model === 'gpt').conformance).toBe('repaired');
   });
 
@@ -733,6 +740,10 @@ describe('runStage2', () => {
     // v4.3 Task 3 (spec §7.2): the judge wave carries council attribution.
     expect(waves[0].councilRunId).toBe('abc123');
     expect(waves[0].councilName).toBe('nightly-council');
+    // v4.7 F8 D16 (T7 review): tag rides the same forward — deleting
+    // `tag: o.tag` from run-stage2.js's Stage-2 launchWave call restores the
+    // silent degrade this pins against.
+    expect(waves[0].tag).toBe('sprint42');
     expect(waves[0].prompt.split('\n')[0]).toContain('Do NOT use any tools');
     expect(fs.existsSync(path.join(ctx.o.runDir, 'bundle-stage2.md'))).toBe(true);
     expect(fs.existsSync(path.join(ctx.o.runDir, 'judge-gemini.md'))).toBe(true);
@@ -791,6 +802,8 @@ describe('runStage2', () => {
     // v4.3 Task 3 (spec §7.2): the judge-repair solo carries council attribution too.
     expect(solos[0].councilRunId).toBe('abc123');
     expect(solos[0].councilName).toBe('nightly-council');
+    // v4.7 F8 D16 (T7 review): tag rides the same forward.
+    expect(solos[0].tag).toBe('sprint42');
     const g = judgeResults.find(j => j.judge === 'gemini');
     expect(g.ok).toBe(true);
     expect(g.conformance).toBe('repaired');
