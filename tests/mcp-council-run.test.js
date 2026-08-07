@@ -54,6 +54,43 @@ describe('amicus_council_run handler', () => {
     expect(args).toContain('--json');
   });
 
+  // T15-m2: a pack-forwarded input.template (the only way a template reaches
+  // this handler — MCP has no template schema param of its own) renders the
+  // briefing AND must now carry its provenance onto the seeded run.json, the
+  // same way the CLI's --template does (cli-handlers-council-run.js).
+  describe('T15-m2: template provenance on the seeded run.json', () => {
+    let prevConfigDir;
+    beforeEach(() => {
+      prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+      process.env.AMICUS_CONFIG_DIR = tmp;
+      const dir = path.join(tmp, 'templates');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'prompt-only.md'), 'Custom wrapper: {{prompt}}');
+    });
+    afterEach(() => {
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+    });
+
+    test('a pack-forwarded input.template lands run.template.{name,hash} on the seeded run.json', async () => {
+      const res = await handleCouncilRunTool(input({ template: 'prompt-only' }), tmp, helpers());
+      const body = parseFenced(res);
+      const run = JSON.parse(fs.readFileSync(path.join(body.runDir, 'run.json'), 'utf-8'));
+      expect(run.template).toEqual({ name: 'prompt-only', hash: expect.any(String) });
+      // The rendered (templated) briefing is what's written and spawned on —
+      // same single-application-point precedent as the CLI.
+      expect(fs.readFileSync(path.join(body.runDir, 'briefing.md'), 'utf-8'))
+        .toBe('Custom wrapper: Review this.');
+    });
+
+    test('no input.template → no template key on the seeded run.json (absent, not null)', async () => {
+      const res = await handleCouncilRunTool(input(), tmp, helpers());
+      const body = parseFenced(res);
+      const run = JSON.parse(fs.readFileSync(path.join(body.runDir, 'run.json'), 'utf-8'));
+      expect(run).not.toHaveProperty('template');
+    });
+  });
+
   test('forwards chair/critic/lenses/maxCost/timeoutMinutes/gateway', async () => {
     const calls = [];
     await handleCouncilRunTool(input({

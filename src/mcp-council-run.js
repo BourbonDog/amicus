@@ -94,11 +94,13 @@ async function handleCouncilRunTool(input, project, helpers) {
   // onto input.template above) is the only way one reaches this handler.
   // {{prompt}} = the briefingFile content; the RENDERED text is what lands in
   // briefing.md below (mirrors the CLI's single template-application point).
+  let templateMeta = null;
   if (input.template !== undefined) {
     const { applyTemplate } = require('./template/apply');
     const t = applyTemplate({ templateRef: input.template, prompt: briefing, project });
     if (t.error) { return textResult(t.error.message, true); }
     briefing = t.prompt;
+    templateMeta = t.promptMeta && t.promptMeta.template;
     notices.push(...t.notices);
   }
 
@@ -158,6 +160,10 @@ async function handleCouncilRunTool(input, project, helpers) {
       // v4.5 Wave 2: additive, same preserved-across-the-child's-own-initRun
       // precedent as `pack` above — absent (never []) when nothing dropped.
       ...(droppedMembers.length ? { droppedMembers } : {}),
+      // T15-m2 (v4.7): additive-only — absent (not null) without a pack-forwarded
+      // template. Same preserved-across-the-child's-own-initRun precedent as
+      // `pack`/`droppedMembers` above (run-state.js:104-106).
+      ...(templateMeta ? { template: templateMeta } : {}),
       usage: null, createdAt: new Date().toISOString(),
     });
     runState.writePointer(project, runId, runDir);

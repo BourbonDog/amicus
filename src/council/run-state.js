@@ -101,8 +101,12 @@ function initCouncilRun(o) {
     // "no debate key" contract and fail the object-typed schema), and with a VALID
     // outcome from the first write so a run killed mid-debate stays schema-valid.
     ...(o.debate ? { debate: { enabled: true, outcome: 'nothing-to-debate' } } : {}),
-    // F9 (v4.5): additive-only — absent (not null) without --template; the MCP
-    // seed (mcp-council-run.js, initRun directly) never sets this in v4.5.
+    // F9 (v4.5): additive-only — absent (not null) without --template. T15-m2
+    // (v4.7): the MCP handler (mcp-council-run.js) now pre-seeds this directly
+    // via its own initRun call when a pack forwards briefing.template; the
+    // spawned CLI child's own seed here still passes o.template: null (no
+    // --template flag crosses that spawn boundary), so this spread omits the
+    // key and mergeRun's shallow merge preserves the parent's pre-seeded value.
     ...(o.template ? { template: o.template } : {}),
     // v4.5 Task 12 (B7/F5): additive-only — absent (not null) without --pack.
     // Preserved across a later MCP-child initRun whose own seed omits it —
