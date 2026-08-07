@@ -141,7 +141,8 @@ function briefingFor(o, unit) {
 async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = { reviewed: 0, total: 0 } } = {}) {
   const { o, launchers } = ctx;
   const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [],
-    stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [] };
+    stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
+    stillDeadRetryLegs: [] };
 
   for (const unit of groupStage1Losses(o, deadWaves, deadLegs)) {
     // Task-4 review hardening: a unit this pass cannot even ATTEMPT — an
@@ -234,6 +235,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
           data: { seat, retryWaveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, firstFailure: ff } });
       } else {
         out.stillDeadNotes.push(retryLegStillDeadNote(seat, ff, leg, unit, counts));
+        out.stillDeadRetryLegs.push(leg);
         if (ff && ff.class === 'wave') {
           if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
           lostWaveSeats.get(ff.waveId).push(seat);

@@ -245,29 +245,35 @@ async function runStage1(ctx) {
   }
 
   // v4.7 D2/E4 — primary error rows: one per seat with NO surviving review
-  // (every alias still in stillDeadLegs/stillDeadWaves after retry). A retry
-  // unit's OWN outcome (status + its waveId) is visible only through its
-  // still-dead note — run-retry.js's structured return keeps the ORIGINAL leg
-  // in stillDeadLegs regardless (E5: run-retry.js takes no edits), so the note
-  // is the only place the retry's own status/waveId survive. No matching note
-  // ⇒ this seat's retry was never attempted (skipped for cost/unmappable) ⇒
-  // the original dead leg IS the seat's only, and therefore final, leg.
-  const retryFacts = new Map();
+  // (every alias still in stillDeadLegs/stillDeadWaves after retry). E5
+  // amended (Task-4 review, owner-ruled): run-retry.js now surfaces the real
+  // retry leg (stillDeadRetryLegs), from the ONE branch it exists in —
+  // retryLegStillDeadNote, a retry leg that came back unusable. Prefer that
+  // REAL leg: status/waveId/usage/duration all real, all from the SAME
+  // attempt (no more pairing a retry's waveId with a different attempt's
+  // status). The other two dead-leg note classes — srcLegStillDeadNote (retry
+  // wave died wholesale, zero legs) and missingLegStillDeadNote (partial
+  // return never named this seat) — never get a real leg, so `leg: null`
+  // (no phantom waveId: one must never appear without a real billed leg).
+  // No 'dead-leg' note at all ⇒ never retried (skipped) ⇒ the original dead
+  // leg is this seat's only, and therefore final, leg.
+  const retryLegByAlias = new Map();
+  for (const leg of retry.stillDeadRetryLegs) { retryLegByAlias.set(leg.modelInput || leg.model, leg); }
+  const attemptedAliases = new Set();
   for (const n of retry.stillDeadNotes) {
-    if (n.channel === 'dead-leg' && n.data && n.data.seat) { retryFacts.set(n.data.seat, n.data); }
+    if (n.channel === 'dead-leg' && n.data && n.data.seat) { attemptedAliases.add(n.data.seat); }
   }
   const deadAliases = new Set([
     ...stillDeadLegs.map(l => l.modelInput || l.model),
     ...stillDeadWaves.flatMap(w => w.models || []),
   ]);
   for (const alias of deadAliases) {
-    const fact = retryFacts.get(alias);
-    // durationMs/usage are never invented: a fact-only leg (from a note) never
-    // carries them, so buildRunStatsEntry's leg-absent defaults (null/null)
-    // apply honestly rather than borrowing the first attempt's spend.
-    const finalLeg = fact
-      ? { model: alias, status: fact.status || 'error', waveId: fact.retryWaveId }
-      : (deadLegs0.find(l => (l.modelInput || l.model) === alias) || null);
+    let finalLeg = retryLegByAlias.get(alias);
+    if (!finalLeg) {
+      finalLeg = attemptedAliases.has(alias)
+        ? null                                                              // retried; no leg at all for this seat
+        : (deadLegs0.find(l => (l.modelInput || l.model) === alias) || null); // never retried
+    }
     extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias, role: roleFor(o, alias), wasChair: false }));
   }
 

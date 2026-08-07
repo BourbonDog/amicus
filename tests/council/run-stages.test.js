@@ -612,13 +612,18 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     expect(r.extraRows.some(x => x.model === 'b' && x.role === 'seat')).toBe(false);
   });
 
-  test('a failed-retry seat gets its primary error row from the retry leg, and its original leg superseded', async () => {
+  test('a failed-retry seat gets its primary error row from the REAL retry leg (real usage/duration), and its original leg superseded', async () => {
+    // v4.7 D2/E4 review fix wave: E5 was amended — run-retry.js now surfaces
+    // the actual retry leg (stillDeadRetryLegs), so this row carries the
+    // retry's REAL usage/durationMs (the $0.01/1000ms mkLeg fixture) rather
+    // than nulling them out. 'timed-out' (not 'timeout') is the canonical
+    // status vocabulary (session-finalize.js:11).
     const ctx = makeCtx({ models: ['a', 'b'] });
     ctx.launchers.launchWave
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
         legs: [usableLeg('a'), { ...deadLeg('b'), waveId: 'abc123-s1' }] }, exitCode: 0 })
       .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
-        legs: [{ ...deadLeg('b', 'timeout', null), waveId: 'abc123-s1r1' }] }, exitCode: 0 });
+        legs: [{ ...deadLeg('b', 'timed-out', null), waveId: 'abc123-s1r1' }] }, exitCode: 0 });
     const r = await runStage1(ctx);
     expect(r.reviews.map(v => v.model)).toEqual(['a']);           // 'b' never got a surviving review
     const superseded = r.extraRows.filter(x => x.role === 'superseded' && x.model === 'b');
@@ -627,9 +632,49 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
     const primaryErr = r.extraRows.find(x => x.model === 'b' && x.role === 'seat');
     expect(primaryErr).toBeDefined();
     expect(primaryErr.waveId).toBe('abc123-s1r1');                 // FROM THE RETRY leg, not the original
-    expect(primaryErr.status).toBe('timeout');                     // the RETRY's own status — not silently coerced
-    expect(primaryErr.usage).toBeNull();                           // never invent: run-retry.js (E5) keeps only
-    expect(primaryErr.durationMs).toBeNull();                      // the ORIGINAL leg structurally — retry cost is unknown here
+    expect(primaryErr.status).toBe('timed-out');                   // the RETRY's own status — not silently coerced
+    expect(primaryErr.usage.cost.amount).toBe(0.01);               // REAL usage — the retry leg genuinely carries it now
+    expect(primaryErr.durationMs).toBe(1000);                      // REAL duration — same real, same attempt, no mixing
+  });
+
+  test('a retry wave that dies wholesale (no leg at all for this seat) gets a leg-less primary error row: no phantom waveId', async () => {
+    // srcLegStillDeadNote class: the retry unit launched but the wave itself
+    // produced ZERO legs. There is no real leg to attribute anything to —
+    // the row must still exist (the seat is still dead), but with no waveId
+    // key at all rather than borrowing the retry's wave id for a leg that
+    // never happened.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a'), { ...deadLeg('b'), waveId: 'abc123-s1' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primaryErr = r.extraRows.find(x => x.model === 'b' && x.role === 'seat');
+    expect(primaryErr).toBeDefined();
+    expect(primaryErr.status).toBe('error');
+    expect(primaryErr.usage).toBeNull();
+    expect(primaryErr.durationMs).toBeNull();
+    expect('waveId' in primaryErr).toBe(false);                    // no real leg backs it — no phantom waveId
+  });
+
+  test('a retry wave that partially returns (no leg named for this seat) gets a leg-less primary error row: no phantom waveId', async () => {
+    // missingLegStillDeadNote class: the bench retry unit launched for
+    // ['a','b'] but the response only names 'a' — 'b' has no leg record at
+    // all in the retry response (distinct from a leg that came back and was
+    // simply unusable).
+    const ctx = makeCtx({ models: ['a', 'b', 'c'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [usableLeg('a'),
+        { ...deadLeg('b'), waveId: 'abc123-s1' }, { ...deadLeg('c'), waveId: 'abc123-s1' }] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [{ ...usableLeg('b'), waveId: 'abc123-s1r1' }] }, exitCode: 0 }); // 'c' never named in the retry response
+    const r = await runStage1(ctx);
+    const primaryErr = r.extraRows.find(x => x.model === 'c' && x.role === 'seat');
+    expect(primaryErr).toBeDefined();
+    expect(primaryErr.status).toBe('error');
+    expect(primaryErr.usage).toBeNull();
+    expect(primaryErr.durationMs).toBeNull();
+    expect('waveId' in primaryErr).toBe(false);                    // no real leg backs it — no phantom waveId
   });
 
   test('no seat appears twice as primary, and every extraRow with a real leg carries its waveId', async () => {
