@@ -2265,7 +2265,10 @@ describe('council MCP handlers', () => {
       const real = jest.requireActual('../src/council/ledger');
       return {
         ...real,
-        deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4 }],
+        // v4.7 GOA-7 D10: documentation pin — aliases/legacy on the mocked
+        // row must survive the MCP fence/parse round-trip unchanged.
+        deriveReliability: () => [{ model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4,
+          aliases: ['deepseek'], legacy: true }],
       };
     });
     const h = require('../src/mcp-server').handlers;
@@ -2274,6 +2277,8 @@ describe('council MCP handlers', () => {
     const doc = JSON.parse(unfence(res.content[0].text));
     expect(doc.type).toBe('council-stats');
     expect(doc.models[0].model).toBe('gpt');
+    expect(doc.models[0].aliases).toEqual(['deepseek']);
+    expect(doc.models[0].legacy).toBe(true);
     jest.dontMock('../src/council/ledger');
     jest.resetModules();
   });

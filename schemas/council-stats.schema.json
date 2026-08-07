@@ -20,7 +20,15 @@
           "avgStreetCredPeersOnly": { "type": ["number", "null"] },
           "lifetimeConfirmRate": { "type": ["number", "null"] },
           "lifetimeFactErrorRate": { "type": ["number", "null"] },
-          "conformance": { "type": "object" }
+          "conformance": { "type": "object" },
+          "aliases": {
+            "type": "array", "items": { "type": "string" },
+            "description": "Every alias observed for this group, most recently observed first — aliases[0] is the launch-preferred name (v4.7 GOA-7)."
+          },
+          "legacy": {
+            "type": "boolean",
+            "description": "True when every row in the group lacks resolvedModel — alias-keyed history from before resolved-id segmentation, or leg-less rows whose resolution is unknowable (v4.7 GOA-7, spec R2)."
+          }
         }
       }
     }

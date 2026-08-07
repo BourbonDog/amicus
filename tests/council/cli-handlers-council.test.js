@@ -431,6 +431,66 @@ test('verdict: an empty --out= value errors the same way, never silently default
 });
 
 // ---------------------------------------------------------------------------
+// renderStats (v4.7 GOA-7 D10 surfaces)
+// ---------------------------------------------------------------------------
+// renderStats is not exported (no sibling render helper is either — see
+// module.exports), so these drive it through `council stats` (human mode)
+// with the ledger redirected to the outer beforeEach's tmp `ledgerDir`,
+// seeding raw ledger rows the same way tests/council/ledger.test.js does
+// (deriveReliability's real aggregation produces the aliases[]/legacy shape
+// renderStats consumes — no need to hand-build aggregate rows).
+function ledgerRow(overrides = {}) {
+  const base = {
+    schemaVersion: 2, runId: 'r1', date: '2026-08-01', runType: 'headless',
+    model: 'alpha', role: 'seat', wasChair: false, judged: true,
+    streetCredWithSelf: 1, streetCredPeersOnly: 1,
+    findingsRaised: 0, bySeverity: { blocker: 0, major: 0, minor: 0, nit: 0 },
+    confirmRate: 1, factErrorRate: 0, conformance: 'clean',
+  };
+  const merged = { ...base, ...overrides };
+  if (!('resolvedModel' in overrides)) { delete merged.resolvedModel; }
+  return merged;
+}
+function appendLedgerRows(rows) {
+  const file = path.join(ledgerDir, 'council-ledger.jsonl');
+  for (const r of rows) { fs.appendFileSync(file, JSON.stringify(r) + '\n'); }
+}
+
+describe('renderStats (v4.7 GOA-7 D10 surfaces)', () => {
+  test('legacy groups carry a legacy marker in the notes column', async () => {
+    // No resolvedModel on any row → deriveReliability marks the group legacy.
+    appendLedgerRows([
+      ledgerRow({ model: 'gemini' }), ledgerRow({ model: 'gemini' }), ledgerRow({ model: 'gemini' }),
+      ledgerRow({ model: 'gemini' }), ledgerRow({ model: 'gemini' }),
+    ]);
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    expect(out).toContain('legacy');
+  });
+
+  test('a resolved-id key longer than 16 chars widens the model column instead of shifting it', async () => {
+    appendLedgerRows([ledgerRow({ model: 'qwen', resolvedModel: 'openrouter/qwen/qwen3-max' })]);
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    const [header, row] = out.split('\n');
+    expect(header.indexOf('runs')).toBeGreaterThan('openrouter/qwen/qwen3-max'.length);
+    expect(row.startsWith('openrouter/qwen/qwen3-max ')).toBe(true);
+  });
+
+  test('non-legacy rows render no legacy marker', async () => {
+    appendLedgerRows([
+      ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+      ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+      ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+      ledgerRow({ model: 'gpt', resolvedModel: 'openai/gpt-5.2' }),
+    ]);
+    const { code, out } = await capture(() => handleCouncil({ _: ['council', 'stats'] }));
+    expect(code).toBe(0);
+    expect(out).not.toContain('legacy');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // council save / list / show (B23)
 // ---------------------------------------------------------------------------
 

@@ -177,9 +177,17 @@ describe('published council-family schemas validate real builder output (v4.0 §
   });
 
   test('council-stats.schema.json accepts buildStatsDoc output', () => {
+    // v4.7 GOA-7 D10: documentation pin — the fixture rows carry `aliases`
+    // and `legacy` (additive row properties) so the schema exercise actually
+    // covers them, not just the pre-D10 shape.
     const doc = buildStatsDoc([{
       model: 'gpt', runs: 3, lowN: false, avgStreetCredPeersOnly: 1.4,
       lifetimeConfirmRate: 0.5, lifetimeFactErrorRate: 0, conformance: { clean: 3 },
+      aliases: ['gpt'],
+    }, {
+      model: 'gemini', runs: 2, lowN: true, avgStreetCredPeersOnly: null,
+      lifetimeConfirmRate: null, lifetimeFactErrorRate: null, conformance: { clean: 2 },
+      aliases: ['gemini'], legacy: true,
     }]);
     expectValid(compile('council-stats'), doc);
     expectValid(compile('council-stats'), buildStatsDoc([]));
