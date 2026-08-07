@@ -207,10 +207,15 @@ async function runCouncil(options, deps = {}) {
     }
 
     // ---- Chair synthesis (provisional tally feeds the packet) ----
+    // v4.7 D2: two independent extraRows channels — Stage 1's findings-repair
+    // rows and Stage 2's judge-repair rows — concatenate into the ONE array
+    // buildTallyInput appends after the primary review rows (run-assemble.js
+    // docblock). Neither stage invents a second mechanism for the other's kind
+    // of row.
     const mkInput = (chairStats, chairModel) => asm.buildTallyInput({
       runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
       reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
-      extraRows: s1.extraRows,
+      extraRows: [...s1.extraRows, ...s2.extraRows],
     });
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);

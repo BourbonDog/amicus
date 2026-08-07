@@ -928,6 +928,53 @@ describe('runStage2', () => {
     expect(judgeResults.find(j => j.judge === 'gpt').ok).toBe(true);
   });
 
+  test('Task 5: a repaired judge yields its primary row (original wave leg) PLUS one repair row carrying the -q1 solo usage', async () => {
+    // v4.7 D2: mirrors Task 4's Stage-1 repair row, on the Stage-2 judge-repair
+    // loop. The judge's OWN judgeResults entry must still carry the ORIGINAL
+    // wave leg (the #83 comment at :110-116) — the repair solo's leg rides a
+    // SEPARATE extraRows row instead of overwriting the primary attribution.
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', 'no json'),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: (opts) => okWave([{ ...mkLeg('gemini',
+        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])), waveId: opts.waveId }]),
+    });
+    const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const g = judgeResults.find(j => j.judge === 'gemini');
+    expect(g.ok).toBe(true);
+    expect(g.conformance).toBe('repaired');
+    expect(g.leg.summary).toBe('no json');                    // primary row: the ORIGINAL wave leg, unchanged
+    expect(extraRows).toHaveLength(1);
+    expect(extraRows[0]).toMatchObject({
+      model: 'gemini', role: 'repair', wasChair: false, waveId: 'abc123-q1', status: 'complete',
+    });
+    expect(extraRows[0].usage.cost.amount).toBe(0.01);
+    expect(extraRows[0].durationMs).toBe(1000);
+  });
+
+  test('Task 5: a FAILED judge repair still yields its repair row (error status)', async () => {
+    const ctx = makeCtx({
+      models: ['gemini', 'gpt'],
+      onWave: () => okWave([
+        mkLeg('gemini', 'never json'),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      ]),
+      onSolo: (opts) => okWave([{ ...deadLeg('gemini'), waveId: opts.waveId }]),
+    });
+    const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+    const g = judgeResults.find(j => j.judge === 'gemini');
+    expect(g.ok).toBe(false);
+    expect(g.conformance).toBe('unstructured');
+    const repairRows = extraRows.filter(r => r.role === 'repair');
+    expect(repairRows).toHaveLength(2);                       // cap = 2 re-prompts; BOTH get a row
+    expect(repairRows.map(r => r.waveId)).toEqual(['abc123-q1', 'abc123-q2']);
+    expect(repairRows.every(r => r.status === 'error')).toBe(true);
+    expect(repairRows.every(r => r.model === 'gemini')).toBe(true);
+  });
+
   test('date-stamps the judge bundle it writes to bundle-stage2.md (spec §4.3)', async () => {
     const s2 = require('../../src/council/briefings-stage2');
     const ctx = makeCtx({
