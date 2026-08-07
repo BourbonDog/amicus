@@ -4,7 +4,7 @@
 
 **A multi-model LLM Council for Claude — with a parallel AI window underneath.**
 
-![The Amicus council mid-ritual: five models — Gemini, Llama, Grok, Claude Opus — reading the same material independently, chaired by GPT](./docs/council.png)
+<p align="center"><img src="./docs/cards/council-hero.svg" width="560" alt="The Amicus council ritual across three convenings: independent review spokes, anonymous cross-review, and a non-Claude chair synthesizing the verdict — the third convening seats a local Qwen2.5-Coder on-device alongside cloud peers"></p>
 
 Hand Claude a plan, a design, a diff, an architecture decision, a manuscript — anything — and say *council review this*: Amicus routes it through several models from different families, has them anonymously cross-review each other, and a non-Claude chair synthesizes a verdict you turn into accept/deny edits. Or skip the ceremony and **fork** a single conversation to Gemini, GPT, DeepSeek, or any other model — it works in parallel with full context, and you **fold** the result back when you're ready. Claude orchestrates throughout; you stay in your editor.
 
@@ -62,7 +62,7 @@ One install delivers six things that work together:
 
 Claude is the orchestrator. The council and chat skills run *on top of* the engine; you talk to Claude, and Claude drives Amicus.
 
-![What one install delivers: council skill, chat skill, CLI + MCP, live catalog](./docs/what-is-amicus.png)
+<p align="center"><img src="./docs/cards/what-is-amicus.svg" alt="One install: the second-opinion council and sidecar skills riding the amicus CLI + MCP engine, with the live model catalog, watch/spend, and Council Workspace fed off it"></p>
 
 ---
 
@@ -89,6 +89,8 @@ flowchart LR
     E --> F["Reviewed copy<br/>+ run folder"]
 ```
 
+<p align="center"><img src="./docs/cards/blind-ballots.svg" width="520" alt="Anonymized cross-review: reviews are relabeled A, B, C before the bench ranks them — one model disputes its own review"></p>
+
 **What a run produces** (in `output/<stem>-council/`):
 
 - `review-<model>.md` × N — each model's independent review.
@@ -106,6 +108,8 @@ flowchart LR
 - **Debate mode** — after cross-review, every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw**, and the disputing judges re-vote. Exactly one rebuttal round, then the final tally.
 - **Claude in the council** — Claude adds its own fresh review to the bundle so the bench ranks and adjudicates it. Claude is *judged* but never votes or chairs, so the verdict stays independent.
 
+<p align="center"><img src="./docs/cards/dial-it-up.svg" alt="The four opt-in council elements as toggles — critic seat and debate on, expert lenses and Claude-in-the-council off — with the up-front run-shape disclosure"></p>
+
 The critic and lens methodologies are adapted from the `/critic` and `/debate` agents in [John Renaldi's product-kit](https://github.com/jrenaldi79/plugin-marketplace) (MIT); the briefing boilerplate lives in [`skills/second-opinion/SEAT-BRIEFS.md`](./skills/second-opinion/SEAT-BRIEFS.md).
 
 **Cost is disclosed up front.** Before any model launches, you see the run shape — including any enabled optional elements — for example:
@@ -113,6 +117,8 @@ The critic and lens methodologies are adapted from the `/critic` and `/debate` a
 > This run uses 3 council models across 2 fanout waves + 1 chair call, with critic seat + debate mode ON (~7 base runs + up to 6 rebuttal calls).
 
 Then the council waits for your confirmation.
+
+<p align="center"><img src="./docs/cards/priced-up-front.svg" width="520" alt="The budget gate: a $0.42 run passes, a $31.80 bench is blocked, and the receipt matches the estimate"></p>
 
 The skill lives at **[`skills/second-opinion/SKILL.md`](./skills/second-opinion/SKILL.md)**; the design spec behind it is **[`skills/second-opinion/COUNCIL-DESIGN.md`](./skills/second-opinion/COUNCIL-DESIGN.md)**. For what `amicus council tally|verdict|report|stats` actually take as input and produce — field-by-field schemas, verdict.json's provenance, and a full worked example run against the real CLI — see **[docs/council.md](./docs/council.md)**.
 
@@ -127,9 +133,13 @@ The council is the hero — start with the everyday way, and reach for the more 
 - **With a debate round.** Add `--debate` and every Contested or Disputed finding goes back to its raiser to **defend, amend, or withdraw** while the disputing judges re-vote — exactly one rebuttal round, then the final tally. → [The Council](#the-council)
 - **On free, local, private models — at $0.** Point the council (and sidecars) at an OpenAI-compatible server already running on your machine — Ollama, LM Studio, or vLLM — with `amicus provider add`. No API key, no per-token bill, nothing leaves your machine, and it works offline. → [`amicus provider`](./docs/usage.md#amicus-provider)
 
+<p align="center"><img src="./docs/cards/same-table.svg" width="520" alt="A local Ollama model seated as an equal council member at $0.00 — a member, not a mode"></p>
+
 ### Headless council (CI)
 
 The same pipeline runs with no Claude runtime at all: `amicus council run --prompt-file briefing.md --models gemini,glm --chair deepseek --json` executes the review waves, the anonymized cross-review, the tally, and the chair verdict in one command, and writes the full run directory (`verdict.json` with the chair's parsed `overallVerdict`, `report.html`, every review and judge output). That is what powers the repo's own **Council Review GitHub Action v2** — on PRs labeled `council-review` it posts an adjudicated verdict as a check run plus a sticky comment, uploads the run directory as an evidence artifact, and can optionally gate merges via its `fail_on` input (default: report-only). Reference: [docs/council.md](./docs/council.md#amicus-council-run).
+
+<p align="center"><img src="./docs/cards/ship-gate.svg" alt="A council gating a release pipeline: exit 0 ships it, exit 1 sends it back"></p>
 
 ### Free council (zero-cost)
 
@@ -460,6 +470,8 @@ amicus models --search gemini # filter by substring
 ```
 
 `start`/`fanout` validate your model against the catalog before launching (skip with `--no-validate-model`). You can also always bypass aliases and pass a full model ID directly — bare `provider/model` (canonical) or `openrouter/provider/model` (explicit override); see Routing below. Catalog internals, alias management, and the full-id passthrough table are in **[docs/usage.md § Models](./docs/usage.md#amicus-models--the-model-catalog)**.
+
+<p align="center"><img src="./docs/cards/build-the-bench.svg" alt="Direct keys, one OpenRouter key, or local runtimes seat a mixed bench — different families, different blind spots"></p>
 
 ### Routing
 

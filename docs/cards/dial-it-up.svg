@@ -1,0 +1,78 @@
+<svg viewBox="0 0 800 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="180" fill="#0a0a0a"/>
+
+  <!-- LEFT: base council block — the ritual -->
+  <rect x="30" y="38" width="184" height="104" rx="8" fill="#111113" stroke="#222225"/>
+  <text x="122" y="56" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#a1a1a0">amicus council run</text>
+  <rect x="40" y="64" width="164" height="16" rx="3" fill="#161618"/>
+  <text x="46" y="74" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">reviews → cross-review → tally → chair</text>
+  <text x="122" y="94" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">the ritual — always the same</text>
+  <rect x="40" y="104" width="100" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="40" y="112" width="70" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="40" y="120" width="85" height="2" rx="1" fill="#2c2c30"/>
+
+  <!-- connector: ritual → extras -->
+  <path d="M220 90 L244 90" stroke="#555" stroke-width="1" stroke-dasharray="3,2"/>
+  <polygon points="242,87 248,90 242,93" fill="#555"/>
+
+  <!-- CENTER: opt-in toggles -->
+  <text x="342" y="37" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">all default off — nothing turns on unless you name it</text>
+
+  <!-- toggle 1: critic seat (flips ON at ~0.8s) -->
+  <g>
+    <rect x="256" y="46" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+    <circle cx="260.5" cy="50.5" r="3" fill="#555"/>
+    <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.16;0.2;0.94;1" dur="5s" repeatCount="indefinite"/>
+  </g>
+  <g opacity="0">
+    <rect x="256" y="46" width="18" height="9" rx="4.5" fill="#d97757"/>
+    <circle cx="269.5" cy="50.5" r="3" fill="#f5f5f3"/>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.16;0.2;0.94;1" dur="5s" repeatCount="indefinite"/>
+  </g>
+  <text x="282" y="53" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">critic seat</text>
+  <text x="282" y="62" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">one reviewer turns adversarial</text>
+
+  <!-- toggle 2: expert lenses (stays OFF) -->
+  <rect x="256" y="70" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+  <circle cx="260.5" cy="74.5" r="3" fill="#555"/>
+  <text x="282" y="77" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">expert lenses</text>
+  <text x="282" y="86" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">business · technical · customer · financial</text>
+
+  <!-- toggle 3: debate round (flips ON at ~1.4s) -->
+  <g>
+    <rect x="256" y="94" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+    <circle cx="260.5" cy="98.5" r="3" fill="#555"/>
+    <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.28;0.32;0.94;1" dur="5s" repeatCount="indefinite"/>
+  </g>
+  <g opacity="0">
+    <rect x="256" y="94" width="18" height="9" rx="4.5" fill="#d97757"/>
+    <circle cx="269.5" cy="98.5" r="3" fill="#f5f5f3"/>
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.28;0.32;0.94;1" dur="5s" repeatCount="indefinite"/>
+  </g>
+  <text x="282" y="101" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">debate round</text>
+  <text x="282" y="110" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">contested findings defend, amend, or withdraw</text>
+
+  <!-- toggle 4: claude in the council (stays OFF) -->
+  <rect x="256" y="118" width="18" height="9" rx="4.5" fill="#2c2c30"/>
+  <circle cx="260.5" cy="122.5" r="3" fill="#555"/>
+  <text x="282" y="125" font-family="IBM Plex Mono,monospace" font-size="6.5" fill="#f5f5f3">claude in the council</text>
+  <text x="282" y="134" font-family="IBM Plex Mono,monospace" font-size="5" fill="#555">judged by the bench — never votes, never chairs</text>
+
+  <!-- connector: extras → run shape -->
+  <path d="M440 90 L552 90" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>
+  <polygon points="550,87 556,90 550,93" fill="#555"/>
+
+  <!-- RIGHT: run-shape disclosure card -->
+  <rect x="566" y="40" width="204" height="100" rx="6" fill="#111113"/>
+  <rect x="566" y="40" width="204" height="16" rx="6" fill="#161618"/>
+  <rect x="566" y="50" width="204" height="6" fill="#111113"/>
+  <rect x="566" y="40" width="204" height="100" rx="6" stroke="#e8b24a" stroke-width="1.2"/>
+  <text x="668" y="52" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" font-weight="600" fill="#e8b24a">run shape</text>
+  <text x="578" y="74" font-family="IBM Plex Mono,monospace" font-size="6" fill="#f5f5f3">3 models × 2 waves + 1 chair</text>
+  <text x="578" y="88" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0" opacity="0">critic seat + debate ON<animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.4;0.44;0.94;1" dur="5s" repeatCount="indefinite"/></text>
+  <text x="578" y="102" font-family="IBM Plex Mono,monospace" font-size="6" fill="#e8b24a">~7 base runs + up to 6 rebuttal calls</text>
+  <text x="578" y="119" font-family="IBM Plex Mono,monospace" font-size="6" fill="#a1a1a0">proceed?</text>
+  <rect x="613" y="112" width="4" height="8" fill="#e8b24a">
+    <animate attributeName="opacity" values="1;0;1" keyTimes="0;0.5;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+</svg>

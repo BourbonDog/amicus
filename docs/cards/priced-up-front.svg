@@ -1,0 +1,76 @@
+<svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="180" fill="#0a0a0a"/>
+
+  <!-- column labels -->
+  <text x="100" y="16" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">queue</text>
+  <text x="205" y="16" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">max-cost $2</text>
+  <text x="295" y="16" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#555">launched</text>
+
+  <!-- approach lanes (ambient flow) -->
+  <path d="M35 120 L196 120" stroke="#555" stroke-width="1" stroke-dasharray="4,4" opacity=".6">
+    <animate attributeName="stroke-dashoffset" values="8;0" dur="0.7s" repeatCount="indefinite"/>
+  </path>
+  <polygon points="194,117 200,120 194,123" fill="#555" opacity=".6"/>
+  <path d="M214 120 L350 120" stroke="#555" stroke-width="1" stroke-dasharray="4,4" opacity=".35">
+    <animate attributeName="stroke-dashoffset" values="8;0" dur="0.7s" repeatCount="indefinite"/>
+  </path>
+  <polygon points="350,117 356,120 350,123" fill="#555" opacity=".35"/>
+
+  <!-- toll gate: glow, bar, caps, padlock (the focal terracotta) -->
+  <rect x="196" y="18" width="18" height="109" rx="9" fill="#d97757" opacity=".1">
+    <animate attributeName="opacity" values="0.1;0.1;0.4;0.4;0.1" keyTimes="0;0.46;0.54;0.92;1" dur="5s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="203" y="20" width="4" height="105" rx="2" fill="#d97757"/>
+  <rect x="199" y="18" width="12" height="3" rx="1.5" fill="#d97757"/>
+  <rect x="199" y="124" width="12" height="3" rx="1.5" fill="#d97757"/>
+  <circle cx="205" cy="72" r="9" fill="#0a0a0a" stroke="#d97757" stroke-width="1"/>
+  <path d="M202 71 v-3 a3 3 0 0 1 6 0 v3" stroke="#d97757" stroke-width="1.2" fill="none"/>
+  <rect x="200.5" y="71" width="9" height="7" rx="1.5" fill="#d97757"/>
+
+  <!-- top run-card, left copy (fades out ~1s) -->
+  <g opacity="1">
+    <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.18;0.26;0.92;1" dur="5s" repeatCount="indefinite"/>
+    <rect x="45" y="30" width="110" height="32" rx="4" fill="#111113" stroke="#222225"/>
+    <text x="53" y="42" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">3 reviewers + chair</text>
+    <text x="53" y="53" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">~7 calls · est $0.42</text>
+    <rect x="53" y="57" width="34" height="2" rx="1" fill="#2c2c30"/>
+  </g>
+
+  <!-- top run-card, right copy (fades in ~1s, passed the gate) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.18;0.26;0.92;1" dur="5s" repeatCount="indefinite"/>
+    <rect x="240" y="30" width="110" height="32" rx="4" fill="#111113" stroke="#222225"/>
+    <text x="248" y="42" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">3 reviewers + chair</text>
+    <text x="248" y="53" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">~7 calls · est $0.42</text>
+    <rect x="248" y="57" width="34" height="2" rx="1" fill="#2c2c30"/>
+    <circle cx="336" cy="46" r="5" fill="#4ade80" opacity=".15"/>
+    <path d="M333 46 L335 48 L339 44" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- bottom run-card (stays queued) -->
+  <rect x="45" y="76" width="110" height="32" rx="4" fill="#111113" stroke="#222225"/>
+  <text x="53" y="88" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">(o3-pro bench)</text>
+  <text x="53" y="99" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">est $31.80</text>
+  <rect x="53" y="103" width="28" height="2" rx="1" fill="#2c2c30"/>
+
+  <!-- budget-gate badge (pulses in ~2.5s) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.46;0.54;0.92;1" dur="5s" repeatCount="indefinite"/>
+    <rect x="152" y="84" width="48" height="12" rx="3" fill="#e25555" opacity=".12"/>
+    <rect x="152" y="84" width="48" height="12" rx="3" stroke="#e25555" stroke-width=".8"/>
+    <text x="176" y="93" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" font-weight="600" fill="#e25555">BUDGET GATE</text>
+  </g>
+
+  <!-- receipt chip (fades in ~3.5s) -->
+  <g opacity="0">
+    <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.66;0.74;0.94;1" dur="5s" repeatCount="indefinite"/>
+    <rect x="256" y="84" width="94" height="30" rx="4" fill="#161618" stroke="#222225"/>
+    <text x="264" y="96" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">est $0.42</text>
+    <text x="264" y="107" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">charged $0.42</text>
+    <circle cx="333" cy="99" r="5" fill="#4ade80" opacity=".15"/>
+    <path d="M330 99 L332 101 L336 97" stroke="#4ade80" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <text x="200" y="152" text-anchor="middle" font-family="Outfit,sans-serif" font-size="9" fill="#555">Cost shown before launch — runaway runs never start</text>
+  <text x="200" y="166" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#d97757">amicus council run --prompt-file plan.md --max-cost 2</text>
+</svg>

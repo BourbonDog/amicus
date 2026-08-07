@@ -1,0 +1,99 @@
+<svg viewBox="0 0 400 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="180" fill="#0a0a0a"/>
+
+  <!-- connector arrows (drawn under the band so they pass through it) -->
+  <g stroke="#d97757" stroke-width="1.1" stroke-dasharray="4,3">
+    <path d="M107 30 L288 30"><animate attributeName="stroke-dashoffset" values="0;-14" dur="1.2s" repeatCount="indefinite"/></path>
+    <path d="M107 72 L288 72"><animate attributeName="stroke-dashoffset" values="0;-14" dur="1.2s" begin="0.2s" repeatCount="indefinite"/></path>
+    <path d="M107 114 L288 114"><animate attributeName="stroke-dashoffset" values="0;-14" dur="1.2s" begin="0.4s" repeatCount="indefinite"/></path>
+  </g>
+  <polygon points="289,27 295,30 289,33" fill="#d97757"/>
+  <polygon points="289,69 295,72 289,75" fill="#d97757"/>
+  <polygon points="289,111 295,114 289,117" fill="#d97757"/>
+
+  <!-- LEFT: three signed review cards -->
+  <rect x="18" y="12" width="85" height="36" rx="4" fill="#111113" stroke="#222225"/>
+  <rect x="24" y="29" width="62" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="24" y="35" width="48" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="24" y="41" width="55" height="2" rx="1" fill="#2c2c30"/>
+  <g>
+    <animate attributeName="opacity" values="1;1;0.25;0.25;1" keyTimes="0;0.3;0.45;0.85;1" dur="7s" repeatCount="indefinite"/>
+    <rect x="18" y="12" width="85" height="14" rx="4" fill="#4285F4" opacity=".22"/>
+    <rect x="18" y="22" width="85" height="4" fill="#111113"/>
+    <text x="24" y="19.5" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#4285F4">Gemini</text>
+  </g>
+
+  <rect x="18" y="54" width="85" height="36" rx="4" fill="#111113" stroke="#222225"/>
+  <rect x="24" y="71" width="58" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="24" y="77" width="66" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="24" y="83" width="40" height="2" rx="1" fill="#2c2c30"/>
+  <g>
+    <animate attributeName="opacity" values="1;1;0.25;0.25;1" keyTimes="0;0.3;0.45;0.85;1" dur="7s" begin="0.35s" repeatCount="indefinite"/>
+    <rect x="18" y="54" width="85" height="14" rx="4" fill="#10a37f" opacity=".22"/>
+    <rect x="18" y="64" width="85" height="4" fill="#111113"/>
+    <text x="24" y="61.5" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#10a37f">GPT</text>
+  </g>
+
+  <rect x="18" y="96" width="85" height="36" rx="4" fill="#111113" stroke="#222225"/>
+  <rect x="24" y="113" width="50" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="24" y="119" width="60" height="2" rx="1" fill="#2c2c30"/>
+  <rect x="24" y="125" width="34" height="2" rx="1" fill="#2c2c30"/>
+  <g>
+    <animate attributeName="opacity" values="1;1;0.25;0.25;1" keyTimes="0;0.3;0.45;0.85;1" dur="7s" begin="0.7s" repeatCount="indefinite"/>
+    <rect x="18" y="96" width="85" height="14" rx="4" fill="#738ADB" opacity=".22"/>
+    <rect x="18" y="106" width="85" height="4" fill="#111113"/>
+    <text x="24" y="103.5" font-family="IBM Plex Mono,monospace" font-size="6" font-weight="600" fill="#738ADB">DeepSeek</text>
+  </g>
+
+  <!-- CENTER: anonymize band -->
+  <rect x="193" y="12" width="14" height="120" rx="3" fill="#161618"/>
+  <path d="M193 14 L193 130" stroke="#d97757" stroke-width="1" stroke-dasharray="3,3" opacity=".9"/>
+  <path d="M207 14 L207 130" stroke="#d97757" stroke-width="1" stroke-dasharray="3,3" opacity=".9"/>
+  <text transform="rotate(-90 200 72)" x="200" y="74" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" letter-spacing="1.5" fill="#d97757">ANONYMIZE</text>
+
+  <!-- RIGHT: blind twins with rank chips -->
+  <g>
+    <animate attributeName="opacity" values="0.2;0.2;1;1;0.2" keyTimes="0;0.3;0.45;0.85;1" dur="7s" repeatCount="indefinite"/>
+    <rect x="297" y="12" width="85" height="36" rx="4" fill="#111113" stroke="#222225"/>
+    <rect x="297" y="12" width="85" height="14" rx="4" fill="#161618"/>
+    <rect x="297" y="22" width="85" height="4" fill="#111113"/>
+    <text x="303" y="19.5" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">REVIEW A</text>
+    <rect x="359" y="14" width="17" height="8" rx="2" fill="#2c2c30"/>
+    <text x="367.5" y="20" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">2nd</text>
+    <rect x="303" y="29" width="58" height="2" rx="1" fill="#2c2c30"/>
+    <rect x="303" y="35" width="44" height="2" rx="1" fill="#2c2c30"/>
+  </g>
+
+  <g>
+    <animate attributeName="opacity" values="0.2;0.2;1;1;0.2" keyTimes="0;0.3;0.45;0.85;1" dur="7s" begin="0.35s" repeatCount="indefinite"/>
+    <rect x="297" y="54" width="85" height="36" rx="4" fill="#111113" stroke="#222225"/>
+    <rect x="297" y="54" width="85" height="14" rx="4" fill="#161618"/>
+    <rect x="297" y="64" width="85" height="4" fill="#111113"/>
+    <text x="303" y="61.5" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">REVIEW B</text>
+    <rect x="359" y="56" width="17" height="8" rx="2" fill="#e8b24a" opacity=".16"/>
+    <text x="367.5" y="62" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e8b24a">1st</text>
+    <rect x="303" y="71" width="62" height="2" rx="1" fill="#2c2c30"/>
+    <rect x="303" y="77" width="48" height="2" rx="1" fill="#2c2c30"/>
+  </g>
+
+  <g>
+    <animate attributeName="opacity" values="0.2;0.2;1;1;0.2" keyTimes="0;0.3;0.45;0.85;1" dur="7s" begin="0.7s" repeatCount="indefinite"/>
+    <rect x="297" y="96" width="85" height="36" rx="4" fill="#111113" stroke="#222225"/>
+    <rect x="297" y="96" width="85" height="14" rx="4" fill="#161618"/>
+    <rect x="297" y="106" width="85" height="4" fill="#111113"/>
+    <text x="303" y="103.5" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">REVIEW C</text>
+    <rect x="359" y="98" width="17" height="8" rx="2" fill="#2c2c30"/>
+    <text x="367.5" y="104" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#a1a1a0">3rd</text>
+    <rect x="303" y="113" width="52" height="2" rx="1" fill="#2c2c30"/>
+    <rect x="303" y="119" width="38" height="2" rx="1" fill="#2c2c30"/>
+    <g>
+      <animate attributeName="opacity" values="0.25;1;0.25" dur="2.2s" repeatCount="indefinite"/>
+      <circle cx="306" cy="125.5" r="2" fill="#e25555"/>
+      <text x="311" y="127.5" font-family="IBM Plex Mono,monospace" font-size="5.5" fill="#e25555">disputed its own</text>
+    </g>
+  </g>
+
+  <!-- captions -->
+  <text x="200" y="152" text-anchor="middle" font-family="Outfit,sans-serif" font-size="9" fill="#555">Reviews are ranked blind — self-bias washes out</text>
+  <text x="200" y="166" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="7" fill="#d97757">amicus council run --prompt-file design.md --models gemini,gpt,deepseek</text>
+</svg>
