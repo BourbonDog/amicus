@@ -5,6 +5,19 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### CI
+
+- **The macOS/node-24 unit leg's `--workerIdleMemoryLimit` drops from 1GB to 512MB.** That leg
+  segfaulted a jest worker again on 2026-08-07 (PR #126) — killing
+  `tests/utils/gateway-route-audit.test.js` while 6791 tests passed and 0 failed, with a green
+  rerun — which was the first such hit *with* the 1GB ceiling in force, so 1GB does not bound the
+  growth on this runner. Halving recycles a worker sooner, at a small wall-clock cost on a leg
+  already mid-pack (~3m59s vs ubuntu's ~3m58s). Three pins in
+  `tests/scripts/ci-workflow.test.js` now guard the mitigation, which previously had none: it
+  produces no assertion failure when it works and none when it is deleted, so nothing else in the
+  repo would notice its loss. If a fifth hit lands at 512MB, the next lever is `--maxWorkers` on
+  that leg — fewer concurrent heaps — not a smaller idle ceiling.
+
 ### Added
 
 - **`runStats` gains a row for every paid launch, not just one per requested seat** (v4.7 CA-4,

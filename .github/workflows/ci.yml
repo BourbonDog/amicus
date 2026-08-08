@@ -27,10 +27,21 @@ jobs:
         # crosses the limit, so the leak never reaches segfault territory. The
         # include below scopes it to this one leg: everywhere else jest-flags is
         # empty and the test step degrades to a plain `npm test`.
+        #
+        # FOURTH hit — 2026-08-07 (PR #126), the first WITH the 1GB limit in
+        # force: killed tests/utils/gateway-route-audit.test.js while 6791 tests
+        # passed and 0 failed; the rerun was green. 1GB was therefore too loose
+        # to bound the growth on this runner, so the standing rule's escalation
+        # applies and the limit halves to 512MB. A worker recycles sooner (a
+        # small wall-clock cost on a leg that was already mid-pack at ~3m59s vs
+        # ubuntu's ~3m58s), and the ceiling sits further below whatever RSS the
+        # segfault actually occurs at. If a FIFTH hit lands at 512MB, stop
+        # halving — the next lever is --maxWorkers on this leg (fewer
+        # concurrent heaps), not a smaller idle ceiling.
         include:
           - os: macos-latest
             node: 24
-            jest-flags: --workerIdleMemoryLimit=1GB
+            jest-flags: --workerIdleMemoryLimit=512MB
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
