@@ -161,7 +161,14 @@ async function handleCouncilRun(args, depsOverride = {}) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: `Error: --lenses needs exactly one lens per seat (${bench.length} seats, got ${lenses.length})` });
   }
-  if (args.timeout !== undefined && args.timeout <= 0) {
+  // v4.7 PR6: this check is POST-pack-merge and ungated, so it is the only one a
+  // pack-filled value passes through — `timeout` is a legal council pack option
+  // (pack-validate.js KIND_OPTIONS) and validatePack checks the key name, never
+  // the value type. The old `<= 0` test alone let `{timeout: true}` past (true
+  // coerces to 1) and `{timeout: "abc"}` past as NaN, reproducing the very bug
+  // the typed-flag guard above closes. Same shape as --max-cost's check below.
+  if (args.timeout !== undefined
+      && (typeof args.timeout !== 'number' || !Number.isFinite(args.timeout) || args.timeout <= 0)) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --timeout must be a positive number' });
   }
   const mc = args['max-cost'];
