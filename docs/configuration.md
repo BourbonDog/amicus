@@ -407,6 +407,11 @@ Two independent pre-flight guards run before a paid model call, both set via top
 - **`maxCost`** — soft ceiling on the estimated total $ for the call. Absent, zero or negative all
   mean no ceiling.
 
+> ⚠️ **`0` means the opposite thing on each key.** `maxCostPerMtok: 0` falls back to the default 60,
+> so that guard stays **on**; `maxCost: 0` disables the ceiling entirely. Neither key is turned off
+> by setting it to zero in the way you might expect — use `--no-cost-gate` (CLI) or
+> `noCostGate` (`amicus_council_run`) to actually disable them.
+
 ```jsonc
 {
   "maxCostPerMtok": 60,
@@ -421,8 +426,8 @@ Over MCP the per-call override depends on the tool. `amicus_council_run` takes i
 and `noCostGate` params, which forward to the spawned child exactly as the CLI flags do.
 **`amicus_start` takes neither.** On that path `maxCostPerMtok` is config-only and nothing can turn
 the gate off at all; the soft ceiling is the **effective** `maxCost` — the pack's if the run used a
-pack that set one, otherwise the config's (`mcp-server.js:454`). Raising the loser of that pair
-will not clear the run. See
+pack that set one, otherwise the config's (`mcp-server.js:454`). Only one of those two values is in
+effect, so raising the other one changes nothing. See
 [Troubleshooting: MCP run fails with "budget gate refused the
 run"](./troubleshooting.md#mcp-run-fails-with-budget-gate-refused-the-run).
 
