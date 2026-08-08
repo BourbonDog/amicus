@@ -166,4 +166,58 @@ describe('shared-server path: budget gate applies with NO pack (PR6 Task 2)', ()
       fs.rmSync(project, { recursive: true, force: true });
     }
   });
+
+  // PR6 Task 2 review follow-up: the only thing pinning the pack-over-config
+  // precedence was `expect(preSpend).toMatch(/fwd\.maxCost/)` in
+  // mcp-pack-params.test.js — a source-text check a BACKWARDS expression
+  // (`cfg.maxCost !== undefined ? cfg.maxCost : fwd.maxCost`) would also
+  // satisfy. This drives it behaviorally: the pack's tiny ceiling must win
+  // over the config's huge one, so flipping the ternary turns this RED.
+  test("a pack's maxCost wins over the config's, on the shared-server path", async () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-packwins-cfg-'));
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-packwins-proj-'));
+    const prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    const prevSharedServer = process.env.AMICUS_SHARED_SERVER;
+    process.env.AMICUS_CONFIG_DIR = configDir;
+    delete process.env.AMICUS_SHARED_SERVER;
+    try {
+      // Config ceiling is enormous; only the pack's can refuse this run.
+      fs.writeFileSync(
+        path.join(configDir, 'config.json'),
+        JSON.stringify({ maxCost: 1000 }, null, 2)
+      );
+      fs.mkdirSync(path.join(configDir, 'packs'), { recursive: true });
+      fs.writeFileSync(
+        path.join(configDir, 'packs', 'tiny-ceiling.json'),
+        JSON.stringify({
+          schemaVersion: 1, type: 'pack', name: 'tiny-ceiling', version: '1.0.0',
+          kind: 'solo', description: 'x', model: 'vendorx/cheap-model',
+          options: { maxCost: 1e-9, noUi: true }, briefing: {},
+        }, null, 2)
+      );
+      await jest.isolateModulesAsync(async () => {
+        // Priced at $0.10/Mtok — far under the default per-Mtok cap, so the
+        // ONLY branch that can refuse here is the ceiling.
+        jest.doMock('../src/utils/pricing', () => ({
+          ...jest.requireActual('../src/utils/pricing'),
+          lookupPricing: (modelId) => (
+            modelId === 'vendorx/cheap-model' ? { prompt: 0.0000001, completion: 0.0000001 } : null
+          ),
+        }));
+        const { handlers: h } = require('../src/mcp-server');
+        const res = await h.amicus_start(
+          { prompt: 'hi', pack: 'tiny-ceiling', noUi: true }, project);
+        expect(res.isError).toBe(true);
+        const doc = JSON.parse(res.content[0].text);
+        expect(doc.error.code).toBe('BUDGET_EXCEEDED');
+      });
+    } finally {
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+      if (prevSharedServer === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+      else { process.env.AMICUS_SHARED_SERVER = prevSharedServer; }
+      fs.rmSync(configDir, { recursive: true, force: true });
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
 });
