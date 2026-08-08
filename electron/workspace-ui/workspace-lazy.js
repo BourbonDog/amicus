@@ -83,7 +83,10 @@
       // into a silent blank panel that ALSO evicts its own cache and therefore retries forever.
       // With the two-argument form this handler only ever sees a genuinely rejected invoke().
       // The `=== pending` self-check is load-bearing: without it a late rejection can evict a
-      // NEWER in-flight promise and strand the panel. And the log is not optional — a silent
+      // NEWER in-flight promise from `loading[panelId]`. That newer promise still resolves and
+      // paints fine on its own — it is not stranded — but the eviction leaves no cache entry
+      // behind for it, so a toggle that lands before it settles finds `loading[panelId]` empty
+      // and fires a spurious duplicate fetch. And the log is not optional — a silent
       // eviction is the correct-but-silent degrade the product principle rejects.
       if (loading[panelId] === pending) { delete loading[panelId]; }
       console.error('workspace lazy panel: read-artifact failed for ' + panelId, err);

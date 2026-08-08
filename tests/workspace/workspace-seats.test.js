@@ -202,6 +202,47 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
     expect(tbody.children[0].classList.contains('seat-retried')).toBe(true);
     expect(tbody.children[0].children[8].textContent).toBe('↻ retried once');
   });
+
+  /**
+   * Fix wave (whole-branch review, finding 2): the class write above was add-only —
+   * renderSeats reuses rows keyed on `model:role` and never resets row.className itself, so a
+   * guard-free `row.className += ' seat-retried'` both piles up duplicate tokens on repeat
+   * repaints of the SAME retried seat and leaves a stale class on a row a LATER repaint reuses
+   * for a seat that is not retried. Both consequences pinned below.
+   */
+  test('(7) repeated repaint of the SAME retried seat does not duplicate the seat-retried class token', () => {
+    const costRows = [{ model: 'alpha', role: 'seat', status: 'error', costDisplay: '$0.01' }];
+    const degrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat alpha did not review',
+      why: "the leg ended 'error'; its once-only retry also ended 'error'", effect: '0 of 1 seats reviewed',
+      data: { seat: 'alpha', status: 'error', reason: 'timed out', retryWaveId: 'r1-c1r1' },
+    }];
+
+    paint(costRows, degrades); // first repaint
+    const tbody = paint(costRows, degrades); // second repaint of the same still-open run
+
+    expect(tbody.children.length).toBe(1);
+    const tokens = tbody.children[0].className.split(/\s+/).filter((c) => c === 'seat-retried');
+    expect(tokens.length).toBe(1);
+    expect(tbody.children[0].children[8].textContent).toBe('↻ retried once');
+  });
+
+  test('(8) a later repaint whose row is reused by a seat that is NOT retried clears both the class and cell 8', () => {
+    const retriedCostRows = [{ model: 'alpha', role: 'seat', status: 'error', costDisplay: '$0.01' }];
+    const retriedDegrades = [{
+      kind: 'degrade', channel: 'dead-leg', what: 'seat alpha did not review',
+      why: "the leg ended 'error'; its once-only retry also ended 'error'", effect: '0 of 1 seats reviewed',
+      data: { seat: 'alpha', status: 'error', reason: 'timed out', retryWaveId: 'r1-c1r1' },
+    }];
+    paint(retriedCostRows, retriedDegrades); // run A: alpha/seat was retried
+
+    const cleanCostRows = [{ model: 'alpha', role: 'seat', status: 'complete', costDisplay: '$0.01' }];
+    const tbody = paint(cleanCostRows, []); // run B reuses the alpha/seat row key; NOT retried
+
+    expect(tbody.children.length).toBe(1);
+    expect(tbody.children[0].classList.contains('seat-retried')).toBe(false);
+    expect(tbody.children[0].children[8].textContent).toBe('');
+  });
 });
 
 /**

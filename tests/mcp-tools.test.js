@@ -395,7 +395,7 @@ describe('MCP Tool Definitions', () => {
     });
 
     // v4.7 PR7 Task 9 review: the task's own "TYPED door" test
-    // (tests/pack/mcp-pack-params.test.js:668, 'typed timeout: -1 with a
+    // (tests/pack/mcp-pack-params.test.js, 'typed timeout: -1 with a
     // valid prompt') calls handlers.amicus_fanout(input, project) directly —
     // but zod validation only runs inside the MCP SDK's registerTool
     // dispatch wrapper (node_modules/@modelcontextprotocol/sdk/dist/cjs/
@@ -404,7 +404,7 @@ describe('MCP Tool Definitions', () => {
     // reverting prompt to z.string() and timeout to z.number().optional() in
     // src/mcp-tools.js left all 4 of that describe block's tests green.
     //
-    // mcp-pack-params.test.js:344-348 already names this exact failure mode
+    // mcp-pack-params.test.js already names this exact failure mode
     // for a sibling schema change: "a unit test that hand-builds its own
     // input object (bypassing Zod) would not notice if .default(...) were
     // ever reintroduced." The same reasoning applies to .min(1)/.positive()

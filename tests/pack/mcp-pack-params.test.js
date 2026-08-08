@@ -530,7 +530,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
   // reach the shared-server branch (mcp-server.js:432 gates that branch on
   // `sharedServer.enabled && input.noUi`, and an interactive call has no `noUi`), so it
   // always takes spawn-fallback, which resolves the pack in-process before spawning
-  // (single-resolution rule) — see the `packNotices` push loop at mcp-server.js:706. That
+  // (single-resolution rule) — see the `packNotices` push loop in mcp-server.js. That
   // loop is UNREACHABLE for solo only by invariant: every key `validatePack(mode:'run')`
   // lets through (KIND_OPTIONS.solo) currently either round-trips onto `input` via a real
   // SOLO_PACK_PARAM_MAP destination, or forwards via pack-resolve.js's FORWARDABLE_ARG_KEYS
@@ -549,7 +549,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
   // it guards) can see. That is a different, narrower defect than the one this task scopes
   // (KIND_OPTIONS drifting ahead of SOLO_PACK_PARAM_MAP/FORWARDABLE_ARG_KEYS on the MCP
   // surface specifically) and is why the recon mutation below touches two files, not one.
-  test('every KIND_OPTIONS.solo key round-trips through applyPackToMcpInput without an orphan notice — a key with neither a SOLO_PACK_PARAM_MAP destination nor FORWARDABLE_ARG_KEYS membership would be silently dropped were it not for the notice loop near src/mcp-server.js:706', () => {
+  test('every KIND_OPTIONS.solo key round-trips through applyPackToMcpInput without an orphan notice — a key with neither a SOLO_PACK_PARAM_MAP destination nor FORWARDABLE_ARG_KEYS membership would be silently dropped were it not for the notice loop in src/mcp-server.js', () => {
     for (const optionKey of KIND_OPTIONS.solo) {
       const packName = `solo-w1m67-${optionKey.toLowerCase()}`;
       store().writePack({
@@ -676,7 +676,7 @@ describe('amicus_fanout: pre-spend validation of pack-forwarded maxCost/template
 // ---------------------------------------------------------------------------
 
 describe('amicus_fanout: reject empty prompt / non-positive timeout before any wave dir (v4.7 PR7 Task 9)', () => {
-  // Local variant of callFanoutWithMockedSpawn (:568) / waveDirCount (:579) —
+  // Local variant of callFanoutWithMockedSpawn / waveDirCount —
   // mirrors this file's own established idiom (see callFanoutCapturingArgv
   // below) of each describe block owning its helpers rather than reaching
   // into a sibling describe's closure.
@@ -765,7 +765,7 @@ describe('amicus_fanout: renders briefing.md at the pre-seed so an aborted wave 
     return path.join(project, '.claude', 'amicus_sessions', body.waveId);
   }
 
-  // Local variant of callFanoutWithMockedSpawn (:568) that also hands back
+  // Local variant of callFanoutWithMockedSpawn that also hands back
   // the captured spawn argv, needed to assert --prompt-file/--template.
   async function callFanoutCapturingArgv(input, project) {
     let result; let spawnMock; let argv;

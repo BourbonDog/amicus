@@ -255,7 +255,10 @@ All notable changes to Amicus are documented here. Format follows
   `template` now writes a second file into the wave dir, `briefing-input.md` (the raw prompt handed
   to the spawned child so its own render still drives `promptMeta.template` provenance), and
   `--search` now matches the rendered text even for a wave whose MCP-spawned child aborted early —
-  previously it matched nothing meaningful in that case. `amicus_start`'s identical divergence
+  previously it matched nothing meaningful in that case; the same rendered excerpt (first 200
+  characters) is also seeded into `metadata.json` at creation for every MCP fan-out wave, pack or
+  not, so `amicus list`'s BRIEFING column is populated for an aborted wave too, not just a
+  completed one. `amicus_start`'s identical divergence
   (`mcp-server.js:669`) is unchanged; nobody has driven that path end to end yet, so it is filed in
   `BACKLOG.md`, not fixed here.
 - **`amicus_fanout` now rejects an empty prompt or a non-positive timeout before creating anything

@@ -101,15 +101,27 @@
       rowsByKey[row.dataset.key] = row;
     });
     seats.forEach(function (s) {
-      if (!isReviewingRole(s.role) || !retried[s.modelInput || s.model]) { return; }
       var row = rowsByKey[String(s.id || s.model)];
       if (!row || !row.children[8]) { return; }
       // Column 8 is the table's unlabeled trailing flag cell (index.html:51's final <th></th>).
       // It carries '⏳ stalled' on the LIVE path; on this terminal path seatsFromRunStats
       // hardcodes stalled:false (live-model.js:128), so it is always empty here and free to use.
       // If that ever changes, this is the collision site.
-      row.className = row.className ? row.className + ' seat-retried' : 'seat-retried';
-      row.children[8].textContent = '↻ retried once';
+      // Fix wave (whole-branch review, finding 2): this pass must be SYMMETRIC. renderSeats
+      // reuses rows keyed on `model:role` across calls — including across two different
+      // terminal runs opened in sequence that happen to share an alias+role — and never resets
+      // row.className itself. An add-only write here both duplicates the token on every repaint
+      // of the SAME run and leaves a stale 'seat-retried' class on a row that belonged to a
+      // PREVIOUS run's non-retried seat. classList.add/remove (not string concatenation) so a
+      // repeat add never duplicates the token and a seat that is no longer retried gets cleared.
+      var isRetried = isReviewingRole(s.role) && !!retried[s.modelInput || s.model];
+      if (isRetried) {
+        row.classList.add('seat-retried');
+        row.children[8].textContent = '↻ retried once';
+      } else {
+        row.classList.remove('seat-retried');
+        row.children[8].textContent = '';
+      }
     });
     var dead = window.AmicusLive.deadSeats(deg, seatLoss, seats, runMeta);
     renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
