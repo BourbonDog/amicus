@@ -63,20 +63,54 @@ function checkBudget(legs, opts = {}) {
   return { ok, offending, overCeiling, breakdown: { legs: breakdownLegs, totalEstCost, unpricedCount, maxCostPerMtok: cap, maxCost: opts.maxCost || null } };
 }
 
-/** Human-readable refusal text (also used as the error envelope `hint`). */
-function formatBudgetError(result) {
+/**
+ * Human-readable refusal text (also used as the error envelope `hint`).
+ * @param {object} result checkBudget's return value
+ * @param {{kind:'cli'|'mcp'}} [surface] where the text will be read. Remedies are
+ *   surface-specific: the MCP tool surface has no --flags, and (since v4.7 PR6's
+ *   gate hoist) no per-call override at all. Defaults to 'cli' so the two CLI
+ *   callers stay byte-identical.
+ */
+function formatBudgetError(result, surface = { kind: 'cli' }) {
   const lines = [];
+  const isMcp = surface && surface.kind === 'mcp';
   if (result.offending.length > 0) {
     lines.push('Budget gate: model(s) over the per-$/Mtok threshold:');
     for (const o of result.offending) { lines.push(`  - ${o.modelInput} (${o.model}): ${o.reason}`); }
   }
   if (result.overCeiling) {
-    lines.push(`Budget gate: estimated total $${result.breakdown.totalEstCost.toFixed(4)} exceeds --max-cost $${result.breakdown.maxCost.toFixed(4)} (estimate, not guaranteed).`);
+    // On MCP the ceiling can come from EITHER a pack's `maxCost` option or the
+    // config, and the pack wins (mcp-server.js's fwd.maxCost ?? cfg.maxCost).
+    // Naming only one of them would send the caller to edit the loser — the very
+    // "remedy that cannot work" class this surface split exists to end.
+    lines.push(`Budget gate: estimated total $${result.breakdown.totalEstCost.toFixed(4)} exceeds ${isMcp ? 'the effective maxCost' : '--max-cost'} $${result.breakdown.maxCost.toFixed(4)} (estimate, not guaranteed).`);
   }
   if (result.breakdown.unpricedCount > 0) {
     lines.push(`(${result.breakdown.unpricedCount} unpriced leg(s) — direct provider; cost unknown, not included in the estimate.)`);
   }
-  lines.push('Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards (e.g. an intentional o3 run).');
+  // offending and overCeiling are independent (unrelated inputs — see module
+  // header), and either or both may have fired since formatBudgetError is only
+  // called when !ok. Only name a remedy that actually clears every branch that
+  // fired; when both fired, raising just one lever will not clear the run.
+  const hasOffending = result.offending.length > 0;
+  const hasCeiling = result.overCeiling;
+  if (isMcp) {
+    if (hasOffending && hasCeiling) {
+      lines.push("Override: raise maxCostPerMtok in the amicus config AND the effective maxCost (the pack's `maxCost` option if this run used a pack, otherwise the config's), or choose a cheaper model — raising just one will not clear this run.");
+    } else if (hasOffending) {
+      lines.push('Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.');
+    } else {
+      lines.push("Override: raise the effective maxCost — the pack's `maxCost` option if this run used a pack, otherwise the config's — or choose a cheaper model.");
+    }
+  } else {
+    if (hasOffending && hasCeiling) {
+      lines.push('Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run) — raising just one of maxCostPerMtok or --max-cost will not clear this run.');
+    } else if (hasOffending) {
+      lines.push('Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run), or raise maxCostPerMtok in config.');
+    } else {
+      lines.push('Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards (e.g. an intentional o3 run).');
+    }
+  }
   return lines.join('\n');
 }
 

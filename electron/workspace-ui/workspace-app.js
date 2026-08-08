@@ -37,7 +37,7 @@
     // live loop's running -> terminal refresh, or the abort-confirm re-read) still auto-reveals.
     detailRunId: null,
     detailRunStatus: null,
-    labelByModel: {},
+    labelByModel: Object.create(null),
     listTimer: null,
     liveTimer: null, // LIVE (Task 15)
     liveEpoch: 0,    // LIVE (Task 15): bumped by stopLiveLoop() to invalidate in-flight ticks
@@ -144,7 +144,7 @@
       state.detailRunStatus = d.run.status;
     }
     $('blind-toggle').checked = state.blind;
-    state.labelByModel = {};
+    state.labelByModel = Object.create(null);
     d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; });
 
     $('run-title').textContent = d.runId;

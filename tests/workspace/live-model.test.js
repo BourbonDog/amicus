@@ -212,6 +212,23 @@ describe('deadSeats (role-aware D6, v4.6.3 PR2)', () => {
       { model: 'echo', role: null, statusText: 'did not review' },
     ]);
   });
+
+  describe('prototype-named models (v4.7 PR6)', () => {
+    // Bare-object maps inherit Object.prototype keys: every one of the 12 own-property
+    // names is truthy off `{}`, so a model named `toString` was dropped by `seen`
+    // and again by `reviewing`.
+    for (const name of ['toString', 'constructor', 'valueOf', 'hasOwnProperty']) {
+      it(`a seat named '${name}' still renders a dead row`, () => {
+        expect(deadSeats([deadLeg(name)], null, [], null)).toHaveLength(1);
+      });
+    }
+
+    it("a critic-role candidate named 'toString' survives too", () => {
+      // Takes the byRole branch (pipe-delimited, immune) — needs only the `seen` fix,
+      // which is why this case alone does NOT prove the family framing.
+      expect(deadSeats([deadLeg('toString')], null, [], { critic: 'toString' })).toHaveLength(1);
+    });
+  });
 });
 
 describe('dash', () => {

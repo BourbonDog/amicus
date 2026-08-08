@@ -439,28 +439,30 @@ const handlers = {
         // a fall-through to the spawn-fallback catch must never leak one.
         const inProcessNotices = [...fwd.notices];
         const renderedPrompt = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
-        if (packForward.maxCost !== undefined) {
-          // fwd.maxCost is already validated (I2); the ceiling gate itself
-          // stays here (needs resolvedModel/pricing, unavailable to pack-forward.js).
-          const { lookupPricing } = require('./utils/pricing');
-          const { checkBudget, formatBudgetError } = require('./sidecar/budget');
-          const { loadConfig } = require('./utils/config');
-          const cfg = loadConfig() || {};
-          const soloLeg = { modelInput: input.model || resolvedModel, model: resolvedModel, pricing: lookupPricing(resolvedModel) };
-          const budget = checkBudget([soloLeg], {
-            maxCostPerMtok: cfg.maxCostPerMtok, maxCost: fwd.maxCost,
-            promptChars: (renderedPrompt && renderedPrompt.length) || 0,
-          });
-          if (!budget.ok) {
-            const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
-            return {
-              isError: true,
-              content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
-                code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run',
-                hint: formatBudgetError(budget),
-              })) }],
-            };
-          }
+        // v4.7 PR6: the gate used to hang off `packForward.maxCost !== undefined`,
+        // so a no-pack MCP start skipped it while the CLI (cli-handlers-run.js:90)
+        // gated unconditionally with a cfg.maxCost fallback. Same guard, both doors.
+        // fwd.maxCost is already validated (I2); the ceiling gate itself
+        // stays here (needs resolvedModel/pricing, unavailable to pack-forward.js).
+        const { lookupPricing } = require('./utils/pricing');
+        const { checkBudget, formatBudgetError } = require('./sidecar/budget');
+        const { loadConfig } = require('./utils/config');
+        const cfg = loadConfig() || {};
+        const soloLeg = { modelInput: input.model || resolvedModel, model: resolvedModel, pricing: lookupPricing(resolvedModel) };
+        const budget = checkBudget([soloLeg], {
+          maxCostPerMtok: cfg.maxCostPerMtok,
+          maxCost: fwd.maxCost !== undefined ? fwd.maxCost : cfg.maxCost,
+          promptChars: (renderedPrompt && renderedPrompt.length) || 0,
+        });
+        if (!budget.ok) {
+          const { buildErrorDoc, ERROR_CODES } = require('./utils/error-doc');
+          return {
+            isError: true,
+            content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
+              code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run',
+              hint: formatBudgetError(budget, { kind: 'mcp' }),
+            })) }],
+          };
         }
 
         const { server, client } = await sharedServer.ensureServer();

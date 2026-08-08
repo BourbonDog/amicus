@@ -34,9 +34,11 @@ function listSessionIndexTmpFiles() {
     .filter((name) => name.startsWith(prefix) && name.endsWith('.tmp'))
     .map((name) => {
       let st = null;
-      // statSync (not lstatSync) is deliberate here — see session-metadata-tmp-sweep.js:27-31
-      // for why that sibling never follows symlinks; this file's choice to follow them is a
-      // separate, unreviewed symlink-policy decision left as-is (SR-3 only added the isFile() gate).
+      // statSync (not lstatSync) is deliberate here — see the "Symlink safety"
+      // paragraph in session-metadata-tmp-sweep.js's module docblock for why that
+      // sibling never follows symlinks; this file's choice to follow them is a
+      // separate, unreviewed symlink-policy decision left as-is (SR-3 only added
+      // the isFile() gate).
       try { st = fs.statSync(path.join(dir, name)); } catch { /* raced away */ }
       return { name, mtimeMs: st && st.isFile() ? st.mtimeMs : null };
     })
@@ -55,6 +57,9 @@ function unlinkSessionIndexTmp(name) {
  * this in guard() the same way it wires the mcp-legacy check's inspect/migrate.
  * @param {{listSessionIndexTmpFiles: () => Array<{name:string, mtimeMs:number}>,
  *   fix?: boolean, now: () => number, unlinkSessionIndexTmp: (name: string) => void}} d
+ * Its four `message` strings are byte-identical to
+ * session-metadata-tmp-sweep.js's evaluateSessionMetadataTmpSweep by design
+ * (only `id`/`name`/`fixDetail` differ) — reword both or neither.
  */
 function evaluateSessionIndexTmpSweep(d) {
   const id = 'sessions-index-tmp'; const name = 'Session index tmp files';

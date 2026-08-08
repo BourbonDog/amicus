@@ -168,6 +168,28 @@ describe('--pack reaches runCouncil (happy path)', () => {
   });
 });
 
+// v4.7 PR6 (Task 5 review finding): `timeout` is a legal council pack option
+// (pack-validate.js KIND_OPTIONS) and validatePack checks only the KEY name at
+// :65, never the value type. The typed-flag guards added by Task 5 are gated on
+// `explicitKeys`, so a pack-filled value skips them by construction — and the
+// old post-merge check was `args.timeout <= 0`, which `true` (coerces to 1) and
+// `NaN` both pass. A pack could therefore push the exact garbage to runCouncil
+// that Task 5 closed the CLI door on. `out-dir`/`claude-review`/`run-id` need no
+// twin test: KIND_OPTIONS/KIND_FIELDS have no slot for them, so validatePack
+// rejects the pack outright before the handler ever sees it.
+describe('a pack cannot smuggle a non-numeric timeout past the typed-flag guards (PR6)', () => {
+  for (const [label, value] of [['boolean true', true], ['a garbage string', 'abc']]) {
+    test(`options.timeout = ${label} is refused, and runCouncil is never called`, async () => {
+      store().writePack({ ...HAPPY_PACK(), options: { timeout: value } });
+      const code = await handleCouncilRun(runArgs(['--pack', 'ship-review']));
+      expect(code).toBe(1);
+      expect(runCouncil).not.toHaveBeenCalled();
+      expect(JSON.parse(out.mock.calls.map(c => c[0]).join('')).error.message)
+        .toMatch(/--timeout must be a positive number/);
+    });
+  }
+});
+
 describe('--pack kind mismatch', () => {
   test('a fanout pack passed to council run fails PACK_KIND_MISMATCH (exit 1 envelope)', async () => {
     store().writePack(FANOUT_KIND_PACK());

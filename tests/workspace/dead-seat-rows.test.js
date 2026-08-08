@@ -234,6 +234,31 @@ describe('dead-seat rows (D6: announced-dead seats render on the seats panel)', 
     expect(openTbody.children[1].children[0].textContent).toBe('bravo'); // blind OFF: raw alias is correct, no placeholder
   });
 
+  // v4.7 PR6: labelByModel render pin. workspace-app.js builds `state.labelByModel` as
+  // `d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; })` —
+  // reproduced here verbatim over a bare object, matching derived.names carrying
+  // { model: 'toString', label: 'Model A' }. Pre-fix note: NOT a genuine RED — a bracket
+  // assignment to an inherited-but-writable key (Object.prototype.toString is
+  // writable/configurable) creates its own shadowing property, so this construction already
+  // returns 'Model A' correctly even off a bare `{}`; the family's real garbage-output risk
+  // is a 'toString'-named model that is LIVE but has no derived.names entry yet (the lookup
+  // then falls through to the inherited function unassigned), not this happy path. Kept as a
+  // pin per the brief's Step 4 (labelByModel is the one site in this family whose failure
+  // mode is garbage text, not a silent drop) and swept to Object.create(null) for uniformity.
+  test('a live seat literally named "toString" renders its labelByModel-derived label, not a function\'s source text', () => {
+    const costRows = [{ model: 'toString', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' }];
+    const names = [{ model: 'toString', label: 'Model A' }]; // derived.names shape
+    const labelByModel = {};
+    names.forEach((p) => { labelByModel[p.model] = p.label; }); // workspace-app.js's exact construction
+    const labelOf = (m) => labelByModel[m] || null;
+
+    const tbody = paint(costRows, [], null, true, labelOf);
+
+    expect(tbody.children.length).toBe(1);
+    expect(tbody.children[0].children[0].textContent).toBe('Model A');
+    expect(tbody.children[0].children[0].textContent).not.toMatch(/function/);
+  });
+
   /**
    * v4.6.3 PR2 (spec D3): role-aware suppression. Pre-PR2, `deadSeats`'s live-suppression map
    * was role-BLIND — any live cost row for a candidate's alias suppressed it, so a model that

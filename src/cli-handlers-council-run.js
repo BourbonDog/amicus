@@ -18,6 +18,7 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
 // resolves it unchanged.
 const { renderRunHuman } = require('./cli-council-run-render');
 const { parseList, sanitizeCouncilName, resolveBench } = require('./cli-council-run-bench');
+const { applyTemplateForArgs } = require('./cli-template-args');
 
 const CHAIR_DEFAULT = 'deepseek';
 
@@ -46,6 +47,27 @@ async function handleCouncilRun(args, depsOverride = {}) {
   // existing application point exactly like a typed --template.
   let packRecord = null;
   const explicitKeys = args.__explicit || new Set();
+  // v4.7 PR6: these all parse as boolean `true` when typed without a value
+  // (src/cli.js:101) and reached runCouncil as `true`, a NaN, or a bogus path.
+  // Voice matches the R5 -o/--out precedent (cli-handlers-council.js:183).
+  for (const flag of ['out-dir', 'claude-review', 'run-id']) {
+    if (!explicitKeys.has(flag)) { continue; }
+    const v = args[flag];
+    if (typeof v !== 'string' || v === '') {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --${flag} requires a value` });
+    }
+    if (v.startsWith('-')) {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --${flag} cannot start with '-': got '${v}'` });
+    }
+  }
+  // --timeout is DEFAULTS-seeded to 15 (src/cli.js:31), so `!== undefined` proves
+  // nothing; NaN is the real hole — it passes the `<= 0` guard below.
+  if (explicitKeys.has('timeout') && (typeof args.timeout !== 'number' || !Number.isFinite(args.timeout))) {
+    // Do NOT echo args.timeout: parseArgs already ran parseInt, so a typed
+    // `--timeout abc` reads back as NaN and quoting it shows the user a value
+    // they never typed. Boolean `true` (bare flag) has the same problem.
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --timeout requires a number' });
+  }
   if (args.pack !== undefined) {
     const { applyPackToArgs } = require('./pack/pack-resolve');
     const pr = applyPackToArgs({
@@ -80,17 +102,14 @@ async function handleCouncilRun(args, depsOverride = {}) {
     promptRes = { prompt: undefined, promptMeta: null };
   }
   let templateMeta = null;
-  if (args.template !== undefined) {
-    const { applyTemplate } = require('./template/apply');
-    const t = applyTemplate({ templateRef: args.template, prompt: promptRes.prompt,
-      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
-    if (t.error) { return failJson(useJson, t.error); }
-    for (const n of t.notices) { process.stderr.write(n + '\n'); }
-    promptRes = { prompt: t.prompt, promptMeta: t.promptMeta };
-    templateMeta = t.promptMeta.template;
-  } else if (args.artifact !== undefined || args.var !== undefined) {
-    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' });
-  }
+  const tpl = applyTemplateForArgs(args, promptRes.prompt, useJson);
+  if (tpl.fail !== undefined) { return tpl.fail; }
+  // The trailing `templateMeta =` is NOT copy-paste drift against handleFanout's
+  // otherwise-identical call: it feeds `template: templateMeta` on the run.json
+  // seed below (the `template:` field of the runCouncil options object). Drop it
+  // and every --template council run silently records
+  // `template: null`. handleFanout has no such field, which is why its call is shorter.
+  if (tpl.applied) { promptRes = { prompt: tpl.prompt, promptMeta: tpl.promptMeta }; templateMeta = tpl.templateMeta; }
 
   const benchRes = resolveBench(args, useJson);
   if (benchRes.fail !== undefined) { return benchRes.fail; }
@@ -143,7 +162,14 @@ async function handleCouncilRun(args, depsOverride = {}) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
       message: `Error: --lenses needs exactly one lens per seat (${bench.length} seats, got ${lenses.length})` });
   }
-  if (args.timeout !== undefined && args.timeout <= 0) {
+  // v4.7 PR6: this check is POST-pack-merge and ungated, so it is the only one a
+  // pack-filled value passes through — `timeout` is a legal council pack option
+  // (pack-validate.js KIND_OPTIONS) and validatePack checks the key name, never
+  // the value type. The old `<= 0` test alone let `{timeout: true}` past (true
+  // coerces to 1) and `{timeout: "abc"}` past as NaN, reproducing the very bug
+  // the typed-flag guard above closes. Same shape as --max-cost's check below.
+  if (args.timeout !== undefined
+      && (typeof args.timeout !== 'number' || !Number.isFinite(args.timeout) || args.timeout <= 0)) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --timeout must be a positive number' });
   }
   const mc = args['max-cost'];
@@ -178,6 +204,12 @@ async function handleCouncilRun(args, depsOverride = {}) {
   const runDir = args['out-dir']
     ? path.resolve(project, String(args['out-dir']))
     : path.resolve(project, `council-${runId}`);
+  // v4.7 PR6: MCP has fenced this since v4.5 (mcp-council-run.js:137-141); the CLI
+  // never did, so `--out-dir ../../x` wrote outside the project and exited 0.
+  const { isPathInside } = require('./project-root-allowlist');
+  if (!isPathInside(runDir, project)) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --out-dir must stay inside the project: '${args['out-dir']}' resolves outside ${project}` });
+  }
 
   const { resolveGatewayMode, loadConfig } = require('./utils/config');
   const { resolveFallbackConfig } = require('./sidecar/fallback-chains');

@@ -21,6 +21,10 @@
  * spawns the CLI child with an already-expanded `--models` list (never
  * `--council`), so the preset name would otherwise be lost; the caller
  * forwards it via the internal `--council-name` passthrough instead.
+ * Parallel twin: cli-council-run-bench.js's `resolveBench` wraps the same
+ * `resolveCouncilMembers` core with its own XOR rules (CLI failJson docs there,
+ * plain `{error}` strings here) and carries one guard this side lacks. The two
+ * wrappers evolve independently — change a validation rule on one, change both.
  */
 function resolveBenchInput(input) {
   const inputModels = Array.isArray(input.models) ? input.models : [];

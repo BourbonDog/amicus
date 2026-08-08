@@ -38,6 +38,11 @@ function sanitizeCouncilName(name) {
  * Also returns `presetName` (v4.3 Task 3, spec §7.1: trimmed --council name,
  * else null) and `droppedMembers`: a preset's own drops, or — bare --models —
  * the parsed `--dropped-members` MCP→child passthrough (v4.6 Plan 4 Task 4b).
+ * Parallel twin: mcp-council-bench.js's `resolveBenchInput` hand-rolls the same
+ * models-XOR-council wrapper around the shared `resolveCouncilMembers` core.
+ * They have already diverged (this side has a third guard for a valueless
+ * --council, and the min-seat rule lives in both callers, not here) — change
+ * a validation rule on one side, change the other.
  */
 function resolveBench(args, useJson) {
   const hasModels = typeof args.models === 'string' && args.models.trim();

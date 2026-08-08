@@ -183,11 +183,11 @@
     // did) while the stored `dataset.key` stays raw means a key containing `"` or `\` can
     // never match its own row — the lookup misses every tick and the row is re-appended
     // forever. A plain object lookup sidesteps the escaping problem entirely.
-    var existing = {};
+    var existing = Object.create(null);
     Array.prototype.slice.call(tbody.children).forEach(function (row) {
       existing[row.dataset.key] = row;
     });
-    var seen = {};
+    var seen = Object.create(null);
     seats.forEach(function (seat) {
       // ⚠️ DE-ROT (F37): `seat.id` is now always set by seatsFromRunStats (`model:role`), so
       // debate rebuttal/revote rows no longer collide with the seat row. The `|| seat.model`
@@ -217,6 +217,10 @@
     // RN-11 (v4.5): the keyed update added and removed rows but never MOVED
     // them, so table order was frozen at first render — wrong the moment a
     // repair solo or new wave changes the composed doc's leg order mid-run.
+    // The O(n²) `find()` per seat is deliberate: bench is capped at 26 (anonymize.js:21),
+    // so this is ~100 rows worst case on a debate run, every 1.5s. `existing` above is
+    // already the map an O(n) rewrite would need — reach for it only if this table ever
+    // renders unbounded rows.
     seats.forEach(function (seat, i) {
       var key = String(seat.id || seat.model);
       var current = tbody.children[i];

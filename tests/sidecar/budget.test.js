@@ -1,6 +1,6 @@
 // tests/sidecar/budget.test.js
 'use strict';
-const { checkBudget, DEFAULT_MAX_COST_PER_MTOK } = require('../../src/sidecar/budget');
+const { checkBudget, formatBudgetError, DEFAULT_MAX_COST_PER_MTOK } = require('../../src/sidecar/budget');
 
 const leg = (modelInput, perTok) => ({ modelInput, model: `openrouter/${modelInput}`, pricing: perTok === null ? null : { prompt: perTok, completion: perTok } });
 
@@ -54,6 +54,88 @@ describe('checkBudget — soft total ceiling (opt-in)', () => {
 
 describe('threshold default', () => {
   it('is a positive number', () => { expect(DEFAULT_MAX_COST_PER_MTOK).toBeGreaterThan(0); });
+});
+
+describe('formatBudgetError surfaces (v4.7 PR6)', () => {
+  const offendingOnly = { ok: false, offending: [{ modelInput: 'o3', model: 'o3', reason: '$80.00/Mtok exceeds the $10.00/Mtok cap' }], overCeiling: false, breakdown: { totalEstCost: 1, unpricedCount: 0, maxCost: null } };
+  const ceilingOnly = { ok: false, offending: [], overCeiling: true, breakdown: { totalEstCost: 12.5, unpricedCount: 0, maxCost: 10 } };
+  const both = { ok: false, offending: [{ modelInput: 'o3', model: 'o3', reason: '$80.00/Mtok exceeds the $10.00/Mtok cap' }], overCeiling: true, breakdown: { totalEstCost: 12.5, unpricedCount: 0, maxCost: 10 } };
+
+  // Captured from the pre-v4.7-PR6 unconditional trailer. The ceiling-only branch's
+  // advice was already correct, so its bytes must not drift.
+  const LEGACY_CEILING_TRAILER =
+    'Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards (e.g. an intentional o3 run).';
+
+  it('the CLI ceiling-only trailer is byte-identical to the pre-PR6 text', () => {
+    expect(formatBudgetError(ceilingOnly).endsWith(LEGACY_CEILING_TRAILER)).toBe(true);
+  });
+
+  it('uses the default-parameter mechanism when no surface is passed', () => {
+    // Pins the mechanism (default surface = { kind: 'cli' }), not byte-compatibility
+    // with the prior release — see the literal-string test above for that guarantee.
+    expect(formatBudgetError(ceilingOnly)).toBe(formatBudgetError(ceilingOnly, { kind: 'cli' }));
+  });
+
+  it('does NOT tell a CLI user to raise --max-cost when the refusal is threshold-only', () => {
+    // budget.js:62 — ok requires offending.length === 0, so raising the ceiling
+    // can never clear this branch. The old trailer said it could.
+    const text = formatBudgetError(offendingOnly);
+    expect(text).not.toMatch(/--max-cost <\$> to raise/);
+    expect(text).toContain('--no-cost-gate');
+  });
+
+  it('names no CLI flags on the MCP surface', () => {
+    const text = formatBudgetError(ceilingOnly, { kind: 'mcp' });
+    expect(text).not.toMatch(/--max-cost|--no-cost-gate/);
+  });
+
+  it('does not offer dropping the pack as an MCP escape (the gate now always runs)', () => {
+    expect(formatBudgetError(ceilingOnly, { kind: 'mcp' })).not.toMatch(/without the .?pack/i);
+  });
+
+  it('names maxCostPerMtok on the MCP surface for a threshold-only refusal', () => {
+    const text = formatBudgetError(offendingOnly, { kind: 'mcp' });
+    expect(text).toBe(
+      'Budget gate: model(s) over the per-$/Mtok threshold:\n' +
+      '  - o3 (o3): $80.00/Mtok exceeds the $10.00/Mtok cap\n' +
+      'Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.'
+    );
+  });
+
+  describe('both guards fired', () => {
+    it('CLI: names --no-cost-gate as the only lever that clears both, and warns raising just one will not', () => {
+      const text = formatBudgetError(both);
+      expect(text).toContain(
+        'Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run) — raising just one of maxCostPerMtok or --max-cost will not clear this run.'
+      );
+      // Does not fall back to either single-branch remedy string.
+      expect(text).not.toContain('or raise maxCostPerMtok in config.');
+      expect(text).not.toMatch(/--max-cost <\$> to raise the ceiling, or --no-cost-gate to disable both guards \(e\.g\. an intentional o3 run\)\.\s*$/);
+    });
+
+    it('MCP: names both levers, and warns raising just one will not clear the run', () => {
+      const text = formatBudgetError(both, { kind: 'mcp' });
+      expect(text).toContain('raise maxCostPerMtok in the amicus config');
+      expect(text).toContain('effective maxCost');
+      expect(text).toContain('raising just one will not clear this run');
+      // Must not degrade to a single-lever remedy.
+      expect(text).not.toContain('Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.');
+    });
+  });
+
+  // Final-review finding: the MCP ceiling can come from a pack's `maxCost` option
+  // OR the config, and the pack WINS (mcp-server.js: fwd.maxCost ?? cfg.maxCost).
+  // Text that names only the config sends a pack-ceiling caller to edit the loser —
+  // the same "remedy that cannot work" class this surface split exists to end.
+  describe('the MCP ceiling text does not claim the config is the only lever', () => {
+    it('ceiling-only names the effective ceiling, not "the configured maxCost"', () => {
+      const text = formatBudgetError(ceilingOnly, { kind: 'mcp' });
+      expect(text).toContain('effective maxCost');
+      expect(text).not.toContain('the configured maxCost');
+      expect(text).not.toContain('Override: raise maxCost in the amicus config');
+      expect(text).toMatch(/pack/i); // it must say where else the ceiling can come from
+    });
+  });
 });
 
 describe('threshold calibration (observed pricing 2026-06-23)', () => {
