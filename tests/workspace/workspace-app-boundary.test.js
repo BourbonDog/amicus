@@ -1213,3 +1213,108 @@ describe('renderSeatsPanel (fix wave): the real read path, reached via the produ
     expect(deadRowsAfter[0].children[0].textContent).not.toBe(DEAD_MODEL);
   });
 });
+
+/**
+ * v4.7 PR6 fix-wave finding 2: workspace-app.js:147's `state.labelByModel = Object.create(null)`
+ * (Task 6's bare-object sweep) had zero coverage through the real app boot — the existing pin
+ * (tests/workspace/dead-seat-rows.test.js:248-260) never requires workspace-app.js at all; it
+ * reconstructs `labelByModel` as its own inline bare `{}` and drives a local `paint()` helper, so
+ * it could never catch a regression on the real line.
+ *
+ * task-6-report.md's own "Step 4" note is the reason a naive port of that pin (a model named
+ * 'toString' that HAS a derived.names entry) is not a genuine regression catch either: a bracket
+ * ASSIGNMENT (`labelByModel['toString'] = 'Model A'`) creates its own shadowing OWN property, so
+ * it reads back correctly whether or not the object has a null prototype — confirmed empirically
+ * in that report. The report names, but never tests, the actual garbage-output risk: a model that
+ * collides with an Object.prototype member name and has NO derived.names entry (never produced a
+ * review yet) — reading labelByModel[thatModel] off a bare `{}` then resolves to the INHERITED
+ * member itself (a function), not undefined, and `A.labelOf(model)`'s only guard (`|| null`) never
+ * fires because a function is truthy.
+ *
+ * Fixture: bench = ['toString', 'constructor'] — 'toString' DOES get a derived.names entry (the
+ * literal scenario workspace-app.js:147-148 constructs, matching the brief's instruction and the
+ * existing dead-seat-rows.test.js pin); 'constructor' deliberately does not (modeling a seat that
+ * hasn't reviewed yet). Both are read via A.labelOf(...) inside the real
+ * AmicusRender.renderHeaderChips (workspace-render.js's displayModel/chip/el), reached through the
+ * production openRun() -> renderDetail() path — no hand-built harness, per the finding.
+ */
+describe('labelByModel Object.create(null) regression (fix-wave finding 2)', () => {
+  beforeEach(() => {
+    const fake = makeFakeDom();
+    global.window = fake.window;
+    global.document = fake.document;
+    global.NodeFilter = fake.NodeFilter;
+    global.window.amicusWorkspace.invoke = jest.fn(defaultInvoke);
+    loadOrderedScripts();
+  });
+
+  afterEach(() => {
+    if (global.window.AmicusApp && global.window.AmicusApp.state.listTimer) {
+      clearInterval(global.window.AmicusApp.state.listTimer);
+    }
+    delete global.window;
+    delete global.document;
+    delete global.NodeFilter;
+  });
+
+  function buildLabelByModelFixture() {
+    return {
+      runId: 'ee5555',
+      runDir: '/fake/run/ee5555',
+      run: {
+        status: 'complete', schemaVersion: 2, bench: ['toString', 'constructor'], chair: 'toString',
+        stages: [], labelMap: { 'Model A': 'toString' }, usage: { cost: { amount: 0.1 } },
+        options: { maxCost: 2 }, error: null, debate: null,
+      },
+      tally: {}, verdict: {},
+      artifacts: { 'chair-output.md': { present: false, bytes: 0 }, 'report.html': { present: false, bytes: 0 } },
+      derived: {
+        schemaSupported: true,
+        // Deliberately only 'toString' — 'constructor' has never produced a review, so it has no
+        // entry here, exactly matching a real run's labelByModel construction (workspace-app.js
+        // :147-148: `d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; })`).
+        names: [{ model: 'toString', label: 'Model A' }],
+        stageRail: [],
+        matrix: { judges: [], rows: [], tierCounts: {}, judged: false },
+        cost: {
+          rows: [{ model: 'toString', role: 'seat', status: 'complete', durationMs: 1000, costDisplay: '$0.10' }],
+          totalDisplay: '$0.10', costAmount: 0.1, maxCost: 2,
+        },
+        verdictPanel: { present: false, overallVerdict: null, tierCounts: {}, streetCred: [], decisions: [], reason: null },
+        artifactCollisions: [],
+      },
+    };
+  }
+
+  test('a bench model colliding with Object.prototype ("constructor") absent from derived.names renders its raw id, not a function\'s source text — "toString" (present in derived.names) renders its real label', async () => {
+    global.window.amicusWorkspace.invoke = jest.fn((channel, ...args) => (
+      channel === 'workspace:get-run' ? Promise.resolve(buildLabelByModelFixture()) : defaultInvoke(channel, ...args)
+    ));
+
+    await global.window.AmicusApp.openRun('ee5555'); // status 'complete' -> defaultBlind() is false
+    // Blind must be ON to exercise the label branch (display()'s `blind && pair.label` arm) — flip
+    // it through the real #blind-toggle listener, same convention the sibling tests above use.
+    const toggle = global.document.getElementById('blind-toggle');
+    toggle._listeners.change[0]({ target: { checked: true } });
+
+    const chips = global.document.getElementById('run-chips').children;
+    // chips[0] = status chip; bench chips follow in bench order; chips[3] = chair chip (unused here).
+    const toStringChip = chips[1];
+    const constructorChip = chips[2];
+
+    expect(toStringChip.textContent).toBe('Model A'); // has a real label — renders it
+    expect(toStringChip.attributes.title).toBe('Model A');
+
+    // The mutation-proving assertion: 'constructor' was NEVER written into labelByModel. Off
+    // Object.create(null), A.labelOf('constructor') correctly reads undefined -> null, and
+    // display() falls back to the raw model id, same as any other unlabeled seat. Off a bare `{}`
+    // (the pre-fix / reverted shape), `{}.constructor` resolves to the INHERITED Object
+    // constructor FUNCTION — truthy, so `|| null` never kicks in — and display() hands that
+    // function straight to the DOM builder: el()'s attrs loop stringifies it into the `title`
+    // attribute (the function's own source text, e.g. "function Object() { [native code] }")
+    // while its children loop appends the function itself as a non-text child, leaving
+    // `textContent` empty instead of 'constructor'.
+    expect(constructorChip.textContent).toBe('constructor');
+    expect(constructorChip.attributes.title).toBe('constructor');
+  });
+});

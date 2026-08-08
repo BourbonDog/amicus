@@ -37,7 +37,7 @@
     // live loop's running -> terminal refresh, or the abort-confirm re-read) still auto-reveals.
     detailRunId: null,
     detailRunStatus: null,
-    labelByModel: {},
+    labelByModel: Object.create(null),
     listTimer: null,
     liveTimer: null, // LIVE (Task 15)
     liveEpoch: 0,    // LIVE (Task 15): bumped by stopLiveLoop() to invalidate in-flight ticks
