@@ -76,7 +76,18 @@
           'aria-label': verdictTitle(cell),
         }, [cell.sym + (cell.isRaiser ? '*' : '')]);
         if (cell.verdict === 'dispute') {
-          td.addEventListener('click', function () { onDrill(cell.judge, row.id); });
+          // ⚠️ T19-m2 (v4.7 PR7): drillIntoJudge's derived promise was discarded here, so a
+          // rejection — or a throw inside its own post-load body, which loadPanel's onRejected
+          // does NOT cover — escaped unhandled. `Promise.resolve(onDrill(...))` would NOT fix the
+          // synchronous half: onDrill(...) is evaluated BEFORE Promise.resolve sees it, so the
+          // throw escapes anyway (measured). Calling it inside the .then callback moves both the
+          // sync and async failure modes onto the chain. A trailing .catch is correct HERE
+          // (unlike loadPanel — see workspace-verbs.js:76-84) because there is no separate
+          // onFulfilled whose throw it could absorb: the callback IS the whole operation.
+          td.addEventListener('click', function () {
+            Promise.resolve().then(function () { return onDrill(cell.judge, row.id); })
+              .catch(function (err) { console.error('workspace matrix: drill into judge failed', err); });
+          });
         }
         cells.push(td);
       });

@@ -51,7 +51,13 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(container.textContent).toContain('Fewer than 2 judges completed');
     });
 
-    test('a dispute cell wires onDrill(judgePair, findingId); an agree cell gets no click listener', () => {
+    // ⚠️ T19-m2 (v4.7 PR7): onDrill used to be invoked synchronously from the click listener.
+    // It is now called inside a `Promise.resolve().then(...)` (see workspace-matrix.js) so a
+    // rejection or a synchronous throw from onDrill can be terminated with a `.catch` instead of
+    // escaping — see tests/workspace/matrix-drill-rejection.test.js for that behavior. This test
+    // still pins the WHAT (exact args onDrill is called with); it now awaits a few microtask
+    // ticks to observe it, matching this file's own async-flush house pattern elsewhere.
+    test('a dispute cell wires onDrill(judgePair, findingId); an agree cell gets no click listener', async () => {
       const container = document.createElement('div');
       const matrix = {
         judges: [{ model: 'gemini', label: 'Review A' }, { model: 'gpt', label: 'Review B' }],
@@ -72,6 +78,7 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       expect(voteCells[0]._listeners.click).toBeUndefined();
       expect(voteCells[1]._listeners.click.length).toBe(1);
       voteCells[1]._listeners.click[0]();
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
       expect(onDrill).toHaveBeenCalledWith({ model: 'gpt', label: 'Review B' }, 'A1');
     });
 
