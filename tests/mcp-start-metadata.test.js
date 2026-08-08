@@ -119,3 +119,51 @@ describe('shared-server path metadata keys (source contract)', () => {
     expect(sharedWrite).toContain('...(input.tag ? { tag: input.tag } : {})');
   });
 });
+
+// PR6 Task 2: the shared-server amicus_start path used to hang the whole
+// budget gate off `packForward.maxCost !== undefined`, so a plain (no-pack)
+// MCP start skipped it entirely while the CLI (cli-handlers-run.js:90) always
+// gated with a cfg.maxCost fallback. This drives the REAL shared-server
+// branch (sharedServer.enabled defaults true, input.noUi:true) and proves the
+// gate now fires before ensureServer()/createSession() are ever reached — no
+// live OpenCode server needed, since a refusal returns before that point.
+describe('shared-server path: budget gate applies with NO pack (PR6 Task 2)', () => {
+  test('refuses an over-threshold model on the shared-server path with NO pack', async () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-budget-cfg-'));
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'meta-budget-proj-'));
+    const prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    const prevSharedServer = process.env.AMICUS_SHARED_SERVER;
+    process.env.AMICUS_CONFIG_DIR = configDir;
+    delete process.env.AMICUS_SHARED_SERVER; // force the shared-server path (default-enabled)
+    try {
+      fs.writeFileSync(
+        path.join(configDir, 'config.json'),
+        JSON.stringify({ maxCostPerMtok: 1.0 }, null, 2)
+      );
+      await jest.isolateModulesAsync(async () => {
+        // Seed a pricing fixture for 'expensive-model' well above the $1/Mtok
+        // cap above (style: same requireActual-spread idiom used elsewhere,
+        // e.g. mockCommonSeams() in tests/mcp-server-wait-wiring.test.js).
+        jest.doMock('../src/utils/pricing', () => ({
+          ...jest.requireActual('../src/utils/pricing'),
+          lookupPricing: (modelId) => (
+            modelId === 'expensive-model' ? { prompt: 0.00005, completion: 0.00005 } : null
+          ), // $50/Mtok
+        }));
+        const { handlers: h } = require('../src/mcp-server');
+        const res = await h.amicus_start(
+          { prompt: 'hi', model: 'expensive-model', noUi: true }, project);
+        expect(res.isError).toBe(true);
+        const doc = JSON.parse(res.content[0].text);
+        expect(doc.error.code).toBe('BUDGET_EXCEEDED');
+      });
+    } finally {
+      if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+      else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+      if (prevSharedServer === undefined) { delete process.env.AMICUS_SHARED_SERVER; }
+      else { process.env.AMICUS_SHARED_SERVER = prevSharedServer; }
+      fs.rmSync(configDir, { recursive: true, force: true });
+      fs.rmSync(project, { recursive: true, force: true });
+    }
+  });
+});
