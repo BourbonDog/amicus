@@ -328,8 +328,9 @@ launch:
   discovered from the sessions-dir pointer files (`council-<runId>.json`); each row shows status,
   the chair's `overallVerdict` chip once one exists, and cost.
 - **Run detail** (`--ui <runId>`) — header + status/verdict chips, a stage rail, a live **Seats**
-  table (model, role, status, stage, messages, tokens, cost, last activity, a stall flag), the
-  Stage-1 reviews, the **verbatim** anonymized Stage-2 packet (`bundle-stage2.md`, shown as-is —
+  table (model, role, status, stage, messages, tokens, cost, last activity, and a trailing flag
+  cell — `⏳ stalled` while live, or on a finished run `↻ retried once` marking a reviewing seat
+  whose once-only Stage-1 retry didn't save it), the Stage-1 reviews, the **verbatim** anonymized Stage-2 packet (`bundle-stage2.md`, shown as-is —
   never re-rendered), judge prose, the **adjudication matrix** (finding × judge, tier-colored
   rows, `a/d/n` basis counts, a `thin` badge when `a+d<=1`, an override badge when a Stage-4
   decision changed a finding's tier, capped at 500 rows with a "showing N of M" note past that),
@@ -564,12 +565,15 @@ dead seat/critic/lens with no recovery, and a chair walk that gives up entirely,
 primary **error** row too — the #83 judge treatment extended to every seat (`usage: null` on the
 give-up chair; the dead leg's own usage on a dead seat/critic/lens).
 
-*Non-primary rows* — new in v4.7, `wasChair` always `false`: `chair-attempt` (a failed ch1–ch3
-chair launch), `repair` (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r`
-solo — a failed defense or re-vote repair), `superseded` (a first leg a later attempt replaced —
-an SL-2 retry or a debate repair). These still cost money and appear in the `council
-report`/`council tally` cost tables (suffixed the same way judge rows are), but the Workspace
-seats panel filters them out — they aren't seats.
+*Non-primary rows* — `wasChair` always `false`: `chair-attempt` (a failed ch1–ch3 chair launch),
+`repair` (a Stage-1 `-p`, Stage-2 `-q`, chair-ch4, or debate-born `-d<N>r`/`-rv-…r` solo — a
+failed defense or re-vote repair), and `superseded` (a first leg a later attempt replaced — an
+SL-2 retry or a debate repair) — all three new in v4.7's row-per-launch change — plus `rebuttal`
+and `revote` (a `--debate` round's defense/re-vote legs; v4.1, pre-dating row-per-launch). All
+five still cost money and appear in the `council report`/`council tally` cost tables, but only
+`judge`/`chair-attempt`/`repair`/`superseded` get a cost-table suffix (`rebuttal`/`revote` render
+unsuffixed); and only `chair-attempt`/`repair`/`superseded` are filtered out of the Workspace
+seats panel — `rebuttal`/`revote` rows still render there.
 
 `runStats[].waveId` names the exact wave/leg a row was built from, present **iff a real billed
 leg backs the row** — e.g. the synthetic `claude` row, a give-up chair's error row, and a
