@@ -11,6 +11,7 @@
 const { validateTaskId, validateTag } = require('./utils/validators');
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { GATEWAY_MODES } = require('./utils/model-descriptor');
+const { applyTemplateForArgs } = require('./cli-template-args');
 
 /**
  * Handle 'amicus fanout' command (F4).
@@ -61,16 +62,9 @@ async function handleFanout(args) {
   } else {
     promptRes = { prompt: undefined, promptMeta: null };
   }
-  if (args.template !== undefined) {
-    const { applyTemplate } = require('./template/apply');
-    const t = applyTemplate({ templateRef: args.template, prompt: promptRes.prompt,
-      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
-    if (t.error) { process.exit(failJson(useJson, t.error)); }
-    for (const n of t.notices) { process.stderr.write(n + '\n'); }
-    promptRes = { prompt: t.prompt, promptMeta: t.promptMeta };
-  } else if (args.artifact !== undefined || args.var !== undefined) {
-    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' }));
-  }
+  const tpl = applyTemplateForArgs(args, promptRes.prompt, useJson);
+  if (tpl.fail !== undefined) { process.exit(tpl.fail); }
+  if (tpl.applied) { promptRes = { prompt: tpl.prompt, promptMeta: tpl.promptMeta }; }
   // Council preset: expand a saved council into args.models (mutually exclusive with --models).
   const hasModels = typeof args.models === 'string' && args.models.trim();
   const hasCouncil = args.council !== undefined && args.council !== false;

@@ -18,6 +18,7 @@ const { resolveLaunchModel, maybeOfferProviderDefaults } = require('./utils/star
 const { failJson, ERROR_CODES } = require('./utils/error-doc');
 const { requireNoUiForJson } = require('./utils/cli-preflight');
 const { handleFanout } = require('./cli-handlers-fanout');
+const { applyTemplateForArgs } = require('./cli-template-args');
 
 /**
  * Handle 'sidecar start' command
@@ -37,17 +38,9 @@ async function handleStart(args) {
     // Drop --prompt-file post-resolve or validateStartArgs re-trips its XOR guard.
     delete args['prompt-file'];
   }
-  if (args.template !== undefined) {
-    const { applyTemplate } = require('./template/apply');
-    const t = applyTemplate({ templateRef: args.template, prompt: args.prompt,
-      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
-    if (t.error) { process.exit(failJson(useJson, t.error)); }
-    for (const n of t.notices) { process.stderr.write(n + '\n'); }
-    args.prompt = t.prompt;
-    templateMeta = t.promptMeta.template;
-  } else if (args.artifact !== undefined || args.var !== undefined) {
-    process.exit(failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' }));
-  }
+  const tpl = applyTemplateForArgs(args, args.prompt, useJson);
+  if (tpl.fail !== undefined) { process.exit(tpl.fail); }
+  if (tpl.applied) { args.prompt = tpl.prompt; templateMeta = tpl.templateMeta; }
   requireNoUiForJson(args, useJson);
 
   const mc = args['max-cost'];

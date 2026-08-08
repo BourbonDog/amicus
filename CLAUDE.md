@@ -326,6 +326,7 @@ src/
 ├── cli-handlers-template.js
 ├── cli-handlers-watch.js
 ├── cli-handlers.js  # CLI Command Handlers
+├── cli-template-args.js
 ├── cli.js  # CLI Argument Parser
 ├── conflict.js  # File Conflict Detection Module
 ├── context-compression.js  # Context Compression Module
@@ -457,6 +458,7 @@ evals/
 | `cli-handlers-template.js` |  | `handleTemplate()` |
 | `cli-handlers-watch.js` |  | `handleWatch()`, `resolveWatchTarget()` |
 | `cli-handlers.js` | CLI Command Handlers | `handleSetup()`, `handleAbort()`, `handleUpdate()`, `handleMcp()`, `handleKey()` |
+| `cli-template-args.js` |  | `applyTemplateForArgs()`, `NEEDS_TEMPLATE_MSG()` |
 | `cli.js` | CLI Argument Parser | `parseArgs()`, `validateStartArgs()`, `getUsage()`, `getCommandNames()`, `getBooleanFlags()` |
 | `conflict.js` | File Conflict Detection Module | `detectConflicts()`, `formatConflictWarning()` |
 | `context-compression.js` | Context Compression Module | `compressContext()`, `estimateTokenCount()`, `buildPreamble()`, `DEFAULT_TOKEN_LIMIT()` |

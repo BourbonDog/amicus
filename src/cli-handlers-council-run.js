@@ -18,6 +18,7 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
 // resolves it unchanged.
 const { renderRunHuman } = require('./cli-council-run-render');
 const { parseList, sanitizeCouncilName, resolveBench } = require('./cli-council-run-bench');
+const { applyTemplateForArgs } = require('./cli-template-args');
 
 const CHAIR_DEFAULT = 'deepseek';
 
@@ -98,17 +99,9 @@ async function handleCouncilRun(args, depsOverride = {}) {
     promptRes = { prompt: undefined, promptMeta: null };
   }
   let templateMeta = null;
-  if (args.template !== undefined) {
-    const { applyTemplate } = require('./template/apply');
-    const t = applyTemplate({ templateRef: args.template, prompt: promptRes.prompt,
-      artifactFile: args.artifact, varList: args.var, project: args.cwd || process.cwd() });
-    if (t.error) { return failJson(useJson, t.error); }
-    for (const n of t.notices) { process.stderr.write(n + '\n'); }
-    promptRes = { prompt: t.prompt, promptMeta: t.promptMeta };
-    templateMeta = t.promptMeta.template;
-  } else if (args.artifact !== undefined || args.var !== undefined) {
-    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --artifact/--var require --template (expansion happens only in template files)' });
-  }
+  const tpl = applyTemplateForArgs(args, promptRes.prompt, useJson);
+  if (tpl.fail !== undefined) { return tpl.fail; }
+  if (tpl.applied) { promptRes = { prompt: tpl.prompt, promptMeta: tpl.promptMeta }; templateMeta = tpl.templateMeta; }
 
   const benchRes = resolveBench(args, useJson);
   if (benchRes.fail !== undefined) { return benchRes.fail; }
