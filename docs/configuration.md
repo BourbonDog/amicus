@@ -287,8 +287,20 @@ Per-session directory contents:
 **Fanout waves.** A wave (`amicus fanout`) gets its own session dir at `<waveId>` (same
 `amicus_sessions/` root); each leg is a full sibling session dir named `<waveId>-1` through
 `<waveId>-N` (`deriveLegIds()` in `src/sidecar/fanout.js`). The wave-heartbeat display reads each
-leg's `progress.json`/`conversation.jsonl` directly — nothing wave-specific is stored beyond the
-per-leg session dirs themselves plus the wave's own `metadata.json` (type `wave`, `legs: [...]`).
+leg's `progress.json`/`conversation.jsonl` directly. The wave dir itself holds:
+
+```
+<waveId>/
+  metadata.json   # type "wave", legs: [...], plus a 200-char rendered briefing excerpt
+  wave.json       # written on completion
+  briefing.md     # the RENDERED prompt — the corpus `amicus list --search` matches against.
+                  # Written by mcp-server.js BEFORE the child spawns (so an aborted wave
+                  # stays searchable), and again by fanout.js:145 once the child runs
+```
+
+One more file appears only for an `amicus_fanout` wave whose prompt came from a **template**: a
+sibling `briefing-input.md` holding the raw pre-render prompt handed to the spawned child, so the
+child's own re-render stays byte-identical and `promptMeta.template` provenance survives.
 
 ### Log location + LOG_LEVEL
 
@@ -382,6 +394,42 @@ options (`timeout`, `maxCost`, `agent`, `thinking`, …) have no `config.json`-l
 a hard-coded built-in (`DEFAULTS` in `src/cli.js`) — so for those the chain is effectively **flag >
 pack > built-in** today. See [Policy packs](./usage.md#policy-packs) for the full per-kind field
 reference.
+
+### Cost gate
+
+Two independent pre-flight guards run before a paid model call, both set via top-level
+`config.json` keys that are **hand-edited only** — no wizard or CLI command writes them
+(`src/sidecar/budget.js`):
+
+- **`maxCostPerMtok`** — hard per-$/Mtok refusal threshold. Refuses any leg whose catalog
+  price-per-Mtok exceeds the cap. Defaults to **60**; a non-positive value falls back to that
+  default.
+- **`maxCost`** — soft ceiling on the estimated total $ for the call. Absent, zero or negative all
+  mean no ceiling.
+
+> ⚠️ **`0` means the opposite thing on each key.** `maxCostPerMtok: 0` falls back to the default 60,
+> so that guard stays **on**; `maxCost: 0` disables the ceiling entirely. Neither key is turned off
+> by setting it to zero in the way you might expect — use `--no-cost-gate` (CLI) or
+> `noCostGate` (`amicus_council_run`) to actually disable them.
+
+```jsonc
+{
+  "maxCostPerMtok": 60,
+  "maxCost": 5
+}
+```
+
+On the CLI, `--max-cost <$>` overrides `maxCost` for that call, and `--no-cost-gate` disables both
+guards (e.g. for an intentional o3 run).
+
+Over MCP the per-call override depends on the tool. `amicus_council_run` takes its own `maxCost`
+and `noCostGate` params, which forward to the spawned child exactly as the CLI flags do.
+**`amicus_start` takes neither.** On that path `maxCostPerMtok` is config-only and nothing can turn
+the gate off at all; the soft ceiling is the **effective** `maxCost` — the pack's if the run used a
+pack that set one, otherwise the config's (`mcp-server.js:454`). Only one of those two values is in
+effect, so raising the other one changes nothing. See
+[Troubleshooting: MCP run fails with "budget gate refused the
+run"](./troubleshooting.md#mcp-run-fails-with-budget-gate-refused-the-run).
 
 ### Uninstall instructions
 

@@ -127,6 +127,7 @@ amicus fanout --council free --prompt "Review this design" --json
 | `--wave-id <id>` | Set the wave ID explicitly; leg IDs become `<wave-id>-1` … `<wave-id>-N`. |
 | `--session-id <id\|"current">` | Session ID to pull shared context from (default `current`). Same semantics as on `start`. |
 | `--json` | Emit the wave document on stdout. |
+| `--quiet` | Suppress per-leg progress ticks and the final wave-result summary (preflight errors are suppressed too). |
 | `--max-cost <$>` | Refuse the wave if the estimated total exceeds `$` (soft ceiling). |
 | `--no-cost-gate` | Disable the budget gate (per-$/Mtok threshold + ceiling) for this run. |
 | `--no-validate-model` | Skip catalog validation. |
@@ -189,7 +190,7 @@ amicus council run --prompt-file briefing.md --models gemini,glm --chair deepsee
 | `--chair <model>` | Verdict synthesizer. Default `deepseek`; must **not** be a bench seat (pre-flight error). |
 | `--critic <model>` | Optional adversarial seat; must **be** a bench seat. Mutually exclusive with `--lenses`. |
 | `--lenses <s1,s2,...>` | Expert lenses, one per seat (count must equal seat count); forces `--no-ledger` semantics. |
-| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. |
+| `--out-dir <dir>` | Run directory. Default `./council-<runId>/`. Must resolve inside the project directory — a path that escapes it is rejected with `BAD_ARGS`. |
 | `--json` | Emit the council-run document on stdout (error envelope + documented exit codes on failure). |
 | `--max-cost <$>` | **Whole-run** ceiling on **known** spend, checked before each paid stage launch. A leg whose cost cannot be determined does not count against it and never halts the run; when the total is inexact and a ceiling is set, the run exits `2`. |
 | `--timeout <min>` | **Per-leg** timeout (fanout semantics); bound the aggregate with your CI job timeout. |
@@ -377,11 +378,12 @@ pack is still recorded on the run either way.
 Amicus does **not** ship a frozen table of model names. Aliases and validation resolve against a **live catalog** fetched from provider APIs and cached at `~/.config/amicus/model-catalog.json` (24-hour TTL; the fetch works without an API key).
 
 ```bash
-amicus models                 # List the catalog
-amicus models --search gemini # Filter by substring over id and name
-amicus models --refresh       # Force-refresh from provider APIs
-amicus models --check         # Audit your aliases against the catalog
-amicus models --check --live  # + probe every stored alias with a real leg (spends)
+amicus models                  # List the catalog
+amicus models --search gemini  # Filter by substring over id and name
+amicus models --refresh        # Force-refresh from provider APIs
+amicus models --check          # Audit your aliases against the catalog
+amicus models --check --strict # + exit non-zero on curated per-gateway drift too
+amicus models --check --live   # + probe every stored alias with a real leg (spends)
 ```
 
 `amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
@@ -392,7 +394,7 @@ direct namespace while the OpenRouter route still serves — a gateway-only rout
 no direct sibling is a routing choice, not staleness. Deliberately gateway-only
 entries (e.g. `gpt-pro`) are annotated as such and are never offered a retarget.
 
-**Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line prints the exact `amicus setup --add-alias <alias>=<current>` refresh command. Drift is informational only — unlike stale aliases, it never changes the exit code.
+**Drifted aliases.** `--check` (and the `doctor` aliases row) also flags **`DRIFTED:`** stored aliases — a stored alias whose target is still catalog-listed but no longer matches any route its family currently resolves to (the v4.6.1 `gemini` release-gate class, where `doctor` stayed green while the model behind it had moved on). Each drift line prints the exact `amicus setup --add-alias <alias>=<current>` refresh command. Drift is informational only by default and does not change the exit code — pass `--strict` alongside `--check` to make curated per-gateway drift (stale or divergent direct/OpenRouter forms) exit non-zero too.
 
 **Live probe (`--check --live`).** Presence in the catalog is not proof of service — a stored alias can point at a model id the catalog still lists but the provider has quietly stopped serving (the v4.6.1 `gemini` incident). `--check` alone can't see that; `--live` can, by actually asking. Scope is **stored aliases only** (`amicus setup --add-alias`) — curated defaults follow the catalog by construction and have no "was it actually served" question for a live probe to answer. **This spends real money — one tiny leg per stored alias** — every probed alias gets one ordinary engine leg on a single quiet fan-out wave, with a real session dir and a real spend-ledger row, exactly as if you'd run it yourself.
 
@@ -486,6 +488,13 @@ MCP-only, since the CLI never lists a council row to search in the first place. 
 with no value is a usage error on the CLI. Tag itself is set at launch with `--tag <t>` on
 `start`/`fanout`/`council run` (see those sections above), and is also a dimension for
 `amicus spend --group-by tag`.
+
+**Known limitation: a tag is not inherited.** `--tag` only ever gets written at launch. `amicus
+continue` and `amicus resume` write their spend rows with no tag, and a `fanout --retry-failed`
+wave does not carry the original wave's tag either (`--tag` combined with `--retry-failed` is
+rejected as a usage error). Since the spend ledger writes `tag: null` whenever none was set, those
+rows group under `(unattributed)` in `amicus spend --group-by tag` rather than under the tag their
+lineage started with.
 
 **`amicus status <id>` output.** Human-readable:
 

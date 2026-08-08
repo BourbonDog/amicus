@@ -1649,3 +1649,90 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   pairing with the `continue`/`resume` decision above, so the whole "derived launches inherit their
   parent's tag" question is settled once, in one policy, rather than three times. Found during the
   v4.7 PR3 rider transcription, 2026-08-07.
+
+## v4.7 docs PR — filed, not shipped (2026-08-08)
+
+**Provenance.** Entry text below is carried over from `.superpowers/sdd/v47-docs-recon-report.md`
+§ 5 (F-1 … F-6, "FILE, do not ship") and § 7 (UNVERIFIED), which lives in the main clone, not this
+worktree. Every item was **deliberately excluded from the v4.7 docs PR** — none of them is a
+documentation gap, so none belongs in a docs-only change. Recorded here so the reasoning travels
+with the repo and nobody re-derives (or re-argues) the exclusion next rev.
+
+- [ ] **F-1 · Gate hardening: pin MCP tool parameters** — Add an `it` to
+  `tests/docs-command-coverage.test.js` that `require()`s `getTools()`, collects every top-level
+  `inputSchema` key per tool, and asserts each appears in `docs/usage.md`'s MCP section. Today only
+  tool *names* are derived from `src/mcp-tools.js` (`docs-command-coverage.test.js:11`); parameters
+  are pinned nowhere, which is how v4.7's `tag`/`search` params and the widened
+  `amicus_list.status` could have shipped undocumented with a green suite. They happen to be
+  documented already — this makes it self-gating for future revs. Expect some red on landing.
+  **Excluded because:** it is test infrastructure, not documentation — refuted as a doc gap
+  (GATE-3) once verified that the current params are, in fact, documented.
+
+- [ ] **F-2 · Gate hardening: derive the README command list from `bin/amicus.js`** —
+  `tests/docs-command-coverage.test.js:13` and `:27–30` pin 5 and 4 *literal* command names against
+  21 real `case '<cmd>'` labels in `bin/amicus.js` (lines 134–212). Replace both `it.each` arrays
+  with a list scraped from those labels — the same trick already used one line below for MCP tool
+  names. All 21 commands are currently documented (verified at `b365e03`), so this should land
+  green. **Excluded because:** refuted as a doc gap (GATE-4) — every one of the 16 ungated commands
+  already has README/usage.md coverage; this is test-code hardening against future drift, not a
+  fix for a present gap.
+
+- [ ] **F-3 · Gate hardening: run `generate-docs --check` in CI or jest** — No CI job and no jest
+  test runs `scripts/generate-docs.js --check` against the real `CLAUDE.md`; marker freshness rests
+  entirely on the self-healing `.husky/pre-commit` hook, so a `--no-verify` commit can land stale
+  AUTO blocks or a broken cross-link. Add ~15 lines of jest calling
+  `buildDirectoryTree`/`buildModuleIndex` against the repo root plus `checkMarkersAreCurrent` and
+  `validateCrossLinks` over the real `CLAUDE.md`. It passes today
+  (`node scripts/validate-docs.js --full` → "All markers are current."), so it lands green.
+  **Excluded because:** refuted as a doc gap (GATE-5) — no doc anywhere claims CI enforces marker
+  freshness, so nothing is factually wrong today; the residual exposure is a `--no-verify` commit,
+  and closing it is a test-hardening task, not a docs fix.
+
+- [ ] **F-4 · Dead code: `validate-docs.js`'s drift-comparison helpers** — `extractSection`,
+  `findFilesInSection` and `checkDrift` in `scripts/validate-docs.js` (defined at `:35`, `:68`,
+  `:84`) are exported and unit-tested but called by **no** execution path — `--full` only
+  `execFileSync`s `generate-docs.js --check`. Either wire the comparison up or delete the three
+  functions and their `CONFIG.mappings`. **Excluded because:** code hygiene, not docs (refuted as
+  GATE-2) — the file's own JSDoc at `:113–116` already accurately describes the delegation, so
+  there is no doc to correct.
+
+- [ ] **F-5 · Document the `routing.tier` cost-tier config surface** — [M] `routing.tier` and
+  `routing.tier_onboarded` (`src/utils/config.js:543–599`) are read by the cost-aware default
+  picker and appear in no user doc; `tests/where-things-live-docs.test.js:65–74` does not pin them.
+  Shipped in **v3.2.0** (`git log -S setCostTier` → `8aa5d6f`), so this is a four-rev-old hole.
+  **Excluded because:** closing it means documenting the whole cost-tier feature end to end — an
+  M-sized doc-writing task, not the one- to five-line corrections that make up the v4.7 docs PR's
+  "S" line. (Not comparable to that PR's new **Cost gate** section: `maxCostPerMtok`/`maxCost` are
+  two standalone thresholds with a default and an override order, describable in a short
+  subsection. `routing.tier`/`tier_onboarded` are *state* belonging to the cost-aware default
+  picker, and are meaningless to a reader who has not first been told what that picker is, when it
+  runs, and what the tiers mean.)
+
+- [ ] **F-6 · Generalise the council TOC/link gates to the rest of `docs/`** — Relative cross-links
+  and in-page anchors are validated only inside `CLAUDE.md` (by `generate-docs --check`, itself
+  un-run in CI — see F-3) and inside `docs/council.md` (by `tests/docs-council-toc-anchors.test.js`).
+  README and the other 14 `docs/*.md` files are ungated. Both were manually swept clean at
+  `b365e03`, so this is latent, not live. Generalising the council TOC test to all of `docs/` is
+  ~20 lines. **Excluded because:** it is a test-hardening task against a currently-clean tree, not
+  a fix for a present broken link or anchor.
+
+**Rider — two recon items verified by reading, not by observation** (from
+`v47-docs-recon-report.md` § 7, UNVERIFIED). Neither blocks the PR; both are noted so any future
+doc wording that hardens these claims into absolutes has a cheap verification path to follow first.
+
+- [ ] **`fanout --quiet` end-to-end output suppression was verified by reading, not by launching a
+  real wave.** The flag's plumbing was confirmed by reading
+  `src/cli-handlers-fanout.js:157–159` → `src/sidecar/fanout.js:75/103/173/248/261/270`, and its
+  absence from `amicus fanout --help` was confirmed by execution. Nobody launched a real wave to
+  watch the banner and per-leg progress lines not print, because that spends money. **To close:**
+  one `fanout --quiet` run against a local/free provider leg, or a unit test asserting
+  `runFanout({quiet:true})` writes nothing to stdout. Do this before wording any doc row as an
+  absolute ("suppresses the launch banner **and** per-leg progress lines") — until then, prefer the
+  softer "suppresses the launch banner and per-leg progress output."
+
+- [ ] **The `(unattributed)` consequence of tag non-inheritance was traced through code, not
+  observed in a real ledger.** The path `continue.js:274–277` → `spend-ledger.js:94` →
+  `spend-query.js:58` was read, not exercised. **To close:** `amicus start --tag x`, then `amicus
+  continue`, then `amicus spend --group-by tag`, and confirm the continue row lands under
+  `(unattributed)`. ~2 minutes and one cheap leg — worth doing since this is the v4.7 docs PR's
+  headline sentence (MUST-1).

@@ -476,6 +476,8 @@ Options for 'fanout':
                                --prompt/--models; --models filters which failed
                                legs to retry. wave.json is never modified.
   --json                       Emit the wave result as stable JSON on stdout
+  --quiet                      Suppress per-leg progress ticks, the wave-result summary, and
+                               preflight errors
   --max-cost <$>               Refuse the wave if the estimated total exceeds $ (soft ceiling)
   --no-cost-gate               Disable the budget gate (per-$/Mtok threshold + ceiling) for this run
   --fallback / --no-fallback   Opt-in cheaper-model substitution on a classified
