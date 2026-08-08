@@ -388,8 +388,9 @@ correct titles from a stale cache.
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `npx jest tests/workspace/lazy-panel-staleness.test.js --runInBand`
-Expected: FAIL — titles stay `["gemini","gpt"]` while `state.blind === true`, and **zero** new
-read-artifact requests are issued.
+Expected: FAIL — the titles stay the pre-flip **raw model ids** while `state.blind === true`, and
+**zero** new read-artifact requests are issued. (Use whatever bench the Task 2 fixture actually
+declares; do not expect a specific literal from this plan.)
 
 - [ ] **Step 3: Implement**
 
@@ -443,7 +444,7 @@ git commit -m "fix(workspace): drop the panel load cache unconditionally on a sa
 - Modify: `electron/workspace-ui/workspace-lazy.js` (module state + `loadPanel`)
 - Modify: `tests/workspace/lazy-panel-staleness.test.js`
 
-- [ ] **Step 1: Write the two failing tests**
+- [ ] **Step 1: Write the three failing tests**
 
 **(B) two waves in flight for one panel, older settles last.** Issue a load, then issue a second
 load for the same panel before the first settles, then settle them in reverse order. Assert the
@@ -453,6 +454,19 @@ load for the same panel before the first settles, then settle them in reverse or
 artifact has appeared, so the newer request fetches 2 files and the older one fetched 1; settle
 the 1-file reply last. Assert the panel keeps **2** sections. No blind toggle is involved in this
 path — it is reachable on the live loop's terminal refresh alone.
+
+**(D) collapse mid-flight, rewire, reopen, stale reply settles last.** *Found by the Task 3 review,
+which built a working reproduction.* Open the panel and hold its reads pending; collapse it while
+still in flight; fire a same-run rewire (blind flip, or the live loop's terminal refresh) — Task 3's
+unconditional `delete loading[id]` drops the cache entry even though the fetch is still outstanding;
+reopen, which issues a **second** concurrent fetch; resolve the **new** pair first, then let the
+orphaned pre-collapse pair settle. Assert the panel still shows the **new** content.
+
+This case is why Task 3 could not close path D on its own: `loadPanel`'s `if (loading[panelId])
+return loading[panelId];` guard used to make two concurrent reads for one panel impossible within a
+run, and the unconditional drop removes that protection. The orphaned promise has no fence but
+`runId`, which is unchanged, so it repaints unconditionally — silently, with no error and no visual
+tell. The token added below is what actually fences it.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -488,6 +502,22 @@ and extend the completion guard:
 
 This never re-derives a title, so the positional `name`↔`title` pairing that RN-1 depends on is
 untouched — which is exactly why the Task 2 pin stays green.
+
+- [ ] **Step 3b: Correct the comments Task 3 left overstated or stale**
+
+Task 3's review raised these; they are fixed here rather than in Task 3 because *this* task is what
+makes the claims true.
+
+1. Task 3's Fix-wave comment in `wireLazyPanels` asserts flatly that the unconditional drop fixes
+   "path A ... and path D". As of Task 3 alone that was **false** — path D was merely converted into
+   a race. Rewrite it so it says what is actually true of the finished pair: the unconditional drop
+   closes A and *opens* the reopen-while-in-flight window, and the per-panel issue token below is
+   what closes D. A comment that overstates is worse than no comment.
+2. The file's own top-of-file notes still describe pre-T19 semantics — the `loading` declaration's
+   "cleared per run by wireLazyPanels", the `lastWiredRunId` note's "A same-run call ... instead
+   refreshes any open panel", and the `§5.2 load on first open, cache` banner. A same-run rewire now
+   drops the cache for **closed** panels too. Update all three so a reader who never scrolls to the
+   fix-wave comment is not misled.
 
 - [ ] **Step 4: Run the tests**
 
