@@ -1,6 +1,6 @@
 // tests/sidecar/budget.test.js
 'use strict';
-const { checkBudget, DEFAULT_MAX_COST_PER_MTOK } = require('../../src/sidecar/budget');
+const { checkBudget, formatBudgetError, DEFAULT_MAX_COST_PER_MTOK } = require('../../src/sidecar/budget');
 
 const leg = (modelInput, perTok) => ({ modelInput, model: `openrouter/${modelInput}`, pricing: perTok === null ? null : { prompt: perTok, completion: perTok } });
 
@@ -54,6 +54,33 @@ describe('checkBudget — soft total ceiling (opt-in)', () => {
 
 describe('threshold default', () => {
   it('is a positive number', () => { expect(DEFAULT_MAX_COST_PER_MTOK).toBeGreaterThan(0); });
+});
+
+describe('formatBudgetError surfaces (v4.7 PR6)', () => {
+  const offendingOnly = { ok: false, offending: [{ modelInput: 'o3', model: 'o3', reason: '$80.00/Mtok exceeds the $10.00/Mtok cap' }], overCeiling: false, breakdown: { totalEstCost: 1, unpricedCount: 0, maxCost: null } };
+  const ceilingOnly = { ok: false, offending: [], overCeiling: true, breakdown: { totalEstCost: 12.5, unpricedCount: 0, maxCost: 10 } };
+
+  it('defaults to the CLI surface when no surface is passed (byte-compatible)', () => {
+    expect(formatBudgetError(ceilingOnly)).toContain('--max-cost');
+    expect(formatBudgetError(ceilingOnly)).toBe(formatBudgetError(ceilingOnly, { kind: 'cli' }));
+  });
+
+  it('does NOT tell a CLI user to raise --max-cost when the refusal is threshold-only', () => {
+    // budget.js:62 — ok requires offending.length === 0, so raising the ceiling
+    // can never clear this branch. The old trailer said it could.
+    const text = formatBudgetError(offendingOnly);
+    expect(text).not.toMatch(/--max-cost <\$> to raise/);
+    expect(text).toContain('--no-cost-gate');
+  });
+
+  it('names no CLI flags on the MCP surface', () => {
+    const text = formatBudgetError(ceilingOnly, { kind: 'mcp' });
+    expect(text).not.toMatch(/--max-cost|--no-cost-gate/);
+  });
+
+  it('does not offer dropping the pack as an MCP escape (the gate now always runs)', () => {
+    expect(formatBudgetError(ceilingOnly, { kind: 'mcp' })).not.toMatch(/without the .?pack/i);
+  });
 });
 
 describe('threshold calibration (observed pricing 2026-06-23)', () => {

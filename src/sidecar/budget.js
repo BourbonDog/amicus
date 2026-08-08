@@ -63,20 +63,39 @@ function checkBudget(legs, opts = {}) {
   return { ok, offending, overCeiling, breakdown: { legs: breakdownLegs, totalEstCost, unpricedCount, maxCostPerMtok: cap, maxCost: opts.maxCost || null } };
 }
 
-/** Human-readable refusal text (also used as the error envelope `hint`). */
-function formatBudgetError(result) {
+/**
+ * Human-readable refusal text (also used as the error envelope `hint`).
+ * @param {object} result checkBudget's return value
+ * @param {{kind:'cli'|'mcp'}} [surface] where the text will be read. Remedies are
+ *   surface-specific: the MCP tool surface has no --flags, and (since v4.7 PR6's
+ *   gate hoist) no per-call override at all. Defaults to 'cli' so the two CLI
+ *   callers stay byte-identical.
+ */
+function formatBudgetError(result, surface = { kind: 'cli' }) {
   const lines = [];
+  const isMcp = surface && surface.kind === 'mcp';
   if (result.offending.length > 0) {
     lines.push('Budget gate: model(s) over the per-$/Mtok threshold:');
     for (const o of result.offending) { lines.push(`  - ${o.modelInput} (${o.model}): ${o.reason}`); }
   }
   if (result.overCeiling) {
-    lines.push(`Budget gate: estimated total $${result.breakdown.totalEstCost.toFixed(4)} exceeds --max-cost $${result.breakdown.maxCost.toFixed(4)} (estimate, not guaranteed).`);
+    lines.push(`Budget gate: estimated total $${result.breakdown.totalEstCost.toFixed(4)} exceeds ${isMcp ? 'the configured maxCost' : '--max-cost'} $${result.breakdown.maxCost.toFixed(4)} (estimate, not guaranteed).`);
   }
   if (result.breakdown.unpricedCount > 0) {
     lines.push(`(${result.breakdown.unpricedCount} unpriced leg(s) — direct provider; cost unknown, not included in the estimate.)`);
   }
-  lines.push('Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards (e.g. an intentional o3 run).');
+  // The threshold branch cannot be cleared by raising the ceiling: `ok` above
+  // requires offending.length === 0 regardless of maxCost. Only name a remedy
+  // that actually works on the branch that fired.
+  if (isMcp) {
+    lines.push(result.offending.length > 0
+      ? 'Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.'
+      : 'Override: raise maxCost in the amicus config, or choose a cheaper model.');
+  } else {
+    lines.push(result.offending.length > 0
+      ? 'Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run), or raise maxCostPerMtok in config.'
+      : 'Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards.');
+  }
   return lines.join('\n');
 }
 

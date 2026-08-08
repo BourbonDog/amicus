@@ -460,7 +460,7 @@ const handlers = {
             isError: true,
             content: [{ type: 'text', text: JSON.stringify(buildErrorDoc({
               code: ERROR_CODES.BUDGET_EXCEEDED, message: 'Error: budget gate refused the run',
-              hint: formatBudgetError(budget),
+              hint: formatBudgetError(budget, { kind: 'mcp' }),
             })) }],
           };
         }
