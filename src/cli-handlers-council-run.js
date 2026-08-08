@@ -46,6 +46,24 @@ async function handleCouncilRun(args, depsOverride = {}) {
   // existing application point exactly like a typed --template.
   let packRecord = null;
   const explicitKeys = args.__explicit || new Set();
+  // v4.7 PR6: these all parse as boolean `true` when typed without a value
+  // (src/cli.js:101) and reached runCouncil as `true`, a NaN, or a bogus path.
+  // Voice matches the R5 -o/--out precedent (cli-handlers-council.js:183).
+  for (const flag of ['out-dir', 'claude-review', 'run-id']) {
+    if (!explicitKeys.has(flag)) { continue; }
+    const v = args[flag];
+    if (typeof v !== 'string' || v === '') {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --${flag} requires a value` });
+    }
+    if (v.startsWith('-')) {
+      return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --${flag} cannot start with '-': got '${v}'` });
+    }
+  }
+  // --timeout is DEFAULTS-seeded to 15 (src/cli.js:31), so `!== undefined` proves
+  // nothing; NaN is the real hole — it passes the `<= 0` guard below.
+  if (explicitKeys.has('timeout') && (typeof args.timeout !== 'number' || !Number.isFinite(args.timeout))) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --timeout requires a number: got '${args.timeout}'` });
+  }
   if (args.pack !== undefined) {
     const { applyPackToArgs } = require('./pack/pack-resolve');
     const pr = applyPackToArgs({
@@ -178,6 +196,12 @@ async function handleCouncilRun(args, depsOverride = {}) {
   const runDir = args['out-dir']
     ? path.resolve(project, String(args['out-dir']))
     : path.resolve(project, `council-${runId}`);
+  // v4.7 PR6: MCP has fenced this since v4.5 (mcp-council-run.js:137-141); the CLI
+  // never did, so `--out-dir ../../x` wrote outside the project and exited 0.
+  const { isPathInside } = require('./project-root-allowlist');
+  if (!isPathInside(runDir, project)) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --out-dir must stay inside the project: '${args['out-dir']}' resolves outside ${project}` });
+  }
 
   const { resolveGatewayMode, loadConfig } = require('./utils/config');
   const { resolveFallbackConfig } = require('./sidecar/fallback-chains');

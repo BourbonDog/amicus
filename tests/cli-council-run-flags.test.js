@@ -36,6 +36,7 @@ const argsBase = (extra = {}) => ({
   _: ['council', 'run'], json: true, cwd: tmp,
   'prompt-file': briefingFile, models: 'gemini,gpt,qwen', ...extra,
 });
+const stdout = () => out.mock.calls.map((c) => c[0]).join('');
 
 describe('parseArgs registers --debate as a boolean flag', () => {
   // RED-PHASE NOTE: an UNREGISTERED `--flag` sitting at the END of argv (or in
@@ -326,5 +327,42 @@ describe('council run threads droppedMembers into runCouncil options (Wave 2 chi
     const mcpDropped = runCouncil.mock.calls[0][0].droppedMembers;
 
     expect(mcpDropped).toEqual(presetDropped);
+  });
+});
+
+describe('valueless and dash-leading value flags (v4.7 PR6)', () => {
+  // These flags reached runCouncil as `true`, as a NaN, or as a path escaping
+  // the project — the CLI had no containment fence where MCP has isPathInside.
+  const bad = [
+    ['out-dir', true, /--out-dir requires a value/],
+    ['out-dir', '-x', /--out-dir cannot start with '-'/],
+    ['claude-review', true, /--claude-review requires a value/],
+    ['run-id', true, /--run-id requires a value/],
+    ['timeout', true, /--timeout requires a number/],
+    ['timeout', 'abc', /--timeout requires a number/],
+  ];
+  for (const [flag, value, re] of bad) {
+    it(`rejects --${flag} ${JSON.stringify(value)}`, async () => {
+      const args = { ...argsBase(), [flag]: value, __explicit: new Set([flag]) };
+      const code = await handleCouncilRun(args);
+      expect(code).toBe(1);
+      // The assertion that actually goes RED: the handler writes nothing to disk,
+      // so a leak check would be vacuous. Prove the engine was never reached.
+      expect(runCouncil).not.toHaveBeenCalled();
+      expect(JSON.parse(stdout()).error.message).toMatch(re);
+    });
+  }
+
+  it('rejects an --out-dir that escapes the project', async () => {
+    const args = { ...argsBase(), 'out-dir': path.join('..', '..', 'escape'), __explicit: new Set(['out-dir']) };
+    expect(await handleCouncilRun(args)).toBe(1);
+    expect(runCouncil).not.toHaveBeenCalled();
+    expect(JSON.parse(stdout()).error.message).toMatch(/must stay inside the project/);
+  });
+
+  it('still accepts a normal --out-dir', async () => {
+    const args = { ...argsBase(), 'out-dir': 'my-run', __explicit: new Set(['out-dir']) };
+    await handleCouncilRun(args);
+    expect(runCouncil).toHaveBeenCalled();
   });
 });
