@@ -5,7 +5,23 @@
 
 ## First: run `amicus doctor`
 
-Before working through any symptom below, run `amicus doctor` (plugin-only installs: `npx -y amicus@latest doctor`). It checks, in order: Node version, config directory, API keys, default model, catalog freshness, alias staleness and drift, the ANTHROPIC_BASE_URL form, the OpenCode binary, the OpenCode engine's MCP launch path, Electron, installed skills, MCP registration, the legacy sidecar MCP entry, session index tmp files, OpenRouter credit, local providers, and the project root — and prints a targeted fix hint for every failing check. `amicus doctor --fix` self-heals what it can (e.g. re-installs a broken Electron in place); `--json` gives machine-readable output.
+Before working through any symptom below, run `amicus doctor` (plugin-only installs: `npx -y amicus@latest doctor`). It checks, in order: Node version, config directory, API keys, default model, catalog freshness, alias staleness and drift, the ANTHROPIC_BASE_URL form, the OpenCode binary, the OpenCode engine's MCP launch path, Electron, installed skills, MCP registration, the legacy sidecar MCP entry, session index and session metadata tmp files, OpenRouter credit, local providers, and the project root — and prints a targeted fix hint for every failing check. `amicus doctor --fix` self-heals what it can (e.g. re-installs a broken Electron in place); `--json` gives machine-readable output.
+
+---
+
+## MCP run fails with "budget gate refused the run"
+
+**Symptom:** An `amicus_start` call over MCP returns an error with `message: "Error: budget gate
+refused the run"` (`ERROR_CODES.BUDGET_EXCEEDED`).
+
+**Cause:** v4.7 made the `amicus_start` shared-server budget gate unconditional
+(`src/mcp-server.js:442-467`) — it used to run only when a pack forwarded `maxCost`, so a no-pack
+MCP start that worked on 4.6.x can now refuse. The gate has two independent guards; when both fire,
+raising only one will not clear the run.
+
+**Fix:** Raise `maxCostPerMtok` and/or `maxCost` in `config.json` (see [Cost
+gate](./configuration.md#cost-gate)), or choose a cheaper model. There is no `--no-cost-gate`
+equivalent over MCP — that flag is CLI-only.
 
 ---
 
