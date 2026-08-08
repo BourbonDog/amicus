@@ -614,6 +614,102 @@ describe('amicus_fanout: pre-spend validation of pack-forwarded maxCost/template
   });
 });
 
+// ---------------------------------------------------------------------------
+// W1-M4 (v4.7 PR7): an MCP fanout wave whose spawned CLI child aborts before
+// fanout.js:145 used to leave briefing.md holding the RAW prompt forever —
+// list-search.js's waveSearchMaterial reads briefing.md verbatim as the
+// `--search` corpus, so the wave was permanently unfindable by the text the
+// user actually sees. This block pins that briefing.md now holds the
+// RENDERED text when a pack forwards a template, while the child still gets
+// the raw prompt via a sibling briefing-input.md so its own later render
+// (and promptMeta.template provenance) is unaffected.
+// ---------------------------------------------------------------------------
+
+describe('amicus_fanout: renders briefing.md at the pre-seed so an aborted wave stays searchable (W1-M4)', () => {
+  const MARKER = '=== W1-M4-MARKER ===';
+
+  // FIXTURE TRAP: the only template fixture already in this file ('review',
+  // used by the I1 test above) needs {{artifact}}, which the fanout pre-seed
+  // dry run can never supply — it is rejected before any wave dir is created.
+  // A real user template, written into THIS test's own tmp AMICUS_CONFIG_DIR,
+  // is required to reach the render path at all.
+  function writeUserTemplate(name) {
+    const dir = path.join(tmp, 'templates');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${name}.md`), `${MARKER}\n{{prompt}}\n`);
+  }
+
+  function waveDirFor(result, project) {
+    const body = JSON.parse(result.content[0].text);
+    return path.join(project, '.claude', 'amicus_sessions', body.waveId);
+  }
+
+  // Local variant of callFanoutWithMockedSpawn (:568) that also hands back
+  // the captured spawn argv, needed to assert --prompt-file/--template.
+  async function callFanoutCapturingArgv(input, project) {
+    let result; let spawnMock; let argv;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn((cmd, cmdArgs) => { argv = cmdArgs; return { pid: 4242, unref: jest.fn() }; });
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length, argv };
+  }
+
+  test('a pack-forwarded template renders briefing.md, hands the child the raw prompt via briefing-input.md, and still forwards --template', async () => {
+    writeUserTemplate('w1m4-marker-template');
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'w1m4-template-pack', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: {},
+      briefing: { template: 'w1m4-marker-template' },
+    });
+    const input = { pack: 'w1m4-template-pack', prompt: 'The raw prompt text.' };
+    const { result, spawnCallCount, argv } = await callFanoutCapturingArgv(input, tmp);
+
+    expect(result.isError).toBeUndefined();
+    expect(spawnCallCount).toBe(1);
+    const waveDir = waveDirFor(result, tmp);
+
+    // 1. briefing.md contains the rendered marker (the search corpus).
+    const briefing = fs.readFileSync(path.join(waveDir, 'briefing.md'), 'utf-8');
+    expect(briefing).toContain(MARKER);
+    expect(briefing).toContain(input.prompt);
+
+    // 2. briefing-input.md is the raw prompt, byte-identical.
+    const briefingInput = fs.readFileSync(path.join(waveDir, 'briefing-input.md'), 'utf-8');
+    expect(briefingInput).toBe(input.prompt);
+
+    // 3. the spawned child's --prompt-file points at briefing-input.md, and
+    // --template is still forwarded (unchanged from today).
+    const pfIdx = argv.indexOf('--prompt-file');
+    expect(pfIdx).toBeGreaterThan(-1);
+    expect(argv[pfIdx + 1]).toBe(path.join(waveDir, 'briefing-input.md'));
+    const tIdx = argv.indexOf('--template');
+    expect(tIdx).toBeGreaterThan(-1);
+    expect(argv[tIdx + 1]).toBe('w1m4-marker-template');
+  });
+
+  test('with no pack: briefing.md is the raw prompt verbatim, no briefing-input.md is written, and --prompt-file defaults to briefing.md', async () => {
+    const input = { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: 'Plain prompt, no pack.' };
+    const { result, spawnCallCount, argv } = await callFanoutCapturingArgv(input, tmp);
+
+    expect(result.isError).toBeUndefined();
+    expect(spawnCallCount).toBe(1);
+    const waveDir = waveDirFor(result, tmp);
+
+    // 4. no pack forwarded: briefing.md === input.prompt, no sibling file.
+    expect(fs.readFileSync(path.join(waveDir, 'briefing.md'), 'utf-8')).toBe(input.prompt);
+    expect(fs.existsSync(path.join(waveDir, 'briefing-input.md'))).toBe(false);
+
+    // The load-bearing default: childPromptPath falls back to briefingPath,
+    // or every non-template wave would spawn with --prompt-file undefined.
+    const pfIdx = argv.indexOf('--prompt-file');
+    expect(pfIdx).toBeGreaterThan(-1);
+    expect(argv[pfIdx + 1]).toBe(path.join(waveDir, 'briefing.md'));
+  });
+});
+
 describe('amicus_start spawn-fallback: pre-spend validation of pack-forwarded maxCost/template', () => {
   const SOLO_TEMPLATE_NEEDS_ARTIFACT_PACK = () => ({
     schemaVersion: 1, type: 'pack', name: 'solo-review-template-pack', version: '1.0.0', kind: 'solo',

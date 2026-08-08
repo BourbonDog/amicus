@@ -1280,15 +1280,34 @@ const handlers = {
     const waveDir = getSessionDir(cwd, waveId);
 
     let briefingPath;
+    let childPromptPath;
     try {
       fs.mkdirSync(waveDir, { recursive: true, mode: 0o700 });
       briefingPath = path.join(waveDir, 'briefing.md');
+      // ⚠️ W1-M4 (v4.7 PR7): this default is LOAD-BEARING. Omit it and every non-template wave
+      // spawns with `--prompt-file undefined`.
+      childPromptPath = briefingPath;
       // The prompt goes via file: the spawned command line must NOT carry it,
       // or it re-hits the ~32KB Windows argument cap (F4 spec §4.2).
-      fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
+      // ⚠️ W1-M4: briefing.md is the SEARCH CORPUS — src/sidecar/list-search.js reads it verbatim
+      // — and a child that aborts before fanout.js:145 never re-renders it, leaving the wave
+      // permanently unfindable by the text the user actually sees. Write the RENDERED text here
+      // (parity with the amicus_start path at :441/:506) and hand the child the raw input in a
+      // sibling file, so its own later re-render still produces byte-identical output and
+      // promptMeta.template provenance survives.
+      const briefingText = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
+      fs.writeFileSync(briefingPath, briefingText, { mode: 0o600 });
+      if (fwd.renderedPrompt !== undefined) {
+        childPromptPath = path.join(waveDir, 'briefing-input.md');
+        fs.writeFileSync(childPromptPath, input.prompt, { mode: 0o600 });
+      }
+      // ⚠️ W1-M4 rider (owner-approved fold): the `briefing` key below must stay — without it the
+      // `list` BRIEFING column renders EMPTY for an aborted MCP wave, since only fanout.js:147
+      // ever wrote a briefing key and an aborted child never reaches it.
       writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify({
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
         models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
+        briefing: briefingText.slice(0, 200),
         // v4.5 Task 15: additive-only — absent (not null) without a pack.
         ...(packRecord ? { pack: packRecord } : {}),
       }, null, 2), { mode: 0o600 });
@@ -1302,7 +1321,7 @@ const handlers = {
 
     const args = [
       'fanout', '--models', effectiveModels.join(','),
-      '--prompt-file', briefingPath, '--wave-id', waveId,
+      '--prompt-file', childPromptPath, '--wave-id', waveId,
       '--json', '--client', detectClient(mcpServer), '--cwd', cwd,
     ];
     const agent = input.agent || 'Build';
