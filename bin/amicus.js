@@ -55,6 +55,23 @@ async function main() {
     process.exit(1);
   }
 
+  // `--cwd` typed with no value parses as boolean `true` (src/cli.js:101) and
+  // `--cwd=` as '' (src/cli.js:72). DEFAULTS (src/cli.js:28) always seeds a
+  // real absolute string, so a non-string or empty cwd can ONLY mean "typed
+  // without a value" — which makes this guard provably free of false
+  // positives. Left unguarded it reached 16 `args.cwd || process.cwd()`
+  // sites across 9 handlers: council run threw a raw TypeError, template
+  // silently resolved <cwd>/true.
+  // No dash check here: absolute paths never start with '-', and
+  // `--cwd ./x` is legitimate.
+  if (typeof args.cwd !== 'string' || args.cwd === '') {
+    console.error('Error: --cwd requires a value');
+    console.error(command
+      ? `Run \`amicus ${command} --help\` to see valid options.`
+      : 'Run `amicus --help` to see valid options.');
+    process.exit(1);
+  }
+
   // Install crash handler for MCP-spawned processes (have --task-id)
   if (args['task-id'] && (command === 'start' || command === 'continue')) {
     const { installCrashHandler } = require('../src/sidecar/crash-handler');
