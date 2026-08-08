@@ -176,3 +176,9 @@ td.vote-cell.dispute { cursor: pointer; text-decoration: underline dotted; }
 
 .empty-note { color: var(--text-3); font-size: var(--fs-12); }
 .truncate-note { color: var(--warn); font-size: var(--fs-11); margin-top: var(--space-3); }
+
+/* PR1F-4: a seat that was retried and still failed — the surviving errored row's own marker.
+   ⚠️ Plan snippet said var(--muted), which does not exist in src/design/tokens.css (verified
+   repo-wide). --text-3 is this file's own established "muted" token — see tr.seat-dead td
+   above, the sibling dead-row treatment. */
+.seat-retried td:last-child { color: var(--text-3); white-space: nowrap; }
