@@ -127,7 +127,7 @@ amicus fanout --council free --prompt "Review this design" --json
 | `--wave-id <id>` | Set the wave ID explicitly; leg IDs become `<wave-id>-1` … `<wave-id>-N`. |
 | `--session-id <id\|"current">` | Session ID to pull shared context from (default `current`). Same semantics as on `start`. |
 | `--json` | Emit the wave document on stdout. |
-| `--quiet` | Suppress the launch banner and per-leg progress output. |
+| `--quiet` | Suppress per-leg progress ticks and the final wave-result summary (preflight errors are suppressed too). |
 | `--max-cost <$>` | Refuse the wave if the estimated total exceeds `$` (soft ceiling). |
 | `--no-cost-gate` | Disable the budget gate (per-$/Mtok threshold + ceiling) for this run. |
 | `--no-validate-model` | Skip catalog validation. |
@@ -378,12 +378,12 @@ pack is still recorded on the run either way.
 Amicus does **not** ship a frozen table of model names. Aliases and validation resolve against a **live catalog** fetched from provider APIs and cached at `~/.config/amicus/model-catalog.json` (24-hour TTL; the fetch works without an API key).
 
 ```bash
-amicus models                 # List the catalog
-amicus models --search gemini # Filter by substring over id and name
-amicus models --refresh       # Force-refresh from provider APIs
-amicus models --check         # Audit your aliases against the catalog
+amicus models                  # List the catalog
+amicus models --search gemini  # Filter by substring over id and name
+amicus models --refresh        # Force-refresh from provider APIs
+amicus models --check          # Audit your aliases against the catalog
 amicus models --check --strict # + exit non-zero on curated per-gateway drift too
-amicus models --check --live  # + probe every stored alias with a real leg (spends)
+amicus models --check --live   # + probe every stored alias with a real leg (spends)
 ```
 
 `amicus models --check` exits with the **number of stale aliases** (capped at 100) and prints same-vendor replacement suggestions for each, so it drops cleanly into CI.
