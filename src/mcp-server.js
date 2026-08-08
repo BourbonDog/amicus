@@ -703,6 +703,17 @@ const handlers = {
     // resolved the route in-process above, so surface its notice here.
     const spawnContent = [{ type: 'text', text: body }];
     if (routeResult.notice) { spawnContent.push({ type: 'text', text: routeResult.notice }); }
+    // W1-M6/M7: NOT dead code. This is the same idiom applyPackToMcpInput's
+    // orphan-knob notices always use — amicus_fanout genuinely reaches it today
+    // (FANOUT_PACK_PARAM_MAP has no contextTurns/contextMaxTokens destination;
+    // the fanout handler's own push into waveContent below is covered by
+    // tests/pack/mcp-pack-params.test.js:503). On THIS solo surface it is
+    // unreachable only while KIND_OPTIONS.solo stays fully covered by
+    // SOLO_PACK_PARAM_MAP destinations + pack-resolve.js's FORWARDABLE_ARG_KEYS
+    // — the invariant tests/pack/mcp-pack-params.test.js guards (the
+    // KIND_OPTIONS.solo round-trip test, mutation-proven against a synthetic
+    // orphaned knob). If that invariant ever breaks, this loop is what turns a
+    // silent drop into a visible notice — never delete it as unreachable.
     for (const n of packNotices) { spawnContent.push({ type: 'text', text: n }); }
     if (isHeadless) {
       spawnContent.push({ type: 'text', text: HEADLESS_START_REMINDER });

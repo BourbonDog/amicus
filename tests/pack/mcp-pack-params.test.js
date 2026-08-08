@@ -62,6 +62,9 @@ const FANOUT_KIND_PACK = () => ({
 // real tables makes that class of drift impossible.
 const { COUNCIL_PACK_PARAM_MAP } = require('../../src/mcp-council-run');
 const { FANOUT_PACK_PARAM_MAP, SOLO_PACK_PARAM_MAP } = require('../../src/mcp-server');
+// W1-M6/M7: same T15-m5 rule — KIND_OPTIONS is the table the guard below
+// walks, imported live so the guard tracks it instead of pinning a copy.
+const { KIND_OPTIONS } = require('../../src/pack/pack-validate');
 
 const FANOUT_TEST_PACK = () => ({
   schemaVersion: 1, type: 'pack', name: 'fanout-direct-pack', version: '1.0.0', kind: 'fanout',
@@ -519,6 +522,55 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     expect(res.notices.some((n) => n.includes('context-max-tokens'))).toBe(false);
     expect(input.contextTurns).toBeUndefined();
     expect(input.contextMaxTokens).toBeUndefined();
+  });
+
+  // ---- W1-M6/M7: the solo knob/param-map invariant behind the forward-notice loop ----
+  //
+  // There is no live defect on the interactive `amicus_start` path today: it can never
+  // reach the shared-server branch (mcp-server.js:432 gates that branch on
+  // `sharedServer.enabled && input.noUi`, and an interactive call has no `noUi`), so it
+  // always takes spawn-fallback, which resolves the pack in-process before spawning
+  // (single-resolution rule) — see the `packNotices` push loop at mcp-server.js:706. That
+  // loop is UNREACHABLE for solo only by invariant: every key `validatePack(mode:'run')`
+  // lets through (KIND_OPTIONS.solo) currently either round-trips onto `input` via a real
+  // SOLO_PACK_PARAM_MAP destination, or forwards via pack-resolve.js's FORWARDABLE_ARG_KEYS
+  // (maxCost — the only KIND_OPTIONS.solo entry with no paramMap destination). Neither table
+  // is re-typed here (T15-m5): KIND_OPTIONS is imported live above, and instead of mirroring
+  // pack-resolve.js's private (unexported) FORWARDABLE_ARG_KEYS — that file sits at exactly
+  // 300/300 lines and is not in this task's file list, so it cannot gain an export — this
+  // walks each KIND_OPTIONS.solo key through the REAL applyPackToMcpInput and inspects the
+  // REAL res.notices it produces, so pack-resolve.js's own forwarding/notice decision is
+  // authoritative, never guessed.
+  //
+  // Known limit (reported, not hidden): a key that validatePack accepts but that
+  // pack-resolve.js's own knob tables (COMMON_OPTION_KNOBS / CONTEXT_OPTION_KNOBS, private to
+  // pack-resolve.js) never read into `args` at all would produce NO notice — not because it
+  // is safely routed, but because it never reaches the diff this guard (and the notice loop
+  // it guards) can see. That is a different, narrower defect than the one this task scopes
+  // (KIND_OPTIONS drifting ahead of SOLO_PACK_PARAM_MAP/FORWARDABLE_ARG_KEYS on the MCP
+  // surface specifically) and is why the recon mutation below touches two files, not one.
+  test('every KIND_OPTIONS.solo key round-trips through applyPackToMcpInput without an orphan notice — a key with neither a SOLO_PACK_PARAM_MAP destination nor FORWARDABLE_ARG_KEYS membership would be silently dropped were it not for the notice loop near src/mcp-server.js:706', () => {
+    for (const optionKey of KIND_OPTIONS.solo) {
+      const packName = `solo-w1m67-${optionKey.toLowerCase()}`;
+      store().writePack({
+        schemaVersion: 1, type: 'pack', name: packName, version: '1.0.0', kind: 'solo',
+        description: 'x', model: 'vendorx/solo-model', options: { [optionKey]: true }, briefing: {},
+      });
+      const input = {};
+      const res = applyPackToMcpInput({
+        packRef: packName, expectedKind: 'solo', input, paramMap: SOLO_PACK_PARAM_MAP,
+      });
+      expect(res.error).toBeUndefined();
+      const orphanNotice = res.notices.find((n) => n.includes(optionKey));
+      if (orphanNotice) {
+        throw new Error(
+          `KIND_OPTIONS.solo key '${optionKey}' has neither a SOLO_PACK_PARAM_MAP destination nor ` +
+          `FORWARDABLE_ARG_KEYS membership — produced: "${orphanNotice}". Without the packNotices push ` +
+          `loop near src/mcp-server.js:706 (amicus_start's spawn-fallback path), a pack setting this ` +
+          'knob would be silently dropped instead of surfaced to the caller.'
+        );
+      }
+    }
   });
 
   // ---- v4.5 HOLD-gate decision 2: a dropped council option fails resolution outright ----
