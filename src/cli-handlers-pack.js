@@ -74,12 +74,18 @@ function packFromCouncilRun(name, version, run) {
   };
 }
 
-/** wave branch: a fanout wave's metadata.json (type:'wave'), plus its first leg. */
-function packFromWave(name, version, project, meta) {
-  const fs = require('fs');
-  const path = require('path');
-  const { getSessionDir } = require('./session-manager');
-
+/**
+ * wave branch: a fanout wave's metadata.json (type:'wave'), plus its first leg.
+ * `{fs, path, getSessionDir}` is threaded in from buildPackFromRun's own lazy
+ * require (below) rather than required again here — T14-m7: this file's other
+ * lazy requires (session-manager per cli-handlers-abort.js/cli-handlers-watch.js/
+ * mcp-council-awareness.js; pack-store/pack-validate in handlePack below) are
+ * all function-scoped, deferred until the `--from-run` path actually needs
+ * them, so a second copy of the same require triple here would just be
+ * duplication without buying back any additional laziness — buildPackFromRun
+ * already pays that cost once, on the only branch that reaches this function.
+ */
+function packFromWave(name, version, project, meta, { fs, path, getSessionDir }) {
   const opts = {};
   const firstLeg = Array.isArray(meta.legs) ? meta.legs[0] : null;
   if (firstLeg) {
@@ -130,7 +136,9 @@ function buildPackFromRun(name, id, project, args) {
     let meta = null;
     try { meta = JSON.parse(fs.readFileSync(path.join(getSessionDir(project, id), 'metadata.json'), 'utf-8')); }
     catch { return { error: `Session ${id} not found` }; }
-    pack = meta.type === 'wave' ? packFromWave(name, version, project, meta) : packFromSolo(name, version, meta);
+    pack = meta.type === 'wave'
+      ? packFromWave(name, version, project, meta, { fs, path, getSessionDir })
+      : packFromSolo(name, version, meta);
   }
   // T14-m4 (final-review): buildPackFromFlags honors --description (line ~27
   // above); this --from-run path threaded `version` the same way but silently
@@ -154,7 +162,6 @@ function renderPackList(doc) {
     });
     text = 'Packs:\n' + lines.join('\n') + '\n';
   }
-  for (const w of doc.warnings) { text += `Warning: ${w}\n`; }
   return text;
 }
 
@@ -203,6 +210,11 @@ async function handlePack(args) {
     const { packs, warnings } = listPacks();
     const doc = { schemaVersion: SCHEMA_VERSION, type: 'pack-list', dir: packsDir(), packs, warnings };
     process.stdout.write(useJson ? JSON.stringify(doc, null, 2) + '\n' : renderPackList(doc));
+    // T14-m1: warnings are diagnostics, not data — keep them off stdout so
+    // `amicus pack list | grep`/`--json` consumers never see them mixed into
+    // the list itself. `pack save` already writes this identical string to
+    // stderr (above); `--json` is untouched: `warnings` stays a field on doc.
+    if (!useJson) { for (const w of warnings) { process.stderr.write(`Warning: ${w}\n`); } }
     return 0;
   }
 

@@ -30,7 +30,7 @@ function applyPackOrExit(args, expectedKind, useJson) {
   if (args.pack === undefined) { return null; }
   const explicit = args.__explicit || new Set();
   const pr = applyPackToArgs({ packRef: args.pack, expectedKind, args, explicit, useJson });
-  if (pr.error) { process.exit(failJson(useJson, pr.error)); }
+  if (pr.error) { return process.exit(failJson(useJson, pr.error)); }
   for (const n of pr.notices) { process.stderr.write(n + '\n'); }
   return pr.packRecord;
 }

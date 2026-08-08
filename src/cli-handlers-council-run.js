@@ -128,8 +128,16 @@ async function handleCouncilRun(args, depsOverride = {}) {
   }
   const lenses = (typeof args.lenses === 'string' && args.lenses.trim()) ? parseList(args.lenses) : null;
   if (critic && lenses) {
+    // T11-d: no packSuffix() here (unlike the chair/critic-in-bench checks
+    // above) — it would only ever contribute ''. pack-validate.js now rejects
+    // a pack supplying both critic and lenses before this handler ever runs
+    // (PACK_INVALID, pre-spend, via pack-resolve.js's validatePack call), and
+    // pack-resolve.js:140/143 already suppress the mixed pack-field x
+    // explicit-flag crossings (a pack-filled critic is skipped when --lenses
+    // is explicit, and vice versa). So whenever this branch fires, both
+    // critic and lenses are always explicit flags, never pack-attributed.
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
-      message: `Error: --critic and --lenses are mutually exclusive in v4.0${packSuffix('critic') || packSuffix('lenses')}` });
+      message: 'Error: --critic and --lenses are mutually exclusive in v4.0' });
   }
   if (lenses && lenses.length !== bench.length) {
     return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,

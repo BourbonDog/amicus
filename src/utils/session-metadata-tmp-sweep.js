@@ -56,9 +56,9 @@ function listTmpIn(dir, root) {
   return entries
     .filter(isMetadataTmp)
     .map((basename) => {
-      let mtimeMs = null;
-      try { mtimeMs = fs.lstatSync(path.join(dir, basename)).mtimeMs; } catch { /* raced away — skip below */ }
-      return { name: path.relative(root, path.join(dir, basename)), mtimeMs };
+      let st = null;
+      try { st = fs.lstatSync(path.join(dir, basename)); } catch { /* raced away */ }
+      return { name: path.relative(root, path.join(dir, basename)), mtimeMs: st && st.isFile() ? st.mtimeMs : null };
     })
     .filter((f) => f.mtimeMs !== null);
 }

@@ -125,6 +125,40 @@ describe('CLI Argument Parser', () => {
       expect(result['no-frobnicate']).toBe('off');
     });
 
+    // R5 (spec §2, §8/D19): '-o' must consume values in lockstep with the
+    // generic long-option branch above (`!next.startsWith('--')`), not its
+    // own stricter `!next.startsWith('-')` test. Five-row matrix from the
+    // v4.7 PR5 owner ruling — parseArgs only normalizes here; a dash-leading
+    // value is still a legitimate (if suspicious) string at this layer.
+    // cli-handlers-council.js's R1 guard is what actually rejects it (see
+    // tests/council/cli-handlers-council.test.js's R1/R5 pins for that half).
+    describe('--out / -o (R5 parser normalization matrix)', () => {
+      it('--out -x parses the dash-leading value literally (unchanged: the long branch already did this)', () => {
+        expect(parseArgs(['council', 'verdict', 't.json', '--out', '-x']).out).toBe('-x');
+      });
+
+      it('-o -x now parses the dash-leading value literally too (was: boolean true — the R5 fix)', () => {
+        expect(parseArgs(['council', 'verdict', 't.json', '-o', '-x']).out).toBe('-x');
+      });
+
+      it('--out bare stays boolean true (unchanged)', () => {
+        expect(parseArgs(['council', 'verdict', 't.json', '--out']).out).toBe(true);
+      });
+
+      it('-o bare stays boolean true (unchanged)', () => {
+        expect(parseArgs(['council', 'verdict', 't.json', '-o']).out).toBe(true);
+      });
+
+      it('--out= stays an empty string (unchanged)', () => {
+        expect(parseArgs(['council', 'verdict', 't.json', '--out=']).out).toBe('');
+      });
+
+      it('-o out.json and --out out.json both still parse the well-formed value unchanged (regression guard)', () => {
+        expect(parseArgs(['council', 'verdict', 't.json', '-o', 'out.json']).out).toBe('out.json');
+        expect(parseArgs(['council', 'verdict', 't.json', '--out', 'out.json']).out).toBe('out.json');
+      });
+    });
+
     it('should parse --position option', () => {
       const result = parseArgs(['start', '--position', 'right']);
       expect(result.position).toBe('right');

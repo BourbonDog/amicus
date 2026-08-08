@@ -171,8 +171,16 @@ function runVerdict(args, useJson) {
   // (renameSync TypeError on a non-string path) leaving an orphaned
   // true.tmp-<pid>; the empty string silently falls through to the default
   // path. Name the flag and refuse both — the unknown-flag precedent.
-  if (args.out !== undefined && (typeof args.out !== 'string' || args.out === '')) {
-    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: '-o/--out requires a value',
+  // R5 (v4.7): a dash-leading value ('-x') is a well-formed string as far as
+  // parseArgs is concerned (it normalizes, it does not validate) — refuse it
+  // here too, or it resolves straight through to writeVerdictAtomic('-x', ...)
+  // and writes a file literally named '-x' in cwd. Same failure class as R1,
+  // one form short.
+  if (args.out !== undefined && (typeof args.out !== 'string' || args.out === '' || args.out.startsWith('-'))) {
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS,
+      message: (typeof args.out !== 'string' || args.out === '')
+        ? '-o/--out requires a value'
+        : `-o/--out cannot start with '-': got '${args.out}'`,
       hint: 'amicus council verdict <tally.json> [--decisions <decisions.json>] [-o|--out <out.json>]' });
   }
   const outPath = args.out || './verdict.json';

@@ -150,7 +150,7 @@ describe('handlePack: list with no packs', () => {
     expect(stdout()).toBe('No packs.\n');
   });
 
-  test('corrupt pack file: exits 0, shows "No packs." AND warning', async () => {
+  test('corrupt pack file: exits 0, shows "No packs." on stdout AND warning on stderr', async () => {
     const packsDir = store().packsDir();
     fs.mkdirSync(packsDir, { recursive: true });
     fs.writeFileSync(path.join(packsDir, 'broken.json'), 'not json at all');
@@ -158,8 +158,13 @@ describe('handlePack: list with no packs', () => {
     expect(code).toBe(0);
     const output = stdout();
     expect(output).toContain('No packs.');
-    expect(output).toContain('Warning:');
-    expect(output).toContain('broken.json');
+    // T14-m1 regression guard: stdout must NOT carry the warning — without
+    // this negative assertion, the test would still pass even if the warning
+    // were written to BOTH streams instead of moving cleanly to stderr.
+    expect(output).not.toContain('Warning:');
+    const errOutput = stderr();
+    expect(errOutput).toContain('Warning:');
+    expect(errOutput).toContain('broken.json');
   });
 });
 

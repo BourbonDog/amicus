@@ -192,6 +192,27 @@ describe('validatePack: by-name bench', () => {
     expect(res.warnings.join(' | ')).toContain('member-level checks');
     expect(res.warnings.join(' | ')).toContain('deferred to run time');
   });
+
+  // Fix wave (T11-d review): the original fixture used bench: 'trio', but this
+  // file's config (beforeEach, above) seeds only aliases and NO `councils` —
+  // 'trio' is not a configured council here, and the built-ins are
+  // free|budget|frontier. So 'trio' took the :85 `if (!members)`
+  // unknown-council path and produced TWO errors, meaning `res.ok === false`
+  // was already true BEFORE the T11-d hoist — the fixture never exercised the
+  // warning-branch (:86-88) that actually housed the hole. Using a real
+  // built-in ('budget') makes this an otherwise-valid by-name pack, so the
+  // ONLY way it can fail is the mutual-exclusion check — the true defect shape.
+  test('a string bench does NOT excuse critic+lenses (T11-d)', () => {
+    const { validatePack } = load();
+    const pack = {
+      schemaVersion: 1, type: 'pack', name: 'by-name-conflict', version: '1.0.0', kind: 'council',
+      description: 'x', bench: 'budget', chair: null, critic: 'alpha', lenses: ['sec', 'perf'],
+      options: {}, briefing: {},
+    };
+    const res = validatePack(pack, { mode: 'run' });
+    expect(res.ok).toBe(false);
+    expect(res.errors).toEqual(['critic and lenses are mutually exclusive']);
+  });
 });
 
 describe('validatePack: briefing.template resolution', () => {

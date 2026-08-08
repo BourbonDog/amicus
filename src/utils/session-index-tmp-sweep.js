@@ -33,9 +33,12 @@ function listSessionIndexTmpFiles() {
   return entries
     .filter((name) => name.startsWith(prefix) && name.endsWith('.tmp'))
     .map((name) => {
-      let mtimeMs = null;
-      try { mtimeMs = fs.statSync(path.join(dir, name)).mtimeMs; } catch { /* raced away — skip below */ }
-      return { name, mtimeMs };
+      let st = null;
+      // statSync (not lstatSync) is deliberate here — see session-metadata-tmp-sweep.js:27-31
+      // for why that sibling never follows symlinks; this file's choice to follow them is a
+      // separate, unreviewed symlink-policy decision left as-is (SR-3 only added the isFile() gate).
+      try { st = fs.statSync(path.join(dir, name)); } catch { /* raced away */ }
+      return { name, mtimeMs: st && st.isFile() ? st.mtimeMs : null };
     })
     .filter((f) => f.mtimeMs !== null);
 }

@@ -890,16 +890,18 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   omits `template`). Export the real council/fanout/start paramMaps from their source modules and
   import them in the tests instead of re-typing them.
   — done v4.7 PR4
-- [ ] **T15-m2 — MCP council path drops template provenance (now council-only).**
+- [x] **T15-m2 — MCP council path drops template provenance (now council-only).**
   `mcp-council-run.js`'s template path (`:117-123`) discards `promptMeta` — `run.json` records pack
   provenance but no template `{name,hash}`, unlike the CLI path's `run.template`. Wave 1's D1
   (forward maxCost+template on MCP fanout/start) closed this for fanout/start; the council MCP path
   is the only one left. Trivial when wanted: pre-seed it in `mcp-council-run.js`'s `initRun` — the
   handler already holds `t.promptMeta` at that point.
-- [ ] **droppedMembers reason strings are a closed two-value set.** The additive
+  — done v4.7 PR5
+- [x] **droppedMembers reason strings are a closed two-value set.** The additive
   `droppedMembers: [{ref, reason}]` on `run.json` (Post-HOLD wave 2) currently only ever produces two
   `reason` values. Fine as long as nothing branches on the string; revisit whether `reason` should
   become a coded enum instead of free text if a third reason is ever added.
+  — standing note: moved to src/utils/config.js docblock (v4.7 PR5)
 
 ### Minor findings riding forward (one line each; full reasoning is in the ledger)
 
@@ -910,8 +912,9 @@ unchecked items ride to the next rev.)*
 - [x] **T2-m1** — `findings.test.js`'s "stays null and NEVER 0" test lost its load-bearing rationale
   comment in a sibling edit; restore a reworded version.
   — done v4.7 PR4
-- [ ] **T3-m1** — `{{var.}}` empty-key template error message has a cosmetic hole
+- [x] **T3-m1** — `{{var.}}` empty-key template error message has a cosmetic hole
   (`--var =<value>`); fails safe.
+  — done v4.7 PR5
 - [x] **T5-m1** — `preflight-json-envelope.test.js` engine mocks return `undefined`, swallowed by
   `captureStdout`; add `mockResolvedValue({exitCode:0})` in `beforeEach` before any success-path test
   lands.
@@ -921,12 +924,14 @@ unchecked items ride to the next rev.)*
   — done v4.7 PR4
 - [ ] **T5-m3** — template block + `BAD_ARGS` string verbatim-triplicated across the three CLI
   handlers; a shared `applyTemplateForArgs` would collapse the drift risk.
-- [ ] **T5-m4** — `{{project}}` isn't path-normalized (unlike `artifact_path`); `TEMPLATE_RENDER`
+- [x] **T5-m4** — `{{project}}` isn't path-normalized (unlike `artifact_path`); `TEMPLATE_RENDER`
   errors carry `hint: null`.
+  — done v4.7 PR5
 - [x] **T5-m5** — guard-matrix gaps: fanout×`--artifact`, fanout×`--var`, council×`--var`, positive
   council `{{prompt}}`-slot case, all untested.
   — done v4.7 PR4
-- [ ] **T5-m6** — fanout help-text wraps at column 31 vs. neighbors' 32; cosmetic.
+- [x] **T5-m6** — fanout help-text wraps at column 31 vs. neighbors' 32; cosmetic.
+  — done v4.7 PR5
 - [ ] **T11-a** — `PACK_NOT_FOUND` catches four distinct `readPack` failure modes; `PACK_INVALID` is
   reserved for structural failures only.
 - [x] **T11-b** — `packRecord` tests don't round-trip hash against `canonicalHash`/`readPack`;
@@ -936,11 +941,13 @@ unchecked items ride to the next rev.)*
   consumption unverified; typing both `--models`+`--council` produces a notice naming only
   `--models`.
   — done v4.7 PR4
-- [ ] **T11-d** — a council pack with both `critic`+`lenses` and a by-name bench survives run-mode
+- [x] **T11-d** — a council pack with both `critic`+`lenses` and a by-name bench survives run-mode
   validation; the handler's mutual-exclusion error can name a flag the user never typed — narrow
   sibling of the closed XOR case.
-- [ ] **T13-m1** — `pack-cli.js:33-34` iterates `pr.notices` on an unreachable-in-prod error branch;
+  — done v4.7 PR5
+- [x] **T13-m1** — `pack-cli.js:33-34` iterates `pr.notices` on an unreachable-in-prod error branch;
   add else/early-return before a future test stub `TypeError`s there.
+  — done v4.7 PR5
 - [x] **T13-m2** — kind-mismatch test assertion is non-discriminating (fixture name happens to
   contain `'fanout'`); assert the full phrase against a neutral fixture.
   — done v4.7 PR4
@@ -950,8 +957,9 @@ unchecked items ride to the next rev.)*
 - [x] **T13-m4** — the pack-cli helper's notice branch (fanout bench-override) is untested through
   the newer code path; Task 12 only covered council's copy.
   — done v4.7 PR4
-- [ ] **T14-m1** — `pack list` warnings print to stdout, `pack save` warnings to stderr (both say
+- [x] **T14-m1** — `pack list` warnings print to stdout, `pack save` warnings to stderr (both say
   "Warning:"); `pack list | grep` mixes diagnostics into data. `--json` unaffected.
+  — done v4.7 PR5
 - [x] **T14-m2** — `cli-pack-cmd.test.js`'s `---- --json doc shapes ----` banner sits two lines above
   where a fix-wave insertion should have moved it.
   — done v4.7 PR4
@@ -962,12 +970,15 @@ unchecked items ride to the next rev.)*
   (`--template/--timeout/--max-cost/--gateway/--agent/--thinking/--summary-length`) lack positive
   mapping tests; one table-driven test closes it.
   — done v4.7 PR4
-- [ ] **T14-m6** — the `pack` usage block in `cli.js` (~:672) is 30 lines vs. siblings' 4-11;
+- [x] **T14-m6** — the `pack` usage block in `cli.js` (~:672) is 30 lines vs. siblings' 4-11;
   compress to match.
-- [ ] **T14-m7** — duplicate lazy `fs`/`path`/`session-manager` requires in `cli-handlers-pack.js`
+  — done v4.7 PR5
+- [x] **T14-m7** — duplicate lazy `fs`/`path`/`session-manager` requires in `cli-handlers-pack.js`
   (:77-79, :123-125); hoist to module top.
-- [ ] **T16-m1** — workspace-auto-open helper throws if `env` is undefined on a Linux call, though
+  — done v4.7 PR5
+- [x] **T16-m1** — workspace-auto-open helper throws if `env` is undefined on a Linux call, though
   the contract documents `env` as always an object; optional hardening.
+  — done v4.7 PR5
 - [x] **T18-m1** — fake-DOM debate tests sequence the fire-and-forget `debate.json` fetch by
   counting microtask hops (2×`await Promise.resolve()`); sturdier fix is to expose/await the real
   fetch promise.
@@ -975,9 +986,20 @@ unchecked items ride to the next rev.)*
 - [ ] **T19-m1** — a sub-round-trip double blind-toggle can leave a panel on stale masking
   (`loadPanel`'s completion guard fences on run id only); self-heals on next toggle. Fix: capture
   `A.state.blind` at issue time, bail on mismatch, beside `workspace-panels.js:111`.
+  — recon 2026-08-07: the proposed "capture blind and bail" fix is **regressive**: in the
+  panel-closed-mid-flight window it leaves a settled-bailed promise cached, giving a *permanently
+  blank* panel (worse than today's wrong titles). There is also a deterministic, race-free path the
+  item misses (open → close → flip blind → reopen returns the cached settled promise). Correct
+  shape: unconditional `delete loading[id]` in `wireLazyPanels`' sameRun arm, plus re-calling
+  `files()` in the completion handler and remapping titles by `name` (blind-independent). Deferred
+  to PR6.
 - [ ] **T19-m2** — RN-5's fix wave added a second uncaught `loadPanel()` call site; a rejected invoke
   leaves `loading[id]` cached and the panel broken until the run changes (pre-existing at `:127`, now
   hit more often).
+  — recon 2026-08-07: the genuinely unterminated path is `drillIntoJudge`'s derived promise, whose
+  production caller (`workspace-matrix.js:79`) discards it; terminate **there**. Once `p.catch(...)`
+  is attached inside `loadPanel`, the two fire-and-forget sites can no longer produce unhandled
+  rejections, so the wrapper the item proposes is not the fix. Deferred to PR6.
 - [x] **T19-m3** — the terminal-refresh test drives `openRun(sameId)` directly rather than the
   live-tick seam (`workspace-verbs.js:95`).
   — done v4.7 PR4
@@ -1003,8 +1025,20 @@ unchecked items ride to the next rev.)*
   — done v4.7 PR4
 - [ ] **W1-M4** — the wave-1 pack pre-seed's briefing is raw, not rendered, until the child
   re-renders it; eventually consistent.
+  — recon 2026-08-07: "eventually consistent" is **conditional**: `sidecar/fanout.js`'s leg-routing
+  pass and budget preflight both return **before** the wave-record write, so a child that exits
+  there leaves `briefing.md` permanently raw — and `list-search.js:56` reads that file as the
+  `--search` corpus, making it a permanently-wrong *search surface*, not a cosmetic window. There is
+  also a repo ruling in the opposite direction (`tests/mcp-start-metadata.test.js:96-105` pins
+  `briefing: renderedPrompt` for parity with the CLI's on-disk file). Deferred to PR6.
 - [ ] **W1-M5** — the budget-ceiling hint text is CLI-flavored even when the run came in over MCP;
   pre-existing class.
+  — recon 2026-08-07: the proposed MCP trailer names `maxCost`/`noCostGate`, which **do not exist
+  on `amicus_start`** (they belong to `amicus_council_run`), and `noCostGate` is unreachable by any
+  route on that path. The ceiling can only have arrived from a pack, so the honest MCP text is
+  pack-flavored; and the refusal has **two** branches (`overCeiling` vs the per-$/Mtok threshold)
+  whose remedies differ — the second has *no* override over MCP at all. Also `budget.js:74`'s
+  ceiling line is a second CLI-flavored string on the same path. Deferred to PR6.
 - [ ] **W1-M6 / W1-M7** — forward-notice plumbing for orphaned pack knobs is dead code on the
   `start` spawn-fallback path today; wouldn't surface a notice if that path went live.
 - [ ] **resolveBench/resolveBenchInput parallel evolution** (`cli-handlers-council-run.js` /
@@ -1013,6 +1047,29 @@ unchecked items ride to the next rev.)*
   shared core, but the two outer wrappers still evolve independently — same drift shape as T15-m5's
   paramMap divergence. Nothing wrong today; watch if one's validation rules change without the other
   following.
+- [x] **PR5F-1** — `amicus pack save <n> --version 2.0.0` exits 0 having written NOTHING. `version`
+  is a boolean flag (`src/cli.js` `BOOLEAN_FLAGS`, `:143`), so `parseArgs` sets `version: true` and
+  `bin/amicus.js:90` intercepts it as the version banner before dispatch — `cli-handlers-pack.js:26`
+  (and `:123`) read `args.version || '1.0.0'` expecting a value they can never receive. Both old and
+  new `pack:` help document `--version <semver>`. Confirmed live, pre-existing; the
+  "accepted-and-silently-ignored" class the product principle rejects. Found during the v4.7 PR5
+  final-review consolidated wave, 2026-08-07.
+  — superseded: fixed in [#125](https://github.com/BourbonDog/amicus/pull/125) (`fix/pack-save-version`),
+  which renamed the pack's own flag to `--pack-version` and added a preflight guard. Filed and closed
+  the same day; PR5's `pack:` help block carries the new spelling via the merge of `origin/main`.
+- [ ] **PR5F-2** — a bare `--out-dir` (no value) yields a directory literally named `true`.
+  `cli-handlers-council-run.js:178-179` does `path.resolve(project, String(args['out-dir']))`
+  with no dash-leading/non-string guard — the same R1/R5 class fixed for `-o/--out`, one flag over.
+  Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
+- [ ] **PR5F-3** — SR-3's metadata tmp-sweep behavior delta is untested: a symlink named like a tmp
+  file now moves from *swept* (unlink removed the link, a safe success) to *silently ignored* (the
+  new `lstatSync`-based directory exclusion also excludes symlinks). Sanctioned by the brief and
+  consistent with the module's never-follow policy, but a real, untested behavior delta. Needs one
+  test or one docblock line. Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
+- [ ] **PR5F-4** — `session-index-tmp-sweep.js:37`'s comment cross-references
+  `session-metadata-tmp-sweep.js:27-31` by line number; currently exact, but a rot risk the same
+  class as T6-m2 above — a future edit to either file can silently invalidate the other's citation.
+  Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
 
 ### Closed at ship — do not re-file
 
@@ -1030,7 +1087,7 @@ unchecked items ride to the next rev.)*
   `--pack` by the single-resolution rule; only `metadata.json` was pre-seeded); `runFanout` now
   inherits from `metadata.json` when `options.pack` is absent, at its two `buildWaveResult` call
   sites. (The separate `errorWave` call site was deliberately left out of this fix — see the
-  still-open errorWave carry above.)
+  `errorWave` pack-inherit entry above, closed: shipped in #123, ticked v4.7 PR4.)
 - [x] **F3** — CHANGELOG's RN-1 line claimed a "not written yet" empty state that doesn't exist;
   clause fixed, with a surviving test comment recording why the idealized phrasing existed at all.
 - [x] **F4** — a typed `--mode` lost to a pack-filled `agent` (flag>pack violation); fixed (`--mode`
@@ -1178,13 +1235,15 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
 - [ ] Hidden dependency, documented in `deadSeats`'s docblock: recovered-critic suppression relies
   on `roleFor`'s critic branch, which the `--critic`/`--lenses` mutual exclusion keeps reachable —
   revisit if that exclusion ever loosens. — #108
-- [ ] `--out -x` parser asymmetry: `--out -x` consumes `-x` as a value while `-o -x` yields boolean
+- [x] `--out -x` parser asymmetry: `--out -x` consumes `-x` as a value while `-o -x` yields boolean
   `true` — out of R1's scope (the valueless-flag fix); the parser itself is untouched. — #109
+  — done v4.7 PR5
 - [ ] The metadata-tmp sweep reads `process.cwd()` directly instead of doctor's injected `getCwd`
   — revisit if a `doctor --cwd` mode ever lands. — #109
-- [ ] A directory named like an orphan tmp file lands in the sweep's "unremovable" bucket via
+- [x] A directory named like an orphan tmp file lands in the sweep's "unremovable" bucket via
   EISDIR (inherited from the session-index-tmp-sweep sibling; the throwing-unlink test pins
   never-crash, not a fix). — #109
+  — done v4.7 PR5
 - [ ] Two `doctor` rows share message prose, disambiguated only by row name (deliberate
   byte-parallel with the sibling sweep; `fixDetail` strings differ). — #109
 - [x] No combined `overwritten`+`shadowsBuiltin` human-render test for `council save` (hand-traced
@@ -1192,10 +1251,12 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   — done v4.7 PR4
 - [ ] The registry pre-check's two body greps (version, status) scan independently — sound for a
   single-version endpoint, revisit if the registry ever returns collections. — #110
-- [ ] The version grep's BRE dots are unescaped (false-match direction is fail-toward-skip, not
+- [x] The version grep's BRE dots are unescaped (false-match direction is fail-toward-skip, not
   real-world exploitable, but worth tightening). — #110
-- [ ] `run-chair.js`'s `ch4` still carries the same duplicated-literal pair (`:186`/`:192`) that
+  — done v4.7 PR5
+- [x] `run-chair.js`'s `ch4` still carries the same duplicated-literal pair (`:186`/`:192`) that
   `ch1`–`ch3` were converged out of — out of PR4's scope, filed. — #110
+  — done v4.7 PR5
 - [x] The 3-file second-layer `base` duplicate in the doctor suites (optional further
   `makeBaseDeps()` consolidation beyond this sweep's pass). — #110
   — done v4.7 PR4
@@ -1229,6 +1290,13 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   touched by PR1's row-per-launch work. Found during PR1 Task-4 review, 2026-08-06. Needs a
   product decision: reject duplicate aliases outright (parse-time error) vs. dedupe silently
   before use.
+  — recon 2026-08-07: filed as PR1F-1 for v4.7 PR5. The guard belongs in the two bench
+  **resolvers** (`cli-council-run-bench.js` `resolveBench`, `mcp-council-bench.js`
+  `resolveBenchInput`), not the CLI handler: the MCP path creates the run dir, writes
+  `briefing.md`, seeds `run.json` as `running`, and writes the pointer **before** spawning, so a
+  handler-only guard leaves an orphaned `running` run. Rider: `amicus council save` accepts
+  duplicate members too. Deferred to its own TDD pass, as originally filed (needs a design ruling
+  recorded first).
 
 - [ ] **`legRow` (`src/council/run-debate.js:39`) is the THIRD hand-rolled runStats-row
   builder** — [S, defer-with-record] alongside `buildRunStatsEntry` (`src/council/run-assemble.js:54`,
@@ -1243,6 +1311,14 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   case) in its own dedicated TDD pass — out of scope for the final-review consolidated wave, which
   only fixed comment/test-armor items, not a producer-unification refactor. Found during the v4.7
   PR1 final-review consolidated wave, 2026-08-06.
+  — recon 2026-08-07: filed as PR1F-2 for v4.7 PR5. There is a **fourth** builder the item never
+  names (`mk` in `debate.js:102-109`), and the real hazard is **key order** (not
+  `findingsUnverified`): `JSON.stringify` preserves insertion order, so unification changes
+  `run.json` bytes for every debate row carrying a `waveId`, and the existing `toEqual`/
+  `toMatchObject` pins are order-insensitive and would not catch it. Also `mk`'s
+  `l.status || 'unknown'` vs `buildRunStatsEntry`'s `leg ? leg.status : 'error'` diverge. Correct
+  shape needs `buildRunStatsEntry` extracted to a **pure** module (`debate.js` is declared DI-free
+  with zero requires). Stays deferred to its own TDD pass, as originally filed.
 
 - [ ] **Conformance drift between producers of the same non-primary role** — [S, defer-with-record]
   `buildRunStatsEntry` (`src/council/run-assemble.js:60`) defaults `conformance` to `'clean'` when
@@ -1256,6 +1332,13 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   ledger join excludes all of them — see `ledger.js`'s `LEDGER_JOIN_ROLES`), so this is silent
   drift, not a live defect; record it before something starts reading it. Found during the v4.7
   PR1 final-review consolidated wave, 2026-08-06.
+  — recon 2026-08-07: filed as PR1F-3 for v4.7 PR5. **Five** engine-born sites take the `'clean'`
+  default, not two (add `run-stage2.js:122` and `run-stages.js:244`), and the item's proposed
+  `solo.leg && res.ok ? 'repaired' : 'unstructured'` expression is a **constant**: the push at
+  `run-stages.js:181` precedes `res = validateFindings(...)` and sits inside a `while (!res.ok ...)`
+  loop, so `res.ok` is always false there. Use a flat literal, or move the pushes below validation —
+  an explicit design call. Do **not** flip the `|| 'clean'` default (primary error rows depend on
+  it). Deferred to its own TDD pass, as originally filed.
 
 - [ ] **The dead-seat retry-reason text ("did not review — retried once") has no terminal-path
   home since the v4.7 CA-4 dead-seat convergence** — [S, defer-with-record, owner-accepted] Before
@@ -1273,3 +1356,10 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   equivalent of what the now-suppressed dead row used to say), sourced from the same
   `retryWaveId`/`firstFailure` degrade-record fields `deadSeats` already reads. Found during the
   v4.7 PR1 final-review consolidated wave, 2026-08-06.
+  — recon 2026-08-07: filed as PR1F-4 for v4.7 PR5. The proposed `r.status === 'error'` gate is
+  **too narrow**: the leg-status vocabulary includes `'timed-out'`, a primary retry trigger, so the
+  gate would never fire for the very case the retry text exists for. Also there is exactly **one**
+  production call site (`workspace-seats.js:47`), not two, and the live-tick path never goes
+  through `seatsFromRunStats` at all — so the fix is terminal-path-only. Line budget:
+  `live-model.js` is 284/300 and the honest implementation is +20-30, so it needs the helper to
+  land in `workspace-seats.js` (132) instead. Deferred to PR6.

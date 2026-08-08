@@ -110,6 +110,10 @@ describe("doctor 'session-metadata-tmp' orphan sweep (D8)", () => {
     expect(c.message).toMatch(/swept 1/i);
   });
 
+  // Pins never-crash for a genuinely unremovable *file* (permissions, AV lock,
+  // etc.) — a different contract from SR-3's directory exclusion below, which
+  // keeps name-shaped directories out of this list by design so they never
+  // reach unlink in the first place.
   test('a throwing unlink degrades gracefully (never crashes doctor)', async () => {
     const unlinkSessionMetadataTmp = jest.fn(() => { throw new Error('EPERM'); });
     const checks = await doctor.runDoctorChecks({ ...base, fix: true,
@@ -221,6 +225,23 @@ describe('session-metadata-tmp-sweep real fs glue', () => {
 
   test('returns [] when the sessions root does not exist yet', () => {
     const { listSessionMetadataTmpFiles } = require('../src/utils/session-metadata-tmp-sweep');
+    expect(listSessionMetadataTmpFiles()).toEqual([]);
+  });
+
+  // SR-3: a directory can carry a name shaped exactly like an orphan tmp
+  // file (e.g. left by a tool that mkdir'd instead of writeFileAtomic'd, or
+  // by anything else that produces a same-named dir). isMetadataTmp filters
+  // on basename only, so without a file-type check this dir would pass the
+  // filter, get lstat'd for mtimeMs (which a directory has), survive the
+  // `.filter((f) => f.mtimeMs !== null)` gate, and be reported as an orphan
+  // — then unlinkSync would throw EISDIR/EPERM on it forever. It must be
+  // excluded, not just tolerated.
+  test('a name-shaped directory is excluded, not reported as an orphan', () => {
+    const { listSessionMetadataTmpFiles } = require('../src/utils/session-metadata-tmp-sweep');
+    const taskDir = path.join(sessionsRoot(), 'abc123');
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.mkdirSync(path.join(taskDir, '.metadata.json.111.aaa111aaa111.tmp'));
+
     expect(listSessionMetadataTmpFiles()).toEqual([]);
   });
 
