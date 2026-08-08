@@ -33,7 +33,7 @@
  *       fixture's exact shape, which this factory does not silently change.
  *     - doctor-local-providers.test.js ALSO omits `env` — a preserved
  *       divergence from that file's pre-consolidation fixture, not a reasoned
- *       pin (its own comment at :19-22). Inert today: only
+ *       pin — see its own "Preserved divergence" comment. Inert today: only
  *       doctor-base-url-check.js reads `d.env`, and that row is never asserted
  *       in that file.
  *   `omit` deletes the keys from the freshly-built object before returning
