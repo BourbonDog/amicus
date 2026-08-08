@@ -66,7 +66,7 @@
     // so the completion guard below compares against the value in force when THIS request was
     // issued, not whatever `issue[panelId]` has become by the time it resolves.
     var token = (issue[panelId] = (issue[panelId] || 0) + 1);
-    loading[panelId] = Promise.all(files().map(function (f) {
+    var pending = Promise.all(files().map(function (f) {
       return A.invoke('workspace:read-artifact', runId, f.name).then(function (res) {
         return { name: f.name, title: f.title, text: res.text || '', truncated: res.truncated, error: res.error };
       });
@@ -76,8 +76,20 @@
         return s.error ? { name: s.name, title: s.title, error: s.name + ' — ' + s.error } : s;
       }));
       A.$(panelId).dataset.loaded = '1';   // display/debug marker only — `loading` is the real gate
+    }, function (err) {
+      // ⚠️ T19-m2 (v4.7 PR7). Two-argument .then(onFulfilled, onRejected) — NOT a trailing
+      // .catch. workspace-verbs.js:76-84 already ruled on this exact construct: with a trailing
+      // .catch a THROW inside onFulfilled is routed here too, so a painter bug would be absorbed
+      // into a silent blank panel that ALSO evicts its own cache and therefore retries forever.
+      // With the two-argument form this handler only ever sees a genuinely rejected invoke().
+      // The `=== pending` self-check is load-bearing: without it a late rejection can evict a
+      // NEWER in-flight promise and strand the panel. And the log is not optional — a silent
+      // eviction is the correct-but-silent degrade the product principle rejects.
+      if (loading[panelId] === pending) { delete loading[panelId]; }
+      console.error('workspace lazy panel: read-artifact failed for ' + panelId, err);
     });
-    return loading[panelId];
+    loading[panelId] = pending;
+    return pending;
   }
 
   /** Registered ONCE at boot (per panel id); reads the current run's spec off `loaders`. */
