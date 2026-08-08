@@ -566,7 +566,7 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
         throw new Error(
           `KIND_OPTIONS.solo key '${optionKey}' has neither a SOLO_PACK_PARAM_MAP destination nor ` +
           `FORWARDABLE_ARG_KEYS membership — produced: "${orphanNotice}". Without the packNotices push ` +
-          `loop near src/mcp-server.js:706 (amicus_start's spawn-fallback path), a pack setting this ` +
+          "loop in amicus_start's spawn-fallback path (src/mcp-server.js), a pack setting this " +
           'knob would be silently dropped instead of surfaced to the caller.'
         );
       }

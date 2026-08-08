@@ -707,7 +707,9 @@ const handlers = {
     // orphan-knob notices always use — amicus_fanout genuinely reaches it today
     // (FANOUT_PACK_PARAM_MAP has no contextTurns/contextMaxTokens destination;
     // the fanout handler's own push into waveContent below is covered by
-    // tests/pack/mcp-pack-params.test.js:503). On THIS solo surface it is
+    // mcp-pack-params.test.js's "notice wording (decision 1b)" test — named,
+    // not line-numbered, because a line citation goes stale the moment anything
+    // is inserted above it, including by its own commit). On THIS solo surface it is
     // unreachable only while KIND_OPTIONS.solo stays fully covered by
     // SOLO_PACK_PARAM_MAP destinations + pack-resolve.js's FORWARDABLE_ARG_KEYS
     // — the invariant tests/pack/mcp-pack-params.test.js guards (the
