@@ -55,6 +55,9 @@ function unlinkSessionIndexTmp(name) {
  * this in guard() the same way it wires the mcp-legacy check's inspect/migrate.
  * @param {{listSessionIndexTmpFiles: () => Array<{name:string, mtimeMs:number}>,
  *   fix?: boolean, now: () => number, unlinkSessionIndexTmp: (name: string) => void}} d
+ * Its four `message` strings are byte-identical to
+ * session-metadata-tmp-sweep.js's evaluateSessionMetadataTmpSweep by design
+ * (only `id`/`name`/`fixDetail` differ) — reword both or neither.
  */
 function evaluateSessionIndexTmpSweep(d) {
   const id = 'sessions-index-tmp'; const name = 'Session index tmp files';

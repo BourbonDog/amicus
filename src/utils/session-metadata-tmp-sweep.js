@@ -38,7 +38,14 @@ const HINTS = require('./remediation-hints');
 /** Files older than this survive to the next --fix, never a live writer's ms-lived tmp. */
 const AGE_THRESHOLD_MS = 60 * 1000;
 
-/** The cwd-scoped sessions root: <cwd>/.claude/amicus_sessions. */
+/**
+ * The cwd-scoped sessions root: <cwd>/.claude/amicus_sessions.
+ * Reads process.cwd() directly, NOT doctor's injected getCwd
+ * (cli-handlers-doctor.js's realDeps().getCwd) — the
+ * listSessionMetadataTmpFiles/unlinkSessionMetadataTmp deps are wired
+ * argument-free in that same realDeps(), so that seam does not reach here.
+ * Thread cwd through those deps if a `doctor --cwd <dir>` mode ever lands.
+ */
 function sessionsRoot() {
   const { SESSIONS_DIR } = require('../session-manager');
   return path.join(process.cwd(), '.claude', SESSIONS_DIR);
@@ -107,6 +114,11 @@ function unlinkSessionMetadataTmp(name) {
  * wraps this in guard() the same way it wires the sibling sessions-index-tmp check.
  * @param {{listSessionMetadataTmpFiles: () => Array<{name:string, mtimeMs:number}>,
  *   fix?: boolean, now: () => number, unlinkSessionMetadataTmp: (name: string) => void}} d
+ * The four `message` strings below are byte-identical to the index sibling's
+ * (session-index-tmp-sweep.js's evaluateSessionIndexTmpSweep, same four
+ * ok/warn returns) on purpose — `id`/`name` and the `fixDetail` wording are
+ * the only disambiguators between the two rows. Reword one side and the
+ * pairing silently breaks: reword both, or neither.
  */
 function evaluateSessionMetadataTmpSweep(d) {
   const id = 'session-metadata-tmp'; const name = 'Session metadata tmp files';
