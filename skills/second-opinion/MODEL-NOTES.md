@@ -101,10 +101,11 @@ the peer-consensus≠evidence rule upstreamed from the field ledger; see changel
   OpenRouter balance — gemini/gpt/anthropic bill directly against their own keys, so inferring cost
   from that balance under-reports it badly (observed: ~6x low). A 3-model bench + chair + debate is
   roughly **$0.60-0.80 per run**, not cents; budget `--max-cost` accordingly or the chair gets
-  skipped mid-run (exit 2, degraded) when the debate legs push the total past the ceiling. As of
-  v4.6, `runStats` also carries Stage-2 judge rows (judge-tagged), so totals read higher than
-  pre-4.6 runs for the same bench; anything keying `runStats` by model should exclude
-  `role: 'judge'`.
+  skipped mid-run (exit 2, degraded) when the debate legs push the total past the ceiling. Totals
+  read higher again as of v4.7 — repairs, failed chair attempts, and superseded legs now get their
+  own `runStats` rows too — so anything keying `runStats` by model must use an **allowlist**, not a
+  judge exclusion; see `docs/council.md`'s `runStats[].role` roster (under `amicus council tally`)
+  for the exact set.
 - **Expect agreement inflation in Stage-2 adjudication.** The judge contract defines `agree` by
   worked example ("an 'I missed this — it's valid' counts as agree") but gives no example for
   `dispute` and no positive definition of `neutral`, while requiring a verdict on EVERY finding —
