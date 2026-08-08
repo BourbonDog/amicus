@@ -105,6 +105,9 @@
   <!-- ⚠️ D8 extraction (Task 1, v4.6.2 PR4): workspace-seats.js must load BEFORE
        workspace-panels.js, whose renderSeatsPanel delegates to it. -->
   <script src="./workspace-seats.js"></script>
+  <!-- ⚠️ v4.7 PR7 extraction: workspace-lazy.js must load BEFORE workspace-panels.js,
+       whose wireLazyPanels/proseLoader delegate to it. -->
+  <script src="./workspace-lazy.js"></script>
   <!-- ⚠️ DE-ROT (F05): panels + verbs are the Task 13 split of workspace-app.js.
        Load order matters: workspace-app.js boots last and owns `state`. -->
   <script src="./workspace-panels.js"></script>

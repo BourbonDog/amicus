@@ -14,6 +14,10 @@
  * and 'workspace-panels' — panels.js's renderSeatsPanel now delegates to it, so it must load
  * first. Updating this one shared list is sufficient for every consumer above; none of them
  * needed a direct edit.
+ *
+ * ⚠️ v4.7 PR7 extraction (Task 1): added 'workspace-lazy' between 'workspace-seats' and
+ * 'workspace-panels' — panels.js's wireLazyPanels/proseLoader now delegate to it, so it must
+ * load first. Same one-list-updates-both-consumers property as the D8 note above.
  */
 const SCRIPT_LOAD_ORDER = [
   'md-lite',
@@ -21,6 +25,7 @@ const SCRIPT_LOAD_ORDER = [
   'workspace-render',
   'workspace-matrix',
   'workspace-seats',
+  'workspace-lazy',
   'workspace-panels',
   'workspace-verbs',
   'workspace-app',
