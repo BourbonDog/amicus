@@ -60,8 +60,9 @@ No plans index is generated **today**. `buildPlansIndex()` in `scripts/generate-
 `docs/plans/` and `docs/archive/plans/`, but neither directory exists in this repo, and
 `runWriteMode()` writes `docs/plans/index.md` only when `docs/plans/` already exists — so the write
 never fires. Note that guard is a runtime `fs.existsSync` check, not a disabled feature: creating
-`docs/plans/` would silently reactivate it, emitting a bare `- [name](docs/plans/name)` list (no
-heading, no date). Plans actually live in `docs/superpowers/plans/`, uncataloged.
+`docs/plans/` would silently reactivate it, emitting a bare list of `- [name](path)` links without
+the per-plan first heading or date the old text here promised. Plans actually live in
+`docs/superpowers/plans/`, uncataloged.
 
 ## Commands
 

@@ -293,10 +293,9 @@ leg's `progress.json`/`conversation.jsonl` directly. The wave dir itself holds:
 <waveId>/
   metadata.json   # type "wave", legs: [...], plus a 200-char rendered briefing excerpt
   wave.json       # written on completion
-  briefing.md     # the RENDERED prompt — the corpus `list --search` matches. Written by
-                  # mcp-server.js BEFORE the child spawns (so an aborted wave stays
-                  # searchable), and again by fanout.js:145 once the child runs
-                   # (src/sidecar/fanout.js); the corpus `amicus list --search` matches against
+  briefing.md     # the RENDERED prompt — the corpus `amicus list --search` matches against.
+                  # Written by mcp-server.js BEFORE the child spawns (so an aborted wave
+                  # stays searchable), and again by fanout.js:145 once the child runs
 ```
 
 One more file appears only for an `amicus_fanout` wave whose prompt came from a **template**: a
@@ -420,8 +419,10 @@ guards (e.g. for an intentional o3 run).
 
 Over MCP the per-call override depends on the tool. `amicus_council_run` takes its own `maxCost`
 and `noCostGate` params, which forward to the spawned child exactly as the CLI flags do.
-**`amicus_start` takes neither** — a pack may forward `maxCost`, but nothing can turn the gate off
-on that path, so the config keys above are the only lever. See
+**`amicus_start` takes neither.** On that path `maxCostPerMtok` is config-only and nothing can turn
+the gate off at all; the soft ceiling is the **effective** `maxCost` — the pack's if the run used a
+pack that set one, otherwise the config's (`mcp-server.js:454`). Raising the loser of that pair
+will not clear the run. See
 [Troubleshooting: MCP run fails with "budget gate refused the
 run"](./troubleshooting.md#mcp-run-fails-with-budget-gate-refused-the-run).
 

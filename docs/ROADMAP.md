@@ -210,7 +210,7 @@ drove it:
   `wsgate04`); `runStats` now carries one row per paid launch, with `judge`
   (`run-assemble.js:180-184`) and `repair` (`run-stage2.js:119-122`) rows emitted unconditionally.
   ⚠️ **Scope correction:** the failed-chair third of the original CA-4 is **closed** — v4.6.2's
-  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:113` cites LC-5 by name), and
+  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:65` cites LC-5 by name), and
   failed-chair cost already reaches `runStats` too: a failed ch1–ch3 attempt gets its own
   `chair-attempt` row there carrying that leg's real `usage` (`run-chair.js:154-156`), so no third
   row class was needed.
@@ -228,7 +228,7 @@ drove it:
   `BACKLOG.md` hand-maintained an index of run identifiers (`wave 47278069`, `run dfb6a692`,
   `runs 0084d48c + 2039b2d1`, `wsgate02`/`wsgate04`) **because there was no search**. It is also the
   rev's only daily-felt user surface — three schema fixes alone are a thin story.
-- **README + docs update** *(S)* — the last scope line; in flight as this is written.
+- **README + docs update** *(S)* — the last scope line; **closed by this documentation pass.**
 
 > **Why these belong in one rev.** CA-4 and GOA-7's prerequisite are the same defect class — the run
 > record under-reporting what actually happened — and both are schema-shaped. Each was individually
