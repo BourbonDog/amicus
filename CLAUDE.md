@@ -359,8 +359,9 @@ electron/
 │   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
 │   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
+│   ├── workspace-lazy.js  # Council Workspace — lazy prose-panel loading (v4.4 §5.2). v4.7 PR7 extraction of the
 │   ├── workspace-matrix.js  # Council Workspace — adjudication matrix + verdict panel painters.
-│   ├── workspace-panels.js  # Council Workspace — lazy/prose panels + the matrix/verdict panel adapters
+│   ├── workspace-panels.js  # Council Workspace — name resolution + the matrix/verdict/seats panel adapters
 │   ├── workspace-render.js  # Council Workspace — DOM painters (run list, header, stage rail, seats,
 │   ├── workspace-seats.js  # Council Workspace — seats panel painter (v4.4 §5). D8 extraction (Task 1,
 │   ├── workspace-verbs.js  # Council Workspace — action verbs (v4.4 §5, ⚠️ DE-ROT F05 split of

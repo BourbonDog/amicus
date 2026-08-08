@@ -36,10 +36,18 @@
  *    render, so template provenance (`promptMeta.template`) is still
  *    recorded exactly as Wave 1 built it.
  *
- * Callers that only need the pre-spend validation (the two spawn paths)
- * ignore the returned `renderedPrompt`; amicus_start's in-process path
- * (which never spawns a child, so nothing else would render it) reuses it
- * as the actual prompt instead of rendering a second time.
+ * `renderedPrompt` has two different consumers now (W1-M4, v4.7 PR7):
+ * amicus_start's in-process path (which never spawns a child, so nothing
+ * else would render it) reuses it as the actual prompt instead of rendering
+ * a second time; amicus_fanout's spawn path writes it to the wave's
+ * on-disk `briefing.md` — the `--search` corpus (src/sidecar/list-search.js)
+ * — instead of the raw prompt, so a wave whose spawned child aborts before
+ * its own render (src/sidecar/fanout.js) stays findable by the text the
+ * user actually sees. The spawned child itself still gets the RAW prompt
+ * (via a sibling `briefing-input.md`), so its own later render remains the
+ * provenance source for `promptMeta.template`. amicus_start's
+ * spawn-fallback path is the one remaining caller that still only needs the
+ * pre-spend validation and ignores `renderedPrompt`.
  */
 
 const { ERROR_CODES } = require('../utils/error-doc');

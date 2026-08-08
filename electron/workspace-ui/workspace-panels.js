@@ -1,14 +1,23 @@
 /**
- * Council Workspace — lazy/prose panels + the matrix/verdict panel adapters
- * (v4.4 §5, ⚠️ DE-ROT F05 split of workspace-app.js).
+ * Council Workspace — name resolution + the matrix/verdict/seats panel adapters
+ * (v4.4 §5, ⚠️ DE-ROT F05 split of workspace-app.js). v4.7 PR7 (Task 1) moved the lazy
+ * prose-panel loading machinery (loaders/loading/lastWiredRunId state, loadPanel,
+ * proseLoader, wireLazyPanels) out to workspace-lazy.js — this file was pressed up against
+ * the 300-line size gate with the T19 stale-paint fixes still to land, the same treatment
+ * workspace-seats.js got in v4.6.2 PR4 (D8).
+ *
+ * Split line: this file owns NAME RESOLUTION (sanitizeName / resolveArtifactName — the RN-1
+ * disambiguation pair, pinned by tests/electron/workspace-ui-static.test.js) and the panel
+ * adapters; workspace-lazy.js owns WHEN and WHETHER an artifact read is issued and which
+ * reply is allowed to paint.
  *
  * Loads BEFORE workspace-app.js (md-lite → live-model → workspace-render →
- * workspace-matrix → workspace-seats → workspace-panels → workspace-verbs →
- * workspace-app), so every function here reads `window.AmicusApp` /
- * `window.AmicusVerbs` at CALL time (never captured at this file's own load
- * time — neither namespace exists yet when this IIFE runs). window.AmicusApp
- * publishes its namespace at the top of its own boot, before calling into this
- * file, so by the time any function below actually executes, both are present.
+ * workspace-matrix → workspace-seats → workspace-lazy → workspace-panels →
+ * workspace-verbs → workspace-app), so every function here reads `window.AmicusApp` /
+ * `window.AmicusVerbs` / `window.AmicusLazy` at CALL time (never captured at this file's
+ * own load time — none of those namespaces exist yet when this IIFE runs). window.AmicusApp
+ * publishes its namespace at the top of its own boot, before calling into this file, so by
+ * the time any function below actually executes, all three are present.
  */
 (function () {
   'use strict';
@@ -67,167 +76,10 @@
     }
   }
 
-  // ---- lazy prose panels (spec §5.2: load on first open, cache) ---------
-  // ⚠️ DE-ROT (F09): a NEW toggle listener stacking on every renderDetail() call is the bug this
-  // shape exists to avoid — see wireLazyPanels()/proseLoader() below. Register the three
-  // listeners ONCE at boot (workspace-app.js's boot block calls proseLoader per panel id) and
-  // dispatch through this module-level `loaders` map, which renderDetail (via wireLazyPanels)
-  // overwrites per run.
-  //
-  // ⚠️ PRE-FLIGHT (P4): the load is AWAITABLE — drillIntoJudge needs to know when it has
-  // settled (the old code guessed with setTimeout(render, 300), which could fire before an
-  // unbounded N-artifact IPC round trip finished and silently render nothing). loadPanel()
-  // is idempotent per panel id and returns its in-flight promise; the promise cache
-  // (`loading`) and the per-run spec (`loaders`) are both keyed by panel id, but only
-  // `loading` is cleared by wireLazyPanels() — on a run CHANGE only (Task 19, RN-5) — and
-  // that clearing is what stops F09's stale-run artifact requests.
-  var loaders = {};  // panelId -> {bodyId, files}  (rewritten per run by wireLazyPanels)
-  var loading = {};  // panelId -> Promise           (cleared per run by wireLazyPanels)
-  // Task 19 (RN-5): the run wireLazyPanels() last reset panels/loading for — gates the reset
-  // below to run CHANGES only. A same-run call (renderDetail() runs this on every blind toggle
-  // too, and on the live loop's terminal refresh) instead refreshes any open panel (Fix 1).
-  var lastWiredRunId = null;
-
-  function loadPanel(panelId, bodyId, files) {
-    var A = window.AmicusApp;
-    if (loading[panelId]) { return loading[panelId]; }
-    // ⚠️ R4 COUNCIL REVIEW (fourth live paid council, major, unanimous): this is the third
-    // instance of the F09 class of bug (a stale async response overwriting shared DOM after
-    // the user has navigated away) — already fixed once for the toggle-listener stack (F09
-    // itself) and once for the fire-and-forget debate.json fetch in workspace-app.js (guards
-    // with `if (state.runId !== runId) return;`). wireLazyPanels() clearing `loading[panelId]`
-    // on every run switch permits a NEW request to be issued, but never fenced the PRIOR
-    // request's eventual resolution — open reviews-panel on run A, switch to run B (which
-    // issues its own request), and A's response — however late — used to overwrite whatever
-    // B had just rendered. Capture the runId this request was issued for, and guard as the
-    // FIRST statement of the completion handler, exactly like the debate.json fix.
-    var runId = A.state.runId;
-    loading[panelId] = Promise.all(files().map(function (f) {
-      return A.invoke('workspace:read-artifact', runId, f.name).then(function (res) {
-        return { name: f.name, title: f.title, text: res.text || '', truncated: res.truncated, error: res.error };
-      });
-    })).then(function (sections) {
-      if (A.state.runId !== runId) { return; } // stale: superseded by a later run switch
-      window.AmicusRender.renderProseSections(A.$(bodyId), sections.map(function (s) {
-        return s.error ? { name: s.name, title: s.title, error: s.name + ' — ' + s.error } : s;
-      }));
-      A.$(panelId).dataset.loaded = '1';   // display/debug marker only — `loading` is the real gate
-    });
-    return loading[panelId];
-  }
-
-  /** Registered ONCE at boot (per panel id); reads the current run's spec off `loaders`. */
-  function proseLoader(panelId) {
-    var A = window.AmicusApp;
-    var panel = A.$(panelId);
-    panel.addEventListener('toggle', function () {
-      if (!panel.open) { return; }
-      var spec = loaders[panelId];
-      if (spec) { loadPanel(panelId, spec.bodyId, spec.files); }
-    });
-  }
-
-  /**
-   * Rewrites the per-run spec map on every call. On a run CHANGE (tracked via the module-level
-   * `lastWiredRunId`, above), resets panel open/loaded state and drops the previous run's
-   * cached load promises — exactly what F09's stale-run protection needs. On a SAME-run call
-   * (Task 19, RN-5: renderDetail() calls this on every blind toggle too, and the live loop's
-   * terminal refresh) any panel the user already has open is instead refreshed in place — see
-   * Fix 1 below — never left showing stale-blind content, never collapsed. Registers no
-   * listeners itself.
-   */
-  function wireLazyPanels() {
-    var A = window.AmicusApp;
-    // ⚠️ Fix-wave (Fix 4): keyed off `A.state.detail.runId`, not `A.state.runId` — the latter is
-    // set synchronously at the top of openRun(), before its workspace:get-run reply lands, so an
-    // out-of-order reply could make the two diverge. workspace-app.js's own run-change gate
-    // (renderDetail(), above `d.runId`) reads off the SAME `state.detail.runId`, so the two
-    // provably agree on whether this is a run change.
-    var sameRun = A.state.detail.runId === lastWiredRunId;
-    if (!sameRun) {
-      ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
-        var p = A.$(id);
-        p.dataset.loaded = '0';
-        p.open = false;
-        delete loading[id];
-      });
-      lastWiredRunId = A.state.detail.runId;
-    }
-    var bench = A.state.detail.run.bench || [];
-    var debated = !!A.state.detail.run.debate;
-    // ⚠️ CODE REVIEW (round 2, finding 2): readRunArtifact's error for a genuinely-missing
-    // artifact is NOT translated into a friendly "not written yet" note anywhere in this
-    // read path — it lands in the panel verbatim, absolute host path and all. `run.debate` is
-    // seeded on run.json's FIRST write, so it's truthy on every --debate run, including ones
-    // where the re-vote wave never actually ran (no contested findings, cost ceiling, abort) —
-    // requesting revote-<model>.md speculatively in that (near-certain) case means one ugly
-    // error row per bench model for a condition that isn't an error at all. run-detail.js
-    // already computes a presence manifest (state.detail.artifacts) for exactly these
-    // allowlisted names via fs.statSync — filter on it instead of requesting known-absent
-    // files. Applies to review-/judge- too (the same latent gap, just plan-mandated rather
-    // than new).
-    var artifacts = A.state.detail.artifacts || {};
-    function present(name) { return !!(artifacts[name] && artifacts[name].present); }
-    // ⚠️ v4.4.1 RN-9: these two titles used to hand-roll `A.state.blind && label ? label : m`
-    // inline. Both now go through AmicusRender.display() — the single blind-flip definition the
-    // re-vote title below already used — so the next blind-mode ruling lands in one place instead
-    // of being re-applied by hand in every file that happens to render an identity.
-    loaders['reviews-panel'] = { bodyId: 'reviews-body', files: function () {
-      return bench.map(function (m) {
-        var label = A.state.labelByModel[m];
-        return { name: resolveArtifactName(m, 'review'), title: window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
-      }).filter(function (f) { return present(f.name); });
-    } };
-    loaders['bundle-panel'] = { bodyId: 'bundle-body', files: function () {
-      // ⚠️ v4.4.1 RN-4: the presence filter is NOT optional here either. Without it, a run whose
-      // Stage 2 never ran (a one-seat bench, an abort before the cross-review, a cost ceiling)
-      // requested a file the manifest already knows is absent and rendered readRunArtifact's raw
-      // error string in the panel — "absolute host path and all", per this file's own round-2
-      // note above `present()`. reviews-panel and judges-panel have always filtered; this was the
-      // odd one out.
-      return [{ name: 'bundle-stage2.md', title: 'bundle-stage2.md (verbatim)' }]
-        .filter(function (f) { return present(f.name); });
-    } };
-    loaders['judges-panel'] = { bodyId: 'judges-body', files: function () {
-      var files = bench.map(function (m) {
-        var label = A.state.labelByModel[m];
-        return { name: resolveArtifactName(m, 'judge'), title: 'Judge ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
-      });
-      if (debated) {
-        // ⚠️ DE-ROT (F38): on a --debate run, a matrix dispute cell can be a RE-VOTE whose
-        // prose lives in revote-<model>.md (not judge-<model>.md). Included per bench model
-        // like judge-*.md above, but — per the presence filter — only when the manifest
-        // confirms the file actually exists (see the code-review note above `present()`).
-        // ⚠️ CODE REVIEW (round 2, finding 3): this title is new code (unlike the review-/
-        // judge- titles above, which mirror the brief verbatim), so it goes through
-        // AmicusRender.display() — the single blind-flip definition — rather than adding a
-        // fourth hand-rolled copy of the same ternary.
-        // ⚠️ Task 18 fix-wave (RN-1, review finding 1): this name used to be recomputed via a
-        // bare sanitizeName(m) call, ignoring the disambiguation map entirely — for a colliding
-        // pair BOTH models resolved to the same bare revote-<sanitized>.md name, reintroducing
-        // for re-votes the exact cross-match bug Task 18 fixed for review-/judge-. Routed
-        // through resolveArtifactName(m, 'revote') like the other three sites; its built-in
-        // legacy fallback keeps older detail payloads (no artifactsByModel map) correct too.
-        files = files.concat(bench.map(function (m) {
-          var label = A.state.labelByModel[m];
-          return { name: resolveArtifactName(m, 'revote'), title: 'Re-vote ' + window.AmicusRender.display({ model: m, label: label }, A.state.blind) };
-        }));
-      }
-      return files.filter(function (f) { return present(f.name); });
-    } };
-    // ⚠️ Fix-wave (Fix 1, RN-9): a same-run call (the blind toggle, or the live loop's
-    // running -> terminal refresh) must re-render any panel the user already has open, or it
-    // keeps showing content painted under the PREVIOUS blind state. renderProseSections()
-    // (workspace-render.js) clears its container before repainting, so this replaces sections
-    // in place rather than appending duplicates. Drop the cached promise first so loadPanel()
-    // actually re-fetches instead of returning its already-settled one.
-    if (sameRun) {
-      ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
-        var p = A.$(id);
-        if (p.open) { delete loading[id]; loadPanel(id, loaders[id].bodyId, loaders[id].files); }
-      });
-    }
-  }
+  // ⚠️ v4.7 PR7 extraction: bodies moved verbatim to workspace-lazy.js
+  // (window.AmicusLazy), which loads immediately before this file.
+  function proseLoader(panelId) { window.AmicusLazy.proseLoader(panelId); }
+  function wireLazyPanels() { window.AmicusLazy.wireLazyPanels(); }
 
   // ⚠️ DE-ROT (F38): on a --debate run the FINAL tally.json is rebuilt from the debate's
   // replaced adjudications, so a matrix `dispute` cell can be a re-vote — gate per
@@ -240,9 +92,9 @@
     var A = window.AmicusApp;
     var panel = A.$('judges-panel');
     panel.open = true;
-    var spec = loaders['judges-panel'];
+    var spec = window.AmicusLazy.panelSpec('judges-panel');
     if (!spec) { return Promise.resolve(); }
-    return loadPanel('judges-panel', spec.bodyId, spec.files).then(function () {
+    return window.AmicusLazy.loadPanel('judges-panel', spec.bodyId, spec.files).then(function () {
       var rv = ((A.state.debate && A.state.debate.revotes) || []).find(function (r) {
         return r.judge === judgePair.model && r.id === findingId;
       });
@@ -290,5 +142,6 @@
     proseLoader: proseLoader,
     drillIntoJudge: drillIntoJudge,
     sanitizeName: sanitizeName,
+    resolveArtifactName: resolveArtifactName,
   };
 })();

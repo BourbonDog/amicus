@@ -987,7 +987,7 @@ unchecked items ride to the next rev.)*
   counting microtask hops (2×`await Promise.resolve()`); sturdier fix is to expose/await the real
   fetch promise.
   — done v4.7 PR4
-- [ ] **T19-m1** — a sub-round-trip double blind-toggle can leave a panel on stale masking
+- [x] **T19-m1** — a sub-round-trip double blind-toggle can leave a panel on stale masking
   (`loadPanel`'s completion guard fences on run id only); self-heals on next toggle. Fix: capture
   `A.state.blind` at issue time, bail on mismatch, beside `workspace-panels.js:111`.
   — recon 2026-08-07: the proposed "capture blind and bail" fix is **regressive**: in the
@@ -1004,7 +1004,18 @@ unchecked items ride to the next rev.)*
   T19-m2 must be ONE task behind a mandatory `workspace-panels.js` extraction (294/300 as of PR6,
   gate-adjusted; T19-m1 alone lands it at exactly 300/300 with zero comments — adding T19-m2 too
   → 302/300). Needs a real design pass, not a sweep slot. Deferred to PR7.
-- [ ] **T19-m2** — RN-5's fix wave added a second uncaught `loadPanel()` call site; a rejected invoke
+  — done v4.7 PR7 (Tasks 1-6): shipped as ONE cluster behind the `workspace-lazy.js` extraction
+  (Task 1, no-behaviour-change) — an unconditional cache drop, a monotonic per-panel issue token,
+  two-argument `.then(ok, fail)` termination with announced eviction and a self-checked cache
+  evict, and a sync-safe matrix-drill wrap (see T19-m2 below). Closes stale paths **A**
+  (close/flip/reopen), **B** (two waves in flight) and **G** (same-run manifest growth) — the
+  three the 2026-08-07 recon named — plus **D** (the artifact manifest changing between issue and
+  completion), which the Task 3 cache-drop alone *converted into a race* (an orphaned in-flight
+  promise, fenced only on unchanged runId, repainting silently) rather than closing, and which
+  Task 4's token then genuinely closed — reviewer-reproduced through real collapse/rewire/reopen
+  wiring with four reads in flight, not a simulation. Both refuted shapes stay refuted (see the
+  2026-08-07 and 2026-08-08 recon notes above for why); neither was re-proposed.
+- [x] **T19-m2** — RN-5's fix wave added a second uncaught `loadPanel()` call site; a rejected invoke
   leaves `loading[id]` cached and the panel broken until the run changes (pre-existing at `:127`, now
   hit more often).
   — recon 2026-08-07: the genuinely unterminated path is `drillIntoJudge`'s derived promise, whose
@@ -1014,6 +1025,14 @@ unchecked items ride to the next rev.)*
   — recon 2026-08-08: must be the SAME task as T19-m1, behind the same mandatory
   `workspace-panels.js` extraction — see T19-m1's 2026-08-08 note for the refuted shape and the
   294/300→302/300 line-budget math. Deferred to PR7.
+  — done v4.7 PR7 (Tasks 1-6): same cluster as T19-m1 — see its done note above. The genuinely
+  unterminated path was `drillIntoJudge`'s derived promise, whose production caller
+  (`workspace-matrix.js:79`) discarded it; terminated there via the two-argument `.then(ok, fail)`
+  now inside `loadPanel`, itself wrapped in a sync-safe `Promise.resolve().then(() => onDrill(...))`
+  so a synchronous throw from `onDrill` still surfaces instead of escaping uncaught (mutation-proved
+  both ways — a bare `Promise.resolve(onDrill(...))` fails the sync-throw case). Verified by
+  execution with negative controls, including a raw-node harness (jest swallows unhandled
+  rejections): reverting the fix reproduces exactly 3 unhandled rejections.
 - [x] **T19-m3** — the terminal-refresh test drives `openRun(sameId)` directly rather than the
   live-tick seam (`workspace-verbs.js:95`).
   — done v4.7 PR4
@@ -1039,7 +1058,7 @@ unchecked items ride to the next rev.)*
 - [x] **T22-m2** — v4.6 is named "`--input-from`" in `render.js`'s docblock vs. "composable waves"
   in the docs; same feature, two names.
   — done v4.7 PR4
-- [ ] **W1-M4** — the wave-1 pack pre-seed's briefing is raw, not rendered, until the child
+- [x] **W1-M4** — the wave-1 pack pre-seed's briefing is raw, not rendered, until the child
   re-renders it; eventually consistent.
   — recon 2026-08-07: "eventually consistent" is **conditional**: `sidecar/fanout.js`'s leg-routing
   pass and budget preflight both return **before** the wave-record write, so a child that exits
@@ -1051,6 +1070,21 @@ unchecked items ride to the next rev.)*
   (hoists a `legs` read into its TDZ), breaks the pinned `fanout.test.js:738` (asserts no wave dir
   on validation failure), and closes only 2 of ~17 pre-launch abort paths. `src/sidecar/fanout.js`
   is at 300/300 by the size gate — zero headroom for a fix in this file. Deferred to PR7.
+  — done v4.7 PR7 (Task 7): fixed entirely inside `src/mcp-server.js`'s `amicus_fanout` handler,
+  NOT `sidecar/fanout.js` (still exactly 300/300, zero lines added). `briefing.md` now holds the
+  RENDERED prompt — parity with the `amicus_start` in-process path — written before the wave
+  dir/metadata, so a child that aborts before its own render leaves a findable `--search` corpus.
+  The raw `input.prompt` moves to a new sibling file, `briefing-input.md`, handed to the spawned
+  child via `--prompt-file` so the child's own later render remains the `promptMeta.template`
+  provenance source; that file is new on-disk residue in every wave dir launched from a pack that
+  forwards a `template` (`fwd.renderedPrompt !== undefined` — a template-free wave still writes
+  only `briefing.md`, unchanged in shape). Consequence found in review, not originally scoped:
+  `src/sidecar/fanout-retry.js:136` reads the ORIGINAL wave's `briefing.md` back verbatim as the
+  retry wave's `prompt` — since that file is now
+  the rendered text, retrying a template-launched wave replays the already-rendered text rather than
+  re-rendering the template a second time. `amicus_start`'s own identical divergence
+  (`mcp-server.js:669`) is explicitly NOT covered by this fix — filed separately below, not folded
+  in, because nobody has executed that half end to end.
 - [x] **W1-M5** — the budget-ceiling hint text is CLI-flavored even when the run came in over MCP;
   pre-existing class.
   — recon 2026-08-07: the proposed MCP trailer names `maxCost`/`noCostGate`, which **do not exist
@@ -1063,26 +1097,44 @@ unchecked items ride to the next rev.)*
   the surface-aware text shipped for the ONE refusal site that passes `{kind:'mcp'}` —
   `mcp-server.js`'s shared-server `amicus_start`. Remainder re-filed as PR6F-1 below; this box is
   ticked only because the shipped half is done, not because the class is closed.
-- [ ] **PR6F-1** — CLI-flavoured budget text survives on two paths W1-M5's original framing missed
+- [x] **PR6F-1** — CLI-flavoured budget text survives on two paths W1-M5's original framing missed
   (it assumed a single site). Only `mcp-server.js:463` passes `{kind:'mcp'}`; verified 2026-08-08 that
   it is the sole surface-aware call site of three.
-  (a) **CONFIRMED** — `src/sidecar/fanout-budget.js:51` calls `formatBudgetError(budget)` with no
-  surface (so it defaults to CLI), and `:62-65` separately hardcodes its own
-  `--max-cost`/`--no-cost-gate` reservation trailer. Both land in run/wave docs that
-  `amicus_wait`/`amicus_read`/`amicus_council_stats` hand back to MCP callers.
-  (b) **UNVERIFIED, check before planning** — the `amicus_start` spawn-fallback child runs
-  `cli-handlers-run.js:92`, which is CLI-flavoured. Whether that text ever reaches a client is
-  unresolved: the v4.7 PR6 Task-3 analysis found spawned children get
-  `stdio: ['ignore','ignore',<debug.log fd>]`, which would send it to a log, not the caller. Confirm
-  the stdio wiring on THIS path before treating (b) as a defect at all.
-  Fixing (a) needs a decision first: a run doc is read by BOTH surfaces, so its text may need to be
-  surface-NEUTRAL rather than surface-switched. Found by the v4.7 PR6 whole-branch review, 2026-08-08.
-- [ ] **W1-M6 / W1-M7** — forward-notice plumbing for orphaned pack knobs is dead code on the
-  `start` spawn-fallback path today; wouldn't surface a notice if that path went live.
-  — recon 2026-08-08: BACKLOG's "the path is dead" premise is **wrong** — spawn-fallback is the
-  **default** for interactive `amicus_start`. Source shape is correct and verified green; the test
-  plan is the part that fails. Needs re-framing (not a source fix) before it can be planned.
-  Deferred to PR7.
+  (a) **FIXED v4.7 PR7 (Task 11) — Option N, surface-neutral.** Retargeted
+  `src/council/run-budget.js:156/158` (the run/wave-doc `budget-refusal` degrade record read by
+  BOTH surfaces, not `fanout-budget.js`) to prose naming no flag at all: `why` now reads "the $N
+  cost ceiling for this run refused it…" and `remedy` reads "Raise this run's cost ceiling, or turn
+  the cost gate off, to seat them" — replacing the CLI-flavoured `--max-cost`/`--no-cost-gate`
+  wording. Net 0 lines (`run-budget.js` held at 283/300, the plan's originally-estimated "71→67"
+  companion line in `fanout-budget.js` corrected in review to 71→70). The separate, structurally
+  unreachable CLI-flavoured reservation trailer at `fanout-budget.js:62-65` (`errorDoc` never
+  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:134`) had its
+  `Override: --max-cost / --no-cost-gate` sentence deleted rather than reworded, since nothing
+  renders it. Note the retained hint at `:62` still says "does not fit the `--max-cost` allowance"
+  — correct, because that string's only real reader is a direct CLI `amicus fanout`. Both strings pinned in both directions
+  in `8b3b90d`, mutation-proved; Step-1 grep found **zero** existing tests asserting either literal
+  in either direction before this — MCP-facing, money-related text with no prior coverage.
+  (b) **STRUCK — verified NOT a defect, v4.7 PR7 (Task 11/12).** The `amicus_start` spawn-fallback
+  child's CLI-flavoured text (`cli-handlers-run.js:92`) is written to the child's **stderr**;
+  `spawnSidecarProcess` (`src/mcp-server.js:250-256`) wires that stderr to a `debug.log` file
+  descriptor (`fs.openSync(..., 'w')`), and nothing under `src/` ever reads `debug.log` back into a
+  doc, a tool response, or any other MCP-visible surface (confirmed by grep). The text is written
+  but never seen by any caller. Closed as verified-unreachable, not filed as open debt.
+  Found by the v4.7 PR6 whole-branch review, 2026-08-08.
+- [x] **W1-M6 / W1-M7** — forward-notice plumbing for orphaned pack knobs, originally filed as dead
+  code on the `start` spawn-fallback path that "wouldn't surface a notice if that path went live."
+  — resolved v4.7 PR7 (Task 10): **NO DEFECT — the original claim was wrong twice over.** First,
+  "the path is dead": spawn-fallback is the **default** for interactive `amicus_start`, not a dead
+  branch (recon 2026-08-08). Second, once re-framed as live, the notice claim itself still doesn't
+  hold — the source shape was already correct and verified green; an orphaned knob DOES surface a
+  notice on this path today. What was actually missing was test coverage proving it, not a source
+  fix. Shipped a real-execution guard in `tests/pack/mcp-pack-params.test.js` (the
+  `KIND_OPTIONS.solo` round-trip test, mutation-proven against a synthetic orphaned knob — chosen
+  over a structural presence check because the export it would need,
+  `pack-resolve.js`'s `FORWARDABLE_ARG_KEYS`, would push that file past 300/300, and the
+  real-execution guard also catches argKey spelling mismatches a presence check would miss), plus a
+  declaring comment at the `mcp-server.js` loop naming the test so it is never deleted as
+  unreachable.
 - [x] **resolveBench/resolveBenchInput parallel evolution** (`cli-handlers-council-run.js` /
   `mcp-council-run.js`) — CLI and MCP each hand-roll their own XOR-validation wrapper around the
   shared `resolveCouncilMembers`. Wave 2 unified the *dropped-members* signal between them via that
@@ -1401,7 +1453,7 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   an explicit design call. Do **not** flip the `|| 'clean'` default (primary error rows depend on
   it). Deferred to its own TDD pass, as originally filed.
 
-- [ ] **The dead-seat retry-reason text ("did not review — retried once") has no terminal-path
+- [x] **The dead-seat retry-reason text ("did not review — retried once") has no terminal-path
   home since the v4.7 CA-4 dead-seat convergence** — [S, defer-with-record, owner-accepted] Before
   v4.7, a dead seat that had been retried and still failed rendered `deadSeats()`'s
   `statusText: 'did not review — retried once'` (vs. the plain `'did not review'` — the
@@ -1428,3 +1480,172 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   ruling on the rendering surface (status-cell suffix vs. a separate marker), and the helper must
   land in `workspace-seats.js` (132/300 by the gate's own arithmetic), not `live-model.js`.
   Deferred to PR7.
+  — done v4.7 PR7 (Task 8). **Owner ruling: the seats table's existing unlabeled trailing flag
+  column** (`index.html:51`'s final empty `<th></th>`, which carries `⏳ stalled` on the live path
+  and is always empty on this terminal path since `seatsFromRunStats` hardcodes `stalled: false`)
+  — not a status-cell suffix. Motivating case: a dead seat's primary row can legitimately carry
+  `status: 'complete'` (proven end to end by driving the real `runStage1` with a leg returning
+  `status:'complete', summary:'   '`); a suffix would render "complete — retried once", which reads
+  as "it finished, twice". The column instead gets `↻ retried once` plus a `seat-retried` row
+  class. The predicate (`retriedAliases` in `workspace-seats.js`) deliberately mirrors
+  `window.AmicusLive.deadSeats`' own filter verbatim: the `kind`/`channel` gate is load-bearing
+  (a `kind:'heal'`/`channel:'stage1-retry'` degrade carries the SAME `retryWaveId`/`firstFailure`
+  fields for a seat that RECOVERED, so a field-only scan would mislabel it "retried once"), and
+  `firstFailure` is read for truthiness only, never `.status` (its wave-class shape has no
+  `status` key). `workspace-seats.js` 132 → 188/300.
+
+## v4.7 PR7 dispositions filed, not fixed (2026-08-08)
+
+- [ ] **W1-M4's raw-vs-rendered briefing divergence also applies to `amicus_start`, not just
+  `amicus_fanout`** — [S] `src/mcp-server.js:669` writes the shared-server spawn-fallback child's
+  `briefing.md` from `input.prompt` directly — the identical divergence Task 7 fixed for
+  `amicus_fanout` (raw, not rendered, until the child's own later render, so a child that dies
+  before that point leaves a permanently-wrong `--search` corpus). Deliberately excluded from PR7:
+  nobody has executed the `amicus_start` spawn-fallback half of W1-M4 end to end, so there is no
+  verified reproduction to fix against, unlike the fanout path Task 7 closed. The fix shape should
+  be the same one Task 7 shipped (write `fwd.renderedPrompt` to `briefing.md`, the raw prompt to a
+  sibling `briefing-input.md` for the child) once someone has actually driven this path. Found
+  during the v4.7 PR7 final-review consolidated wave, 2026-08-08.
+
+- [ ] **A seat that recovered via retry has no marker of its own — only the seat that stayed dead
+  does** — [S] PR1F-4 (v4.7 PR7) marks a seat `↻ retried once` when its degrade record carries
+  `kind:'degrade'` / `channel: 'dead-leg'|'dead-wave'` with a `retryWaveId`/`firstFailure` — and
+  deliberately excludes `kind:'heal'` / `channel:'stage1-retry'` records, because those mean the
+  seat recovered and PR1F-4's marker is not meant for it. That exclusion is correct for PR1F-4's
+  own scope, but it leaves the recovered case with no marker at all: a seat that failed once, was
+  retried, and came back clean today renders identically to a seat that never failed. Whether a
+  healed seat should carry its own distinct marker (e.g. `✓ healed`) is a new design question, not
+  a re-opening of PR1F-4 — a different predicate, a different column or cell, a different owner
+  ruling. Found during the v4.7 PR7 final-review consolidated wave, 2026-08-08.
+
+- [ ] **The retry marker (PR1F-4) only renders on the terminal path — the live-tick path never
+  gets it** — [S] `retriedAliases`/`isReviewingRole` live in `workspace-seats.js`'s
+  `renderSeatsPanel`, which reads `seatsFromRunStats`' terminal-composed rows. The live-tick path
+  (mid-run polling) never goes through `seatsFromRunStats` at all, so a seat retried while its run
+  is still in progress shows no marker until the run finishes and the panel re-renders from the
+  terminal doc. Accepted as terminal-path-only for PR7 (recon 2026-08-07/08 already established
+  there is exactly one production call site, `workspace-seats.js:47`); threading the retry set
+  through the composed live doc so the live path can see it too is a data-layer change, not a
+  render-layer one — a different task. Found during the v4.7 PR7 final-review consolidated wave,
+  2026-08-08.
+
+- [ ] **`session-index-tmp-sweep.js` follows symlinks (`statSync`) where its sibling
+  `session-metadata-tmp-sweep.js` deliberately does not (`lstatSync`)** — [S] Confirmed via grep:
+  this divergence has **zero** prior BACKLOG entries under `statSync` (PR5F-3 filed the
+  `lstatSync`-side consequence — a symlink is excluded by the metadata sweep's `isFile()` gate, not
+  swept — but never the index sweep's opposite choice). Two deltas, both now recorded in the source
+  comment at `session-index-tmp-sweep.js:37-41` (2026-08-08 owner ruling, Option B: keep `statSync`,
+  state the policy instead of calling it "unreviewed"):
+  - **The inclusion delta** — a symlink named like an orphaned tmp file (e.g.
+    `.sessions-index.json.<pid>.<hex>.tmp`) IS still swept on this side, because `statSync` follows
+    the link to the target's stat, and the target passes `isFile()`. On the metadata sweep the
+    identical case is excluded entirely (SR-3's `isFile()` gate over `lstatSync` sees the link
+    itself, never a file).
+  - **The unfiled delta** — `AGE_THRESHOLD_MS` is evaluated against the **target's** mtime (because
+    `statSync` follows), not the link's own mtime: a freshly-created link pointing at an old file is
+    swept immediately, with no 60-second grace window, unlike a genuine same-age orphan tmp file.
+    Not harmful: `unlinkSessionIndexTmp` calls `fs.unlinkSync`, which removes only the link, never
+    the target, and a dangling symlink (target gone) is already excluded upstream by the same
+    `isFile()` gate the sweep shares with its sibling. Cannot be exercised on this machine —
+    `fs.symlinkSync` raises `EPERM` here (verified 2026-08-08) — so any future test of this path
+    must fake `fs.statSync`/`fs.lstatSync` rather than create a real symlink.
+  Found during the v4.7 PR7 final-review consolidated wave, 2026-08-08.
+
+## v4.7 PR3 rider follow-ups (2026-08-07)
+
+- [ ] **`sessions-index.json` has no maintenance step — it only ever grows** — [M, needs a design
+  decision] `recordSession` (`src/utils/session-index.js:64`) appends a `taskId -> project` entry on
+  every session start and **nothing ever removes one**. Entries outlive their subject: a project that
+  is deleted, renamed, or moved leaves its rows behind forever, and the index has no TTL, cap, or
+  prune. Measured on the dev machine 2026-08-07 before the manual cleanup: **18,874 entries, 0.69 MB,
+  of which 5,933 (31.4%) pointed at project paths that no longer existed.**
+
+  Two live costs, both measured:
+  - **Every session start pays for the whole file.** `recordSession` does a full
+    read → `JSON.parse` → mutate → `JSON.stringify` → atomic write of the ENTIRE index. At 18,874
+    entries that is ~5.7 ms of pure parse/serialize plus a **0.69 MB write, on every single start**.
+    It is `O(total sessions ever)` per launch, not `O(1)`.
+  - **`--all` walks all of it.** `enumerateAllProjects` (`src/sidecar/read.js:94`) reads every
+    distinct project in the index. The dead 31.4% cost a `readdirSync` probe each and contribute
+    nothing. `amicus list --all` measured 21,145 rows in 8,275 ms; after a manual prune to 187
+    entries, 132 rows in 53 ms.
+
+  **Note on provenance, so this is not mis-scoped:** the *bulk* of that particular index was test
+  residue from the `/tmp` hermeticity leak, and PR #123 sealed that generator — a fresh index will
+  not balloon the same way. This item is the **remaining structural gap**: even with zero test
+  residue, a real user's index accrues dead entries as projects come and go, and pays the growing
+  per-start write cost forever. The leak made it visible; it is not the whole of it.
+
+  **Design options** (pick at plan time, not here):
+  1. **A `doctor` check + `--fix`** — the natural home, and there is an exact precedent:
+     `src/utils/session-index-tmp-sweep.js` is already a doctor check with `--fix` operating on this
+     very file (orphaned tmp files rather than stale entries). A sibling "N stale index entries — run
+     with `--fix`" check would reuse the whole warn/fix/hint shape, and keeps pruning **explicit and
+     announced** rather than silent, per the degrade-announcement invariant.
+  2. **Prune on write** — drop dead entries during `recordSession`. Cheapest to reach, but it would
+     add a `statSync` per entry to the hot start path (worse than the problem at 18k entries) and
+     deletes user-visible state with no announcement. Would need a sampling/amortization scheme.
+  3. **Cap + LRU eviction** — bound the file outright. Simplest cost story, but the index is an
+     advisory *lookup* aid (`safeSessionDir`'s cross-project fallback, #40), so evicting a live
+     entry silently degrades `amicus read <id>` from another project into a not-found.
+
+  Recommend option 1: it is announced, it is user-triggered, it reuses an existing surface, and it
+  cannot silently lose a lookup. Note that a prune must be **liveness-based, not age-based** — a
+  five-year-old session in a project that still exists is still a valid lookup target, while a
+  one-day-old entry for a deleted project is not. Found while measuring the `--all` output-cap rider
+  during the v4.7 PR3 rider follow-ups, 2026-08-07.
+
+- [ ] **Council runs are invisible to CLI `amicus list` — MCP-only, by omission** — [S] The MCP
+  `amicus_list` merges council runs as first-class rows (`src/mcp-server.js:1003`,
+  `.concat(councilRows)` with `type: 'council-run'`); the CLI `listSidecars`
+  (`src/sidecar/read.js:133`) never calls `listCouncilRuns` at all. So `amicus council run …`
+  produces a run that `amicus list` cannot see — the launching surface and the listing surface
+  disagree about what exists. Documented as a deliberate divergence under errata E-PR3-3 (D14
+  unified the *enumeration*, not the council merge), so this is a scope note, not a regression.
+
+  Cheap to close: `listCouncilRuns` (`src/mcp-council-awareness.js:205`) has **no MCP-specific
+  coupling** — it is pure pointer enumeration + `runState.readRun`, already fenced with
+  `containsOnDisk` per pointer. Two real decisions, not just a wiring job:
+  - It bakes in `sanitizePreview(briefing, 80)`, an MCP-side decoration. E-PR3-3 ruled enrichment
+    stays MCP-side, and the CLI truncates to 30 chars in its own table — so either the preview width
+    moves to a parameter, or the CLI re-truncates a value already truncated to 80 (lossy but
+    harmless at 30).
+  - Council rows carry `model: null` and a `stage` field the CLI table has no column for. The MODEL
+    cell would render empty today (`read.js`'s `s.type === 'wave' ? … : (s.model || '')`); it wants a
+    `council(<stage>)` cell mirroring the existing `wave(N legs)` treatment.
+
+  Found during the v4.7 PR3 rider transcription, 2026-08-07.
+
+- [ ] **`continue`/`resume` sessions always group under `(unattributed)` in `spend --group-by tag`**
+  — [S] `src/cli-handlers-resume-continue.js` has **zero** `tag` references: a follow-up session
+  never carries one, so its spend rows land at `rowKey`'s null fallback
+  (`src/spend-query.js:58`, `case 'tag': return row.tag || '(unattributed)'`). The practical effect
+  is that tag-based cost attribution silently under-reports: tag a session, continue it three times,
+  and only the first launch's cost is attributed to the tag while the follow-ups — the same work,
+  the same intent — scatter into `(unattributed)`.
+
+  The parent's tag **is already on disk**: D13 stores it absent-not-null on the session's
+  `metadata.json`, and both handlers already resolve a validated parent `taskId` (`:24` resume,
+  `:54` continue), so the inherit is a metadata read away. The open question is policy, not
+  plumbing: does a follow-up **inherit** the parent's tag silently, or should `continue`/`resume`
+  accept their own `--tag` (and if so, does an explicit tag override, or is the combination rejected
+  the way `--tag` + `--retry-failed` is)? Inheriting silently is the behavior that makes the grouping
+  honest; accepting an explicit tag is the behavior that matches every other launch surface. Decide
+  before implementing. Found during the v4.7 PR3 rider transcription, 2026-08-07.
+
+- [ ] **`--tag` + `--retry-failed` is rejected rather than inherited** — [S] `handleFanout`
+  (`src/cli-handlers-fanout.js:26`) fails the combination with `BAD_ARGS`
+  (`--tag cannot be combined with --retry-failed`). That was the right call for D13 — a retry is not
+  a new labelling opportunity, and silently accepting a tag that then applied to only some legs would
+  be worse. But the consequence is that **a retry of a tagged wave produces untagged rows**: the
+  retry's legs drop out of the tag's cost rollup even though they are that tagged wave's own work —
+  the same under-reporting shape as the `continue`/`resume` item above.
+
+  The fix is nearly free and strictly better than the current rejection: `buildRetryPlan`
+  (`src/sidecar/fanout-retry.js:46-52`) **already reads the original wave's `metadata.json`** into
+  `waveMeta` for its type/status guards — the tag is sitting right there under D13's absent-not-null
+  storage. Inheriting `waveMeta.tag` onto the retry wave keeps the flag rejection exactly as-is (you
+  still cannot *set* a tag on a retry) while making the retry inherit the one it belongs to. Worth
+  pairing with the `continue`/`resume` decision above, so the whole "derived launches inherit their
+  parent's tag" question is settled once, in one policy, rather than three times. Found during the
+  v4.7 PR3 rider transcription, 2026-08-07.

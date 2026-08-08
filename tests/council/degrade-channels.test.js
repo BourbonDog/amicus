@@ -281,6 +281,27 @@ describe('budget-refusal channel', () => {
     // Additive, not a replacement — Plan 2's derivation and existing consumers need this.
     const run = JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'));
     expect(run.budgetRefusals).toHaveLength(1);
+
+    // Positive pin (PR6F-1): the exact surface-neutral remedy wording. This
+    // record reaches four render surfaces through the shared formatDegrade
+    // "ONE VOICE" renderer — the CLI stream, the MCP JSON payload
+    // (mcp-council-awareness.js:188, verbatim), the markdown report, and the
+    // HTML report — so its exact text is worth locking in.
+    expect(noted[0].remedy).toBe("Raise this run's cost ceiling, or turn the cost gate off, to seat them");
+
+    // Negative pin — the durable half of this coverage. A positive-only pin
+    // above locks in today's sentence; this guard encodes the actual
+    // invariant: this text must never name a CLI-only flag (--max-cost,
+    // --no-cost-gate), because MCP callers read why/remedy verbatim too and
+    // have no such flags to pass. Do NOT delete this as redundant with the
+    // positive pin — the positive pin breaks on ANY wording change (including
+    // harmless rewording); this one specifically catches a CLI flag name
+    // creeping back into MCP-facing, money-related text, which is the actual
+    // failure mode PR6F-1 fixed.
+    expect(noted[0].why).not.toMatch(/--max-cost/);
+    expect(noted[0].why).not.toMatch(/--(max-cost|no-cost-gate)/);
+    expect(noted[0].remedy).not.toMatch(/--max-cost/);
+    expect(noted[0].remedy).not.toMatch(/--(max-cost|no-cost-gate)/);
   });
 });
 

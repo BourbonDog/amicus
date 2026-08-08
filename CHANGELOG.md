@@ -221,6 +221,65 @@ All notable changes to Amicus are documented here. Format follows
 - A council member whose model name collides with an `Object.prototype` key (`toString`,
   `constructor`, …) crashed the Workspace seats repaint and every live tick after it.
 
+### Added (v4.7 PR7)
+
+- **The seats table's trailing flag column marks a seat that was retried and stayed failed**
+  (PR1F-4): `↻ retried once`, on the errored seat's own primary cost row. Previously that
+  information only existed on a dead-seat row the v4.7 CA-4 convergence now suppresses, so it had
+  no home at all; a status-cell suffix was rejected because a dead seat's row can legitimately
+  carry `status: 'complete'`, and `complete — retried once` reads as "it finished, twice." Terminal
+  path only (`seatsFromRunStats`) — a seat retried while its run is still live shows no marker
+  until the run finishes.
+
+### Fixed (v4.7 PR7)
+
+- **Four stale-paint paths in the workspace prose panels, plus three unhandled-rejection sites,
+  closed together (T19-m1/T19-m2).** A panel could repaint stale content after a
+  close/flip-blind/reopen sequence, after two loads landed out of order, after the same run's
+  artifact manifest grew mid-flight, or after being collapsed mid-flight and reopened; separately,
+  three fire-and-forget panel-load promises could reject uncaught. Fixed behind a new
+  `workspace-lazy.js` extraction: an unconditional panel-cache drop on every issue, a monotonic
+  per-panel issue token so only the newest in-flight load can paint, two-argument
+  `.then(ok, fail)` termination on every load promise (with an announced eviction and a self-check
+  against a stale cache write), and a sync-safe wrap around the matrix drill-in call so a
+  synchronous throw still surfaces instead of escaping uncaught. Worth recording honestly: the
+  collapse-mid-flight path was not closed by the cache-drop half — that half *converted* it from a
+  deterministic stale paint into a race, by orphaning a still-in-flight load that no longer had a
+  cache entry to fence it. The issue token is what actually closes it. Both land in the same commit
+  series, so no released state ever carried the race.
+- **`amicus_fanout`'s wave briefing is now the rendered prompt, not the raw one** (W1-M4),
+  matching the parity the `amicus_start` in-process path already had. Previously a spawned child
+  that aborted before rendering its own copy left `briefing.md` — the file
+  `amicus list --search`/`amicus read` treat as the wave's search corpus — permanently holding
+  unrendered template markup. **Behaviour change:** a wave launched from a pack that forwards a
+  `template` now writes a second file into the wave dir, `briefing-input.md` (the raw prompt handed
+  to the spawned child so its own render still drives `promptMeta.template` provenance), and
+  `--search` now matches the rendered text even for a wave whose MCP-spawned child aborted early —
+  previously it matched nothing meaningful in that case; the same rendered excerpt (first 200
+  characters) is also seeded into `metadata.json` at creation for every MCP fan-out wave, pack or
+  not, so `amicus list`'s BRIEFING column is populated for an aborted wave too, not just a
+  completed one. `amicus_start`'s identical divergence
+  (`mcp-server.js:669`) is unchanged; nobody has driven that path end to end yet, so it is filed in
+  `BACKLOG.md`, not fixed here.
+- **`amicus_fanout` now rejects an empty prompt or a non-positive timeout before creating anything
+  on disk**, closing the one remaining pid-less `status: 'running'` orphan-wave class the schema
+  didn't already cover. **Behaviour change:** a request shaped like `{prompt: '', ...}` or
+  `{timeout: -1, ...}` previously created a wave directory and spawned a child that then failed on
+  its own terms; it now returns a plain-text error and creates nothing. The Zod schema closes this
+  for one entry point (`prompt: z.string().min(1, …)`, `timeout: z.number().positive(…)`); a second,
+  identical check lives in the handler itself, after pack merge, because a pack can push the same
+  invalid values through a door the schema never sees (`validatePack` checks option key names, not
+  value types).
+
+### Changed (v4.7 PR7)
+
+- **The budget-refusal text recorded in a run/wave doc's degrade record is now surface-neutral**
+  (PR6F-1), since that doc is read by both the CLI and MCP: "the $N cost ceiling for this run
+  refused it" / "Raise this run's cost ceiling, or turn the cost gate off, to seat them," in place
+  of CLI-flavoured `--max-cost`/`--no-cost-gate` wording that named flags an MCP caller cannot type.
+  A separate, structurally-unreachable copy of the same CLI-flavoured trailer (nothing ever renders
+  its `hint` on that path) was removed rather than reworded.
+
 ## [4.6.3] - 2026-08-05
 
 ### Added

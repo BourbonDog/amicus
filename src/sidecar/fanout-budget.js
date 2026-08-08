@@ -61,8 +61,7 @@ function preflightBudget(okLegs, options) {
       message: 'Error: budget gate refused the wave',
       hint: `Budget gate: estimated total $${estimate.toFixed(4)} does not fit the --max-cost `
         + 'allowance still unclaimed by concurrently launching waves (estimate, not guaranteed).\n'
-        + 'The run continues with the waves that did launch. Override: --max-cost <$> to raise the '
-        + 'ceiling, or --no-cost-gate to disable both guards.',
+        + 'The run continues with the waves that did launch.',
     };
   }
   return { ok: true, estimate };

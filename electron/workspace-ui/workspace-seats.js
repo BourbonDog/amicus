@@ -41,6 +41,42 @@
 (function () {
   'use strict';
 
+  /**
+   * Aliases of seats whose degrade record says they were retried. PR1F-4 (v4.7 PR7).
+   *
+   * ⚠️ Mirrors window.AmicusLive.deadSeats' own predicate (live-model.js:227-241) EXACTLY, and
+   * must keep mirroring it. The kind/channel filter is load-bearing: run.degrades[] also carries
+   * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
+   * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
+   *
+   * ⚠️ firstFailure is TRUTHINESS ONLY. It has two shapes — run-retry.js:98 emits
+   * {seat, class:'leg', status, reason}; :86/:90/:93 emit {seat, class:'wave', waveId, reason}
+   * with NO status key — so any read of firstFailure.status is undefined on every wave-origin
+   * seat.
+   */
+  function retriedAliases(degrades) {
+    var out = Object.create(null);
+    (degrades || []).forEach(function (d) {
+      if (!d || d.kind !== 'degrade') { return; }
+      if (d.channel !== 'dead-leg' && d.channel !== 'dead-wave') { return; }
+      var data = d.data || {};
+      if (!(data.retryWaveId || data.firstFailure)) { return; }
+      if (d.channel === 'dead-leg') {
+        if (data.seat) { out[data.seat] = true; }
+      } else {
+        (data.models || []).forEach(function (m) { if (m) { out[m] = true; } });
+      }
+    });
+    return out;
+  }
+
+  // Mirrors isReviewing at live-model.js:261-264 — a chair/judge/rebuttal/revote row must not
+  // carry a reviewer's retry marker.
+  function isReviewingRole(role) {
+    return role === 'seat' || role === 'critic' ||
+      (typeof role === 'string' && role.indexOf('lens:') === 0);
+  }
+
   function renderSeatsPanel() {
     var A = window.AmicusApp;
     var d = A.state.detail;
@@ -55,6 +91,38 @@
     // records for the SAME run, and the persisted run.json copy is authoritative when present.
     var deg = (d.run && d.run.degrades && d.run.degrades.length) ? d.run.degrades
       : ((d.verdict && d.verdict.degrades) || []);
+    var retried = retriedAliases(deg);
+    // ⚠️ Look rows up by data-key, NEVER by position. renderSeats (workspace-render.js:179-216)
+    // keys every row on String(seat.id || seat.model) and RN-11 made it REORDER rows to match the
+    // composed doc's leg order — so tbody.children[i] is not seats[i]. Build the key exactly the
+    // way renderSeats does or the lookup silently misses.
+    var rowsByKey = Object.create(null);
+    Array.prototype.slice.call(tbody.children).forEach(function (row) {
+      rowsByKey[row.dataset.key] = row;
+    });
+    seats.forEach(function (s) {
+      var row = rowsByKey[String(s.id || s.model)];
+      if (!row || !row.children[8]) { return; }
+      // Column 8 is the table's unlabeled trailing flag cell (index.html:51's final <th></th>).
+      // It carries '⏳ stalled' on the LIVE path; on this terminal path seatsFromRunStats
+      // hardcodes stalled:false (live-model.js:128), so it is always empty here and free to use.
+      // If that ever changes, this is the collision site.
+      // Fix wave (whole-branch review, finding 2): this pass must be SYMMETRIC. renderSeats
+      // reuses rows keyed on `model:role` across calls — including across two different
+      // terminal runs opened in sequence that happen to share an alias+role — and never resets
+      // row.className itself. An add-only write here both duplicates the token on every repaint
+      // of the SAME run and leaves a stale 'seat-retried' class on a row that belonged to a
+      // PREVIOUS run's non-retried seat. classList.add/remove (not string concatenation) so a
+      // repeat add never duplicates the token and a seat that is no longer retried gets cleared.
+      var isRetried = isReviewingRole(s.role) && !!retried[s.modelInput || s.model];
+      if (isRetried) {
+        row.classList.add('seat-retried');
+        row.children[8].textContent = '↻ retried once';
+      } else {
+        row.classList.remove('seat-retried');
+        row.children[8].textContent = '';
+      }
+    });
     var dead = window.AmicusLive.deadSeats(deg, seatLoss, seats, runMeta);
     renderDeadSeatRows(tbody, dead, A.state.blind, A.labelOf);
   }

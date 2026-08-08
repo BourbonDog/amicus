@@ -62,6 +62,9 @@ const FANOUT_KIND_PACK = () => ({
 // real tables makes that class of drift impossible.
 const { COUNCIL_PACK_PARAM_MAP } = require('../../src/mcp-council-run');
 const { FANOUT_PACK_PARAM_MAP, SOLO_PACK_PARAM_MAP } = require('../../src/mcp-server');
+// W1-M6/M7: same T15-m5 rule — KIND_OPTIONS is the table the guard below
+// walks, imported live so the guard tracks it instead of pinning a copy.
+const { KIND_OPTIONS } = require('../../src/pack/pack-validate');
 
 const FANOUT_TEST_PACK = () => ({
   schemaVersion: 1, type: 'pack', name: 'fanout-direct-pack', version: '1.0.0', kind: 'fanout',
@@ -521,6 +524,55 @@ describe('applyPackToMcpInput (direct unit tests)', () => {
     expect(input.contextMaxTokens).toBeUndefined();
   });
 
+  // ---- W1-M6/M7: the solo knob/param-map invariant behind the forward-notice loop ----
+  //
+  // There is no live defect on the interactive `amicus_start` path today: it can never
+  // reach the shared-server branch (mcp-server.js:432 gates that branch on
+  // `sharedServer.enabled && input.noUi`, and an interactive call has no `noUi`), so it
+  // always takes spawn-fallback, which resolves the pack in-process before spawning
+  // (single-resolution rule) — see the `packNotices` push loop in mcp-server.js. That
+  // loop is UNREACHABLE for solo only by invariant: every key `validatePack(mode:'run')`
+  // lets through (KIND_OPTIONS.solo) currently either round-trips onto `input` via a real
+  // SOLO_PACK_PARAM_MAP destination, or forwards via pack-resolve.js's FORWARDABLE_ARG_KEYS
+  // (maxCost — the only KIND_OPTIONS.solo entry with no paramMap destination). Neither table
+  // is re-typed here (T15-m5): KIND_OPTIONS is imported live above, and instead of mirroring
+  // pack-resolve.js's private (unexported) FORWARDABLE_ARG_KEYS — that file sits at exactly
+  // 300/300 lines and is not in this task's file list, so it cannot gain an export — this
+  // walks each KIND_OPTIONS.solo key through the REAL applyPackToMcpInput and inspects the
+  // REAL res.notices it produces, so pack-resolve.js's own forwarding/notice decision is
+  // authoritative, never guessed.
+  //
+  // Known limit (reported, not hidden): a key that validatePack accepts but that
+  // pack-resolve.js's own knob tables (COMMON_OPTION_KNOBS / CONTEXT_OPTION_KNOBS, private to
+  // pack-resolve.js) never read into `args` at all would produce NO notice — not because it
+  // is safely routed, but because it never reaches the diff this guard (and the notice loop
+  // it guards) can see. That is a different, narrower defect than the one this task scopes
+  // (KIND_OPTIONS drifting ahead of SOLO_PACK_PARAM_MAP/FORWARDABLE_ARG_KEYS on the MCP
+  // surface specifically) and is why the recon mutation below touches two files, not one.
+  test('every KIND_OPTIONS.solo key round-trips through applyPackToMcpInput without an orphan notice — a key with neither a SOLO_PACK_PARAM_MAP destination nor FORWARDABLE_ARG_KEYS membership would be silently dropped were it not for the notice loop in src/mcp-server.js', () => {
+    for (const optionKey of KIND_OPTIONS.solo) {
+      const packName = `solo-w1m67-${optionKey.toLowerCase()}`;
+      store().writePack({
+        schemaVersion: 1, type: 'pack', name: packName, version: '1.0.0', kind: 'solo',
+        description: 'x', model: 'vendorx/solo-model', options: { [optionKey]: true }, briefing: {},
+      });
+      const input = {};
+      const res = applyPackToMcpInput({
+        packRef: packName, expectedKind: 'solo', input, paramMap: SOLO_PACK_PARAM_MAP,
+      });
+      expect(res.error).toBeUndefined();
+      const orphanNotice = res.notices.find((n) => n.includes(optionKey));
+      if (orphanNotice) {
+        throw new Error(
+          `KIND_OPTIONS.solo key '${optionKey}' has neither a SOLO_PACK_PARAM_MAP destination nor ` +
+          `FORWARDABLE_ARG_KEYS membership — produced: "${orphanNotice}". Without the packNotices push ` +
+          "loop in amicus_start's spawn-fallback path (src/mcp-server.js), a pack setting this " +
+          'knob would be silently dropped instead of surfaced to the caller.'
+        );
+      }
+    }
+  });
+
   // ---- v4.5 HOLD-gate decision 2: a dropped council option fails resolution outright ----
   test('a council pack carrying a dropped option (agent) now fails PACK_INVALID — it can no longer reach the orphan-notice path', () => {
     store().writePack(COUNCIL_DROPPED_OPTION_PACK()); // options.agent: 'Plan'
@@ -611,6 +663,171 @@ describe('amicus_fanout: pre-spend validation of pack-forwarded maxCost/template
     expect(result.isError).toBeUndefined();
     expect(spawnCallCount).toBe(1);
     expect(waveDirCount(tmp)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v4.7 PR7 Task 9: an empty/whitespace prompt or a non-positive timeout must
+// never strand a pid-less 'running' orphan wave. This is failure mode (d):
+// {timeout: -1} is reachable BOTH as a typed MCP param (closed by the zod
+// schema's .positive() in mcp-tools.js) AND via a pack (validatePack only
+// checks option KEY names, never value types — a guard on the zod schema
+// alone is half a guard). Both entrances are exercised below.
+// ---------------------------------------------------------------------------
+
+describe('amicus_fanout: reject empty prompt / non-positive timeout before any wave dir (v4.7 PR7 Task 9)', () => {
+  // Local variant of callFanoutWithMockedSpawn / waveDirCount —
+  // mirrors this file's own established idiom (see callFanoutCapturingArgv
+  // below) of each describe block owning its helpers rather than reaching
+  // into a sibling describe's closure.
+  async function callFanoutWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length };
+  }
+
+  function waveDirCount(project) {
+    const sessBase = path.join(project, '.claude', 'amicus_sessions');
+    return fs.existsSync(sessBase) ? fs.readdirSync(sessBase).length : 0;
+  }
+
+  const FANOUT_NEGATIVE_TIMEOUT_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'fanout-negative-timeout-pack', version: '1.0.0', kind: 'fanout',
+    description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: { timeout: -1 }, briefing: {},
+  });
+
+  test('empty prompt: isError, NO wave dir, NO spawn (never strands a pid-less running wave)', async () => {
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: '' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('whitespace-only prompt: isError, NO wave dir, NO spawn (never strands a pid-less running wave)', async () => {
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: '   ' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('typed timeout: -1 with a valid prompt: isError, NO wave dir, NO spawn (the TYPED door)', async () => {
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: 'ok', timeout: -1 }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('a pack carrying options.timeout: -1: isError, NO wave dir, NO spawn (the PACK door — validatePack checks keys, never values)', async () => {
+    store().writePack(FANOUT_NEGATIVE_TIMEOUT_PACK());
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { pack: 'fanout-negative-timeout-pack', prompt: 'ok' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W1-M4 (v4.7 PR7): an MCP fanout wave whose spawned CLI child aborts before
+// fanout.js:145 used to leave briefing.md holding the RAW prompt forever —
+// list-search.js's waveSearchMaterial reads briefing.md verbatim as the
+// `--search` corpus, so the wave was permanently unfindable by the text the
+// user actually sees. This block pins that briefing.md now holds the
+// RENDERED text when a pack forwards a template, while the child still gets
+// the raw prompt via a sibling briefing-input.md so its own later render
+// (and promptMeta.template provenance) is unaffected.
+// ---------------------------------------------------------------------------
+
+describe('amicus_fanout: renders briefing.md at the pre-seed so an aborted wave stays searchable (W1-M4)', () => {
+  const MARKER = '=== W1-M4-MARKER ===';
+
+  // FIXTURE TRAP: the only template fixture already in this file ('review',
+  // used by the I1 test above) needs {{artifact}}, which the fanout pre-seed
+  // dry run can never supply — it is rejected before any wave dir is created.
+  // A real user template, written into THIS test's own tmp AMICUS_CONFIG_DIR,
+  // is required to reach the render path at all.
+  function writeUserTemplate(name) {
+    const dir = path.join(tmp, 'templates');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${name}.md`), `${MARKER}\n{{prompt}}\n`);
+  }
+
+  function waveDirFor(result, project) {
+    const body = JSON.parse(result.content[0].text);
+    return path.join(project, '.claude', 'amicus_sessions', body.waveId);
+  }
+
+  // Local variant of callFanoutWithMockedSpawn that also hands back
+  // the captured spawn argv, needed to assert --prompt-file/--template.
+  async function callFanoutCapturingArgv(input, project) {
+    let result; let spawnMock; let argv;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn((cmd, cmdArgs) => { argv = cmdArgs; return { pid: 4242, unref: jest.fn() }; });
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length, argv };
+  }
+
+  test('a pack-forwarded template renders briefing.md, hands the child the raw prompt via briefing-input.md, and still forwards --template', async () => {
+    writeUserTemplate('w1m4-marker-template');
+    store().writePack({
+      schemaVersion: 1, type: 'pack', name: 'w1m4-template-pack', version: '1.0.0', kind: 'fanout',
+      description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: {},
+      briefing: { template: 'w1m4-marker-template' },
+    });
+    const input = { pack: 'w1m4-template-pack', prompt: 'The raw prompt text.' };
+    const { result, spawnCallCount, argv } = await callFanoutCapturingArgv(input, tmp);
+
+    expect(result.isError).toBeUndefined();
+    expect(spawnCallCount).toBe(1);
+    const waveDir = waveDirFor(result, tmp);
+
+    // 1. briefing.md contains the rendered marker (the search corpus).
+    const briefing = fs.readFileSync(path.join(waveDir, 'briefing.md'), 'utf-8');
+    expect(briefing).toContain(MARKER);
+    expect(briefing).toContain(input.prompt);
+
+    // 2. briefing-input.md is the raw prompt, byte-identical.
+    const briefingInput = fs.readFileSync(path.join(waveDir, 'briefing-input.md'), 'utf-8');
+    expect(briefingInput).toBe(input.prompt);
+
+    // 3. the spawned child's --prompt-file points at briefing-input.md, and
+    // --template is still forwarded (unchanged from today).
+    const pfIdx = argv.indexOf('--prompt-file');
+    expect(pfIdx).toBeGreaterThan(-1);
+    expect(argv[pfIdx + 1]).toBe(path.join(waveDir, 'briefing-input.md'));
+    const tIdx = argv.indexOf('--template');
+    expect(tIdx).toBeGreaterThan(-1);
+    expect(argv[tIdx + 1]).toBe('w1m4-marker-template');
+  });
+
+  test('with no pack: briefing.md is the raw prompt verbatim, no briefing-input.md is written, and --prompt-file defaults to briefing.md', async () => {
+    const input = { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: 'Plain prompt, no pack.' };
+    const { result, spawnCallCount, argv } = await callFanoutCapturingArgv(input, tmp);
+
+    expect(result.isError).toBeUndefined();
+    expect(spawnCallCount).toBe(1);
+    const waveDir = waveDirFor(result, tmp);
+
+    // 4. no pack forwarded: briefing.md === input.prompt, no sibling file.
+    expect(fs.readFileSync(path.join(waveDir, 'briefing.md'), 'utf-8')).toBe(input.prompt);
+    expect(fs.existsSync(path.join(waveDir, 'briefing-input.md'))).toBe(false);
+
+    // The load-bearing default: childPromptPath falls back to briefingPath,
+    // or every non-template wave would spawn with --prompt-file undefined.
+    const pfIdx = argv.indexOf('--prompt-file');
+    expect(pfIdx).toBeGreaterThan(-1);
+    expect(argv[pfIdx + 1]).toBe(path.join(waveDir, 'briefing.md'));
   });
 });
 

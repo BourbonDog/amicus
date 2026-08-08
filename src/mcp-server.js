@@ -703,6 +703,19 @@ const handlers = {
     // resolved the route in-process above, so surface its notice here.
     const spawnContent = [{ type: 'text', text: body }];
     if (routeResult.notice) { spawnContent.push({ type: 'text', text: routeResult.notice }); }
+    // W1-M6/M7: NOT dead code. This is the same idiom applyPackToMcpInput's
+    // orphan-knob notices always use — amicus_fanout genuinely reaches it today
+    // (FANOUT_PACK_PARAM_MAP has no contextTurns/contextMaxTokens destination;
+    // the fanout handler's own push into waveContent below is covered by
+    // mcp-pack-params.test.js's "notice wording (decision 1b)" test — named,
+    // not line-numbered, because a line citation goes stale the moment anything
+    // is inserted above it, including by its own commit). On THIS solo surface it is
+    // unreachable only while KIND_OPTIONS.solo stays fully covered by
+    // SOLO_PACK_PARAM_MAP destinations + pack-resolve.js's FORWARDABLE_ARG_KEYS
+    // — the invariant tests/pack/mcp-pack-params.test.js guards (the
+    // KIND_OPTIONS.solo round-trip test, mutation-proven against a synthetic
+    // orphaned knob). If that invariant ever breaks, this loop is what turns a
+    // silent drop into a visible notice — never delete it as unreachable.
     for (const n of packNotices) { spawnContent.push({ type: 'text', text: n }); }
     if (isHeadless) {
       spawnContent.push({ type: 'text', text: HEADLESS_START_REMINDER });
@@ -1247,6 +1260,17 @@ const handlers = {
     if (fwd.error) { return textResult(fwd.error.message + (fwd.error.hint ? `\n${fwd.error.hint}` : ''), true); }
     packNotices.push(...fwd.notices);
 
+    // ⚠️ v4.7 PR7: the zod schema closes the TYPED door; a pack can push the same values through
+    // the other one (validatePack checks option KEY names, never value types). Both entrances
+    // reach the same spawn, so the check lives here, after pack merge, before any wave dir.
+    if (typeof input.prompt !== 'string' || !input.prompt.trim()) {
+      return textResult('Error: prompt must not be empty.', true);
+    }
+    if (input.timeout !== undefined
+        && (typeof input.timeout !== 'number' || !Number.isFinite(input.timeout) || input.timeout <= 0)) {
+      return textResult('Error: timeout must be a positive number of minutes.', true);
+    }
+
     // Resolve a single effective models list (council OR models), validated
     // BEFORE any wave dir / metadata is written so a bad request never strands
     // a pid-less 'running' orphan wave.
@@ -1280,15 +1304,34 @@ const handlers = {
     const waveDir = getSessionDir(cwd, waveId);
 
     let briefingPath;
+    let childPromptPath;
     try {
       fs.mkdirSync(waveDir, { recursive: true, mode: 0o700 });
       briefingPath = path.join(waveDir, 'briefing.md');
+      // ⚠️ W1-M4 (v4.7 PR7): this default is LOAD-BEARING. Omit it and every non-template wave
+      // spawns with `--prompt-file undefined`.
+      childPromptPath = briefingPath;
       // The prompt goes via file: the spawned command line must NOT carry it,
       // or it re-hits the ~32KB Windows argument cap (F4 spec §4.2).
-      fs.writeFileSync(briefingPath, input.prompt, { mode: 0o600 });
+      // ⚠️ W1-M4: briefing.md is the SEARCH CORPUS — src/sidecar/list-search.js reads it verbatim
+      // — and a child that aborts before fanout.js:145 never re-renders it, leaving the wave
+      // permanently unfindable by the text the user actually sees. Write the RENDERED text here
+      // (parity with the amicus_start path at :441/:506) and hand the child the raw input in a
+      // sibling file, so its own later re-render still produces byte-identical output and
+      // promptMeta.template provenance survives.
+      const briefingText = fwd.renderedPrompt !== undefined ? fwd.renderedPrompt : input.prompt;
+      fs.writeFileSync(briefingPath, briefingText, { mode: 0o600 });
+      if (fwd.renderedPrompt !== undefined) {
+        childPromptPath = path.join(waveDir, 'briefing-input.md');
+        fs.writeFileSync(childPromptPath, input.prompt, { mode: 0o600 });
+      }
+      // ⚠️ W1-M4 rider (owner-approved fold): the `briefing` key below must stay — without it the
+      // `list` BRIEFING column renders EMPTY for an aborted MCP wave, since only fanout.js:147
+      // ever wrote a briefing key and an aborted child never reaches it.
       writeFileAtomic(path.join(waveDir, 'metadata.json'), JSON.stringify({
         taskId: waveId, type: 'wave', status: 'running', legs: legIds,
         models: effectiveModels, headless: true, createdAt: new Date().toISOString(),
+        briefing: briefingText.slice(0, 200),
         // v4.5 Task 15: additive-only — absent (not null) without a pack.
         ...(packRecord ? { pack: packRecord } : {}),
       }, null, 2), { mode: 0o600 });
@@ -1302,7 +1345,7 @@ const handlers = {
 
     const args = [
       'fanout', '--models', effectiveModels.join(','),
-      '--prompt-file', briefingPath, '--wave-id', waveId,
+      '--prompt-file', childPromptPath, '--wave-id', waveId,
       '--json', '--client', detectClient(mcpServer), '--cwd', cwd,
     ];
     const agent = input.agent || 'Build';
