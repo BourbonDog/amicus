@@ -200,26 +200,35 @@ drove it:
    > unknown; never fabricate $0*). An omitted leg is not "unknown" — it renders as money never
    spent on legs that spent money.
 
-- **CA-4 (remaining half) — `runStats` completeness** *(M)*: Stage-2 judges and repair solos are
-  absent from `tally.json`'s `runStats` (observed: 5 rows for 11 real legs in `wsgate04`).
+> **Tense note.** The bullets below were written as pre-work problem statements and are kept for
+> the record of *why* the rev was scoped this way. The code has since landed on `main`; each bullet
+> now states what shipped. The heading's `✅ SHIPPED` marker and the version line stay absent until
+> the release cut, because v4.7 is not released yet.
+
+- **CA-4 (remaining half) — `runStats` completeness** *(M)*: **shipped.** Stage-2 judges and repair
+  solos *were* absent from `tally.json`'s `runStats` (observed: 5 rows for 11 real legs in
+  `wsgate04`); `runStats` now carries one row per paid launch, with `judge`
+  (`run-assemble.js:180-184`) and `repair` (`run-stage2.js:119-122`) rows emitted unconditionally.
   ⚠️ **Scope correction:** the failed-chair third of the original CA-4 is **closed** — v4.6.2's
   `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:113` cites LC-5 by name), and
   failed-chair cost already reaches `runStats` too: a failed ch1–ch3 attempt gets its own
   `chair-attempt` row there carrying that leg's real `usage` (`run-chair.js:154-156`), so no third
   row class was needed.
-- **GOA-7 prerequisite — segment the ledger by RESOLVED model, not alias** *(S–M)*: a **live defect
-  today**. Ledger rows key by council alias and aliases silently retarget (`gpt-pro` →
+- **GOA-7 prerequisite — segment the ledger by RESOLVED model, not alias** *(S–M)*: **shipped.**
+  `ledger.js:124` now keys on `row.resolvedModel || row.model` and `LEDGER_SCHEMA_VERSION` is 2.
+  It *was* a live defect: ledger rows keyed by council alias and aliases silently retarget (`gpt-pro` →
   `gpt-5.6-sol-pro`, the `opus` re-pin — both 2026-08-04), so `council stats` conflates distinct
   models under one name. The ledger is append-only, so every run adds rows that will later have to
   be distrusted, and both GOA-1 and GOA-2 plan to build on this data. Bump `LEDGER_SCHEMA_VERSION`;
   old rows stay readable (absent id ⇒ legacy). Full write-up and schema discipline: `BACKLOG.md`
   GOA-7. *(Recency decay — GOA-7's second half — is NOT in this rev.)*
-- **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)* — the one element carried
+- **Session/wave tagging + `--search` + grouped history** (F8) *(S–M)* — **shipped**
+  (`--tag`, `amicus list --search`, `--limit`, `spend --group-by tag`). The one element carried
   over from the composition scope, and the one with a visible paper trail: this repo's own
-  `BACKLOG.md` hand-maintains an index of run identifiers (`wave 47278069`, `run dfb6a692`,
-  `runs 0084d48c + 2039b2d1`, `wsgate02`/`wsgate04`) **because there is no search**. It is also the
+  `BACKLOG.md` hand-maintained an index of run identifiers (`wave 47278069`, `run dfb6a692`,
+  `runs 0084d48c + 2039b2d1`, `wsgate02`/`wsgate04`) **because there was no search**. It is also the
   rev's only daily-felt user surface — three schema fixes alone are a thin story.
-- **README + docs update** *(S)*
+- **README + docs update** *(S)* — the last scope line; in flight as this is written.
 
 > **Why these belong in one rev.** CA-4 and GOA-7's prerequisite are the same defect class — the run
 > record under-reporting what actually happened — and both are schema-shaped. Each was individually
