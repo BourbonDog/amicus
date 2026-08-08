@@ -194,6 +194,27 @@ All notable changes to Amicus are documented here. Format follows
   exploitable in practice, but tightens the same idempotency check the v4.6.3 CI fix below
   hardened.
 
+### Fixed
+
+- A pack file whose JSON body is not an object (`null`, an array, a bare number or string) used to
+  read as a *successful* load and then crash with an uncaught `TypeError` — `council run --pack` and
+  `pack show` both died, and `pack show --json` exited 0 with `"pack": null`. It is now a clean
+  `PACK_NOT_FOUND`.
+- **The MCP `amicus_start` shared-server path skipped the budget gate entirely unless a pack set
+  `maxCost`.** It now gates unconditionally with the same `maxCost`/`maxCostPerMtok` config fallback
+  the CLI has always used. Runs that previously proceeded may now be refused — that is the fix.
+- Budget refusal text is now surface-aware: the MCP surface no longer names `--max-cost`/
+  `--no-cost-gate` (flags that do not exist there), and neither surface suggests raising the ceiling
+  for a per-$/Mtok refusal, which could never clear it.
+- `--cwd` typed without a value parsed as boolean `true` and reached 16 consumer sites — crashing
+  `council run` with a raw `TypeError` and silently resolving templates against `<cwd>/true`. It now
+  exits 1 at the entry point. Same treatment for `council run`'s `--out-dir`, `--claude-review`,
+  `--run-id`, and `--timeout` (which also accepted `NaN`).
+- **`council run --out-dir` could write outside the project.** The MCP path has been fenced since
+  v4.5; the CLI now applies the same containment check.
+- A council member whose model name collides with an `Object.prototype` key (`toString`,
+  `constructor`, …) crashed the Workspace seats repaint and every live tick after it.
+
 ## [4.6.3] - 2026-08-05
 
 ### Added

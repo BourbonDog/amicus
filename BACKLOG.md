@@ -208,7 +208,8 @@ friction; a personal tap is possible but low-payoff), Scoop official buckets, an
   readable assertion). Tighten the `/multi-model/i` pin to the quoted "multi-model review" trigger
   string so it can't false-match unrelated prose.
   — done v4.7 PR4; pin tightened, null-guard half already resolved by 7cf3f18 (mustMatch), filed
-  sight-unseen. Also tracked in "v4.6.3 sweep riders" (:1207).
+  sight-unseen. Originally double-filed as a #110 sweep rider; that duplicate collapsed here in
+  v4.7 PR6 per spec D18.
 - [x] **`docs/DISTRIBUTION.md` internal API-path inconsistency** — **DONE**: no `/v0.1` reference
   remains in the file (synced in the Phase 13 docs lane; re-verified 2026-08-03).
 - [x] **Post-v1.9.0 hardening: registry pre-check trusts a bare HTTP 200.** **DONE (v4.6.3 #110):**
@@ -922,8 +923,9 @@ unchecked items ride to the next rev.)*
 - [x] **T5-m2** — run-state absent-case test should pass `template: null` (real production shape),
   not omit the key.
   — done v4.7 PR4
-- [ ] **T5-m3** — template block + `BAD_ARGS` string verbatim-triplicated across the three CLI
+- [x] **T5-m3** — template block + `BAD_ARGS` string verbatim-triplicated across the three CLI
   handlers; a shared `applyTemplateForArgs` would collapse the drift risk.
+  — done v4.7 PR6 (src/cli-template-args.js)
 - [x] **T5-m4** — `{{project}}` isn't path-normalized (unlike `artifact_path`); `TEMPLATE_RENDER`
   errors carry `hint: null`.
   — done v4.7 PR5
@@ -932,8 +934,10 @@ unchecked items ride to the next rev.)*
   — done v4.7 PR4
 - [x] **T5-m6** — fanout help-text wraps at column 31 vs. neighbors' 32; cosmetic.
   — done v4.7 PR5
-- [ ] **T11-a** — `PACK_NOT_FOUND` catches four distinct `readPack` failure modes; `PACK_INVALID` is
+- [x] **T11-a** — `PACK_NOT_FOUND` catches four distinct `readPack` failure modes; `PACK_INVALID` is
   reserved for structural failures only.
+  — done v4.7 PR6 (docblock now truthful; the underlying non-object-body crash was fixed in the
+  same PR)
 - [x] **T11-b** — `packRecord` tests don't round-trip hash against `canonicalHash`/`readPack`;
   `source:'path'` (`--pack ./x.json`) branch unexercised.
   — done v4.7 PR4
@@ -993,6 +997,13 @@ unchecked items ride to the next rev.)*
   shape: unconditional `delete loading[id]` in `wireLazyPanels`' sameRun arm, plus re-calling
   `files()` in the completion handler and remapping titles by `name` (blind-independent). Deferred
   to PR6.
+  — recon 2026-08-08: the 2026-08-07 corrected shape is itself refuted — remapping titles by
+  `name` reintroduces cross-model misattribution (the RN-1 class) when `artifactsByModel` is
+  absent (measured: `["vendor/a","vendor:a"]` → `["vendor:a","vendor:a"]`), and a third path — the
+  artifact manifest changing between issue and completion — survives both halves. T19-m1 and
+  T19-m2 must be ONE task behind a mandatory `workspace-panels.js` extraction (294/300 as of PR6,
+  gate-adjusted; T19-m1 alone lands it at exactly 300/300 with zero comments — adding T19-m2 too
+  → 302/300). Needs a real design pass, not a sweep slot. Deferred to PR7.
 - [ ] **T19-m2** — RN-5's fix wave added a second uncaught `loadPanel()` call site; a rejected invoke
   leaves `loading[id]` cached and the panel broken until the run changes (pre-existing at `:127`, now
   hit more often).
@@ -1000,14 +1011,19 @@ unchecked items ride to the next rev.)*
   production caller (`workspace-matrix.js:79`) discards it; terminate **there**. Once `p.catch(...)`
   is attached inside `loadPanel`, the two fire-and-forget sites can no longer produce unhandled
   rejections, so the wrapper the item proposes is not the fix. Deferred to PR6.
+  — recon 2026-08-08: must be the SAME task as T19-m1, behind the same mandatory
+  `workspace-panels.js` extraction — see T19-m1's 2026-08-08 note for the refuted shape and the
+  294/300→302/300 line-budget math. Deferred to PR7.
 - [x] **T19-m3** — the terminal-refresh test drives `openRun(sameId)` directly rather than the
   live-tick seam (`workspace-verbs.js:95`).
   — done v4.7 PR4
 - [x] **T19-m4** — a blind-flip test reads titles via `children[0]` instead of the house pattern
   `querySelectorAll('h3')` (boundary test `:444`).
   — done v4.7 PR4
-- [ ] **T20-m2** — the seat-reorder pass is O(n²) (`find()` per seat); immaterial at real council
+- [x] **T20-m2** — the seat-reorder pass is O(n²) (`find()` per seat); immaterial at real council
   seat counts.
+  — standing note v4.7 PR6: folded into the RN-11 comment at
+  electron/workspace-ui/workspace-render.js renderSeats
 - [x] **T20-m3** — reorder runs before the departed-row removal pass; the combined reorder+removal
   render is untested (hand-traced correct).
   — done v4.7 PR4
@@ -1031,7 +1047,11 @@ unchecked items ride to the next rev.)*
   `--search` corpus, making it a permanently-wrong *search surface*, not a cosmetic window. There is
   also a repo ruling in the opposite direction (`tests/mcp-start-metadata.test.js:96-105` pins
   `briefing: renderedPrompt` for parity with the CLI's on-disk file). Deferred to PR6.
-- [ ] **W1-M5** — the budget-ceiling hint text is CLI-flavored even when the run came in over MCP;
+  — recon 2026-08-08: option (B) (the only shape on file) throws `ReferenceError` on every wave
+  (hoists a `legs` read into its TDZ), breaks the pinned `fanout.test.js:738` (asserts no wave dir
+  on validation failure), and closes only 2 of ~17 pre-launch abort paths. `src/sidecar/fanout.js`
+  is at 300/300 by the size gate — zero headroom for a fix in this file. Deferred to PR7.
+- [x] **W1-M5** — the budget-ceiling hint text is CLI-flavored even when the run came in over MCP;
   pre-existing class.
   — recon 2026-08-07: the proposed MCP trailer names `maxCost`/`noCostGate`, which **do not exist
   on `amicus_start`** (they belong to `amicus_council_run`), and `noCostGate` is unreachable by any
@@ -1039,14 +1059,23 @@ unchecked items ride to the next rev.)*
   pack-flavored; and the refusal has **two** branches (`overCeiling` vs the per-$/Mtok threshold)
   whose remedies differ — the second has *no* override over MCP at all. Also `budget.js:74`'s
   ceiling line is a second CLI-flavored string on the same path. Deferred to PR6.
+  — partially done v4.7 PR6: the parity half (the gate no longer hangs off packForward.maxCost)
+  and the surface-aware text both shipped.
 - [ ] **W1-M6 / W1-M7** — forward-notice plumbing for orphaned pack knobs is dead code on the
   `start` spawn-fallback path today; wouldn't surface a notice if that path went live.
-- [ ] **resolveBench/resolveBenchInput parallel evolution** (`cli-handlers-council-run.js` /
+  — recon 2026-08-08: BACKLOG's "the path is dead" premise is **wrong** — spawn-fallback is the
+  **default** for interactive `amicus_start`. Source shape is correct and verified green; the test
+  plan is the part that fails. Needs re-framing (not a source fix) before it can be planned.
+  Deferred to PR7.
+- [x] **resolveBench/resolveBenchInput parallel evolution** (`cli-handlers-council-run.js` /
   `mcp-council-run.js`) — CLI and MCP each hand-roll their own XOR-validation wrapper around the
   shared `resolveCouncilMembers`. Wave 2 unified the *dropped-members* signal between them via that
   shared core, but the two outer wrappers still evolve independently — same drift shape as T15-m5's
   paramMap divergence. Nothing wrong today; watch if one's validation rules change without the other
   following.
+  — standing note v4.7 PR6: mirrored docblocks at src/cli-council-run-bench.js resolveBench and
+  src/mcp-council-bench.js resolveBenchInput (the entry's file paths were stale — both were
+  extracted in v4.6 Task 4b / v4.7 PR0)
 - [x] **PR5F-1** — `amicus pack save <n> --version 2.0.0` exits 0 having written NOTHING. `version`
   is a boolean flag (`src/cli.js` `BOOLEAN_FLAGS`, `:143`), so `parseArgs` sets `version: true` and
   `bin/amicus.js:90` intercepts it as the version banner before dispatch — `cli-handlers-pack.js:26`
@@ -1057,19 +1086,29 @@ unchecked items ride to the next rev.)*
   — superseded: fixed in [#125](https://github.com/BourbonDog/amicus/pull/125) (`fix/pack-save-version`),
   which renamed the pack's own flag to `--pack-version` and added a preflight guard. Filed and closed
   the same day; PR5's `pack:` help block carries the new spelling via the merge of `origin/main`.
-- [ ] **PR5F-2** — a bare `--out-dir` (no value) yields a directory literally named `true`.
+- [x] **PR5F-2** — a bare `--out-dir` (no value) yields a directory literally named `true`.
   `cli-handlers-council-run.js:178-179` does `path.resolve(project, String(args['out-dir']))`
   with no dash-leading/non-string guard — the same R1/R5 class fixed for `-o/--out`, one flag over.
   Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
-- [ ] **PR5F-3** — SR-3's metadata tmp-sweep behavior delta is untested: a symlink named like a tmp
+  — done v4.7 PR6, but SPLIT: `--cwd` is guarded once at `bin/amicus.js` (16 consumer sites);
+  council run's own valueless flags (`--out-dir`, `--claude-review`, `--run-id`, `--timeout`)
+  guarded in-handler. The filed shape (B) was rejected — it would have turned
+  `amicus models --check` into exit 1. Same valueless-value class also covers `df9c3e5`: a council
+  PACK could set `options.timeout` to a boolean or a non-numeric string and reach `runCouncil`,
+  because `pack-validate.js` checks option KEY names and never value types, and the old post-merge
+  check was `args.timeout <= 0` (which `true` coerces to `1` and passes). Fixed alongside the CLI
+  valueless-flag guards in the same PR.
+- [x] **PR5F-3** — SR-3's metadata tmp-sweep behavior delta is untested: a symlink named like a tmp
   file now moves from *swept* (unlink removed the link, a safe success) to *silently ignored* (the
   new `lstatSync`-based directory exclusion also excludes symlinks). Sanctioned by the brief and
   consistent with the module's never-follow policy, but a real, untested behavior delta. Needs one
   test or one docblock line. Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
-- [ ] **PR5F-4** — `session-index-tmp-sweep.js:37`'s comment cross-references
+  — done v4.7 PR6
+- [x] **PR5F-4** — `session-index-tmp-sweep.js:37`'s comment cross-references
   `session-metadata-tmp-sweep.js:27-31` by line number; currently exact, but a rot risk the same
   class as T6-m2 above — a future edit to either file can silently invalidate the other's citation.
   Found during the v4.7 PR5 final-review consolidated wave, 2026-08-07.
+  — done v4.7 PR6
 
 ### Closed at ship — do not re-file
 
@@ -1225,32 +1264,42 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   (an explicit `gatewayOnly:false` provenance value is what a non-annotated entry produces) but
   flagged for a future wording pass. — #107
   — done v4.7 PR4
-- [ ] Bare-object candidate/suppression maps (`seen`/`reviewing`/`byRole` in the seats-panel dead
+- [x] Bare-object candidate/suppression maps (`seen`/`reviewing`/`byRole` in the seats-panel dead
   logic) inherit `Object.prototype` keys — a model literally named `toString` would be silently
   suppressed. Pre-existing pattern, effectively unreachable; fix as one `Object.create(null)`
   family sweep, not piecemeal. — #108
-- [ ] Role `'claude'` is absent from `isReviewing`'s allowlist — unreachable today (claude is
+  — done v4.7 PR6
+- [x] Role `'claude'` is absent from `isReviewing`'s allowlist — unreachable today (claude is
   rejected as bench/chair/critic), but `isReviewing` is the single place to extend if that
   reservation ever loosens. — #108
-- [ ] Hidden dependency, documented in `deadSeats`'s docblock: recovered-critic suppression relies
+  — standing note v4.7 PR6: extended the role-awareness comment above isReviewing
+  (electron/workspace-ui/live-model.js)
+- [x] Hidden dependency, documented in `deadSeats`'s docblock: recovered-critic suppression relies
   on `roleFor`'s critic branch, which the `--critic`/`--lenses` mutual exclusion keeps reachable —
   revisit if that exclusion ever loosens. — #108
+  — standing note v4.7 PR6: already at the deadSeats docblock; stale citation corrected in the
+  same commit
 - [x] `--out -x` parser asymmetry: `--out -x` consumes `-x` as a value while `-o -x` yields boolean
   `true` — out of R1's scope (the valueless-flag fix); the parser itself is untouched. — #109
   — done v4.7 PR5
-- [ ] The metadata-tmp sweep reads `process.cwd()` directly instead of doctor's injected `getCwd`
+- [x] The metadata-tmp sweep reads `process.cwd()` directly instead of doctor's injected `getCwd`
   — revisit if a `doctor --cwd` mode ever lands. — #109
+  — standing note v4.7 PR6: sessionsRoot() docblock in src/utils/session-metadata-tmp-sweep.js
 - [x] A directory named like an orphan tmp file lands in the sweep's "unremovable" bucket via
   EISDIR (inherited from the session-index-tmp-sweep sibling; the throwing-unlink test pins
   never-crash, not a fix). — #109
   — done v4.7 PR5
-- [ ] Two `doctor` rows share message prose, disambiguated only by row name (deliberate
+- [x] Two `doctor` rows share message prose, disambiguated only by row name (deliberate
   byte-parallel with the sibling sweep; `fixDetail` strings differ). — #109
+  — standing note v4.7 PR6: mirrored comments in src/utils/session-index-tmp-sweep.js
+  (evaluateSessionIndexTmpSweep) and src/utils/session-metadata-tmp-sweep.js
+  (evaluateSessionMetadataTmpSweep)
 - [x] No combined `overwritten`+`shadowsBuiltin` human-render test for `council save` (hand-traced
   correct; the `--json` compose case is covered). — #109
   — done v4.7 PR4
-- [ ] The registry pre-check's two body greps (version, status) scan independently — sound for a
+- [x] The registry pre-check's two body greps (version, status) scan independently — sound for a
   single-version endpoint, revisit if the registry ever returns collections. — #110
+  — standing note v4.7 PR6: comment block in .github/workflows/publish.yml, above VERSION_RE
 - [x] The version grep's BRE dots are unescaped (false-match direction is fail-toward-skip, not
   real-world exploitable, but worth tightening). — #110
   — done v4.7 PR5
@@ -1260,17 +1309,13 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
 - [x] The 3-file second-layer `base` duplicate in the doctor suites (optional further
   `makeBaseDeps()` consolidation beyond this sweep's pass). — #110
   — done v4.7 PR4
-- [ ] `doctor-local-providers`'s preserved `env` omission is comment-marked as deliberate — revisit
+- [x] `doctor-local-providers`'s preserved `env` omission is comment-marked as deliberate — revisit
   if it ever drifts unnoticed. — #110
+  — standing note v4.7 PR6: tests/helpers/doctor-base-deps.js:34-38, alongside the pre-existing
+  getLocalProviders/probeLocalProvider omission note
 - [x] `makeBaseDeps()`'s new test helper sits outside the `src/`/`electron/` lint gates (manually
   linted clean today; no automated enforcement). — #110
   — done v4.7 PR4
-- [x] Phase-11 test-hygiene bundle's skill-docs remainder (frontmatter null-guards on
-  `tests/skill-second-opinion-docs.test.js`/`tests/skill-sidecar-docs.test.js`, the `/multi-model/i`
-  pin tighten) — files not opened during this sweep; also tracked in this file's Phase 11 section
-  above. — #110
-  — done v4.7 PR4: pin tightened; the null-guard half was already resolved by 7cf3f18
-  (mustMatch), filed sight-unseen. Canonical entry: Phase 11 (:204).
 - [x] The README's "sixteen tools" count is unpinned prose — owner call on whether to pin it to a
   generated count or leave it deliberately count-neutral. — #110
   — done v4.7 PR4 (R6 count-neutral)
@@ -1363,3 +1408,6 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   through `seatsFromRunStats` at all — so the fix is terminal-path-only. Line budget:
   `live-model.js` is 284/300 and the honest implementation is +20-30, so it needs the helper to
   land in `workspace-seats.js` (132) instead. Deferred to PR6.
+  — recon 2026-08-08: dropping the `=== 'error'` gate is confirmed right. Still needs an owner
+  ruling on the rendering surface (status-cell suffix vs. a separate marker), and the helper must
+  land in `workspace-seats.js` (133/300), not `live-model.js`. Deferred to PR7.
