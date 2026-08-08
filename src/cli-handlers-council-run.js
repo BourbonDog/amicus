@@ -63,7 +63,10 @@ async function handleCouncilRun(args, depsOverride = {}) {
   // --timeout is DEFAULTS-seeded to 15 (src/cli.js:31), so `!== undefined` proves
   // nothing; NaN is the real hole — it passes the `<= 0` guard below.
   if (explicitKeys.has('timeout') && (typeof args.timeout !== 'number' || !Number.isFinite(args.timeout))) {
-    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: `Error: --timeout requires a number: got '${args.timeout}'` });
+    // Do NOT echo args.timeout: parseArgs already ran parseInt, so a typed
+    // `--timeout abc` reads back as NaN and quoting it shows the user a value
+    // they never typed. Boolean `true` (bare flag) has the same problem.
+    return failJson(useJson, { code: ERROR_CODES.BAD_ARGS, message: 'Error: --timeout requires a number' });
   }
   if (args.pack !== undefined) {
     const { applyPackToArgs } = require('./pack/pack-resolve');
@@ -103,7 +106,8 @@ async function handleCouncilRun(args, depsOverride = {}) {
   if (tpl.fail !== undefined) { return tpl.fail; }
   // The trailing `templateMeta =` is NOT copy-paste drift against handleFanout's
   // otherwise-identical call: it feeds `template: templateMeta` on the run.json
-  // seed below (:231). Drop it and every --template council run silently records
+  // seed below (the `template:` field of the runCouncil options object). Drop it
+  // and every --template council run silently records
   // `template: null`. handleFanout has no such field, which is why its call is shorter.
   if (tpl.applied) { promptRes = { prompt: tpl.prompt, promptMeta: tpl.promptMeta }; templateMeta = tpl.templateMeta; }
 

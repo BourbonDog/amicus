@@ -1059,8 +1059,24 @@ unchecked items ride to the next rev.)*
   pack-flavored; and the refusal has **two** branches (`overCeiling` vs the per-$/Mtok threshold)
   whose remedies differ — the second has *no* override over MCP at all. Also `budget.js:74`'s
   ceiling line is a second CLI-flavored string on the same path. Deferred to PR6.
-  — partially done v4.7 PR6: the parity half (the gate no longer hangs off packForward.maxCost)
-  and the surface-aware text both shipped.
+  — partially done v4.7 PR6: the parity half (the gate no longer hangs off packForward.maxCost) and
+  the surface-aware text shipped for the ONE refusal site that passes `{kind:'mcp'}` —
+  `mcp-server.js`'s shared-server `amicus_start`. Remainder re-filed as PR6F-1 below; this box is
+  ticked only because the shipped half is done, not because the class is closed.
+- [ ] **PR6F-1** — CLI-flavoured budget text survives on two paths W1-M5's original framing missed
+  (it assumed a single site). Only `mcp-server.js:463` passes `{kind:'mcp'}`; verified 2026-08-08 that
+  it is the sole surface-aware call site of three.
+  (a) **CONFIRMED** — `src/sidecar/fanout-budget.js:51` calls `formatBudgetError(budget)` with no
+  surface (so it defaults to CLI), and `:62-65` separately hardcodes its own
+  `--max-cost`/`--no-cost-gate` reservation trailer. Both land in run/wave docs that
+  `amicus_wait`/`amicus_read`/`amicus_council_stats` hand back to MCP callers.
+  (b) **UNVERIFIED, check before planning** — the `amicus_start` spawn-fallback child runs
+  `cli-handlers-run.js:92`, which is CLI-flavoured. Whether that text ever reaches a client is
+  unresolved: the v4.7 PR6 Task-3 analysis found spawned children get
+  `stdio: ['ignore','ignore',<debug.log fd>]`, which would send it to a log, not the caller. Confirm
+  the stdio wiring on THIS path before treating (b) as a defect at all.
+  Fixing (a) needs a decision first: a run doc is read by BOTH surfaces, so its text may need to be
+  surface-NEUTRAL rather than surface-switched. Found by the v4.7 PR6 whole-branch review, 2026-08-08.
 - [ ] **W1-M6 / W1-M7** — forward-notice plumbing for orphaned pack knobs is dead code on the
   `start` spawn-fallback path today; wouldn't surface a notice if that path went live.
   — recon 2026-08-08: BACKLOG's "the path is dead" premise is **wrong** — spawn-fallback is the
@@ -1410,4 +1426,5 @@ duplication debt) is excluded here: it was resolved within the same sweep by #11
   land in `workspace-seats.js` (132) instead. Deferred to PR6.
   — recon 2026-08-08: dropping the `=== 'error'` gate is confirmed right. Still needs an owner
   ruling on the rendering surface (status-cell suffix vs. a separate marker), and the helper must
-  land in `workspace-seats.js` (133/300), not `live-model.js`. Deferred to PR7.
+  land in `workspace-seats.js` (132/300 by the gate's own arithmetic), not `live-model.js`.
+  Deferred to PR7.

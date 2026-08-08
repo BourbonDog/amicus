@@ -79,7 +79,11 @@ function formatBudgetError(result, surface = { kind: 'cli' }) {
     for (const o of result.offending) { lines.push(`  - ${o.modelInput} (${o.model}): ${o.reason}`); }
   }
   if (result.overCeiling) {
-    lines.push(`Budget gate: estimated total $${result.breakdown.totalEstCost.toFixed(4)} exceeds ${isMcp ? 'the configured maxCost' : '--max-cost'} $${result.breakdown.maxCost.toFixed(4)} (estimate, not guaranteed).`);
+    // On MCP the ceiling can come from EITHER a pack's `maxCost` option or the
+    // config, and the pack wins (mcp-server.js's fwd.maxCost ?? cfg.maxCost).
+    // Naming only one of them would send the caller to edit the loser — the very
+    // "remedy that cannot work" class this surface split exists to end.
+    lines.push(`Budget gate: estimated total $${result.breakdown.totalEstCost.toFixed(4)} exceeds ${isMcp ? 'the effective maxCost' : '--max-cost'} $${result.breakdown.maxCost.toFixed(4)} (estimate, not guaranteed).`);
   }
   if (result.breakdown.unpricedCount > 0) {
     lines.push(`(${result.breakdown.unpricedCount} unpriced leg(s) — direct provider; cost unknown, not included in the estimate.)`);
@@ -92,11 +96,11 @@ function formatBudgetError(result, surface = { kind: 'cli' }) {
   const hasCeiling = result.overCeiling;
   if (isMcp) {
     if (hasOffending && hasCeiling) {
-      lines.push('Override: raise both maxCostPerMtok and maxCost in the amicus config, or choose a cheaper model — raising just one will not clear this run.');
+      lines.push("Override: raise maxCostPerMtok in the amicus config AND the effective maxCost (the pack's `maxCost` option if this run used a pack, otherwise the config's), or choose a cheaper model — raising just one will not clear this run.");
     } else if (hasOffending) {
       lines.push('Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.');
     } else {
-      lines.push('Override: raise maxCost in the amicus config, or choose a cheaper model.');
+      lines.push("Override: raise the effective maxCost — the pack's `maxCost` option if this run used a pack, otherwise the config's — or choose a cheaper model.");
     }
   } else {
     if (hasOffending && hasCeiling) {

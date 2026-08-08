@@ -203,9 +203,15 @@ All notable changes to Amicus are documented here. Format follows
 - **The MCP `amicus_start` shared-server path skipped the budget gate entirely unless a pack set
   `maxCost`.** It now gates unconditionally with the same `maxCost`/`maxCostPerMtok` config fallback
   the CLI has always used. Runs that previously proceeded may now be refused — that is the fix.
-- Budget refusal text is now surface-aware: the MCP surface no longer names `--max-cost`/
-  `--no-cost-gate` (flags that do not exist there), and neither surface suggests raising the ceiling
-  for a per-$/Mtok refusal, which could never clear it.
+- Budget refusal text is now surface-aware on the MCP `amicus_start` (shared-server) path: it no
+  longer names `--max-cost`/`--no-cost-gate`, flags that do not exist there. Other MCP-visible
+  refusals — the `amicus_start` spawn fallback and the fanout/council reservation hint recorded in
+  run docs — still carry CLI-flavoured text; that remainder is filed, not fixed here. On BOTH
+  surfaces the remedy now names only levers that can actually clear the branch that fired: raising
+  the ceiling was previously suggested for a per-$/Mtok refusal, which it could never clear.
+- A council pack could set `options.timeout` to `true` or to a non-numeric string and have it reach
+  the engine — `validatePack` checks option key names, never value types, and the old post-merge
+  check was `timeout <= 0`, which `true` passes by coercing to `1`. Such a pack now exits 1.
 - `--cwd` typed without a value parsed as boolean `true` and reached 16 consumer sites — crashing
   `council run` with a raw `TypeError` and silently resolving templates against `<cwd>/true`. It now
   exits 1 at the entry point. Same treatment for `council run`'s `--out-dir`, `--claude-review`,

@@ -113,13 +113,27 @@ describe('formatBudgetError surfaces (v4.7 PR6)', () => {
       expect(text).not.toMatch(/--max-cost <\$> to raise the ceiling, or --no-cost-gate to disable both guards \(e\.g\. an intentional o3 run\)\.\s*$/);
     });
 
-    it('MCP: names both config levers, and warns raising just one will not clear the run', () => {
+    it('MCP: names both levers, and warns raising just one will not clear the run', () => {
       const text = formatBudgetError(both, { kind: 'mcp' });
-      expect(text).toContain(
-        'Override: raise both maxCostPerMtok and maxCost in the amicus config, or choose a cheaper model — raising just one will not clear this run.'
-      );
+      expect(text).toContain('raise maxCostPerMtok in the amicus config');
+      expect(text).toContain('effective maxCost');
+      expect(text).toContain('raising just one will not clear this run');
+      // Must not degrade to a single-lever remedy.
       expect(text).not.toContain('Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.');
-      expect(text).not.toContain('Override: raise maxCost in the amicus config, or choose a cheaper model.');
+    });
+  });
+
+  // Final-review finding: the MCP ceiling can come from a pack's `maxCost` option
+  // OR the config, and the pack WINS (mcp-server.js: fwd.maxCost ?? cfg.maxCost).
+  // Text that names only the config sends a pack-ceiling caller to edit the loser —
+  // the same "remedy that cannot work" class this surface split exists to end.
+  describe('the MCP ceiling text does not claim the config is the only lever', () => {
+    it('ceiling-only names the effective ceiling, not "the configured maxCost"', () => {
+      const text = formatBudgetError(ceilingOnly, { kind: 'mcp' });
+      expect(text).toContain('effective maxCost');
+      expect(text).not.toContain('the configured maxCost');
+      expect(text).not.toContain('Override: raise maxCost in the amicus config');
+      expect(text).toMatch(/pack/i); // it must say where else the ceiling can come from
     });
   });
 });
