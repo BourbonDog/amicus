@@ -144,7 +144,7 @@
       state.detailRunStatus = d.run.status;
     }
     $('blind-toggle').checked = state.blind;
-    state.labelByModel = {};
+    state.labelByModel = Object.create(null);
     d.derived.names.forEach(function (p) { state.labelByModel[p.model] = p.label; });
 
     $('run-title').textContent = d.runId;

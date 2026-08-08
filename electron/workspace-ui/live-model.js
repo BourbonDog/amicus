@@ -180,9 +180,9 @@
    * suppression below (`byRole[alias + '|critic']`) relies on `roleFor`'s
    * critic branch (src/council/run-stages.js), which only fires when lenses
    * are absent — safe today only because --critic and --lenses are mutually
-   * exclusive (cli-handlers-council-run.js:196); if that exclusion ever
-   * loosens, a healed critic on a lens run would carry role 'seat' and this
-   * suppression would render a ghost dead row for it.
+   * exclusive (src/cli-handlers-council-run.js's `critic && lenses` check); if
+   * that exclusion ever loosens, a healed critic on a lens run would carry
+   * role 'seat' and this suppression would render a ghost dead row for it.
    *
    * Old-run resilience (v4.6.3 PR2, spec D4): pre-`degrades[]` runs (v4.5.2)
    * carry the BENCH half of a seat loss only in `seatLoss.deadBenchSeats`
@@ -208,7 +208,12 @@
    */
   function deadSeats(degrades, seatLoss, liveSeats, runMeta) {
     var critic = runMeta && runMeta.critic ? runMeta.critic : null;
-    var seen = {};
+    // ⚠️ Object.create(null) throughout this family (also workspace-render.js's
+    // `existing`/`seen` and workspace-app.js's `labelByModel`): a model literally
+    // named `toString` is truthy off a bare object, so it was dropped here and —
+    // worse — crashed workspace-render.js:212 reading `.children` off an inherited
+    // function, killing the seats repaint and every tick after it.
+    var seen = Object.create(null);
     var order = [];
     function add(model, retried, role) {
       if (!model || seen[model]) { return; }
@@ -248,12 +253,17 @@
     // a dead-critic candidate is cleared only by a live CRITIC leg. A null
     // role is NOT reviewing: counting it would suppress silently, the exact
     // class the announcement invariant forbids.
+    // Role 'claude' is deliberately absent: it is emitted only by claudeRunStatsRow
+    // (src/council/run-assemble.js:129-132) for a seat that never launches a leg, and
+    // preflightClaudeReview (run-assemble.js:86-102) rejects 'claude' as chair/critic/
+    // bench — so no 'claude' leg can die. If that reservation ever loosens, this
+    // allowlist is the single place to extend.
     function isReviewing(role) {
       return role === 'seat' || role === 'critic' ||
         (typeof role === 'string' && role.indexOf('lens:') === 0);
     }
-    var reviewing = {};
-    var byRole = {};
+    var reviewing = Object.create(null);
+    var byRole = Object.create(null);
     // ⚠️ Fable review (PR4b fix wave): same F34/F36 alias-selection seatCells already uses
     // (`seat.modelInput || seat.model`, above) — a LIVE payload seat's `model` is the RESOLVED
     // executable id, not the alias a degrade record names; `modelInput` carries the alias.
