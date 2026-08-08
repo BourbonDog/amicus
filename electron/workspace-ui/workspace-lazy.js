@@ -173,7 +173,15 @@
     if (sameRun) {
       ['reviews-panel', 'bundle-panel', 'judges-panel'].forEach(function (id) {
         var p = A.$(id);
-        if (p.open) { delete loading[id]; loadPanel(id, loaders[id].bodyId, loaders[id].files); }
+        // ⚠️ T19-m1 (v4.7 PR7): the cache drop used to be INSIDE the `p.open` guard, so a panel
+        // the user had collapsed kept its settled promise across a blind flip — reopening it
+        // returned that promise and repainted the previous blind state with no new fetch (recon
+        // path A), and a panel collapsed mid-flight repainted the stale wave (path D). Dropping
+        // unconditionally costs a re-read of that panel's artifacts on the next open; renderDetail
+        // fires on run open, blind toggle, and the live loop's terminal refresh only (the tick
+        // calls applyLive, not renderDetail), so this is not a per-poll storm.
+        delete loading[id];
+        if (p.open) { loadPanel(id, loaders[id].bodyId, loaders[id].files); }
       });
     }
   }

@@ -181,4 +181,58 @@ describe('lazy-panel staleness pin (Task 2, v4.7 PR7): RN-1 collision titles', (
     expect(global.window.AmicusApp.state.blind).toBe(true);
     expect(reviewsSectionTitles()).toEqual(['Review A', 'Review B']);
   });
+
+  /**
+   * Task 3 (v4.7 PR7, T19-m1): a panel the user has COLLAPSED must not keep painting a stale
+   * blind state when reopened after a blind flip. Recon paths A (collapsed-then-reopened after
+   * a flip) and D (collapsed mid-flight) both trace to the same root cause: the cache drop in
+   * wireLazyPanels' `sameRun` arm used to sit INSIDE the `p.open` guard, so a panel that was
+   * closed at flip time never had its settled `loading[panelId]` promise dropped — reopening it
+   * returned that already-resolved promise (whose `.then` had already fired) instead of issuing
+   * a new read.
+   *
+   * Sequence: open at blind OFF -> collapse -> flip blind ON (panel still closed) -> reopen.
+   *
+   * Asserts BOTH halves, per the brief:
+   * 1. the rendered titles are the blind LABELS ('Review A'/'Review B'), not the raw model ids;
+   * 2. a NEW 'workspace:read-artifact' invoke was actually issued on reopen — count is the
+   *    load-bearing assertion. Without it, a build that paints correct titles from a stale cache
+   *    (impossible today, but not something (1) alone rules out in general) would still pass.
+   */
+  test('a panel collapsed before a blind flip re-fetches and repaints on reopen, not a stale cached promise (T19-m1, path A)', async () => {
+    await global.window.AmicusApp.openRun('runA');
+    expect(global.window.AmicusApp.state.blind).toBe(false);
+
+    const panel = await openReviewsPanel();
+    expect(reviewsSectionTitles()).toEqual(['vendor/a', 'vendor:a']);
+
+    const invokeMock = global.window.amicusWorkspace.invoke;
+    function readArtifactCalls() {
+      return invokeMock.mock.calls.filter((c) => c[0] === 'workspace:read-artifact').length;
+    }
+
+    // Collapse the panel — mirrors the real <details> firing 'toggle' on every open-state
+    // change, same convention as openReviewsPanel() firing it on open.
+    panel.open = false;
+    panel._listeners.toggle[0]();
+
+    const readArtifactCountBeforeFlip = readArtifactCalls();
+
+    // Flip blind ON while the panel is still collapsed — this drives wireLazyPanels' `sameRun`
+    // arm with p.open === false for reviews-panel.
+    flipBlind(true);
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(global.window.AmicusApp.state.blind).toBe(true);
+
+    // Reopen — the real registered toggle listener, exactly like openReviewsPanel().
+    panel.open = true;
+    panel._listeners.toggle[0]();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+
+    // (1) titles are the blind labels, not the raw model ids left over from the blind-OFF paint.
+    expect(reviewsSectionTitles()).toEqual(['Review A', 'Review B']);
+    // (2) load-bearing: a genuinely NEW read-artifact request was issued on reopen, not a
+    // repaint from the promise cached before the flip.
+    expect(readArtifactCalls()).toBeGreaterThan(readArtifactCountBeforeFlip);
+  });
 });
