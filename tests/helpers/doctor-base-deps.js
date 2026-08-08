@@ -31,6 +31,11 @@
  *       every call site in that file supplies both keys). The omission is
  *       preserved byte-conservatively: it matches the pre-consolidation
  *       fixture's exact shape, which this factory does not silently change.
+ *     - doctor-local-providers.test.js ALSO omits `env` — a preserved
+ *       divergence from that file's pre-consolidation fixture, not a reasoned
+ *       pin (its own comment at :19-22). Inert today: only
+ *       doctor-base-url-check.js reads `d.env`, and that row is never asserted
+ *       in that file.
  *   `omit` deletes the keys from the freshly-built object before returning
  *   it, so `Object.keys(makeBaseDeps({ omit: ['x'] }))` truly excludes `x`.
  *

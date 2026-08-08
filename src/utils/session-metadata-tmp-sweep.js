@@ -29,6 +29,14 @@
  * symlinked taskId or subagents directory could otherwise be traversed and
  * have files unlinked through the link, effectively outside the sessions
  * root; lstat closes that off at zero cost.
+ *
+ * Consequence of the SR-3 isFile() gate (listTmpIn, below): a SYMLINK whose
+ * basename matches the tmp pattern is now excluded from the list entirely —
+ * neither swept nor reported. Before SR-3 it was swept (unlink removes the
+ * link, never the target — a safe success). Deliberate: this module's
+ * never-follow policy applies to the entries it unlinks too. Note the sibling
+ * session-index-tmp-sweep.js diverges here — it uses statSync, so a
+ * symlink-to-a-file with the matching name IS still swept there.
  */
 
 const fs = require('fs');

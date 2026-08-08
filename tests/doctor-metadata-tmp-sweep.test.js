@@ -245,6 +245,22 @@ describe('session-metadata-tmp-sweep real fs glue', () => {
     expect(listSessionMetadataTmpFiles()).toEqual([]);
   });
 
+  // Symlink safety (module docblock): a SYMLINK whose basename matches the
+  // tmp pattern is excluded by the same isFile() gate that excludes
+  // name-shaped directories above — lstat never follows it, so a symlink
+  // never reads as an orphan here. POSIX-only: Windows generally refuses
+  // fs.symlinkSync for unprivileged users, and this suite runs on
+  // windows-latest in CI.
+  const itPosix = process.platform === 'win32' ? it.skip : it;
+  itPosix('a name-shaped symlink is excluded, not reported as an orphan', () => {
+    const taskDir = path.join(sessionsRoot(), 'abc123');
+    fs.mkdirSync(taskDir, { recursive: true });
+    const target = path.join(taskDir, 'real.json');
+    fs.writeFileSync(target, '{}');
+    fs.symlinkSync(target, path.join(taskDir, '.metadata.json.555.eee555eee555.tmp'));
+    expect(listSessionMetadataTmpFiles()).toEqual([]);
+  });
+
   test('unlinkSessionMetadataTmp removes the named file relative to the sessions root', () => {
     const { listSessionMetadataTmpFiles, unlinkSessionMetadataTmp } = require('../src/utils/session-metadata-tmp-sweep');
     const taskDir = path.join(sessionsRoot(), 'abc123');
