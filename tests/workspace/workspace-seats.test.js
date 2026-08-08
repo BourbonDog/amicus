@@ -203,3 +203,147 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
     expect(tbody.children[0].children[8].textContent).toBe('↻ retried once');
   });
 });
+
+/**
+ * Drift pin (v4.7 PR7 task-8 review finding, "Important"): retriedAliases() above is a
+ * hand-mirrored copy of deadSeats' own kind/channel/data-shape filter (live-model.js:227-241)
+ * — the comment at this file's :47-56 says it "must keep mirroring it", but nothing enforced
+ * that until now. This is a BEHAVIOURAL pin, not a source-text one: it drives both consumers
+ * with the SAME degrade-record fixtures and asserts they agree on which records count as
+ * "retried" — the one axis the two consumers are required to agree on.
+ *
+ * Deliberately NOT a row-count/ghost-row comparison. deadSeats paints ghost rows for seats
+ * with no live/cost row; the seats-panel marker only marks reviewing-role rows that DO have a
+ * cost row — different jobs by design (D6's role-aware suppression), so a pin comparing total
+ * rows would be false by construction (see test (5) above, which relies on exactly that
+ * asymmetry). Comparing "does this degrade record count as retried" sidesteps it: each case
+ * drives retriedAliases() (via ONE live reviewing-role row for the alias, so deadSeats' own
+ * ghost candidate for that same alias is suppressed and the row painted is unambiguously the
+ * marker path's) and deadSeats() (via NO live rows at all, so its ghost candidate's statusText
+ * reflects the retried computation in isolation, uncoupled from suppression) against the
+ * IDENTICAL degrade array, and asserts the two verdicts match.
+ */
+describe('retriedAliases (workspace-seats.js) vs deadSeats retried-set (live-model.js): drift pin', () => {
+  let AmicusSeats;
+  let AmicusLive;
+  let document;
+
+  beforeEach(() => {
+    jest.resetModules(); // force every IIFE to re-run against THIS test's fresh globals below
+    const fake = makeFakeDom();
+    document = fake.document;
+    global.window = fake.window;
+    global.document = document;
+    global.NodeFilter = fake.NodeFilter;
+    // Canonical load order (script-load-order.js): live-model -> workspace-render -> workspace-seats.
+    require('../../electron/workspace-ui/live-model'); // eslint-disable-line global-require
+    require('../../electron/workspace-ui/workspace-render'); // eslint-disable-line global-require
+    require('../../electron/workspace-ui/workspace-seats'); // eslint-disable-line global-require
+    AmicusSeats = global.window.AmicusSeats;
+    AmicusLive = global.window.AmicusLive;
+  });
+
+  afterEach(() => {
+    delete global.window;
+    delete global.document;
+    delete global.NodeFilter;
+  });
+
+  /**
+   * The marker path: paints ONE live reviewing-role ('seat') row for `alias` plus `degrades`
+   * through the real renderSeatsPanel(). Its own degrade candidate is suppressed by the
+   * matching live row (D6 role-aware suppression), so exactly one row exists and it is
+   * unambiguously the marker path's — asserted here as a precondition, not the pin itself.
+   */
+  function markedBySeatsPanel(alias, degrades) {
+    const tbody = document.getElementById('seats-body');
+    global.window.AmicusApp = {
+      $: (id) => document.getElementById(id),
+      labelOf: () => null,
+      state: {
+        blind: false,
+        detail: {
+          derived: { cost: { rows: [{ model: alias, role: 'seat', status: 'error', costDisplay: '$0.01' }] } },
+          run: { degrades, critic: null },
+          verdict: null,
+        },
+      },
+    };
+    AmicusSeats.renderSeatsPanel();
+    expect(tbody.children.length).toBe(1);
+    return tbody.children[0].classList.contains('seat-retried');
+  }
+
+  /**
+   * The ghost path: deadSeats() with NO live seats and no seatLoss/runMeta, so nothing
+   * suppresses — isolates the retried computation from the suppression logic entirely.
+   */
+  function retriedByDeadSeats(alias, degrades) {
+    const dead = AmicusLive.deadSeats(degrades, null, [], {});
+    const entry = dead.find((s) => s.model === alias);
+    return !!entry && entry.statusText === 'did not review — retried once';
+  }
+
+  const cases = [
+    {
+      name: 'dead-leg record WITH retryWaveId',
+      alias: 'alpha',
+      expected: true,
+      degrades: [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat alpha did not review',
+        why: "the leg ended 'error'; its once-only retry also ended 'error'", effect: '0 of 1 seats reviewed',
+        data: { seat: 'alpha', status: 'error', reason: 'timed out', retryWaveId: 'r1-c1r1' },
+      }],
+    },
+    {
+      name: 'dead-wave record with models[] and firstFailure',
+      alias: 'bravo',
+      expected: true,
+      degrades: [{
+        kind: 'degrade', channel: 'dead-wave', what: 'Stage-1 wave r1-s1 (bravo) produced NO legs',
+        why: 'no reason recorded; the once-only retry wave also produced no legs', effect: '0 of 1 seats reviewed',
+        data: {
+          waveId: 'r1-s1', models: ['bravo'], reason: 'no reason recorded',
+          firstFailure: { seat: 'bravo', class: 'wave', waveId: 'r1-s1', reason: 'no legs produced' },
+        },
+      }],
+    },
+    {
+      // The exact defect the finding warns about: a "field-only" scan (retryWaveId/firstFailure
+      // present, kind/channel unchecked) would tag this RECOVERED seat "retried once" too.
+      name: 'kind:"heal"/channel:"stage1-retry" record carrying the SAME retry fields (a recovered seat) — must NOT be retried',
+      alias: 'charlie',
+      expected: false,
+      degrades: [{
+        kind: 'heal', channel: 'stage1-retry', what: 'seat charlie reviewed on retry',
+        why: "its first leg ended 'error' with no usable output and was relaunched once",
+        effect: 'The seat is in this council; nothing was lost',
+        data: {
+          seat: 'charlie', retryWaveId: 'r1-c1r1', retryOfWaveId: 'r1-c1',
+          firstFailure: { seat: 'charlie', class: 'leg', status: 'error', reason: 'timed out' },
+        },
+      }],
+    },
+    {
+      name: 'dead-leg record with NEITHER retryWaveId nor firstFailure',
+      alias: 'delta',
+      expected: false,
+      degrades: [{
+        kind: 'degrade', channel: 'dead-leg', what: 'seat delta did not review',
+        why: "the leg ended 'error'; no retry was attempted", effect: '0 of 1 seats reviewed',
+        data: { seat: 'delta', status: 'error', reason: 'timed out' },
+      }],
+    },
+  ];
+
+  cases.forEach(({ name, alias, expected, degrades }) => {
+    test(`${name} (expected retried=${expected}); marker path and ghost path agree`, () => {
+      const marked = markedBySeatsPanel(alias, degrades);
+      const retried = retriedByDeadSeats(alias, degrades);
+      expect(marked).toBe(expected);
+      expect(retried).toBe(expected);
+      // The actual drift pin: the two mirrored predicates must land on the same verdict.
+      expect(marked).toBe(retried);
+    });
+  });
+});
