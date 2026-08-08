@@ -293,7 +293,9 @@ leg's `progress.json`/`conversation.jsonl` directly. The wave dir itself holds:
 <waveId>/
   metadata.json   # type "wave", legs: [...], plus a 200-char rendered briefing excerpt
   wave.json       # written on completion
-  briefing.md     # the RENDERED prompt — written on both the CLI and MCP paths
+  briefing.md     # the RENDERED prompt — the corpus `list --search` matches. Written by
+                  # mcp-server.js BEFORE the child spawns (so an aborted wave stays
+                  # searchable), and again by fanout.js:145 once the child runs
                    # (src/sidecar/fanout.js); the corpus `amicus list --search` matches against
 ```
 
@@ -403,7 +405,8 @@ Two independent pre-flight guards run before a paid model call, both set via top
 - **`maxCostPerMtok`** — hard per-$/Mtok refusal threshold. Refuses any leg whose catalog
   price-per-Mtok exceeds the cap. Defaults to **60**; a non-positive value falls back to that
   default.
-- **`maxCost`** — soft ceiling on the estimated total $ for the call. Absent means no ceiling.
+- **`maxCost`** — soft ceiling on the estimated total $ for the call. Absent, zero or negative all
+  mean no ceiling.
 
 ```jsonc
 {
@@ -412,9 +415,14 @@ Two independent pre-flight guards run before a paid model call, both set via top
 }
 ```
 
-On the CLI, `--max-cost <$>` overrides `maxCost` for that call, and `--no-cost-gate` disables
-both guards (e.g. for an intentional o3 run) — both flags are **CLI-only**. There is no MCP
-equivalent; see [Troubleshooting: MCP run fails with "budget gate refused the
+On the CLI, `--max-cost <$>` overrides `maxCost` for that call, and `--no-cost-gate` disables both
+guards (e.g. for an intentional o3 run).
+
+Over MCP the per-call override depends on the tool. `amicus_council_run` takes its own `maxCost`
+and `noCostGate` params, which forward to the spawned child exactly as the CLI flags do.
+**`amicus_start` takes neither** — a pack may forward `maxCost`, but nothing can turn the gate off
+on that path, so the config keys above are the only lever. See
+[Troubleshooting: MCP run fails with "budget gate refused the
 run"](./troubleshooting.md#mcp-run-fails-with-budget-gate-refused-the-run).
 
 ### Uninstall instructions

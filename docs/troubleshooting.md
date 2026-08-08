@@ -20,8 +20,10 @@ MCP start that worked on 4.6.x can now refuse. The gate has two independent guar
 raising only one will not clear the run.
 
 **Fix:** Raise `maxCostPerMtok` and/or `maxCost` in `config.json` (see [Cost
-gate](./configuration.md#cost-gate)), or choose a cheaper model. There is no `--no-cost-gate`
-equivalent over MCP — that flag is CLI-only.
+gate](./configuration.md#cost-gate)), or choose a cheaper model. `amicus_start` has **no per-call
+override** — it takes neither a `maxCost` nor a `noCostGate` param, and a pack can forward only
+`maxCost`, never a gate-off — so the config keys are the only lever on this path. (`amicus_council_run`
+is different: it does take `maxCost` and `noCostGate`, which forward to its child like the CLI flags.)
 
 ---
 
