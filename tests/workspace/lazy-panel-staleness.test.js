@@ -135,9 +135,17 @@ describe('lazy-panel staleness pin (Task 2, v4.7 PR7): RN-1 collision titles', (
   function blindToggle() { return global.document.getElementById('blind-toggle'); }
   function flipBlind(checked) { blindToggle()._listeners.change[0]({ target: { checked } }); }
 
-  /** Section titles as rendered (the <h3> text of each .prose-section), in DOM order. */
+  /**
+   * Section titles as rendered (the <h3> text of each .prose-section), in DOM order.
+   *
+   * ⚠️ `querySelectorAll('h3')`, NOT `children[0]`. Reading the title positionally is the exact
+   * defect filed and closed as T19-m4 in v4.7 PR4 — it silently reads the wrong node the day
+   * renderProseSections prepends anything before the heading, so the pin would keep passing while
+   * guarding nothing. Match the house pattern (blind-flip.test.js).
+   */
   function reviewsSectionTitles() {
-    return global.document.getElementById('reviews-body').children.map((el) => el.children[0].textContent);
+    return global.document.getElementById('reviews-body').children
+      .map((el) => el.querySelectorAll('h3')[0].textContent);
   }
 
   /** Opens reviews-panel via its real registered `toggle` listener (proseLoader, boot-time),
