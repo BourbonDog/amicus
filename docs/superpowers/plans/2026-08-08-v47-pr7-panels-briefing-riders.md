@@ -156,8 +156,10 @@ commit prefixes, matching the repo's existing log.
 - Regenerate: `CLAUDE.md` (via the script — do not hand-edit)
 
 **Interfaces:**
-- Produces: `window.AmicusLazy = { loadPanel, proseLoader, wireLazyPanels }`. Tasks 3, 4 and 5
-  modify `loadPanel`/`wireLazyPanels` inside this new file.
+- Produces: `window.AmicusLazy = { loadPanel, proseLoader, wireLazyPanels, panelSpec }`. Tasks 3,
+  4 and 5 modify `loadPanel`/`wireLazyPanels` inside this new file. `panelSpec(panelId)` exists
+  only so `drillIntoJudge` — which stays in `workspace-panels.js` — can ask whether the current
+  run has a spec for a panel without the module-private `loaders` map being exported.
 - `window.AmicusPanels` keeps **all seven** existing keys and gains nothing that is removed.
   `tests/workspace/workspace-app-boundary.test.js:116` asserts `typeof P[k] === 'function'` for
   `renderSeatsPanel, renderMatrixPanel, renderVerdictPanel, wireLazyPanels, proseLoader,
