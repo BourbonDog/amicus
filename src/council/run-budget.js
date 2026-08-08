@@ -153,9 +153,9 @@ function createBudget({ allLegs, maxCost, runDir, degrade, write }) {
       channel: 'budget-refusal',
       what: `wave ${rec.waveId} (${rec.models.join(', ') || 'no models'}) — those seats DID NOT `
         + 'LAUNCH and are missing from this council',
-      why: `the $${maxCost} --max-cost ceiling refused it${message ? `: ${message}` : ''}`,
+      why: `the $${maxCost} cost ceiling for this run refused it${message ? `: ${message}` : ''}`,
       effect: 'The run continues with the bench that did launch and will exit degraded (2)',
-      remedy: 'Raise --max-cost, or pass --no-cost-gate, to seat them',
+      remedy: "Raise this run's cost ceiling, or turn the cost gate off, to seat them",
     });
     if (runDir) {
       // Never let bookkeeping sink a run that is otherwise fine.
