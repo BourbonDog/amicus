@@ -233,18 +233,20 @@ All notable changes to Amicus are documented here. Format follows
 
 ### Fixed (v4.7 PR7)
 
-- **Three stale-paint paths in the workspace prose panels, plus three unhandled-rejection sites,
-  closed with one mechanism (T19-m1/T19-m2).** A panel could repaint stale content after a
-  close/flip-blind/reopen sequence, after two loads landed out of order, or after the same run's
-  artifact manifest grew mid-flight; separately, three fire-and-forget panel-load promises could
-  reject uncaught. Fixed together behind a new `workspace-lazy.js` extraction: an unconditional
-  panel-cache drop on every issue, a monotonic per-panel issue token so only the newest in-flight
-  load can paint, two-argument `.then(ok, fail)` termination on every load promise (with an
-  announced eviction and a self-check against a stale cache write), and a sync-safe wrap around the
-  matrix drill-in call so a synchronous throw still surfaces instead of escaping uncaught. One path
-  (a manifest change landing between issue and completion) was briefly turned into a race by the
-  cache-drop half of this fix; the issue-token half closes it in the same commit series, so no
-  intermediate state ever shipped with the race open.
+- **Four stale-paint paths in the workspace prose panels, plus three unhandled-rejection sites,
+  closed together (T19-m1/T19-m2).** A panel could repaint stale content after a
+  close/flip-blind/reopen sequence, after two loads landed out of order, after the same run's
+  artifact manifest grew mid-flight, or after being collapsed mid-flight and reopened; separately,
+  three fire-and-forget panel-load promises could reject uncaught. Fixed behind a new
+  `workspace-lazy.js` extraction: an unconditional panel-cache drop on every issue, a monotonic
+  per-panel issue token so only the newest in-flight load can paint, two-argument
+  `.then(ok, fail)` termination on every load promise (with an announced eviction and a self-check
+  against a stale cache write), and a sync-safe wrap around the matrix drill-in call so a
+  synchronous throw still surfaces instead of escaping uncaught. Worth recording honestly: the
+  collapse-mid-flight path was not closed by the cache-drop half — that half *converted* it from a
+  deterministic stale paint into a race, by orphaning a still-in-flight load that no longer had a
+  cache entry to fence it. The issue token is what actually closes it. Both land in the same commit
+  series, so no released state ever carried the race.
 - **`amicus_fanout`'s wave briefing is now the rendered prompt, not the raw one** (W1-M4),
   matching the parity the `amicus_start` in-process path already had. Previously a spawned child
   that aborted before rendering its own copy left `briefing.md` — the file

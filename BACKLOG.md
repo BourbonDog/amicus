@@ -1108,8 +1108,10 @@ unchecked items ride to the next rev.)*
   wording. Net 0 lines (`run-budget.js` held at 283/300, the plan's originally-estimated "71→67"
   companion line in `fanout-budget.js` corrected in review to 71→70). The separate, structurally
   unreachable CLI-flavoured reservation trailer at `fanout-budget.js:62-65` (`errorDoc` never
-  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:134`) was removed
-  outright rather than reworded, since nothing renders it. Both strings pinned in both directions
+  carries `hint` on this path; `quiet:true` unconditional at `run-launch.js:134`) had its
+  `Override: --max-cost / --no-cost-gate` sentence deleted rather than reworded, since nothing
+  renders it. Note the retained hint at `:62` still says "does not fit the `--max-cost` allowance"
+  — correct, because that string's only real reader is a direct CLI `amicus fanout`. Both strings pinned in both directions
   in `8b3b90d`, mutation-proved; Step-1 grep found **zero** existing tests asserting either literal
   in either direction before this — MCP-facing, money-related text with no prior coverage.
   (b) **STRUCK — verified NOT a defect, v4.7 PR7 (Task 11/12).** The `amicus_start` spawn-fallback
