@@ -615,6 +615,75 @@ describe('amicus_fanout: pre-spend validation of pack-forwarded maxCost/template
 });
 
 // ---------------------------------------------------------------------------
+// v4.7 PR7 Task 9: an empty/whitespace prompt or a non-positive timeout must
+// never strand a pid-less 'running' orphan wave. This is failure mode (d):
+// {timeout: -1} is reachable BOTH as a typed MCP param (closed by the zod
+// schema's .positive() in mcp-tools.js) AND via a pack (validatePack only
+// checks option KEY names, never value types — a guard on the zod schema
+// alone is half a guard). Both entrances are exercised below.
+// ---------------------------------------------------------------------------
+
+describe('amicus_fanout: reject empty prompt / non-positive timeout before any wave dir (v4.7 PR7 Task 9)', () => {
+  // Local variant of callFanoutWithMockedSpawn (:568) / waveDirCount (:579) —
+  // mirrors this file's own established idiom (see callFanoutCapturingArgv
+  // below) of each describe block owning its helpers rather than reaching
+  // into a sibling describe's closure.
+  async function callFanoutWithMockedSpawn(input, project) {
+    let result; let spawnMock;
+    await jest.isolateModulesAsync(async () => {
+      spawnMock = jest.fn(() => ({ pid: 4242, unref: jest.fn() }));
+      jest.doMock('child_process', () => ({ spawn: spawnMock }));
+      const { handlers: h } = require('../../src/mcp-server');
+      result = await h.amicus_fanout(input, project);
+    });
+    return { result, spawnCallCount: spawnMock.mock.calls.length };
+  }
+
+  function waveDirCount(project) {
+    const sessBase = path.join(project, '.claude', 'amicus_sessions');
+    return fs.existsSync(sessBase) ? fs.readdirSync(sessBase).length : 0;
+  }
+
+  const FANOUT_NEGATIVE_TIMEOUT_PACK = () => ({
+    schemaVersion: 1, type: 'pack', name: 'fanout-negative-timeout-pack', version: '1.0.0', kind: 'fanout',
+    description: 'x', bench: ['vendorx/model-a', 'vendorx/model-b'], options: { timeout: -1 }, briefing: {},
+  });
+
+  test('empty prompt: isError, NO wave dir, NO spawn (never strands a pid-less running wave)', async () => {
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: '' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('whitespace-only prompt: isError, NO wave dir, NO spawn (never strands a pid-less running wave)', async () => {
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: '   ' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('typed timeout: -1 with a valid prompt: isError, NO wave dir, NO spawn (the TYPED door)', async () => {
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { models: ['vendorx/model-a', 'vendorx/model-b'], prompt: 'ok', timeout: -1 }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+
+  test('a pack carrying options.timeout: -1: isError, NO wave dir, NO spawn (the PACK door — validatePack checks keys, never values)', async () => {
+    store().writePack(FANOUT_NEGATIVE_TIMEOUT_PACK());
+    const { result, spawnCallCount } = await callFanoutWithMockedSpawn(
+      { pack: 'fanout-negative-timeout-pack', prompt: 'ok' }, tmp);
+    expect(result.isError).toBe(true);
+    expect(spawnCallCount).toBe(0);
+    expect(waveDirCount(tmp)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // W1-M4 (v4.7 PR7): an MCP fanout wave whose spawned CLI child aborts before
 // fanout.js:145 used to leave briefing.md holding the RAW prompt forever —
 // list-search.js's waveSearchMaterial reads briefing.md verbatim as the

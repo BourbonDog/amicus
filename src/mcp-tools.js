@@ -341,7 +341,7 @@ function getTools() {
         'Routing preference: auto (direct-first, default), direct (require a ' +
         'direct provider key), or openrouter (force OpenRouter).'
       ),
-      prompt: z.string().describe(
+      prompt: z.string().min(1, 'prompt must not be empty').describe(
         'The briefing sent to every model. Self-contained briefings work best (set includeContext false).'
       ),
       agent: z.enum(['Plan', 'Build']).optional().describe(
@@ -350,7 +350,7 @@ function getTools() {
       thinking: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']).optional().describe(
         'Reasoning effort for every leg. Default: medium.'
       ),
-      timeout: z.number().optional().describe(
+      timeout: z.number().positive('timeout must be a positive number of minutes').optional().describe(
         'Per-leg timeout in minutes (wall-clock ≈ slowest leg). Default: 15.'
       ),
       summaryLength: z.enum(['brief', 'normal', 'verbose']).optional().describe(

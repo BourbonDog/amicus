@@ -1247,6 +1247,17 @@ const handlers = {
     if (fwd.error) { return textResult(fwd.error.message + (fwd.error.hint ? `\n${fwd.error.hint}` : ''), true); }
     packNotices.push(...fwd.notices);
 
+    // ⚠️ v4.7 PR7: the zod schema closes the TYPED door; a pack can push the same values through
+    // the other one (validatePack checks option KEY names, never value types). Both entrances
+    // reach the same spawn, so the check lives here, after pack merge, before any wave dir.
+    if (typeof input.prompt !== 'string' || !input.prompt.trim()) {
+      return textResult('Error: prompt must not be empty.', true);
+    }
+    if (input.timeout !== undefined
+        && (typeof input.timeout !== 'number' || !Number.isFinite(input.timeout) || input.timeout <= 0)) {
+      return textResult('Error: timeout must be a positive number of minutes.', true);
+    }
+
     // Resolve a single effective models list (council OR models), validated
     // BEFORE any wave dir / metadata is written so a bad request never strands
     // a pid-less 'running' orphan wave.
