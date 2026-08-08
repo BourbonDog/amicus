@@ -16,7 +16,8 @@
 (function () {
   'use strict';
 
-  // ---- lazy prose panels (spec §5.2: load on first open, cache) ---------
+  // ---- lazy prose panels (spec §5.2: load on first open; NOT cached across a same-run rewire
+  // — a blind flip or the live loop's terminal refresh both drop it, T19-m1) -----------------
   // ⚠️ DE-ROT (F09): a NEW toggle listener stacking on every renderDetail() call is the bug this
   // shape exists to avoid — see wireLazyPanels()/proseLoader() below. Register the three
   // listeners ONCE at boot (workspace-app.js's boot block calls proseLoader per panel id) and
@@ -27,15 +28,25 @@
   // settled (the old code guessed with setTimeout(render, 300), which could fire before an
   // unbounded N-artifact IPC round trip finished and silently render nothing). loadPanel()
   // is idempotent per panel id and returns its in-flight promise; the promise cache
-  // (`loading`) and the per-run spec (`loaders`) are both keyed by panel id, but only
-  // `loading` is cleared by wireLazyPanels() — on a run CHANGE only (Task 19, RN-5) — and
-  // that clearing is what stops F09's stale-run artifact requests.
+  // (`loading`) and the per-run spec (`loaders`) are both keyed by panel id. `loading` is
+  // dropped by wireLazyPanels() on BOTH a run CHANGE and a same-run rewire (T19-m1, Task 3) —
+  // the run-change drop is what stops F09's stale-run artifact requests; the same-run drop is
+  // what T19-m1's `issue` token (below) fences against repainting a superseded same-run wave.
   var loaders = {};  // panelId -> {bodyId, files}  (rewritten per run by wireLazyPanels)
-  var loading = {};  // panelId -> Promise           (cleared per run by wireLazyPanels)
+  var loading = {};  // panelId -> Promise           (dropped on every run CHANGE or same-run rewire)
   // Task 19 (RN-5): the run wireLazyPanels() last reset panels/loading for — gates the reset
   // below to run CHANGES only. A same-run call (renderDetail() runs this on every blind toggle
-  // too, and on the live loop's terminal refresh) instead refreshes any open panel (Fix 1).
+  // too, and on the live loop's terminal refresh) instead drops the cached load for EVERY
+  // tracked panel — open or closed (T19-m1, Task 3) — and reissues a fetch for whichever panel
+  // is currently open (Fix 1).
   var lastWiredRunId = null;
+  // ⚠️ T19-m1 (v4.7 PR7): the only staleness fence used to be the runId captured at issue time,
+  // which cannot distinguish two requests issued for the SAME run — a blind flip, a manifest that
+  // grew, or any same-run rewire issues a second load while the first is still in flight, and
+  // whichever settles LAST won the paint. Monotonic per-panel issue number: the completion handler
+  // paints only if it is still the newest issue. Keys are the three fixed panel-id literals (never
+  // a model name), so a bare object is safe here — unlike the model-keyed maps in live-model.js.
+  var issue = {};    // panelId -> monotonically increasing issue number
 
   function loadPanel(panelId, bodyId, files) {
     var A = window.AmicusApp;
@@ -51,12 +62,16 @@
     // B had just rendered. Capture the runId this request was issued for, and guard as the
     // FIRST statement of the completion handler, exactly like the debate.json fix.
     var runId = A.state.runId;
+    // ⚠️ T19-m1 (v4.7 PR7): captured the same way as `runId` above — read once, at issue time —
+    // so the completion guard below compares against the value in force when THIS request was
+    // issued, not whatever `issue[panelId]` has become by the time it resolves.
+    var token = (issue[panelId] = (issue[panelId] || 0) + 1);
     loading[panelId] = Promise.all(files().map(function (f) {
       return A.invoke('workspace:read-artifact', runId, f.name).then(function (res) {
         return { name: f.name, title: f.title, text: res.text || '', truncated: res.truncated, error: res.error };
       });
     })).then(function (sections) {
-      if (A.state.runId !== runId) { return; } // stale: superseded by a later run switch
+      if (A.state.runId !== runId || issue[panelId] !== token) { return; } // stale: superseded
       window.AmicusRender.renderProseSections(A.$(bodyId), sections.map(function (s) {
         return s.error ? { name: s.name, title: s.title, error: s.name + ' — ' + s.error } : s;
       }));
@@ -176,10 +191,14 @@
         // ⚠️ T19-m1 (v4.7 PR7): the cache drop used to be INSIDE the `p.open` guard, so a panel
         // the user had collapsed kept its settled promise across a blind flip — reopening it
         // returned that promise and repainted the previous blind state with no new fetch (recon
-        // path A), and a panel collapsed mid-flight repainted the stale wave (path D). Dropping
-        // unconditionally costs a re-read of that panel's artifacts on the next open; renderDetail
-        // fires on run open, blind toggle, and the live loop's terminal refresh only (the tick
-        // calls applyLive, not renderDetail), so this is not a per-poll storm.
+        // path A). Dropping unconditionally closes path A — but by itself it only CONVERTS path D
+        // (collapse mid-flight) into a race: it drops the cache entry even while that panel's
+        // fetch is still outstanding, so a reopen before it settles issues a SECOND concurrent
+        // fetch, and the orphaned first one has no fence but `runId` (unchanged for a same-run
+        // rewire). `issue` (declared above) and loadPanel()'s completion guard are what actually
+        // close D. Unconditional drop costs a re-read of that panel's artifacts on the next open;
+        // renderDetail fires on run open, blind toggle, and the live loop's terminal refresh only
+        // (the tick calls applyLive, not renderDetail), so this is not a per-poll storm.
         delete loading[id];
         if (p.open) { loadPanel(id, loaders[id].bodyId, loaders[id].files); }
       });
