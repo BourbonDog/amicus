@@ -393,6 +393,44 @@ describe('MCP Tool Definitions', () => {
       expect(fanoutTool.description).toContain('amicus_wait');
       expect(fanoutTool.description).toContain('amicus_status');
     });
+
+    // v4.7 PR7 Task 9 review: the task's own "TYPED door" test
+    // (tests/pack/mcp-pack-params.test.js:668, 'typed timeout: -1 with a
+    // valid prompt') calls handlers.amicus_fanout(input, project) directly —
+    // but zod validation only runs inside the MCP SDK's registerTool
+    // dispatch wrapper (node_modules/@modelcontextprotocol/sdk/dist/cjs/
+    // server/mcp.js: validateToolInput, upstream of executeToolHandler), so
+    // that test never actually reaches the schema. Proof by mutation:
+    // reverting prompt to z.string() and timeout to z.number().optional() in
+    // src/mcp-tools.js left all 4 of that describe block's tests green.
+    //
+    // mcp-pack-params.test.js:344-348 already names this exact failure mode
+    // for a sibling schema change: "a unit test that hand-builds its own
+    // input object (bypassing Zod) would not notice if .default(...) were
+    // ever reintroduced." The same reasoning applies to .min(1)/.positive()
+    // here, so these parse through the REAL fanoutTool.inputSchema via
+    // z.object(...).parse — the same shape the MCP SDK builds from
+    // getTools() — rather than hand-building an input object.
+    //
+    // Not covered here: z.string().min(1) accepts whitespace-only strings
+    // like '   ' — that case is rejected by the handler's own .trim() check
+    // (src/mcp-server.js), not by the schema, so it is deliberately not
+    // asserted in this schema-boundary block.
+    describe('prompt/timeout schema guards (Task 9 review)', () => {
+      test('rejects an empty prompt', () => {
+        expect(() => z.object(fanoutTool.inputSchema).parse({ prompt: '' })).toThrow();
+      });
+
+      test('rejects a non-positive timeout', () => {
+        expect(() => z.object(fanoutTool.inputSchema).parse({ prompt: 'hi', timeout: -1 })).toThrow();
+      });
+
+      test('accepts a valid prompt with a positive timeout (baseline — proves the rejections above are not rejecting everything)', () => {
+        const parsed = z.object(fanoutTool.inputSchema).parse({ prompt: 'hi', timeout: 5 });
+        expect(parsed.prompt).toBe('hi');
+        expect(parsed.timeout).toBe(5);
+      });
+    });
   });
 
   describe('tag input (F8 D13, errata E-PR3-2)', () => {
