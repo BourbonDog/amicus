@@ -59,9 +59,20 @@ describe('threshold default', () => {
 describe('formatBudgetError surfaces (v4.7 PR6)', () => {
   const offendingOnly = { ok: false, offending: [{ modelInput: 'o3', model: 'o3', reason: '$80.00/Mtok exceeds the $10.00/Mtok cap' }], overCeiling: false, breakdown: { totalEstCost: 1, unpricedCount: 0, maxCost: null } };
   const ceilingOnly = { ok: false, offending: [], overCeiling: true, breakdown: { totalEstCost: 12.5, unpricedCount: 0, maxCost: 10 } };
+  const both = { ok: false, offending: [{ modelInput: 'o3', model: 'o3', reason: '$80.00/Mtok exceeds the $10.00/Mtok cap' }], overCeiling: true, breakdown: { totalEstCost: 12.5, unpricedCount: 0, maxCost: 10 } };
 
-  it('defaults to the CLI surface when no surface is passed (byte-compatible)', () => {
-    expect(formatBudgetError(ceilingOnly)).toContain('--max-cost');
+  // Captured from the pre-v4.7-PR6 unconditional trailer. The ceiling-only branch's
+  // advice was already correct, so its bytes must not drift.
+  const LEGACY_CEILING_TRAILER =
+    'Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards (e.g. an intentional o3 run).';
+
+  it('the CLI ceiling-only trailer is byte-identical to the pre-PR6 text', () => {
+    expect(formatBudgetError(ceilingOnly).endsWith(LEGACY_CEILING_TRAILER)).toBe(true);
+  });
+
+  it('uses the default-parameter mechanism when no surface is passed', () => {
+    // Pins the mechanism (default surface = { kind: 'cli' }), not byte-compatibility
+    // with the prior release — see the literal-string test above for that guarantee.
     expect(formatBudgetError(ceilingOnly)).toBe(formatBudgetError(ceilingOnly, { kind: 'cli' }));
   });
 
@@ -80,6 +91,36 @@ describe('formatBudgetError surfaces (v4.7 PR6)', () => {
 
   it('does not offer dropping the pack as an MCP escape (the gate now always runs)', () => {
     expect(formatBudgetError(ceilingOnly, { kind: 'mcp' })).not.toMatch(/without the .?pack/i);
+  });
+
+  it('names maxCostPerMtok on the MCP surface for a threshold-only refusal', () => {
+    const text = formatBudgetError(offendingOnly, { kind: 'mcp' });
+    expect(text).toBe(
+      'Budget gate: model(s) over the per-$/Mtok threshold:\n' +
+      '  - o3 (o3): $80.00/Mtok exceeds the $10.00/Mtok cap\n' +
+      'Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.'
+    );
+  });
+
+  describe('both guards fired', () => {
+    it('CLI: names --no-cost-gate as the only lever that clears both, and warns raising just one will not', () => {
+      const text = formatBudgetError(both);
+      expect(text).toContain(
+        'Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run) — raising just one of maxCostPerMtok or --max-cost will not clear this run.'
+      );
+      // Does not fall back to either single-branch remedy string.
+      expect(text).not.toContain('or raise maxCostPerMtok in config.');
+      expect(text).not.toMatch(/--max-cost <\$> to raise the ceiling, or --no-cost-gate to disable both guards \(e\.g\. an intentional o3 run\)\.\s*$/);
+    });
+
+    it('MCP: names both config levers, and warns raising just one will not clear the run', () => {
+      const text = formatBudgetError(both, { kind: 'mcp' });
+      expect(text).toContain(
+        'Override: raise both maxCostPerMtok and maxCost in the amicus config, or choose a cheaper model — raising just one will not clear this run.'
+      );
+      expect(text).not.toContain('Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.');
+      expect(text).not.toContain('Override: raise maxCost in the amicus config, or choose a cheaper model.');
+    });
   });
 });
 

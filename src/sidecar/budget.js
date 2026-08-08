@@ -84,17 +84,28 @@ function formatBudgetError(result, surface = { kind: 'cli' }) {
   if (result.breakdown.unpricedCount > 0) {
     lines.push(`(${result.breakdown.unpricedCount} unpriced leg(s) — direct provider; cost unknown, not included in the estimate.)`);
   }
-  // The threshold branch cannot be cleared by raising the ceiling: `ok` above
-  // requires offending.length === 0 regardless of maxCost. Only name a remedy
-  // that actually works on the branch that fired.
+  // offending and overCeiling are independent (unrelated inputs — see module
+  // header), and either or both may have fired since formatBudgetError is only
+  // called when !ok. Only name a remedy that actually clears every branch that
+  // fired; when both fired, raising just one lever will not clear the run.
+  const hasOffending = result.offending.length > 0;
+  const hasCeiling = result.overCeiling;
   if (isMcp) {
-    lines.push(result.offending.length > 0
-      ? 'Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.'
-      : 'Override: raise maxCost in the amicus config, or choose a cheaper model.');
+    if (hasOffending && hasCeiling) {
+      lines.push('Override: raise both maxCostPerMtok and maxCost in the amicus config, or choose a cheaper model — raising just one will not clear this run.');
+    } else if (hasOffending) {
+      lines.push('Override: raise maxCostPerMtok in the amicus config, or choose a cheaper model.');
+    } else {
+      lines.push('Override: raise maxCost in the amicus config, or choose a cheaper model.');
+    }
   } else {
-    lines.push(result.offending.length > 0
-      ? 'Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run), or raise maxCostPerMtok in config.'
-      : 'Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards.');
+    if (hasOffending && hasCeiling) {
+      lines.push('Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run) — raising just one of maxCostPerMtok or --max-cost will not clear this run.');
+    } else if (hasOffending) {
+      lines.push('Override: --no-cost-gate to disable both guards (e.g. an intentional o3 run), or raise maxCostPerMtok in config.');
+    } else {
+      lines.push('Override: --max-cost <$> to raise the ceiling, or --no-cost-gate to disable both guards (e.g. an intentional o3 run).');
+    }
   }
   return lines.join('\n');
 }
