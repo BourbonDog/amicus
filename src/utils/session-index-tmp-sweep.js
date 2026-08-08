@@ -34,11 +34,18 @@ function listSessionIndexTmpFiles() {
     .filter((name) => name.startsWith(prefix) && name.endsWith('.tmp'))
     .map((name) => {
       let st = null;
-      // statSync (not lstatSync) is deliberate here — see the "Symlink safety"
-      // paragraph in session-metadata-tmp-sweep.js's module docblock for why that
-      // sibling never follows symlinks; this file's choice to follow them is a
-      // separate, unreviewed symlink-policy decision left as-is (SR-3 only added
-      // the isFile() gate).
+      // statSync (not lstatSync) is a DECIDED policy, not an oversight (owner
+      // ruling, v4.7 PR7 — see BACKLOG.md "session-index-tmp-sweep.js follows
+      // symlinks... where its sibling deliberately does not"). This sweep's
+      // targets are index tmp files directly in the flat config dir, never
+      // traversed through a directory an attacker could redirect — unlike
+      // session-metadata-tmp-sweep.js's walk through per-session directories
+      // (see that file's "Symlink safety" paragraph for why THAT sweep must
+      // never follow). Following here means a symlink named like an orphaned
+      // tmp file is still swept (unlink removes only the link); the one real
+      // consequence is AGE_THRESHOLD_MS reading the TARGET's mtime, so a fresh
+      // link to an old file is swept with no grace window. Filed, not fixed —
+      // see the BACKLOG entry above for the full inclusion/unfiled-delta split.
       try { st = fs.statSync(path.join(dir, name)); } catch { /* raced away */ }
       return { name, mtimeMs: st && st.isFile() ? st.mtimeMs : null };
     })
