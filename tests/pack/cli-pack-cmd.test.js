@@ -367,6 +367,18 @@ describe('handlePack: show missing pack -> PACK_NOT_FOUND', () => {
   });
 });
 
+describe('handlePack: show on a null-bodied pack (v4.7 PR6)', () => {
+  test('exits 1 with PACK_NOT_FOUND, not a TypeError', async () => {
+    const packsDir = store().packsDir();
+    fs.mkdirSync(packsDir, { recursive: true });
+    fs.writeFileSync(path.join(packsDir, 'nullpack.json'), 'null');
+    const code = await handlePack(pa(['show', 'nullpack', '--json']));
+    expect(code).toBe(1);
+    const doc = JSON.parse(stdout());
+    expect(doc.error.code).toBe(ERROR_CODES.PACK_NOT_FOUND);
+  });
+});
+
 describe('handlePack: rm nonexistent pack -> PACK_NOT_FOUND (v4.5 HOLD-gate decision 3)', () => {
   // Was BAD_ARGS — unified with `pack show`'s missing-pack code (same hint
   // idiom) so a script switching on error.code gets one answer, not two, for

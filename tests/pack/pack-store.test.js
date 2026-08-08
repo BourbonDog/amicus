@@ -103,3 +103,33 @@ describe('listPacks / rmPack', () => {
     expect(rmPack('sec-review').removed).toBe(false);
   });
 });
+
+describe('readPack rejects non-object bodies (v4.7 PR6)', () => {
+  // A pack file whose JSON body is valid but not an object used to return as a
+  // SUCCESS with `pack: null` — `pack &&` in the name-match guard short-circuited —
+  // and crashed both callers on `pack.kind` / `pack.name`.
+  const cases = [
+    ['null', 'null'],
+    ['an array', '[]'],
+    ['a number', '5'],
+    ['a string', '"x"'],
+    ['a boolean', 'true'],
+  ];
+  for (const [label, body] of cases) {
+    it(`returns {error} when the body is ${label}`, () => {
+      const { readPack } = load();
+      const file = path.join(tmp, 'bad.json');
+      fs.writeFileSync(file, body);
+      const r = readPack(file);
+      expect(r.error).toMatch(/is not a pack object/);
+      expect(r.pack).toBeUndefined();
+    });
+  }
+
+  it('still accepts a well-formed object pack', () => {
+    const { readPack } = load();
+    const file = path.join(tmp, 'good.json');
+    fs.writeFileSync(file, JSON.stringify({ name: 'good', kind: 'council', version: '1.0.0' }));
+    expect(readPack(file).pack).toEqual({ name: 'good', kind: 'council', version: '1.0.0' });
+  });
+});

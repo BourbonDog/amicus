@@ -52,7 +52,20 @@ function resolvePackRef(ref) {
 
 function stripBom(text) { return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text; }
 
-/** @returns {{pack, path, source:'dir'|'path', hash}|{error}} */
+/**
+ * @returns {{pack, path, source:'dir'|'path', hash}|{error}}
+ * All SIX `{error}` returns below — malformed name, name-form unreadable,
+ * path-form unreadable, invalid JSON, non-object body, name/filename mismatch —
+ * are mapped to PACK_NOT_FOUND by both callers (pack-resolve.js:76,
+ * cli-handlers-pack.js:225). A new `{error}` added here inherits that code
+ * silently: re-code it deliberately or it lands as "not found".
+ * PACK_NOT_FOUND has a FOURTH producer that never calls readPack —
+ * `pack rm` (cli-handlers-pack.js:242, via rmPack) — unified there by the
+ * v4.5 HOLD-gate decision 3 and pinned at tests/pack/cli-pack-cmd.test.js:370.
+ * PACK_INVALID is NOT readPack's: it belongs to validatePack
+ * (pack-resolve.js:94, cli-handlers-pack.js:199) and to prepareForward's
+ * maxCost guard (pack-forward.js:68-76), which is not a validatePack call.
+ */
 function readPack(ref) {
   const r = resolvePackRef(ref);
   if (r.error) { return r; }
@@ -66,8 +79,11 @@ function readPack(ref) {
   let pack;
   try { pack = JSON.parse(raw); }
   catch (err) { return { error: `Error: pack ${file} is not valid JSON: ${err.message}` }; }
-  if (r.kind === 'name' && pack && pack.name !== r.name) {
-    return { error: `Error: pack file ${file} declares name '${pack && pack.name}' which does not match its filename — rename one of them` };
+  if (pack === null || typeof pack !== 'object' || Array.isArray(pack)) {
+    return { error: `Error: pack ${file} is not a pack object (found ${pack === null ? 'null' : Array.isArray(pack) ? 'an array' : typeof pack})` };
+  }
+  if (r.kind === 'name' && pack.name !== r.name) {
+    return { error: `Error: pack file ${file} declares name '${pack.name}' which does not match its filename — rename one of them` };
   }
   return { pack, path: file, source: r.kind === 'name' ? 'dir' : 'path', hash: canonicalHash(pack) };
 }
