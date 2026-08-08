@@ -253,6 +253,7 @@ describe('session-metadata-tmp-sweep real fs glue', () => {
   // windows-latest in CI.
   const itPosix = process.platform === 'win32' ? it.skip : it;
   itPosix('a name-shaped symlink is excluded, not reported as an orphan', () => {
+    const { listSessionMetadataTmpFiles } = require('../src/utils/session-metadata-tmp-sweep');
     const taskDir = path.join(sessionsRoot(), 'abc123');
     fs.mkdirSync(taskDir, { recursive: true });
     const target = path.join(taskDir, 'real.json');
