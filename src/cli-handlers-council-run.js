@@ -101,6 +101,10 @@ async function handleCouncilRun(args, depsOverride = {}) {
   let templateMeta = null;
   const tpl = applyTemplateForArgs(args, promptRes.prompt, useJson);
   if (tpl.fail !== undefined) { return tpl.fail; }
+  // The trailing `templateMeta =` is NOT copy-paste drift against handleFanout's
+  // otherwise-identical call: it feeds `template: templateMeta` on the run.json
+  // seed below (:231). Drop it and every --template council run silently records
+  // `template: null`. handleFanout has no such field, which is why its call is shorter.
   if (tpl.applied) { promptRes = { prompt: tpl.prompt, promptMeta: tpl.promptMeta }; templateMeta = tpl.templateMeta; }
 
   const benchRes = resolveBench(args, useJson);
