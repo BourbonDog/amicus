@@ -17,11 +17,13 @@ Amicus is at **v4.6.3** (tagged 2026-08-05). Each 4.x rev below leads with the b
 plumbing.
 
 **Status:** v4.0 through **v4.6.3** have **shipped** — everything down to the v4.7 heading is a
-record of what landed, not a plan. **v4.7 is not locked.** The composition scope below carried the
-number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0 release
-(2026-08-02); it was renumbered, not descoped, and it remains the leading candidate — but it is a
-candidate, not a commitment, and the rev's contents are decided at kickoff per the anti-rot rule.
-There is **no numbered major** on this roadmap.
+record of what landed, not a plan. **v4.7 is locked and code-complete, but not yet released** — the
+rescoped scope below (CA-4, the GOA-7 prerequisite, F8) has merged to `main`; only the version bump
+and tag remain, and those are the release cut's job, not this file's. Composition — the scope that
+carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
+release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
+below (dropped from v4.7, 2026-08-05); its contents are decided at kickoff per the anti-rot rule,
+not assumed in advance. There is **no numbered major** on this roadmap.
 
 > 📁 **Reading this from an npm install?** Some references below point at working documents that
 > live in the git repository and are deliberately **not** in the published package — anything under
@@ -201,10 +203,10 @@ drove it:
 - **CA-4 (remaining half) — `runStats` completeness** *(M)*: Stage-2 judges and repair solos are
   absent from `tally.json`'s `runStats` (observed: 5 rows for 11 real legs in `wsgate04`).
   ⚠️ **Scope correction:** the failed-chair third of the original CA-4 is **closed** — v4.6.2's
-  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:113` cites LC-5 by name).
-  **Open kickoff question, do not assume either way:** `chairAttempts[]` carries
-  `{waveId, model, outcome, reason}` and **no usage**, so whether failed-chair *cost* reaches
-  `runStats` is unverified. Check before scoping — it is either already handled or a third row class.
+  `chairAttempts[]` records every attempt on `run.json` (`run-chair.js:113` cites LC-5 by name), and
+  failed-chair cost already reaches `runStats` too: a failed ch1–ch3 attempt gets its own
+  `chair-attempt` row there carrying that leg's real `usage` (`run-chair.js:154-156`), so no third
+  row class was needed.
 - **GOA-7 prerequisite — segment the ledger by RESOLVED model, not alias** *(S–M)*: a **live defect
   today**. Ledger rows key by council alias and aliases silently retarget (`gpt-pro` →
   `gpt-5.6-sol-pro`, the `opus` re-pin — both 2026-08-04), so `council stats` conflates distinct
