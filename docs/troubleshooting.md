@@ -19,13 +19,19 @@ refused the run"` (`ERROR_CODES.BUDGET_EXCEEDED`).
 MCP start that worked on 4.6.x can now refuse. The gate has two independent guards; when both fire,
 raising only one will not clear the run.
 
-**Fix:** Raise `maxCostPerMtok` and/or `maxCost` in `config.json` (see [Cost
-gate](./configuration.md#cost-gate)), or choose a cheaper model. `amicus_start` has **no per-call
-override** — it takes neither a `maxCost` nor a `noCostGate` param, and nothing can turn the gate
-off on that path. Raise `maxCostPerMtok` in the config (it has no pack override), and raise the
-**effective** `maxCost` — **the pack's if this run used a pack that set one, otherwise the
-config's**; editing the loser of that pair changes nothing. (`amicus_council_run` is different: it
-does take `maxCost` and `noCostGate`, which forward to its child like the CLI flags.)
+**Fix:** the error text names which guard fired — raise that one, or choose a cheaper model. **If
+both fired, you must raise both**; clearing one leaves the other refusing. See
+[Cost gate](./configuration.md#cost-gate).
+
+- **`maxCostPerMtok`** (the per-$/Mtok guard) lives only in `config.json`. No pack and no MCP param
+  can override it.
+- **`maxCost`** (the total-$ ceiling) is whichever value is *in effect*: **the pack's if this run
+  used a pack that set one, otherwise the config's.** Editing the loser of that pair changes
+  nothing.
+
+`amicus_start` has **no per-call override** — it takes neither a `maxCost` nor a `noCostGate` param,
+and nothing can turn the gate off on that path. (`amicus_council_run` is different: it does take
+both, and they forward to its child exactly like the CLI flags.)
 
 ---
 

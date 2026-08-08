@@ -1702,7 +1702,11 @@ with the repo and nobody re-derives (or re-argues) the exclusion next rev.
   Shipped in **v3.2.0** (`git log -S setCostTier` → `8aa5d6f`), so this is a four-rev-old hole.
   **Excluded because:** closing it means documenting the whole cost-tier feature end to end — an
   M-sized doc-writing task, not the one- to five-line corrections that make up the v4.7 docs PR's
-  "S" line.
+  "S" line. (Not comparable to that PR's new **Cost gate** section: `maxCostPerMtok`/`maxCost` are
+  two standalone thresholds with a default and an override order, describable in a short
+  subsection. `routing.tier`/`tier_onboarded` are *state* belonging to the cost-aware default
+  picker, and are meaningless to a reader who has not first been told what that picker is, when it
+  runs, and what the tiers mean.)
 
 - [ ] **F-6 · Generalise the council TOC/link gates to the rest of `docs/`** — Relative cross-links
   and in-page anchors are validated only inside `CLAUDE.md` (by `generate-docs --check`, itself
