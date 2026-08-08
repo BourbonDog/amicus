@@ -953,7 +953,7 @@ Add to `electron/workspace-ui/workspace.css` (not gated):
 
 ```css
 /* PR1F-4: a seat that was retried and still failed — the surviving errored row's own marker. */
-.seat-retried td:last-child { color: var(--muted); white-space: nowrap; }
+.seat-retried td:last-child { color: var(--text-3); white-space: nowrap; }
 ```
 
 - [ ] **Step 5: Run the tests**
