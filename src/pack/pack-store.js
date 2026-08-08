@@ -59,9 +59,10 @@ function stripBom(text) { return text.charCodeAt(0) === 0xFEFF ? text.slice(1) :
  * are mapped to PACK_NOT_FOUND by both callers (pack-resolve.js:76,
  * cli-handlers-pack.js:225). A new `{error}` added here inherits that code
  * silently: re-code it deliberately or it lands as "not found".
- * PACK_NOT_FOUND has a FOURTH producer that never calls readPack —
- * `pack rm` (cli-handlers-pack.js:242, via rmPack) — unified there by the
- * v4.5 HOLD-gate decision 3 and pinned at tests/pack/cli-pack-cmd.test.js:370.
+ * PACK_NOT_FOUND has a THIRD emit site that never calls readPack — `pack rm`
+ * (cli-handlers-pack.js:242, via rmPack) — unified there by the v4.5 HOLD-gate
+ * decision 3 and pinned by the "rm nonexistent pack -> PACK_NOT_FOUND" describe
+ * in tests/pack/cli-pack-cmd.test.js.
  * PACK_INVALID is NOT readPack's: it belongs to validatePack
  * (pack-resolve.js:94, cli-handlers-pack.js:199) and to prepareForward's
  * maxCost guard (pack-forward.js:68-76), which is not a validatePack call.
