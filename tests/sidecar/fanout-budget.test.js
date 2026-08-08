@@ -63,6 +63,16 @@ describe('preflightBudget', () => {
     const res = preflightBudget([leg('gpt', 0.02)], opts({ maxCost: 10, reserveBudget }));
     expect(res.ok).toBe(false);
     expect(res.hint).toMatch(/concurrent|unclaimed/i);
+    // PR6F-1 dropped this hint's trailing CLI-flag sentence ("Override: --max-cost
+    // <$> to raise the ceiling, or --no-cost-gate to disable both guards.") — its
+    // sole producer (run-launch.js) sets quiet:true and forwards only
+    // errorDoc.message, so the trailer was undisplayed dead weight. Pinned on
+    // "--no-cost-gate" (only ever present in that trailer) plus the trailer's own
+    // "Override: --max-cost" phrasing, rather than banning "--max-cost" outright —
+    // the earlier "does not fit the --max-cost allowance" phrase on this same hint
+    // is untouched and deliberately kept, so a blanket ban would misfire on it.
+    expect(res.hint).not.toMatch(/--no-cost-gate/);
+    expect(res.hint).not.toMatch(/Override:\s*--max-cost/);
   });
 
   test('the per-$/Mtok hard threshold is checked BEFORE anything is reserved', () => {

@@ -59,7 +59,8 @@ merge). Baseline suite measured green at branch point: **504 suites / 6852 passe
  117  src/pack/pack-validate.js
   96  src/pack/pack-forward.js
   89  src/utils/session-index-tmp-sweep.js        Task 12 edits a comment here
-  71  src/sidecar/fanout-budget.js                Task 11 removes 4 lines
+  71  src/sidecar/fanout-budget.js                Task 11 removes 1 line (→70; an earlier draft
+                                                  of this table said -4, which was never right)
 1526  src/mcp-server.js                           EXEMPT (exclude list, check-file-sizes.js:27)
 ```
 
