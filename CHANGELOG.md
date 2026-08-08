@@ -5,6 +5,14 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-08-08
+
+**"The count is the count."** Every number Amicus shows you is the number — what a council cost,
+which legs ran, and which model earned the credit. Shipped across ten `v4.7-*` PRs — PR0
+(extractions) through PR7, plus the PR3 riders and a closing documentation pass: the `runStats`
+completeness half of CA-4, the GOA-7 ledger prerequisite, F8 session/wave tagging with `--search`,
+and four correction sweeps.
+
 ### CI
 
 - **The macOS/node-24 unit leg's `--workerIdleMemoryLimit` drops from 1GB to 512MB.** That leg

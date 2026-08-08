@@ -13,13 +13,11 @@ lives under **Backlog (tracked, not scheduled)** with everything else that is re
 Nothing about the content changed and no judgment about its value is implied; only its status. When
 an org buyer and the org to support them exist, it earns a number then.
 
-Amicus is at **v4.6.3** (tagged 2026-08-05). Each 4.x rev below leads with the benefit, not the
+Amicus is at **v4.7.0** (tagged 2026-08-08). Each 4.x rev below leads with the benefit, not the
 plumbing.
 
-**Status:** v4.0 through **v4.6.3** have **shipped** — everything down to the v4.7 heading is a
-record of what landed, not a plan. **v4.7 is locked and code-complete, but not yet released** — the
-rescoped scope below (CA-4, the GOA-7 prerequisite, F8) has merged to `main`; only the version bump
-and tag remain, and those are the release cut's job, not this file's. Composition — the scope that
+**Status:** v4.0 through **v4.7.0** have **shipped** — everything on this page is a record of what
+landed, not a plan. Composition — the scope that
 carried the number v4.6 here until the degrade-announcement-invariant milestone took the v4.6.0
 release (2026-08-02) — is now an unscheduled candidate for the next rev, tabled in its own section
 below (dropped from v4.7, 2026-08-05); its contents are decided at kickoff per the anti-rot rule,
@@ -178,13 +176,18 @@ fooled, and a handful of proven small defects land with tests.
   path; the README/install scripts/doctor all agree on the real Node ≥22.12 floor; eleven
   duplicated doctor test fixtures consolidate into one factory — #110
 
-## v4.7 — "The count is the count" *(rescoped 2026-08-05 — spec + fresh plan at kickoff per the anti-rot rule)*
+## v4.7 — "The count is the count" — ✅ SHIPPED v4.7.0, 2026-08-08
 **Benefit:** every number amicus shows you is the number — what a council cost, which legs ran, and
 which model earned the credit.
 
+**Shipped across ten `v4.7-*` PRs** — PR0 (extractions) through PR7, plus the PR3 riders and a
+closing documentation pass: the `runStats` completeness half of CA-4, the GOA-7 ledger
+prerequisite, F8 session/wave tagging with `--search`, and four correction sweeps (PR4–PR7).
+
 **Why this scope, and why it replaced composition.** Rescoped after a roadmap review on 2026-08-05
-that started from *how the tool is actually used* rather than from the deferral list. Two findings
-drove it:
+(the number was carried here as v4.6 until the degrade-announcement-invariant milestone took the
+v4.6.0 release) that started from *how the tool is actually used* rather than from the deferral
+list. Two findings drove it:
 
 1. **The Workspace is an instrument panel, not a workspace** (owner, 2026-08-05): it is used for
    **live status while a council runs** and for **quantitative stats** — *never* to read council
@@ -201,9 +204,8 @@ drove it:
    spent on legs that spent money.
 
 > **Tense note.** The bullets below were written as pre-work problem statements and are kept for
-> the record of *why* the rev was scoped this way. The code has since landed on `main`; each bullet
-> now states what shipped. The heading's `✅ SHIPPED` marker and the version line stay absent until
-> the release cut, because v4.7 is not released yet.
+> the record of *why* the rev was scoped this way. Each now leads with what shipped; the
+> problem-statement text that follows it is history, not a live defect.
 
 - **CA-4 (remaining half) — `runStats` completeness** *(M)*: **shipped.** Stage-2 judges and repair
   solos *were* absent from `tally.json`'s `runStats` (observed: 5 rows for 11 real legs in
@@ -229,7 +231,8 @@ drove it:
   `BACKLOG.md` hand-maintained an index of run identifiers (`wave 47278069`, `run dfb6a692`,
   `runs 0084d48c + 2039b2d1`, `wsgate02`/`wsgate04`) **because there was no search**. It is also the
   rev's only daily-felt user surface — three schema fixes alone are a thin story.
-- **README + docs update** *(S)* — the last scope line; **closed by this documentation pass.**
+- **README + docs update** *(S)* — the last scope line; **closed by PR #132**, which corrected the
+  sentences v4.7 had made false rather than adding coverage the feature PRs had already shipped.
 
 > **Why these belong in one rev.** CA-4 and GOA-7's prerequisite are the same defect class — the run
 > record under-reporting what actually happened — and both are schema-shaped. Each was individually
