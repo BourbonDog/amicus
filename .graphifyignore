@@ -1,0 +1,24 @@
+# Directories excluded from the graphify knowledge graph.
+#
+# docs/superpowers/ is 113 files / 5.36 MB of historical plans and specs -- 84%
+# of this repo's markdown. They describe designs as they were PROPOSED, which is
+# often not how they shipped. Indexing them makes superseded designs compete with
+# current ones in query results, and would push ~1.35M tokens through a serial
+# backend for the privilege.
+docs/superpowers/
+
+# .superpowers/ is agent scratch (plans, reports) that grows every session -- already
+# 1200+ files / 35 MB, several times the volume of docs/superpowers/ above, and rising.
+# (Deliberately not stating an exact count: it would be stale within a session.)
+# It is otherwise kept out of the graph only by
+# .git/info/exclude, which is machine-local and does not travel with the repo; this
+# tracked entry is what actually guarantees exclusion for every clone.
+.superpowers/
+
+# Test and eval fixtures: synthetic content, not architecture.
+tests/fixtures/
+evals/fixtures/
+
+# Build output and generated reports.
+site/
+output/

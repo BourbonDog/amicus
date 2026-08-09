@@ -68,6 +68,7 @@
     "generate-docs:check": "node scripts/generate-docs.js --check",
     "validate-docs": "node scripts/validate-docs.js --full",
     "setup-hooks": "node scripts/setup-hooks.js",
+    "graphify:index": "graphify extract . --backend claude-cli",
     "check:secrets": "node scripts/check-secrets.js --all",
     "check:sizes": "node scripts/check-file-sizes.js --all",
     "check:tarball": "node scripts/check-tarball-lifecycle.js"
