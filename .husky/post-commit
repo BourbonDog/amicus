@@ -11,8 +11,14 @@
 #
 # PORTABILITY CONTRACT: this file must contain NO machine-specific paths. The
 # interpreter is resolved at run time from graphify-out/.graphify_python, which is
-# gitignored and machine-local. With graphify absent every probe fails and the hook
-# exits 0 silently -- contributors and CI are unaffected.
+# gitignored and machine-local.
+#
+# WITHOUT GRAPHIFY INSTALLED: every interpreter probe fails and the hook prints one
+# diagnostic line to stderr ("could not locate a Python with graphify installed")
+# before returning. It never fails and never blocks a commit -- git ignores
+# post-commit exit status -- but it is NOT silent. That line is graphify's own; this
+# file is a verbatim transplant with only _PINNED blanked, so the message is left
+# intact rather than suppressed.
 #
 # Transplanted from `graphify hook install` (graphifyy 0.9.32) with _PINNED blanked.
 # Regenerate the same way rather than hand-editing.
