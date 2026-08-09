@@ -7,8 +7,10 @@
 # backend for the privilege.
 docs/superpowers/
 
-# .superpowers/ is 692 files / 35 MB of agent scratch (plans, reports) -- about 6x the
-# volume of docs/superpowers/ above. It's currently kept out of the graph only by
+# .superpowers/ is agent scratch (plans, reports) that grows every session -- already
+# 1200+ files / 35 MB, several times the volume of docs/superpowers/ above, and rising.
+# (Deliberately not stating an exact count: it would be stale within a session.)
+# It is otherwise kept out of the graph only by
 # .git/info/exclude, which is machine-local and does not travel with the repo; this
 # tracked entry is what actually guarantees exclusion for every clone.
 .superpowers/
