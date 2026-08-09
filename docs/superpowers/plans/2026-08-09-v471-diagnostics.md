@@ -114,6 +114,31 @@ worktree `opencode-ai` **1.2.20**, global **1.18.15**, npx **1.18.15**. `listAmi
 by `engineOk`, first match wins, running first. Today `amicus doctor --fix` would copy the dev
 tree's 1.2.20 engine into a broken npx copy — healing *into* the skew. Ruling R-A fixes it.
 
+**E-1f (found at Task 3's review — THIS PLAN'S OWN Task 4 Step 4 was wrong).** The plan told the
+implementer to prefer a donor with `kind !== 'running'`. That proxy is wrong on the exact topology
+this release targets. `listAmicusInstalls` pushes `running` first and `global` second
+(`src/utils/engine-install-scan.js:90,97`), then `dedupByRealpath` (`:57-68`) keeps the **first**
+entry. So when the running process **is** the global install — an ordinary end user running
+`amicus doctor --fix` — the `global` record is dropped and the global copy is labeled
+`kind: 'running'`. An existing test already pins that dedup behaviour.
+
+Consequence of the plan's rule: with `installs = [running(=global, healthy, 1.18.15), npxA (broken,
+the repair destination), npxB (healthy, 1.17.3)]`, the old code donated the good global engine and
+the plan's rule donates **npxB — the stale copy**, importing the very skew #133 is about. Neither
+of the tests the plan specified distinguishes that case.
+
+**Corrected rule:** `healthy.find((i) => i.kind === 'global') || healthy[0] || null`. On a dev
+machine the dev tree and the global install are distinct real paths, so the `global` record
+survives dedup and wins (ruling R-A's purpose — stop donating the dev engine — is met). On an
+end-user machine there is no `global` record, so `healthy[0]` is the running-that-is-global and the
+correct donor still wins. The single-install fallback is unchanged.
+
+**Open for the final review:** R-A's wording was "make `findDonor` version-aware". The corrected
+rule is *kind*-aware and achieves R-A's stated purpose without needing `engineVersion`. True
+version-aware ranking would be strictly better and becomes possible once Task 4 lands
+`engineVersion` — deliberately NOT expanded into Task 4 here, because the kind-aware rule already
+closes the defect and the ranking policy deserves its own decision.
+
 **E-1e: the version source is the record's existing `roots` array.** Read
 `<root>/opencode-ai/package.json`. Do **not** "read the package.json next to the binary":
 `hasOpencodeBinary` (`src/utils/path-setup.js:113-122`) probes
