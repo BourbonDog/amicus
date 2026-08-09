@@ -829,34 +829,49 @@ not losing legs** — the defect is that when a seat *is* lost, nothing tells th
   Those are already far over and are NOT cliffs — `mcp-server.js` is 1490 lines. Only **gated**
   files can trip the gate.
 
-  **Gated files at ≥293/300** (★ = was on the old list; re-measured 2026-08-02 at the v4.6
-  Plan-4 tip — the four v4.6-touched rows moved, three DOWN via extractions, one UP to the edge):
+  **Gated files at ≥291/300 — RE-MEASURED 2026-08-09 against `main` @ `caf4d7e` (v4.7.0).**
+  This replaces the 2026-08-02 v4.6 table, which had gone stale exactly as this section warns.
+  Counted with the gate's own arithmetic (`check-file-sizes.js:53-54`: `split('\n').length`, minus
+  one when the file ends in a newline — a naive line count reads one high and will look like a
+  false violation).
 
-  | Lines | File | |
+  | Lines | File | Δ vs the v4.6 table |
   |---|---|---|
-  | **300** | `src/sidecar/electron-install.js` | AT CEILING, was missing |
-  | **300** | `src/cli-handlers-run.js` | ★ |
-  | **299** | `src/cli-handlers-council-run.js` | ★ **v4.6 Plan 4 landed it here EXACTLY — zero headroom; next edit extracts first (`cli-council-run-render.js`, 51 lines, is the receiver)** |
-  | 299 | `src/council/run-debate.js` | was missing |
-  | 298 | `src/sidecar/start.js` | was missing |
-  | 298 | `src/sidecar/fanout.js` | was missing |
-  | 297 | `src/sidecar/continue.js` | was missing |
-  | 297 | `src/sidecar/context-builder.js` | was missing |
-  | 297 | `src/pack/pack-resolve.js` | ★ |
-  | 296 | `src/sidecar/session-utils.js` | was missing |
-  | 295 | `electron/workspace-ui/workspace-panels.js` | ★ |
-  | 293 | `electron/workspace-ui/workspace-verbs.js` | was missing |
+  | **300** | `src/pack/pack-resolve.js` | **UP 3 — AT CEILING, zero headroom** |
+  | **300** | `src/sidecar/electron-install.js` | unchanged — AT CEILING |
+  | **300** | `src/sidecar/fanout.js` | **UP 2 in v4.7 — AT CEILING, zero headroom** |
+  | 297 | `src/sidecar/context-builder.js` | unchanged |
+  | 297 | `src/sidecar/continue.js` | unchanged |
+  | 297 | `electron/workspace-ui/workspace-render.js` | **was missing from the table entirely** |
+  | 296 | `src/sidecar/session-utils.js` | unchanged |
+  | 295 | `src/council/run.js` | **crept back +24** — the v4.6 Plan-1 extraction to 271 has been eaten |
+  | 294 | `electron/workspace-ui/live-model.js` | was missing |
+  | 294 | `electron/workspace-ui/workspace-verbs.js` | UP 1 |
+  | 292 | `src/cli-handlers-doctor.js` | DOWN 3 |
+  | 292 | `src/sidecar/models.js` | was missing |
+  | 291 | `src/council/run-stages.js` | was missing |
+  | 291 | `src/mcp-council-run.js` | UP 10 |
 
-  De-cliffed by v4.6 extractions (out of the ≥293 band): `src/council/run.js` 299→**271**
-  (Plan 1), `src/mcp-council-run.js` 298→**281** (Plan 4), `src/cli-handlers-doctor.js`
-  295→**274** (Plan 3).
+  **Dropped out of the danger band since v4.6** (no longer cliffs): `src/cli-handlers-run.js`,
+  `src/cli-handlers-council-run.js`, `src/council/run-debate.js`, `src/sidecar/start.js`,
+  `electron/workspace-ui/workspace-panels.js`.
 
-  **Two corrections to entries elsewhere in this file:**
+  **Three files now sit at exactly 300/300.** Any edit touching `pack-resolve.js`,
+  `electron-install.js` or `fanout.js` must extract FIRST — there is no headroom at all.
+  Note for the v4.8.0 plan: `run.js` at 295 is where #130's ledger-skip lands, and
+  `sidecar/continue.js` at 297 is where v4.7.1's tag-inherit lands. Both need an extraction or a
+  surgical diff.
+
+  **Two corrections to entries elsewhere in this file** *(both re-measured 2026-08-09)*:
   - The Phase 17 entry claims `src/cli-handlers-doctor.js` was resolved to 260/300 by the Phase 20.1
-    `doctor-mcp-checks.js` extraction. It has since crept back to **295/300** — the cliff is live
-    again, and `doctor-mcp-checks.js` (84 lines) is still the natural receiving module.
+    `doctor-mcp-checks.js` extraction. It crept back to 295, and is now **292/300** — still in the
+    danger band, and `doctor-mcp-checks.js` (**91** lines) is still the natural receiving module.
   - The Phase 16 roll-up claims `src/utils/result-schema.js` is "now at exactly 300/300". It is
-    **243/300** and is no longer a cliff.
+    **279/300** and is no longer a cliff.
+
+  Receiving modules with room, for the extractions the three at-ceiling files will need:
+  `src/pack/pack-forward.js` (**104**) for pack-domain spillover, `src/utils/doctor-mcp-checks.js`
+  (**91**) for doctor checks, `cli-council-run-render.js` (51) for council-run rendering.
 
   `src/pack/pack-forward.js` (96 lines) remains the natural receiving module for pack-domain
   spillover. **Any next-rev task, or any hotfix, touching a file in the table above must extract
@@ -1736,3 +1751,197 @@ doc wording that hardens these claims into absolutes has a cheap verification pa
   continue`, then `amicus spend --group-by tag`, and confirm the continue row lands under
   `(unattributed)`. ~2 minutes and one cheap leg — worth doing since this is the v4.7 docs PR's
   headline sentence (MUST-1).
+
+## v4.7.1 + v4.8.0 — release split (ruled 2026-08-09)
+
+**Shape ruled by Christian, 2026-08-09:** ship **v4.7.1** small and soon (fixes and test hardening
+only, zero new surface), and take everything else as **v4.8.0** rather than a second patch. An
+intermediate "v4.7.2" was scoped and dropped: several of its items add user-visible surface — a new
+doctor check, a new degrade kind, new `runStats`/`run.json` fields, new `amicus list` rows — which
+is minor-bump material wearing a patch number.
+
+**Provenance.** Filed after a validation pass over all 8 open issues (#129, #130, #133, #134–#138)
+plus a sweep of this file's v4.7 sections, 2026-08-08/09. Every file:line citation below was
+verified against `main` @ `caf4d7e` (v4.7.0), suite green at 507 suites / 6883 passed / 8 skipped.
+
+**Stale entries retired by that sweep — do not re-file:**
+- `backlog-picklist.md` PULL-FORWARDs **B02, B03, B27 are all already resolved.** B27's
+  second-opinion frontmatter measures **1016/1024** (was 1441); B03's untrusted-output fence now
+  spans 8 files (was "1 of 4+ channels"); B02's hardcoded `--client cowork` is gone from the spawn
+  paths. That picklist is historical — it also still lists B22/B24 (council presets, spend
+  tracking), both shipped.
+- The `session-index-tmp-sweep.js` `statSync`/`lstatSync` divergence is **closed** by the
+  2026-08-08 Option B owner ruling, already recorded in that file's own source comment.
+
+### The seven rulings, with rationale
+
+| # | Decision | Ruling | Rationale |
+|---|---|---|---|
+| 1 | `opencode-ai` constraint | **Pin exact `1.18.15`** | `^1.2.20` spans 1.2.20 → <2.0.0 — that width is *how* npx cached 1.17.3 against a global 1.18.15 (#133). An exact pin means a stale cached copy no longer satisfies the range, forcing re-resolution. Cost: opencode patches need a deliberate bump; the release recipe already has a version-pin step. |
+| 2 | Derived-launch tags | **Inherit, no new flags** | Makes `spend --group-by tag` honest without adding CLI surface, so it stays patch-legal. `--tag` stays rejected on `--retry-failed` exactly as D13 ruled; continue/resume gain no flag. |
+| 3 | Doc gates | **F-2, F-3, F-6 only** | All three are documented as landing green. F-1 explicitly expects red, so it would import doc-writing of unknown volume into a patch → deferred to v4.8.0. |
+| 4 | Duplicate aliases (PR1F-1) | ~~Reject at the resolvers~~ **SUPERSEDED** | Ruled "reject" before #137 was read. Rejection was only ever a stopgap for the window before seat identity existed; with #137 in the same release there is no window. See v4.8.0 § Seat identity. |
+| 5 | Council rows in `amicus list` | **`council(<stage>)` in MODEL** | Mirrors the existing `wave(N legs)` treatment — that column is already "what kind of thing is this", not strictly a model id. No new column, so nothing changes for non-council rows. |
+| 6 | Briefing preview width | **Re-truncate 80 → 30** | Proven a no-op, not merely "harmless": `sanitizePreview` appends `…` only past the cap, so at a 30-char cut the ellipsis is never in range and `sanitizePreview(t,80).slice(0,30) === collapsed.slice(0,30)` in both branches. MCP path stays byte-identical; honours E-PR3-3. |
+| 7 | #130 scope | ~~Detect + degrade + ledger skip~~ **SUPERSEDED** | Was a patch-boundary call. #134 requires the TASK MODE declaration regardless, so v4.8.0 takes the full treatment rather than the detection half. |
+
+## v4.7.1 — the diagnostics stop lying
+
+Every item is a fix or test hardening. No new flags, no new checks, no new output.
+
+- [ ] **Version-aware `doctor` engine check** (#133). `engine-install-scan.js:135` sets
+  `engineOk: !!hasOpencodeBinary({pkgDir})` — a **presence boolean**, and the install record
+  (`{kind,pkgDir,engineOk,roots}`) carries **no version field to compare**. So
+  `doctor-engine-check.js:53` emits "engine present in N npx-cache copy" and reports **ok** through
+  a total outage. Add a version to the scan record and fail loudly on skew across copies.
+  Receivers have room: `doctor-engine-check.js` 115/300, `engine-install-scan.js` 142/300.
+  ⚠️ The check was built for bug report #1 (binary missing / AV quarantine) — a *presence* failure.
+  Version skew is a different class it was never designed to see.
+- [ ] **Pin `opencode-ai` to `1.18.15`** (#133, ruling 1). `package.json` only.
+- [ ] **Escalate the backstop 2× on retry** (#129). `run-retry.js`'s `common` object (`:169`) lists
+  12 fields with **no `noOutputBackstopMs` and no `agent`**, so the once-only SL-2 retry re-runs
+  under identical conditions and is *structurally unable* to heal a latency failure.
+  ⚠️ Honest scope, two files not one: `run-launch.js`'s `launchWave`/`launchSolo` build an
+  **explicit field allowlist** (no `...opts` spread), so the field must be added there too,
+  spread-guarded — exactly the shape `tag: opts.tag` shipped in v4.7 F8 D16. Council never sets the
+  value today, so the retry resolves it itself. `fanout.js` needs **no edit**: it already forwards
+  `noOutputBackstopMs` at `:272`. Headroom: `run-launch.js` 215/300, `run-retry.js` 283/300.
+- [ ] **Reword the backstop message** (#129 + #133, both flag the same string). `headless.js:485`
+  asserts "— likely a listed-but-not-serving model or a dead endpoint": a canned guess with no
+  evidence gate, fired identically from both firing sites. All the mechanism knows is "zero
+  substantive activity by the deadline". Report that neutrally and **name
+  `AMICUS_NO_OUTPUT_BACKSTOP_MS` in the message itself**. Highest value-per-line in the release —
+  this string is what sent 30 minutes of #133's debugging at model ids and API keys.
+- [ ] **`continue`/`resume` inherit the parent's tag** (ruling 2). Parent tag is already on disk
+  (D13, absent-not-null on `metadata.json`) and both handlers already resolve a validated parent
+  `taskId` (`:24` resume, `:54` continue). ⚠️ **Gate risk:** `src/sidecar/continue.js` is at
+  **297/300** and is where the spend row is written, so the tag has to reach it. Three lines will
+  not hold a metadata read plus pass-through — extract first or keep the diff surgical.
+- [ ] **`--retry-failed` inherits the wave's tag** (ruling 2). `buildRetryPlan`
+  (`fanout-retry.js:46-52`, 208/300) **already reads** the original wave's `metadata.json` into
+  `waveMeta`. Keeps the `--tag` + `--retry-failed` rejection exactly as-is — you still cannot *set*
+  a tag on a retry, it just inherits the one it belongs to. `fanout.js` needs no edit: the
+  `tag: options.tag || metaTag` inherit machinery is already at all three `buildWaveResult` sites.
+- [ ] **F-4 — delete dead code.** `extractSection`, `findFilesInSection`, `checkDrift` in
+  `scripts/validate-docs.js` (`:35`, `:68`, `:84`) are exported and unit-tested but on **no**
+  execution path. Delete them and `CONFIG.mappings`. Ungated file.
+- [ ] **F-2 / F-3 / F-6 — doc gates** (ruling 3). Derive the README command list from
+  `bin/amicus.js`'s 21 `case` labels; run `generate-docs --check` in jest; extend the council
+  TOC/anchor gate to all of `docs/`. All test-only, all verified passing today.
+- [ ] **Two verification riders** (~5 min). Assert `runFanout({quiet:true})` writes nothing to
+  stdout; and actually observe a `continue` row landing under `(unattributed)` before item 5 fixes
+  it — that path is the v4.7 docs PR's headline sentence and was traced by reading, never exercised.
+
+## v4.8.0 — the council does new work
+
+The three largest issues attack the same two assumptions baked into the pipeline: **every seat
+reviews an artifact**, and **one seat = one alias**. v4.8.0 breaks both.
+
+### Task mode — closes #134, finishes #130
+
+#134 (open-ended asks) and #130 (byzantine divergence) are the **same problem from two directions**:
+#130 is the bug report of what happens when a generative brief meets a review-shaped pipeline, and
+#134 is the request to support generative briefs properly. The TASK MODE declaration serves both;
+design them together, not separately.
+
+- Mechanical root cause confirmed: `briefings.js:114` hard-frames every seat — *"You are one
+  reviewer on an independent multi-model review bench. Review the material…"* — composed onto the
+  user's brief regardless of what that brief asks for. No task-mode or divergence concept exists
+  anywhere in `src/` (grep hits only unrelated `DIVERGENT_VENDORS` routing).
+- Stamp `TASK MODE: review-artifact | produce-analysis` from an explicit parameter; Stage-1 composes
+  per mode; Stage-2 judges score conformance to the declared mode as a first-class criterion.
+- Emit divergence into `degrades[]` so it reaches `report.html`/`report.md` the way seat loss does.
+  ⚠️ Word it as an **observation** ("seats' findings cite disjoint location populations"), never a
+  diagnosis — repeating #129's sin of asserting an unestablished cause would be the same bug.
+- ⚠️ **The location heuristic needs calibration.** In a *normal* review run the material under
+  review **is** delivered inside the briefing, so "cites the briefing" does not separate the cases
+  on its own. The engine can still do it — it composes the brief and knows where its instruction
+  scaffold ends and the user body begins — but models write `location` as free text.
+- Skip the ledger row on divergence. Exact precedent: `run.js:271`'s `if (!o.lenses)` — *"Lens runs
+  never feed cross-run reliability stats."* ⚠️ `run.js` is at **295/300**; extract first.
+- Per-population tiers, and split the two Singleton causes ("no peer engaged" vs "no peer was in
+  scope to engage"). NB: v4.7 already redefined Singleton as the no-signal case `a=0,d=0`
+  (`tally.js:24`, docs match) — the #130 report quotes the older v4.6.2 wording, but the
+  conflation it describes survives intact and is arguably sharper now.
+
+**Empirical evidence, still on disk** (`~/.config/amicus/council-ledger.jsonl`, 157 rows). Run
+`westpac-jv-02` ranked gpt **worst** (peersOnly 3.0) on a **perfect** confirm rate (1.00), while
+deepseek ranked better (2.0) on 0.42. That is the ranking inversion in two rows, and those rows
+permanently feed `council stats` — which is the authoritative input to bench selection.
+
+### Seat identity — closes #137, and PR1F-1 properly
+
+- PR1F-1's real defect is not that duplicates exist, it is that `lensIndexOf`
+  (`run-retry.js:24`) and `roleFor` (`run-stages.js:34`) resolve a seat via `indexOf(alias)` —
+  **first occurrence wins** — so a duplicated alias whose second occurrence dies yields two primary
+  rows where the row-per-launch bijection expects one.
+- Give seats distinct identities so alias is no longer the resolution key. That fixes the bug **and**
+  delivers #137's ask: the same model in multiple seats, one per expert lens persona.
+- Supersedes ruling 4. Note duplicates mostly *work* today — the corruption only fires when a
+  duplicated seat dies — so rejecting them would have broken a working workflow that this release
+  then un-breaks. Rider: `amicus council save` accepts duplicate members too.
+
+### Bench adaptation — closes #135, finishes #129
+
+#135 is #129's generalization, and names the same case (*"if Kimi sometimes takes two or three
+minutes to get started"*).
+
+- Record **time-to-first-token** in `runStats` (additive, emit-only-when-set idiom as with
+  `waveId`/`tag`). This is the data foundation #135 needs — it makes slow seats visible *before*
+  they cross the line rather than after.
+- Derive per-model thresholds **from observed TTFT** rather than a hand-configured knob. This is the
+  version that satisfies the product principle (self-heal or self-diagnose); a config knob is
+  neither. It likely means `--no-output-backstop-ms` and per-model backstop config never need to
+  exist — revisit only if adaptation proves insufficient.
+- Capture OpenRouter-vs-direct variance in the model notes log.
+- ⚠️ Related, from #129's own side observation: `curated-models.js:112` ships
+  `kimi → openrouter/moonshotai/kimi-k2.6` while a local config override repoints it to `kimi-k3`.
+  Per-model operating notes keyed on an alias can therefore describe a different model than the
+  alias now resolves to. Surface the resolved target in run artifacts, or warn when a local override
+  shadows a curated alias.
+
+### Quote the real engine error — #133 root fix
+
+v4.7.1 only softens the wording; this replaces the guess with the truth. When a leg dies, read the
+session's line from `~/.local/share/opencode/log/opencode.log` and surface it. In the #133 outage the
+actual cause — `SQLiteError: no such column: replacement_seq` — sat in that file the entire 30
+minutes, appearing at the exact timestamp of every failed MCP session and never for the CLI sessions
+succeeding in the same window. Needs log-path resolution, session correlation, and a clean fallback
+when no line exists.
+
+### Setup polish — #138
+
+Smaller than it reads: a two-level-picker gap, not a missing feature. The main `setup` path
+(`setup.js:444`) offers quick-picks keyed by **family alias** (`deepseek → routes.openrouter`) with
+no model-level choice — but a per-provider picker with priced, context-annotated rows **already
+exists** (`provider-default-prompt.js` / `provider-default-picker.js`); it only runs after
+`amicus key <provider>` saves a key. And `resolveChoice` already accepts *"any full model id"*, so
+the capability is there but undiscoverable from the list. Add the family → model second level,
+reusing the existing priced picker.
+
+### Carried from the dropped v4.7.2 scope
+
+- [ ] **`sessions-index.json` growth.** Design already recommended in this file (doctor check +
+  `--fix`, **liveness-based not age-based**). Impact measured, not theorized: 5.7 ms parse plus a
+  0.69 MB write on **every session start** (`O(total sessions ever)` per launch), and
+  `amicus list --all` at 8,275 ms → 53 ms after a prune.
+- [ ] **W1-M4 — `amicus_start` spawn-fallback writes a raw briefing** (`mcp-server.js:669`). Fix
+  shape known and proven (Task 7 shipped it for `amicus_fanout`); the work is driving the path end
+  to end for a verified repro. Leaves a permanently-wrong `--search` corpus for a child that dies early.
+- [ ] **Council runs in CLI `amicus list`** (ruling 5 + 6). `listCouncilRuns`
+  (`mcp-council-awareness.js:205`) has no MCP-specific coupling.
+- [ ] **The tight-file extraction pass** — see the refreshed table under *Next-rev hard gates*.
+- [ ] **F-1** (MCP tool-parameter pinning; expects red) and **F-5** (`routing.tier` /
+  `tier_onboarded`, a four-rev-old hole shipped in v3.2.0).
+- [ ] **PR1F-2 / PR1F-3** — both explicitly silent drift with no live defect. PR1F-2 needs
+  `buildRunStatsEntry` extracted to a **pure** module (`debate.js` is declared DI-free) and its real
+  hazard is **key order** changing `run.json` bytes, which the order-insensitive pins would not
+  catch. PR1F-3's proposed expression was found to be a **constant** (`res.ok` is always false at
+  `run-stages.js:181`), so it needs a design call.
+- [ ] **KNOWN_VARIABLES single-source (T3-m2)** — hard gate, but only bites when `{{input}}` lands.
+
+### Explicitly NOT in v4.8.0
+
+- **#136 (easy bug reporting)** — explicitly a brainstorming placeholder. Its "three or more times"
+  trigger implies recurring-error tracking that does not exist yet; it needs a design session before
+  it can be scoped at all.
