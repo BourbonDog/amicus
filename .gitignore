@@ -75,3 +75,6 @@ test_output*.txt
 # skills/second-opinion/ and silently ignore the shipped skill files.
 /output/
 /second-opinion/
+
+# Graphify knowledge graph (generated build artifact; rebuild with `npm run graphify:index`)
+graphify-out/
