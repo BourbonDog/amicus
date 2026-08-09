@@ -4,8 +4,9 @@
  * path diverge from the registry path (clone -> prepare -> nested devDep
  * install -> cached-pack), so it is removed. Git hooks are still configured
  * for DEVELOPERS, now folded into the existing (non-fatal, #29) postinstall
- * flow: scripts/setup-hooks.js exits 0 outside a git checkout, so invoking it
- * from postinstall is a no-op for consumers and sets core.hooksPath for devs.
+ * flow: scripts/setup-hooks.js configures hooks only when git's toplevel is the
+ * amicus package root itself, so invoking it from postinstall is a no-op for
+ * consumers (see tests/setup-hooks.test.js) and sets core.hooksPath for devs.
  *
  * These tests assert the manifest shape and the dev hook-setup path without
  * ever running a real install (which is forbidden in this worktree).
@@ -71,20 +72,29 @@ describe('#35 — github: install runs identically (prepare removed)', () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     });
 
+    /**
+     * A scratch dev checkout laid out like the real package: setup-hooks.js
+     * sits at <root>/scripts/ and resolves its package root from __dirname, so
+     * the copy — not this repo's own — is what a scratch repo must run.
+     * @returns {string} path to the scratch checkout's setup-hooks.js
+     */
     function initRepo(dir) {
-      fs.mkdirSync(dir, { recursive: true });
+      fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
       run('git', ['init', '-q', '-b', 'main', dir]);
       run('git', ['-C', dir, 'config', 'user.email', 'test@amicus.invalid']);
       run('git', ['-C', dir, 'config', 'user.name', 'prepare-removed test']);
       fs.mkdirSync(path.join(dir, '.husky'));
+      const script = path.join(dir, 'scripts', 'setup-hooks.js');
+      fs.copyFileSync(SETUP_HOOKS, script);
+      return script;
     }
 
     test('invoking setup-hooks (the postinstall dev path) sets core.hooksPath', () => {
       const repo = path.join(tmp, 'repo');
-      initRepo(repo);
+      const script = initRepo(repo);
 
       // This is exactly what postinstall now runs for a dev checkout.
-      run('node', [SETUP_HOOKS], repo);
+      run('node', [script], repo);
 
       expect(run('git', ['-C', repo, 'config', 'core.hooksPath']).trim()).toBe('.husky');
     });

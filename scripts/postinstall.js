@@ -110,9 +110,12 @@ async function provisionElectron(deps = {}) {
  * path.
  *
  * Hook setup still needs to happen for devs, so we run setup-hooks.js here.
- * It is a no-op for consumers: setup-hooks.js exits 0 outside a git checkout
- * (the published tarball / github: export has no .git), so this changes
- * nothing for end users while keeping `npm install` wiring hooks for devs.
+ * It is a no-op for consumers, but NOT merely because the published tarball
+ * has no .git: git resolves a repository by walking UP, so during a consumer's
+ * `npm install amicus` (cwd = node_modules/amicus) it finds the CONSUMER'S
+ * .git. setup-hooks.js is what makes this safe — it configures hooks only when
+ * git's toplevel IS the amicus package root, so a dependency install can never
+ * repoint someone else's core.hooksPath. See its docstring for the full story.
  *
  * Best-effort and self-contained: never throws (a hook-setup failure must
  * never roll back the install), so it is safe to call before the optional
