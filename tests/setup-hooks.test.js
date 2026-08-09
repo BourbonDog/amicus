@@ -23,7 +23,7 @@
  * exercise a layout that never ships.
  */
 
-const { execFileSync } = require('node:child_process');
+const { execFileSync, execSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -228,6 +228,42 @@ describe('scripts/setup-hooks.js', () => {
 
       expect(hooksPath(consumer)).toBe('.githooks');
     });
+  });
+
+  /**
+   * The 8.3 short-path trap, pinned. GitHub's Windows runners hand %TEMP% out
+   * as a short path (C:\Users\RUNNER~1\...), Node's module loader realpaths the
+   * script but fs.realpathSync PRESERVES short components, and git always
+   * reports the long form. A guard that string-compares `--show-toplevel`
+   * against the package root therefore sees two spellings of one directory,
+   * decides they differ, and silently refuses to configure a valid checkout —
+   * which is exactly how the first version of this guard shipped red on
+   * Windows CI while passing on Linux, macOS and a dev box whose %TEMP% has no
+   * mangled component. `--show-prefix` makes git compute the relationship, so
+   * spelling stops mattering.
+   *
+   * Self-skips off Windows, and on volumes with 8.3 generation disabled (there
+   * the short path IS the long path and there is nothing to exercise).
+   */
+  const winOnly = process.platform === 'win32' ? test : test.skip;
+  winOnly('configures through an 8.3 short path (the Windows %TEMP% shape)', () => {
+    const repo = path.join(tmp, 'a-directory-name-well-past-8-chars');
+    initRepoWithHook(repo);
+
+    // `%~sI` is the only shell-level way to the 8.3 form without a native
+    // binding. execSync, not the execFileSync helper: passing this to cmd as a
+    // single argv entry gets mangled by Node's Windows quoting.
+    const short = execSync(`for %I in ("${repo}") do @echo %~sI`, {
+      encoding: 'utf-8',
+      env: CLEAN_ENV,
+    }).trim();
+    if (short.toLowerCase() === repo.toLowerCase()) {
+      return; // 8.3 name generation is off on this volume — nothing to test
+    }
+
+    run('node', [path.join(short, 'scripts', 'setup-hooks.js')], short);
+
+    expect(hooksPath(repo)).toBe('.husky');
   });
 
   test('configures the package root repo, not whatever repo the cwd is in', () => {

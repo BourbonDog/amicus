@@ -34,13 +34,22 @@
  * stops running them. The damage also outlived a failed install: npm rolls
  * back node_modules, but not writes to someone else's .git/config.
  *
- * So the guard compares `git rev-parse --show-toplevel` against this package's
- * own root and does nothing unless they are the same directory. That is exact
- * rather than heuristic: a dependency install, a vendored copy, and a global
- * install all sit BELOW their enclosing repo's toplevel (or in no repo at
- * all), while the dev checkout — and every linked worktree of it, whose
- * toplevel is the worktree root — matches. Both sides are realpath'd so
- * macOS's /var -> /private/var symlink and Windows junctions compare equal.
+ * So the guard asks `git rev-parse --show-prefix` from the package root. That
+ * prints the path of the current directory RELATIVE to the top of the work
+ * tree, so it is empty exactly when the package root IS the repository root,
+ * and non-empty ("node_modules/amicus/") when amicus merely sits inside
+ * someone else's checkout. A dependency install, a vendored copy and a global
+ * install all land below their enclosing repo's root; the dev checkout — and
+ * every linked worktree of it, whose root is the worktree — comes back empty.
+ *
+ * DO NOT "simplify" this into comparing `--show-toplevel` against the package
+ * root as strings. That was the first attempt and it broke on Windows CI: the
+ * runners' %TEMP% is an 8.3 short path (C:\Users\RUNNER~1\...), Node's
+ * fs.realpathSync PRESERVES short components while git always reports the long
+ * form, so the two spellings of one directory never compared equal and the
+ * guard refused to configure a legitimate checkout. Case, separators, symlinks
+ * and 8.3 are four different ways for equal paths to spell differently; asking
+ * git to compute the relationship sidesteps all of them at once.
  *
  * Every git call is anchored at the package root rather than process.cwd() for
  * the same reason: what gets configured must depend on where amicus lives, not
@@ -51,58 +60,23 @@
  */
 
 const { execFileSync } = require('node:child_process');
-const fs = require('node:fs');
 const path = require('node:path');
 
-/**
- * Resolve symlinks/junctions so two spellings of one directory compare equal.
- * Falls back to a plain resolve when the path cannot be stat'd.
- * @param {string} p
- * @returns {string}
- */
-function realpath(p) {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return path.resolve(p);
-  }
-}
-
-/**
- * Compare two absolute paths for pointing at the same directory.
- * win32 and darwin default filesystems are case-insensitive, and git may
- * report a different drive-letter case than Node does.
- * @param {string} a
- * @param {string} b
- * @returns {boolean}
- */
-function samePath(a, b) {
-  const left = path.resolve(a);
-  const right = path.resolve(b);
-  if (left === right) {
-    return true;
-  }
-  if (process.platform === 'win32' || process.platform === 'darwin') {
-    return left.toLowerCase() === right.toLowerCase();
-  }
-  return false;
-}
-
 /** This package's root — the parent of the scripts/ directory holding this file. */
-const PKG_ROOT = realpath(path.resolve(__dirname, '..'));
+const PKG_ROOT = path.resolve(__dirname, '..');
 
 function git(...args) {
   return execFileSync('git', args, { cwd: PKG_ROOT, encoding: 'utf-8' }).trim();
 }
 
-let toplevel;
+let prefix;
 try {
-  toplevel = git('rev-parse', '--show-toplevel');
+  prefix = git('rev-parse', '--show-prefix');
 } catch {
-  process.exit(0); // not a git checkout — nothing to configure
+  process.exit(0); // not a git checkout (or a bare repo) — nothing to configure
 }
 
-if (!samePath(realpath(toplevel), PKG_ROOT)) {
+if (prefix !== '') {
   // amicus is nested inside someone else's repository — a dependency install,
   // a vendored copy, a global install under a tracked directory. Their hooks
   // are none of our business. Silent: this is the normal consumer path.
