@@ -31,6 +31,13 @@ Pre-commit: lint-staged (eslint on staged `src/**/*.js`) → secret scan → 300
 (auto-staged) → docs-drift warning. Pre-push: the unit suite must be green (`.test-passed` cache).
 Hooks fire in the clone **and** in linked worktrees (`core.hooksPath=.husky`).
 
+Post-commit isn't a gate — it can't block anything: it rebuilds the graphify knowledge graph in
+the background (code files only, no LLM). No-op if graphify isn't installed — prints one
+harmless stderr line and returns; set `GRAPHIFY_SKIP_HOOK=1` to disable it outright. Doesn't
+fire in linked worktrees, by design. graphify is an optional Python tool (`uv tool install
+"graphifyy[mcp]"`), not an npm dependency, so `npm run graphify:index` — a full rebuild, ~24 min
+and ~1.7M input tokens via your Claude subscription — is `command not found` without it.
+
 ## Tests
 
 ```bash

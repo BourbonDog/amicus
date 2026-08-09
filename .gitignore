@@ -76,5 +76,8 @@ test_output*.txt
 /output/
 /second-opinion/
 
-# Graphify knowledge graph (generated build artifact; rebuild with `npm run graphify:index`)
+# Graphify knowledge graph -- generated build artifact, ~8 MB.
+# `npm run graphify:index` rebuilds it from scratch: ~24 min and ~1.7M input tokens via
+# claude-cli, and it regenerates only graph.json (GRAPH_REPORT.md and graph.html come back
+# on the next incremental rebuild). Deleting this directory is not free.
 graphify-out/

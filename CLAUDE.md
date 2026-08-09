@@ -703,6 +703,8 @@ Version-controlled in `.husky/` and executed directly by git via `core.hooksPath
 
 **SHA caching:** `posttest` writes HEAD SHA to `.test-passed`. Pre-push skips tests if SHA matches. Invalidated by any new commit. File is gitignored.
 
+**post-commit:** rebuilds the graphify knowledge graph in the background (code files only, no LLM; detached, so it never blocks or fails a commit). No-op if graphify isn't installed — prints one stderr line saying it could not locate a Python with graphify, which is expected and harmless. `GRAPHIFY_SKIP_HOOK=1` disables it. Does not fire in linked worktrees, by design. graphify is an optional Python tool (`uv tool install "graphifyy[mcp]"`), not an npm dependency — `npm run graphify:index` rebuilds the graph from scratch (~24 min, ~1.7M input tokens via your Claude subscription) and is `command not found` without it.
+
 ---
 
 ## Structured Logging

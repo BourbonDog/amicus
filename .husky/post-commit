@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Rebuild the graphify knowledge graph after each commit (code files only, no LLM).
 #
-# Tracked on purpose: a fresh clone runs npm install -> scripts/postinstall.js ->
-# scripts/setup-hooks.js, which sets core.hooksPath=.husky, so this fires with no
-# per-clone setup in the primary checkout.
+# Tracked on purpose: a fresh clone's `npm install` runs scripts/postinstall.js ->
+# scripts/setup-hooks.js, setting core.hooksPath=.husky, so this fires with no
+# per-clone setup -- unless you used CONTRIBUTING's `--ignore-scripts` flow, which
+# skips postinstall; run `npm run setup-hooks` once in that case.
 #
 # In LINKED WORKTREES this hook deliberately exits 0 without rebuilding: git-dir
 # differs from git-common-dir there, and graphify-out/ belongs to the primary
@@ -20,8 +21,16 @@
 # file is a verbatim transplant with only _PINNED blanked, so the message is left
 # intact rather than suppressed.
 #
-# Transplanted from `graphify hook install` (graphifyy 0.9.32) with _PINNED blanked.
-# Regenerate the same way rather than hand-editing.
+# Transplanted from `graphify hook install` (graphifyy 0.9.32; 0.9.37 generates a
+# byte-identical body) with _PINNED blanked so no machine path is committed.
+#
+# WARNING: `graphify hook install` is NOT a read-only generator. It also edits tracked
+# .gitattributes (adds a graphify-out/graph.json merge=graphify driver referencing local
+# git config), installs an unwanted .husky/post-checkout, and writes a merge.graphify
+# section to .git/config. If you regenerate, revert those three side effects:
+#   git checkout -- .gitattributes
+#   rm -f .husky/post-checkout
+#   git config --remove-section merge.graphify
 
 # graphify-hook-start
 # Auto-rebuilds the knowledge graph after each commit (code files only, no LLM needed).
