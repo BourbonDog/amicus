@@ -186,6 +186,7 @@ src/
 │   ├── progress-fields.js  # Derived, agent-facing progress fields shared by the MCP status/list
 │   ├── progress.js  # Sidecar Progress Reader
 │   ├── read.js  # Sidecar Read Operations Module
+│   ├── reopen-spend.js  # Spend finalization for a REOPENED session (continue/resume). Split out of
 │   ├── resume.js  # Sidecar Resume Operations - Handles resuming previous sidecar sessions
 │   ├── session-finalize.js
 │   ├── session-utils.js  # Sidecar Session Utilities - Shared functionality for session management
@@ -528,7 +529,7 @@ evals/
 | `sidecar/budget.js` |  | `checkBudget()`, `formatBudgetError()`, `DEFAULT_MAX_COST_PER_MTOK()`, `ASSUMED_OUTPUT_TOKENS()` |
 | `sidecar/child-sessions.js` |  | `collectSubtreeUsage()`, `subtreeIsUnknown()`, `SUBTREE_MAX_DEPTH()`, `SUBTREE_MAX_SESSIONS()` |
 | `sidecar/context-builder.js` | Context Builder Module | `buildContext()`, `parseDuration()`, `resolveSessionFile()`, `applyContextFilters()`, `findCoworkSession()` |
-| `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `finalizeSpendForReopen()`, `continueSidecar()` |
+| `sidecar/continue.js` | Sidecar Continue Operations - Handles continuing from previous sessions | `loadPreviousSession()`, `buildContinuationContext()`, `createContinueSessionMetadata()`, `continueSidecar()` |
 | `sidecar/conversation-mirror.js` |  | `createMirrorState()`, `mirrorMessages()`, `logMessage()`, `mirrorUsageOnly()`, `allAssistantUsagePresent()` |
 | `sidecar/crash-handler.js` | Crash Handler - Updates metadata to 'error' on uncaught exceptions | `installCrashHandler()` |
 | `sidecar/electron-cache.js` | Electron download-cache root resolution (#53 helper). | `resolveCacheRoots()`, `defaultCacheRoot()` |
@@ -558,6 +559,7 @@ evals/
 | `sidecar/progress-fields.js` | Derived, agent-facing progress fields shared by the MCP status/list | `sanitizePreview()`, `latestAssistantPreview()`, `deriveStage()`, `COARSE_STAGES()`, `TERMINAL_PROGRESS_STAGES()` |
 | `sidecar/progress.js` | Sidecar Progress Reader | `readProgress()`, `writeProgress()`, `writeTerminalProgressSafe()`, `extractLatest()`, `computeLastActivity()` |
 | `sidecar/read.js` | Sidecar Read Operations Module | `formatAge()`, `enumerateSessions()`, `enumerateAllProjects()`, `searchSessions()`, `listSidecars()` |
+| `sidecar/reopen-spend.js` | Spend finalization for a REOPENED session (continue/resume). Split out of | `finalizeSpendForReopen()` |
 | `sidecar/resume.js` | Sidecar Resume Operations - Handles resuming previous sidecar sessions | `loadSessionMetadata()`, `loadInitialContext()`, `checkFileDrift()`, `buildDriftWarning()`, `buildResumeUserMessage()` |
 | `sidecar/session-finalize.js` |  | `resolveTerminalState()`, `finalizeHeadlessResult()` |
 | `sidecar/session-utils.js` | Sidecar Session Utilities - Shared functionality for session management | `HEARTBEAT_INTERVAL()`, `SessionPaths()`, `saveInitialContext()`, `finalizeSession()`, `outputSummary()` |

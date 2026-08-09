@@ -251,7 +251,7 @@ async function resumeSidecar(options) {
     // v4.3: attribute resume spend (C9/E4). Reload metadata, write usage + append
     // a ledger row (status: statusFromResult, matching start.js — not terminal.status).
     {
-      const { finalizeSpendForReopen } = require('./continue');
+      const { finalizeSpendForReopen } = require('./reopen-spend');
       const { statusFromResult } = require('../utils/result-schema');
       const reloaded = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
       const { usage } = finalizeSpendForReopen({

@@ -23,7 +23,8 @@ jest.mock('../src/opencode-client', () => ({
 }));
 jest.mock('../src/utils/model-validator', () => ({ warnIfNotInCatalog: jest.fn() }));
 
-const { finalizeSpendForReopen, continueSidecar } = require('../src/sidecar/continue');
+const { finalizeSpendForReopen } = require('../src/sidecar/reopen-spend');
+const { continueSidecar } = require('../src/sidecar/continue');
 const { resumeSidecar } = require('../src/sidecar/resume');
 const { runHeadless } = require('../src/headless');
 const { readSpendRows } = require('../src/utils/spend-ledger');
