@@ -198,4 +198,44 @@ describe('findDonor', () => {
     expect(donor.kind).toBe('running');
     expect(donor.pkgDir).toBe(RUNNING);
   });
+
+  // R-A residual hole (reviewer finding, closed by this task's engineVersion
+  // field): on a machine with a dev checkout, NO npm-global amicus install, a
+  // broken npx destination, and a healthy npx sibling, no record has
+  // kind:'global' — the old kind-only rule fell through to healthy[0], i.e.
+  // the running dev tree, and could donate a version-skewed dev engine. Once
+  // engineVersion exists, ranking healthy donors by version (highest first)
+  // must win over the kind-based fallback so the newer sibling is chosen
+  // instead. Before this task's findDonor change, this test fails: the old
+  // code returns `healthy[0]` unconditionally (kind fallback, ignoring
+  // version), i.e. the OLDER running dev tree — not the sibling.
+  test('ranks by engineVersion over the kind-based fallback: a newer healthy npx sibling beats an older running dev tree', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.2.20' }, // dev tree, older
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.18.15' }, // healthy sibling, newer
+      // destPkgDir itself: broken npx copy being repaired — excluded via engineOk:false anyway.
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('npx');
+    expect(donor.pkgDir).toBe(NPX_SIBLING);
+  });
+
+  test('a tie on engineVersion falls back to the kind-based rule (global preferred)', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.18.15' },
+      { kind: 'global', pkgDir: DONOR, engineOk: true, engineVersion: '1.18.15' },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('global');
+  });
+
+  test('a non-semver engineVersion is treated as absent (sorts last, never throws)', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: 'not-a-version' },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.18.15' },
+    ];
+    expect(() => findDonor({ installs, destPkgDir: DEST, fs })).not.toThrow();
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.pkgDir).toBe(NPX_SIBLING);
+  });
 });

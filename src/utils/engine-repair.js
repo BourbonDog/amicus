@@ -24,30 +24,81 @@ function runningPkgDir() {
 }
 
 /**
- * Prefer the explicitly-`global` healthy donor; else fall back to the first
- * healthy install in listAmicusInstalls order (running-first).
+ * Parse a semver-shaped string into a [major, minor, patch] triple.
+ * @returns {[number,number,number]|null} null for undefined/non-string/non-semver
+ */
+function parseVersionTriple(v) {
+  if (typeof v !== 'string') { return null; }
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
+  if (!m) { return null; }
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+/**
+ * Descending version comparator: newest first, unparseable/absent sorts last
+ * (never throws). Two unparseable values compare equal (0).
+ */
+function compareVersionsDesc(a, b) {
+  const ta = parseVersionTriple(a);
+  const tb = parseVersionTriple(b);
+  if (!ta && !tb) { return 0; }
+  if (!ta) { return 1; }
+  if (!tb) { return -1; }
+  for (let i = 0; i < 3; i += 1) {
+    if (ta[i] !== tb[i]) { return tb[i] - ta[i]; }
+  }
+  return 0;
+}
+
+/**
+ * Prefer the newest-`engineVersion` healthy donor; fall back to the
+ * explicitly-`global` healthy donor when versions are absent or tied; else
+ * fall back to the first healthy install in listAmicusInstalls order
+ * (running-first).
  *
- * A `kind !== 'running'` proxy is wrong: listAmicusInstalls pushes `running`
- * first and `global` second, and dedupByRealpath keeps the FIRST of any two
- * entries that resolve to the same real path. So on an ordinary end-user
- * machine — where the running process IS the global install — the `global`
- * record never survives dedup; that copy is labeled `kind: 'running'`. A
- * `kind !== 'running'` filter would then skip the good global engine and
- * donate some other (possibly stale) healthy copy, importing the exact
- * version skew this self-heal exists to prevent.
+ * Ruling R-A (version-aware close of the residual hole): Task 3 could only
+ * approximate "don't donate the dev engine" with a kind-based rule, because
+ * no version existed on the record yet. That leaves a hole: a machine with a
+ * dev checkout, no npm-global amicus install, a broken npx destination, and
+ * a healthy npx sibling has no `kind:'global'` record at all, so the old rule
+ * fell through to `healthy[0]` — the running dev tree — and could donate a
+ * version-skewed dev engine over a newer healthy sibling. Ranking by
+ * engineVersion first closes that: the newest healthy copy always wins,
+ * regardless of kind, as long as its version is known and unambiguous.
  *
- * Preferring `global` explicitly is correct on both topologies: on a dev
- * machine the dev tree and the global install are distinct real paths, so
- * the `global` record survives dedup and wins over the dev tree. On an
- * end-user machine there is no separate `global` record — the running
- * process already IS it — so `healthy[0]` (running-that-is-global) is
- * correct. Single-install machines keep the same fallback.
+ * A `kind !== 'running'` proxy is wrong for the fallback tier: listAmicusInstalls
+ * pushes `running` first and `global` second, and dedupByRealpath keeps the
+ * FIRST of any two entries that resolve to the same real path. So on an
+ * ordinary end-user machine — where the running process IS the global install
+ * — the `global` record never survives dedup; that copy is labeled
+ * `kind: 'running'`. A `kind !== 'running'` filter would then skip the good
+ * global engine and donate some other (possibly stale) healthy copy,
+ * importing the exact version skew this self-heal exists to prevent.
+ *
+ * Preferring `global` explicitly (once versions tie or are unknown) is
+ * correct on both topologies: on a dev machine the dev tree and the global
+ * install are distinct real paths, so the `global` record survives dedup and
+ * wins over the dev tree. On an end-user machine there is no separate
+ * `global` record — the running process already IS it — so `healthy[0]`
+ * (running-that-is-global) is correct. Single-install machines keep the same
+ * fallback.
  */
 function findDonor({ installs, destPkgDir, fs }) {
   const norm = (p) => { try { return path.normalize(fs.realpathSync(p)); } catch { return path.normalize(p); } };
   const destReal = norm(destPkgDir);
   const healthy = installs.filter((i) => i.engineOk && norm(i.pkgDir) !== destReal);
-  return healthy.find((i) => i.kind === 'global') || healthy[0] || null;
+  if (healthy.length === 0) { return null; }
+
+  const sorted = [...healthy].sort((a, b) => compareVersionsDesc(a.engineVersion, b.engineVersion));
+  const topVersion = sorted[0].engineVersion;
+  const topIsParseable = !!parseVersionTriple(topVersion);
+  // Every install tying the best version (or, if no version parses at all,
+  // every healthy install) — the tier the kind-based rule chooses within.
+  const topTier = topIsParseable
+    ? sorted.filter((i) => compareVersionsDesc(i.engineVersion, topVersion) === 0)
+    : sorted;
+  if (topIsParseable && topTier.length === 1) { return topTier[0]; } // unambiguous newest wins outright
+  return topTier.find((i) => i.kind === 'global') || topTier[0];
 }
 
 /** The donor root (nested or hoisted) that actually holds the engine binary. */

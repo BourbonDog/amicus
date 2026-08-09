@@ -171,4 +171,63 @@ describe('scanEngineInstalls', () => {
     }));
     expect(mcpLaunch).toBe('unknown');
   });
+
+  // #133 R-A: doctor grading only on binary presence let a version-skewed
+  // engine (right binary, wrong opencode-ai release) report green. These two
+  // tests pin engineVersion landing on scanEngineInstalls' record — never on
+  // listAmicusInstalls', whose fixtures above assert exact toEqual — and pin
+  // that the reader is an injected dep driven by the record's own `roots`,
+  // not deps.fs.readFileSync (fakeFs here implements no such method) and not
+  // a direct require('fs') read (would hit the real disk against fake paths).
+  test('stamps engineVersion per install from the reader injected as readEngineVersion', () => {
+    const { installs } = scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => ({ command: 'npx', args: ['-y', 'amicus@latest', 'mcp'] }),
+      readEngineVersion: ({ pkgDir }) => (pkgDir === GLOBAL_AMICUS ? '1.18.15' : '1.2.20'),
+    }));
+    const byDir = Object.fromEntries(installs.map((i) => [i.pkgDir, i]));
+    expect(byDir[GLOBAL_AMICUS].engineVersion).toBe('1.18.15');
+    expect(byDir[RUNNING].engineVersion).toBe('1.2.20');
+    expect(byDir[npxAmicus('hashA')].engineVersion).toBe('1.2.20');
+  });
+
+  test('the injected reader receives the roots already resolved onto the record', () => {
+    const seen = [];
+    scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => null,
+      readEngineVersion: ({ pkgDir, roots }) => { seen.push({ pkgDir, roots }); return undefined; },
+    }));
+    expect(seen.length).toBeGreaterThan(0);
+    for (const { pkgDir, roots } of seen) {
+      expect(roots).toEqual([path.join(pkgDir, 'node_modules'), path.dirname(pkgDir)]);
+    }
+  });
+
+  test('leaves engineVersion undefined (never null, and always present as an own key) when it cannot be resolved', () => {
+    let calls = 0;
+    const { installs } = scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => null,
+      readEngineVersion: () => { calls += 1; return undefined; },
+    }));
+    // hasOwnProperty, not just `=== undefined`, so this fails pre-implementation
+    // (no engineVersion key at all) rather than passing vacuously either way.
+    expect(installs.every((i) => Object.prototype.hasOwnProperty.call(i, 'engineVersion'))).toBe(true);
+    expect(installs.every((i) => i.engineVersion === undefined)).toBe(true);
+    expect(installs.some((i) => i.engineVersion === null)).toBe(false);
+    expect(calls).toBeGreaterThan(0); // proves the injected reader was actually invoked
+  });
+
+  test('a throwing readEngineVersion is swallowed to undefined, not thrown, and does not stop the scan', () => {
+    let calls = 0;
+    const { installs } = scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => null,
+      readEngineVersion: () => { calls += 1; throw new Error('ENOENT package.json'); },
+    }));
+    expect(calls).toBeGreaterThan(0);
+    expect(installs.length).toBeGreaterThan(0);
+    expect(installs.every((i) => i.engineVersion === undefined)).toBe(true);
+  });
 });

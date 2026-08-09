@@ -54,6 +54,30 @@ function safe(fn, fallback) {
   try { return fn(); } catch (_e) { return fallback; }
 }
 
+/**
+ * Resolve the engine version from the roots already on the record. Reads
+ * opencode-ai's own package.json, which is a faithful proxy for the executed
+ * binary because opencode-ai exact-pins all 12 platform sub-packages.
+ * ⚠️ Do NOT read next to the binary: hasOpencodeBinary probes
+ * opencode-windows-<arch>/bin/opencode.exe on win32 but .bin/opencode on
+ * POSIX, and .bin/ has no package.json — a binary-adjacent rule would work on
+ * Windows only and silently return nothing on the two POSIX CI legs.
+ * Uses the real `fs` module directly (not a seam) because this is the
+ * PRODUCTION default — tests always inject `readEngineVersion` instead (the
+ * suite's fakeFs implements no readFileSync).
+ * @returns {string|undefined} undefined (never null) so toEqual fixtures survive
+ */
+function defaultReadEngineVersion({ roots }) {
+  for (const root of roots || []) {
+    try {
+      const raw = require('fs').readFileSync(path.join(root, 'opencode-ai', 'package.json'), 'utf-8');
+      const v = JSON.parse(raw).version;
+      if (v) { return String(v); }
+    } catch (_e) { /* try the next root */ }
+  }
+  return undefined;
+}
+
 /** Drop installs whose pkgDir resolves to the same real path; keep the first. */
 function dedupByRealpath(installs, fs) {
   const seen = new Set();
@@ -130,20 +154,26 @@ function classifyLaunch(config) {
  * @param {object} [deps] - listAmicusInstalls seams, plus:
  * @param {(d:{pkgDir:string}) => boolean} [deps.hasOpencodeBinary]
  * @param {(d:{pkgDir:string}) => string[]} [deps.opencodeRoots]
+ * @param {(d:{pkgDir:string, roots:string[]}) => (string|undefined)} [deps.readEngineVersion]
  * @param {() => (object|null)} [deps.readAmicusMcpConfig]
- * @returns {{installs: Array<{kind,pkgDir,engineOk,roots}>, mcpLaunch: string}}
+ * @returns {{installs: Array<{kind,pkgDir,engineOk,roots,engineVersion}>, mcpLaunch: string}}
  */
 function scanEngineInstalls(deps = {}) {
   const hasOpencodeBinary = deps.hasOpencodeBinary || require('./path-setup').hasOpencodeBinary;
   const opencodeRoots = deps.opencodeRoots || require('./path-setup').opencodeRoots;
+  const readEngineVersion = deps.readEngineVersion || defaultReadEngineVersion;
   const readAmicusMcpConfig = deps.readAmicusMcpConfig
     || (() => require('./mcp-discovery').readAmicusMcpConfig());
 
-  const installs = listAmicusInstalls(deps).map((i) => ({
-    ...i,
-    engineOk: !!hasOpencodeBinary({ pkgDir: i.pkgDir }),
-    roots: opencodeRoots({ pkgDir: i.pkgDir }),
-  }));
+  const installs = listAmicusInstalls(deps).map((i) => {
+    const roots = opencodeRoots({ pkgDir: i.pkgDir });
+    return {
+      ...i,
+      engineOk: !!hasOpencodeBinary({ pkgDir: i.pkgDir }),
+      roots,
+      engineVersion: safe(() => readEngineVersion({ pkgDir: i.pkgDir, roots }), undefined),
+    };
+  });
   const mcpLaunch = classifyLaunch(safe(() => readAmicusMcpConfig(), null));
   return { installs, mcpLaunch };
 }

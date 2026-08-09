@@ -82,6 +82,58 @@ describe('evaluateEngineInstalls', () => {
   });
 });
 
+// #133 R-A: a PRESENT engine can still be the WRONG one — the npx-cache copy
+// and the global install resolve independently and can end up on different
+// opencode-ai versions, which is what produced #133's SQLiteError against one
+// shared opencode.db. All copies here report engineOk:true (nothing "broken"
+// in the old presence-only sense), so these tests only pass once the check
+// also compares engineVersion — before that, every case here is 'ok'.
+const npxCopyV = (hash, engineVersion) => ({ ...npxCopy(hash, true), engineVersion });
+const runningV = (engineVersion) => ({
+  kind: 'running', pkgDir: path.join('C:', 'dev', 'amicus'), engineOk: true, roots: [], engineVersion,
+});
+const globalV = (engineVersion) => ({
+  kind: 'global', pkgDir: path.join('C:', 'global', 'node_modules', 'amicus'), engineOk: true, roots: [], engineVersion,
+});
+
+describe('evaluateEngineInstalls — engine version skew (#133 R-A)', () => {
+  test('warns when an npx copy and the global install disagree on engine version', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningV('1.2.20'), globalV('1.18.15'), npxCopyV('a', '1.17.3')],
+    }));
+    expect(r.status).toBe('warn');
+    expect(r.message).toMatch(/1\.17\.3/);
+    expect(r.message).toMatch(/1\.18\.15/);
+    expect(r.message).not.toMatch(/1\.2\.20/); // the dev/running tree is excluded (E-1c)
+    expect(r.hint).toBeTruthy();
+  });
+
+  test('stays ok when only the running copy differs from the npx copies — every dev checkout looks like this', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningV('1.2.20'), globalV('1.18.15'), npxCopyV('a', '1.18.15')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+
+  test('stays ok when the global version is unresolved rather than guessing skew', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [globalV(undefined), npxCopyV('a', '1.18.15')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+
+  test('stays ok when there is no global record at all — nothing to compare against', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningV('1.2.20'), npxCopyV('a', '1.17.3')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+});
+
 const { evaluateEngineMcp } = require('../../src/utils/doctor-engine-check');
 
 describe('evaluateEngineMcp (--fix)', () => {
@@ -219,5 +271,19 @@ describe('evaluateEngineMcp (--fix)', () => {
     expect(r.message).toBe(
       `engine missing from 1/2 npx-cache copies: ${npxDir('h2')} (searched: ); self-heal incomplete: ${npxDir('h2')} — no healthy sibling install to copy the engine from`,
     ); // prose byte-identical, exact
+  });
+});
+
+describe('evaluateEngineMcp (--fix) — engine version skew has no fix branch', () => {
+  test('--fix on a skew-only verdict returns the warn unchanged and never calls repairEngine', async () => {
+    const repairEngine = jest.fn();
+    const scan = () => ({
+      mcpLaunch: 'npx',
+      installs: [globalV('1.18.15'), npxCopyV('a', '1.17.3')],
+    });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(r.status).toBe('warn');
+    expect(r.message).toMatch(/1\.17\.3/);
+    expect(repairEngine).not.toHaveBeenCalled();
   });
 });

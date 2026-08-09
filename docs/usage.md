@@ -574,7 +574,7 @@ Runs every check below, in order, and prints a ✓/⚠/✗ line for each plus a 
 | `aliases` | Your configured aliases still resolve against the catalog | warn |
 | `anthropic-base-url` | `ANTHROPIC_BASE_URL` isn't host-form (host-form 404s every direct-Anthropic leg unless normalized) | warn |
 | `opencode-bin` | The OpenCode engine binary is on `PATH` | error |
-| `engine-mcp` | The engine copy `npx -y amicus@latest mcp` would actually launch (catches a broken npx-cache copy a healthy local install would hide) | warn (error only if there's exactly one npx-cache copy and it's broken) |
+| `engine-mcp` | The engine copy `npx -y amicus@latest mcp` would actually launch (catches a broken npx-cache copy a healthy local install would hide, and a version-skewed one — present but the wrong opencode-ai release vs. the global install, #133) | warn (error only if there's exactly one npx-cache copy and it's broken; also warns, never errors, on engine version skew between the npx copies and the global install) |
 | `electron` | Electron (the interactive GUI) is installed | warn — headless still works |
 | `skills` | Both skills exist under `~/.claude/skills/` | warn |
 | `mcp` | Amicus is registered as an MCP server in Claude Code | warn |

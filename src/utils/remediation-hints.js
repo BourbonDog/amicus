@@ -89,6 +89,24 @@ const REMEDIATION_HINTS = Object.freeze({
     'amicus doctor --fix  (sweeps orphaned .sessions-index.json.*.tmp files left by an interrupted write)',
 
   /**
+   * Engine version skew (#133 R-A): a PRESENT engine can still be the WRONG
+   * one — the npx-cache copy `npx -y amicus@latest mcp` launches and the
+   * global install resolve independently and at different times, and two
+   * engine versions writing one shared opencode.db is what produced #133's
+   * SQLiteError. Unlike reinstallEngineAv (antivirus quarantine — a MISSING
+   * binary), this is a WRONG-VERSION binary, so the remedy has to touch both
+   * sides: reinstall the global copy (which re-resolves to the exact pinned
+   * opencode-ai/@opencode-ai/sdk version amicus pins as of 4.7.1), and clear
+   * the npm cache so the npx copy re-resolves fresh next time it launches
+   * instead of replaying a stale cached resolution. `doctor --fix` has no
+   * dedicated skew branch (WARN only — see doctor-engine-check.js), so this
+   * hint is the manual remedy.
+   */
+  engineVersionSkew:
+    'npm install -g amicus && npm cache clean --force  (reinstalls the global engine to the exact pinned opencode-ai version — amicus pins it exactly as of 4.7.1 — '
+    + 'and clears the npm cache so the npx-cache copy `npx -y amicus@latest mcp` launches re-resolves to that same pinned version instead of a stale cached one)',
+
+  /**
    * Orphaned per-session metadata.json.*.tmp files (v4.6.3 PR3 Task 3 / D8):
    * same producer shape as sweepSessionIndexTmp above, one level down — a
    * kill between an atomic write's tmp-write and rename leaves a stray temp
