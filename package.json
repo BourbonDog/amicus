@@ -76,10 +76,10 @@
   "dependencies": {
     "@electron/get": "^5.0.0",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@opencode-ai/sdk": "^1.1.36",
+    "@opencode-ai/sdk": "1.18.15",
     "dotenv": "^17.2.3",
     "extract-zip": "^2.0.1",
-    "opencode-ai": "^1.2.20",
+    "opencode-ai": "1.18.15",
     "tiktoken": "^1.0.0",
     "update-notifier": "^7.3.1",
     "zod": "^3.0.0"
