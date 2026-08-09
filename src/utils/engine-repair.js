@@ -23,11 +23,19 @@ function runningPkgDir() {
   return path.join(__dirname, '..', '..');
 }
 
-/** First healthy install whose real path differs from the destination. */
+/**
+ * First healthy install whose real path differs from the destination.
+ * Prefer a non-running donor: listAmicusInstalls emits the running copy
+ * first, and a dev/source checkout legitimately sits at a different engine
+ * version from the installed copies. Donating it self-heals INTO the very
+ * skew the engine-mcp check exists to detect. Fall back to any healthy copy
+ * so a single-install machine (only a running copy present) still repairs.
+ */
 function findDonor({ installs, destPkgDir, fs }) {
   const norm = (p) => { try { return path.normalize(fs.realpathSync(p)); } catch { return path.normalize(p); } };
   const destReal = norm(destPkgDir);
-  return installs.find((i) => i.engineOk && norm(i.pkgDir) !== destReal) || null;
+  const healthy = installs.filter((i) => i.engineOk && norm(i.pkgDir) !== destReal);
+  return healthy.find((i) => i.kind !== 'running') || healthy[0] || null;
 }
 
 /** The donor root (nested or hoisted) that actually holds the engine binary. */

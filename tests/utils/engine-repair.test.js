@@ -1,7 +1,8 @@
 'use strict';
 const path = require('path');
-const { repairEngine } = require('../../src/utils/engine-repair');
+const { repairEngine, findDonor } = require('../../src/utils/engine-repair');
 
+const RUNNING = path.join('C:', 'proj', 'amicus');
 const DEST = path.join('C:', 'cache', '_npx', 'h1', 'node_modules', 'amicus');
 const DEST_NM = path.join(DEST, 'node_modules');
 const DONOR = path.join('C:', 'global', 'node_modules', 'amicus');
@@ -146,5 +147,34 @@ describe('repairEngine', () => {
     expect(r.repaired).toBe(false);
     expect(r.reason).toMatch(/copy failed/i);
     expect(b.lock.release).toHaveBeenCalled();
+  });
+});
+
+describe('findDonor', () => {
+  // Ruling R-A: listAmicusInstalls emits `running` first, but a dev/source
+  // checkout legitimately sits at a different engine version than the
+  // installed copies. Donating it would self-heal INTO the very skew the
+  // engine-mcp check exists to detect, so a non-running healthy donor must
+  // win when one exists — with a fallback to `running` so a single-install
+  // machine (only a running copy present) can still self-heal.
+  const fs = { realpathSync: (p) => p };
+
+  test('prefers a non-running donor when both a healthy running and a healthy global are present', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true },
+      { kind: 'global', pkgDir: DONOR, engineOk: true },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('global');
+    expect(donor.pkgDir).toBe(DONOR);
+  });
+
+  test('falls back to the running donor when it is the only healthy copy present', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('running');
+    expect(donor.pkgDir).toBe(RUNNING);
   });
 });

@@ -1,7 +1,7 @@
 // tests/utils/engine-install-scan.test.js
 'use strict';
 const path = require('path');
-const { listAmicusInstalls, scanEngineInstalls } = require('../../src/utils/engine-install-scan');
+const { listAmicusInstalls, scanEngineInstalls, resolveNpmRootG } = require('../../src/utils/engine-install-scan');
 
 // Fake fs seam: existsSync true only for seeded paths; readdirSync/realpathSync
 // driven by maps. Normalizes so backslash/forward-slash never matters.
@@ -80,6 +80,29 @@ describe('listAmicusInstalls', () => {
     }));
     const forShared = installs.filter((i) => i.pkgDir === RUNNING || i.pkgDir === GLOBAL_AMICUS);
     expect(forShared).toEqual([{ kind: 'running', pkgDir: RUNNING }]);
+  });
+});
+
+describe('resolveNpmRootG', () => {
+  it('resolves the global root on win32, where bare `npm` is not spawnable without a shell', () => {
+    // Node 24 hardening (CVE-2024-27980) rejects .cmd without shell:true, so
+    // execFileSync('npm', …) throws ENOENT and execFileSync('npm.cmd', …) throws
+    // EINVAL. Before this fix defaultNpmRootG returned null on every Windows box
+    // and the global install was invisible to the scan — and to findDonor.
+    const calls = [];
+    const execFileSync = (cmd, args, opts) => {
+      calls.push({ cmd, args, shell: opts && opts.shell });
+      if (!opts || opts.shell !== true) { const e = new Error('spawnSync ENOENT'); e.code = 'ENOENT'; throw e; }
+      return 'C:\\Users\\t\\AppData\\Roaming\\npm\\node_modules\n';
+    };
+    expect(resolveNpmRootG({ execFileSync, platform: 'win32' }))
+      .toBe('C:\\Users\\t\\AppData\\Roaming\\npm\\node_modules');
+    expect(calls.some((c) => c.shell === true)).toBe(true);
+  });
+
+  it('returns null rather than throwing when npm cannot be resolved at all', () => {
+    const execFileSync = () => { throw new Error('nope'); };
+    expect(resolveNpmRootG({ execFileSync, platform: 'win32' })).toBe(null);
   });
 });
 

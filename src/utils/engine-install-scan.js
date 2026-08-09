@@ -27,12 +27,21 @@ function defaultNpmCacheDir(platform) {
   return path.join(os.homedir(), '.npm');
 }
 
-/** Best-effort `npm root -g`. Never throws; returns null on any failure. */
-function defaultNpmRootG() {
+/**
+ * Best-effort `npm root -g`. Never throws; returns null on any failure.
+ * ⚠️ Windows needs shell:true — npm is a .cmd shim, and Node 24's
+ * CVE-2024-27980 hardening rejects .cmd via execFileSync without a shell
+ * (bare `npm` → ENOENT, `npm.cmd` → EINVAL). Without this the global install
+ * was invisible to the whole scan, which also blinded engine-repair's donor
+ * search: `doctor --fix` reported "no healthy sibling install" while one sat
+ * at %AppData%\npm\node_modules.
+ */
+function resolveNpmRootG({ execFileSync, platform } = {}) {
+  const exec = execFileSync || require('child_process').execFileSync;
+  const win = (platform || process.platform) === 'win32';
   try {
-    const { execFileSync } = require('child_process');
-    const out = execFileSync('npm', ['root', '-g'], {
-      encoding: 'utf-8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'],
+    const out = exec('npm', ['root', '-g'], {
+      encoding: 'utf-8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'], shell: win,
     });
     return String(out).trim() || null;
   } catch (_e) {
@@ -76,7 +85,7 @@ function listAmicusInstalls(deps = {}) {
   const platform = deps.platform || process.platform;
   const runningPkgDir = deps.runningPkgDir || path.join(__dirname, '..', '..');
   const npmCacheDir = deps.npmCacheDir || defaultNpmCacheDir(platform);
-  const npmRootG = deps.npmRootG || defaultNpmRootG;
+  const npmRootG = deps.npmRootG || resolveNpmRootG;
 
   const raw = [{ kind: 'running', pkgDir: runningPkgDir }];
 
@@ -139,4 +148,6 @@ function scanEngineInstalls(deps = {}) {
   return { installs, mcpLaunch };
 }
 
-module.exports = { listAmicusInstalls, scanEngineInstalls, classifyLaunch };
+module.exports = {
+  listAmicusInstalls, scanEngineInstalls, classifyLaunch, resolveNpmRootG,
+};
