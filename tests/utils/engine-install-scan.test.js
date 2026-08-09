@@ -40,6 +40,13 @@ function baseDeps(overrides = {}) {
     runningPkgDir: RUNNING,
     npmCacheDir: CACHE,
     npmRootG: () => GLOBAL_NM,
+    // Hermetic default: without this, scanEngineInstalls tests that don't
+    // override readEngineVersion fall through to defaultReadEngineVersion,
+    // which calls the REAL require('fs').readFileSync against these
+    // fabricated C:\cache\... paths on every CI leg (harmless today — ENOENT
+    // → undefined — but one seam away from the hermeticity hole the brief
+    // warned about). Tests that care override it via `...rest`.
+    readEngineVersion: () => undefined,
     ...rest,
   };
 }
@@ -229,5 +236,48 @@ describe('scanEngineInstalls', () => {
     expect(calls).toBeGreaterThan(0);
     expect(installs.length).toBeGreaterThan(0);
     expect(installs.every((i) => i.engineVersion === undefined)).toBe(true);
+  });
+
+  // #133 R-A finding 1 (review round 2): listAmicusInstalls pushes `running`
+  // first and `global` second, and its own dedupByRealpath keeps the FIRST of
+  // two entries sharing a real path. So on the documented end-user
+  // invocation — `amicus doctor` run from the globally-installed copy —
+  // `runningPkgDir` IS `<npm root -g>/amicus`, and the separate `global`
+  // record never survives dedup. Without recovering that fact, the skew
+  // baseline (installs.find(kind==='global')) can never fire for exactly the
+  // topology #133 was filed from. `isGlobal` recovers it in scanEngineInstalls
+  // ONLY — never in listAmicusInstalls, whose output is pinned exact by
+  // toEqual at :50 and :82 above (verified unchanged by the two tests there
+  // still passing, unedited, after this change).
+  test('stamps isGlobal on the running record when dedup collapsed it with the would-be global entry', () => {
+    const SHARED = path.join('C:', 'real', 'amicus');
+    const { installs } = scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => null,
+      realpath: { [RUNNING]: SHARED, [GLOBAL_AMICUS]: SHARED },
+    }));
+    expect(installs.some((i) => i.kind === 'global')).toBe(false); // dedup still drops the separate record
+    const running = installs.find((i) => i.pkgDir === RUNNING);
+    expect(running.isGlobal).toBe(true);
+  });
+
+  test('does not stamp isGlobal when running and global are genuinely distinct real installs (a true dev checkout)', () => {
+    const { installs } = scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => null,
+      // no realpath collision — running and GLOBAL_AMICUS stay distinct
+    }));
+    const running = installs.find((i) => i.pkgDir === RUNNING);
+    expect(running.isGlobal).toBeUndefined();
+    const globalRec = installs.find((i) => i.kind === 'global');
+    expect(globalRec.isGlobal).toBeUndefined(); // kind:'global' already says it; no redundant flag
+  });
+
+  test('does not stamp isGlobal on an npx-cache copy that happens not to collide with the global root', () => {
+    const { installs } = scanEngineInstalls(baseDeps({
+      ...engineSeams(),
+      readAmicusMcpConfig: () => null,
+    }));
+    expect(installs.filter((i) => i.kind === 'npx').every((i) => i.isGlobal === undefined)).toBe(true);
   });
 });

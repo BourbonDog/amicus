@@ -78,18 +78,37 @@ function defaultReadEngineVersion({ roots }) {
   return undefined;
 }
 
+/** Resolve p's real path via fs.realpathSync, tolerating any throw. */
+function realNorm(p, fs) {
+  return path.normalize(safe(() => fs.realpathSync(p), p));
+}
+
 /** Drop installs whose pkgDir resolves to the same real path; keep the first. */
 function dedupByRealpath(installs, fs) {
   const seen = new Set();
   const out = [];
   for (const inst of installs) {
-    const real = safe(() => fs.realpathSync(inst.pkgDir), inst.pkgDir);
-    const key = path.normalize(real);
+    const key = realNorm(inst.pkgDir, fs);
     if (seen.has(key)) { continue; }
     seen.add(key);
     out.push(inst);
   }
   return out;
+}
+
+/**
+ * True when pkgDir is the same real install as the npm-global amicus
+ * package (`<gRoot>/amicus`). Recovers "this record IS the global install"
+ * after dedupByRealpath has already dropped the separate `kind:'global'`
+ * record — see the docblock on scanEngineInstalls for why (#133 R-A finding
+ * 1: on the documented end-user invocation, `amicus doctor` run from the
+ * globally-installed copy, `runningPkgDir` IS `<npm root -g>/amicus`, and
+ * listAmicusInstalls pushes `running` first, so dedup keeps `running` and
+ * drops `global`).
+ */
+function isGlobalInstall({ pkgDir, fs, gRoot }) {
+  if (!gRoot) { return false; }
+  return realNorm(pkgDir, fs) === realNorm(path.join(gRoot, 'amicus'), fs);
 }
 
 /**
@@ -156,22 +175,45 @@ function classifyLaunch(config) {
  * @param {(d:{pkgDir:string}) => string[]} [deps.opencodeRoots]
  * @param {(d:{pkgDir:string, roots:string[]}) => (string|undefined)} [deps.readEngineVersion]
  * @param {() => (object|null)} [deps.readAmicusMcpConfig]
- * @returns {{installs: Array<{kind,pkgDir,engineOk,roots,engineVersion}>, mcpLaunch: string}}
+ * @returns {{installs: Array<{kind,pkgDir,engineOk,roots,engineVersion,isGlobal?}>, mcpLaunch: string}}
  */
 function scanEngineInstalls(deps = {}) {
+  const fs = deps.fs || require('fs');
+  const platform = deps.platform || process.platform;
   const hasOpencodeBinary = deps.hasOpencodeBinary || require('./path-setup').hasOpencodeBinary;
   const opencodeRoots = deps.opencodeRoots || require('./path-setup').opencodeRoots;
   const readEngineVersion = deps.readEngineVersion || defaultReadEngineVersion;
   const readAmicusMcpConfig = deps.readAmicusMcpConfig
     || (() => require('./mcp-discovery').readAmicusMcpConfig());
 
-  const installs = listAmicusInstalls(deps).map((i) => {
+  // Resolve `npm root -g` once and feed that SAME resolver into
+  // listAmicusInstalls (below), so the isGlobal recovery here reuses its
+  // result instead of spawning a second `npm root -g` process.
+  let gRootCache;
+  let gRootResolved = false;
+  const npmRootGRaw = deps.npmRootG || (() => resolveNpmRootG({ platform }));
+  const npmRootGOnce = () => {
+    if (!gRootResolved) { gRootCache = safe(() => npmRootGRaw(), null); gRootResolved = true; }
+    return gRootCache;
+  };
+
+  const rawInstalls = listAmicusInstalls({ ...deps, platform, npmRootG: npmRootGOnce });
+  const gRoot = npmRootGOnce(); // already resolved by listAmicusInstalls above; this just reads the cache
+
+  const installs = rawInstalls.map((i) => {
     const roots = opencodeRoots({ pkgDir: i.pkgDir });
+    // #133 R-A finding 1: recovers "this IS the global install" for a
+    // record whose `kind:'global'` twin was dropped by dedupByRealpath
+    // (see isGlobalInstall's docblock). Deliberately NOT stamped inside
+    // listAmicusInstalls — its output is pinned exact by toEqual in
+    // tests/utils/engine-install-scan.test.js:50 and :82.
+    const isGlobal = i.kind !== 'global' && isGlobalInstall({ pkgDir: i.pkgDir, fs, gRoot });
     return {
       ...i,
       engineOk: !!hasOpencodeBinary({ pkgDir: i.pkgDir }),
       roots,
       engineVersion: safe(() => readEngineVersion({ pkgDir: i.pkgDir, roots }), undefined),
+      ...(isGlobal ? { isGlobal: true } : {}),
     };
   });
   const mcpLaunch = classifyLaunch(safe(() => readAmicusMcpConfig(), null));

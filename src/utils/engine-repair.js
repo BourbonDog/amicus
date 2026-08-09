@@ -25,11 +25,18 @@ function runningPkgDir() {
 
 /**
  * Parse a semver-shaped string into a [major, minor, patch] triple.
- * @returns {[number,number,number]|null} null for undefined/non-string/non-semver
+ * Prerelease versions (`1.18.15-beta.1`) return null — treated the same as
+ * unparseable, so they sort LAST rather than tying with (and, via a stable
+ * sort, sometimes beating) the release they're a prerelease of. Only the
+ * exact-release leading triple is a valid donor signal; amicus pins exact
+ * release versions, never prereleases.
+ * @returns {[number,number,number]|null} null for undefined/non-string/non-semver/prerelease
  */
 function parseVersionTriple(v) {
   if (typeof v !== 'string') { return null; }
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v.trim());
+  const trimmed = v.trim();
+  if (/^\d+\.\d+\.\d+-/.test(trimmed)) { return null; }
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(trimmed);
   if (!m) { return null; }
   return [Number(m[1]), Number(m[2]), Number(m[3])];
 }
@@ -51,37 +58,55 @@ function compareVersionsDesc(a, b) {
 }
 
 /**
- * Prefer the newest-`engineVersion` healthy donor; fall back to the
- * explicitly-`global` healthy donor when versions are absent or tied; else
- * fall back to the first healthy install in listAmicusInstalls order
- * (running-first).
+ * TWO TIERS, not one sort. An explicitly-global healthy donor — `kind:'global'`,
+ * or `isGlobal:true` when engine-install-scan.js's dedup collapsed the
+ * `global` record into `running` (#133 R-A finding 1) — wins OUTRIGHT,
+ * regardless of version. Only when no explicit-global donor exists does
+ * engineVersion rank the remaining candidates (newest first; ties/absent
+ * versions fall back to list order, running-first).
  *
- * Ruling R-A (version-aware close of the residual hole): Task 3 could only
- * approximate "don't donate the dev engine" with a kind-based rule, because
- * no version existed on the record yet. That leaves a hole: a machine with a
- * dev checkout, no npm-global amicus install, a broken npx destination, and
- * a healthy npx sibling has no `kind:'global'` record at all, so the old rule
- * fell through to `healthy[0]` — the running dev tree — and could donate a
- * version-skewed dev engine over a newer healthy sibling. Ranking by
- * engineVersion first closes that: the newest healthy copy always wins,
- * regardless of kind, as long as its version is known and unambiguous.
+ * Review round 2, finding 2: a single version-first sort (this function's
+ * first cut) inverted R-A's own goal three ways, each confirmed by a test in
+ * tests/utils/engine-repair.test.js:
+ *   1. running (dev tree) newer than global → donated the dev tree. R-A's
+ *      stated goal is "--fix stops donating the dev engine"; the dev tree
+ *      running ahead of the pin is the NORMAL direction mid-pin-bump, not a
+ *      reason to trust it over the global install.
+ *   2. running-that-is-global older than a healthy npx sibling → donated the
+ *      npx sibling — the exact outcome the ORIGINAL (pre-engineVersion)
+ *      findDonor test says must never happen, reintroduced via the source
+ *      class this file's own scanEngineInstalls docblock calls LEAST
+ *      trustworthy (npx-cache copies: optional-dependency skips, AV
+ *      quarantine on every re-resolve).
+ *   3. global's version unresolved, npx sibling versioned → donated the npx
+ *      copy despite a `global` record existing at all.
+ * All three share one cause: ranking by version BEFORE asking "is there an
+ * explicit global donor at all". Tiering fixes it without losing what the
+ * version ranking was FOR — Task 3's kind-only rule left a residual hole
+ * (dev checkout, no npm-global install, broken npx destination, healthy npx
+ * sibling — no record has kind:'global' at all) where the old code fell
+ * through to `healthy[0]`, the running dev tree, and could donate a
+ * version-skewed dev engine over a newer healthy sibling. That hole is
+ * exactly the case where tier 1 finds nothing and tier 2's version ranking
+ * takes over.
  *
- * A `kind !== 'running'` proxy is wrong for the fallback tier: listAmicusInstalls
- * pushes `running` first and `global` second, and dedupByRealpath keeps the
- * FIRST of any two entries that resolve to the same real path. So on an
- * ordinary end-user machine — where the running process IS the global install
- * — the `global` record never survives dedup; that copy is labeled
- * `kind: 'running'`. A `kind !== 'running'` filter would then skip the good
- * global engine and donate some other (possibly stale) healthy copy,
- * importing the exact version skew this self-heal exists to prevent.
+ * A `kind !== 'running'` proxy for tier 1 is wrong: listAmicusInstalls pushes
+ * `running` first and `global` second, and dedupByRealpath keeps the FIRST of
+ * any two entries that resolve to the same real path. So on an ordinary
+ * end-user machine — where the running process IS the global install — the
+ * `global` record never survives dedup; that copy is labeled `kind:
+ * 'running'` (carrying `isGlobal:true` instead, once scanEngineInstalls has
+ * run). A `kind !== 'running'` filter would then skip the good global engine
+ * and donate some other (possibly stale) healthy copy, importing the exact
+ * version skew this self-heal exists to prevent.
  *
- * Preferring `global` explicitly (once versions tie or are unknown) is
- * correct on both topologies: on a dev machine the dev tree and the global
- * install are distinct real paths, so the `global` record survives dedup and
- * wins over the dev tree. On an end-user machine there is no separate
- * `global` record — the running process already IS it — so `healthy[0]`
- * (running-that-is-global) is correct. Single-install machines keep the same
- * fallback.
+ * Tier 1 (`kind==='global' || isGlobal`) is correct on both topologies: on a
+ * dev machine the dev tree and the global install are distinct real paths, so
+ * the `global` record survives dedup and wins over the dev tree. On an
+ * end-user machine there is no separate `global` record — the running process
+ * already IS it, flagged `isGlobal:true` — so tier 1 still finds it. Tier 2
+ * (list-order fallback via a stable sort) only applies when tier 1 finds
+ * nothing at all — a pure dev checkout or npx-only machine.
  */
 function findDonor({ installs, destPkgDir, fs }) {
   const norm = (p) => { try { return path.normalize(fs.realpathSync(p)); } catch { return path.normalize(p); } };
@@ -89,16 +114,14 @@ function findDonor({ installs, destPkgDir, fs }) {
   const healthy = installs.filter((i) => i.engineOk && norm(i.pkgDir) !== destReal);
   if (healthy.length === 0) { return null; }
 
+  const explicitGlobal = healthy.find((i) => i.kind === 'global' || i.isGlobal);
+  if (explicitGlobal) { return explicitGlobal; }
+
+  // No explicit-global donor on this machine at all — rank the remaining
+  // healthy candidates by engineVersion (newest first; Array#sort is stable,
+  // so ties/absent versions preserve list order, i.e. running-first).
   const sorted = [...healthy].sort((a, b) => compareVersionsDesc(a.engineVersion, b.engineVersion));
-  const topVersion = sorted[0].engineVersion;
-  const topIsParseable = !!parseVersionTriple(topVersion);
-  // Every install tying the best version (or, if no version parses at all,
-  // every healthy install) — the tier the kind-based rule chooses within.
-  const topTier = topIsParseable
-    ? sorted.filter((i) => compareVersionsDesc(i.engineVersion, topVersion) === 0)
-    : sorted;
-  if (topIsParseable && topTier.length === 1) { return topTier[0]; } // unambiguous newest wins outright
-  return topTier.find((i) => i.kind === 'global') || topTier[0];
+  return sorted[0];
 }
 
 /** The donor root (nested or hoisted) that actually holds the engine binary. */

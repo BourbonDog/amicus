@@ -97,14 +97,25 @@ const REMEDIATION_HINTS = Object.freeze({
    * binary), this is a WRONG-VERSION binary, so the remedy has to touch both
    * sides: reinstall the global copy (which re-resolves to the exact pinned
    * opencode-ai/@opencode-ai/sdk version amicus pins as of 4.7.1), and clear
-   * the npm cache so the npx copy re-resolves fresh next time it launches
-   * instead of replaying a stale cached resolution. `doctor --fix` has no
-   * dedicated skew branch (WARN only — see doctor-engine-check.js), so this
-   * hint is the manual remedy.
+   * the npx-cache tree so the npx copy re-resolves fresh next time it
+   * launches instead of replaying a stale cached one.
+   *
+   * Review round 2, finding 3: the first cut of this hint said
+   * `npm cache clean --force`, which does NOT touch the npx tree — verified
+   * against npm's own lib/commands/cache.js (npm 11.16.0): `cache clean`
+   * removes `flatOptions.cache` (the registry-metadata cache, `<cache
+   * dir>/_cacache`), while npx installs live at the SEPARATE
+   * `flatOptions.npxCache` (`<cache dir>/_npx`). That command would have left
+   * the skewed npx copy byte-for-byte in place. The correct command is npm's
+   * own npx-cache subcommand: `npm cache npx rm` with no keys and `--force`
+   * empties the whole npx cache (cache.js's `npxRm`: no keys + force →
+   * `fs.rm(npxCache, {recursive:true, force:true})`). Since `doctor --fix`
+   * has no dedicated skew branch (WARN only — see doctor-engine-check.js),
+   * this hint is the ONLY remedy the user gets — it must actually work.
    */
   engineVersionSkew:
-    'npm install -g amicus && npm cache clean --force  (reinstalls the global engine to the exact pinned opencode-ai version — amicus pins it exactly as of 4.7.1 — '
-    + 'and clears the npm cache so the npx-cache copy `npx -y amicus@latest mcp` launches re-resolves to that same pinned version instead of a stale cached one)',
+    'npm install -g amicus && npm cache npx rm --force  (reinstalls the global engine to the exact pinned opencode-ai version — amicus pins it exactly as of 4.7.1 — '
+    + 'and empties the npx cache, the SEPARATE directory `npm cache clean` does not touch, so the npx-cache copy `npx -y amicus@latest mcp` launches re-resolves fresh to that same pinned version instead of replaying a stale one)',
 
   /**
    * Orphaned per-session metadata.json.*.tmp files (v4.6.3 PR3 Task 3 / D8):
