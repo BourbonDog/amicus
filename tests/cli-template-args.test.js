@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { readIfPresent } = require('./helpers/read-if-present');
 
 let out; let err;
 beforeEach(() => {
@@ -86,7 +87,10 @@ describe('applyTemplateForArgs', () => {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) { walk(full); }
         else if (entry.isFile() && entry.name.endsWith('.js')) {
-          if (fs.readFileSync(full, 'utf-8').includes(NEEDLE)) {
+          // readIfPresent, not readFileSync: a parallel worker's temp file can be
+          // named by the readdir above and unlinked before this read — see
+          // helpers/read-if-present.
+          if (readIfPresent(full)?.includes(NEEDLE)) {
             hits.push(path.relative(path.join(__dirname, '..'), full).split(path.sep).join('/'));
           }
         }

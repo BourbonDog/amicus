@@ -21,6 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const { builtinModules } = require('module');
+const { readIfPresent } = require('./helpers/read-if-present');
 
 const ROOT = path.join(__dirname, '..');
 const SHIPPED_DIRS = ['src', 'bin', 'electron'];
@@ -39,7 +40,10 @@ function collectExternalRequires(dir, acc = new Map()) {
       continue;
     }
     if (!entry.name.endsWith('.js')) { continue; }
-    const src = fs.readFileSync(full, 'utf8');
+    // Not fs.readFileSync: a parallel worker's temp file can be named by the
+    // listing above and unlinked before this read — see helpers/read-if-present.
+    const src = readIfPresent(full);
+    if (src === null) { continue; }
     for (const m of src.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
       const spec = m[1];
       if (spec.startsWith('.') || spec.startsWith('node:')) { continue; }

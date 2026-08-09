@@ -5,6 +5,22 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`npm test` no longer fails intermittently with `ENOENT: … src\__sizecheck_tmp__.js`.**
+  `tests/scripts/check-file-sizes.test.js` writes a real `src/__sizecheck_tmp__.js` and unlinks it a
+  few milliseconds later. It cannot move that fixture to a tmpdir: `checkAllTracked()` filters its
+  input through the anchored `src/**/*.js` include glob and only then resolves against
+  `process.cwd()`, so a tmpdir path is dropped before the read and the test would assert on an empty
+  violation list. Three suites walk `src/` in parallel jest workers, and a directory listing taken
+  while that file existed followed by a read issued after the unlink threw ENOENT — killing
+  `no-phantom-dependencies.test.js` during collection ("Test suite failed to run") on roughly 1 full
+  run in 2, with `cli-template-args.test.js` and `council/degrade-invariant.test.js` exposed
+  identically (both confirmed failing under a reproduction that widens the collision window). All
+  three now read through the new `tests/helpers/read-if-present.js`, which skips a file that vanished
+  mid-walk and still throws on any non-ENOENT failure, so an unreadable source file stays loud.
+  Pre-existing — reproduces at 0fe6128, unrelated to the graphify integration.
+
 ## [4.7.0] - 2026-08-08
 
 **"The count is the count."** Every number Amicus shows you is the number — what a council cost,
