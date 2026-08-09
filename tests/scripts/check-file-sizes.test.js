@@ -137,6 +137,17 @@ describe('check-file-sizes', () => {
 
     it('flags an oversized included src file end-to-end', () => {
       const fs = require('fs');
+      // The fixture has to be a real repo-relative src/ path, not an os.tmpdir()
+      // file: checkAllTracked filters its input through the ANCHORED 'src/**/*.js'
+      // include glob and only then resolves it against process.cwd(), so a tmpdir
+      // path is dropped before the read and this would assert on an empty list.
+      //
+      // That makes this the one test in the suite that writes into a shipped
+      // source dir — and src/ is walked by three suites running in parallel jest
+      // workers. They read through tests/helpers/read-if-present.js, so this file
+      // vanishing between their listing and their read is a skip rather than an
+      // ENOENT that kills the suite. Keep that seam in mind before adding another
+      // writer here.
       const tmp = 'src/__sizecheck_tmp__.js';
       try {
         fs.writeFileSync(tmp, 'const x = 1;\n'.repeat(400)); // > 300 lines, matches src/**/*.js, not excluded

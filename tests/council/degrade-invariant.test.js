@@ -1,6 +1,7 @@
 'use strict';
 // tests/council/degrade-invariant.test.js
 const fs = require('fs'); const path = require('path');
+const { readIfPresent } = require('../helpers/read-if-present');
 
 const SRC = path.join(__dirname, '..', '..', 'src');
 const ALLOWED = path.join('council', 'run-degrade.js');
@@ -18,7 +19,9 @@ test('degraded.value is assigned ONLY inside run-degrade.js', () => {
   const assign = /degraded\s*\.\s*value\s*=(?!=)/;
   const offenders = walk(SRC)
     // Normalize CRLF: checkouts with autocrlf have already broken two docs suites.
-    .filter(f => assign.test(fs.readFileSync(f, 'utf8').replace(/\r\n/g, '\n')))
+    // readIfPresent, not readFileSync: a file walk() named can be unlinked by a
+    // parallel worker before this read — see helpers/read-if-present.
+    .filter(f => assign.test((readIfPresent(f) ?? '').replace(/\r\n/g, '\n')))
     .map(f => path.relative(SRC, f))
     .filter(rel => rel !== ALLOWED);
   expect(offenders).toEqual([]);
