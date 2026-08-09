@@ -37,9 +37,9 @@ function defaultNpmCacheDir(platform) {
  * at %AppData%\npm\node_modules.
  */
 function resolveNpmRootG({ execFileSync, platform } = {}) {
-  const exec = execFileSync || require('child_process').execFileSync;
   const win = (platform || process.platform) === 'win32';
   try {
+    const exec = execFileSync || require('child_process').execFileSync;
     const out = exec('npm', ['root', '-g'], {
       encoding: 'utf-8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'], shell: win,
     });
@@ -85,7 +85,7 @@ function listAmicusInstalls(deps = {}) {
   const platform = deps.platform || process.platform;
   const runningPkgDir = deps.runningPkgDir || path.join(__dirname, '..', '..');
   const npmCacheDir = deps.npmCacheDir || defaultNpmCacheDir(platform);
-  const npmRootG = deps.npmRootG || resolveNpmRootG;
+  const npmRootG = deps.npmRootG || (() => resolveNpmRootG({ platform }));
 
   const raw = [{ kind: 'running', pkgDir: runningPkgDir }];
 

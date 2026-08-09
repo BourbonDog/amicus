@@ -104,6 +104,20 @@ describe('resolveNpmRootG', () => {
     const execFileSync = () => { throw new Error('nope'); };
     expect(resolveNpmRootG({ execFileSync, platform: 'win32' })).toBe(null);
   });
+
+  it('does not pass shell:true on POSIX — pinning against a regression to shell:true everywhere', () => {
+    // Both tests above pass platform:'win32', so a regression to an
+    // unconditional shell:true (forbidden by the plan's global constraints:
+    // a shell widens the quoting surface for no benefit on POSIX) would
+    // stay green without this. Assert opts.shell is falsy off win32.
+    let seenShell;
+    const execFileSync = (cmd, args, opts) => {
+      seenShell = opts && opts.shell;
+      return '/usr/local/lib/node_modules\n';
+    };
+    expect(resolveNpmRootG({ execFileSync, platform: 'linux' })).toBe('/usr/local/lib/node_modules');
+    expect(seenShell).toBeFalsy();
+  });
 });
 
 describe('scanEngineInstalls', () => {

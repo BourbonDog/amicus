@@ -24,18 +24,30 @@ function runningPkgDir() {
 }
 
 /**
- * First healthy install whose real path differs from the destination.
- * Prefer a non-running donor: listAmicusInstalls emits the running copy
- * first, and a dev/source checkout legitimately sits at a different engine
- * version from the installed copies. Donating it self-heals INTO the very
- * skew the engine-mcp check exists to detect. Fall back to any healthy copy
- * so a single-install machine (only a running copy present) still repairs.
+ * Prefer the explicitly-`global` healthy donor; else fall back to the first
+ * healthy install in listAmicusInstalls order (running-first).
+ *
+ * A `kind !== 'running'` proxy is wrong: listAmicusInstalls pushes `running`
+ * first and `global` second, and dedupByRealpath keeps the FIRST of any two
+ * entries that resolve to the same real path. So on an ordinary end-user
+ * machine — where the running process IS the global install — the `global`
+ * record never survives dedup; that copy is labeled `kind: 'running'`. A
+ * `kind !== 'running'` filter would then skip the good global engine and
+ * donate some other (possibly stale) healthy copy, importing the exact
+ * version skew this self-heal exists to prevent.
+ *
+ * Preferring `global` explicitly is correct on both topologies: on a dev
+ * machine the dev tree and the global install are distinct real paths, so
+ * the `global` record survives dedup and wins over the dev tree. On an
+ * end-user machine there is no separate `global` record — the running
+ * process already IS it — so `healthy[0]` (running-that-is-global) is
+ * correct. Single-install machines keep the same fallback.
  */
 function findDonor({ installs, destPkgDir, fs }) {
   const norm = (p) => { try { return path.normalize(fs.realpathSync(p)); } catch { return path.normalize(p); } };
   const destReal = norm(destPkgDir);
   const healthy = installs.filter((i) => i.engineOk && norm(i.pkgDir) !== destReal);
-  return healthy.find((i) => i.kind !== 'running') || healthy[0] || null;
+  return healthy.find((i) => i.kind === 'global') || healthy[0] || null;
 }
 
 /** The donor root (nested or hoisted) that actually holds the engine binary. */

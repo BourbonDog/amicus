@@ -151,15 +151,21 @@ describe('repairEngine', () => {
 });
 
 describe('findDonor', () => {
-  // Ruling R-A: listAmicusInstalls emits `running` first, but a dev/source
-  // checkout legitimately sits at a different engine version than the
-  // installed copies. Donating it would self-heal INTO the very skew the
-  // engine-mcp check exists to detect, so a non-running healthy donor must
-  // win when one exists — with a fallback to `running` so a single-install
-  // machine (only a running copy present) can still self-heal.
+  // Ruling R-A: prefer an explicitly-`global` healthy donor over any other
+  // kind. `kind !== 'running'` is the WRONG proxy for "not the dev tree":
+  // listAmicusInstalls pushes `running` first and `global` second, and
+  // dedupByRealpath keeps the FIRST of two entries sharing a real path. On
+  // an ordinary end-user machine the running process IS the global install,
+  // so the `global` record never survives dedup — that copy is labeled
+  // `kind: 'running'`. A `kind !== 'running'` filter would skip that good
+  // global engine and donate some other (possibly stale) healthy copy,
+  // importing the exact version skew this self-heal exists to prevent.
+  // Preferring `global` explicitly, falling back to listAmicusInstalls order
+  // (running-first) otherwise, is correct on both topologies.
   const fs = { realpathSync: (p) => p };
+  const NPX_SIBLING = path.join('C:', 'cache', '_npx', 'h2', 'node_modules', 'amicus');
 
-  test('prefers a non-running donor when both a healthy running and a healthy global are present', () => {
+  test('prefers the explicitly-global donor when both a healthy running and a healthy global are present', () => {
     const installs = [
       { kind: 'running', pkgDir: RUNNING, engineOk: true },
       { kind: 'global', pkgDir: DONOR, engineOk: true },
@@ -172,6 +178,21 @@ describe('findDonor', () => {
   test('falls back to the running donor when it is the only healthy copy present', () => {
     const installs = [
       { kind: 'running', pkgDir: RUNNING, engineOk: true },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('running');
+    expect(donor.pkgDir).toBe(RUNNING);
+  });
+
+  test('running-that-is-really-global (no separate global record) wins over a healthy npx sibling', () => {
+    // Simulates the dedup outcome on an end-user machine: running IS global,
+    // so there is no separate `global` entry — only `running` plus whatever
+    // npx-cache copies exist. A `kind !== 'running'` proxy would wrongly
+    // donate the npx sibling (possibly stale) instead of the good running
+    // copy. destPkgDir is a THIRD, broken npx copy being repaired.
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true },
     ];
     const donor = findDonor({ installs, destPkgDir: DEST, fs });
     expect(donor.kind).toBe('running');
