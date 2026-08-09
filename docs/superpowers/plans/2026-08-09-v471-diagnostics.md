@@ -139,6 +139,34 @@ version-aware ranking would be strictly better and becomes possible once Task 4 
 `engineVersion` — deliberately NOT expanded into Task 4 here, because the kind-aware rule already
 closes the defect and the ranking policy deserves its own decision.
 
+**E-1g (found at Task 4's review — THE SAME dedup defect as E-1f, repeated in Task 4).** The plan
+gave `installs.find((i) => i.kind === 'global')` as the skew baseline. Because dedup collapses a
+running-that-is-global into the `running` record, an end user running `amicus doctor` from their
+global install has **no `global` record at all** — so `globalV` is undefined, `skewed` is empty, and
+the check reports `ok`. **As planned, the release's headline check was structurally unable to fire
+for the users who filed #133.** Corrected: `scanEngineInstalls` stamps `isGlobal: true` on the
+surviving record when dedup collapsed the global into it, and the baseline becomes
+`kind === 'global' || isGlobal`. The stamp lives in `scanEngineInstalls`, never in
+`listAmicusInstalls`, so the `toEqual` fixtures at `tests/utils/engine-install-scan.test.js:50`
+and `:82` stay green unchanged. Lesson: this dedup behaviour bit two separate items in one release
+— treat "which record survives dedup" as a standing hazard for anything keying on `kind`.
+
+**E-1h (found at Task 4's review — a defect in the CONTROLLER'S dispatch, not the plan or the
+implementation).** Routing E-1f's residual into Task 4, the dispatch specified "rank healthy donors
+by `engineVersion`, highest semver first, falling back to the kind rule." A reviewer probed the
+result and found three inversions, one of which defeats ruling R-A outright: with running = dev
+tree at `1.19.0` and global at `1.18.15`, highest-semver **donates the dev tree** — exactly what
+R-A exists to prevent, and the normal direction mid-pin-bump. Corrected to **two tiers**: an
+explicitly-global donor (including `isGlobal`) wins outright; version ranking applies only within
+the remaining candidates. That still closes E-1f's residual without the inversions.
+
+**E-1i (found at Task 4's review).** The remediation hint told users `npm cache clean --force`
+would make the npx copy re-resolve. Verified against npm 11's own `lib/commands/cache.js`:
+`cache clean` removes `flatOptions.cache` (`<cache>/_cacache`), while npx trees live at
+`flatOptions.npxCache` (`<cache>/_npx`). The hinted command deletes registry metadata and leaves
+the skewed copy byte-for-byte in place. Since this release deliberately ships **no `--fix` branch
+for skew**, that hint is the only remedy a user gets. Corrected to `npm cache npx rm --force`.
+
 **E-1e: the version source is the record's existing `roots` array.** Read
 `<root>/opencode-ai/package.json`. Do **not** "read the package.json next to the binary":
 `hasOpencodeBinary` (`src/utils/path-setup.js:113-122`) probes
