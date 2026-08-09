@@ -138,6 +138,23 @@ criterion that says "npx re-resolves because the range no longer matches." The p
 **E-2c: nothing local heals.** Both the npx cache and the global install already hold 1.18.15. The
 pin is **prophylactic**. Do not write an acceptance criterion that observes a stale copy updating.
 
+**E-2d (found during Task 2 — this plan's own Step 4 command was wrong).**
+`require('@opencode-ai/sdk/package.json')` throws `ERR_PACKAGE_PATH_NOT_EXPORTED`: the SDK's
+`exports` map does not expose its manifest, at both the old and new versions. Read it with
+`fs.readFileSync` instead. Unrelated to the pin; the plan's verification snippet was simply wrong.
+
+**E-2e (operational, found during Task 2): `npm install` destroyed the worktree's `node_modules`
+JUNCTION and replaced it with a real directory.** npm logged
+`npm warn reify Removing non-directory … node_modules` and then installed a full tree.
+**The main clone was NOT damaged** — verified after the fact: `C:\Users\sendt\code\amicus\node_modules`
+still has 434 entries and `jest/package.json` resolves. But two standing procedures change for this
+worktree:
+- Teardown must **not** use the link-only junction procedure. `amicus-wt-v471/node_modules` is now a
+  real, independent directory (432 entries) and deleting it recursively is safe and correct.
+- The worktree no longer shares the main clone's modules, so its installed tree is the one under
+  test. That is what made Task 2's suite run meaningful, but it also means a later
+  `npm install --ignore-scripts` here affects only this worktree.
+
 **E-3a: `launchSolo` needs no edit.** It is `launchWave({ ...opts, models: [opts.model] })` at
 `src/council/run-launch.js:159` — a one-line delegation that inherits the key. "launchWave/launchSolo"
 doubles the real edit surface.
@@ -1680,8 +1697,16 @@ git commit -m "test: gate CLAUDE.md marker freshness in jest (F-3); changelog fo
 
 ## Verification before the PR
 
-- [ ] `npm test` green, and the suite count compared against the branch's own merge-base
-      (`5bd2615` = 507 suites / 6883 passed / 8 skipped), not against a remembered number.
+- [ ] `npm test` green, and the suite count compared against the branch's own merge-base.
+      ⚠️ **CORRECTED 2026-08-09 during Task 2.** This plan originally cited `5bd2615` as
+      *507 suites / 6883 passed / 8 skipped*. **That is v4.7.0's count (`caf4d7e`), not this
+      branch's base.** PRs #141/#142 landed between them and added
+      `tests/helpers/read-if-present.test.js` (3 cases, verified absent at `caf4d7e`) plus
+      substantial additions to four existing suites. The real base at `5bd2615` is
+      **508 suites / 6890 passed / 9 skipped**. Measured at Task 2's head (`4eb0cc6`):
+      508 / 6893 / 9, i.e. base + Task 2's 3 new assertions, 0 failures.
+      This is the "re-measure baselines at the branch's own merge-base" rule biting the plan
+      that cites it — do not compare against a number carried forward from the last release.
 - [ ] `npm run lint`, `npm run check:sizes` green.
 - [ ] `node scripts/generate-docs.js --check` exits 0.
 - [ ] **This plan file is committed on the branch.** Untracked-plan-at-push has now bitten twice
