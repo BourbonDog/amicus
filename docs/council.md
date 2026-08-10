@@ -540,8 +540,8 @@ model to the reliability ledger. Thin CLI wrapper over `tally()` (`src/council/t
 ### Tally-input schema
 
 Claude assembles this file at the end of Stage 2 (the full assembly recipe is in
-[SKILL.md](../skills/second-opinion/SKILL.md#stage-2--cross-review), under "Stage-2 → tally
-assembly recipe"). It needs **all five top-level keys** — `tally()` throws
+[SKILL.md](../skills/second-opinion/SKILL.md#the-engine-run--stages-13-plus-the-stage-5-artifacts),
+under "Stage-2 → tally assembly recipe"). It needs **all five top-level keys** — `tally()` throws
 `Cannot read properties of undefined (reading 'map')` if `meta` or `findings` is missing:
 
 | Field | Type | Meaning |

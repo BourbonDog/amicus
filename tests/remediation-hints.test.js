@@ -73,3 +73,23 @@ describe('unverified-cause voice (v4.6 Plan 3)', () => {
     expect(hints.sweepSessionMetadataTmp).not.toMatch(/unverified/i);
   });
 });
+
+// Review round 2, finding 3: `npm cache clean --force` removes
+// flatOptions.cache (<cache>/_cacache — registry metadata) but npx trees live
+// at flatOptions.npxCache (<cache>/_npx) — a DIFFERENT directory (verified
+// against npm 11's own lib/commands/cache.js). Since doctor --fix has no
+// skew branch, this hint is the ONLY remedy the user gets, so it must name a
+// command that actually clears the npx tree: `npm cache npx rm` with no keys
+// and --force (npmRootG's own cache.js: npxRm with empty keys + force wipes
+// the whole npxCache dir).
+describe('engineVersionSkew hint (#133 R-A, review round 2 finding 3)', () => {
+  test('names the real npx-cache-clearing command, not the registry-metadata-only npm cache clean --force', () => {
+    expect(hints.engineVersionSkew).toMatch(/npm cache npx rm/);
+    expect(hints.engineVersionSkew).not.toMatch(/npm cache clean --force/);
+  });
+
+  test('still tells the user to reinstall the global engine to the exact pinned version (verified-accurate clause, unchanged)', () => {
+    expect(hints.engineVersionSkew).toMatch(/npm install -g amicus/);
+    expect(hints.engineVersionSkew).toMatch(/4\.7\.1/);
+  });
+});

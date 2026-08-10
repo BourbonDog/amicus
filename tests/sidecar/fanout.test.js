@@ -586,6 +586,28 @@ describe('runFanout orchestrator', () => {
     }
   });
 
+  // Rider A (v4.7.1 diagnostics): --quiet must suppress BOTH streams, not
+  // just one. The launch banner and wave doc are stdout (fanout.js:77/:80);
+  // per-leg progress and the wave heartbeat are stderr (fanout-leg.js:58/:188,
+  // wave-progress.js:75) — each gated by its own `if (!quiet)`/`options.quiet`
+  // check, so a fix to one gate could silently leave the other stream noisy
+  // and nothing here would have caught it before this test existed.
+  // Spy console.log, NOT process.stdout.write: Jest swaps in its own Console
+  // that never funnels through process.stdout.write, so that spy would pass
+  // vacuously even on code that prints every call.
+  it.each([true, false])('quiet writes nothing to stdout or stderr (json:%s)', async (json) => {
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runFanout({ ...baseOpts(), json });
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(errSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+  });
+
   // v4.3 Task 19 Fix Wave 1 (Finding 3): a retry launch (options.retryOfWaveId
   // set by fanout-retry.js) must NOT print its own wave doc to stdout —
   // fanout-retry.js owns that print (after enriching retryOf/effective onto

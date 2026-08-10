@@ -257,4 +257,5 @@ module.exports = {
   checkMarkersAreCurrent,
   extractJSDocDescription,
   extractExports,
+  TREE_DIRS,
 };

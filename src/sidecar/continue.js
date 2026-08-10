@@ -88,7 +88,7 @@ Build on the previous sidecar's findings. The user wants to continue or extend t
 
 /** Create session metadata for continuation */
 function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
-  const { model, briefing, headless, agent, gateway, resolutionVersion } = options;
+  const { model, briefing, headless, agent, gateway, resolutionVersion, tag } = options;
 
   const sessionDir = SessionPaths.sessionDir(project, taskId);
   fs.mkdirSync(sessionDir, { recursive: true });
@@ -102,7 +102,11 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
     agent: agent || (headless ? 'build' : 'chat'),
     status: 'running',
     createdAt: new Date().toISOString(),
-    continuesFrom: oldTaskId
+    continuesFrom: oldTaskId,
+    // v4.7.1 Task 7 (D13): absent-not-null, same idiom as start-metadata.js:50
+    // — a continuation inherits the parent's tag so a continue chain never
+    // scatters into `(unattributed)`.
+    ...(tag ? { tag } : {}),
   };
   // #61 Task 5.2 (best-effort provenance): only present when THIS continue
   // call freshly routed an explicit --model through the gateway router — the
@@ -114,26 +118,6 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
   writeFileAtomic(SessionPaths.metadataFile(sessionDir), JSON.stringify(metadata, null, 2));
 
   return sessionDir;
-}
-
-/**
- * Resolve a reopened session's usage, write it onto metadata, and append one
- * attributed ledger row. Mirrors start.js's finalize (the only sites that
- * dropped usage - BACKLOG.md:280). Best-effort ledger append; never throws.
- * @returns {{usage: object|null}}
- */
-function finalizeSpendForReopen({ taskId, model, mode, op, result, status, project, metadata }, ctx = {}) {
-  const { resolveUsage } = require('../utils/pricing');
-  const usage = result && result.usage ? resolveUsage({ model, usageTotals: result.usage }) : null;
-  if (usage) {
-    metadata.usage = usage; // buildRunResult surfaces metadata.usage into the --json doc for free
-    try {
-      const { appendSpend } = require('../utils/spend-ledger');
-      const gateway = metadata.gateway || (String(model).startsWith('openrouter/') ? 'openrouter' : 'direct');
-      appendSpend({ taskId, model, mode, usage, op, status, project, gateway }, ctx);
-    } catch { /* best-effort */ }
-  }
-  return { usage };
 }
 
 /**
@@ -196,6 +180,7 @@ async function continueSidecar(options) {
 
   const sessionDir = createContinueSessionMetadata(newTaskId, project, {
     model, briefing, headless, agent: effectiveAgent, gateway, resolutionVersion,
+    tag: oldMetadata.tag, // v4.7.1 Task 7: inherit the parent's tag (absent if the parent had none).
   }, oldTaskId);
 
   // Lock the NEW continuation session dir too — not just the previous one — so a
@@ -270,6 +255,7 @@ async function continueSidecar(options) {
   // ledger row (status: statusFromResult, matching start.js — not terminal.status).
   {
     const { statusFromResult } = require('../utils/result-schema');
+    const { finalizeSpendForReopen } = require('./reopen-spend');
     const reloaded = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
     const { usage } = finalizeSpendForReopen({
       taskId: newTaskId, model, mode: headless ? 'headless' : 'interactive',
@@ -292,6 +278,5 @@ module.exports = {
   loadPreviousSession,
   buildContinuationContext,
   createContinueSessionMetadata,
-  finalizeSpendForReopen,
   continueSidecar
 };

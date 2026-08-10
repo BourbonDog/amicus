@@ -90,3 +90,21 @@ describe('no phantom dependencies in shipped code', () => {
     expect(declared.has('extract-zip')).toBe(true);
   });
 });
+
+describe('engine version pinning (#133)', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+
+  // Exact pins, not ranges: package-lock.json does NOT ship in the tarball, so
+  // for every consumer the range in package.json is the sole governor and a
+  // caret resolves to "whatever was latest the day this copy was installed".
+  // That is precisely how an npx-cache copy and a global install ended up on
+  // different engines in #133. Exact makes the engine a pure function of the
+  // amicus version. They release in lockstep, so both are pinned together.
+  it.each(['opencode-ai', '@opencode-ai/sdk'])('%s is an exact version, not a range', (dep) => {
+    expect(pkg.dependencies[dep]).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  it('the engine and its SDK are pinned to the same version', () => {
+    expect(pkg.dependencies['@opencode-ai/sdk']).toBe(pkg.dependencies['opencode-ai']);
+  });
+});

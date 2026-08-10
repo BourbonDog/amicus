@@ -1,7 +1,8 @@
 'use strict';
 const path = require('path');
-const { repairEngine } = require('../../src/utils/engine-repair');
+const { repairEngine, findDonor } = require('../../src/utils/engine-repair');
 
+const RUNNING = path.join('C:', 'proj', 'amicus');
 const DEST = path.join('C:', 'cache', '_npx', 'h1', 'node_modules', 'amicus');
 const DEST_NM = path.join(DEST, 'node_modules');
 const DONOR = path.join('C:', 'global', 'node_modules', 'amicus');
@@ -146,5 +147,160 @@ describe('repairEngine', () => {
     expect(r.repaired).toBe(false);
     expect(r.reason).toMatch(/copy failed/i);
     expect(b.lock.release).toHaveBeenCalled();
+  });
+});
+
+describe('findDonor', () => {
+  // Ruling R-A: prefer an explicitly-`global` healthy donor over any other
+  // kind. `kind !== 'running'` is the WRONG proxy for "not the dev tree":
+  // listAmicusInstalls pushes `running` first and `global` second, and
+  // dedupByRealpath keeps the FIRST of two entries sharing a real path. On
+  // an ordinary end-user machine the running process IS the global install,
+  // so the `global` record never survives dedup — that copy is labeled
+  // `kind: 'running'`. A `kind !== 'running'` filter would skip that good
+  // global engine and donate some other (possibly stale) healthy copy,
+  // importing the exact version skew this self-heal exists to prevent.
+  // Preferring `global` explicitly, falling back to listAmicusInstalls order
+  // (running-first) otherwise, is correct on both topologies.
+  const fs = { realpathSync: (p) => p };
+  const NPX_SIBLING = path.join('C:', 'cache', '_npx', 'h2', 'node_modules', 'amicus');
+
+  test('prefers the explicitly-global donor when both a healthy running and a healthy global are present', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true },
+      { kind: 'global', pkgDir: DONOR, engineOk: true },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('global');
+    expect(donor.pkgDir).toBe(DONOR);
+  });
+
+  test('falls back to the running donor when it is the only healthy copy present', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('running');
+    expect(donor.pkgDir).toBe(RUNNING);
+  });
+
+  test('running-that-is-really-global (no separate global record) wins over a healthy npx sibling', () => {
+    // Simulates the dedup outcome on an end-user machine: running IS global,
+    // so there is no separate `global` entry — only `running` plus whatever
+    // npx-cache copies exist. A `kind !== 'running'` proxy would wrongly
+    // donate the npx sibling (possibly stale) instead of the good running
+    // copy. destPkgDir is a THIRD, broken npx copy being repaired.
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('running');
+    expect(donor.pkgDir).toBe(RUNNING);
+  });
+
+  // R-A residual hole (reviewer finding, closed by this task's engineVersion
+  // field): on a machine with a dev checkout, NO npm-global amicus install, a
+  // broken npx destination, and a healthy npx sibling, no record has
+  // kind:'global' — the old kind-only rule fell through to healthy[0], i.e.
+  // the running dev tree, and could donate a version-skewed dev engine. Once
+  // engineVersion exists, ranking healthy donors by version (highest first)
+  // must win over the kind-based fallback so the newer sibling is chosen
+  // instead. Before this task's findDonor change, this test fails: the old
+  // code returns `healthy[0]` unconditionally (kind fallback, ignoring
+  // version), i.e. the OLDER running dev tree — not the sibling.
+  test('ranks by engineVersion over the kind-based fallback: a newer healthy npx sibling beats an older running dev tree', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.2.20' }, // dev tree, older
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.18.15' }, // healthy sibling, newer
+      // destPkgDir itself: broken npx copy being repaired — excluded via engineOk:false anyway.
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('npx');
+    expect(donor.pkgDir).toBe(NPX_SIBLING);
+  });
+
+  test('a tie on engineVersion falls back to the kind-based rule (global preferred)', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.18.15' },
+      { kind: 'global', pkgDir: DONOR, engineOk: true, engineVersion: '1.18.15' },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('global');
+  });
+
+  test('a non-semver engineVersion is treated as absent (sorts last, never throws)', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: 'not-a-version' },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.18.15' },
+    ];
+    expect(() => findDonor({ installs, destPkgDir: DEST, fs })).not.toThrow();
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.pkgDir).toBe(NPX_SIBLING);
+  });
+
+  // Review round 2, finding 2: the dispatch's "highest semver first, falling
+  // back to kind" was wrong — a single version-first sort lets a non-global
+  // donor outrank an explicit global one whenever it merely reports a higher
+  // (or unresolved-vs-resolved) version. The fix is TWO TIERS: an explicit
+  // global donor (kind:'global', or isGlobal:true — finding 1) wins OUTRIGHT;
+  // version ranking only decides BETWEEN non-global candidates. These three
+  // tests each pin one of the three inversions the reviewer found by probing
+  // the single-sort version of findDonor directly.
+  test('an explicit global donor wins outright even when the running dev tree reports a NEWER version', () => {
+    // Before the two-tier fix: a single version-first sort ranks running
+    // (1.19.0) above global (1.18.15) and returns running directly — exactly
+    // backwards from R-A's stated goal ("--fix stops donating the dev
+    // engine"). A dev tree merely running ahead of the pin is normal
+    // mid-pin-bump, not a signal to trust it over the global install.
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.19.0' },
+      { kind: 'global', pkgDir: DONOR, engineOk: true, engineVersion: '1.18.15' },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('global');
+  });
+
+  test('a running-that-is-global donor (isGlobal flag) outranks a version-newer healthy npx sibling', () => {
+    // Before the two-tier fix: a single version-first sort ranks the npx
+    // sibling (1.19.0) above running-that-is-global (1.18.15) and donates
+    // the npx copy — the exact outcome the original (pre-engineVersion)
+    // findDonor test above says must never happen, now reintroduced via the
+    // least-trustworthy source class (doctor-engine-check.js's own docblock:
+    // npx-cache copies are subject to optional-dependency skips and AV
+    // quarantine on every re-resolve).
+    const installs = [
+      {
+        kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.18.15', isGlobal: true,
+      },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.19.0' },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.pkgDir).toBe(RUNNING);
+  });
+
+  test('an explicit global donor with an unresolved engineVersion still wins over a versioned npx copy', () => {
+    // Before the two-tier fix: global's undefined version sorts last against
+    // any parseable version, so the single sort put the npx copy first and
+    // donated it — despite a `global` record existing on the machine.
+    const installs = [
+      { kind: 'global', pkgDir: DONOR, engineOk: true, engineVersion: undefined },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.17.3' },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.kind).toBe('global');
+  });
+
+  // Minor 4 (review round 2): the version-triple regex matched the LEADING
+  // digits of a prerelease too, so '1.18.15-beta.1' tied with '1.18.15' —
+  // and because Array#sort is stable, whichever came first in list order
+  // (running, here) won the tie, i.e. a prerelease could beat a real release.
+  test('a prerelease engineVersion sorts LAST, never ties with (or beats) a release version', () => {
+    const installs = [
+      { kind: 'running', pkgDir: RUNNING, engineOk: true, engineVersion: '1.18.15-beta.1' },
+      { kind: 'npx', pkgDir: NPX_SIBLING, engineOk: true, engineVersion: '1.18.15' },
+    ];
+    const donor = findDonor({ installs, destPkgDir: DEST, fs });
+    expect(donor.pkgDir).toBe(NPX_SIBLING);
   });
 });

@@ -55,7 +55,7 @@ jest.mock('../src/opencode-client', () => ({
 const mockLogger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() };
 jest.mock('../src/utils/logger', () => ({ logger: mockLogger }));
 
-const { runHeadless } = require('../src/headless');
+const { runHeadless, formatNoOutputBackstopReason } = require('../src/headless');
 const { statusFromResult } = require('../src/utils/result-schema');
 
 const MODEL = 'openrouter/qwen/qwen3.7-max';
@@ -113,6 +113,16 @@ describe('runHeadless no-output backstop wiring', () => {
     expect(result.completed).toBe(false);
     expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
     expect(String(result.error)).toMatch(/no output, reasoning, or tool calls/);
+    // Task 6 review (Minor 2): prove the caller-set phrasing through the REAL
+    // runHeadless wiring, not just the pure helper — this leg's `ms` arrived
+    // as the direct `noOutputBackstopMs: 200` option above, so it must never
+    // claim to BE the live env window. Would break if the pre-send/per-poll
+    // firing sites stopped forwarding `backstopFromEnv` correctly, or if
+    // formatNoOutputBackstopReason's caller-set branch regressed to claiming
+    // direct governance ("(0 disables)" / "the AMICUS_NO_OUTPUT_BACKSTOP_MS
+    // window").
+    expect(String(result.error)).toMatch(/a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default/);
+    expect(String(result.error)).not.toMatch(/\(0 disables\)/);
     // The session must have been aborted, mirroring the timeout path (LC-2 style).
     expect(mockAbortSession).toHaveBeenCalledTimes(1);
     expect(mockAbortSession.mock.calls[0][1]).toBe('ses_parent');
@@ -330,6 +340,14 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
     expect(Date.now() - started).toBeLessThan(10000);
     expect(result.completed).toBe(false);
     expect(String(result.error)).toMatch(/^NO_OUTPUT_BACKSTOP:/);
+    // Task 6 review (Minor 2): prove the env-resolved phrasing through the
+    // REAL runHeadless wiring — this leg's `ms` reached the deadline
+    // arithmetic ONLY via the env-resolution fallthrough (the direct '200'
+    // was rejected by Number.isFinite), so `backstopFromEnv` must have been
+    // true and the message must claim direct governance. Would break if the
+    // fallthrough stopped setting `backstopFromEnv`, or if the fromEnv
+    // branch's wording regressed (dropped the var name or "(0 disables)").
+    expect(String(result.error)).toMatch(/the AMICUS_NO_OUTPUT_BACKSTOP_MS window \(0 disables\)/);
     expect(mockAbortSession).toHaveBeenCalledTimes(1);
   }, 20000);
 
@@ -347,4 +365,65 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
     expect(result.timedOut).toBe(true);
     expect(result.completed).toBe(false);
   }, 20000);
+});
+
+/**
+ * Task 6 (#129, #133): the reason string reports only what the deadline
+ * mechanism actually observed — a deadline passed with no substantive
+ * activity — never a cause. The removed guess ("likely a listed-but-not-
+ * serving model or a dead endpoint") sent 30 minutes of #133's debugging at
+ * model ids and API keys while the real cause (an opencode engine version
+ * skew) sat in ~/.local/share/opencode/log/opencode.log the whole time.
+ *
+ * Task 6 REVIEW (Important finding, superseding this suite's original
+ * contract): `fromEnv` answers "did `ms` arrive as a direct numeric option",
+ * not "does AMICUS_NO_OUTPUT_BACKSTOP_MS influence this window" — those
+ * diverge on a Stage-1 retry (src/council/run-retry.js:154 doubles the
+ * resolved/direct value and forwards it as a direct option), so a
+ * retry-fired 240s backstop is `fromEnv: false` while still genuinely
+ * governed by the env var. The original version of these tests asserted the
+ * ABSENCE of the variable NAME on the caller-set branch; the real
+ * requirement was always the absence of a FALSE CLAIM that the window IS the
+ * live env value. The tests below assert that instead: the caller-set branch
+ * may (now does) name the var, but must never pair it with "(0 disables)" or
+ * say "the AMICUS_NO_OUTPUT_BACKSTOP_MS window" — both of which mean "this
+ * value tracks the env var live," true only on the fromEnv branch.
+ *
+ * These tests exercise `formatNoOutputBackstopReason` directly — a pure,
+ * module-scope helper lifted out of the `noOutputBackstopReason` closure so
+ * the string can be asserted on without driving the whole runHeadless poll
+ * loop. The two firing sites (pre-send and per-poll) both still call the
+ * original in-closure wrapper, which just forwards to this helper with the
+ * per-run `noOutputBackstopMs`/`backstopFromEnv` values — so proving the
+ * helper's output also proves what those sites will emit. (The wiring itself
+ * — that a real runHeadless call actually reaches each branch — is proven
+ * separately below, by extending two of the existing end-to-end tests.)
+ */
+describe('formatNoOutputBackstopReason: reports only what the deadline observed, never a cause', () => {
+  test('states only what was observed, with no cause claim — proof: fails if the removed guess ("likely"/"dead endpoint"/"not serving"/"accepted") is ever reintroduced, or if the required prefix/phrase is dropped', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 120000, fromEnv: true });
+    expect(msg.startsWith('NO_OUTPUT_BACKSTOP:')).toBe(true); // models-probe.js:39 anchors on this exact prefix
+    expect(msg).toMatch(/no output, reasoning, or tool calls/); // this file's own :115/:265 assert this phrase
+    expect(msg).not.toMatch(/likely|dead endpoint|not serving|accepted/i);
+  });
+
+  test('fromEnv=true claims direct governance: names the var AND pairs it with "(0 disables)" — proof: fails if the from-env branch stops naming AMICUS_NO_OUTPUT_BACKSTOP_MS or drops the "(0 disables)" qualifier that marks this window as the live env value, breaking the documented remedy in troubleshooting.md', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 120000, fromEnv: true });
+    expect(msg).toMatch(/AMICUS_NO_OUTPUT_BACKSTOP_MS/);
+    expect(msg).toMatch(/\(0 disables\)/);
+  });
+
+  test('fromEnv=false still names the var (a retry\'s escalated window is derived from it) but never claims direct governance — proof: this is the test that actually catches the review\'s Important finding. It FAILS against this suite\'s pre-review contract ("does NOT name the env var on a caller-set window"), which was true for the probe\'s fixed 30s but FALSE for a retry\'s 240s (genuinely derived from the env default, doubled) — the old assertion would have shipped a message that goes silent about the one remedy that actually applies to a retry. It also fails against a regression back to the literal "the AMICUS_NO_OUTPUT_BACKSTOP_MS window" phrasing or a reintroduced "(0 disables)", either of which would falsely claim this caller-set window tracks the env var live', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 30000, fromEnv: false });
+    expect(msg).toMatch(/AMICUS_NO_OUTPUT_BACKSTOP_MS/);
+    expect(msg).not.toMatch(/\(0 disables\)/);
+    expect(msg).not.toMatch(/the AMICUS_NO_OUTPUT_BACKSTOP_MS window/);
+    expect(msg).toMatch(/30s/);
+  });
+
+  test('the seconds count derives from ms, not a hardcoded 120 — proof: fails if a future edit hardcodes "120s" instead of deriving from the ms argument, which would silently mis-report Task 5\'s doubled retry window (120s -> 240s)', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 240000, fromEnv: true });
+    expect(msg).toMatch(/240s/);
+    expect(msg).not.toMatch(/\b120s\b/);
+  });
 });

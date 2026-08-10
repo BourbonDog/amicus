@@ -14,10 +14,10 @@ function writeLeg(proj, id, meta, ctx) {
   if (ctx) { fs.writeFileSync(path.join(dir, 'initial_context.md'), ctx); }
   return dir;
 }
-function writeWave(proj, id, status, legIds, models) {
+function writeWave(proj, id, status, legIds, models, extra) {
   const dir = getSessionDir(proj, id);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify({ taskId: id, type: 'wave', status, legs: legIds, models }));
+  fs.writeFileSync(path.join(dir, 'metadata.json'), JSON.stringify({ taskId: id, type: 'wave', status, legs: legIds, models, ...extra }));
   fs.writeFileSync(path.join(dir, 'briefing.md'), 'BRIEFING');
   return dir;
 }
@@ -230,5 +230,167 @@ describe('retryFailedWave (spec 6.1 — new linked wave + additive linkage)', ()
     expect(captured.retryContexts[0].hadSavedContext).toBe(true);
     expect(captured.retryContexts[0].systemPrompt).toBe('SYSTEM PROMPT TEXT');
     expect(captured.retryContexts[0].userMessage).toBe('USER MESSAGE TEXT');
+  });
+});
+
+// Task 8 (v4.7.1): --retry-failed inherits the ORIGINAL wave's tag. The
+// mechanism it must travel through is options.tag -> stampLegAttribution
+// (fanout-wave-io.js:84, called at fanout.js:126, BEFORE the new wave dir
+// exists) -> leg.tag -> recordAttemptSpend's row.tag. A pre-seeded
+// metadata.json implementation produces a correctly-tagged wave.json/
+// metadata.json while every leg spend row stays tag:null — see "THE SPEND
+// ROW" test below, which is the one that would catch that trap.
+describe('Task 8: --retry-failed inherits the original wave tag', () => {
+  const { stampLegAttribution } = require('../../src/sidecar/fanout-wave-io');
+  const { recordAttemptSpend } = require('../../src/sidecar/fanout-leg-fallback');
+  const { readSpendRows } = require('../../src/utils/spend-ledger');
+  const { writeWaveMetadata } = require('../../src/sidecar/fanout');
+
+  test('buildRetryPlan surfaces the original wave tag', () => {
+    const proj = project();
+    writeWave(proj, 't1', 'partial', ['t1-1'], ['gpt'], { tag: 'demo' });
+    writeLeg(proj, 't1-1', { taskId: 't1-1', model: 'gpt', status: 'error' }, 'c1');
+    const plan = buildRetryPlan('t1', proj, {});
+    expect(plan.tag).toBe('demo');
+  });
+
+  test('retryFailedWave forwards the inherited tag as options.tag (never args.tag)', async () => {
+    const proj = project();
+    writeWave(proj, 't2', 'partial', ['t2-1'], ['gpt'], { tag: 'demo' });
+    writeLeg(proj, 't2-1', { taskId: 't2-1', model: 'gpt', status: 'error' }, 'c1');
+    let captured = null;
+    const fake = async (o) => { captured = o; return { wave: null, exitCode: 0 }; };
+    // Fix-wave: opts carries a DIFFERENT tag ('sneaky') so this actually pins
+    // fanout-retry.js's `...opts` -then- explicit `...(plan.tag ? {tag} : {})`
+    // ordering. Without a competing opts.tag, a misordered spread or an
+    // `opts.tag` fallback would still land on 'demo' by coincidence and this
+    // test would pass either way.
+    await retryFailedWave('t2', proj, { runFanout: fake, quiet: true, tag: 'sneaky' });
+    expect(captured.tag).toBe('demo');
+  });
+
+  // THE decisive test: simulates the real fanout.js mechanism end to end
+  // (minus actual model execution — zero paid legs) via a fake runFanout that
+  // performs the SAME two calls the real one does, in the SAME order:
+  //   1. stampLegAttribution(legs, options) — reads ONLY options.tag, runs
+  //      BEFORE any wave dir exists (fanout.js:126, before :144-146).
+  //   2. writeWaveMetadata (real, read-merge-write) — so a pre-seeded tag on
+  //      the new wave dir would survive this merge exactly like production.
+  //   3. recordAttemptSpend per leg, via its deps.spendDir test seam, with a
+  //      fabricated usage block (no network call, no real ledger touched).
+  // A pre-seed-metadata implementation leaves options.tag undefined, so step
+  // 1 never stamps leg.tag, so step 3's rows stay tag:null even though step
+  // 2's wave metadata carries the pre-seeded tag — exactly the trap.
+  test('THE SPEND ROW carries the tag — not just the wave doc', async () => {
+    const proj = project();
+    writeWave(proj, 't3', 'partial', ['t3-1'], ['gpt'], { tag: 'demo' });
+    writeLeg(proj, 't3-1', { taskId: 't3-1', model: 'gpt', status: 'error' }, 'c1');
+    const spendDir = fs.mkdtempSync(path.join(os.tmpdir(), 'retry-spend-'));
+
+    const fakeRunFanout = async (o) => {
+      const modelList = o.models.split(',');
+      const legs = modelList.map(model => ({ ok: true, model }));
+      stampLegAttribution(legs, o); // mirrors fanout.js:126 exactly
+      const legIds = deriveLegIds(o.waveId, modelList.length);
+      const wDir = getSessionDir(proj, o.waveId);
+      fs.mkdirSync(wDir, { recursive: true, mode: 0o700 });
+      const merged = writeWaveMetadata(wDir, { // mirrors fanout.js:146-154 (read-merge-write)
+        taskId: o.waveId, type: 'wave', status: 'complete', legs: legIds,
+        ...(o.tag ? { tag: o.tag } : {}),
+      });
+      const legDocs = legIds.map((legId, i) => {
+        const lDir = getSessionDir(proj, legId);
+        fs.mkdirSync(lDir, { recursive: true });
+        fs.writeFileSync(path.join(lDir, 'metadata.json'),
+          JSON.stringify({ taskId: legId, model: legs[i].model, status: 'complete' }));
+        const usage = { tokens: { input: 1, output: 1, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+          cost: { amount: 0, currency: 'USD', source: 'reported' } };
+        // mirrors fanout-leg.js:210 exactly, routed to a scratch ledger dir
+        recordAttemptSpend({ doc: { status: 'complete', usage }, leg: legs[i], currentModel: legs[i].model,
+          legId, waveId: o.waveId, project: proj, attempt: 0, originalModel: legs[i].model }, { spendDir });
+        return { taskId: legId, model: legs[i].model, status: 'complete', usage };
+      });
+      return { wave: { type: 'wave', waveId: o.waveId, status: 'complete', tag: merged.tag, legs: legDocs }, exitCode: 0 };
+    };
+
+    await retryFailedWave('t3', proj, { runFanout: fakeRunFanout, quiet: true });
+
+    const rows = readSpendRows(spendDir);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every(r => r.tag === 'demo')).toBe(true);
+  });
+
+  test("the retry wave's own metadata carries the tag, so retry-of-a-retry inherits", async () => {
+    const proj = project();
+    writeWave(proj, 't4', 'partial', ['t4-1'], ['gpt'], { tag: 'demo' });
+    writeLeg(proj, 't4-1', { taskId: 't4-1', model: 'gpt', status: 'error' }, 'c1');
+    let newWaveId;
+    // Uses the REAL writeWaveMetadata (read-merge-write), exactly like
+    // fanout.js:146-154, rather than a raw overwrite — a raw overwrite would
+    // erase a pre-seeded field instead of merging over it, understating what
+    // a pre-seed trap implementation would actually leave behind on disk.
+    const fake = async (o) => {
+      newWaveId = o.waveId;
+      const legIds = deriveLegIds(o.waveId, 1);
+      const wDir = getSessionDir(proj, o.waveId);
+      fs.mkdirSync(wDir, { recursive: true, mode: 0o700 });
+      writeWaveMetadata(wDir, { taskId: o.waveId, type: 'wave', status: 'complete', legs: legIds, ...(o.tag ? { tag: o.tag } : {}) });
+      fs.mkdirSync(getSessionDir(proj, legIds[0]), { recursive: true });
+      fs.writeFileSync(path.join(getSessionDir(proj, legIds[0]), 'metadata.json'),
+        JSON.stringify({ taskId: legIds[0], model: 'gpt', status: 'complete' }));
+      return { wave: { type: 'wave', waveId: o.waveId, status: 'complete',
+        legs: [{ taskId: legIds[0], model: 'gpt', status: 'complete' }] }, exitCode: 0 };
+    };
+    await retryFailedWave('t4', proj, { runFanout: fake, quiet: true });
+    const newMeta = JSON.parse(fs.readFileSync(path.join(getSessionDir(proj, newWaveId), 'metadata.json'), 'utf-8'));
+    expect(newMeta.tag).toBe('demo');
+  });
+
+  test('an untagged original produces no tag anywhere', async () => {
+    const proj = project();
+    writeWave(proj, 't5', 'partial', ['t5-1'], ['gpt']); // no tag
+    writeLeg(proj, 't5-1', { taskId: 't5-1', model: 'gpt', status: 'error' }, 'c1');
+    let newWaveId;
+    let captured = null;
+    const fake = async (o) => {
+      captured = o;
+      newWaveId = o.waveId;
+      const legIds = deriveLegIds(o.waveId, 1);
+      const wDir = getSessionDir(proj, o.waveId);
+      fs.mkdirSync(wDir, { recursive: true, mode: 0o700 });
+      writeWaveMetadata(wDir, { taskId: o.waveId, type: 'wave', status: 'complete', legs: legIds, ...(o.tag ? { tag: o.tag } : {}) });
+      fs.mkdirSync(getSessionDir(proj, legIds[0]), { recursive: true });
+      fs.writeFileSync(path.join(getSessionDir(proj, legIds[0]), 'metadata.json'),
+        JSON.stringify({ taskId: legIds[0], model: 'gpt', status: 'complete' }));
+      return { wave: { type: 'wave', waveId: o.waveId, status: 'complete',
+        legs: [{ taskId: legIds[0], model: 'gpt', status: 'complete' }] }, exitCode: 0 };
+    };
+    await retryFailedWave('t5', proj, { runFanout: fake, quiet: true });
+    // Fix-wave: assert directly on the CAPTURED fanout options, not just the
+    // fake's derived metadata — the fake writes tag via
+    // `...(o.tag ? { tag: o.tag } : {})`, which would launder a
+    // `tag: plan.tag || null` regression in fanout-retry.js (o.tag === null
+    // is falsy, so the fake still omits the key) and this test would still
+    // pass on newMeta alone.
+    expect(captured).not.toHaveProperty('tag');
+    const newMeta = JSON.parse(fs.readFileSync(path.join(getSessionDir(proj, newWaveId), 'metadata.json'), 'utf-8'));
+    expect(newMeta.tag).toBeUndefined();
+    expect(newMeta).not.toHaveProperty('tag');
+  });
+
+  test('the zero-eligible no-op doc still carries the tag (--json)', async () => {
+    const proj = project();
+    writeWave(proj, 't6', 'complete', ['t6-1'], ['gpt'], { tag: 'demo' });
+    writeLeg(proj, 't6-1', { taskId: 't6-1', model: 'gpt', status: 'complete' });
+
+    const out = [];
+    const spy = jest.spyOn(process.stdout, 'write').mockImplementation((s) => { out.push(s); return true; });
+    try {
+      await retryFailedWave('t6', proj, { json: true });
+    } finally {
+      spy.mockRestore();
+    }
+    const doc = JSON.parse(out.join(''));
+    expect(doc.tag).toBe('demo');
   });
 });

@@ -82,6 +82,98 @@ describe('evaluateEngineInstalls', () => {
   });
 });
 
+// #133 R-A: a PRESENT engine can still be the WRONG one — the npx-cache copy
+// and the global install resolve independently and can end up on different
+// opencode-ai versions, which is what produced #133's SQLiteError against one
+// shared opencode.db. All copies here report engineOk:true (nothing "broken"
+// in the old presence-only sense), so these tests only pass once the check
+// also compares engineVersion — before that, every case here is 'ok'.
+const npxCopyV = (hash, engineVersion) => ({ ...npxCopy(hash, true), engineVersion });
+const runningV = (engineVersion) => ({
+  kind: 'running', pkgDir: path.join('C:', 'dev', 'amicus'), engineOk: true, roots: [], engineVersion,
+});
+const globalV = (engineVersion) => ({
+  kind: 'global', pkgDir: path.join('C:', 'global', 'node_modules', 'amicus'), engineOk: true, roots: [], engineVersion,
+});
+// #133 R-A finding 1 (review round 2): on the documented end-user
+// invocation — `amicus doctor` run from the globally-installed copy — the
+// running process IS the global install, so listAmicusInstalls' own dedup
+// drops the separate `kind:'global'` record and only `kind:'running'`
+// survives. scanEngineInstalls recovers that fact as `isGlobal: true` on the
+// surviving record (see engine-install-scan.test.js). This factory produces
+// exactly that shape, so these doctor-level tests can exercise the skew
+// baseline without going through the real scan.
+const runningGlobalV = (engineVersion) => ({
+  kind: 'running', pkgDir: path.join('C:', 'global', 'node_modules', 'amicus'), engineOk: true, roots: [], engineVersion, isGlobal: true,
+});
+
+describe('evaluateEngineInstalls — engine version skew (#133 R-A)', () => {
+  test('warns when an npx copy and the global install disagree on engine version', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningV('1.2.20'), globalV('1.18.15'), npxCopyV('a', '1.17.3')],
+    }));
+    expect(r.status).toBe('warn');
+    expect(r.message).toMatch(/1\.17\.3/);
+    expect(r.message).toMatch(/1\.18\.15/);
+    expect(r.message).not.toMatch(/1\.2\.20/); // the dev/running tree is excluded (E-1c)
+    expect(r.hint).toBeTruthy();
+  });
+
+  test('stays ok when only the running copy differs from the npx copies — every dev checkout looks like this', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningV('1.2.20'), globalV('1.18.15'), npxCopyV('a', '1.18.15')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+
+  test('stays ok when the global version is unresolved rather than guessing skew', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [globalV(undefined), npxCopyV('a', '1.18.15')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+
+  test('stays ok for a genuine dev checkout with no global baseline at all — not the isGlobal blind spot', () => {
+    // Distinct from the end-user "running IS global" topology below: this
+    // running record carries no isGlobal flag, i.e. it is a real source
+    // checkout that does NOT live under the npm global root, so there is
+    // truly nothing to compare the npx copy against. Must stay 'ok' even
+    // after the isGlobal fix — absence of evidence is not evidence.
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningV('1.2.20'), npxCopyV('a', '1.17.3')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+
+  // Review round 2, finding 1: before this fix, `installs.find(kind==='global')`
+  // was the SOLE baseline, so on the end-user topology above — where dedup
+  // collapsed `global` into `running` — this always fell through to 'ok',
+  // meaning the headline #133 check could never fire for the exact users who
+  // filed the bug. This is the case that proves the fix: a running-that-is-
+  // global record (isGlobal:true) must now serve as the skew baseline.
+  test('warns when a running-that-is-global record disagrees with a skewed npx copy (#133 own topology)', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningGlobalV('1.18.15'), npxCopyV('a', '1.17.3')],
+    }));
+    expect(r.status).toBe('warn');
+    expect(r.message).toMatch(/1\.17\.3/);
+    expect(r.message).toMatch(/1\.18\.15/);
+  });
+
+  test('stays ok when a running-that-is-global record agrees with every npx copy', () => {
+    const r = evaluateEngineInstalls(withScan({
+      mcpLaunch: 'npx',
+      installs: [runningGlobalV('1.18.15'), npxCopyV('a', '1.18.15')],
+    }));
+    expect(r.status).toBe('ok');
+  });
+});
+
 const { evaluateEngineMcp } = require('../../src/utils/doctor-engine-check');
 
 describe('evaluateEngineMcp (--fix)', () => {
@@ -219,5 +311,19 @@ describe('evaluateEngineMcp (--fix)', () => {
     expect(r.message).toBe(
       `engine missing from 1/2 npx-cache copies: ${npxDir('h2')} (searched: ); self-heal incomplete: ${npxDir('h2')} — no healthy sibling install to copy the engine from`,
     ); // prose byte-identical, exact
+  });
+});
+
+describe('evaluateEngineMcp (--fix) — engine version skew has no fix branch', () => {
+  test('--fix on a skew-only verdict returns the warn unchanged and never calls repairEngine', async () => {
+    const repairEngine = jest.fn();
+    const scan = () => ({
+      mcpLaunch: 'npx',
+      installs: [globalV('1.18.15'), npxCopyV('a', '1.17.3')],
+    });
+    const r = await evaluateEngineMcp({ scanEngineInstalls: scan, fix: true, repairEngine });
+    expect(r.status).toBe('warn');
+    expect(r.message).toMatch(/1\.17\.3/);
+    expect(repairEngine).not.toHaveBeenCalled();
   });
 });

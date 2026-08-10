@@ -48,6 +48,38 @@ function evaluateEngineInstalls(d) {
 
   const broken = npxCopies.filter((i) => !i.engineOk);
   if (broken.length === 0) {
+    // Version skew (#133): a PRESENT engine can still be the wrong one. The
+    // npx copies and the global install resolve independently and at different
+    // times, and two versions writing one shared opencode.db is what produced
+    // #133's SQLiteError. Compare npx against global ONLY — a genuine source
+    // checkout's engine legitimately differs, so including it would fire red
+    // on every developer machine and in CI (E-1c). Unresolved versions never
+    // signal skew; absence of evidence is not evidence.
+    // WARN, never ERROR: doctor --fix has no skew branch, so an error would be
+    // unfixable, and this file already downgrades to warn at the ambiguous-npx
+    // branch below whenever the copy npx will select is ambiguous.
+    //
+    // Review round 2, finding 1: `kind === 'global'` alone is NOT the whole
+    // baseline. On the documented end-user invocation — `amicus doctor` run
+    // from the globally-installed copy — the running process IS the global
+    // install, so engine-install-scan.js's own dedup drops the separate
+    // `global` record and only `kind:'running'` survives, carrying
+    // `isGlobal: true` instead (see scanEngineInstalls). Without the
+    // `|| i.isGlobal` clause, the skew check was structurally unable to fire
+    // for exactly the users who filed #133. A TRUE source checkout (running,
+    // no isGlobal) is still excluded, as intended.
+    const globalV = (installs.find((i) => i.kind === 'global' || i.isGlobal) || {}).engineVersion;
+    const skewed = globalV
+      ? npxCopies.filter((i) => i.engineVersion && i.engineVersion !== globalV)
+      : [];
+    if (skewed.length > 0) {
+      const detail = skewed.map((i) => `${i.pkgDir} has ${i.engineVersion}`).join('; ');
+      return {
+        id, name, status: 'warn',
+        message: `engine version skew — global install has ${globalV}; ${detail}`,
+        hint: HINTS.engineVersionSkew,
+      };
+    }
     return {
       id, name, status: 'ok',
       message: `engine present in ${npxCopies.length} npx-cache ${plural(npxCopies.length, 'copy', 'copies')}`,

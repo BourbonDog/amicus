@@ -5,8 +5,40 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **`continue`, `resume`, and `--retry-failed` now inherit the parent session's/wave's tag,
+  instead of dropping it.** `amicus list` now shows a TAG for continuations (they no longer group
+  under `(unattributed)` for `--group-by tag`), and `--tag` is now **rejected** on `continue` and
+  `resume` — the tag can only come from the parent, it cannot be overridden. This deletes a
+  documented limitation, not a bug: `docs/usage.md` carried a paragraph headed "Known limitation: a
+  tag is not inherited", and v4.7.0's own release notes called the gap "future work, not
+  oversights." That limitation is now gone.
+- **`opencode-ai` and `@opencode-ai/sdk` are pinned to exactly `1.18.15`** (previously `^1.2.20` /
+  `^1.1.36`). Dev and CI now run on the same engine version end users resolve, so this is the
+  first release whose test suite actually ran against the engine users get. Honest scope: the pin
+  makes the *resolved* engine a pure function of the amicus version — it does nothing for a user
+  whose installed amicus version hasn't moved, and it does not force any existing npx cache to
+  re-resolve (that mechanism was investigated for #133 and found not to exist).
+
 ### Fixed
 
+- **The no-output backstop message now reports what it observed, not what it guessed.** The old
+  three-line message asserted "likely a listed-but-not-serving model or a dead endpoint" with no
+  evidence behind it; it now names only what the deadline mechanism actually saw, and names
+  `AMICUS_NO_OUTPUT_BACKSTOP_MS` as the live governing window only when it is one, calling it out
+  as an overridden default otherwise.
+- **The no-output backstop window now doubles on a Stage-1 retry, clamped to the leg timeout, so
+  retries can now heal a class of no-output failure that previously required a manual rerun.**
+  This is not a fix for the backstop class itself — only Stage-1 bench/critic/lens units retry;
+  judges, chair, chair-repair, and debate legs do not, and can still hit the backstop with no
+  automatic recovery.
+- **`doctor` now reports engine version skew between installs instead of only grading on
+  presence.** A stale npx-cached copy of `opencode-ai` next to a newer global install now surfaces
+  as a WARN.
+- **`npm root -g` now resolves on Windows** (it previously threw `ENOENT`/`EINVAL`, making the
+  global amicus install invisible to `doctor`). This also un-blinds `doctor --fix`'s donor
+  selection, which depends on seeing that global install to pick a healthy engine to copy from.
 - **`npm test` no longer fails intermittently with `ENOENT: … src\__sizecheck_tmp__.js`.**
   `tests/scripts/check-file-sizes.test.js` writes a real `src/__sizecheck_tmp__.js` and unlinks it a
   few milliseconds later. It cannot move that fixture to a tmpdir: `checkAllTracked()` filters its
@@ -20,6 +52,22 @@ All notable changes to Amicus are documented here. Format follows
   three now read through the new `tests/helpers/read-if-present.js`, which skips a file that vanished
   mid-walk and still throws on any non-ENOENT failure, so an unreadable source file stays loud.
   Pre-existing — reproduces at 0fe6128, unrelated to the graphify integration.
+
+### Internal
+
+- **`finalizeSpendForReopen` extracted to `src/sidecar/reopen-spend.js`**, out of
+  `sidecar/continue.js`, to keep that file under the 300-line gate; `resume.js` was already
+  reaching across into `continue.js` for it, so the shared home is the honest one.
+- **Deleted three unreachable helpers from `scripts/validate-docs.js`** (dead code with no call
+  site remaining after earlier `--check` work landed).
+- **Three doc/marker-freshness gates, all jest-enforced — one genuinely new, two hardened.**
+  `tests/docs-command-coverage.test.js` and the anchor-link gate
+  (`tests/docs-council-toc-anchors.test.js`) both already existed and already ran in CI; this
+  branch hardens them (the former now derives its command list from `bin/amicus.js`'s switch
+  instead of hardcoding five entries, the latter generalizes from one file to sixteen). Only the
+  CLAUDE.md AUTO-marker/cross-link freshness gate in this changelog entry's own commit is genuinely
+  new — `generate-docs --check` had never run in CI before — so a stale `CLAUDE.md` can no longer
+  pass CI silently.
 
 ## [4.7.0] - 2026-08-08
 

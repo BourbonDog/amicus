@@ -23,10 +23,13 @@ jest.mock('../src/opencode-client', () => ({
 }));
 jest.mock('../src/utils/model-validator', () => ({ warnIfNotInCatalog: jest.fn() }));
 
-const { finalizeSpendForReopen, continueSidecar } = require('../src/sidecar/continue');
+const { finalizeSpendForReopen } = require('../src/sidecar/reopen-spend');
+const { continueSidecar } = require('../src/sidecar/continue');
 const { resumeSidecar } = require('../src/sidecar/resume');
 const { runHeadless } = require('../src/headless');
 const { readSpendRows } = require('../src/utils/spend-ledger');
+const { SessionPaths } = require('../src/sidecar/session-utils');
+const { groupRows } = require('../src/spend-query');
 
 function tmp() { return fs.mkdtempSync(path.join(os.tmpdir(), 'reopen-spend-')); }
 
@@ -160,5 +163,121 @@ describe('continue/resume wiring: end-to-end spend-ledger + metadata.usage (Find
     const rows = readSpendRows(ledgerDir);
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('timeout');
+  });
+});
+
+// v4.7.1 Task 7 (R-C): `continue`/`resume` must inherit the parent session's
+// tag instead of writing `tag: null` — today's behavior mis-buckets continued
+// work under `(unattributed)` in `amicus spend --group-by tag`.
+describe('continue/resume inherit the parent tag (v4.7.1 Task 7)', () => {
+  let projectDir;
+  let prevConfigDir;
+  let ledgerDir;
+  let logSpy;
+  const usage = { tokens: { input: 50, output: 20, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, costReported: 0.01 };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-tagspend-'));
+    prevConfigDir = process.env.AMICUS_CONFIG_DIR;
+    ledgerDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-tagspend-ledger-'));
+    process.env.AMICUS_CONFIG_DIR = ledgerDir;
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    if (prevConfigDir === undefined) { delete process.env.AMICUS_CONFIG_DIR; }
+    else { process.env.AMICUS_CONFIG_DIR = prevConfigDir; }
+  });
+
+  /** metadata.json path for a session that hasn't necessarily been read yet. */
+  function newSessionMetadataPath(taskId) {
+    return SessionPaths.metadataFile(SessionPaths.sessionDir(projectDir, taskId));
+  }
+
+  it('a continued session inherits the parent tag onto its own metadata.json', async () => {
+    seedSession(projectDir, 'tagparent1', { tag: 'demo' });
+    runHeadless.mockResolvedValue({
+      summary: 'continued', completed: true, timedOut: false, aborted: false, taskId: 'tagchild1', usage,
+    });
+    await continueSidecar({
+      taskId: 'tagparent1', newTaskId: 'tagchild1', briefing: 'follow-up',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(newSessionMetadataPath('tagchild1'), 'utf-8'));
+    expect(meta.tag).toBe('demo');
+  });
+
+  it('an untagged parent leaves the key ABSENT, not null (D13)', async () => {
+    seedSession(projectDir, 'tagparent2', {});
+    runHeadless.mockResolvedValue({
+      summary: 'continued', completed: true, timedOut: false, aborted: false, taskId: 'tagchild2', usage,
+    });
+    await continueSidecar({
+      taskId: 'tagparent2', newTaskId: 'tagchild2', briefing: 'follow-up',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    const meta = JSON.parse(fs.readFileSync(newSessionMetadataPath('tagchild2'), 'utf-8'));
+    expect(meta.tag).toBeUndefined();
+    expect('tag' in meta).toBe(false);
+  });
+
+  it('the continue spend row carries the tag instead of landing in (unattributed)', async () => {
+    seedSession(projectDir, 'tagparent3', { tag: 'demo' });
+    runHeadless.mockResolvedValue({
+      summary: 'continued', completed: true, timedOut: false, aborted: false, taskId: 'tagchild3', usage,
+    });
+    await continueSidecar({
+      taskId: 'tagparent3', newTaskId: 'tagchild3', briefing: 'follow-up',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    const rows = readSpendRows(ledgerDir);
+    expect(rows[0].tag).toBe('demo');
+    expect(groupRows(rows, 'tag').map((g) => g.key)).not.toContain('(unattributed)');
+  });
+
+  it('resume carries the tag with no change to resume.js', async () => {
+    seedSession(projectDir, 'tagsolo1', { tag: 'demo' });
+    runHeadless.mockResolvedValue({
+      summary: 'resumed', completed: true, timedOut: false, aborted: false, taskId: 'tagsolo1', usage,
+    });
+    await resumeSidecar({
+      taskId: 'tagsolo1', project: projectDir, headless: true, timeout: 5, json: true,
+    });
+    expect(readSpendRows(ledgerDir)[0].tag).toBe('demo');
+  });
+
+  it('a two-hop chain keeps the tag — this is what a ledger-only fix breaks', async () => {
+    // Continue #2 reads continue #1's metadata. If the tag were only forwarded
+    // to appendSpend (a ledger-only pass-through) and never persisted onto the
+    // continuation's own metadata.json, hop #1's ledger row would carry the tag
+    // correctly (read straight off the ORIGINAL parent) but hop #1's metadata.json
+    // would stay tagless — so hop #2, which reads hop #1's metadata as ITS
+    // "parent", would find nothing to inherit and scatter back to
+    // `(unattributed)`. Asserting on the LAST row (not the first) is what makes
+    // this test actually exercise persistence rather than the ledger call alone.
+    seedSession(projectDir, 'tagchain0', { tag: 'demo' });
+    runHeadless.mockResolvedValueOnce({
+      summary: 'first hop', completed: true, timedOut: false, aborted: false, taskId: 'tagchain1', usage,
+    });
+    await continueSidecar({
+      taskId: 'tagchain0', newTaskId: 'tagchain1', briefing: 'follow-up 1',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    runHeadless.mockResolvedValueOnce({
+      summary: 'second hop', completed: true, timedOut: false, aborted: false, taskId: 'tagchain2', usage,
+    });
+    await continueSidecar({
+      taskId: 'tagchain1', newTaskId: 'tagchain2', briefing: 'follow-up 2',
+      model: 'google/gemini-2.5-flash', project: projectDir,
+      headless: true, timeout: 5, json: true,
+    });
+    expect(readSpendRows(ledgerDir).at(-1).tag).toBe('demo');
   });
 });

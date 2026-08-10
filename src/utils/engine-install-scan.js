@@ -27,12 +27,21 @@ function defaultNpmCacheDir(platform) {
   return path.join(os.homedir(), '.npm');
 }
 
-/** Best-effort `npm root -g`. Never throws; returns null on any failure. */
-function defaultNpmRootG() {
+/**
+ * Best-effort `npm root -g`. Never throws; returns null on any failure.
+ * ⚠️ Windows needs shell:true — npm is a .cmd shim, and Node 24's
+ * CVE-2024-27980 hardening rejects .cmd via execFileSync without a shell
+ * (bare `npm` → ENOENT, `npm.cmd` → EINVAL). Without this the global install
+ * was invisible to the whole scan, which also blinded engine-repair's donor
+ * search: `doctor --fix` reported "no healthy sibling install" while one sat
+ * at %AppData%\npm\node_modules.
+ */
+function resolveNpmRootG({ execFileSync, platform } = {}) {
+  const win = (platform || process.platform) === 'win32';
   try {
-    const { execFileSync } = require('child_process');
-    const out = execFileSync('npm', ['root', '-g'], {
-      encoding: 'utf-8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'],
+    const exec = execFileSync || require('child_process').execFileSync;
+    const out = exec(win ? 'npm root -g' : 'npm', win ? [] : ['root', '-g'], {
+      encoding: 'utf-8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'], shell: win,
     });
     return String(out).trim() || null;
   } catch (_e) {
@@ -45,18 +54,61 @@ function safe(fn, fallback) {
   try { return fn(); } catch (_e) { return fallback; }
 }
 
+/**
+ * Resolve the engine version from the roots already on the record. Reads
+ * opencode-ai's own package.json, which is a faithful proxy for the executed
+ * binary because opencode-ai exact-pins all 12 platform sub-packages.
+ * ⚠️ Do NOT read next to the binary: hasOpencodeBinary probes
+ * opencode-windows-<arch>/bin/opencode.exe on win32 but .bin/opencode on
+ * POSIX, and .bin/ has no package.json — a binary-adjacent rule would work on
+ * Windows only and silently return nothing on the two POSIX CI legs.
+ * Uses the real `fs` module directly (not a seam) because this is the
+ * PRODUCTION default — tests always inject `readEngineVersion` instead (the
+ * suite's fakeFs implements no readFileSync).
+ * @returns {string|undefined} undefined (never null) so toEqual fixtures survive
+ */
+function defaultReadEngineVersion({ roots }) {
+  for (const root of roots || []) {
+    try {
+      const raw = require('fs').readFileSync(path.join(root, 'opencode-ai', 'package.json'), 'utf-8');
+      const v = JSON.parse(raw).version;
+      if (v) { return String(v); }
+    } catch (_e) { /* try the next root */ }
+  }
+  return undefined;
+}
+
+/** Resolve p's real path via fs.realpathSync, tolerating any throw. */
+function realNorm(p, fs) {
+  return path.normalize(safe(() => fs.realpathSync(p), p));
+}
+
 /** Drop installs whose pkgDir resolves to the same real path; keep the first. */
 function dedupByRealpath(installs, fs) {
   const seen = new Set();
   const out = [];
   for (const inst of installs) {
-    const real = safe(() => fs.realpathSync(inst.pkgDir), inst.pkgDir);
-    const key = path.normalize(real);
+    const key = realNorm(inst.pkgDir, fs);
     if (seen.has(key)) { continue; }
     seen.add(key);
     out.push(inst);
   }
   return out;
+}
+
+/**
+ * True when pkgDir is the same real install as the npm-global amicus
+ * package (`<gRoot>/amicus`). Recovers "this record IS the global install"
+ * after dedupByRealpath has already dropped the separate `kind:'global'`
+ * record — see the docblock on scanEngineInstalls for why (#133 R-A finding
+ * 1: on the documented end-user invocation, `amicus doctor` run from the
+ * globally-installed copy, `runningPkgDir` IS `<npm root -g>/amicus`, and
+ * listAmicusInstalls pushes `running` first, so dedup keeps `running` and
+ * drops `global`).
+ */
+function isGlobalInstall({ pkgDir, fs, gRoot }) {
+  if (!gRoot) { return false; }
+  return realNorm(pkgDir, fs) === realNorm(path.join(gRoot, 'amicus'), fs);
 }
 
 /**
@@ -76,7 +128,7 @@ function listAmicusInstalls(deps = {}) {
   const platform = deps.platform || process.platform;
   const runningPkgDir = deps.runningPkgDir || path.join(__dirname, '..', '..');
   const npmCacheDir = deps.npmCacheDir || defaultNpmCacheDir(platform);
-  const npmRootG = deps.npmRootG || defaultNpmRootG;
+  const npmRootG = deps.npmRootG || (() => resolveNpmRootG({ platform }));
 
   const raw = [{ kind: 'running', pkgDir: runningPkgDir }];
 
@@ -121,22 +173,53 @@ function classifyLaunch(config) {
  * @param {object} [deps] - listAmicusInstalls seams, plus:
  * @param {(d:{pkgDir:string}) => boolean} [deps.hasOpencodeBinary]
  * @param {(d:{pkgDir:string}) => string[]} [deps.opencodeRoots]
+ * @param {(d:{pkgDir:string, roots:string[]}) => (string|undefined)} [deps.readEngineVersion]
  * @param {() => (object|null)} [deps.readAmicusMcpConfig]
- * @returns {{installs: Array<{kind,pkgDir,engineOk,roots}>, mcpLaunch: string}}
+ * @returns {{installs: Array<{kind,pkgDir,engineOk,roots,engineVersion,isGlobal?}>, mcpLaunch: string}}
  */
 function scanEngineInstalls(deps = {}) {
+  const fs = deps.fs || require('fs');
+  const platform = deps.platform || process.platform;
   const hasOpencodeBinary = deps.hasOpencodeBinary || require('./path-setup').hasOpencodeBinary;
   const opencodeRoots = deps.opencodeRoots || require('./path-setup').opencodeRoots;
+  const readEngineVersion = deps.readEngineVersion || defaultReadEngineVersion;
   const readAmicusMcpConfig = deps.readAmicusMcpConfig
     || (() => require('./mcp-discovery').readAmicusMcpConfig());
 
-  const installs = listAmicusInstalls(deps).map((i) => ({
-    ...i,
-    engineOk: !!hasOpencodeBinary({ pkgDir: i.pkgDir }),
-    roots: opencodeRoots({ pkgDir: i.pkgDir }),
-  }));
+  // Resolve `npm root -g` once and feed that SAME resolver into
+  // listAmicusInstalls (below), so the isGlobal recovery here reuses its
+  // result instead of spawning a second `npm root -g` process.
+  let gRootCache;
+  let gRootResolved = false;
+  const npmRootGRaw = deps.npmRootG || (() => resolveNpmRootG({ platform }));
+  const npmRootGOnce = () => {
+    if (!gRootResolved) { gRootCache = safe(() => npmRootGRaw(), null); gRootResolved = true; }
+    return gRootCache;
+  };
+
+  const rawInstalls = listAmicusInstalls({ ...deps, platform, npmRootG: npmRootGOnce });
+  const gRoot = npmRootGOnce(); // already resolved by listAmicusInstalls above; this just reads the cache
+
+  const installs = rawInstalls.map((i) => {
+    const roots = opencodeRoots({ pkgDir: i.pkgDir });
+    // #133 R-A finding 1: recovers "this IS the global install" for a
+    // record whose `kind:'global'` twin was dropped by dedupByRealpath
+    // (see isGlobalInstall's docblock). Deliberately NOT stamped inside
+    // listAmicusInstalls — its output is pinned exact by toEqual in
+    // tests/utils/engine-install-scan.test.js:57 and :89.
+    const isGlobal = i.kind !== 'global' && isGlobalInstall({ pkgDir: i.pkgDir, fs, gRoot });
+    return {
+      ...i,
+      engineOk: !!hasOpencodeBinary({ pkgDir: i.pkgDir }),
+      roots,
+      engineVersion: safe(() => readEngineVersion({ pkgDir: i.pkgDir, roots }), undefined),
+      ...(isGlobal ? { isGlobal: true } : {}),
+    };
+  });
   const mcpLaunch = classifyLaunch(safe(() => readAmicusMcpConfig(), null));
   return { installs, mcpLaunch };
 }
 
-module.exports = { listAmicusInstalls, scanEngineInstalls, classifyLaunch };
+module.exports = {
+  listAmicusInstalls, scanEngineInstalls, classifyLaunch, resolveNpmRootG,
+};

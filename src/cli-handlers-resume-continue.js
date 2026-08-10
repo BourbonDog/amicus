@@ -21,6 +21,17 @@ const { GATEWAY_MODES } = require('./utils/model-descriptor');
  */
 async function handleResume(args) {
   const useJson = !!args.json;
+  // v4.7.1 Task 7 (R-D): --tag parses today only because getKnownFlags()
+  // unions every usage block's flags (fanout's/start's/council run's), and is
+  // then read by nobody here — resume reuses the parent session's own dir, so
+  // its tag is already inherited (E-5a) with nothing left to set. Mirrors
+  // handleFanout's --tag/--retry-failed rejection shape (cli-handlers-fanout.js:27-29).
+  if (args.tag !== undefined) {
+    process.exit(failJson(useJson, {
+      code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --tag is not supported on resume — the tag is inherited from the parent session',
+    }));
+  }
   const taskId = requireValidTaskId(args, useJson, 'resume', 'Usage: amicus resume <task_id>');
   requireNoUiForJson(args, useJson);
 
@@ -51,6 +62,15 @@ async function handleResume(args) {
  */
 async function handleContinue(args) {
   const useJson = !!args.json;
+  // v4.7.1 Task 7 (R-D): same rationale as handleResume above — a continuation
+  // inherits the parent session's tag onto its own metadata.json (createContinueSessionMetadata),
+  // so a user-supplied --tag here would silently be ignored rather than applied.
+  if (args.tag !== undefined) {
+    process.exit(failJson(useJson, {
+      code: ERROR_CODES.BAD_ARGS,
+      message: 'Error: --tag is not supported on continue — the tag is inherited from the parent session',
+    }));
+  }
   const taskId = requireValidTaskId(args, useJson, 'continue', 'Usage: amicus continue <task_id> --prompt "..."');
 
   // BL-1: accept --prompt-file (XOR --prompt) so the MCP handler can pass a long

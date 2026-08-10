@@ -174,3 +174,29 @@ describe('retryOfWaveId passthrough (SL-2)', () => {
     expect('retryOfWaveId' in fanoutFn.mock.calls[0][0]).toBe(false);
   });
 });
+
+describe('noOutputBackstopMs passthrough (Task 5, #129)', () => {
+  test('forwards a provided noOutputBackstopMs to the transport', async () => {
+    const fanoutFn = jest.fn().mockResolvedValue({ wave: { waveId: 'w', legs: [] }, exitCode: 0 });
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gpt'], prompt: 'p', project: tmp, waveId: 'w', noOutputBackstopMs: 240000 });
+    expect(fanoutFn.mock.calls[0][0].noOutputBackstopMs).toBe(240000);
+  });
+
+  test('forwards an explicit 0 unchanged — 0 is the documented disable hatch', async () => {
+    // A truthiness spread-guard would drop this. no-output-backstop.js:13-15
+    // exists precisely so an explicit 0 is honoured; createNoOutputBackstop
+    // arms only on ms > 0, so 0 means "never arm".
+    const fanoutFn = jest.fn().mockResolvedValue({ wave: { waveId: 'w', legs: [] }, exitCode: 0 });
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gpt'], prompt: 'p', project: tmp, waveId: 'w', noOutputBackstopMs: 0 });
+    expect(fanoutFn.mock.calls[0][0].noOutputBackstopMs).toBe(0);
+  });
+
+  test('omits the key entirely when the caller does not set it', async () => {
+    const fanoutFn = jest.fn().mockResolvedValue({ wave: { waveId: 'w', legs: [] }, exitCode: 0 });
+    const { launchWave } = createLaunchers({ fanoutFn });
+    await launchWave({ models: ['gpt'], prompt: 'p', project: tmp, waveId: 'w' });
+    expect('noOutputBackstopMs' in fanoutFn.mock.calls[0][0]).toBe(false);
+  });
+});

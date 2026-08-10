@@ -155,6 +155,58 @@ function withTimeout(promise, ms, label) {
 }
 
 /**
+ * Task 6 (#129, #133): build the NO_OUTPUT_BACKSTOP reason string. Report
+ * ONLY what the mechanism observed — a deadline passed with no substantive
+ * activity (output/reasoning/tool calls) — never a cause. At the pre-send
+ * firing site (runHeadless, ~:506-518) the backstop can win the race against
+ * sendPromptAsync before the send ever resolves, so "the endpoint accepted
+ * the request" is not even something that site observed. The previous text
+ * asserted "likely a listed-but-not-serving model or a dead endpoint" — a
+ * canned guess with no evidence gate — which sent 30 minutes of #133's
+ * debugging at model ids and API keys while the real cause (an opencode
+ * engine version skew) sat in ~/.local/share/opencode/log/opencode.log the
+ * whole time.
+ *
+ * `fromEnv` distinguishes two ways `ms` was decided, NOT whether
+ * AMICUS_NO_OUTPUT_BACKSTOP_MS is relevant — it is relevant on both branches:
+ *   - fromEnv=true: `ms` IS the live env-resolved value (or its documented
+ *     default) — the message says so directly, "(0 disables)" included,
+ *     because raising the env var changes exactly this window.
+ *   - fromEnv=false: `ms` arrived as a direct, caller-set numeric option.
+ *     Task 6 review (Important finding): this is NOT synonymous with "the
+ *     env var doesn't apply" — src/council/run-retry.js:154 computes a
+ *     Stage-1 retry's escalated window as
+ *     `2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs :
+ *     resolveNoOutputBackstopMs())` and forwards that as a direct
+ *     `noOutputBackstopMs` (line 186) — so a 240s retry-fired backstop is
+ *     "caller-set" by this predicate while still being *derived from* the
+ *     env default doubled. Only src/sidecar/models-probe.js:79's hardcoded,
+ *     non-tunable 30s (PROBE_WINDOW_MS; docs/usage.md:406 promises it's "not
+ *     tunable") is truly independent of the env var. Because a real
+ *     `fromEnv` flag distinguishing those two cases would have to ride the
+ *     same value through src/sidecar/fanout.js, which is line-locked at
+ *     EXACTLY 300/300 this release, the caller-set branch instead names the
+ *     var as something this window *overrides* rather than either claiming
+ *     it governs (false on the probe) or omitting it (false/unhelpful on the
+ *     retry) — true on both, and still points a user at the remedy.
+ *
+ * Kept module-scope and pure (not a closure over runHeadless locals) so it
+ * can be asserted on directly in tests without driving the poll loop; the
+ * `noOutputBackstopReason` closure inside runHeadless just forwards to this
+ * with the per-run `noOutputBackstopMs`/`backstopFromEnv` values, so the two
+ * firing sites there stay identical to what's tested here.
+ * @param {{ms: number, fromEnv: boolean}} args
+ * @returns {string}
+ */
+function formatNoOutputBackstopReason({ ms, fromEnv }) {
+  return 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
+    + `${Math.round(ms / 1000)}s — `
+    + (fromEnv
+      ? 'the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)'
+      : 'a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default');
+}
+
+/**
  * Wait for the OpenCode server to be ready using SDK health check
  */
 async function waitForServer(client, checkHealthFn, maxAttempts = 30) {
@@ -473,16 +525,26 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // deadline `nowMs >= deadline` can never satisfy — the backstop would
     // silently never fire. Finite zero (the documented explicit-disable
     // value) still takes the direct branch: Number.isFinite(0) === true.
-    const noOutputBackstopMs = Number.isFinite(options.noOutputBackstopMs)
-      ? options.noOutputBackstopMs : resolveNoOutputBackstopMs(options._env);
+    // Capture the source-of-truth predicate ONCE and reuse it (do not call
+    // Number.isFinite a second time below) — `backstopFromEnv` is just its
+    // complement: options.noOutputBackstopMs is a direct, caller-set value
+    // exactly when Number.isFinite is true, so the window came from
+    // resolveNoOutputBackstopMs's env-resolution seam exactly when it's false.
+    // Reused both to pick noOutputBackstopMs and to decide whether the reason
+    // string below may name the env var, so the two can never drift apart.
+    const backstopFromEnv = !Number.isFinite(options.noOutputBackstopMs);
+    const noOutputBackstopMs = backstopFromEnv
+      ? resolveNoOutputBackstopMs(options._env) : options.noOutputBackstopMs;
     const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
     let backstopFired = false;
     // Single source for the reason string so the pre-send firing site below and
     // the per-poll firing site further down (still ticking the SAME instance)
-    // can never drift apart.
-    const noOutputBackstopReason = () => 'NO_OUTPUT_BACKSTOP: model produced no '
-      + `output, reasoning, or tool calls in ${Math.round(noOutputBackstopMs / 1000)}s `
-      + '— likely a listed-but-not-serving model or a dead endpoint';
+    // can never drift apart. Forwards to the module-scope, pure
+    // formatNoOutputBackstopReason (below/exported) so tests can assert on the
+    // string shape directly without driving the whole poll loop.
+    const noOutputBackstopReason = () => formatNoOutputBackstopReason({
+      ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
+    });
 
     // Send prompt asynchronously (returns immediately, we poll for results) —
     // bounded by the backstop: an endpoint that accepts but never answers must
@@ -1413,6 +1475,7 @@ module.exports = {
   extractSummary,
   findTrailingFoldMarker,
   formatFoldOutput,
+  formatNoOutputBackstopReason,
   DEFAULT_TIMEOUT,
   FOLD_MARKER,
   COMPLETE_MARKER,

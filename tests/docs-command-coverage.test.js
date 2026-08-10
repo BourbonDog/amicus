@@ -3,6 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf-8');
 const { mustSection, mustIndexOf } = require('./helpers/docs-extract');
+const { getCommandNames } = require('../src/cli');
+
+// F-2: derive the command list from bin/amicus.js's switch instead of
+// hand-maintaining it — a hardcoded array silently stops covering a command
+// added (or renamed) in the switch. `case 'foo':` labels only; matches all
+// 21 current top-level commands.
+const COMMANDS = [...read('bin/amicus.js').matchAll(/^\s*case '([^']+)':/gm)].map((m) => m[1]);
 
 describe('docs command & MCP-tool coverage (B11)', () => {
   const readme = read('README.md');
@@ -10,24 +17,78 @@ describe('docs command & MCP-tool coverage (B11)', () => {
   const trouble = read('docs/troubleshooting.md');
   const toolNames = [...read('src/mcp-tools.js').matchAll(/name: '(amicus_\w+)'/g)].map(m => m[1]);
 
-  it.each(['amicus doctor', 'amicus key', 'amicus council', 'amicus provider', 'amicus init'])('README Commands table documents %s', c => {
-    // Task 17.3 restructure: the per-command `### ` subsections that used to
-    // follow `## Commands` (start options, fanout, other commands) moved to
-    // docs/usage.md (the canonical CLI reference); the table is now bounded
-    // by the next `## ` section instead of a `### ` subheading.
-    const table = mustSection(readme, /## Commands[\s\S]*?(?=\n## )/, 'README.md Commands table');
-    expect(table).toContain(c);
+  // Task 17.3 restructure: the per-command `### ` subsections that used to
+  // follow `## Commands` (start options, fanout, other commands) moved to
+  // docs/usage.md (the canonical CLI reference); the table is now bounded
+  // by the next `## ` section instead of a `### ` subheading.
+  const table = mustSection(readme, /## Commands[\s\S]*?(?=\n## )/, 'README.md Commands table');
+
+  it('the switch labels and getCommandNames() agree', () => {
+    // Free cross-check: src/cli.js:751 exports getCommandNames() as the
+    // repo's stated anti-rot idiom for "every command amicus recognizes",
+    // but nothing pinned it against the actual bin/amicus.js switch. If a
+    // command is added to one and not the other, this goes red.
+    expect(new Set(COMMANDS)).toEqual(new Set(getCommandNames()));
   });
+
+  // Loose matcher deliberately: the README table is 22 rows for 21 commands
+  // (both `amicus council` and `amicus council run` have rows) and carries
+  // placeholders like `| \`amicus status <id>\` |`, so a
+  // `| \`amicus <cmd>\` |` row-matcher would land red on `status`/`watch`.
+  it.each(COMMANDS)('README Commands table documents amicus %s', (cmd) => {
+    expect(table).toContain('amicus ' + cmd);
+  });
+  it.each(COMMANDS)('usage.md documents amicus %s', (cmd) => {
+    expect(usage).toContain('amicus ' + cmd);
+  });
+
+  // Review finding (round 2): `report` — and its siblings below — are
+  // dispatched INSIDE the `case 'council'/'pack'/'template'/'provider':`
+  // branches (src/cli-handlers-{council,pack,template,provider}.js), never
+  // as their own bin/amicus.js switch label, so COMMANDS never sees them
+  // and the loose `amicus council`/`amicus pack`/`amicus template`/
+  // `amicus provider` matcher above is trivially satisfied by any ONE of
+  // their subcommand lines — it would stay green even if
+  // `amicus council report` were deleted from usage.md entirely. The old
+  // hardcoded test happened to pin that one phrase directly; nothing else
+  // in the suite pins a subcommand's literal presence in docs/usage.md
+  // specifically (tests/council-reference-docs.js pins the same 8 council
+  // subcommands, but against docs/council.md — a different file that this
+  // suite doesn't read). Restoring only `report` would silently leave its
+  // siblings exposed to the identical gap, so every documented multi-word
+  // subcommand in this position gets a slot here, giving a future one an
+  // obvious home.
+  //
+  // Round-3 review correction: an earlier version of this comment claimed
+  // `amicus provider list/test/remove` "never appear as `amicus provider
+  // <word>`" and excluded them. That check only looked at the CLI-commands
+  // summary table (usage.md's opening block); it missed the `### amicus
+  // provider` worked-examples section ~600 lines later (usage.md:642-648),
+  // which spells all four subcommands out individually
+  // (`amicus provider add|list|test|remove`, each on its own line) — the
+  // claim was false. Re-verified across the WHOLE of docs/usage.md and
+  // README.md this time (every `amicus <cmd> <bare-word>` occurrence, not
+  // just the summary table): council (9), pack (4), template (2), and
+  // provider (4: add/list/test/remove) are the complete set of multi-word
+  // subcommands in this position — none beyond these.
+  const USAGE_SUBCOMMANDS = [
+    'amicus council tally', 'amicus council stats', 'amicus council report',
+    'amicus council validate', 'amicus council verdict', 'amicus council run',
+    'amicus council save', 'amicus council list', 'amicus council show',
+    'amicus pack save', 'amicus pack list', 'amicus pack show', 'amicus pack rm',
+    'amicus template list', 'amicus template show',
+    'amicus provider add', 'amicus provider list', 'amicus provider test', 'amicus provider remove',
+  ];
+  it.each(USAGE_SUBCOMMANDS)('usage.md documents %s', (phrase) => {
+    expect(usage).toContain(phrase);
+  });
+
   it('README MCP section lists every registered tool (no stale count)', () => {
     expect(readme).not.toMatch(/exposes ten tools/);
     for (const t of toolNames) { expect(readme).toContain(t); }
   });
-  it('usage.md lists every registered MCP tool and the new commands', () => {
+  it('usage.md lists every registered MCP tool', () => {
     for (const t of toolNames) { expect(usage).toContain(t); }
-    expect(usage).toMatch(/amicus doctor/);
-    expect(usage).toMatch(/amicus council report/);
-    expect(usage).toMatch(/amicus provider/);
-    expect(usage).toMatch(/amicus init/);
   });
   it('troubleshooting leads with doctor and drops the false active-servers claim', () => {
     expect(trouble.indexOf('amicus doctor')).toBeGreaterThan(-1);

@@ -73,7 +73,10 @@ function buildRetryPlan(origWaveId, project, { models } = {}) {
     } catch { /* legacy leg — fall back to briefing.md at launch time */ }
     eligible.push({ legId, model, systemPrompt, userMessage, hadSavedContext });
   }
-  return { eligible };
+  // waveMeta has been read since :51 but was discarded; retryFailedWave needs
+  // the tag BEFORE it builds fanoutOpts, and its own origMeta re-read at :176
+  // runs after runFanoutImpl at :153 — too late to influence the launch.
+  return { eligible, tag: waveMeta.tag };
 }
 
 /**
@@ -121,7 +124,7 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
         // --json caller's stdout stays machine-parseable either way.
         const noopDoc = {
           ...buildWaveResult({ waveId: origWaveId, legs: [], status: 'complete' }),
-          retryOf: origWaveId, effective: [], note: 'no failed legs',
+          retryOf: origWaveId, effective: [], note: 'no failed legs', tag: plan.tag,
         };
         process.stdout.write(JSON.stringify(noopDoc, null, 2) + '\n');
       } else {
@@ -148,7 +151,16 @@ async function retryFailedWave(origWaveId, project, opts = {}) {
   // expects (parseModelsList/validateFanoutModels) — an array silently fails
   // every leg pre-flight (BAD_ARGS), matching run-launch.js:41's precedent.
   // Strip our own injection key so it is never forwarded.
-  const fanoutOpts = { ...opts, models: models.join(','), prompt: briefing, project, waveId: newWaveId, retryContexts, retryOfWaveId: origWaveId };
+  const fanoutOpts = {
+    ...opts, models: models.join(','), prompt: briefing, project, waveId: newWaveId, retryContexts, retryOfWaveId: origWaveId,
+    // v4.7.1 Task 8: inherit the ORIGINAL wave's tag — sourced from disk
+    // (plan.tag, off waveMeta) never from opts.tag/args.tag. This is placed
+    // AFTER the `...opts` spread so it wins even if a caller's opts somehow
+    // carried a tag (the CLI itself already rejects --tag + --retry-failed
+    // upstream in cli-handlers-fanout.js). Absent-not-null idiom, matching
+    // fanout.js:152's `...(options.pack ? {...} : {})`.
+    ...(plan.tag ? { tag: plan.tag } : {}),
+  };
   delete fanoutOpts.runFanout;
   const { wave, exitCode } = await runFanoutImpl(fanoutOpts);
 

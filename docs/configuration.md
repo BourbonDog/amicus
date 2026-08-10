@@ -460,6 +460,6 @@ aliases, and council presets carry over untouched.
 | `eslint` ^8.0.0 | Code linting |
 | `lint-staged` ^16.3.2 | Run linters on staged files |
 
-`opencode-ai` (>=1.0.0) is the bundled LLM conversation engine — it is installed automatically as a postinstall step and does not need a separate `npm install`.
+The bundled **`opencode-ai`** engine (pinned to `1.18.15`, matched by `@opencode-ai/sdk`) installs automatically as a normal dependency — you don't install it separately. Its own postinstall lays down the per-platform binaries.
 
 > **Legacy names.** Pre-rebrand `SIDECAR_*` environment variables were removed entirely in v2.0.0 — they are no longer read, with no warning. Rename to the `AMICUS_*` equivalents documented above. See [docs/SHIMS.md](./SHIMS.md) for the full removal record and rename table.
