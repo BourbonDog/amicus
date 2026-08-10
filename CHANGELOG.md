@@ -5,6 +5,8 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+## [4.7.1] - 2026-08-09
+
 ### Changed
 
 - **`continue`, `resume`, and `--retry-failed` now inherit the parent session's/wave's tag,
