@@ -43,33 +43,41 @@ describe('docs command & MCP-tool coverage (B11)', () => {
   });
 
   // Review finding (round 2): `report` — and its siblings below — are
-  // dispatched INSIDE the `case 'council'/'pack'/'template':` branches
-  // (src/cli-handlers-{council,pack,template}.js), never as their own
-  // bin/amicus.js switch label, so COMMANDS never sees them and the loose
-  // `amicus council`/`amicus pack`/`amicus template` matcher above is
-  // trivially satisfied by any ONE of their subcommand lines — it would
-  // stay green even if `amicus council report` were deleted from usage.md
-  // entirely. The old hardcoded test happened to pin that one phrase
-  // directly; nothing else in the suite pins a subcommand's literal
-  // presence in docs/usage.md specifically (tests/council-reference-docs.js
-  // pins the same 8 council subcommands, but against docs/council.md — a
-  // different file that this suite doesn't read). Restoring only `report`
-  // would silently leave its siblings exposed to the identical gap, so
-  // every documented multi-word subcommand in this position gets a slot
-  // here, giving a future one an obvious home.
+  // dispatched INSIDE the `case 'council'/'pack'/'template'/'provider':`
+  // branches (src/cli-handlers-{council,pack,template,provider}.js), never
+  // as their own bin/amicus.js switch label, so COMMANDS never sees them
+  // and the loose `amicus council`/`amicus pack`/`amicus template`/
+  // `amicus provider` matcher above is trivially satisfied by any ONE of
+  // their subcommand lines — it would stay green even if
+  // `amicus council report` were deleted from usage.md entirely. The old
+  // hardcoded test happened to pin that one phrase directly; nothing else
+  // in the suite pins a subcommand's literal presence in docs/usage.md
+  // specifically (tests/council-reference-docs.js pins the same 8 council
+  // subcommands, but against docs/council.md — a different file that this
+  // suite doesn't read). Restoring only `report` would silently leave its
+  // siblings exposed to the identical gap, so every documented multi-word
+  // subcommand in this position gets a slot here, giving a future one an
+  // obvious home.
   //
-  // `amicus provider add|list|test|remove` was checked and excluded:
-  // usage.md documents it as one pipe-alternation line, not repeated
-  // `amicus provider <sub>` phrases (only `add`, the first alternative,
-  // would incidentally match a raw substring check — `list`/`test`/`remove`
-  // never appear as `amicus provider <word>`), so it doesn't fit this
-  // literal-substring pattern.
+  // Round-3 review correction: an earlier version of this comment claimed
+  // `amicus provider list/test/remove` "never appear as `amicus provider
+  // <word>`" and excluded them. That check only looked at the CLI-commands
+  // summary table (usage.md's opening block); it missed the `### amicus
+  // provider` worked-examples section ~600 lines later (usage.md:642-648),
+  // which spells all four subcommands out individually
+  // (`amicus provider add|list|test|remove`, each on its own line) — the
+  // claim was false. Re-verified across the WHOLE of docs/usage.md and
+  // README.md this time (every `amicus <cmd> <bare-word>` occurrence, not
+  // just the summary table): council (9), pack (4), template (2), and
+  // provider (4: add/list/test/remove) are the complete set of multi-word
+  // subcommands in this position — none beyond these.
   const USAGE_SUBCOMMANDS = [
     'amicus council tally', 'amicus council stats', 'amicus council report',
     'amicus council validate', 'amicus council verdict', 'amicus council run',
     'amicus council save', 'amicus council list', 'amicus council show',
     'amicus pack save', 'amicus pack list', 'amicus pack show', 'amicus pack rm',
     'amicus template list', 'amicus template show',
+    'amicus provider add', 'amicus provider list', 'amicus provider test', 'amicus provider remove',
   ];
   it.each(USAGE_SUBCOMMANDS)('usage.md documents %s', (phrase) => {
     expect(usage).toContain(phrase);
