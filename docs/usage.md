@@ -487,14 +487,18 @@ written at MCP launch time, or falls back to the portion of `briefing-stage1.md`
 MCP-only, since the CLI never lists a council row to search in the first place. A bare `--search`
 with no value is a usage error on the CLI. Tag itself is set at launch with `--tag <t>` on
 `start`/`fanout`/`council run` (see those sections above), and is also a dimension for
-`amicus spend --group-by tag`.
+`amicus spend --group-by tag`. `amicus continue` and `amicus resume` don't take a `--tag` of
+their own — they automatically inherit the parent session's tag (see below).
 
-**Known limitation: a tag is not inherited.** `--tag` only ever gets written at launch. `amicus
-continue` and `amicus resume` write their spend rows with no tag, and a `fanout --retry-failed`
-wave does not carry the original wave's tag either (`--tag` combined with `--retry-failed` is
-rejected as a usage error). Since the spend ledger writes `tag: null` whenever none was set, those
-rows group under `(unattributed)` in `amicus spend --group-by tag` rather than under the tag their
-lineage started with.
+**Tag inheritance.** `amicus continue` and `amicus resume` carry the parent session's tag forward
+onto the new/reopened session's metadata and spend row, with no `--tag` flag needed — resume reuses
+the parent's own session directory, and continue copies the tag onto the new session it creates, so
+a multi-hop `continue` chain keeps the same tag at every depth. A `fanout --retry-failed` wave
+likewise replays the original wave's tag automatically. Because the tag in each of these cases
+comes from the session/wave being reopened rather than a fresh launch, `--tag` is rejected as a
+usage error when combined with `continue`, `resume`, or `--retry-failed` — there is nothing new to
+set. An untagged parent still leaves the key absent (not `null`) on the new metadata, and its spend
+row still groups under `(unattributed)`, exactly as an untagged `start`/`fanout` would.
 
 **`amicus status <id>` output.** Human-readable:
 

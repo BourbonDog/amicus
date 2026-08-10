@@ -21,7 +21,9 @@ function finalizeSpendForReopen({ taskId, model, mode, op, result, status, proje
     try {
       const { appendSpend } = require('../utils/spend-ledger');
       const gateway = metadata.gateway || (String(model).startsWith('openrouter/') ? 'openrouter' : 'direct');
-      appendSpend({ taskId, model, mode, usage, op, status, project, gateway }, ctx);
+      // v4.7.1 Task 7 D16: null-not-absent, the OPPOSITE convention from
+      // metadata.tag's absent-not-null (D13) — same `|| null` idiom as start.js:237.
+      appendSpend({ taskId, model, mode, usage, op, status, project, gateway, tag: metadata.tag || null }, ctx);
     } catch { /* best-effort */ }
   }
   return { usage };

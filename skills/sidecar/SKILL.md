@@ -380,7 +380,9 @@ amicus list --json         # Output as JSON
 - `--cwd <path>`: Project directory (default: current directory)
 
 Rows show the `--tag <t>` label set at launch time (`start`/`fanout`/`council run` —
-not a `list` flag itself); untagged sessions show blank.
+not a `list` flag itself), or inherited automatically from the parent session on
+`continue`/`resume` (neither accepts its own `--tag` — the tag comes from the
+parent, so there's nothing new to set); untagged sessions show blank.
 
 ### Resume a Sidecar
 

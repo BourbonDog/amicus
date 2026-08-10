@@ -88,7 +88,7 @@ Build on the previous sidecar's findings. The user wants to continue or extend t
 
 /** Create session metadata for continuation */
 function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
-  const { model, briefing, headless, agent, gateway, resolutionVersion } = options;
+  const { model, briefing, headless, agent, gateway, resolutionVersion, tag } = options;
 
   const sessionDir = SessionPaths.sessionDir(project, taskId);
   fs.mkdirSync(sessionDir, { recursive: true });
@@ -102,7 +102,11 @@ function createContinueSessionMetadata(taskId, project, options, oldTaskId) {
     agent: agent || (headless ? 'build' : 'chat'),
     status: 'running',
     createdAt: new Date().toISOString(),
-    continuesFrom: oldTaskId
+    continuesFrom: oldTaskId,
+    // v4.7.1 Task 7 (D13): absent-not-null, same idiom as start-metadata.js:50
+    // — a continuation inherits the parent's tag so a continue chain never
+    // scatters into `(unattributed)`.
+    ...(tag ? { tag } : {}),
   };
   // #61 Task 5.2 (best-effort provenance): only present when THIS continue
   // call freshly routed an explicit --model through the gateway router — the
@@ -176,6 +180,7 @@ async function continueSidecar(options) {
 
   const sessionDir = createContinueSessionMetadata(newTaskId, project, {
     model, briefing, headless, agent: effectiveAgent, gateway, resolutionVersion,
+    tag: oldMetadata.tag, // v4.7.1 Task 7: inherit the parent's tag (absent if the parent had none).
   }, oldTaskId);
 
   // Lock the NEW continuation session dir too — not just the previous one — so a
