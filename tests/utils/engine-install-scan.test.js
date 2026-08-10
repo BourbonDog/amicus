@@ -105,6 +105,11 @@ describe('resolveNpmRootG', () => {
     expect(resolveNpmRootG({ execFileSync, platform: 'win32' }))
       .toBe('C:\\Users\\t\\AppData\\Roaming\\npm\\node_modules');
     expect(calls.some((c) => c.shell === true)).toBe(true);
+    // DEP0190 (Node >=24): passing an args array together with shell:true is
+    // deprecated. On the shell path the command must carry its own args
+    // (`npm root -g`), never a separate args array — pin that here so a
+    // regression to execFileSync('npm', ['root','-g'], {shell:true}) is caught.
+    expect(calls.every((c) => !c.args || c.args.length === 0)).toBe(true);
   });
 
   it('returns null rather than throwing when npm cannot be resolved at all', () => {
@@ -247,7 +252,7 @@ describe('scanEngineInstalls', () => {
   // baseline (installs.find(kind==='global')) can never fire for exactly the
   // topology #133 was filed from. `isGlobal` recovers it in scanEngineInstalls
   // ONLY — never in listAmicusInstalls, whose output is pinned exact by
-  // toEqual at :50 and :82 above (verified unchanged by the two tests there
+  // toEqual at :57 and :89 above (verified unchanged by the two tests there
   // still passing, unedited, after this change).
   test('stamps isGlobal on the running record when dedup collapsed it with the would-be global entry', () => {
     const SHARED = path.join('C:', 'real', 'amicus');

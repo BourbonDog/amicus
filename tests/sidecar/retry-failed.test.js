@@ -260,7 +260,12 @@ describe('Task 8: --retry-failed inherits the original wave tag', () => {
     writeLeg(proj, 't2-1', { taskId: 't2-1', model: 'gpt', status: 'error' }, 'c1');
     let captured = null;
     const fake = async (o) => { captured = o; return { wave: null, exitCode: 0 }; };
-    await retryFailedWave('t2', proj, { runFanout: fake, quiet: true });
+    // Fix-wave: opts carries a DIFFERENT tag ('sneaky') so this actually pins
+    // fanout-retry.js's `...opts` -then- explicit `...(plan.tag ? {tag} : {})`
+    // ordering. Without a competing opts.tag, a misordered spread or an
+    // `opts.tag` fallback would still land on 'demo' by coincidence and this
+    // test would pass either way.
+    await retryFailedWave('t2', proj, { runFanout: fake, quiet: true, tag: 'sneaky' });
     expect(captured.tag).toBe('demo');
   });
 
@@ -346,7 +351,9 @@ describe('Task 8: --retry-failed inherits the original wave tag', () => {
     writeWave(proj, 't5', 'partial', ['t5-1'], ['gpt']); // no tag
     writeLeg(proj, 't5-1', { taskId: 't5-1', model: 'gpt', status: 'error' }, 'c1');
     let newWaveId;
+    let captured = null;
     const fake = async (o) => {
+      captured = o;
       newWaveId = o.waveId;
       const legIds = deriveLegIds(o.waveId, 1);
       const wDir = getSessionDir(proj, o.waveId);
@@ -359,6 +366,13 @@ describe('Task 8: --retry-failed inherits the original wave tag', () => {
         legs: [{ taskId: legIds[0], model: 'gpt', status: 'complete' }] }, exitCode: 0 };
     };
     await retryFailedWave('t5', proj, { runFanout: fake, quiet: true });
+    // Fix-wave: assert directly on the CAPTURED fanout options, not just the
+    // fake's derived metadata — the fake writes tag via
+    // `...(o.tag ? { tag: o.tag } : {})`, which would launder a
+    // `tag: plan.tag || null` regression in fanout-retry.js (o.tag === null
+    // is falsy, so the fake still omits the key) and this test would still
+    // pass on newMeta alone.
+    expect(captured).not.toHaveProperty('tag');
     const newMeta = JSON.parse(fs.readFileSync(path.join(getSessionDir(proj, newWaveId), 'metadata.json'), 'utf-8'));
     expect(newMeta.tag).toBeUndefined();
     expect(newMeta).not.toHaveProperty('tag');

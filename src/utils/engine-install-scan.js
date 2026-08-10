@@ -40,7 +40,7 @@ function resolveNpmRootG({ execFileSync, platform } = {}) {
   const win = (platform || process.platform) === 'win32';
   try {
     const exec = execFileSync || require('child_process').execFileSync;
-    const out = exec('npm', ['root', '-g'], {
+    const out = exec(win ? 'npm root -g' : 'npm', win ? [] : ['root', '-g'], {
       encoding: 'utf-8', timeout: 4000, stdio: ['ignore', 'pipe', 'ignore'], shell: win,
     });
     return String(out).trim() || null;
@@ -206,7 +206,7 @@ function scanEngineInstalls(deps = {}) {
     // record whose `kind:'global'` twin was dropped by dedupByRealpath
     // (see isGlobalInstall's docblock). Deliberately NOT stamped inside
     // listAmicusInstalls — its output is pinned exact by toEqual in
-    // tests/utils/engine-install-scan.test.js:50 and :82.
+    // tests/utils/engine-install-scan.test.js:57 and :89.
     const isGlobal = i.kind !== 'global' && isGlobalInstall({ pkgDir: i.pkgDir, fs, gRoot });
     return {
       ...i,

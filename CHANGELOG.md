@@ -25,8 +25,9 @@ All notable changes to Amicus are documented here. Format follows
 
 - **The no-output backstop message now reports what it observed, not what it guessed.** The old
   three-line message asserted "likely a listed-but-not-serving model or a dead endpoint" with no
-  evidence behind it; it now names only what the deadline mechanism actually saw, and only names
-  the `AMICUS_NO_OUTPUT_BACKSTOP_MS` window when that env var genuinely governs it.
+  evidence behind it; it now names only what the deadline mechanism actually saw, and names
+  `AMICUS_NO_OUTPUT_BACKSTOP_MS` as the live governing window only when it is one, calling it out
+  as an overridden default otherwise.
 - **The no-output backstop window now doubles on a Stage-1 retry, clamped to the leg timeout, so
   retries can now heal a class of no-output failure that previously required a manual rerun.**
   This is not a fix for the backstop class itself — only Stage-1 bench/critic/lens units retry;
@@ -59,10 +60,14 @@ All notable changes to Amicus are documented here. Format follows
   reaching across into `continue.js` for it, so the shared home is the honest one.
 - **Deleted three unreachable helpers from `scripts/validate-docs.js`** (dead code with no call
   site remaining after earlier `--check` work landed).
-- **Three new doc/marker-freshness gates**, all jest-enforced (previously manual-only or
-  nonexistent): a command-coverage cross-check between `docs/` and the CLI's real subcommand list,
-  an in-page anchor-link gate across `docs/`, and the CLAUDE.md AUTO-marker/cross-link freshness
-  gate in this changelog entry's own commit — a stale `CLAUDE.md` can no longer pass CI silently.
+- **Three doc/marker-freshness gates, all jest-enforced — one genuinely new, two hardened.**
+  `tests/docs-command-coverage.test.js` and the anchor-link gate
+  (`tests/docs-council-toc-anchors.test.js`) both already existed and already ran in CI; this
+  branch hardens them (the former now derives its command list from `bin/amicus.js`'s switch
+  instead of hardcoding five entries, the latter generalizes from one file to sixteen). Only the
+  CLAUDE.md AUTO-marker/cross-link freshness gate in this changelog entry's own commit is genuinely
+  new — `generate-docs --check` had never run in CI before — so a stale `CLAUDE.md` can no longer
+  pass CI silently.
 
 ## [4.7.0] - 2026-08-08
 

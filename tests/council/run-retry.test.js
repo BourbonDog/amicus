@@ -486,10 +486,15 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
   // launchWave mock + a single dead bench leg) rather than inventing a new
   // one — it drives the real retryStage1Losses bench path and reads back
   // what run-retry.js actually handed to launchWave.
-  async function runRetryCapturingLaunchOpts({ timeout }) {
+  // noOutputBackstopMs is accepted alongside timeout (fix-wave addition) so
+  // callers below can drive the Number.isFinite(o.noOutputBackstopMs) TRUE
+  // branch — fakeCtx's own oOverrides spread already threads it onto `o`,
+  // but this helper previously destructured only `{ timeout }` and silently
+  // dropped it.
+  async function runRetryCapturingLaunchOpts({ timeout, noOutputBackstopMs }) {
     const launchWave = jest.fn().mockResolvedValue(
       { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', 'boom')] }, exitCode: 0 });
-    const ctx = fakeCtx({ timeout }, { launchWave });
+    const ctx = fakeCtx({ timeout, noOutputBackstopMs }, { launchWave });
     await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [deadLeg('b')], counts: COUNTS });
     return launchWave.mock.calls[0][0];
   }
@@ -529,5 +534,30 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
     delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
     const launched = await runRetryCapturingLaunchOpts({ timeout: 3 });
     expect(launched.noOutputBackstopMs).toBe(180000);
+  });
+
+  // Fix-wave regression guard: legTimeoutMs = (o.timeout || 15) * 60 * 1000 —
+  // every test above passes an explicit timeout, and fakeCtx's own default is
+  // timeout:5, so nothing previously drove o.timeout actually being unset.
+  // If `|| 15` were ever dropped, o.timeout undefined -> legTimeoutMs is NaN
+  // -> Math.min(240000, NaN) is NaN -> headless.js's Number.isFinite check
+  // rejects it -> silent fallback to the 120000 default, with every other
+  // test in this describe block still green (they all pin an explicit
+  // timeout, never the default).
+  test('an unset o.timeout falls back to the 15-minute leg default', async () => {
+    // 240000 (the doubled default backstop) < 900000 (15min leg timeout), so
+    // the clamp does not bind here — this isolates the `|| 15` default itself.
+    delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
+    const launched = await runRetryCapturingLaunchOpts({ timeout: undefined });
+    expect(launched.noOutputBackstopMs).toBe(240000);
+  });
+
+  // Companion: the Number.isFinite(o.noOutputBackstopMs) TRUE branch at :154
+  // is also uncovered above — council never populates o.noOutputBackstopMs,
+  // so every prior test in this file takes the FALSE branch (resolved from
+  // env/default). Drive it directly via the helper's new pass-through.
+  test('Number.isFinite(o.noOutputBackstopMs) true branch: an explicit value on o is doubled directly, not re-resolved from env', async () => {
+    const launched = await runRetryCapturingLaunchOpts({ timeout: 15, noOutputBackstopMs: 50000 });
+    expect(launched.noOutputBackstopMs).toBe(100000);
   });
 });
