@@ -1,0 +1,52 @@
+/**
+ * Marker-freshness gate (F-3).
+ *
+ * Promotes `node scripts/generate-docs.js --check` to a jest assertion so a
+ * stale CLAUDE.md fails CI, not just a manually-run script. The pre-commit
+ * hook runs generate-docs in WRITE mode and self-heals, so --check never runs
+ * automatically anywhere else — a stale CLAUDE.md can only be caught here.
+ *
+ * Calls the exported helpers in-process. Never call `main()` or
+ * `runCheckMode()` from generate-docs.js — both call `process.exit`, which
+ * would kill the jest worker.
+ */
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+const {
+  buildDirectoryTree,
+  buildModuleIndex,
+  checkMarkersAreCurrent,
+  validateCrossLinks,
+  TREE_DIRS,
+} = require('../../scripts/generate-docs');
+
+const ROOT = path.join(__dirname, '..', '..');
+const read = file => fs.readFileSync(path.join(ROOT, file), 'utf-8');
+
+const FIX_COMMAND = 'node scripts/generate-docs.js';
+
+describe('CLAUDE.md marker freshness (F-3)', () => {
+  it('CLAUDE.md AUTO markers are current', () => {
+    const tree = buildDirectoryTree(ROOT, TREE_DIRS);
+    const modules = buildModuleIndex(ROOT);
+    const stale = checkMarkersAreCurrent(read('CLAUDE.md'), { tree, modules });
+    if (stale.length > 0) {
+      throw new Error(
+        `Stale CLAUDE.md AUTO marker(s): ${stale.join(', ')}. Run \`${FIX_COMMAND}\` to regenerate, then commit CLAUDE.md.`,
+      );
+    }
+    expect(stale).toEqual([]);
+  });
+
+  it('CLAUDE.md cross-links all resolve', () => {
+    const errors = validateCrossLinks(read('CLAUDE.md'), ROOT);
+    if (errors.length > 0) {
+      throw new Error(
+        `Broken CLAUDE.md cross-link(s):\n${errors.join('\n')}\nRun \`${FIX_COMMAND}\` and fix any remaining broken links by hand.`,
+      );
+    }
+    expect(errors).toEqual([]);
+  });
+});
