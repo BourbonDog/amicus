@@ -167,12 +167,29 @@ function withTimeout(promise, ms, label) {
  * engine version skew) sat in ~/.local/share/opencode/log/opencode.log the
  * whole time.
  *
- * `fromEnv` gates whether the message names AMICUS_NO_OUTPUT_BACKSTOP_MS:
- * name it only when `ms` actually came from that env-resolution seam.
- * src/sidecar/models-probe.js:79 passes a hardcoded, non-tunable 30s
- * (PROBE_WINDOW_MS) as a direct option, and docs/usage.md:406 already
- * promises users that probe window is "not tunable" — naming the knob
- * unconditionally would trade the removed guess for a new false statement.
+ * `fromEnv` distinguishes two ways `ms` was decided, NOT whether
+ * AMICUS_NO_OUTPUT_BACKSTOP_MS is relevant — it is relevant on both branches:
+ *   - fromEnv=true: `ms` IS the live env-resolved value (or its documented
+ *     default) — the message says so directly, "(0 disables)" included,
+ *     because raising the env var changes exactly this window.
+ *   - fromEnv=false: `ms` arrived as a direct, caller-set numeric option.
+ *     Task 6 review (Important finding): this is NOT synonymous with "the
+ *     env var doesn't apply" — src/council/run-retry.js:154 computes a
+ *     Stage-1 retry's escalated window as
+ *     `2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs :
+ *     resolveNoOutputBackstopMs())` and forwards that as a direct
+ *     `noOutputBackstopMs` (line 186) — so a 240s retry-fired backstop is
+ *     "caller-set" by this predicate while still being *derived from* the
+ *     env default doubled. Only src/sidecar/models-probe.js:79's hardcoded,
+ *     non-tunable 30s (PROBE_WINDOW_MS; docs/usage.md:406 promises it's "not
+ *     tunable") is truly independent of the env var. Because a real
+ *     `fromEnv` flag distinguishing those two cases would have to ride the
+ *     same value through src/sidecar/fanout.js, which is line-locked at
+ *     EXACTLY 300/300 this release, the caller-set branch instead names the
+ *     var as something this window *overrides* rather than either claiming
+ *     it governs (false on the probe) or omitting it (false/unhelpful on the
+ *     retry) — true on both, and still points a user at the remedy.
+ *
  * Kept module-scope and pure (not a closure over runHeadless locals) so it
  * can be asserted on directly in tests without driving the poll loop; the
  * `noOutputBackstopReason` closure inside runHeadless just forwards to this
@@ -186,7 +203,7 @@ function formatNoOutputBackstopReason({ ms, fromEnv }) {
     + `${Math.round(ms / 1000)}s — `
     + (fromEnv
       ? 'the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)'
-      : 'a caller-set backstop window');
+      : 'a caller-set window overriding the AMICUS_NO_OUTPUT_BACKSTOP_MS default');
 }
 
 /**
