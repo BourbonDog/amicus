@@ -523,7 +523,7 @@ Complete mapping of test files to their targets and focus areas.
 | `evals/tests/result_writer.test.js` | Result output | Summary formatting, file writing |
 | `scripts/check-secrets.test.js` | Secret detection | Pattern matching, allowlist, multi-secret |
 | `scripts/check-file-sizes.test.js` | File size limits | Line counting, batch checking |
-| `scripts/validate-docs.test.js` | Doc drift detection | Section extraction, drift comparison, staged file check |
+| `scripts/validate-docs.test.js` | Doc drift detection | Staged file check |
 | `helpers/cdp-client.test.js` | CDP helper | Mock HTTP+WebSocket CDP server, factory methods |
 | `electron-headless-mode.test.js` | Electron headless | Source-level verify `AMICUS_HEADLESS_TEST` guard |
 | `cli-headless-e2e.integration.test.js` | CLI E2E (real LLM) | `start --no-ui`, `list`, `read`, `read --metadata` |

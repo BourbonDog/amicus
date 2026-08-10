@@ -16,80 +16,8 @@ const { execFileSync } = require('node:child_process');
 const { resolve, basename } = require('node:path');
 
 const CONFIG = {
-  docFile: 'CLAUDE.md',
   trackedDirs: ['src/', 'bin/', 'scripts/'],
-  mappings: [
-    { section: 'Directory Structure', dirs: ['src/', 'bin/', 'scripts/'] },
-    { section: 'Key Modules', dir: 'src/', pattern: /\.js$/ },
-  ],
 };
-
-/**
- * Extract a markdown section by its heading (## level).
- * Returns all content between the matched heading and the next heading
- * at the same or higher level.
- * @param {string} markdown - Full markdown content
- * @param {string} heading - Section heading text
- * @returns {string} Section content (empty string if not found)
- */
-function extractSection(markdown, heading) {
-  const lines = markdown.split('\n');
-  let inSection = false;
-  let sectionLevel = 0;
-  const result = [];
-
-  for (const line of lines) {
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const text = headingMatch[2].trim();
-      if (text === heading) {
-        inSection = true;
-        sectionLevel = level;
-        continue;
-      } else if (inSection && level <= sectionLevel) {
-        break;
-      }
-    }
-    if (inSection) {
-      result.push(line);
-    }
-  }
-
-  return result.join('\n').trim();
-}
-
-/**
- * Find .js filenames mentioned in a markdown section.
- * Searches code blocks and markdown table rows for file references.
- * @param {string} section - Markdown section content
- * @returns {string[]} Array of unique .js filenames
- */
-function findFilesInSection(section) {
-  const files = new Set();
-  const regex = /[\w/.-]*?([\w.-]+\.js)\b/g;
-  let match;
-  while ((match = regex.exec(section)) !== null) {
-    files.add(match[1]);
-  }
-  return [...files];
-}
-
-/**
- * Compare documented files against actual files on disk.
- * @param {string[]} docFiles - Filenames from docs
- * @param {string[]} diskFiles - Filenames from filesystem
- * @returns {{missingFromDocs: string[], missingFromDisk: string[]}}
- */
-function checkDrift(docFiles, diskFiles) {
-  const docSet = new Set(docFiles);
-  const diskSet = new Set(diskFiles);
-
-  const missingFromDocs = diskFiles.filter(f => !docSet.has(f));
-  const missingFromDisk = docFiles.filter(f => !diskSet.has(f));
-
-  return { missingFromDocs, missingFromDisk };
-}
 
 /**
  * Check if staged files include tracked directories but not CLAUDE.md.
@@ -181,8 +109,5 @@ if (require.main === module) {
 }
 
 module.exports = {
-  extractSection,
-  findFilesInSection,
-  checkDrift,
   checkStagedFilesDrift,
 };
