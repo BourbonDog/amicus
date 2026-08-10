@@ -705,16 +705,31 @@ the quoting surface for no benefit.
 return installs.find((i) => i.engineOk && norm(i.pkgDir) !== destReal) || null;
 ```
 
+> ### ⛔ SUPERSEDED — DO NOT IMPLEMENT THE CODE BLOCK BELOW
+>
+> The rule in this step (`kind !== 'running'`) is **refuted by erratum E-1f**, and again by
+> **E-1h** and **E-1g**. It is preserved verbatim only as the historical record of what the plan
+> originally said. **What actually shipped** is the two-tier rule, landed across Tasks 3 and 4:
+>
+> ```javascript
+> // tier 1: an explicitly-global donor wins outright (isGlobal covers the case
+> // where dedupByRealpath collapsed the global record into `running`)
+> // tier 2: rank the remainder by engineVersion, newest first
+> ```
+>
+> Read E-1f, E-1g and E-1h before touching `findDonor`. `kind !== 'running'` donates a
+> healthy-but-stale npx copy on an ordinary end-user machine, because `dedupByRealpath` keeps the
+> `running` record first and a global install invoked as `amicus doctor` therefore has **no
+> `global` record at all**.
+
+<details><summary>Historical: the original, refuted Step 4 text</summary>
+
 `listAmicusInstalls` emits `running` first, so on a developer machine this donates the dev tree's
 engine — which after Task 2 is pinned but on any pre-Task-2 or mid-bump checkout is 1.2.20. Prefer
 a non-running donor, falling back to the old behaviour so a single-install machine still self-heals:
 
 ```javascript
-// Prefer a non-running donor: listAmicusInstalls emits the running copy first,
-// and a dev/source checkout legitimately sits at a different engine version
-// from the installed copies. Donating it self-heals INTO the very skew the
-// engine-mcp check exists to detect. Fall back to any healthy copy so a
-// single-install machine still repairs.
+// REFUTED by E-1f — do not implement. See the banner above.
 const healthy = installs.filter((i) => i.engineOk && norm(i.pkgDir) !== destReal);
 return healthy.find((i) => i.kind !== 'running') || healthy[0] || null;
 ```
@@ -722,6 +737,8 @@ return healthy.find((i) => i.kind !== 'running') || healthy[0] || null;
 Add a test in `tests/utils/engine-repair.test.js` asserting that with a healthy `running` and a
 healthy `global` both present, the **global** is chosen; and that with only `running` healthy, it is
 still chosen.
+
+</details>
 
 - [ ] **Step 5: Run both suites**
 
@@ -882,6 +899,20 @@ Update the `@returns` jsdoc at `:125` to `{kind,pkgDir,engineOk,roots,engineVers
 `defaultReadEngineVersion` only if a test needs it directly.
 
 - [ ] **Step 4: Report skew as a WARN in the doctor check**
+
+> ### ⚠️ THIS STEP IS INCOMPLETE AS WRITTEN — see erratum E-1g
+>
+> The snippet below derives the baseline with `installs.find((i) => i.kind === 'global')`. On an
+> ordinary end-user machine that returns **undefined**: `dedupByRealpath` keeps the `running`
+> record first, so a global install invoked as `amicus doctor` has no `global` record at all,
+> `globalV` is undefined, `skewed` is empty, and the check reports `ok`. **As written, the
+> release's headline check could never fire for the users who filed #133.**
+>
+> **What shipped** adds an `isGlobal: true` stamp in `scanEngineInstalls` — never in
+> `listAmicusInstalls`, whose `toEqual` fixtures are the contract — and makes the baseline
+> `installs.find((i) => i.kind === 'global' || i.isGlobal)`. Everything else in this step
+> (WARN-not-ERROR, excluding `kind === 'running'`, unresolved versions never signalling skew)
+> stands as written.
 
 `src/utils/doctor-engine-check.js`. The existing `:40` filter and the `broken` branch at `:49-68`
 stay exactly as they are — a **missing** engine is still the primary failure and still errors when
