@@ -155,6 +155,41 @@ function withTimeout(promise, ms, label) {
 }
 
 /**
+ * Task 6 (#129, #133): build the NO_OUTPUT_BACKSTOP reason string. Report
+ * ONLY what the mechanism observed — a deadline passed with no substantive
+ * activity (output/reasoning/tool calls) — never a cause. At the pre-send
+ * firing site (runHeadless, ~:506-518) the backstop can win the race against
+ * sendPromptAsync before the send ever resolves, so "the endpoint accepted
+ * the request" is not even something that site observed. The previous text
+ * asserted "likely a listed-but-not-serving model or a dead endpoint" — a
+ * canned guess with no evidence gate — which sent 30 minutes of #133's
+ * debugging at model ids and API keys while the real cause (an opencode
+ * engine version skew) sat in ~/.local/share/opencode/log/opencode.log the
+ * whole time.
+ *
+ * `fromEnv` gates whether the message names AMICUS_NO_OUTPUT_BACKSTOP_MS:
+ * name it only when `ms` actually came from that env-resolution seam.
+ * src/sidecar/models-probe.js:79 passes a hardcoded, non-tunable 30s
+ * (PROBE_WINDOW_MS) as a direct option, and docs/usage.md:406 already
+ * promises users that probe window is "not tunable" — naming the knob
+ * unconditionally would trade the removed guess for a new false statement.
+ * Kept module-scope and pure (not a closure over runHeadless locals) so it
+ * can be asserted on directly in tests without driving the poll loop; the
+ * `noOutputBackstopReason` closure inside runHeadless just forwards to this
+ * with the per-run `noOutputBackstopMs`/`backstopFromEnv` values, so the two
+ * firing sites there stay identical to what's tested here.
+ * @param {{ms: number, fromEnv: boolean}} args
+ * @returns {string}
+ */
+function formatNoOutputBackstopReason({ ms, fromEnv }) {
+  return 'NO_OUTPUT_BACKSTOP: no output, reasoning, or tool calls in '
+    + `${Math.round(ms / 1000)}s — `
+    + (fromEnv
+      ? 'the AMICUS_NO_OUTPUT_BACKSTOP_MS window (0 disables)'
+      : 'a caller-set backstop window');
+}
+
+/**
  * Wait for the OpenCode server to be ready using SDK health check
  */
 async function waitForServer(client, checkHealthFn, maxAttempts = 30) {
@@ -473,16 +508,26 @@ async function runHeadless(model, systemPrompt, userMessage, taskId, project, ti
     // deadline `nowMs >= deadline` can never satisfy — the backstop would
     // silently never fire. Finite zero (the documented explicit-disable
     // value) still takes the direct branch: Number.isFinite(0) === true.
-    const noOutputBackstopMs = Number.isFinite(options.noOutputBackstopMs)
-      ? options.noOutputBackstopMs : resolveNoOutputBackstopMs(options._env);
+    // Capture the source-of-truth predicate ONCE and reuse it (do not call
+    // Number.isFinite a second time below) — `backstopFromEnv` is just its
+    // complement: options.noOutputBackstopMs is a direct, caller-set value
+    // exactly when Number.isFinite is true, so the window came from
+    // resolveNoOutputBackstopMs's env-resolution seam exactly when it's false.
+    // Reused both to pick noOutputBackstopMs and to decide whether the reason
+    // string below may name the env var, so the two can never drift apart.
+    const backstopFromEnv = !Number.isFinite(options.noOutputBackstopMs);
+    const noOutputBackstopMs = backstopFromEnv
+      ? resolveNoOutputBackstopMs(options._env) : options.noOutputBackstopMs;
     const noOutputBackstop = createNoOutputBackstop({ ms: noOutputBackstopMs, startedAt: Date.now() });
     let backstopFired = false;
     // Single source for the reason string so the pre-send firing site below and
     // the per-poll firing site further down (still ticking the SAME instance)
-    // can never drift apart.
-    const noOutputBackstopReason = () => 'NO_OUTPUT_BACKSTOP: model produced no '
-      + `output, reasoning, or tool calls in ${Math.round(noOutputBackstopMs / 1000)}s `
-      + '— likely a listed-but-not-serving model or a dead endpoint';
+    // can never drift apart. Forwards to the module-scope, pure
+    // formatNoOutputBackstopReason (below/exported) so tests can assert on the
+    // string shape directly without driving the whole poll loop.
+    const noOutputBackstopReason = () => formatNoOutputBackstopReason({
+      ms: noOutputBackstopMs, fromEnv: backstopFromEnv,
+    });
 
     // Send prompt asynchronously (returns immediately, we poll for results) —
     // bounded by the backstop: an endpoint that accepts but never answers must
@@ -1413,6 +1458,7 @@ module.exports = {
   extractSummary,
   findTrailingFoldMarker,
   formatFoldOutput,
+  formatNoOutputBackstopReason,
   DEFAULT_TIMEOUT,
   FOLD_MARKER,
   COMPLETE_MARKER,

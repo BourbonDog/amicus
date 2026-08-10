@@ -55,7 +55,7 @@ jest.mock('../src/opencode-client', () => ({
 const mockLogger = { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() };
 jest.mock('../src/utils/logger', () => ({ logger: mockLogger }));
 
-const { runHeadless } = require('../src/headless');
+const { runHeadless, formatNoOutputBackstopReason } = require('../src/headless');
 const { statusFromResult } = require('../src/utils/result-schema');
 
 const MODEL = 'openrouter/qwen/qwen3.7-max';
@@ -347,4 +347,46 @@ describe('v4.6.2 PR3 Task 1: the noOutputBackstopMs coercion guard', () => {
     expect(result.timedOut).toBe(true);
     expect(result.completed).toBe(false);
   }, 20000);
+});
+
+/**
+ * Task 6 (#129, #133): the reason string reports only what the deadline
+ * mechanism actually observed — a deadline passed with no substantive
+ * activity — never a cause. The removed guess ("likely a listed-but-not-
+ * serving model or a dead endpoint") sent 30 minutes of #133's debugging at
+ * model ids and API keys while the real cause (an opencode engine version
+ * skew) sat in ~/.local/share/opencode/log/opencode.log the whole time.
+ *
+ * These tests exercise `formatNoOutputBackstopReason` directly — a pure,
+ * module-scope helper lifted out of the `noOutputBackstopReason` closure so
+ * the string can be asserted on without driving the whole runHeadless poll
+ * loop. The two firing sites (pre-send and per-poll) both still call the
+ * original in-closure wrapper, which just forwards to this helper with the
+ * per-run `noOutputBackstopMs`/`backstopFromEnv` values — so proving the
+ * helper's output also proves what those sites will emit.
+ */
+describe('formatNoOutputBackstopReason: reports only what the deadline observed, never a cause', () => {
+  test('states only what was observed, with no cause claim — proof: fails if the removed guess ("likely"/"dead endpoint"/"not serving"/"accepted") is ever reintroduced, or if the required prefix/phrase is dropped', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 120000, fromEnv: true });
+    expect(msg.startsWith('NO_OUTPUT_BACKSTOP:')).toBe(true); // models-probe.js:39 anchors on this exact prefix
+    expect(msg).toMatch(/no output, reasoning, or tool calls/); // this file's own :115/:265 assert this phrase
+    expect(msg).not.toMatch(/likely|dead endpoint|not serving|accepted/i);
+  });
+
+  test('names the env var when the window came from env resolution — proof: fails if the from-env branch stops naming AMICUS_NO_OUTPUT_BACKSTOP_MS, breaking the documented remedy in troubleshooting.md', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 120000, fromEnv: true });
+    expect(msg).toMatch(/AMICUS_NO_OUTPUT_BACKSTOP_MS/);
+  });
+
+  test('does NOT name the env var on a caller-set window — proof: this is the one test that actually catches the trap. It FAILS against the brief\'s own suggested Step-3 wording ("a caller-set backstop window (AMICUS_NO_OUTPUT_BACKSTOP_MS does not apply)"), because that text still contains the var name. models-probe.js:79 passes a hardcoded, non-tunable 30s (PROBE_WINDOW_MS); usage.md:406 already promises users that window is not tunable, so naming the knob here would trade one false statement for another', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 30000, fromEnv: false });
+    expect(msg).not.toMatch(/AMICUS_NO_OUTPUT_BACKSTOP_MS/);
+    expect(msg).toMatch(/30s/);
+  });
+
+  test('the seconds count derives from ms, not a hardcoded 120 — proof: fails if a future edit hardcodes "120s" instead of deriving from the ms argument, which would silently mis-report Task 5\'s doubled retry window (120s -> 240s)', () => {
+    const msg = formatNoOutputBackstopReason({ ms: 240000, fromEnv: true });
+    expect(msg).toMatch(/240s/);
+    expect(msg).not.toMatch(/\b120s\b/);
+  });
 });
