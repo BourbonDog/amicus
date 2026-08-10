@@ -41,6 +41,40 @@ describe('docs command & MCP-tool coverage (B11)', () => {
   it.each(COMMANDS)('usage.md documents amicus %s', (cmd) => {
     expect(usage).toContain('amicus ' + cmd);
   });
+
+  // Review finding (round 2): `report` — and its siblings below — are
+  // dispatched INSIDE the `case 'council'/'pack'/'template':` branches
+  // (src/cli-handlers-{council,pack,template}.js), never as their own
+  // bin/amicus.js switch label, so COMMANDS never sees them and the loose
+  // `amicus council`/`amicus pack`/`amicus template` matcher above is
+  // trivially satisfied by any ONE of their subcommand lines — it would
+  // stay green even if `amicus council report` were deleted from usage.md
+  // entirely. The old hardcoded test happened to pin that one phrase
+  // directly; nothing else in the suite pins a subcommand's literal
+  // presence in docs/usage.md specifically (tests/council-reference-docs.js
+  // pins the same 8 council subcommands, but against docs/council.md — a
+  // different file that this suite doesn't read). Restoring only `report`
+  // would silently leave its siblings exposed to the identical gap, so
+  // every documented multi-word subcommand in this position gets a slot
+  // here, giving a future one an obvious home.
+  //
+  // `amicus provider add|list|test|remove` was checked and excluded:
+  // usage.md documents it as one pipe-alternation line, not repeated
+  // `amicus provider <sub>` phrases (only `add`, the first alternative,
+  // would incidentally match a raw substring check — `list`/`test`/`remove`
+  // never appear as `amicus provider <word>`), so it doesn't fit this
+  // literal-substring pattern.
+  const USAGE_SUBCOMMANDS = [
+    'amicus council tally', 'amicus council stats', 'amicus council report',
+    'amicus council validate', 'amicus council verdict', 'amicus council run',
+    'amicus council save', 'amicus council list', 'amicus council show',
+    'amicus pack save', 'amicus pack list', 'amicus pack show', 'amicus pack rm',
+    'amicus template list', 'amicus template show',
+  ];
+  it.each(USAGE_SUBCOMMANDS)('usage.md documents %s', (phrase) => {
+    expect(usage).toContain(phrase);
+  });
+
   it('README MCP section lists every registered tool (no stale count)', () => {
     expect(readme).not.toMatch(/exposes ten tools/);
     for (const t of toolNames) { expect(readme).toContain(t); }

@@ -76,12 +76,26 @@ function slugsFor(file) {
   return [...doc.matchAll(/^(#{1,6})\s+(.+)$/gm)].map((m) => githubSlug(m[2].trim()));
 }
 
-// One flat table of {file, anchor} pairs across every in-scope file.
+// One flat table of {file, anchor} pairs across every in-scope file. Slugs
+// are computed once per FILE (not once per anchor match — this corpus is
+// small enough that the difference is harmless, but there is no reason to
+// re-read and re-regex a file 4+ times over). Duplicate {file, anchor}
+// pairs (the same anchor linked twice in one file, e.g. council.md's
+// "#where-artifacts-live" from both the TOC and a cross-reference) are
+// deduped — otherwise Jest emits two identically-titled tests for the one
+// real link, which is confusing in output and doubles the count for no
+// added coverage.
 const pairs = [];
+const seenPairs = new Set();
 for (const file of docFiles) {
   const doc = fs.readFileSync(file, 'utf-8');
+  const slugs = slugsFor(file);
+  const basename = path.basename(file);
   for (const m of doc.matchAll(/\]\(#([^)]+)\)/g)) {
-    pairs.push({ file: path.basename(file), anchor: m[1], slugs: slugsFor(file) });
+    const key = basename + ' ' + m[1];
+    if (seenPairs.has(key)) continue;
+    seenPairs.add(key);
+    pairs.push({ file: basename, anchor: m[1], slugs });
   }
 }
 
