@@ -17,6 +17,7 @@
 const briefings = require('./briefings');
 const { materializeReviews, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
+const { resolveNoOutputBackstopMs } = require('../utils/no-output-backstop');
 const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
   = require('./run-retry-notes');
 
@@ -143,6 +144,16 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
   const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [],
     stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
     stillDeadRetryLegs: [] };
+  // Task 5 (#129): SL-2 retries the SAME model under the SAME conditions, so a
+  // latency failure is structurally unhealable. Double the window, clamped to
+  // the leg timeout so the failure CLASS stays NO_OUTPUT_BACKSTOP rather than
+  // silently becoming an ordinary timeout at a low --timeout. 2*0 === 0 keeps
+  // the disable hatch. (o.timeout || 15) * 60 * 1000 mirrors fanout.js:254.
+  const legTimeoutMs = (o.timeout || 15) * 60 * 1000;
+  const escalatedBackstopMs = Math.min(
+    2 * (Number.isFinite(o.noOutputBackstopMs) ? o.noOutputBackstopMs : resolveNoOutputBackstopMs()),
+    legTimeoutMs,
+  );
 
   for (const unit of groupStage1Losses(o, deadWaves, deadLegs)) {
     // Task-4 review hardening: a unit this pass cannot even ATTEMPT — an
@@ -171,7 +182,8 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
       councilRunId: o.runId, councilName: o.councilName,
       tag: o.tag, // v4.7 F8 D16: rides the same forward as councilRunId/councilName.
       fallback: o.fallback, catalog: o.catalog,
-      waveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, prompt: briefingFor(o, unit) };
+      waveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, prompt: briefingFor(o, unit),
+      noOutputBackstopMs: escalatedBackstopMs };
     // Dispatch by UNIT TYPE, not model count (spec §4: bench is always a wave —
     // even down to its last surviving seat — critic/lens are always solos).
     // A model-count proxy (`models.length === 1`) is wrong for a bench unit

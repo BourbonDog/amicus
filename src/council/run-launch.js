@@ -64,7 +64,7 @@ function createLaunchers(deps = {}) {
    * @param {{models: string[], prompt: string, project: string, waveId: string,
    *   timeout?: number, gateway?: string, noValidateModel?: boolean, agent?: string,
    *   councilRunId?: string, councilName?: string, tag?: string, fallback?: object,
-   *   catalog?: Array}} opts
+   *   catalog?: Array, noOutputBackstopMs?: number}} opts
    *   councilRunId/councilName (v4.3 Task 3, spec §7.2) are additive attribution
    *   ids forwarded verbatim into the runFanout call so it can stamp them onto
    *   every leg. tag (v4.7 F8 D16) rides the same forward — every call site
@@ -72,6 +72,9 @@ function createLaunchers(deps = {}) {
    *   fallback/catalog (v4.3 Task 18, spec §6.2) are likewise
    *   additive/opt-in — omitted by callers that must never substitute (the
    *   chair, debate legs); run-stages.js's Stage-1/Stage-2 launches pass them.
+   *   noOutputBackstopMs (Task 5, #129) is opt-in and spread-guarded on
+   *   Number.isFinite (0 is a valid disable value); only run-retry.js sets it,
+   *   to escalate the window on a Stage-1 retry.
    * @returns {Promise<{wave: object|null, exitCode: number}>}
    */
   async function launchWave(opts) {
@@ -118,6 +121,14 @@ function createLaunchers(deps = {}) {
       // undefined when no --tag, so stampLegAttribution's `if (options.tag)`
       // guard (fanout-wave-io.js) simply no-ops, byte-identical to today.
       tag: opts.tag,
+      // Task 5 (#129): spread-guarded on Number.isFinite, NOT on truthiness —
+      // an explicit 0 is this knob's documented disable hatch
+      // (no-output-backstop.js:13-15) and a truthiness guard would silently
+      // drop it. Guarding at all — rather than a plain
+      // `noOutputBackstopMs: opts.noOutputBackstopMs` — keeps the transport
+      // call key-identical for run-stage1-launch / run-stage2 / run-chair /
+      // run-debate, none of which set it.
+      ...(Number.isFinite(opts.noOutputBackstopMs) ? { noOutputBackstopMs: opts.noOutputBackstopMs } : {}),
       // v4.3 Task 18 (spec §6.2): additive/opt-in. Callers that must never
       // substitute (run-chair.js, run-debate.js) simply omit these — runLeg's
       // fallback path only activates when `fallback.enabled` is true.

@@ -480,3 +480,54 @@ describe('v4.6.2 PR2 Task 3: backstop reason inherits the SL-2 retry + degrade c
     expect(degraded.value).toBe(true);
   });
 });
+
+describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', () => {
+  // Built on the same harness as the PR2 Task 3 suite above (fakeCtx +
+  // launchWave mock + a single dead bench leg) rather than inventing a new
+  // one — it drives the real retryStage1Losses bench path and reads back
+  // what run-retry.js actually handed to launchWave.
+  async function runRetryCapturingLaunchOpts({ timeout }) {
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', 'boom')] }, exitCode: 0 });
+    const ctx = fakeCtx({ timeout }, { launchWave });
+    await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [deadLeg('b')], counts: COUNTS });
+    return launchWave.mock.calls[0][0];
+  }
+
+  const ORIGINAL_ENV = process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
+  afterEach(() => {
+    if (ORIGINAL_ENV === undefined) { delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS; }
+    else { process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = ORIGINAL_ENV; }
+  });
+
+  test('retries with double the resolved backstop window', async () => {
+    // Council never sets the field, so there is nothing on `o` to double —
+    // the retry resolves it itself. Must be COMPUTED: hardcoding 240000 would
+    // make AMICUS_NO_OUTPUT_BACKSTOP_MS stop applying to retries, so an operator
+    // who set 300000 would get a SHORTER retry window than the first attempt.
+    delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
+    const launched = await runRetryCapturingLaunchOpts({ timeout: 15 });
+    expect(launched.noOutputBackstopMs).toBe(240000);
+  });
+
+  test('honours AMICUS_NO_OUTPUT_BACKSTOP_MS when doubling', async () => {
+    process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = '300000';
+    const launched = await runRetryCapturingLaunchOpts({ timeout: 15 });
+    expect(launched.noOutputBackstopMs).toBe(600000);
+  });
+
+  test('preserves the disable hatch: 2 * 0 === 0', async () => {
+    process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS = '0';
+    const launched = await runRetryCapturingLaunchOpts({ timeout: 15 });
+    expect(launched.noOutputBackstopMs).toBe(0);
+  });
+
+  test('clamps the doubled window to the leg timeout', async () => {
+    // At --timeout 3 (180_000ms) an unclamped 240_000 can never fire, so the
+    // retry would silently reclassify from NO_OUTPUT_BACKSTOP to an ordinary
+    // timeout — a different diagnosis, arrived at silently.
+    delete process.env.AMICUS_NO_OUTPUT_BACKSTOP_MS;
+    const launched = await runRetryCapturingLaunchOpts({ timeout: 3 });
+    expect(launched.noOutputBackstopMs).toBe(180000);
+  });
+});
