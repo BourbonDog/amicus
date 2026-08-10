@@ -1785,11 +1785,11 @@ verified against `main` @ `caf4d7e` (v4.7.0), suite green at 507 suites / 6883 p
 | 6 | Briefing preview width | **Re-truncate 80 → 30** | Proven a no-op, not merely "harmless": `sanitizePreview` appends `…` only past the cap, so at a 30-char cut the ellipsis is never in range and `sanitizePreview(t,80).slice(0,30) === collapsed.slice(0,30)` in both branches. MCP path stays byte-identical; honours E-PR3-3. |
 | 7 | #130 scope | ~~Detect + degrade + ledger skip~~ **SUPERSEDED** | Was a patch-boundary call. #134 requires the TASK MODE declaration regardless, so v4.8.0 takes the full treatment rather than the detection half. |
 
-## v4.7.1 — the diagnostics stop lying
+## v4.7.1 — the diagnostics stop lying — ✅ SHIPPED v4.7.1, 2026-08-09
 
 Every item is a fix or test hardening. No new flags, no new checks, no new output.
 
-- [ ] **Version-aware `doctor` engine check** (#133). `engine-install-scan.js:135` sets
+- [x] **Version-aware `doctor` engine check** (#133). `engine-install-scan.js:135` sets
   `engineOk: !!hasOpencodeBinary({pkgDir})` — a **presence boolean**, and the install record
   (`{kind,pkgDir,engineOk,roots}`) carries **no version field to compare**. So
   `doctor-engine-check.js:53` emits "engine present in N npx-cache copy" and reports **ok** through
@@ -1797,8 +1797,8 @@ Every item is a fix or test hardening. No new flags, no new checks, no new outpu
   Receivers have room: `doctor-engine-check.js` 115/300, `engine-install-scan.js` 142/300.
   ⚠️ The check was built for bug report #1 (binary missing / AV quarantine) — a *presence* failure.
   Version skew is a different class it was never designed to see.
-- [ ] **Pin `opencode-ai` to `1.18.15`** (#133, ruling 1). `package.json` only.
-- [ ] **Escalate the backstop 2× on retry** (#129). `run-retry.js`'s `common` object (`:169`) lists
+- [x] **Pin `opencode-ai` to `1.18.15`** (#133, ruling 1). `package.json` only.
+- [x] **Escalate the backstop 2× on retry** (#129). `run-retry.js`'s `common` object (`:169`) lists
   12 fields with **no `noOutputBackstopMs` and no `agent`**, so the once-only SL-2 retry re-runs
   under identical conditions and is *structurally unable* to heal a latency failure.
   ⚠️ Honest scope, two files not one: `run-launch.js`'s `launchWave`/`launchSolo` build an
@@ -1806,29 +1806,29 @@ Every item is a fix or test hardening. No new flags, no new checks, no new outpu
   spread-guarded — exactly the shape `tag: opts.tag` shipped in v4.7 F8 D16. Council never sets the
   value today, so the retry resolves it itself. `fanout.js` needs **no edit**: it already forwards
   `noOutputBackstopMs` at `:272`. Headroom: `run-launch.js` 215/300, `run-retry.js` 283/300.
-- [ ] **Reword the backstop message** (#129 + #133, both flag the same string). `headless.js:485`
+- [x] **Reword the backstop message** (#129 + #133, both flag the same string). `headless.js:485`
   asserts "— likely a listed-but-not-serving model or a dead endpoint": a canned guess with no
   evidence gate, fired identically from both firing sites. All the mechanism knows is "zero
   substantive activity by the deadline". Report that neutrally and **name
   `AMICUS_NO_OUTPUT_BACKSTOP_MS` in the message itself**. Highest value-per-line in the release —
   this string is what sent 30 minutes of #133's debugging at model ids and API keys.
-- [ ] **`continue`/`resume` inherit the parent's tag** (ruling 2). Parent tag is already on disk
+- [x] **`continue`/`resume` inherit the parent's tag** (ruling 2). Parent tag is already on disk
   (D13, absent-not-null on `metadata.json`) and both handlers already resolve a validated parent
   `taskId` (`:24` resume, `:54` continue). ⚠️ **Gate risk:** `src/sidecar/continue.js` is at
   **297/300** and is where the spend row is written, so the tag has to reach it. Three lines will
   not hold a metadata read plus pass-through — extract first or keep the diff surgical.
-- [ ] **`--retry-failed` inherits the wave's tag** (ruling 2). `buildRetryPlan`
+- [x] **`--retry-failed` inherits the wave's tag** (ruling 2). `buildRetryPlan`
   (`fanout-retry.js:46-52`, 208/300) **already reads** the original wave's `metadata.json` into
   `waveMeta`. Keeps the `--tag` + `--retry-failed` rejection exactly as-is — you still cannot *set*
   a tag on a retry, it just inherits the one it belongs to. `fanout.js` needs no edit: the
   `tag: options.tag || metaTag` inherit machinery is already at all three `buildWaveResult` sites.
-- [ ] **F-4 — delete dead code.** `extractSection`, `findFilesInSection`, `checkDrift` in
+- [x] **F-4 — delete dead code.** `extractSection`, `findFilesInSection`, `checkDrift` in
   `scripts/validate-docs.js` (`:35`, `:68`, `:84`) are exported and unit-tested but on **no**
   execution path. Delete them and `CONFIG.mappings`. Ungated file.
-- [ ] **F-2 / F-3 / F-6 — doc gates** (ruling 3). Derive the README command list from
+- [x] **F-2 / F-3 / F-6 — doc gates** (ruling 3). Derive the README command list from
   `bin/amicus.js`'s 21 `case` labels; run `generate-docs --check` in jest; extend the council
   TOC/anchor gate to all of `docs/`. All test-only, all verified passing today.
-- [ ] **Two verification riders** (~5 min). Assert `runFanout({quiet:true})` writes nothing to
+- [x] **Two verification riders** (~5 min). Assert `runFanout({quiet:true})` writes nothing to
   stdout; and actually observe a `continue` row landing under `(unattributed)` before item 5 fixes
   it — that path is the v4.7 docs PR's headline sentence and was traced by reading, never exercised.
 
