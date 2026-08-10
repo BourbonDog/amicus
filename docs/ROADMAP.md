@@ -326,6 +326,25 @@ release whose scope was explicitly locked. The patch already carries two behavio
 LC-10) that stretch the definition; a third that pops a GUI window would not be defensible as a
 patch. Sits naturally beside v4.5's existing **GUI power ergonomics (F10)** line.
 
+### v4.7.1 — the diagnostics stop lying *(patch)* — ✅ SHIPPED v4.7.1, 2026-08-09
+Nine fix/test-hardening items and one mandatory extraction. No new commands; three declared
+behaviour changes.
+- **`doctor` stops grading the engine on presence** — the install record gains a version and skew
+  is reported as a WARN. Underneath it, `npm root -g` could never resolve on Windows, so amicus had
+  never been able to see a global install at all — which also blinded `doctor --fix`'s donor
+  selection — #133
+- **The NO_OUTPUT_BACKSTOP message stops guessing** — it asserted a cause it had no evidence for,
+  which misdirected 30 minutes of a real incident. It now states only what the deadline
+  observed — #129, #133
+- **Retries can heal a slow model** — the once-only Stage-1 retry doubles its window, clamped to the
+  leg timeout so a low `--timeout` cannot silently reclassify the failure class — #129
+- **Tags stop being dropped** — `continue`, `resume` and `--retry-failed` inherit the parent tag, so
+  `spend --group-by tag` stops mis-bucketing continued work under `(unattributed)`. `--tag` is now
+  rejected on continue/resume rather than silently ignored *(behaviour change)*
+- **The engine is pinned exactly** — `opencode-ai` and `@opencode-ai/sdk` at 1.18.15, moving dev and
+  CI off 1.2.20. First release whose suite ran against the engine users actually get
+- Plus a `sidecar/reopen-spend.js` extraction, a dead-code deletion, and three documentation gates
+
 ## Backlog (tracked, not scheduled)
 
 ### Enterprise-readiness *(unscheduled — gated on funding / cofounder)*
