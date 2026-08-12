@@ -10,14 +10,29 @@
 // below asserts `leg.waveId === waveId` explicitly, BEFORE calling bindSeats,
 // so a missing waveId is caught here rather than silently passing.
 //
+// Fix-wave (whole-branch review, v48-pr2a-seat-prereqs): counting legs, the
+// bind result, and even the SET of bound aliases are still not enough — a
+// slot SWAP (two legs' taskId slots exchanged, both still valid slots) leaves
+// every one of those checks green while binding gemini's leg to the gpt
+// seat. That is precisely the silent wrong-seat failure this whole
+// workstream exists to kill. Every bind case below now also asserts
+// leg-to-seat CORRESPONDENCE — which specific leg landed on which specific
+// seat, not just how many landed and which aliases are represented. Twin
+// benches need a different technique (their legs share one alias, so alias
+// equality proves nothing), documented at each site below. This file also
+// mirrors run-retry.test.js's distinct builder shape (item 2, second
+// describe block) and adds a two-seat twin retry roster where position is
+// the only possible discriminator (item 4, last describe in the first
+// block).
+//
 // The leg shape is copied verbatim from run-stages.test.js's mkLeg
-// (// mirrors run-stages.test.js:23-26) rather than required — local builders
+// (// mirrors run-stages.test.js:30-35) rather than required — local builders
 // in a sibling .test.js file are not exported, and importing test internals
 // across suites is exactly the coupling this file exists to avoid.
 const { buildSeats, bindSeats } = require('../../src/council/seats');
 
 let legSeq = 0;
-// mirrors run-stages.test.js:23-26 (mkLeg, post-Task-1 shape: explicit
+// mirrors run-stages.test.js:30-35 (mkLeg, post-Task-1 shape: explicit
 // waveId/slot -> taskId `${waveId}-${slot}` plus a waveId field; the
 // undefined-waveId fallback is unused here — every fixture in this file
 // stamps both explicitly, which is the entire point of the gate.
@@ -41,12 +56,20 @@ describe('seat-fixtures: engine-shaped legs bind under bindSeats (v4.8 PR2a Task
       for (const leg of legs) { expect(leg.waveId).toBe(waveId); }
     });
 
-    test('bindSeats(waveId, roster, legs): full clean bind, no unbound, no orphans', () => {
+    test('bindSeats(waveId, roster, legs): full clean bind, no unbound, no orphans, correspondence holds', () => {
       const { bound, unbound, orphanLegs } = bindSeats(waveId, seats, legs);
       expect(bound).toHaveLength(seats.length);
       expect(unbound).toEqual([]);
       expect(orphanLegs).toEqual([]);
       expect(bound.map(b => b.seat.alias).sort()).toEqual(['gemini', 'gpt', 'qwen']);
+      // Correspondence (fix-wave item 1): a slot SWAP — e.g. gemini's and
+      // gpt's taskId slots exchanged, both still valid slots in range —
+      // leaves every assertion above unchanged: bound count, unbound,
+      // orphans, and even the ALIAS SET are all identical before and after a
+      // swap. This is the one assertion that actually looks at which leg
+      // landed on which seat (proof it catches a swap: see the fix-wave
+      // report's mutation evidence).
+      expect(bound.every(b => b.seat.alias === (b.leg.modelInput || b.leg.model))).toBe(true);
     });
 
     test('a leg whose taskId names a different wave lands in orphanLegs', () => {
@@ -89,6 +112,23 @@ describe('seat-fixtures: engine-shaped legs bind under bindSeats (v4.8 PR2a Task
       const ids = bound.map(b => b.seat.id).sort();
       expect(ids).toEqual(['deepseek#1', 'deepseek#2']);
       expect(new Set(ids).size).toBe(2);
+
+      // Correspondence (fix-wave item 1): distinct ids alone do not prove
+      // each leg landed on ITS OWN seat — a swap between the two twins still
+      // produces two distinct ids, just with the wrong two legs attached.
+      // Alias equality is USELESS here: both legs share alias 'deepseek', so
+      // `leg.modelInput === seat.alias` holds no matter which leg binds to
+      // which seat and cannot catch a swap. The fixture's own summary
+      // carries the leg's INTENDED slot (`#${i + 1}` in mkLeg above); seat.id
+      // carries the matching `#N` suffix buildSeats mints for that same
+      // slot. Comparing those two independently-derived numbers is what
+      // actually proves each leg landed on its own seat, not merely "a
+      // deepseek seat".
+      for (const { seat, leg } of bound) {
+        const legSlot = leg.summary.match(/#(\d+)$/)[1];
+        const seatSlot = seat.id.match(/#(\d+)$/)[1];
+        expect(legSlot).toBe(seatSlot);
+      }
     });
 
     test('a leg whose taskId names a different wave lands in orphanLegs', () => {
@@ -129,6 +169,118 @@ describe('seat-fixtures: engine-shaped legs bind under bindSeats (v4.8 PR2a Task
       // slot 1 in the ONE-SEAT retry roster resolves to deepseek#2 — proof the
       // retry-roster's own position, not the full bench's position, is what binds.
       expect(bound[0].seat.id).toBe('deepseek#2');
+      // Correspondence (fix-wave item 1): trivial at a one-seat roster (only
+      // one possible pairing exists), kept here for consistency across every
+      // bind case in this file — see the two-seat twin retry describe below
+      // for the retry case where this check actually has teeth.
+      expect(bound[0].seat.alias).toBe(bound[0].leg.modelInput || bound[0].leg.model);
+    });
+  });
+
+  describe('retry wave (abc123-s1r2): a two-seat twin roster where BOTH twins retried — position is the only discriminator', () => {
+    // Fix-wave item 4: the one-seat retry describe above cannot tell
+    // position-binding apart from alias-binding — seats.js:141-145's alias
+    // fallback fires whenever the alias holds EXACTLY ONE seat in the
+    // roster, which a one-seat roster satisfies trivially even when the
+    // taskId slot itself is wrong. Retrying BOTH twins forces every leg
+    // through resolution order 1 alone: roster.filter(s => s.alias ===
+    // 'deepseek') has length 2 here, so the fallback's `hits.length === 1`
+    // guard can never fire for either leg — this is the only bench shape in
+    // this file where a mis-stamped slot cannot be silently rescued by the
+    // alias path.
+    const fullSeats = buildSeats(['deepseek', 'deepseek'], null, null); // ids: deepseek#1, deepseek#2
+    const retryRoster = fullSeats; // both twins lost their seat and retry together
+    const retryWaveId = 'abc123-s1r2';
+    const legs = retryRoster.map((s, i) => mkLeg('deepseek', `retry review #${i + 1}`, 'complete', retryWaveId, i + 1));
+
+    test('every fixture leg carries leg.waveId === waveId (asserted before binding)', () => {
+      for (const leg of legs) { expect(leg.waveId).toBe(retryWaveId); }
+    });
+
+    test('bindSeats(retryWaveId, retryRoster, legs): full clean bind, no unbound, no orphans, position correspondence holds', () => {
+      const { bound, unbound, orphanLegs } = bindSeats(retryWaveId, retryRoster, legs);
+      expect(bound).toHaveLength(retryRoster.length);
+      expect(unbound).toEqual([]);
+      expect(orphanLegs).toEqual([]);
+      const ids = bound.map(b => b.seat.id).sort();
+      expect(ids).toEqual(['deepseek#1', 'deepseek#2']);
+      // Correspondence (item 1's twin technique, applied to a retry roster):
+      // the leg's own `#N` summary suffix names the slot it was BUILT for;
+      // it must match the `#N` suffix of the seat bindSeats actually
+      // resolved it to. A slot swap here is caught purely by POSITION, since
+      // (per the comment above) the alias fallback cannot rescue either leg.
+      for (const { seat, leg } of bound) {
+        const legSlot = leg.summary.match(/#(\d+)$/)[1];
+        const seatSlot = seat.id.match(/#(\d+)$/)[1];
+        expect(legSlot).toBe(seatSlot);
+      }
+    });
+  });
+});
+
+// v4.8 PR2a Task 1 fix-wave (item 2): run-retry.test.js mirrors
+// run-stages.test.js's leg shape only at the taskId/waveId fields — its OWN
+// builders (mirrors run-retry.test.js:94-101, usableLeg/deadLeg) emit a
+// DIFFERENT object shape entirely: {modelInput, status, summary|error,
+// taskId, waveId} — no `model` field, no `usage`, no `durationMs`. bindSeats
+// binds it today (seats.js:142 reads `leg.modelInput || leg.model`, and
+// position-binding via taskId never inspects `model` at all), but nothing in
+// this file pinned that shape before this block — exactly the suite the
+// previous fix-wave caught being forgotten from this gate.
+const mkRetryShapedLeg = (model, summary, waveId, slot) => ({
+  modelInput: model, status: 'complete', summary,
+  taskId: `${waveId}-${slot}`, waveId,
+});
+
+describe('seat-fixtures: run-retry.test.js-shaped legs (no model field, no usage) also bind (v4.8 PR2a Task 1 gate, item 2)', () => {
+  describe('unique-alias bench', () => {
+    const models = ['gemini', 'gpt', 'qwen'];
+    const seats = buildSeats(models, null, null);
+    const waveId = 'r1-s1r1';
+    const legs = models.map((m, i) => mkRetryShapedLeg(m, `review by ${m}`, waveId, i + 1));
+
+    test('every fixture leg carries leg.waveId === waveId (asserted before binding)', () => {
+      for (const leg of legs) { expect(leg.waveId).toBe(waveId); }
+    });
+
+    test('bindSeats(waveId, roster, legs): full clean bind, no unbound, no orphans, alias correspondence holds', () => {
+      const { bound, unbound, orphanLegs } = bindSeats(waveId, seats, legs);
+      expect(bound).toHaveLength(seats.length);
+      expect(unbound).toEqual([]);
+      expect(orphanLegs).toEqual([]);
+      expect(bound.map(b => b.seat.alias).sort()).toEqual(['gemini', 'gpt', 'qwen']);
+      // Correspondence (item 1's assertion): the alias falls back to
+      // `modelInput` since this shape carries no `model` field at all.
+      expect(bound.every(b => b.seat.alias === (b.leg.modelInput || b.leg.model))).toBe(true);
+    });
+  });
+
+  describe('twin bench (deepseek, deepseek)', () => {
+    const models = ['deepseek', 'deepseek'];
+    const seats = buildSeats(models, null, null); // ids: deepseek#1, deepseek#2
+    const waveId = 'r1-s1r1';
+    const legs = models.map((m, i) => mkRetryShapedLeg(m, `review by ${m} #${i + 1}`, waveId, i + 1));
+
+    test('every fixture leg carries leg.waveId === waveId (asserted before binding)', () => {
+      for (const leg of legs) { expect(leg.waveId).toBe(waveId); }
+    });
+
+    test('bindSeats(waveId, roster, legs): full clean bind, distinct seats, position correspondence holds', () => {
+      const { bound, unbound, orphanLegs } = bindSeats(waveId, seats, legs);
+      expect(bound).toHaveLength(seats.length);
+      expect(unbound).toEqual([]);
+      expect(orphanLegs).toEqual([]);
+      const ids = bound.map(b => b.seat.id).sort();
+      expect(ids).toEqual(['deepseek#1', 'deepseek#2']);
+      // Twin correspondence (item 1): alias equality is useless here — both
+      // twin legs share alias 'deepseek'. Compare the leg's own `#N` summary
+      // suffix (its intended slot) against the `#N` suffix bindSeats
+      // actually resolved it to.
+      for (const { seat, leg } of bound) {
+        const legSlot = leg.summary.match(/#(\d+)$/)[1];
+        const seatSlot = seat.id.match(/#(\d+)$/)[1];
+        expect(legSlot).toBe(seatSlot);
+      }
     });
   });
 });
