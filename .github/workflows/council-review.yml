@@ -221,6 +221,11 @@ jobs:
         if: steps.gate.outputs.available == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # 300s first-token window (retries double it). CI cold start plus
+          # gateway TTFT swings exceed the engine's 120s default — two live
+          # runs on 2026-08-12 lost every first leg to NO_OUTPUT_BACKSTOP
+          # at 120s while the 240s retries seated qwen both times.
+          AMICUS_NO_OUTPUT_BACKSTOP_MS: '300000'
         run: |
           # The engine pre-flight requires the chair NOT to be a bench seat,
           # and the default inputs overlap (the default bench contains the
