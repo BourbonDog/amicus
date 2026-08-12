@@ -80,7 +80,7 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # pull_request events carry empty inputs, so the || fallback IS this
       # repo's own bench. workflow_call callers get the input default above.
-      MODELS: ${{ inputs.models || 'kimi,qwen,deepseek' }}
+      MODELS: ${{ inputs.models || 'glm,qwen,deepseek' }}
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}

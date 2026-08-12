@@ -85,9 +85,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     }
   });
 
-  test('workflow_call surface: callers keep the shipped four-seat default; this repo\'s pull_request fallback benches kimi,qwen,deepseek', () => {
+  test('workflow_call surface: callers keep the shipped four-seat default; this repo\'s pull_request fallback benches glm,qwen,deepseek', () => {
     const y = yml();
-    expect(y).toContain("MODELS: ${{ inputs.models || 'kimi,qwen,deepseek' }}");
+    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,deepseek' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
     expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'none' }}");
