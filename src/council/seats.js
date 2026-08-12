@@ -148,4 +148,33 @@ function bindSeats(waveId, seats, legs) {
   return { bound, unbound: roster.filter(s => !takenBy.has(s.id)), orphanLegs };
 }
 
-module.exports = { slug, sanitizeName, buildSeats, roleAt, bindSeats };
+/**
+ * The artifact filename for one seat. Reproduces the four shapes shipping
+ * today — review-/judge-/rebuttal-/revote-<name>.md, the exact key set
+ * workspace/artifact-guard.js enumerates — with the seat id in place of the
+ * alias. Identical output for every bench that has ever run; a twin sanitizes
+ * to `review-deepseek-2.md`, which is the collision surface preflightSeats
+ * rejects pre-spend.
+ * @param {{id: string}} seat
+ * @param {'review'|'judge'|'rebuttal'|'revote'} kind
+ * @returns {string}
+ */
+function artifactName(seat, kind) {
+  return `${kind}-${sanitizeName(seat && seat.id)}.md`;
+}
+
+/**
+ * How a seat is named to a human — chair packet review headers today.
+ * Deliberately the seat id and nothing more: spec §4.2's byte-identical
+ * promise means a unique-alias seat MUST render as its bare alias, so lens
+ * text, position and role can never be appended unconditionally. It exists as
+ * a named seam so a later rev changes presentation in one place instead of at
+ * every call site.
+ * @param {{id: string}} seat
+ * @returns {string}
+ */
+function displayName(seat) {
+  return seat && seat.id;
+}
+
+module.exports = { slug, sanitizeName, buildSeats, roleAt, bindSeats, artifactName, displayName };

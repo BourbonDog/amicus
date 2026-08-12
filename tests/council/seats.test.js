@@ -155,3 +155,25 @@ describe('bindSeats', () => {
     expect(bindSeats('r-s1', buildSeats(['glm'], null, null), [null]).orphanLegs).toEqual([]);
   });
 });
+
+describe('artifactName / displayName', () => {
+  const { artifactName, displayName } = require('../../src/council/seats');
+
+  test('artifactName reproduces every shipped filename shape for a unique bench', () => {
+    const [seat] = buildSeats(['deepseek'], null, null);
+    expect(artifactName(seat, 'review')).toBe('review-deepseek.md');
+    expect(artifactName(seat, 'judge')).toBe('judge-deepseek.md');
+    expect(artifactName(seat, 'rebuttal')).toBe('rebuttal-deepseek.md');
+    expect(artifactName(seat, 'revote')).toBe('revote-deepseek.md');
+  });
+
+  test('a twin sanitizes # to - (the collision surface preflightSeats guards)', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    expect(artifactName(seats[1], 'review')).toBe('review-deepseek-2.md');
+  });
+
+  test('displayName is the seat id — the bare alias for every bench that has ever run', () => {
+    expect(displayName(buildSeats(['glm'], null, null)[0])).toBe('glm');
+    expect(displayName(buildSeats(['glm', 'glm'], null, null)[1])).toBe('glm#2');
+  });
+});
