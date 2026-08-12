@@ -96,6 +96,7 @@ bin/
 src/
 ├── council/
 │   ├── anonymize.js
+│   ├── briefings-chair.js
 │   ├── briefings-debate.js
 │   ├── briefings-stage2.js
 │   ├── briefings.js
@@ -488,6 +489,7 @@ evals/
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
+| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()`, `CHAIR_TASK()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
 | `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `FINDINGS_JSON_SHAPE()`, `FINDINGS_TWO_PART_FRAMING()`, `buildSeatBriefing()` |
