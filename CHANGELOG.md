@@ -17,8 +17,8 @@ All notable changes to Amicus are documented here. Format follows
   never mentioned. Benches whose aliases are distinct and contain no `#` are unaffected.
 - **`--critic` together with `--lenses` is now refused before any paid leg.** The same pre-spend
   seat validation now rejects passing both flags at once, closing the same `require()`-caller gap:
-  both the CLI and MCP handlers already rejected this pair, but a direct engine call did not. A
-  bench with no repeated alias is unaffected, and so is every shipped entry point.
+  both the CLI and MCP handlers already rejected this pair, so callers going through either see no
+  change. Only a direct programmatic `require()` call passing both flags is newly refused.
 
 ## [4.7.1] - 2026-08-09
 
