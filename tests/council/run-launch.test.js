@@ -9,8 +9,9 @@ let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-launch-')); });
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
+let legSeq = 0;
 const mkLeg = (model, summary, status = 'complete') => ({
-  taskId: `${model}-leg`, model, modelInput: model, status, summary,
+  taskId: `${model}-${++legSeq}`, model, modelInput: model, status, summary,
   durationMs: 1000, usage: { cost: { amount: 0.01, source: 'reported' } },
 });
 
