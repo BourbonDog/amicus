@@ -5,6 +5,17 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Council seats are validated before any paid leg.** `amicus council run` now refuses to start
+  when `--critic` names a model that is not on the bench, when `--critic <alias>` is ambiguous
+  because that alias occupies more than one bench seat (remove the duplicate entry, or use two
+  distinct aliases), or when a bench mixes a repeated alias with a literal alias spelling its
+  disambiguated form (e.g. `--models deepseek,deepseek,deepseek-2`, where two seats would write
+  the same `review-deepseek-2.md`). The off-bench case previously launched an extra leg the run's
+  own model roster never mentioned; the ambiguous case silently stripped both seats. Benches
+  without a repeated alias are unaffected.
+
 ## [4.7.1] - 2026-08-09
 
 ### Changed

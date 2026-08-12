@@ -23,6 +23,10 @@ const { buildVerdict, summarizeSeatLoss, deriveSeatLoss, writeVerdictAtomic } = 
 const { buildReport } = require('./report');
 const { validateFindings } = require('./findings');
 const { toGlobalFindings } = require('./anonymize');
+// Seat identity lives in ./seats (v4.8 PR1) — that module is require-free by
+// design, so preflightSeats' body lives there and is re-exported here to keep
+// the asm.preflightSeats(o) call spelling and this file under the size gate.
+const { preflightSeats } = require('./seats');
 
 const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
 
@@ -254,4 +258,5 @@ module.exports = {
   buildRunStatsEntry, worseConformance, buildTallyInput, writeTallyFiles, writeVerdictFiles,
   buildChairPacketFile,
   preflightClaudeReview, labelClaudeReview, claudeRunStatsRow, CLAUDE_SEAT,
+  preflightSeats,
 };

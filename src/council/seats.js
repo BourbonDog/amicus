@@ -177,4 +177,70 @@ function displayName(seat) {
   return seat && seat.id;
 }
 
-module.exports = { slug, sanitizeName, buildSeats, roleAt, bindSeats, artifactName, displayName };
+const SEATS_ERROR = 'COUNCIL_SEATS_INVALID';
+
+/**
+ * Mint the seat table and validate it, pre-spend. Runs AFTER initRun (so the
+ * error doc lands in a run dir that exists) and BEFORE any launch, exactly like
+ * its sibling preflightClaudeReview.
+ *
+ * Rejects four ways, all zero-spend:
+ *   - two bench entries resolving to the SAME seat id (a bench alias spelling
+ *     another alias's disambiguated id, e.g. 'deepseek#2' beside twin
+ *     'deepseek' entries) — that table would be incoherent as a join key,
+ *   - a collision in which a DISAMBIGUATED (#N) id participates, i.e. two seats
+ *     whose review files would be the same name. Deliberately narrow: a
+ *     pure-alias collision ('vendor/a' vs 'vendor?a') runs today and
+ *     workspace/artifact-guard.js exists to detect and surface it, so v4.8
+ *     refuses only the collisions its own id scheme creates,
+ *   - a --critic alias occupying more than one seat,
+ *   - a critic that is not on the bench at all. runCouncil never checked this
+ *     (only the CLI/MCP handlers did), so a direct require() caller silently
+ *     launched an N+1th leg meta.models never mentioned.
+ *
+ * Remedies ride INSIDE message: the engine error is {code, message} and both
+ * render paths discard anything else. The message never suggests naming a seat
+ * id — every entry point requires bench.includes(critic), so that spelling
+ * cannot work until PR2 teaches the handlers.
+ *
+ * @param {{models: ?Array<string>, critic: ?string, lenses: ?Array<string>}} o
+ * @returns {{seats: ?Array<object>, criticSeat: ?string, error: ?{code: string, message: string}}}
+ */
+function preflightSeats(o) {
+  const bad = (detail) => ({ seats: null, criticSeat: null,
+    error: { code: SEATS_ERROR, message: `council_seats_invalid: ${detail}` } });
+  const seats = buildSeats(o.models, o.critic, o.lenses);
+
+  const byId = new Set();
+  const byFile = new Map();
+  for (const s of seats) {
+    if (byId.has(s.id)) {
+      return bad(`two bench entries both resolve to seat id '${s.id}' — a bench alias may not `
+        + "spell another alias's disambiguated seat id; rename one entry");
+    }
+    byId.add(s.id);
+    const file = artifactName(s, 'review');
+    const prev = byFile.get(file);
+    // Only reject collisions this id scheme created: at least one side must be
+    // a disambiguated id. Pure-alias collisions are artifact-guard's to surface.
+    if (prev && (prev.includes('#') || s.id.includes('#'))) {
+      return bad(`seats '${prev}' and '${s.id}' would both write ${file} — rename one bench entry`);
+    }
+    if (!prev) { byFile.set(file, s.id); }
+  }
+
+  if (o.critic) {
+    const hits = seats.filter(s => s.alias === o.critic);
+    if (hits.length === 0) {
+      return bad(`--critic '${o.critic}' is not on the bench (${seats.map(s => s.id).join(', ') || 'empty'})`);
+    }
+    if (hits.length > 1) {
+      return bad(`--critic '${o.critic}' is ambiguous: that alias occupies ${hits.length} bench seats `
+        + '— remove the duplicate bench entry, or use two distinct aliases');
+    }
+    return { seats, criticSeat: hits[0].id, error: null };
+  }
+  return { seats, criticSeat: null, error: null };
+}
+
+module.exports = { slug, sanitizeName, buildSeats, roleAt, bindSeats, artifactName, displayName, preflightSeats };

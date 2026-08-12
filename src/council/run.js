@@ -125,6 +125,15 @@ async function runCouncil(options, deps = {}) {
     if (pre.error) { return finalize(1, pre.error); }
     const claudeReview = pre.claudeReview;
 
+    // v4.8 §4.3: seats are derived pre-spend from data run.json already holds,
+    // then checkpointed — initCouncilRun ran ~50 lines earlier, so they cannot
+    // ride the seed.
+    const seatPre = asm.preflightSeats(o);
+    if (seatPre.error) { return finalize(1, seatPre.error); }
+    o.seats = seatPre.seats;
+    o.criticSeat = seatPre.criticSeat;
+    runState.checkpoint(o.runDir, { seats: o.seats, criticSeat: o.criticSeat });
+
     // Composed Stage-1 seat briefing persisted for auditability (spec §4 layout).
     fs.writeFileSync(path.join(o.runDir, 'briefing-stage1.md'),
       briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }), { mode: 0o600 });
