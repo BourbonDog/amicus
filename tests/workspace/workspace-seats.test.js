@@ -178,7 +178,7 @@ describe('workspace-seats.js: PR1F-4 retry marker (cell 8, .seat-retried)', () =
 
     // 'chair' is not a REVIEWING role (isReviewing/isReviewingRole both exclude it), so it also
     // does not suppress deadSeats' own unrelated ghost row for the same alias (D6 role-aware
-    // suppression, live-model.js:275-284) — both rows exist. The assertion below is specifically
+    // suppression, live-seats.js:234-243) — both rows exist. The assertion below is specifically
     // about the chair's OWN live row never picking up the PR1F-4 retry marker.
     expect(tbody.children.length).toBe(2);
     const liveRow = tbody.children.find((r) => !r.classList.contains('seat-dead'));

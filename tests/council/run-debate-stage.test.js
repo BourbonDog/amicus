@@ -17,7 +17,7 @@ test('debate disabled → returns the provisional input untouched, no debate run
 
 test('all five bindings are present on the returned object', async () => {
   // Guards the defect this task exists to avoid: returning a subset compiles fine
-  // and breaks the chair packet at run.js:257 at runtime.
+  // and breaks the chair packet at run-finish.js:37 at runtime.
   const res = await runDebateStage(
     { o: { debate: false, runDir: '/tmp/x', runId: 'r1' }, degrade: { note: () => {} } },
     { provisional: { findings: [] }, provisionalInput: {}, overBudget: () => false },

@@ -20,7 +20,7 @@ describe('normalizeLive', () => {
         // ⚠️ DE-ROT (F34/F36): `model` is the RESOLVED executable id; `modelInput` is the council
         // ALIAS (src/observe/council-legs.js). They are two distinct fields on a real leg row —
         // collapsing them (`leg.model || leg.modelInput`) would drop the alias that blind mode's
-        // labelFor() and the already-shipped electron/workspace-ui/live-model.js:55
+        // labelFor() and the already-shipped electron/workspace-ui/live-seats.js:25
         // (`seat.modelInput || seat.model`) key on, leaking the real model id.
         // `lastActivityAt` (ISO), not `lastActivity`, is the real field Task 0.5 emits (PRE-FLIGHT P5).
         { taskId: 'dddd0001', model: 'google/gemini-2.5-pro', modelInput: 'gemini', role: 'seat',
