@@ -53,6 +53,10 @@ module.exports = {
         // dual-export guard so jest can require them directly. `module` is the
         // one Node identifier the renderer legitimately names.
         module: 'readonly',
+        // v4.8 PR0: live-model.js bridges to live-seats.js via a conditional
+        // `require('./live-seats')` under the same dual-export guard — the
+        // one other Node identifier the renderer legitimately names.
+        require: 'readonly',
       },
       rules: {
         // No access to the Node logger from a sandboxed page; console goes to

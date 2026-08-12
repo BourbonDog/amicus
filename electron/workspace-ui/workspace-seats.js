@@ -12,7 +12,7 @@
  * `getRunDetail` returns them wholesale, unfiltered), so `run.degrades` and
  * `verdict.seatLoss` are already on `state.detail` today; no data-layer
  * threading was needed. Only the derivation (window.AmicusLive.deadSeats,
- * live-model.js) and this file's painting are new.
+ * live-seats.js) and this file's painting are new.
  *
  * NOTE (scope, matches the plan's file list): renderSeatsPanel() (below) is reached from
  * renderDetail() — called both from openRun() (a fresh run open) and from the blind toggle
@@ -44,7 +44,7 @@
   /**
    * Aliases of seats whose degrade record says they were retried. PR1F-4 (v4.7 PR7).
    *
-   * ⚠️ Mirrors window.AmicusLive.deadSeats' own predicate (live-model.js:227-241) EXACTLY, and
+   * ⚠️ Mirrors window.AmicusLive.deadSeats' own predicate (live-seats.js:186-200) EXACTLY, and
    * must keep mirroring it. The kind/channel filter is load-bearing: run.degrades[] also carries
    * kind:'heal' / channel:'stage1-retry' records with the SAME retryWaveId/firstFailure fields
    * for seats that RECOVERED, and a field-only scan would tag a recovered seat "retried once".
@@ -70,7 +70,7 @@
     return out;
   }
 
-  // Mirrors isReviewing at live-model.js:261-264 — a chair/judge/rebuttal/revote row must not
+  // Mirrors isReviewing at live-seats.js:220-223 — a chair/judge/rebuttal/revote row must not
   // carry a reviewer's retry marker.
   function isReviewingRole(role) {
     return role === 'seat' || role === 'critic' ||
@@ -105,7 +105,7 @@
       if (!row || !row.children[8]) { return; }
       // Column 8 is the table's unlabeled trailing flag cell (index.html:51's final <th></th>).
       // It carries '⏳ stalled' on the LIVE path; on this terminal path seatsFromRunStats
-      // hardcodes stalled:false (live-model.js:128), so it is always empty here and free to use.
+      // hardcodes stalled:false (live-seats.js:87), so it is always empty here and free to use.
       // If that ever changes, this is the collision site.
       // Fix wave (whole-branch review, finding 2): this pass must be SYMMETRIC. renderSeats
       // reuses rows keyed on `model:role` across calls — including across two different
@@ -153,7 +153,7 @@
       // Fix wave 2 (smoke-caught, GUI smoke on real degraded run 12c96b6b): dead seats never
       // produce a review, so state.labelByModel (built from the run's names derivation — models
       // that DID review) never carries them; seatCells' own `blindOn && label ? label : alias`
-      // fallback is LOAD-BEARING for LIVE rows (RN-9/F36, live-model.js) and stays untouched, but
+      // fallback is LOAD-BEARING for LIVE rows (RN-9/F36, live-seats.js) and stays untouched, but
       // for a dead seat that fallback leaks the raw model name under blind — precisely the seat
       // blind mode most needs to hide. Placeholder ONLY when blind is on AND no label resolved;
       // a label that DOES resolve (possible in principle) still wins via seatCells' own cell.

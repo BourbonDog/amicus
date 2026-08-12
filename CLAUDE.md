@@ -362,6 +362,7 @@ electron/
 ├── workspace-ui/
 │   ├── index.html
 │   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
+│   ├── live-seats.js
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
 │   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
 │   ├── workspace-lazy.js  # Council Workspace — lazy prose-panel loading (v4.4 §5.2). v4.7 PR7 extraction of the

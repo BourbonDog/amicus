@@ -196,7 +196,7 @@
       seen[key] = true;
       var row = existing[key];
       // ⚠️ DE-ROT (F35): seat.lastActivity is the ISO `leg.lastActivityAt`; format it HERE.
-      // seatCells lives in live-model.js, which loads first and has no access to relTime.
+      // seatCells lives in live-seats.js, which loads first and has no access to relTime.
       var view = Object.assign({}, seat, {
         lastActivity: seat.lastActivity ? relTime(seat.lastActivity) : null,
       });

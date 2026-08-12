@@ -21,6 +21,7 @@
  */
 const SCRIPT_LOAD_ORDER = [
   'md-lite',
+  'live-seats',
   'live-model',
   'workspace-render',
   'workspace-matrix',
