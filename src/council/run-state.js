@@ -96,7 +96,7 @@ function initCouncilRun(o) {
   initRun(o.runDir, {
     schemaVersion: 2, type: 'council-run', runId: o.runId, status: 'running', stages: [],
     bench: o.models.slice(), chair: o.chair, critic: o.critic, lenses: o.lenses,
-    labelMap: null,
+    labelMap: null, seats: null, criticSeat: null,
     // Seeded ONLY under --debate (a `debate:null` seed would both break the v4.0
     // "no debate key" contract and fail the object-typed schema), and with a VALID
     // outcome from the first write so a run killed mid-debate stays schema-valid.

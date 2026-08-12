@@ -43,6 +43,25 @@
       }
     },
     "labelMap": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
+    "seats": {
+      "description": "v4.8: derived seat table, one entry per bench position. Bench-only — the synthesized 'claude' review is never a seat.",
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["id", "alias", "role", "position"],
+        "properties": {
+          "id": { "type": "string" },
+          "alias": { "type": "string" },
+          "role": { "type": "string" },
+          "lens": { "type": ["string", "null"] },
+          "position": { "type": "integer" }
+        }
+      }
+    },
+    "criticSeat": {
+      "description": "v4.8: seat id of the critic, or null.",
+      "type": ["string", "null"]
+    },
     "options": { "type": "object" },
     "pack": { "type": "object" },
     "tag": { "type": "string" },

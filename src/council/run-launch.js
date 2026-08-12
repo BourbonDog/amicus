@@ -16,6 +16,10 @@
 
 const fs = require('fs');
 const path = require('path');
+// sanitizeName lives in ./seats (v4.8 PR1) so that module can stay
+// require-free; re-exported below — run-stage2.js and workspace/artifact-guard.js
+// import it from here.
+const { sanitizeName } = require('./seats');
 
 /**
  * Did a launch exit because a SIGNAL killed it (130 = SIGINT, 143 = SIGTERM)
@@ -173,11 +177,6 @@ function createLaunchers(deps = {}) {
   }
 
   return { launchWave, launchSolo };
-}
-
-/** Filesystem-safe model name for review-/judge- artifact filenames. */
-function sanitizeName(model) {
-  return String(model).replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
 /**

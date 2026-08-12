@@ -5,6 +5,17 @@ All notable changes to Amicus are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Council seats are validated before any paid leg.** `amicus council run` now refuses to start
+  when `--critic` names a model that is not on the bench, when `--critic <alias>` is ambiguous
+  because that alias occupies more than one bench seat (remove the duplicate entry, or use two
+  distinct aliases), or when two bench entries would write the same `review-<name>.md` after
+  filename sanitization (e.g. `--models deepseek,deepseek,deepseek-2`). The off-bench critic was
+  already rejected by the CLI and MCP handlers; the engine now guards it too, closing the gap for
+  programmatic `require()` callers, where it previously launched a leg the run's own model roster
+  never mentioned. Benches whose aliases are distinct and contain no `#` are unaffected.
+
 ## [4.7.1] - 2026-08-09
 
 ### Changed

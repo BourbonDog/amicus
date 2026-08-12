@@ -86,4 +86,24 @@ describe('run.json validates against schemas/council-run.schema.json (Plan A con
     if (!ok) { throw new Error('schema errors: ' + JSON.stringify(validate.errors, null, 2)); }
     expect('tag' in run).toBe(false);
   });
+
+  // Local copy: tests/schemas-degrades-lockstep.test.js has the same helper but
+  // is a test file and exports nothing.
+  const stripDesc = (node) => JSON.parse(JSON.stringify(node, (k, v) => (k === 'description' ? undefined : v)));
+
+  test('the schema declares the v4.8 seats + criticSeat shape (the schema is open, so an ajv pass proves nothing)', () => {
+    expect(stripDesc(SCHEMA.properties.criticSeat)).toEqual({ type: ['string', 'null'] });
+    expect(stripDesc(SCHEMA.properties.seats)).toEqual({
+      type: ['array', 'null'],
+      items: {
+        type: 'object',
+        required: ['id', 'alias', 'role', 'position'],
+        properties: {
+          id: { type: 'string' }, alias: { type: 'string' }, role: { type: 'string' },
+          lens: { type: ['string', 'null'] }, position: { type: 'integer' },
+        },
+      },
+    });
+    expect(SCHEMA.required).not.toContain('seats');
+  });
 });

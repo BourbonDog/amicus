@@ -26,10 +26,9 @@ const { runStage2 } = require('./run-stage2');
 const { launchStage1 } = require('./run-stage1-launch');
 const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
-
-function slug(text) {
-  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-}
+// slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
+// re-exported below — run-stages.test.js imports it from here.
+const { slug } = require('./seats');
 
 /** Role of a seat by its input alias. */
 function roleFor(o, alias) {
