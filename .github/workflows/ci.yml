@@ -53,6 +53,11 @@ jobs:
   quality:
     name: quality (lint + secret-scan + size-gate + actionlint)
     runs-on: ubuntu-latest
+    # The actionlint step retries its download, so a sustained network outage
+    # can keep this job busy for ~9 minutes instead of failing fast. Without a
+    # bound it would inherit GitHub's 6-hour default. Everything here is a
+    # seconds-scale static check, so 15 minutes is headroom, not a tight bound.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -63,20 +68,98 @@ jobs:
       - run: npm run check:secrets
       - run: npm run check:sizes
       - run: npm run check:tarball
-      # Pinned to v1.7.7 (bump deliberately). ubuntu-latest ships shellcheck
-      # preinstalled, so actionlint also shellchecks every `run:` block across
-      # all workflows for free — no separate shellcheck install needed here.
-      # Verified locally (actionlint + shellcheck Windows binaries) before this
-      # landed: 0 findings across all 5 workflows, so no suppression config
-      # was needed. If a future change trips a finding that would force an
-      # edit to a byte-pinned workflow line (see tests/scripts/*-workflow.test.js
-      # and package-manifest.test.js), suppress it narrowly with a checked-in
-      # .github/actionlint.yaml (documented per-rule) rather than rewording
-      # the pinned line.
+      # actionlint v1.7.12, fetched as a checksum-verified release asset.
+      #
+      # This step deliberately does NOT run the upstream installer script
+      # (scripts/download-actionlint.bash in the actionlint repo), which pipes
+      # `curl -L` straight into `tar xvz` with no --fail, no --retry, no timeout
+      # and no checksum, so a partial body becomes an unrecoverable
+      # `gzip: stdin: unexpected end of file`. That happened live TWICE IN A ROW
+      # on 2026-08-12 (run 31622335985): runner egress died mid-transfer and
+      # delivered 107 bytes instead of the ~2.3MB tarball, while the same asset
+      # downloaded fine (200, 0.5s) off-runner and GitHub reported all systems
+      # operational. It blocked an unrelated PR from merging.
+      #
+      # So: fetch the pinned asset to a FILE, verify its SHA256 before anything
+      # is extracted or executed, and retry the whole attempt with backoff. The
+      # installer's only real job was OS/arch detection, which is a constant on
+      # ubuntu-latest — dropping it also removes a remote script from the
+      # execution chain, which is what closed the supply-chain hole: previously
+      # nothing verified the binary we ran.
+      #
+      # BUMPING: change ACTIONLINT_VERSION and ACTIONLINT_SHA256 together. The
+      # digest is the linux_amd64 line of that release's own checksums asset
+      # (actionlint_<version>_checksums.txt). Both pins are asserted by
+      # tests/scripts/ci-workflow.test.js.
+      #
+      # ubuntu-latest ships shellcheck preinstalled, so actionlint also
+      # shellchecks every `run:` block across all workflows for free — no
+      # separate shellcheck install needed here. Verified locally before this
+      # landed (actionlint 1.7.12 + shellcheck 0.11.0 Windows binaries): 0
+      # findings across all 6 workflows, so no suppression config was needed.
+      # If a future change trips a finding that would force an edit to a
+      # byte-pinned workflow line (see tests/scripts/*-workflow.test.js and
+      # package-manifest.test.js), suppress it narrowly with a checked-in
+      # .github/actionlint.yaml (documented per-rule) rather than rewording the
+      # pinned line.
       - name: actionlint (lint GitHub Actions workflows)
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
         run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
-          ./actionlint -color
+          set -euo pipefail
+
+          # The pinned digest is the linux_amd64 asset. If ubuntu-latest ever
+          # flips arch, fail with THIS message rather than looping on a checksum
+          # mismatch that reads like a compromised download.
+          arch="$(uname -m)"
+          if [ "$arch" != "x86_64" ]; then
+            echo "::error::actionlint pin is linux/amd64 but this runner reports '$arch' — re-pin ACTIONLINT_SHA256 from the release checksums asset."
+            exit 1
+          fi
+
+          file="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${file}"
+          tarball="${RUNNER_TEMP}/${file}"
+
+          for attempt in 1 2 3; do
+            rm -f "$tarball"
+            # --fail so an error body never reaches the file, --max-time so a
+            # stalled transfer cannot inherit the job timeout, --retry for
+            # in-process blips; the outer loop covers what curl itself gives up
+            # on. --retry-max-time bounds curl's OWN retry loop: without it, 3
+            # internal retries each worth --max-time stack up, and the three
+            # outer attempts could hang this step for ~24 minutes on a total
+            # outage. With it the worst case is ~9 minutes, then a clear error.
+            if curl --fail --location --silent --show-error \
+                    --connect-timeout 15 --max-time 120 \
+                    --retry 3 --retry-delay 2 --retry-all-errors --retry-max-time 60 \
+                    --output "$tarball" "$url" \
+              && printf '%s  %s\n' "$ACTIONLINT_SHA256" "$tarball" | sha256sum --check --status; then
+              echo "actionlint ${ACTIONLINT_VERSION} tarball verified (attempt ${attempt}/3)"
+              break
+            fi
+            # Byte count is the tell: 107 bytes means truncation, ~2.3MB with a
+            # bad digest would mean something far more interesting. Test for the
+            # file first — a bare `wc -c < missing` leaks the shell's own
+            # "No such file or directory" into the log at exactly the moment
+            # someone is trying to read a failure.
+            if [ -f "$tarball" ]; then
+              bytes="$(wc -c < "$tarball")"
+            else
+              bytes=0
+            fi
+            echo "attempt ${attempt}/3 failed: received ${bytes} bytes, wanted sha256 ${ACTIONLINT_SHA256}" >&2
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::actionlint download or checksum verification failed 3 times — see the byte counts above."
+              exit 1
+            fi
+            sleep "$((attempt * 5))"
+          done
+
+          tar -xzf "$tarball" -C "$RUNNER_TEMP" actionlint
+          "${RUNNER_TEMP}/actionlint" -version
+          "${RUNNER_TEMP}/actionlint" -color
 
   windows-install-smoke:
     # #35: prove the github:/tarball global install runs IDENTICALLY on Windows
