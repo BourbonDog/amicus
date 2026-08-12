@@ -136,7 +136,7 @@ as hard as a crash.
   (`runStats` consumers keying by model must exclude `role: 'judge'`).
 - **Docs** — the full record is `CHANGELOG.md` §4.6.0; spec
   `docs/superpowers/specs/2026-08-01-degrade-announcement-invariant-design.md`; plans 1–4 under
-  `docs/superpowers/plans/` (`2026-08-0*-v4.6-degrade-invariant-plan-*.md`).
+  the v4.6 degrade-invariant plans (pruned at the release cut; see git history for the branch).
 > Why it jumped the queue (2026-08-01): the v4.5.x field reports showed the engine was not losing
 > legs (11 four-seat council runs on v4.5.4, 10 clean) — but when a seat *was* lost, nothing told
 > the user which one. That silent-degrade class was ruled a north-star violation and took the rev

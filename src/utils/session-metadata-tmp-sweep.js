@@ -13,7 +13,7 @@
  * Structurally mirrors utils/session-index-tmp-sweep.js (B15's sibling).
  *
  * Enumeration decision (cwd-scoped, index rejected — recorded at plan time,
- * docs/superpowers/plans/2026-08-05-v463-pr3-cli-doctor-odds.md): this walks
+ * v4.6.3 D8): this walks
  * `<process.cwd()>/.claude/amicus_sessions/` — each taskId dir plus its
  * `subagents/<id>/` children — rather than consulting sessions-index.json.
  * `amicus doctor` is a per-project surface; the index is best-effort and can

@@ -78,7 +78,9 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      MODELS: ${{ inputs.models || 'glm,qwen,minimax,qwen-coder' }}
+      # pull_request events carry empty inputs, so the || fallback IS this
+      # repo's own bench. workflow_call callers get the input default above.
+      MODELS: ${{ inputs.models || 'glm,qwen,deepseek' }}
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
       DEBATE: ${{ format('{0}', inputs.debate) }}
@@ -125,11 +127,69 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           gh pr diff "$PR_NUMBER" --repo "$GH_REPO" > full.diff
-          head -c "$DIFF_CAP" full.diff > capped.diff
-          TRUNC=""
-          if [ "$(wc -c < full.diff)" -gt "$DIFF_CAP" ]; then
-            TRUNC="(diff truncated to ${DIFF_CAP} bytes — review what is shown; do not guess about elided hunks)"
-          fi
+          # Feed the council the CODE, not the paperwork. A raw byte prefix of
+          # `gh pr diff` lets whatever sorts first eat the whole budget — on #143
+          # that was 8 markdown files, and ZERO bytes of src/ reached the bench
+          # (its own finding C1 called that a blocker). Spec §9 P0 / ruling R12:
+          # exclude non-reviewable paths, order src/ first, pack WHOLE files.
+          # Inline JS rather than a repo script because this workflow never
+          # checks out, and rather than awk because the test harvests this
+          # program and executes it verbatim.
+          cat > filter-diff.js <<'FILTER_EOF'
+          'use strict';
+          const fs = require('fs');
+          const [, , diffPath, capRaw] = process.argv;
+          const cap = Number(capRaw);
+          const raw = fs.readFileSync(diffPath, 'utf8');
+
+          const EXCLUDE = [/^docs\/superpowers\//, /^package-lock\.json$/];
+          const PRIORITY = [/^src\//, /^tests\//, /^schemas\//, /^\.github\//, /^bin\//, /^electron\//, /^scripts\//];
+
+          function pathOf(block) {
+            const m = block.match(/^diff --git a\/.+? b\/(.+?)$/m);
+            return m ? m[1] : null;
+          }
+          function priorityOf(p) {
+            const i = PRIORITY.findIndex((re) => re.test(p));
+            return i === -1 ? PRIORITY.length : i;
+          }
+
+          const parts = raw.split(/(?=^diff --git )/m).filter((s) => s.trim().length > 0);
+          const kept = [];
+          const dropped = [];
+          let unparseable = 0;
+          for (const block of parts) {
+            const p = pathOf(block);
+            if (p === null) { unparseable++; continue; }
+            if (EXCLUDE.some((re) => re.test(p))) { dropped.push(p); continue; }
+            kept.push({ p, block, prio: priorityOf(p) });
+          }
+          kept.sort((a, b) => a.prio - b.prio);
+
+          let out = '';
+          const elided = [];
+          for (const k of kept) {
+            if (Buffer.byteLength(out) + Buffer.byteLength(k.block) > cap) { elided.push(k.p); continue; }
+            out += k.block;
+          }
+          // A single file bigger than the entire budget must not reduce the briefing to
+          // nothing — that would read to the bench as "this PR changed no code".
+          let headTruncated = null;
+          if (out === '' && kept.length > 0) {
+            out = Buffer.from(kept[0].block, 'utf8').subarray(0, cap).toString('utf8');
+            headTruncated = kept[0].p;
+            elided.shift();
+          }
+
+          process.stdout.write(out);
+          const notes = [];
+          if (dropped.length) { notes.push('excluded as non-reviewable: ' + dropped.join(', ')); }
+          if (elided.length) { notes.push('elided to fit the byte budget: ' + elided.join(', ')); }
+          if (headTruncated) { notes.push('truncated mid-file (larger than the whole budget): ' + headTruncated); }
+          if (unparseable) { notes.push('unrecognized diff sections (path not parsed): ' + unparseable); }
+          process.stderr.write(notes.join('\n'));
+          FILTER_EOF
+          node filter-diff.js full.diff "$DIFF_CAP" > capped.diff 2> diff-notes.txt
           PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
           # The engine's Stage-1 seat briefing supplies the output contract
           # (findings JSON block) and the anti-sycophancy clause itself — this
@@ -144,7 +204,14 @@ jobs:
             echo "## PR: ${PR_TITLE}"
             echo "${PR_BODY}"
             echo
-            echo "## Diff ${TRUNC}"
+            echo "## Diff"
+            if [ -s diff-notes.txt ]; then
+              echo
+              echo "> **Not shown.** The diff below is filtered, not the whole PR. Review only what is"
+              echo "> shown and do not guess about anything omitted:"
+              while IFS= read -r line || [ -n "$line" ]; do echo "> - ${line}"; done < diff-notes.txt
+              echo
+            fi
             echo '```diff'
             cat capped.diff
             echo '```'
@@ -154,6 +221,11 @@ jobs:
         if: steps.gate.outputs.available == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # 300s first-token window (retries double it). CI cold start plus
+          # gateway TTFT swings exceed the engine's 120s default — two live
+          # runs on 2026-08-12 lost every first leg to NO_OUTPUT_BACKSTOP
+          # at 120s while the 240s retries seated qwen both times.
+          AMICUS_NO_OUTPUT_BACKSTOP_MS: '300000'
         run: |
           # The engine pre-flight requires the chair NOT to be a bench seat,
           # and the default inputs overlap (the default bench contains the

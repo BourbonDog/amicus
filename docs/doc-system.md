@@ -62,7 +62,7 @@ No plans index is generated **today**. `buildPlansIndex()` in `scripts/generate-
 never fires. Note that guard is a runtime `fs.existsSync` check, not a disabled feature: creating
 `docs/plans/` would silently reactivate it, emitting a bare list of `- [name](path)` links without
 the per-plan first heading or date the old text here promised. Plans actually live in
-`docs/superpowers/plans/`, uncataloged.
+`docs/superpowers/plans/`, which are working documents pruned at each release cut — specs in `docs/superpowers/specs/` are the permanent record.
 
 ## Commands
 

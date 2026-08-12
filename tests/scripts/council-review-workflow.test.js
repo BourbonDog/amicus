@@ -85,9 +85,9 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     }
   });
 
-  test('workflow_call surface: chair/critic/fail_on added with spec defaults; max_cost default doubled; models widened to four cheap seats', () => {
+  test('workflow_call surface: callers keep the shipped four-seat default; this repo\'s pull_request fallback benches glm,qwen,deepseek', () => {
     const y = yml();
-    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,minimax,qwen-coder' }}");
+    expect(y).toContain("MODELS: ${{ inputs.models || 'glm,qwen,deepseek' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).toContain("CRITIC: ${{ inputs.critic || '' }}");
     expect(y).toContain("FAIL_ON: ${{ inputs.fail_on || 'none' }}");
@@ -221,5 +221,80 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     const sedRules = (y.match(/-e\s+'s[/|][^']+'/g) || []).map((s) => s.replace(/^-e\s+/, ''));
     expect(sedRules.length).toBe(10);
     expect(new Set(sedRules).size).toBe(5);
+  });
+
+  describe('review-diff filter (harvested from the workflow and executed verbatim)', () => {
+    const os = require('os');
+    const { execFileSync } = require('child_process');
+
+    /** Pull the filter program out of the YAML heredoc and write it to a temp file. */
+    function harvestFilter() {
+      const y = yml();
+      const m = y.match(/<<'FILTER_EOF'\n([\s\S]*?)\n([ ]*)FILTER_EOF/);
+      if (!m) { throw new Error('filter program not found in council-review.yml'); }
+      // Dedent exactly as YAML does: the block scalar strips the run-block's
+      // base indent, so the executed script (and this harness) must too.
+      const program = m[1].split('\n').map((l) => l.slice(m[2].length)).join('\n');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-filter-'));
+      const file = path.join(dir, 'filter-diff.js');
+      fs.writeFileSync(file, program, 'utf-8');
+      return { file, dir };
+    }
+
+    /** Run the harvested filter exactly as the workflow does. */
+    function runFilter(diffText, cap) {
+      const { file, dir } = harvestFilter();
+      const input = path.join(dir, 'full.diff');
+      fs.writeFileSync(input, diffText, 'utf-8');
+      const stdout = execFileSync(process.execPath, [file, input, String(cap)], { encoding: 'utf-8' });
+      return stdout;
+    }
+
+    const block = (p, body) => `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n+${body}\n`;
+
+    test('drops docs/superpowers and package-lock.json, keeps src/', () => {
+      const diff = block('docs/superpowers/plans/big.md', 'PLANTEXT')
+        + block('package-lock.json', 'LOCKTEXT')
+        + block('src/council/tally.js', 'SRCTEXT');
+      const out = runFilter(diff, 100000);
+      expect(out).toContain('SRCTEXT');
+      expect(out).not.toContain('PLANTEXT');
+      expect(out).not.toContain('LOCKTEXT');
+    });
+
+    test('orders src/ and tests/ ahead of everything else', () => {
+      const diff = block('README.md', 'READMETEXT')
+        + block('tests/foo.test.js', 'TESTTEXT')
+        + block('src/cli.js', 'SRCTEXT');
+      const out = runFilter(diff, 100000);
+      expect(out.indexOf('SRCTEXT')).toBeLessThan(out.indexOf('TESTTEXT'));
+      expect(out.indexOf('TESTTEXT')).toBeLessThan(out.indexOf('READMETEXT'));
+    });
+
+    test('packs WHOLE files — a budget overflow never emits a half hunk', () => {
+      const big = block('docs/other/big.md', 'X'.repeat(500));
+      const small = block('src/cli.js', 'SRCTEXT');
+      const out = runFilter(small + big, small.length + 50);
+      expect(out).toContain('SRCTEXT');
+      expect(out).not.toContain('XXXXX');
+      expect(out.endsWith('\n')).toBe(true);
+    });
+
+    test('a single file larger than the whole budget is truncated, never silently dropped to nothing', () => {
+      const out = runFilter(block('src/huge.js', 'Y'.repeat(5000)), 400);
+      expect(out.length).toBeGreaterThan(0);
+      expect(out).toContain('diff --git a/src/huge.js');
+    });
+
+    test('the briefing declares exclusions and elisions instead of claiming a byte truncation', () => {
+      const y = yml();
+      const step = y.slice(y.indexOf('Build council briefing from the PR diff'),
+                           y.indexOf('Run the adjudicated council'));
+      expect(step).toContain('diff-notes.txt');
+      // the stale byte-prefix wording must be gone
+      expect(step).not.toContain('diff truncated to ${DIFF_CAP} bytes');
+      expect(step).toContain('Not shown');
+      expect(step).toContain('|| [ -n "$line" ]');
+    });
   });
 });

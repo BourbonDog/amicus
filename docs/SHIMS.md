@@ -59,4 +59,4 @@ Removed across the following commits on `p18/shim-removal` (#19):
 - `c3de5bf` — dead `sidecar-config-hash` comment-parse tolerance (test-only tolerance removal — `config.js` never had dual-parse code; the skill-text acceptance instruction is fixed by this docs sweep)
 - `9273dd1` — `SIDECAR_MAX_SESSIONS` → `AMICUS_MAX_SESSIONS` rename (the last legacy-prefixed env var read anywhere in the codebase)
 
-See the rebrand plan for the original shim rationale: `docs/superpowers/plans/2026-06-08-amicus-rebrand.md`.
+The original shim rationale is in the 2026-06-08 rebrand plan, pruned at its release cut; see git history.
