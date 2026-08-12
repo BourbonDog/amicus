@@ -87,14 +87,25 @@ function fakeCtx(oOverrides = {}, opts = {}) {
     _notes: notes,
   };
 }
-const usableLeg = (m) => ({ modelInput: m, status: 'complete', summary: `review by ${m}` });
-const deadLeg = (m, status = 'error', error = 'boom') => ({ modelInput: m, status, error });
+// v4.8 PR2a Task 1 fix-wave (coordinator review): both builders now take the
+// same trailing (waveId, slot) pair as run-stages.test.js's pair. A bare call
+// (no waveId) keeps this file's pre-existing shape — no taskId/waveId field
+// at all — so any call site not explicitly touched is unchanged.
+const usableLeg = (m, waveId, slot) => ({
+  modelInput: m, status: 'complete', summary: `review by ${m}`,
+  ...(waveId != null ? { taskId: `${waveId}-${slot}`, waveId } : {}),
+});
+const deadLeg = (m, status = 'error', error = 'boom', waveId, slot) => ({
+  modelInput: m, status, error,
+  ...(waveId != null ? { taskId: `${waveId}-${slot}`, waveId } : {}),
+});
 const COUNTS = { reviewed: 1, total: 3 };
 
 describe('retryStage1Losses (SL-2 Task 4)', () => {
   test('recovery: heal per seat, recovered legs returned, no still-dead output', async () => {
+    // retry roster (r1-s1r1): whole first wave died naming ['a','b'] -> a=slot1, b=slot2.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a'), usableLeg('b')] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1), usableLeg('b', 'r1-s1r1', 2)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, {
       deadWaves: [{ waveId: 'r1-s1', models: ['a', 'b'], reason: 'died' }], deadLegs: [], counts: COUNTS });
@@ -121,8 +132,9 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
   test('appendStageWave is called BEFORE the launcher (abort cascade reaches the retry)', async () => {
     const order = [];
     runState.appendStageWave.mockImplementation(() => order.push('append'));
+    // retry roster (r1-s1r1): whole first wave died naming ['a'] alone -> a=slot1.
     const launchWave = jest.fn().mockImplementation(async () => { order.push('launch');
-      return { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 }; });
+      return { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 }; });
     const ctx = fakeCtx({}, { launchWave });
     await retryStage1Losses(ctx, { deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: 'x' }],
       deadLegs: [], counts: COUNTS });
@@ -143,11 +155,13 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
   });
 
   test('leg-origin, retry leg dies: dead-leg note names BOTH attempts; recovered sibling heals', async () => {
+    // input deadLegs (r1-s1, the ORIGINAL wave): bench roster ['a','b'] -> a=slot1, b=slot2.
+    // retry roster (r1-s1r1): both a and b lost their leg, grouped in that order -> a=slot1, b=slot2.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a'), deadLeg('b', 'timeout', null)] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1), deadLeg('b', 'timeout', null, 'r1-s1r1', 2)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, { deadWaves: [],
-      deadLegs: [deadLeg('a'), deadLeg('b')], counts: COUNTS });
+      deadLegs: [deadLeg('a', undefined, undefined, 'r1-s1', 1), deadLeg('b', undefined, undefined, 'r1-s1', 2)], counts: COUNTS });
     expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
     expect(ctx._notes).toHaveLength(1); // a's heal
     // Coordinator-review IMPORTANT-3b: explicit heal-why text for the
@@ -161,8 +175,9 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
   });
 
   test('wave-origin seat whose retry LEG dies: dead-leg granularity naming both attempts (D5)', async () => {
+    // retry roster (r1-s1r1): whole first wave died naming ['a'] alone -> a=slot1.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('a', 'error', 'again')] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('a', 'error', 'again', 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, {
       deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: 'died' }], deadLegs: [], counts: COUNTS });
@@ -172,10 +187,13 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
   });
 
   test('critic retries as a SOLO with launchSolo; heal keys deriveSeatLoss-compatible data', async () => {
+    // input deadLeg (r1-c1, the ORIGINAL critic wave): a one-seat roster, slot always 1.
+    // retry roster (r1-c1r1): also a one-seat roster, slot always 1.
     const launchSolo = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-c1r1', legs: [usableLeg('crit')] }, exitCode: 0, leg: usableLeg('crit') });
+      { wave: { waveId: 'r1-c1r1', legs: [usableLeg('crit', 'r1-c1r1', 1)] }, exitCode: 0, leg: usableLeg('crit', 'r1-c1r1', 1) });
     const ctx = fakeCtx({}, { launchSolo });
-    const r = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [deadLeg('crit')], counts: COUNTS });
+    const r = await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('crit', undefined, undefined, 'r1-c1', 1)], counts: COUNTS });
     expect(launchSolo).toHaveBeenCalledTimes(1);
     expect(launchSolo.mock.calls[0][0]).toMatchObject({ model: 'crit', waveId: 'r1-c1r1', retryOfWaveId: 'r1-c1' });
     expect(r.recoveredLegs).toHaveLength(1);
@@ -190,20 +208,27 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
     // the bench mock's resolution to a macrotask means a concurrency bug
     // would let 'critic' (a microtask-resolved mock) land BEFORE
     // 'bench-done', which this asserts against.
+    // input deadLegs (r1-s1 / r1-c1, the ORIGINAL waves): bench roster ['a','b'] -> a=slot1
+    // (only 'a' failed here, but the ORIGINAL wave's full roster is still ['a','b']);
+    // critic is a one-seat roster, slot always 1.
+    // retry rosters: bench retry (r1-s1r1) is ['a'] alone (only 'a' failed) -> slot1;
+    // critic retry (r1-c1r1) is the usual one-seat roster -> slot1.
     const order = [];
     const launchWave = jest.fn().mockImplementation(() => {
       order.push('bench');
       return new Promise((resolve) => {
         setTimeout(() => {
           order.push('bench-done');
-          resolve({ wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 });
+          resolve({ wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
         }, 0);
       });
     });
     const launchSolo = jest.fn().mockImplementation(async () => { order.push('critic');
-      return { wave: { waveId: 'r1-c1r1', legs: [usableLeg('crit')] }, exitCode: 0 }; });
+      return { wave: { waveId: 'r1-c1r1', legs: [usableLeg('crit', 'r1-c1r1', 1)] }, exitCode: 0 }; });
     const ctx = fakeCtx({}, { launchWave, launchSolo });
-    await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [deadLeg('a'), deadLeg('crit')], counts: COUNTS });
+    await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('a', undefined, undefined, 'r1-s1', 1), deadLeg('crit', undefined, undefined, 'r1-c1', 1)],
+      counts: COUNTS });
     expect(order).toEqual(['bench', 'bench-done', 'critic']);
   });
 
@@ -211,7 +236,8 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
     const launchWave = jest.fn();
     const ctx = fakeCtx({}, { launchWave, overBudget: () => true });
     const w = { waveId: 'r1-s1', models: ['a'], reason: 'died' };
-    const l = deadLeg('crit');
+    // input deadLeg (r1-c1, the ORIGINAL critic wave): a one-seat roster, slot always 1.
+    const l = deadLeg('crit', undefined, undefined, 'r1-c1', 1);
     const r = await retryStage1Losses(ctx, { deadWaves: [w], deadLegs: [l], counts: COUNTS });
     expect(launchWave).not.toHaveBeenCalled();
     expect(r.skippedDeadWaves).toEqual([w]);
@@ -292,7 +318,10 @@ describe('retryStage1Losses hardening (SL-2 Task 4 review)', () => {
     const launchSolo = jest.fn();
     const ctx = fakeCtx({ models: ['m1', 'm2'], critic: null, lenses: ['security', 'perf'] },
       { launchWave, launchSolo });
-    const ghost = deadLeg('ghost'); // not in o.models -> lensIndexOf returns null
+    // roster-defying fixture (the stray-1 class from CODE FIX 2 in run-stages.test.js):
+    // 'ghost' names a model that isn't on the bench at all, so no real engine wave
+    // could ever produce this leg — an intentionally non-conforming id, not a stamp.
+    const ghost = { ...deadLeg('ghost'), taskId: 'stray-1' }; // not in o.models -> lensIndexOf returns null
     const r = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [ghost], counts: COUNTS });
     expect(launchWave).not.toHaveBeenCalled();
     expect(launchSolo).not.toHaveBeenCalled();
@@ -308,11 +337,16 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
     'retry response still gets a still-dead note, never vanishes', async () => {
     // unit models ['a','b']; the retry wave comes back naming ONLY 'a' —
     // 'b' has no leg record whatsoever (not even an error/timeout leg).
+    // input deadLegs (r1-s1, the ORIGINAL wave): bench roster ['a','b'] -> a=slot1, b=slot2.
+    // retry roster (r1-s1r1): both a and b lost their leg -> a=slot1, b=slot2; only a's leg
+    // comes back (the partial-return fixture this test is named for) — slot1 is correct for
+    // a here, but the identical single-leg shape naming b alone would need slot2, not slot1.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, { deadWaves: [],
-      deadLegs: [deadLeg('a'), deadLeg('b')], counts: COUNTS });
+      deadLegs: [deadLeg('a', undefined, undefined, 'r1-s1', 1), deadLeg('b', undefined, undefined, 'r1-s1', 2)],
+      counts: COUNTS });
     expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
     expect(r.stillDeadNotes).toHaveLength(1);
     expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg', what: 'seat b did not review',
@@ -323,8 +357,9 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
   test('CRITICAL: wave-origin partial return — an unseen seat lands in stillDeadWaves with reduced ' +
     'models, never vanishes', async () => {
     // deadWave names ['a','b']; the retry wave comes back naming ONLY 'a'.
+    // retry roster (r1-s1r1): whole first wave died naming ['a','b'] -> a=slot1, b=slot2.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a')] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, {
       deadWaves: [{ waveId: 'r1-s1', models: ['a', 'b'], reason: 'died' }], deadLegs: [], counts: COUNTS });
@@ -340,11 +375,20 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
     // unusable (per-leg still-dead), 'c' has no leg record at all (the
     // CRITICAL reconciliation path) -- every seat must be accounted for
     // exactly once across the three buckets.
+    // Reconciliation: 'c' is not on fakeCtx's default bench (['a','b','crit']) —
+    // for its input deadLeg to name a real ORIGINAL wave roster, the bench here
+    // must actually include it. models: ['a','b','c','crit'] -> bench roster
+    // ['a','b','c'] (a=slot1, b=slot2, c=slot3); o.models is otherwise inert for
+    // this code path (groupStage1Losses/retryStage1Losses never read it outside
+    // lens mode), so this changes no other behavior in the test.
+    // retry roster (r1-s1r1): all three lost their leg, grouped in that order ->
+    // a=slot1, b=slot2, c=slot3; only a and b come back (c entirely absent).
     const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
-      legs: [usableLeg('a'), deadLeg('b', 'timeout', null)] }, exitCode: 0 }); // 'c' entirely absent
-    const ctx = fakeCtx({}, { launchWave });
+      legs: [usableLeg('a', 'r1-s1r1', 1), deadLeg('b', 'timeout', null, 'r1-s1r1', 2)] }, exitCode: 0 }); // 'c' entirely absent
+    const ctx = fakeCtx({ models: ['a', 'b', 'c', 'crit'] }, { launchWave });
     const r = await retryStage1Losses(ctx, { deadWaves: [],
-      deadLegs: [deadLeg('a'), deadLeg('b'), deadLeg('c')], counts: COUNTS });
+      deadLegs: [deadLeg('a', undefined, undefined, 'r1-s1', 1), deadLeg('b', undefined, undefined, 'r1-s1', 2),
+        deadLeg('c', undefined, undefined, 'r1-s1', 3)], counts: COUNTS });
     expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
     expect(r.stillDeadLegs.map(l => l.modelInput).sort()).toEqual(['b', 'c']);
     expect(r.skippedDeadLegs).toEqual([]);
@@ -356,8 +400,10 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
   test('IMPORTANT-3a: leg-origin retry wave dies wholesale — srcLegStillDeadNote fires, why names both attempts', async () => {
     const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
+    // input deadLegs (r1-s1, the ORIGINAL wave): bench roster ['a','b'] -> a=slot1, b=slot2.
     const r = await retryStage1Losses(ctx, { deadWaves: [],
-      deadLegs: [deadLeg('a'), deadLeg('b')], counts: COUNTS });
+      deadLegs: [deadLeg('a', undefined, undefined, 'r1-s1', 1), deadLeg('b', undefined, undefined, 'r1-s1', 2)],
+      counts: COUNTS });
     expect(ctx._notes).toEqual([]);
     expect(r.stillDeadNotes).toHaveLength(2);
     expect(r.stillDeadNotes).toEqual(expect.arrayContaining([
@@ -373,7 +419,11 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
     const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const w = { waveId: 'r1-s0', models: ['a'], reason: 'died' };
-    const l = deadLeg('a', 'timeout', null);
+    // 'a' arrives via BOTH carriers here — the synthetic wave id 'r1-s0' (distinct
+    // from the usual r1-s1, chosen by this test to probe dedup, not a real bench
+    // wave) is the only coherent ORIGINAL-wave id to stamp the paired leg with;
+    // roster is w.models = ['a'] alone, slot1.
+    const l = deadLeg('a', 'timeout', null, 'r1-s0', 1);
     const r = await retryStage1Losses(ctx, { deadWaves: [w], deadLegs: [l], counts: COUNTS });
     // seat 'a' arrived via both a srcWave and a srcLeg (grouping keeps both
     // sources — Task-4 hardening item 1) -- the wholesale-death path must
@@ -411,8 +461,13 @@ describe('retryStage1Losses fix-wave (SL-2 Task 5 coordinator review)', () => {
     // never lost its seat in the first place. Before the fix this fabricated
     // a bogus heal for 'ghost' (ff===null -> "ended 'unknown'") and pushed a
     // duplicate leg into recoveredLegs alongside whatever 'ghost' already had.
+    // retry roster (r1-s1r1): only 'a' lost its seat -> ['a'] alone, slot1. 'ghost'
+    // is a roster-defying fixture (the stray-1 class from CODE FIX 2 in
+    // run-stages.test.js) — no real retry roster could ever include it, so it
+    // gets an intentionally non-conforming id instead of a real stamp.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a'), usableLeg('ghost')] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1',
+        legs: [usableLeg('a', 'r1-s1r1', 1), { ...usableLeg('ghost'), taskId: 'stray-1' }] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, {
       deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: 'died' }], deadLegs: [], counts: COUNTS });
@@ -451,11 +506,13 @@ describe('v4.6.2 PR2 Task 3: backstop reason inherits the SL-2 retry + degrade c
 
   test('a leg dead with the NO_OUTPUT_BACKSTOP reason retries once (SL-2); the retry also dies; ' +
     'the dead-leg note carries the reason; degraded.value flips (exit-2)', async () => {
+    // input deadLeg (r1-s1, the ORIGINAL wave): bench roster ['a','b'] -> b=slot2.
+    // retry roster (r1-s1r1): only 'b' failed -> ['b'] alone, slot1.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', BACKSTOP)] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', BACKSTOP, 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
     const r = await retryStage1Losses(ctx, { deadWaves: [],
-      deadLegs: [deadLeg('b', 'error', BACKSTOP)], counts: COUNTS });
+      deadLegs: [deadLeg('b', 'error', BACKSTOP, 'r1-s1', 2)], counts: COUNTS });
 
     // (1) the SL-2 retry launches (existing retry-fired assertion pattern).
     expect(launchWave).toHaveBeenCalledTimes(1);
@@ -498,10 +555,13 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
   // but this helper previously destructured only `{ timeout }` and silently
   // dropped it.
   async function runRetryCapturingLaunchOpts({ timeout, noOutputBackstopMs }) {
+    // input deadLeg (r1-s1, the ORIGINAL wave): bench roster ['a','b'] -> b=slot2.
+    // retry roster (r1-s1r1): only 'b' failed -> ['b'] alone, slot1.
     const launchWave = jest.fn().mockResolvedValue(
-      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', 'boom')] }, exitCode: 0 });
+      { wave: { waveId: 'r1-s1r1', legs: [deadLeg('b', 'error', 'boom', 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({ timeout, noOutputBackstopMs }, { launchWave });
-    await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [deadLeg('b')], counts: COUNTS });
+    await retryStage1Losses(ctx, { deadWaves: [],
+      deadLegs: [deadLeg('b', undefined, undefined, 'r1-s1', 2)], counts: COUNTS });
     return launchWave.mock.calls[0][0];
   }
 

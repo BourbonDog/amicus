@@ -101,4 +101,34 @@ describe('seat-fixtures: engine-shaped legs bind under bindSeats (v4.8 PR2a Task
       expect(orphanLegs).toEqual([foreign]);
     });
   });
+
+  describe('retry wave (abc123-s1r1): a partial-roster retry binds against ITS OWN roster, not the bench', () => {
+    // v4.8 PR2a Task 1 fix-wave (coordinator review): the class this task
+    // exists for — mirrors run-stages.test.js's/run-retry.test.js's SL-2
+    // retry-seam fixtures. Full bench is a TWIN ['deepseek','deepseek']; only
+    // the SECOND twin (deepseek#2) lost its seat on the first wave and
+    // retries. The retry wave's launch roster is that ONE seat alone — slot 1
+    // — even though deepseek#2 was slot 2 in the full bench. Seat IDENTITY
+    // still comes from the FULL bench (buildSeats needs both twins to know
+    // '#2' is the right id); only the LAUNCH ROSTER passed to bindSeats
+    // (seats.js:93-96) is the one-seat retry subset.
+    const fullSeats = buildSeats(['deepseek', 'deepseek'], null, null); // ids: deepseek#1, deepseek#2
+    const retryRoster = fullSeats.filter(s => s.id === 'deepseek#2');
+    const retryWaveId = 'abc123-s1r1';
+    const legs = [mkLeg('deepseek', 'review by deepseek#2 (on retry)', 'complete', retryWaveId, 1)];
+
+    test('every fixture leg carries leg.waveId === waveId (asserted before binding)', () => {
+      for (const leg of legs) { expect(leg.waveId).toBe(retryWaveId); }
+    });
+
+    test('bindSeats(retryWaveId, retryRoster, legs): full clean bind, no unbound, no orphans', () => {
+      const { bound, unbound, orphanLegs } = bindSeats(retryWaveId, retryRoster, legs);
+      expect(bound).toHaveLength(retryRoster.length);
+      expect(unbound).toEqual([]);
+      expect(orphanLegs).toEqual([]);
+      // slot 1 in the ONE-SEAT retry roster resolves to deepseek#2 — proof the
+      // retry-roster's own position, not the full bench's position, is what binds.
+      expect(bound[0].seat.id).toBe('deepseek#2');
+    });
+  });
 });
