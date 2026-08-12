@@ -2,6 +2,7 @@
 jest.mock('../../src/council/run-state', () => ({ appendStageWave: jest.fn() }));
 const runState = require('../../src/council/run-state');
 const { groupStage1Losses, retryStage1Losses } = require('../../src/council/run-retry');
+const { buildSeats } = require('../../src/council/seats');
 
 // Coordinator-review MINOR-6: the shared mock's call history and any
 // per-test mockImplementation (see the 'appendStageWave is called BEFORE...'
@@ -70,10 +71,15 @@ function fakeCtx(oOverrides = {}, opts = {}) {
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sl2-'));
   createdRunDirs.push(runDir);
   const notes = [];
+  const o = { runId: 'r1', runDir, models: ['a', 'b', 'crit'], critic: 'crit', lenses: null,
+    briefing: 'B', date: 'D', timeout: 5, gateway: undefined, noValidateModel: false,
+    noCostGate: false, councilName: null, fallback: null, catalog: null, ...oOverrides };
+  // Production sets these at run.js:133. Without them, PR2b's twin tests would
+  // pass through a buildSeats fallback — green for the wrong reason.
+  o.seats = buildSeats(o.models, o.critic, o.lenses);
+  o.criticSeat = (o.seats.find(s => s.alias === o.critic) || {}).id || null;
   return {
-    o: { runId: 'r1', runDir, models: ['a', 'b', 'crit'], critic: 'crit', lenses: null,
-      briefing: 'B', date: 'D', timeout: 5, gateway: undefined, noValidateModel: false,
-      noCostGate: false, councilName: null, fallback: null, catalog: null, ...oOverrides },
+    o,
     launchers: { launchWave: opts.launchWave || jest.fn(), launchSolo: opts.launchSolo || jest.fn() },
     degrade: { note: (r) => notes.push(r) },
     addWave: jest.fn(),
