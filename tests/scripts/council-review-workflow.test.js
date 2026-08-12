@@ -291,6 +291,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       // the stale byte-prefix wording must be gone
       expect(step).not.toContain('diff truncated to ${DIFF_CAP} bytes');
       expect(step).toContain('Not shown');
+      expect(step).toContain('|| [ -n "$line" ]');
     });
   });
 });

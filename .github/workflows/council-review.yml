@@ -205,7 +205,7 @@ FILTER_EOF
               echo
               echo "> **Not shown.** The diff below is filtered, not the whole PR. Review only what is"
               echo "> shown and do not guess about anything omitted:"
-              while IFS= read -r line; do echo "> - ${line}"; done < diff-notes.txt
+              while IFS= read -r line || [ -n "$line" ]; do echo "> - ${line}"; done < diff-notes.txt
               echo
             fi
             echo '```diff'
