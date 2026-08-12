@@ -91,8 +91,9 @@ describe('bindSeats', () => {
   test('the roster is the WAVE roster, not the bench — a critic-filtered -s1 wave', () => {
     const seats = buildSeats(['glm', 'qwen', 'deepseek'], 'glm', null);
     const roster = seats.filter(s => s.role !== 'critic'); // run-stage1-launch.js:47
-    const { bound } = bindSeats('r-s1', roster, [leg({ taskId: 'r-s1-1', modelInput: 'qwen' })]);
-    expect(bound[0].seat.id).toBe('qwen');
+    const legs = [leg({ taskId: 'r-s1-1' }), leg({ taskId: 'r-s1-2' })];
+    const { bound } = bindSeats('r-s1', roster, legs);
+    expect(bound.map(b => b.seat.id)).toEqual(['qwen', 'deepseek']);
   });
 
   test('falls back to alias ONLY when that alias holds exactly one seat', () => {
@@ -129,9 +130,16 @@ describe('bindSeats', () => {
     expect(bySlot.bound).toHaveLength(1);
     // no waveId AND no matching slot id: adopting it by alias would silently
     // claim a foreign wave's leg.
-    const byAlias = bindSeats('r-s1', seats, [{ taskId: 'zzz-9', modelInput: 'glm' }]);
+    const byAlias = bindSeats('r-s1', seats, [{ taskId: 'zzz-1', modelInput: 'glm' }]);
     expect(byAlias.bound).toEqual([]);
     expect(byAlias.orphanLegs).toHaveLength(1);
+  });
+
+  test('a leg that ran and DIED still binds — bound says nothing about usability', () => {
+    const seats = buildSeats(['glm'], null, null);
+    const { bound, unbound } = bindSeats('r-s1', seats, [leg({ taskId: 'r-s1-1', status: 'error' })]);
+    expect(bound).toHaveLength(1);
+    expect(unbound).toEqual([]);
   });
 
   test('a second leg claiming a bound seat is an orphan, never a silent overwrite', () => {

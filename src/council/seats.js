@@ -111,6 +111,11 @@ function roleAt(seats, seatId) {
  *      bench that has ever run, this is today's exact behaviour.
  *   3. neither → the leg is an orphan and the seat stays unbound.
  *
+ * The greedy `.*` is safe because no waveId generator mints an id ending in
+ * `-<digits>` (verified across all 13: -s1, -c1, -l{i}, -s2, -d{n}, -rv,
+ * -ch1..4, -p{n}, -q{n}, and the r1 retry forms). A future generator that
+ * did would break slot matching.
+ *
  * `bound` says nothing about USABILITY: a leg that ran and died still binds
  * (run-launch.js:194-196 drops non-complete legs later). PR2's dead-seat set is
  * `unbound ∪ deadWave.seats ∪ {bound seats materializeReviews rejected}`.
