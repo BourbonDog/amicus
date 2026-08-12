@@ -134,57 +134,59 @@ jobs:
           # checks out, and rather than awk because the test harvests this
           # program and executes it verbatim.
           cat > filter-diff.js <<'FILTER_EOF'
-'use strict';
-const fs = require('fs');
-const [, , diffPath, capRaw] = process.argv;
-const cap = Number(capRaw);
-const raw = fs.readFileSync(diffPath, 'utf8');
+          'use strict';
+          const fs = require('fs');
+          const [, , diffPath, capRaw] = process.argv;
+          const cap = Number(capRaw);
+          const raw = fs.readFileSync(diffPath, 'utf8');
 
-const EXCLUDE = [/^docs\/superpowers\//, /^package-lock\.json$/];
-const PRIORITY = [/^src\//, /^tests\//, /^schemas\//, /^\.github\//];
+          const EXCLUDE = [/^docs\/superpowers\//, /^package-lock\.json$/];
+          const PRIORITY = [/^src\//, /^tests\//, /^schemas\//, /^\.github\//, /^bin\//, /^electron\//, /^scripts\//];
 
-function pathOf(block) {
-  const m = block.match(/^diff --git a\/.+? b\/(.+?)$/m);
-  return m ? m[1] : null;
-}
-function priorityOf(p) {
-  const i = PRIORITY.findIndex((re) => re.test(p));
-  return i === -1 ? PRIORITY.length : i;
-}
+          function pathOf(block) {
+            const m = block.match(/^diff --git a\/.+? b\/(.+?)$/m);
+            return m ? m[1] : null;
+          }
+          function priorityOf(p) {
+            const i = PRIORITY.findIndex((re) => re.test(p));
+            return i === -1 ? PRIORITY.length : i;
+          }
 
-const parts = raw.split(/(?=^diff --git )/m).filter((s) => s.trim().length > 0);
-const kept = [];
-const dropped = [];
-for (const block of parts) {
-  const p = pathOf(block);
-  if (p === null) { continue; }
-  if (EXCLUDE.some((re) => re.test(p))) { dropped.push(p); continue; }
-  kept.push({ p, block, prio: priorityOf(p) });
-}
-kept.sort((a, b) => a.prio - b.prio);
+          const parts = raw.split(/(?=^diff --git )/m).filter((s) => s.trim().length > 0);
+          const kept = [];
+          const dropped = [];
+          let unparseable = 0;
+          for (const block of parts) {
+            const p = pathOf(block);
+            if (p === null) { unparseable++; continue; }
+            if (EXCLUDE.some((re) => re.test(p))) { dropped.push(p); continue; }
+            kept.push({ p, block, prio: priorityOf(p) });
+          }
+          kept.sort((a, b) => a.prio - b.prio);
 
-let out = '';
-const elided = [];
-for (const k of kept) {
-  if (Buffer.byteLength(out) + Buffer.byteLength(k.block) > cap) { elided.push(k.p); continue; }
-  out += k.block;
-}
-// A single file bigger than the entire budget must not reduce the briefing to
-// nothing — that would read to the bench as "this PR changed no code".
-let headTruncated = null;
-if (out === '' && kept.length > 0) {
-  out = Buffer.from(kept[0].block, 'utf8').subarray(0, cap).toString('utf8');
-  headTruncated = kept[0].p;
-  elided.shift();
-}
+          let out = '';
+          const elided = [];
+          for (const k of kept) {
+            if (Buffer.byteLength(out) + Buffer.byteLength(k.block) > cap) { elided.push(k.p); continue; }
+            out += k.block;
+          }
+          // A single file bigger than the entire budget must not reduce the briefing to
+          // nothing — that would read to the bench as "this PR changed no code".
+          let headTruncated = null;
+          if (out === '' && kept.length > 0) {
+            out = Buffer.from(kept[0].block, 'utf8').subarray(0, cap).toString('utf8');
+            headTruncated = kept[0].p;
+            elided.shift();
+          }
 
-process.stdout.write(out);
-const notes = [];
-if (dropped.length) { notes.push('excluded as non-reviewable: ' + dropped.join(', ')); }
-if (elided.length) { notes.push('elided to fit the byte budget: ' + elided.join(', ')); }
-if (headTruncated) { notes.push('truncated mid-file (larger than the whole budget): ' + headTruncated); }
-process.stderr.write(notes.join('\n'));
-FILTER_EOF
+          process.stdout.write(out);
+          const notes = [];
+          if (dropped.length) { notes.push('excluded as non-reviewable: ' + dropped.join(', ')); }
+          if (elided.length) { notes.push('elided to fit the byte budget: ' + elided.join(', ')); }
+          if (headTruncated) { notes.push('truncated mid-file (larger than the whole budget): ' + headTruncated); }
+          if (unparseable) { notes.push('unrecognized diff sections (path not parsed): ' + unparseable); }
+          process.stderr.write(notes.join('\n'));
+          FILTER_EOF
           node filter-diff.js full.diff "$DIFF_CAP" > capped.diff 2> diff-notes.txt
           PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
           # The engine's Stage-1 seat briefing supplies the output contract

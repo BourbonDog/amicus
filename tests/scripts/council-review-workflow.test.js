@@ -230,11 +230,14 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     /** Pull the filter program out of the YAML heredoc and write it to a temp file. */
     function harvestFilter() {
       const y = yml();
-      const m = y.match(/<<'FILTER_EOF'\n([\s\S]*?)\nFILTER_EOF/);
+      const m = y.match(/<<'FILTER_EOF'\n([\s\S]*?)\n([ ]*)FILTER_EOF/);
       if (!m) { throw new Error('filter program not found in council-review.yml'); }
+      // Dedent exactly as YAML does: the block scalar strips the run-block's
+      // base indent, so the executed script (and this harness) must too.
+      const program = m[1].split('\n').map((l) => l.slice(m[2].length)).join('\n');
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'amicus-filter-'));
       const file = path.join(dir, 'filter-diff.js');
-      fs.writeFileSync(file, m[1], 'utf-8');
+      fs.writeFileSync(file, program, 'utf-8');
       return { file, dir };
     }
 
