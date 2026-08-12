@@ -58,3 +58,17 @@ test('a pure-alias collision still RUNS — artifact-guard surfaces it, PR1 does
 test('run-assemble re-exports it so asm.preflightSeats(o) is the call spelling', () => {
   expect(asm.preflightSeats).toBe(preflightSeats);
 });
+
+test('critic + lenses together is rejected pre-spend — the pair is incoherent, not merely unused', () => {
+  const r = preflightSeats({ models: ['glm', 'qwen'], critic: 'qwen', lenses: ['A', 'B'] });
+  expect(r.seats).toBe(null);
+  expect(r.error.code).toBe('COUNCIL_SEATS_INVALID');
+  expect(r.error.message).toMatch(/lens/i);
+});
+
+test('lenses alone, critic alone, and an EMPTY lenses array all still work', () => {
+  expect(preflightSeats({ models: ['glm', 'qwen'], critic: null, lenses: ['A', 'B'] }).error).toBe(null);
+  expect(preflightSeats({ models: ['glm', 'qwen'], critic: 'qwen', lenses: null }).error).toBe(null);
+  // [] is not lenses anywhere else in this module (seats.js:55) — it must not trip the guard
+  expect(preflightSeats({ models: ['glm', 'qwen'], critic: 'qwen', lenses: [] }).error).toBe(null);
+});
