@@ -55,6 +55,12 @@ describe('buildSeats', () => {
     expect(buildSeats([], null, null)).toEqual([]);
     expect(buildSeats(['glm'], null, ['A', 'B']).map(s => s.role)).toEqual(['lens:a']);
   });
+
+  test('a twin lens bench WITH a critic — the plan\'s divergence row, verbatim', () => {
+    const seats = buildSeats(['glm', 'glm'], 'glm', ['Skeptic', 'Optimist!']);
+    expect(seats.map(s => s.role)).toEqual(['lens:skeptic', 'lens:optimist']);
+    expect(seats.map(s => s.id)).toEqual(['glm#1', 'glm#2']);
+  });
 });
 
 describe('roleAt', () => {

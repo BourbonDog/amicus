@@ -192,7 +192,9 @@ const SEATS_ERROR = 'COUNCIL_SEATS_INVALID';
  *     whose review files would be the same name. Deliberately narrow: a
  *     pure-alias collision ('vendor/a' vs 'vendor?a') runs today and
  *     workspace/artifact-guard.js exists to detect and surface it, so v4.8
- *     refuses only the collisions its own id scheme creates,
+ *     refuses only the collisions its own id scheme creates
+ *     (any '#' in a seat id counts — a literal alias containing '#' is the
+ *     same collision surface as a minted #N id),
  *   - a --critic alias occupying more than one seat,
  *   - a critic that is not on the bench at all. runCouncil never checked this
  *     (only the CLI/MCP handlers did), so a direct require() caller silently
@@ -243,4 +245,4 @@ function preflightSeats(o) {
   return { seats, criticSeat: null, error: null };
 }
 
-module.exports = { slug, sanitizeName, buildSeats, roleAt, bindSeats, artifactName, displayName, preflightSeats };
+module.exports = { buildSeats, roleAt, bindSeats, artifactName, displayName, preflightSeats, slug, sanitizeName };
