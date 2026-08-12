@@ -34,7 +34,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
 
   test('cheap bench + cheap chair only — the expensive-model names never appear', () => {
     const y = yml();
-    expect(y).toContain('kimi,qwen,deepseek');
+    expect(y).toContain('glm,qwen,minimax,qwen-coder');
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");
     expect(y).not.toMatch(/\bo3\b|o3-pro|opus/);
   });
@@ -85,7 +85,7 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
     }
   });
 
-  test('workflow_call surface: chair/critic/fail_on added with spec defaults; max_cost default doubled; bench is kimi,qwen + deepseek chair', () => {
+  test('workflow_call surface: callers keep the shipped four-seat default; this repo\'s pull_request fallback benches kimi,qwen,deepseek', () => {
     const y = yml();
     expect(y).toContain("MODELS: ${{ inputs.models || 'kimi,qwen,deepseek' }}");
     expect(y).toContain("CHAIR: ${{ inputs.chair || 'deepseek' }}");

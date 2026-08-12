@@ -16,7 +16,7 @@ on:
       models:
         description: Comma-separated amicus model aliases (cheap bench default)
         type: string
-        default: 'kimi,qwen,deepseek'
+        default: 'glm,qwen,minimax,qwen-coder'
       chair:
         description: Chair model that synthesizes the verdict. Must not sit on the bench — if it appears in models, it is excluded from the bench for the run.
         type: string
@@ -78,6 +78,8 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # pull_request events carry empty inputs, so the || fallback IS this
+      # repo's own bench. workflow_call callers get the input default above.
       MODELS: ${{ inputs.models || 'kimi,qwen,deepseek' }}
       CHAIR: ${{ inputs.chair || 'deepseek' }}
       CRITIC: ${{ inputs.critic || '' }}
