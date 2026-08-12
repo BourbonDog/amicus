@@ -39,8 +39,9 @@ const deps = (launchers) => ({ launchers, appendRunFn: jest.fn(), statsFn: () =>
 const stderrText = () => stderrSpy.mock.calls.map((c) => String(c[0])).join('');
 
 /** A leg whose provider reported no usage at all → {amount:null, source:'unknown'}. */
+let legSeq = 0;
 const unknownLeg = (model, summary) => ({
-  taskId: `${model}-leg`, model, modelInput: model, status: 'complete', summary,
+  taskId: `${model}-${++legSeq}`, model, modelInput: model, status: 'complete', summary,
   durationMs: 1000,
   usage: {
     tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },

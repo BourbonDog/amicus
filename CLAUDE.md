@@ -96,6 +96,7 @@ bin/
 src/
 ├── council/
 │   ├── anonymize.js
+│   ├── briefings-chair.js
 │   ├── briefings-debate.js
 │   ├── briefings-stage2.js
 │   ├── briefings.js
@@ -113,11 +114,14 @@ src/
 │   ├── run-debate.js
 │   ├── run-degrade.js
 │   ├── run-finalize.js
+│   ├── run-finish.js
 │   ├── run-launch.js
+│   ├── run-retry-group.js
 │   ├── run-retry-notes.js
 │   ├── run-retry.js
 │   ├── run-server.js
 │   ├── run-stage1-launch.js  # Stage-1 launch pass for the council engine.
+│   ├── run-stage1-rows.js
 │   ├── run-stage2.js
 │   ├── run-stages.js
 │   ├── run-state.js
@@ -179,6 +183,7 @@ src/
 │   ├── interactive-mirror.js
 │   ├── interactive-process.js  # Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing
 │   ├── interactive.js  # Sidecar Interactive Mode - Electron GUI session management
+│   ├── leg-ids.js
 │   ├── list-limit.js  # The `--limit` core behind `amicus list` (v4.7 PR3 rider).
 │   ├── list-search.js  # The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5).
 │   ├── models-probe.js
@@ -358,6 +363,7 @@ electron/
 ├── workspace-ui/
 │   ├── index.html
 │   ├── live-model.js  # Council Workspace — pure renderer-side view logic (poll cadence, seat row
+│   ├── live-seats.js
 │   ├── md-lite.js  # markdown-lite — dependency-free renderer for untrusted model prose
 │   ├── workspace-app.js  # Council Workspace — application state + wiring (v4.4 §5).
 │   ├── workspace-lazy.js  # Council Workspace — lazy prose-panel loading (v4.4 §5.2). v4.7 PR7 extraction of the
@@ -485,6 +491,7 @@ evals/
 | `session.js` | Session Resolver | `encodeProjectPath()`, `getSessionDirectory()`, `getSessionId()`, `resolveSession()` |
 | `spend-query.js` |  | `filterRows()`, `groupRows()`, `computeWasted()`, `emptyTokens()`, `addTokens()` |
 | `council/anonymize.js` |  | `assignLabels()`, `toGlobalId()`, `toGlobalFindings()`, `rankingToOrder()`, `LETTERS()` |
+| `council/briefings-chair.js` |  | `dateLine()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `VERDICT_SCALE_ADDENDUM()`, `CHAIR_TASK()` |
 | `council/briefings-debate.js` |  | `DEBATE_NO_TOOLS_PREAMBLE()`, `DEFENSE_CONTRACT()`, `REVOTE_CONTRACT()`, `buildDefenseBrief()`, `buildRevoteBundle()` |
 | `council/briefings-stage2.js` |  | `JUDGE_NO_TOOLS_PREAMBLE()`, `CHAIR_NO_TOOLS_PREAMBLE()`, `CHAIR_VERDICT_VALUES()`, `JUDGE_OUTPUT_CONTRACT()`, `VERDICT_SCALE_ADDENDUM()` |
 | `council/briefings.js` |  | `ANTI_SYCOPHANCY_CLAUSE()`, `FINDINGS_CONTRACT()`, `FINDINGS_JSON_SHAPE()`, `FINDINGS_TWO_PART_FRAMING()`, `buildSeatBriefing()` |
@@ -502,11 +509,14 @@ evals/
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-degrade.js` |  | `createDegradeSink()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
+| `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
+| `council/run-retry-group.js` |  | `lensIndexOf()`, `recordFailure()`, `groupStage1Losses()` |
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
 | `council/run-server.js` |  | `acquireRunServer()`, `releaseRunServer()`, `resolveRunServerModels()`, `recordServerFate()` |
 | `council/run-stage1-launch.js` | Stage-1 launch pass for the council engine. | `launchStage1()` |
+| `council/run-stage1-rows.js` |  | `pushDeadSeatRows()` |
 | `council/run-stage2.js` |  | `runStage2()` |
 | `council/run-stages.js` |  | `runStage1()`, `runStage2()`, `isAbortExit()`, `slug()`, `roleFor()` |
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
@@ -552,6 +562,7 @@ evals/
 | `sidecar/interactive-mirror.js` |  | `startInteractiveMirror()` |
 | `sidecar/interactive-process.js` | Sidecar Interactive Process Helpers - Electron probe/env/process-exit plumbing | `getElectronPath()`, `checkElectronAvailable()`, `buildElectronEnv()`, `handleElectronProcess()` |
 | `sidecar/interactive.js` | Sidecar Interactive Mode - Electron GUI session management | `runInteractive()` |
+| `sidecar/leg-ids.js` |  | `deriveLegIds()` |
 | `sidecar/list-limit.js` | The `--limit` core behind `amicus list` (v4.7 PR3 rider). | `normalizeLimit()`, `truncationNotice()` |
 | `sidecar/list-search.js` | The `--search` core behind both list surfaces (F8 D15, errata E-PR3-5). | `searchSessions()` |
 | `sidecar/models-probe.js` |  | `probeStoredAliases()`, `selectStoredAliases()`, `PROBE_WINDOW_MS()`, `PROBE_PROMPT()` |

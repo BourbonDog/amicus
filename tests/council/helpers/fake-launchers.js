@@ -1,6 +1,8 @@
 // tests/council/helpers/fake-launchers.js — shared fakes for driver tests.
 'use strict';
 
+let legSeq = 0;
+
 const review = (n, findings) => `Prose ${n}.\n\n\`\`\`json\n${JSON.stringify({
   overall: 'take',
   findings: findings || [{ id: 1, severity: 'major', claim: `claim-${n}`, location: 'loc', rationale: 'why' }],
@@ -10,7 +12,7 @@ const judgeOut = (ranking, adjudications) =>
   `Judged.\n\n\`\`\`json\n${JSON.stringify({ ranking, adjudications })}\n\`\`\`\n`;
 
 const mkLeg = (model, summary, status = 'complete', cost = 0.01, waveId) => ({
-  taskId: `${model}-leg`, model, modelInput: model, status, summary,
+  taskId: `${waveId !== undefined ? waveId : model}-${++legSeq}`, model, modelInput: model, status, summary,
   durationMs: 1000, usage: { cost: { amount: cost, source: 'reported' } },
   ...(waveId !== undefined ? { waveId } : {}),
 });
@@ -29,7 +31,11 @@ function scriptedLaunchers(script) {
     calls.push(opts);
     const fn = script[opts.waveId];
     if (!fn) { throw new Error(`no script for waveId ${opts.waveId}`); }
-    return fn(opts);
+    const r = await fn(opts);
+    if (r && r.wave && Array.isArray(r.wave.legs)) {
+      r.wave.legs.forEach((leg, i) => { leg.taskId = `${opts.waveId}-${i + 1}`; });
+    }
+    return r;
   }
   async function launchSolo(opts) {
     const r = await launchWave({ ...opts, models: [opts.model] });
@@ -91,7 +97,11 @@ function launchersFromScript(script, onLaunch) {
     if (onLaunch) { onLaunch(opts); }
     const fn = script[opts.waveId];
     if (!fn) { throw new Error(`no script for waveId ${opts.waveId}`); }
-    return fn(opts);
+    const r = await fn(opts);
+    if (r && r.wave && Array.isArray(r.wave.legs)) {
+      r.wave.legs.forEach((leg, i) => { leg.taskId = `${opts.waveId}-${i + 1}`; });
+    }
+    return r;
   }
   return {
     calls,

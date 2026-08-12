@@ -332,7 +332,7 @@ describe('a budget-refused wave is never silently dropped', () => {
         }
         return {
           wave: { waveId: o.waveId, status: 'complete',
-            legs: o.models.split(',').map((m) => ({ taskId: `${m}-leg`, model: m, modelInput: m,
+            legs: o.models.split(',').map((m, i) => ({ taskId: `${o.waveId}-${i + 1}`, model: m, modelInput: m,
               status: 'complete', summary: review(m), durationMs: 1, ...priced(0.01) })) },
           exitCode: 0,
         };

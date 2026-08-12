@@ -20,16 +20,10 @@ const { ERROR_CODES } = require('../utils/error-doc');
 // Task 0.5). writeWaveMetadata is re-exported below — fanout-retry.js and the
 // fanout tests import it from here.
 const { writeWaveMetadata, writeWaveDoc, finishWave, stampLegAttribution } = require('./fanout-wave-io');
-
-/**
- * Derive leg task IDs: <waveId>-1 .. <waveId>-N (matches TASK_ID_PATTERN).
- * @param {string} waveId
- * @param {number} count
- * @returns {string[]}
- */
-function deriveLegIds(waveId, count) {
-  return Array.from({ length: count }, (_, i) => `${waveId}-${i + 1}`);
-}
+// Leg-id derivation lives in ./leg-ids (v4.8 PR0 size-gate split).
+// deriveLegIds is re-exported below — mcp-server.js, fanout-retry.js and
+// the fanout tests import it from here.
+const { deriveLegIds } = require('./leg-ids');
 
 /**
  * Run a fan-out wave. Spec §4.3.

@@ -68,8 +68,8 @@ describe('getRunDetail', () => {
       { label: 'Review C', model: 'qwen' },
     ]);
     // ⚠️ DE-ROT (F27): was ['stage1','stage2','tally','chair','verdict']. The engine runs the chair
-    // BEFORE the final tally — run.js:261 runChair (stamps the stage at run-chair.js:92) precedes
-    // run.js:283-285 writeTallyFiles + updateStage — and stages[] is append-ordered
+    // BEFORE the final tally — run.js:236 runChair (stamps the stage at run-chair.js:92) precedes
+    // run-finish.js:56-58 writeTallyFiles + updateStage — and stages[] is append-ordered
     // (run-state.js:95-102). Pinned by the shipped tests/council/run-debate.test.js:616.
     // REQUIRED COMPANION EDIT (Task 1): swap the `chair` entry ahead of `tally` in BOTH run.json
     // fixtures (complete + degraded) and shift the timestamps so chair completes before tally starts.

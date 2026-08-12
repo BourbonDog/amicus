@@ -443,7 +443,7 @@ describe('workspace-render.js (headless painter proof — the 3 gaps the plan-ma
     // RN-11 update-branch className fix — WHAT THIS TEST ACTUALLY PINS: source-text parity
     // between the create and update branches' className expressions, not a runtime
     // regression. Review finding: live-model.js's seatCells() always returns a FIXED
-    // 9-element array in a fixed column order (see live-model.js:73-86) — every seat's cells
+    // 9-element array in a fixed column order (see live-seats.js:40-53) — every seat's cells
     // differ only in per-slot TEXT, never in array length or slot order. Since the create
     // branch's className is a pure function of the column index `i` (never of seat data,
     // see workspace-render.js's create branch a few lines above the update branch below),

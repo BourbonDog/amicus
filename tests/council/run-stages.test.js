@@ -19,8 +19,9 @@ const review = (n) => `Prose review ${n}.\n\n\`\`\`json\n${JSON.stringify({
 })}\n\`\`\`\n`;
 const judgeOut = (ranking, adjudications) =>
   `Judged.\n\n\`\`\`json\n${JSON.stringify({ ranking, adjudications })}\n\`\`\`\n`;
+let legSeq = 0;
 const mkLeg = (model, summary, status = 'complete') => ({
-  taskId: `${model}-leg`, model, modelInput: model, status, summary,
+  taskId: `${model}-${++legSeq}`, model, modelInput: model, status, summary,
   durationMs: 1000, usage: { cost: { amount: 0.01, source: 'reported' } },
 });
 const okWave = (legs) => ({ wave: { status: 'complete', legs }, exitCode: 0 });
