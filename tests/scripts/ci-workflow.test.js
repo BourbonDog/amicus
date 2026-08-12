@@ -16,17 +16,25 @@ describe('ci workflow (B43 — actionlint in CI)', () => {
     const pinned = y.match(/ACTIONLINT_VERSION:\s*'?(\d+\.\d+\.\d+)'?/);
     expect(pinned).not.toBeNull();
 
-    // Every version literal ATTACHED to the word actionlint must agree with the
-    // pin. Adjacency (`actionlint v1.2.3`, `actionlint_1.2.3`) is deliberate:
-    // the previous form of this check scanned `actionlint[^\n]*v?(\d+\.\d+\.\d+)`
-    // — greedy to end of line — so a comment mentioning a SECOND tool and its
-    // version ("actionlint 1.7.12 + shellcheck 0.11.0") reported shellcheck's
-    // version as an actionlint version and failed. Version consistency between
-    // the pin, the URL and the filename is now pinned precisely by the
-    // "fetched robustly and verified" describe block below.
-    const versionMatches = [...y.matchAll(/actionlint[ _/@]v?(\d+\.\d+\.\d+)/g)].map((m) => m[1]);
-    expect(versionMatches.length).toBeGreaterThan(0);
-    expect(new Set(versionMatches)).toEqual(new Set([pinned[1]]));
+    // No version literal ATTACHED to the word actionlint may CONTRADICT the pin.
+    //
+    // Deliberately a no-contradiction rule, not a must-appear-somewhere rule.
+    // Requiring at least one literal made a COMMENT load-bearing: the only
+    // literals in this file are prose, so rewording them failed the suite with
+    // "Expected: > 0, Received: 0" — which tells you nothing about what broke or
+    // that a comment was the thing holding it up. Comments are documentation,
+    // not an invariant. That ACTIONLINT_VERSION is actually USED is pinned where
+    // it belongs, by "the download URL is built from the pinned version" below.
+    //
+    // Adjacency (`actionlint v1.2.3`, `actionlint_1.2.3`) is also deliberate: an
+    // earlier form scanned `actionlint[^\n]*v?(\d+\.\d+\.\d+)`, greedy to end of
+    // line, so a comment naming a SECOND tool and its version ("actionlint
+    // 1.7.12 + shellcheck 0.11.0") reported shellcheck's version as actionlint's.
+    const lineOf = (idx) => y.slice(0, idx).split('\n').length;
+    const conflicts = [...y.matchAll(/actionlint[ _/@]v?(\d+\.\d+\.\d+)/g)]
+      .filter((m) => m[1] !== pinned[1])
+      .map((m) => `ci.yml:${lineOf(m.index)} "${m[0]}" contradicts ACTIONLINT_VERSION ${pinned[1]}`);
+    expect(conflicts).toEqual([]);
 
     // never "latest"/unpinned
     expect(y).not.toMatch(/actionlint[ _/@]latest/i);
