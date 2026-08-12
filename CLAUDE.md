@@ -113,6 +113,7 @@ src/
 │   ├── run-debate.js
 │   ├── run-degrade.js
 │   ├── run-finalize.js
+│   ├── run-finish.js
 │   ├── run-launch.js
 │   ├── run-retry-notes.js
 │   ├── run-retry.js
@@ -502,6 +503,7 @@ evals/
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-degrade.js` |  | `createDegradeSink()` |
 | `council/run-finalize.js` |  | `statusForExit()`, `resolveTerminalExit()`, `writeRunTerminal()`, `SIGNAL_EXIT()` |
+| `council/run-finish.js` |  | `finishRun()` |
 | `council/run-launch.js` |  | `createLaunchers()`, `materializeReviews()`, `materializeDebate()`, `sanitizeName()`, `isAbortExit()` |
 | `council/run-retry-notes.js` |  | `waveStillDeadNote()`, `srcLegStillDeadNote()`, `retryLegStillDeadNote()`, `missingLegStillDeadNote()` |
 | `council/run-retry.js` |  | `groupStage1Losses()`, `retryStage1Losses()` |
