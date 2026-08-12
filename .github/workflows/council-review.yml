@@ -186,10 +186,6 @@ if (headTruncated) { notes.push('truncated mid-file (larger than the whole budge
 process.stderr.write(notes.join('\n'));
 FILTER_EOF
           node filter-diff.js full.diff "$DIFF_CAP" > capped.diff 2> diff-notes.txt
-          TRUNC=""
-          if [ "$(wc -c < full.diff)" -gt "$DIFF_CAP" ]; then
-            TRUNC="(diff truncated to ${DIFF_CAP} bytes — review what is shown; do not guess about elided hunks)"
-          fi
           PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json body -q .body | head -c 4000)
           # The engine's Stage-1 seat briefing supplies the output contract
           # (findings JSON block) and the anti-sycophancy clause itself — this
@@ -204,7 +200,14 @@ FILTER_EOF
             echo "## PR: ${PR_TITLE}"
             echo "${PR_BODY}"
             echo
-            echo "## Diff ${TRUNC}"
+            echo "## Diff"
+            if [ -s diff-notes.txt ]; then
+              echo
+              echo "> **Not shown.** The diff below is filtered, not the whole PR. Review only what is"
+              echo "> shown and do not guess about anything omitted:"
+              while IFS= read -r line; do echo "> - ${line}"; done < diff-notes.txt
+              echo
+            fi
             echo '```diff'
             cat capped.diff
             echo '```'

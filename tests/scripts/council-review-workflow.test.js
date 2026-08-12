@@ -282,5 +282,15 @@ describe('council-review workflow (v2 — adjudicated council engine)', () => {
       expect(out.length).toBeGreaterThan(0);
       expect(out).toContain('diff --git a/src/huge.js');
     });
+
+    test('the briefing declares exclusions and elisions instead of claiming a byte truncation', () => {
+      const y = yml();
+      const step = y.slice(y.indexOf('Build council briefing from the PR diff'),
+                           y.indexOf('Run the adjudicated council'));
+      expect(step).toContain('diff-notes.txt');
+      // the stale byte-prefix wording must be gone
+      expect(step).not.toContain('diff truncated to ${DIFF_CAP} bytes');
+      expect(step).toContain('Not shown');
+    });
   });
 });
