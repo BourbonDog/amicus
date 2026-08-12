@@ -85,4 +85,62 @@ function roleAt(seats, seatId) {
   return hit ? hit.role : 'seat';
 }
 
-module.exports = { slug, sanitizeName, buildSeats, roleAt };
+/**
+ * Resolve a wave's legs to its seats. Pure: it reports, it never emits a
+ * degrade and never guesses — silent mis-attribution is the failure this whole
+ * mechanism exists to kill (spec §4.4).
+ *
+ * `seats` is THE WAVE'S LAUNCH ROSTER, in launch order — not necessarily the
+ * full seat table. The -s1 wave is critic-filtered (run-stage1-launch.js:47)
+ * and a retry wave is the loss subset (run-retry.js:93), so a legId's `-N`
+ * suffix indexes this roster, never bench position.
+ *
+ * Callers legitimately hold legs from several waves at once, so a leg stamped
+ * with a DIFFERENT waveId is ignored rather than reported — call once per wave
+ * over the same array. A leg with NO waveId (result-schema.js:61 falls back to
+ * `metadata.parentWave || null`, and the council fixtures omit it) may bind
+ * ONLY by an exact roster-slot id: adopting it by alias would silently claim a
+ * foreign wave's leg.
+ *
+ * Resolution order per leg:
+ *   1. `leg.legId || leg.taskId` matching `${waveId}-${n}` → roster slot n.
+ *      Both are read because legId is never persisted, so every disk-rebuilt
+ *      wave is taskId-only.
+ *   2. alias (`leg.modelInput || leg.model`), only for a wave-stamped leg and
+ *      only when that alias holds exactly one seat in this roster — for every
+ *      bench that has ever run, this is today's exact behaviour.
+ *   3. neither → the leg is an orphan and the seat stays unbound.
+ *
+ * `bound` says nothing about USABILITY: a leg that ran and died still binds
+ * (run-launch.js:194-196 drops non-complete legs later). PR2's dead-seat set is
+ * `unbound ∪ deadWave.seats ∪ {bound seats materializeReviews rejected}`.
+ *
+ * @param {string} waveId
+ * @param {?Array<object>} seats the wave's launch roster, in launch order
+ * @param {?Array<object>} legs
+ * @returns {{bound: Array<{seat: object, leg: object}>, unbound: Array<object>, orphanLegs: Array<object>}}
+ */
+function bindSeats(waveId, seats, legs) {
+  const roster = Array.isArray(seats) ? seats.filter(Boolean) : [];
+  const all = Array.isArray(legs) ? legs.filter(Boolean) : [];
+  const mine = all.filter(l => !l.waveId || l.waveId === waveId);
+  const takenBy = new Map();
+  const bound = [];
+  const orphanLegs = [];
+  for (const leg of mine) {
+    const id = leg.legId || leg.taskId;
+    const m = typeof id === 'string' ? id.match(/^(.*)-(\d+)$/) : null;
+    let seat = (m && m[1] === waveId) ? roster[Number(m[2]) - 1] : undefined;
+    if (!seat && leg.waveId === waveId) {
+      const alias = leg.modelInput || leg.model;
+      const hits = roster.filter(s => s.alias === alias);
+      seat = hits.length === 1 ? hits[0] : undefined;
+    }
+    if (!seat || takenBy.has(seat.id)) { orphanLegs.push(leg); continue; }
+    takenBy.set(seat.id, leg);
+    bound.push({ seat, leg });
+  }
+  return { bound, unbound: roster.filter(s => !takenBy.has(s.id)), orphanLegs };
+}
+
+module.exports = { slug, sanitizeName, buildSeats, roleAt, bindSeats };

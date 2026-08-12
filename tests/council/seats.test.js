@@ -66,3 +66,84 @@ describe('roleAt', () => {
     expect(roleAt(null, 'glm')).toBe('seat');
   });
 });
+
+describe('bindSeats', () => {
+  const { bindSeats } = require('../../src/council/seats');
+  const leg = (over) => ({ waveId: 'r-s1', status: 'complete', ...over });
+
+  test('binds by legId suffix against the WAVE ROSTER, so twins never cross', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const legs = [leg({ taskId: 'r-s1-2', model: 'deepseek', modelInput: 'deepseek' }),
+      leg({ taskId: 'r-s1-1', model: 'deepseek', modelInput: 'deepseek' })];
+    const { bound, unbound, orphanLegs } = bindSeats('r-s1', seats, legs);
+    expect(bound.map(b => [b.seat.id, b.leg.taskId]))
+      .toEqual([['deepseek#2', 'r-s1-2'], ['deepseek#1', 'r-s1-1']]);
+    expect(unbound).toEqual([]);
+    expect(orphanLegs).toEqual([]);
+  });
+
+  test('legId WINS over taskId — the two must resolve to different seats to prove precedence', () => {
+    const seats = buildSeats(['glm', 'qwen'], null, null);
+    const legs = [leg({ legId: 'r-s1-2', taskId: 'r-s1-1', model: 'qwen' })];
+    expect(bindSeats('r-s1', seats, legs).bound[0].seat.id).toBe('qwen');
+  });
+
+  test('the roster is the WAVE roster, not the bench — a critic-filtered -s1 wave', () => {
+    const seats = buildSeats(['glm', 'qwen', 'deepseek'], 'glm', null);
+    const roster = seats.filter(s => s.role !== 'critic'); // run-stage1-launch.js:47
+    const { bound } = bindSeats('r-s1', roster, [leg({ taskId: 'r-s1-1', modelInput: 'qwen' })]);
+    expect(bound[0].seat.id).toBe('qwen');
+  });
+
+  test('falls back to alias ONLY when that alias holds exactly one seat', () => {
+    const unique = buildSeats(['glm', 'qwen'], null, null);
+    expect(bindSeats('r-s1', unique, [leg({ taskId: 'no-match', modelInput: 'qwen' })])
+      .bound[0].seat.id).toBe('qwen');
+
+    const twins = buildSeats(['glm', 'glm'], null, null);
+    const ambiguous = bindSeats('r-s1', twins, [leg({ taskId: 'no-match', modelInput: 'glm' })]);
+    expect(ambiguous.bound).toEqual([]);
+    expect(ambiguous.orphanLegs).toHaveLength(1);
+    expect(ambiguous.unbound.map(s => s.id)).toEqual(['glm#1', 'glm#2']);
+  });
+
+  test('a seat with no leg comes back unbound — the dead-seat input', () => {
+    const seats = buildSeats(['glm', 'qwen'], null, null);
+    const { bound, unbound } = bindSeats('r-s1', seats, [leg({ taskId: 'r-s1-1', modelInput: 'glm' })]);
+    expect(bound).toHaveLength(1);
+    expect(unbound.map(s => s.id)).toEqual(['qwen']);
+  });
+
+  test('legs stamped with another wave are IGNORED, not orphaned (callers hold concatenated arrays)', () => {
+    const seats = buildSeats(['glm'], null, null);
+    const legs = [leg({ taskId: 'r-s1-1', modelInput: 'glm' }),
+      leg({ waveId: 'r-c1', taskId: 'r-c1-1', modelInput: 'critic-model' })];
+    const out = bindSeats('r-s1', seats, legs);
+    expect(out.bound).toHaveLength(1);
+    expect(out.orphanLegs).toEqual([]);
+  });
+
+  test('an UNSTAMPED leg binds only by exact roster-slot id, never by alias', () => {
+    const seats = buildSeats(['glm'], null, null);
+    const bySlot = bindSeats('r-s1', seats, [{ taskId: 'r-s1-1', modelInput: 'glm' }]);
+    expect(bySlot.bound).toHaveLength(1);
+    // no waveId AND no matching slot id: adopting it by alias would silently
+    // claim a foreign wave's leg.
+    const byAlias = bindSeats('r-s1', seats, [{ taskId: 'zzz-9', modelInput: 'glm' }]);
+    expect(byAlias.bound).toEqual([]);
+    expect(byAlias.orphanLegs).toHaveLength(1);
+  });
+
+  test('a second leg claiming a bound seat is an orphan, never a silent overwrite', () => {
+    const seats = buildSeats(['glm'], null, null);
+    const legs = [leg({ taskId: 'r-s1-1', modelInput: 'glm' }), leg({ taskId: 'r-s1-1', modelInput: 'glm' })];
+    const out = bindSeats('r-s1', seats, legs);
+    expect(out.bound).toHaveLength(1);
+    expect(out.orphanLegs).toHaveLength(1);
+  });
+
+  test('total over junk — never throws', () => {
+    expect(bindSeats('r-s1', null, null)).toEqual({ bound: [], unbound: [], orphanLegs: [] });
+    expect(bindSeats('r-s1', buildSeats(['glm'], null, null), [null]).orphanLegs).toEqual([]);
+  });
+});
