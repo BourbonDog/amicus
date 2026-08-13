@@ -1169,13 +1169,16 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 
 describe('runStage2', () => {
   function stage1Reviews() {
+    // v4.8 PR3 Task 2: seat: per entry, mirroring Task 3's production shape —
+    // built positionally from the same bench these reviews are for.
+    const stage1Seats = buildSeats(['gemini', 'gpt'], null, null);
     return [
       { model: 'gemini', modelInput: 'gemini', role: 'seat', text: review('gemini'),
         findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
-        conformance: 'clean', leg: mkLeg('gemini', review('gemini')) },
+        conformance: 'clean', leg: mkLeg('gemini', review('gemini')), seat: stage1Seats[0] },
       { model: 'gpt', modelInput: 'gpt', role: 'seat', text: review('gpt'),
         findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
-        conformance: 'clean', leg: mkLeg('gpt', review('gpt')) },
+        conformance: 'clean', leg: mkLeg('gpt', review('gpt')), seat: stage1Seats[1] },
     ];
   }
   const labels = assignLabels(['gemini', 'gpt']);
@@ -1192,9 +1195,9 @@ describe('runStage2', () => {
         waves.push(opts);
         return okWave([
           mkLeg('gemini', judgeOut(['Review B', 'Review A'],
-            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
           mkLeg('gpt', judgeOut(['Review A', 'Review B'],
-            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
         ]);
       },
       onSolo: () => { throw new Error('no repairs expected'); },
@@ -1224,11 +1227,11 @@ describe('runStage2', () => {
     // both judges parse clean on the first pass) — driven the same way.
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
+      onWave: (opts) => okWave([
         mkLeg('gemini', judgeOut(['Review B', 'Review A'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
         mkLeg('gpt', judgeOut(['Review A', 'Review B'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { throw new Error('no repairs expected'); },
     });
@@ -1253,13 +1256,13 @@ describe('runStage2', () => {
     const solos = [];
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'no json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'no json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]))]);
+        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1)]);
       },
     });
     const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
@@ -1284,13 +1287,13 @@ describe('runStage2', () => {
     const solos = [];
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', badJudge),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]))]);
+        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1)]);
       },
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
@@ -1305,13 +1308,13 @@ describe('runStage2', () => {
     const firstRepair = 'first judge repair, still no json';
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', badJudge),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gemini', solos.length === 1 ? firstRepair : 'second repair, still no json')]);
+        return okWave([mkLeg('gemini', solos.length === 1 ? firstRepair : 'second repair, still no json', 'complete', opts.waveId, 1)]);
       },
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
@@ -1326,11 +1329,11 @@ describe('runStage2', () => {
     const badJudge = 'original judging prose, no json';
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', badJudge),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gemini', '')]); },
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gemini', '', 'complete', opts.waveId, 1)]); },
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(solos).toHaveLength(2);
@@ -1341,11 +1344,11 @@ describe('runStage2', () => {
     let soloCount = 0;
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'never json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'never json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: () => { soloCount += 1; return okWave([mkLeg('gemini', 'still bad')]); },
+      onSolo: (opts) => { soloCount += 1; return okWave([mkLeg('gemini', 'still bad', 'complete', opts.waveId, 1)]); },
     });
     const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(soloCount).toBe(2);
@@ -1359,9 +1362,9 @@ describe('runStage2', () => {
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
       overBudget: () => true,
-      onWave: () => okWave([
-        mkLeg('gemini', 'no json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'no json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected over budget'); },
     });
@@ -1380,9 +1383,9 @@ describe('runStage2', () => {
     let soloCalls = 0;
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', ''),   // status 'complete' (default), summary empty
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', '', 'complete', opts.waveId, 1),   // status 'complete' (default), summary empty
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected for an empty-summary complete leg'); },
     });
@@ -1396,9 +1399,9 @@ describe('runStage2', () => {
   test('dead judge leg → ok false (tally over survivors; tiers unchanged)', async () => {
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', '', 'timeout'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', '', 'timeout', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { throw new Error('dead legs are not repaired'); },
     });
@@ -1414,12 +1417,12 @@ describe('runStage2', () => {
     // SEPARATE extraRows row instead of overwriting the primary attribution.
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'no json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'no json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: (opts) => okWave([{ ...mkLeg('gemini',
-        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])), waveId: opts.waveId }]),
+      onSolo: (opts) => okWave([mkLeg('gemini',
+        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1)]),
     });
     const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     const g = judgeResults.find(j => j.judge === 'gemini');
@@ -1437,11 +1440,11 @@ describe('runStage2', () => {
   test('Task 5: a FAILED judge repair still yields its repair row (error status)', async () => {
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'never json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'never json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: (opts) => okWave([{ ...deadLeg('gemini'), waveId: opts.waveId }]),
+      onSolo: (opts) => okWave([deadLeg('gemini', 'error', 'boom', opts.waveId, 1)]),
     });
     const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     const g = judgeResults.find(j => j.judge === 'gemini');
@@ -1458,11 +1461,11 @@ describe('runStage2', () => {
     const s2 = require('../../src/council/briefings-stage2');
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
+      onWave: (opts) => okWave([
         mkLeg('gemini', judgeOut(['Review B', 'Review A'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1),
         mkLeg('gpt', judgeOut(['Review A', 'Review B'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { throw new Error('no repairs expected'); },
     });
