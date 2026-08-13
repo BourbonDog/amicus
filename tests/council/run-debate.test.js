@@ -7,6 +7,7 @@ const { runDebate, nothingToDebate, disputingJudges } = require('../../src/counc
 const { tally } = require('../../src/council/tally');
 const runState = require('../../src/council/run-state');
 const { runCouncil } = require('../../src/council/run');
+const { buildSeats } = require('../../src/council/seats');
 const flh = require('./helpers/fake-launchers');
 const { scriptedLaunchers, debateScriptMap, debateScript, okWave, mkLeg, launchersFromScript } = flh;
 
@@ -28,31 +29,88 @@ function provisionalInput() {
   };
 }
 
+// v4.8 PR3 Task 3: real fanout stamps taskId `${waveId}-${slot}` (roster position,
+// consumed without replacement) onto every leg BEFORE handing it back — the exact
+// re-stamp scriptedLaunchers/launchersFromScript perform in fake-launchers.js. This
+// fixture skipped that step and returned script-literal legs untouched, so a leg's
+// taskId never carried the wave it actually belonged to — bindSeats' `/^(.*)-(\d+)$/`
+// could never match it. `stampFanout` reproduces that same roster-slot re-stamp
+// (NOT a file-global counter, which indexes the wrong roster position — see mkLeg
+// at helpers/fake-launchers.js:14-18, which this deliberately does NOT copy).
+function stampFanout(waveId, models, res) {
+  if (res && res.wave && Array.isArray(res.wave.legs)) {
+    const remaining = (models || []).slice();
+    res.wave.legs.forEach((l, i) => {
+      const alias = l.modelInput || l.model;
+      const k = remaining.indexOf(alias);
+      if (k >= 0) { remaining[k] = null; }
+      l.taskId = `${waveId}-${k >= 0 ? k + 1 : i + 1}`;
+      l.waveId = waveId;
+    });
+    // Solo callers built `leg` as a SEPARATE leg(...) call from the one inside
+    // wave.legs (same content, different object) — collapse onto the re-stamped
+    // one so both surfaces agree, mirroring launchersFromScript's solo wrapper.
+    res.leg = res.wave.legs[0] || res.leg || null;
+  }
+  return res;
+}
 // Fake launchers: defense solo defends A1; re-vote wave has gpt flip to agree, qwen hold dispute.
 // Mirrors the run-launch.js DI contract: launchSolo → {wave, exitCode, leg}; launchWave → {wave, exitCode}.
 function fakeLaunchers(script, seen) {
   return {
-    launchSolo: async (opts) => { if (seen) { seen.push(opts); } return { ...script.solos[opts.waveId], exitCode: 0 }; },
-    launchWave: async (opts) => { if (seen) { seen.push(opts); } return { wave: script.waves[opts.waveId], exitCode: 0 }; },
+    launchSolo: async (opts) => {
+      if (seen) { seen.push(opts); }
+      return stampFanout(opts.waveId, [opts.model], { ...script.solos[opts.waveId], exitCode: 0 });
+    },
+    launchWave: async (opts) => {
+      if (seen) { seen.push(opts); }
+      return stampFanout(opts.waveId, opts.models, { wave: script.waves[opts.waveId], exitCode: 0 });
+    },
   };
 }
-function leg(model, summary, waveId) {
-  return { model, modelInput: model, status: 'complete', summary, taskId: `${model}-t`,
-    ...(waveId !== undefined ? { waveId } : {}) };
+// v4.8 PR3 Task 3: leg() now takes an explicit (waveId, slot) pair, mirroring
+// run-stages.test.js's mkLeg (PR2a Task 1) — slot is the leg's 1-based index in
+// the wave's LAUNCH ROSTER (seats.js:93-96), defaulting to 1 because every call
+// site that passes a bare waveId is a SOLO (one-model roster, always slot 1).
+// Omitting waveId omits taskId/waveId entirely rather than falling back to the
+// old `${model}-t` shape — no leg this file returns is meant to reach a wave
+// unstamped; the ~34 call sites that omit waveId are all consumed through
+// fakeLaunchers/stampFanout above, which re-stamps them before they leave.
+function leg(model, summary, waveId, slot = 1) {
+  return { model, modelInput: model, status: 'complete', summary,
+    ...(waveId !== undefined ? { taskId: `${waveId}-${slot}`, waveId } : {}) };
 }
 function wave(legs) { return { status: 'complete', legs }; }
 const defenseOut = (resp) => `Defending.\n\`\`\`json\n${JSON.stringify({ responses: resp })}\n\`\`\`\n`;
 const revoteOut = (rv) => `Re-voting.\n\`\`\`json\n${JSON.stringify({ revotes: rv })}\n\`\`\`\n`;
 
+// v4.8 PR3 Task 3: models/seats/criticSeat + degrade widened onto ctxFor, mirroring
+// how PR2a widened run-stages.test.js's makeCtx (:58-101). Production sets seats/
+// criticSeat/models at run.js:131-135 (via asm.preflightSeats) and ctx.degrade at
+// run.js:119. Every debate fixture here runs the fixed 3-seat gemini/gpt/qwen bench
+// (provisionalInput()'s meta.models, e2eOpts()'s models) — no critic, no lenses —
+// so, unlike makeCtx, this stays a fixed table rather than a parameterized one.
+// Without ctx.degrade, any ctx.degrade.note(...) call throws
+// "Cannot read properties of undefined"; without o.seats/o.criticSeat/o.models,
+// any bindSeats-driven consumer falls through to an empty roster — green for the
+// wrong reason.
 function ctxFor(tmp, launchers) {
+  const models = ['gemini', 'gpt', 'qwen'];
+  const seats = buildSeats(models, null, null);
+  const notes = [];
   return {
     // v4.3 Task 3 (spec §7.2): non-null councilName so legOpts()'s attribution
     // fields can be asserted below, not just checked against a falsy default.
     // v4.7 F8 D16 (T7 review): tag joins it on the same idiom — non-null so
     // legOpts()'s `tag: ctx.o.tag` forward can be asserted too.
     o: { runId: 'r', runDir: tmp, timeout: 10, gateway: 'auto', date: '2026-07-19', maxCost: null,
-      noCostGate: false, councilName: 'nightly-council', tag: 'sprint42' },
+      noCostGate: false, councilName: 'nightly-council', tag: 'sprint42',
+      models, critic: null, lenses: null, seats, criticSeat: null },
     launchers, addWave: () => {}, overBudget: () => false, scratchDir: path.join(tmp, '_scratch'),
+    // A real recording sink (not a no-op) so a later ctx.degrade.note(...) call is
+    // both safe AND assertable — not the production createDegradeSink, which
+    // drags in fs writes this fixture doesn't need.
+    degrade: { note: (rec) => notes.push(rec), all: () => notes },
   };
 }
 
@@ -311,9 +369,9 @@ describe('runDebate — one bounded repair per defense solo', () => {
       launchSolo: async (opts) => {
         seen.push(opts.waveId);
         const summary = opts.waveId === 'r-d1' ? 'prose only, no json block' : good;
-        return { wave: wave([leg('gemini', summary)]), leg: leg('gemini', summary), exitCode: 0 };
+        return { wave: wave([leg('gemini', summary, opts.waveId)]), leg: leg('gemini', summary, opts.waveId), exitCode: 0 };
       },
-      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]))]), exitCode: 0 }),
+      launchWave: async (opts) => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), opts.waveId)]), exitCode: 0 }),
     }), { provisionalRecord, tallyInput: input });
 
     expect(seen).toEqual(['r-d1', 'r-d1r']);
@@ -339,9 +397,9 @@ describe('runDebate — one bounded repair per defense solo', () => {
       launchSolo: async (opts) => {
         prompts[opts.waveId] = opts.prompt;
         const summary = opts.waveId === 'r-d1' ? bad : good;
-        return { wave: wave([leg('gemini', summary)]), leg: leg('gemini', summary), exitCode: 0 };
+        return { wave: wave([leg('gemini', summary, opts.waveId)]), leg: leg('gemini', summary, opts.waveId), exitCode: 0 };
       },
-      launchWave: async () => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]))]), exitCode: 0 }),
+      launchWave: async (opts) => ({ wave: wave([leg('gpt', revoteOut([{ id: 'A1', verdict: 'agree' }]), opts.waveId)]), exitCode: 0 }),
     }), { provisionalRecord: tally(input), tallyInput: input });
 
     expect(prompts['r-d1r']).toContain(bad);
@@ -509,7 +567,10 @@ describe('runDebate — v4.7 D2/E4 debate rows: superseded pre-repair legs and f
         throw new Error(`unscripted solo waveId ${opts.waveId}`);
       },
       launchWave: async () => ({
-        wave: wave([leg('gpt', 'prose only, no json block', 'r-rv'), leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv')]),
+        // Two judges share ONE wave: each needs its OWN roster slot (gpt=1, qwen=2)
+        // — leg()'s default slot=1 is only correct for a solo's single-model roster.
+        wave: wave([leg('gpt', 'prose only, no json block', 'r-rv', 1),
+                    leg('qwen', revoteOut([{ id: 'A1', verdict: 'agree' }]), 'r-rv', 2)]),
         exitCode: 0,
       }),
     }), { provisionalRecord, tallyInput: input });
@@ -529,9 +590,9 @@ describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wa
     const input = provisionalInput();
     const provisionalRecord = tally(input);
     const ctx = ctxFor(tmp, {
-      launchSolo: async () => {
+      launchSolo: async (opts) => {
         const out = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
-        return { wave: wave([leg('gemini', out)]), leg: leg('gemini', out), exitCode: 0 };
+        return { wave: wave([leg('gemini', out, opts.waveId)]), leg: leg('gemini', out, opts.waveId), exitCode: 0 };
       },
       launchWave: async () => { throw new Error('re-vote wave must not launch over budget'); },
     });
@@ -553,7 +614,7 @@ describe('runDebate — cost ceiling is a WHOLE-ROUND gate before the re-vote wa
     const provisionalRecord = tally(input);
     const out = defenseOut([{ id: 'A1', action: 'withdraw' }]);
     const result = await runDebate(ctxFor(tmp, {
-      launchSolo: async () => ({ wave: wave([leg('gemini', out)]), leg: leg('gemini', out), exitCode: 0 }),
+      launchSolo: async (opts) => ({ wave: wave([leg('gemini', out, opts.waveId)]), leg: leg('gemini', out, opts.waveId), exitCode: 0 }),
       launchWave: async () => { throw new Error('no re-vote wave expected'); },
     }), { provisionalRecord, tallyInput: input });
 
@@ -586,7 +647,7 @@ describe('runDebate — abort short-circuits the round', () => {
     const provisionalRecord = tally(input);
     const out = defenseOut([{ id: 'A1', action: 'defend', argument: 'caps at 5' }]);
     const result = await runDebate(ctxFor(tmp, {
-      launchSolo: async () => ({ wave: wave([leg('gemini', out)]), leg: leg('gemini', out), exitCode: 0 }),
+      launchSolo: async (opts) => ({ wave: wave([leg('gemini', out, opts.waveId)]), leg: leg('gemini', out, opts.waveId), exitCode: 0 }),
       launchWave: async () => ({ wave: wave([]), exitCode: 130 }),
     }), { provisionalRecord, tallyInput: input });
 
@@ -617,7 +678,7 @@ describe('runDebate — defense solos run CONCURRENTLY (spec §5.1)', () => {
         inFlight -= 1;
         // Both withdraw ⇒ nothing defended/amended ⇒ the re-vote wave never launches.
         const out = defenseOut([{ id: waveId === 'r-d1' ? 'A1' : 'B1', action: 'withdraw' }]);
-        return { wave: wave([leg(model, out)]), leg: leg(model, out), exitCode: 0 };
+        return { wave: wave([leg(model, out, waveId)]), leg: leg(model, out, waveId), exitCode: 0 };
       },
       launchWave: async () => { throw new Error('no re-vote wave expected'); },
     };
