@@ -657,13 +657,16 @@ npx jest tests/council/stage1-bind.test.js tests/council/degrade-contract.test.j
 
 `run-degrade.js:21-32` rewrites an unregistered channel as `internal` and **still** flips `degraded.value`, so a test asserting only `degrades.length` or `exitCode === 2` passes on a forgotten registration:
 
+⚠️ **Restore from a byte copy, never `git checkout --`.** The file you are mutating holds UNCOMMITTED work from Step 1, and `git checkout -- <file>` reverts to HEAD — silently discarding that edit along with the mutation. (This happened for real on Task 2; it was caught by a grep, but only by luck.) The recipe below is independent of git state.
+
 ```bash
-node -e "const f='src/utils/degrade.js';const fs=require('fs');const s=fs.readFileSync(f,'utf8');const m=s.replace(\"'seat-unbound',\",'');if(m===s){console.error('MUTATION DID NOT APPLY');process.exit(1)}fs.writeFileSync(f,m)"
+node -e "const fs=require('fs');const f='src/utils/degrade.js';fs.copyFileSync(f,f+'.bak');const s=fs.readFileSync(f,'utf8');const m=s.replace(\"'seat-unbound',\",'');if(m===s){console.error('MUTATION DID NOT APPLY');process.exit(1)}fs.writeFileSync(f,m)"
 npx jest tests/council/degrade-contract.test.js tests/council/stage1-bind.test.js
-git checkout -- src/utils/degrade.js
+node -e "const fs=require('fs');const f='src/utils/degrade.js';fs.copyFileSync(f+'.bak',f);fs.unlinkSync(f+'.bak')"
+git diff --stat src/utils/degrade.js
 ```
 
-Expected: RED while mutated. If green, the assertions do not name `.channel` — fix them before proceeding.
+Expected: RED while mutated. If green, the assertions do not name `.channel` — fix them before proceeding. After restoring, confirm `grep -c "seat-unbound" src/utils/degrade.js` is non-zero — a silently-lost registration is the exact failure this step exists to catch.
 
 - [ ] **Step 7: Commit**
 
@@ -1244,15 +1247,18 @@ Re-derive with `grep -n "launchedSeats\|notedSeats\|seenSeats\|f\.seat\|=== seat
 npx jest tests/council/run-retry.test.js tests/council/run-stages.test.js tests/council/degrade-channels.test.js
 ```
 
-Revert the dedup key to the alias and confirm RED:
+Revert the dedup key to the alias and confirm RED.
+
+⚠️ **Restore from a byte copy, never `git checkout --`.** The files you are mutating hold UNCOMMITTED work from Steps 3-4c, and `git checkout -- <file>` reverts to HEAD — silently discarding that work along with the mutation. (This happened for real on Task 2.) The recipe below is independent of git state.
 
 ```bash
-node -e "const f='src/council/run-retry-group.js';const fs=require('fs');const s=fs.readFileSync(f,'utf8');const m=s.replace('f.seatId === key','f.seat === seat');if(m===s){console.error('MUTATION DID NOT APPLY');process.exit(1)}fs.writeFileSync(f,m)"
+node -e "const fs=require('fs');const f='src/council/run-retry-group.js';fs.copyFileSync(f,f+'.bak');const s=fs.readFileSync(f,'utf8');const m=s.replace('f.seatId === key','f.seat === seat');if(m===s){console.error('MUTATION DID NOT APPLY');process.exit(1)}fs.writeFileSync(f,m)"
 npx jest tests/council/run-retry.test.js
-git checkout -- src/council/run-retry-group.js
+node -e "const fs=require('fs');const f='src/council/run-retry-group.js';fs.copyFileSync(f+'.bak',f);fs.unlinkSync(f+'.bak')"
+git diff --stat src/council/run-retry-group.js
 ```
 
-Repeat for `launchedSeats` (restore `new Set(unit.models)` plus the two alias feeders). Both must go RED, and each mutation must report that it applied — a mutation that silently fails to apply reads as a pass.
+Repeat the same copy/mutate/restore shape for `launchedSeats` in `src/council/run-retry.js` (mutate it back to `new Set(unit.models)` plus the two alias feeders). Both must go RED, and each mutation must report that it applied — a mutation that silently fails to apply reads as a pass. After each restore, confirm `git diff --stat` shows the file still carrying your Step 3-4c work.
 
 - [ ] **Step 6: Commit**
 
