@@ -2005,7 +2005,8 @@ deliberately left alone:
   one `letterByModel` key (last wins) and `rankPositions` (`tally.js:32-42`) collapses them, so
   `rankings[].order` is already meaningless on a twin bench and street-cred computed from it
   cannot be made correct by editing `:58`. Seat-ify `assignLabels`/`rankingToOrder` first.
-- [ ] **PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6, §3 R8) is still unwritten.** Spec
+- [ ] **PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
+  rulings table) is still unwritten.** Spec
   §4.5 pairs it with the `tally.js:96` fix: once same-model seats count as each other's peers, the
   corroboration has to be *labelled* on the finding rather than silently folded into the basis.
   Listed in the spec's artifact table (`tally.json`, per finding, optional in schema) and in no
@@ -2016,6 +2017,19 @@ deliberately left alone:
   position — `run.json`'s `seats[]` (seeded `null` at `run-state.js:99`, filled by
   `preflightSeats`) is the only place the table exists. Every seat-aware renderer therefore has to
   read two documents.
+- [ ] **PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
+  verdict-only consumer cannot tell which twin raised a finding.** `buildVerdict`
+  (`src/council/verdict.js:113-127`) rebuilds every finding from an explicit field list — `id`,
+  `raiser`, `severity`, `tier`, `basis`, `confidence`, `tierOverride`, `duplicateOf`,
+  `adjudications`, `decision`, `applied`, plus `debate` when present. `adjudications` is passed by
+  reference (`:121`), so PR3's per-vote `seat` survives; `raiserSeat` has no slot and is dropped.
+  Measured on a twin bench: the tally finding carries `"raiserSeat":"deepseek#1"`, the verdict
+  finding does not, while both carry `adjudications[0].seat === "deepseek#2"`. Every caller writes
+  through `buildVerdict` (`run-assemble.js:223`, `cli-handlers-council.js:198`,
+  `mcp-server.js:1452`), so there is no second path that could add it. **Not fixed in PR3** — the
+  CHANGELOG describes what shipped, and threading it through is a code change PR3 did not make.
+  Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
+  document" gap.
 - [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
   `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
   was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin
