@@ -67,10 +67,10 @@ async function runStage1(ctx) {
   // Per-wave binding, before anything reads a leg. Orphans are announced now —
   // they are not a loss, so the "never degrade for a seat the retry saves" rule
   // below does not apply to them.
-  const { orphanLegs } = bindStage1Waves(waves);
+  const { seatOf, orphanLegs } = bindStage1Waves(waves);
   for (const { waveId, leg } of orphanLegs) { ctx.degrade.note(orphanLegNote(waveId, leg)); }
 
-  const firstPass = materializeReviews(o.runDir, legs);
+  const firstPass = materializeReviews(o.runDir, legs, seatOf);
   const alive0 = new Set(firstPass.map(m => m.leg));
   const deadLegs0 = legs.filter(l => !alive0.has(l));
 
@@ -116,7 +116,7 @@ async function runStage1(ctx) {
   // and `recoveredLegs` can never both carry a leg for the same seat here.
   // materializeReviews re-writing an already-materialized recovered leg's
   // review-*.md a second time is accepted as an idempotent no-op, not a bug.
-  const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs]);
+  const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs], seatOf);
   const stillDeadLegs = [...retry.skippedDeadLegs, ...retry.stillDeadLegs];
   const stillDeadWaves = [...retry.skippedDeadWaves, ...retry.stillDeadWaves];
 
