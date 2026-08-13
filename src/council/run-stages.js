@@ -145,8 +145,8 @@ async function runStage1(ctx) {
   // and `recoveredLegs` can never both carry a leg for the same seat here.
   // A recovered leg is a RETRY-wave object, absent from Stage-1's object-keyed
   // seatOf, so this union is mandatory rather than tidiness: without it every
-  // healed seat re-materializes with seat:null and roleAt falls back to the
-  // alias shim. Re-writing an already-materialized recovered leg's review file
+  // healed seat re-materializes with seat:null and its role falls back to
+  // roleFor's alias shim. Re-writing an already-materialized recovered leg's review file
   // is only an idempotent no-op while the name is the seat's — under the alias
   // it is the twin clobber this PR removes (two healed twins, one file).
   const allSeatOf = new Map([...seatOf, ...retry.seatOf]);
