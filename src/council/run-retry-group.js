@@ -23,11 +23,16 @@ function lensIndexOf(o, waveId, model) {
  * `.models` is fixed at creation (there is only ever one critic seat), so
  * only bench/lens units grow `.models` here — the critic call sites pass
  * `trackModel: false`.
+ *
+ * v4.8 PR2b: `seatObj` rides in lockstep, so `unit.seats` stays INDEX-PARALLEL
+ * to `unit.models` — same order, same length. `null` means "we could not
+ * identify this seat"; it is never back-filled from an alias lookup, which is
+ * exactly the guess seat identity exists to forbid.
  */
-function recordFailure(unit, seat, ff, trackModel = true) {
+function recordFailure(unit, seat, ff, trackModel = true, seatObj = null) {
   if (unit.firstFailures.some(f => f.seat === seat)) { return; }
   unit.firstFailures.push(ff);
-  if (trackModel) { unit.models.push(seat); }
+  if (trackModel) { unit.models.push(seat); unit.seats.push(seatObj); }
 }
 
 /**
@@ -37,15 +42,26 @@ function recordFailure(unit, seat, ff, trackModel = true) {
  * differ). Stable order: bench, critic, lenses ascending. The critic matches
  * on EITHER carrier — waveId convention or model — mirroring
  * verdict.js summarizeSeatLoss.
+ *
+ * `seatOf` (v4.8 PR2b) is Stage-1's leg->seat binding, keyed by leg OBJECT
+ * identity: it is how a dead LEG contributes the seat it was actually bound to
+ * rather than one guessed from its alias. A wave-origin loss carries its own
+ * roster on `w.seats`, positionally parallel to `w.models`.
  */
-function groupStage1Losses(o, deadWaves = [], deadLegs = []) {
+function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map()) {
   const isCriticWave = (w) =>
     w.waveId === `${o.runId}-c1` || (!!o.critic && (w.models || []).includes(o.critic));
   const bench = { unit: 'bench', waveId: `${o.runId}-s1r1`, retryOfWaveId: `${o.runId}-s1`,
-    models: [], firstFailures: [], srcWaves: [], srcLegs: [] };
+    models: [], seats: [], firstFailures: [], srcWaves: [], srcLegs: [] };
   const lensUnits = new Map(); // lensIndex (number, or null for unmappable) -> unit
+  // Seeded exactly like `models`, and gated on the same `o.critic` so the two
+  // arrays cannot diverge in LENGTH when the critic's seat cannot be resolved
+  // (a caller with no o.seats): `[null]` says "unidentified", `[]` would say
+  // "no slot at all" and shift the retry roster.
+  const criticSeatObj = (o.seats || []).find(s => s.alias === o.critic) || null;
   const criticUnit = { unit: 'critic', waveId: `${o.runId}-c1r1`, retryOfWaveId: `${o.runId}-c1`,
-    models: o.critic ? [o.critic] : [], firstFailures: [], srcWaves: [], srcLegs: [] };
+    models: o.critic ? [o.critic] : [], seats: o.critic ? [criticSeatObj] : [],
+    firstFailures: [], srcWaves: [], srcLegs: [] };
 
   const lensUnitFor = (i) => {
     if (!lensUnits.has(i)) {
@@ -57,9 +73,10 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = []) {
       // `lensIndex === null` and routes its sources to skipped instead.
       lensUnits.set(i, i === null
         ? { unit: 'lens', lensIndex: null, waveId: null, retryOfWaveId: null,
-          models: [], firstFailures: [], srcWaves: [], srcLegs: [] }
+          models: [], seats: [], firstFailures: [], srcWaves: [], srcLegs: [] }
         : { unit: 'lens', lensIndex: i, waveId: `${o.runId}-l${i}r1`,
-          retryOfWaveId: `${o.runId}-l${i}`, models: [], firstFailures: [], srcWaves: [], srcLegs: [] });
+          retryOfWaveId: `${o.runId}-l${i}`, models: [], seats: [],
+          firstFailures: [], srcWaves: [], srcLegs: [] });
     }
     return lensUnits.get(i);
   };
@@ -69,14 +86,16 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = []) {
     if (o.lenses) {
       const u = lensUnitFor(lensIndexOf(o, w.waveId, models[0]));
       u.srcWaves.push(w);
-      models.forEach(seat => recordFailure(u, seat, { seat, class: 'wave', waveId: w.waveId, reason: w.reason }));
+      models.forEach((seat, idx) => recordFailure(u, seat,
+        { seat, class: 'wave', waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
     } else if (isCriticWave(w)) {
       criticUnit.srcWaves.push(w);
       recordFailure(criticUnit, o.critic,
         { seat: o.critic, class: 'wave', waveId: w.waveId, reason: w.reason }, false);
     } else {
       bench.srcWaves.push(w);
-      models.forEach(seat => recordFailure(bench, seat, { seat, class: 'wave', waveId: w.waveId, reason: w.reason }));
+      models.forEach((seat, idx) => recordFailure(bench, seat,
+        { seat, class: 'wave', waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
     }
   }
   for (const leg of deadLegs) {
@@ -85,13 +104,13 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = []) {
     if (o.lenses) {
       const u = lensUnitFor(lensIndexOf(o, null, seat));
       u.srcLegs.push(leg);
-      recordFailure(u, seat, ff);
+      recordFailure(u, seat, ff, true, seatOf.get(leg) || null);
     } else if (o.critic && seat === o.critic) {
       criticUnit.srcLegs.push(leg);
       recordFailure(criticUnit, seat, ff, false);
     } else {
       bench.srcLegs.push(leg);
-      recordFailure(bench, seat, ff);
+      recordFailure(bench, seat, ff, true, seatOf.get(leg) || null);
     }
   }
 

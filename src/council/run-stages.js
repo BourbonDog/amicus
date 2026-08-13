@@ -76,7 +76,7 @@ async function runStage1(ctx) {
 
   // SL-2: one retry BEFORE anything is recorded lost — the sink never
   // un-flips, so a degrade for a seat the retry saves must never fire at all.
-  const retry = await retryStage1Losses(ctx, { deadWaves, deadLegs: deadLegs0,
+  const retry = await retryStage1Losses(ctx, { deadWaves, deadLegs: deadLegs0, seatOf,
     counts: { reviewed: firstPass.length, total: legs.length } });
   if (retry.aborted) {
     // Final whole-branch review: same bug class as the post-retry-repair
@@ -109,14 +109,22 @@ async function runStage1(ctx) {
     });
   }
   for (const rec of retry.stillDeadNotes) { ctx.degrade.note(rec); }
+  // Same shape: the retry pass BUILDS its orphan records, the caller EMITS them
+  // (that module emits heals only and never notes a degrade, by construction).
+  for (const { waveId, leg } of retry.orphanLegs) { ctx.degrade.note(orphanLegNote(waveId, leg)); }
 
   // Invariant this merge relies on: retry.recoveredLegs only ever names seats
   // that actually lost their seat on the first pass (run-retry.js's recovery
   // loop drops any leg for a seat with no firstFailures entry) — so `legs`
   // and `recoveredLegs` can never both carry a leg for the same seat here.
-  // materializeReviews re-writing an already-materialized recovered leg's
-  // review-*.md a second time is accepted as an idempotent no-op, not a bug.
-  const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs], seatOf);
+  // A recovered leg is a RETRY-wave object, absent from Stage-1's object-keyed
+  // seatOf, so this union is mandatory rather than tidiness: without it every
+  // healed seat re-materializes with seat:null and roleAt falls back to the
+  // alias shim. Re-writing an already-materialized recovered leg's review file
+  // is only an idempotent no-op while the name is the seat's — under the alias
+  // it is the twin clobber this PR removes (two healed twins, one file).
+  const allSeatOf = new Map([...seatOf, ...retry.seatOf]);
+  const materialized = materializeReviews(o.runDir, [...legs, ...retry.recoveredLegs], allSeatOf);
   const stillDeadLegs = [...retry.skippedDeadLegs, ...retry.stillDeadLegs];
   const stillDeadWaves = [...retry.skippedDeadWaves, ...retry.stillDeadWaves];
 
