@@ -34,10 +34,14 @@ All notable changes to Amicus are documented here. Format follows
   seats sharing an alias both die, the run now produces two retry legs, two heals, and two review
   files instead of collapsing to a single retry and a single clobbered file. Reviews are written
   per seat as `review-<seat>.md` (e.g. `review-deepseek-1.md` / `review-deepseek-2.md`).
-- **`verdict.json`'s seat-loss text now covers partial wave returns.** A partial-return loss now
-  reaches `verdict.js`'s `summarizeSeatLoss` through `run.json`'s `deadWaves`, so runs that
-  previously showed nothing for this class of loss now report the seat by name. This is intended —
-  the point of the seat-unbound work above — not drift.
+- **Known limitation: a partial-return seat loss is recorded in `run.json` but not yet reflected
+  in `verdict.json`.** The loss lands in `stage.deadWaves` (as a `partial` entry) and in
+  `degrades[]` (on the new `seat-unbound` channel above), and the run exits 2 — but
+  `verdict.json`'s `seatLoss.deadBenchSeats` does not name the seat, because `verdict.js`'s
+  `deriveSeatLoss` filters `degrades[]` down to the `dead-wave`/`dead-leg` channels only, and a
+  `seat-unbound` loss matches neither. The seat is not silently dropped from the run's own
+  record, only from the summary readers usually check first. Closing this is a filed BACKLOG item
+  for PR4.
 - **Known limitation: the Council Workspace does not yet list per-seat review files for a bench
   that repeats an alias.** `artifact-guard.js` still builds its file allowlist from a
   de-duplicated bench, so only one of a twin bench's two review files appears in the Workspace

@@ -1904,14 +1904,20 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   "twin" only as a test-naming convention for a paired/counterpart test, not a duplicated-alias
   bench. Nothing currently pins this gap or would catch a fix.
 
-- [ ] **PR4 · `verdict.js`'s `summarizeSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
+- [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on
-  `dead-leg`/`dead-wave` and are blind to `seat-unbound`.** This is **not** a plain channel-list
-  edit: two different note shapes ride the `seat-unbound` channel and mean opposite things about
-  spend. An **orphan** note (`data.legId` present) means a review DID land, just unattributable —
-  counting it as a lost seat would over-report losses and double-count a review that was already
-  paid for and rendered. A **missing-seat** note (`data.legId` absent) means the seat is genuinely
-  absent. Discriminate on `data.legId`, never on channel membership alone.
+  `dead-leg`/`dead-wave` and are blind to `seat-unbound`.** (`deriveSeatLoss`, not
+  `summarizeSeatLoss` — `writeVerdictFiles` at `run-assemble.js:217-219` takes the
+  `deriveSeatLoss` branch whenever `degrades` is present, which it always is for a run that lost a
+  seat; `summarizeSeatLoss` is a fallback reached only when a direct caller supplies `deadWaves`
+  with no `degrades` at all. This item closes the CHANGELOG's known-limitation entry for this
+  release: `verdict.json`'s `seatLoss` not yet naming a partial-return loss.) This is **not** a
+  plain channel-list edit: two different note shapes ride the `seat-unbound` channel and mean
+  opposite things about spend. An **orphan** note (`data.legId` present) means a review DID
+  land, just unattributable — counting it as a lost seat would over-report losses and
+  double-count a review that was already paid for and rendered. A **missing-seat** note
+  (`data.legId` absent) means the seat is genuinely absent. Discriminate on `data.legId`, never
+  on channel membership alone.
 
 - [ ] **PR4 · `run-stage2.js:57` builds its judge roster from `reviews[].modelInput`, so a twin
   bench pays for two judge legs and clobbers one `judge-<alias>.md`.** Pre-existing, not
