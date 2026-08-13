@@ -82,16 +82,21 @@ async function runStage1(ctx) {
     // Final whole-branch review: same bug class as the post-retry-repair
     // abort fixed ~87 lines below ("Must be the post-retry set") — subtract
     // whatever retry.recoveredLegs already healed before this abort landed.
-    const healed = new Set(retry.recoveredLegs.map(l => l.modelInput || l.model));
+    // SEAT-keyed since v4.8 H4: twin seats now retry INDEPENDENTLY, so an alias
+    // Set marks BOTH healed the moment one of them is — the still-dead twin
+    // silently disappears from deadLegs AND deadWaves[].models, and run.js
+    // persists that return into stage-1 state as if it had reviewed.
+    const keyOf = (l, bind) => { const s = bind.get(l); return s ? s.id : (l.modelInput || l.model); };
+    const healed = new Set(retry.recoveredLegs.map(l => keyOf(l, retry.seatOf)));
     // `seats` must be narrowed in LOCKSTEP with `models`: a bare `...w` carries
     // the FULL roster past a narrowed models list, and run.js persists this
     // record before the abort short-circuit — so index i of each would name a
     // different seat in run.json. Omitted entirely when the source had none.
     return { aborted: retry.aborted, reviews: [], degraded: false, extraRows: [],
-      deadLegs: deadLegs0.filter(l => !healed.has(l.modelInput || l.model)),
+      deadLegs: deadLegs0.filter(l => !healed.has(keyOf(l, seatOf))),
       deadWaves: deadWaves.map((w) => {
         const keep = (w.models || []).map((m, i) => [m, (w.seats || [])[i] || null])
-          .filter(([m]) => !healed.has(m));
+          .filter(([m, s]) => !healed.has(s ? s.id : m));
         return { ...w, models: keep.map(x => x[0]), ...(w.seats ? { seats: keep.map(x => x[1]) } : {}) };
       }).filter(w => w.models.length > 0) };
   }

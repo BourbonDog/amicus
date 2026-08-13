@@ -637,6 +637,53 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
       + 'launch and will exit degraded (2)');
     expect(r.degraded).toBe(true);
   });
+
+  // ---- v4.8 PR2b Task 6 (H4): twin seats retry independently ----
+
+  test('H4: a twin bench whose retry heals BOTH seats emits no degrade and exits clean', async () => {
+    // Before H4 the two twins collapsed into ONE retry leg, so one paid seat
+    // was silently abandoned. Both must relaunch, and both must heal cleanly.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    // roster (-s1): ['deepseek','deepseek'] -> #1=slot1, #2=slot2; retry roster
+    // (-s1r1) is the same pair in the same order.
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1),
+          deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('deepseek', 'abc123-s1r1', 1),
+          usableLeg('deepseek', 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['deepseek', 'deepseek']);
+    expect(ctx._notes.map(n => n.channel)).toEqual(['stage1-retry', 'stage1-retry']);
+    expect(r.degraded).toBe(false);
+    expect(r.reviews).toHaveLength(2);
+  });
+
+  test('H4: a retry abort after ONE twin healed keeps the OTHER twin in deadLegs', async () => {
+    // Lens mode makes each twin its own retry unit, so unit 1 can heal before
+    // unit 2 aborts. run-stages.js's `healed` set is OUTSIDE run-retry.js and
+    // was alias-keyed: it marks BOTH twins healed the moment one of them is,
+    // and run.js persists that return into stage-1 state — the still-dead twin
+    // disappears from the record as if it had reviewed.
+    let solo = 0;
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'], lenses: ['risk', 'cost'],
+      onSolo: (opts) => {
+        solo += 1;
+        if (solo <= 2) { // first pass: both lens solos die
+          return { wave: { waveId: opts.waveId,
+            legs: [deadLeg('deepseek', undefined, undefined, opts.waveId, 1)] }, exitCode: 0 };
+        }
+        if (solo === 3) { // lens-1 retry heals
+          return { wave: { waveId: opts.waveId,
+            legs: [mkLeg('deepseek', review(), 'complete', opts.waveId, 1)] }, exitCode: 0 };
+        }
+        return { wave: null, exitCode: 130 }; // lens-2 retry aborts
+      } });
+    const r = await runStage1(ctx);
+    expect(r.aborted).toBe(130);
+    expect(r.deadLegs.map(l => l.waveId)).toEqual(['abc123-l2']);
+  });
 });
 
 describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)', () => {

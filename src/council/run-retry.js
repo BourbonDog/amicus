@@ -132,11 +132,32 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // degrade (see the @module docblock), so it is REPORTED here and emitted by
     // the caller, exactly as stillDeadNotes already are.
     for (const leg of bindRes.orphanLegs) { out.orphanLegs.push({ waveId: unit.waveId, leg }); }
-    // The seat a still-lost ALIAS belongs to, from this unit's own roster —
-    // authoritative even for a seat whose retry produced no leg to bind at all.
-    // One alias holds exactly one slot here (recordFailure dedups by alias), so
-    // the lookup is unambiguous.
-    const seatByAlias = new Map(unit.models.map((m, i) => [m, unit.seats[i] || null]));
+    // Every seat this unit LAUNCHED for, keyed exactly the way recordFailure
+    // keyed it: the identified seat's id, else the alias. Keys are unique by
+    // construction — recordFailure dedups on this same key, so two slots can
+    // never share one.
+    // ⚠️ v4.8 H4: an alias is no longer a seat identity. A `new Map(unit.models
+    // .map(...))` lookup overwrites the duplicate key, so a twin bench resolves
+    // BOTH still-lost seats to the LAST twin — an affirmative mis-attribution,
+    // strictly worse than the `null` that says "unidentified". Every feeder
+    // below must be seat-keyed for the same reason: a MIX (['x#1','x#2','x'])
+    // can never match `seenSeats`, so a run where both twins healed would emit
+    // a phantom dead-leg degrade and exit 2.
+    const seatKey = (s, alias) => (s ? s.id : alias);
+    const launched = new Map(); // key -> {alias, seat, ff}; alias is what notes render
+    const addLaunched = (s, alias, ff) => {
+      const k = seatKey(s, alias);
+      if (!launched.has(k)) { launched.set(k, { alias, seat: s || null, ff: ff || null }); }
+    };
+    // firstFailures grows in LOCKSTEP with models/seats (recordFailure pushes
+    // all three together), so slot i is one seat's whole record.
+    unit.models.forEach((m, i) => addLaunched(unit.seats[i] || null, m, unit.firstFailures[i]));
+    for (const w of unit.srcWaves) {
+      (w.models || []).forEach((m, i) => addLaunched((w.seats || [])[i] || null, m));
+    }
+    for (const l of unit.srcLegs) { addLaunched(seatOf.get(l) || null, l.modelInput || l.model); }
+    // A Stage-1 source leg's key, from the binding Stage 1 published for it.
+    const srcLegKey = l => seatKey(seatOf.get(l) || null, l.modelInput || l.model);
     if (legs.length === 0) {
       // The retry wave itself died wholesale — final failure keeps each
       // source's granularity (D5): wave-origin stays a dead-wave, leg-origin
@@ -152,23 +173,27 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       for (const w of unit.srcWaves) {
         out.stillDeadNotes.push(waveStillDeadNote(w, unit));
         out.stillDeadWaves.push(w);
-        for (const m of (w.models || [])) { notedSeats.add(m); }
+        (w.models || []).forEach((m, i) => notedSeats.add(seatKey((w.seats || [])[i] || null, m)));
       }
       for (const l of unit.srcLegs) {
-        const seat = l.modelInput || l.model;
-        if (notedSeats.has(seat)) { continue; }
-        notedSeats.add(seat);
+        const key = srcLegKey(l);
+        if (notedSeats.has(key)) { continue; }
+        notedSeats.add(key);
         out.stillDeadNotes.push(srcLegStillDeadNote(l, unit, counts));
         out.stillDeadLegs.push(l);
       }
       continue;
     }
     const usable = new Set(materializeReviews(o.runDir, legs, retrySeatOf).map(m => m.leg));
-    const seenSeats = new Set(legs.map(leg => leg.modelInput || leg.model));
+    // Seat-keyed off THIS wave's own bindings (an unbound leg keys by alias,
+    // matching how its unidentified roster slot was keyed above).
+    const seenSeats = new Set(legs.map(l => seatKey(retrySeatOf.get(l) || null, l.modelInput || l.model)));
     const lostWaveSeats = new Map(); // waveId -> [{alias, seat}] still lost from a wave-origin
     for (const leg of legs) {
-      const seat = leg.modelInput || leg.model;
-      const ff = unit.firstFailures.find(f => f.seat === seat) || null;
+      const seat = leg.modelInput || leg.model; // ALIAS — what every note renders
+      const bound = retrySeatOf.get(leg) || null;
+      const key = seatKey(bound, seat);
+      const ff = (launched.get(key) || {}).ff || null;
       // SL-2 fix-wave: a retry response should only ever name seats THIS unit
       // launched for (unit.models is built in lockstep with firstFailures via
       // groupStage1Losses's recordFailure) — but if a leg turns up for a seat
@@ -192,9 +217,9 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
         out.stillDeadRetryLegs.push(leg);
         if (ff && ff.class === 'wave') {
           if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
-          lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: seatByAlias.get(seat) || null });
+          lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: bound });
         } else {
-          const src = unit.srcLegs.find(l => (l.modelInput || l.model) === seat);
+          const src = unit.srcLegs.find(l => srcLegKey(l) === key);
           if (src) { out.stillDeadLegs.push(src); }
         }
       }
@@ -203,23 +228,22 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // that came back WITH a leg record. A partial wave return (unit models
     // [a,b], the wave comes back with only a's leg) leaves 'b' invisible to
     // that loop entirely — no heal, no still-dead note, no skip: it would
-    // vanish from every array. Reconcile against the full launched-seat set
-    // (the union of unit.models, every srcWave's models, and every srcLeg's
-    // seat — not just unit.models alone, so this holds even if some future
-    // change to the grouping made unit.models an incomplete union) so every
-    // launched seat lands in exactly one of recovered / still-dead / skipped.
-    const launchedSeats = new Set(unit.models);
-    for (const w of unit.srcWaves) { for (const m of (w.models || [])) { launchedSeats.add(m); } }
-    for (const l of unit.srcLegs) { launchedSeats.add(l.modelInput || l.model); }
-    for (const seat of launchedSeats) {
-      if (seenSeats.has(seat)) { continue; } // already handled above (healed or still-dead)
-      const ff = unit.firstFailures.find(f => f.seat === seat) || null;
-      out.stillDeadNotes.push(missingLegStillDeadNote(seat, ff, unit, counts));
+    // vanish from every array. Reconcile against `launched` — the union of
+    // unit.models, every srcWave's models and every srcLeg's seat, not
+    // unit.models alone, so this holds even if some future change to the
+    // grouping made unit.models an incomplete union — so every launched seat
+    // lands in exactly one of recovered / still-dead / skipped. Slot-indexed:
+    // there is no leg here to read a binding off, so the seat comes from the
+    // roster slot itself, never from an alias lookup.
+    for (const [key, rec] of launched) {
+      if (seenSeats.has(key)) { continue; } // already handled above (healed or still-dead)
+      const ff = rec.ff;
+      out.stillDeadNotes.push(missingLegStillDeadNote(rec.alias, ff, unit, counts));
       if (ff && ff.class === 'wave') {
         if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
-        lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: seatByAlias.get(seat) || null });
+        lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
       } else {
-        const src = unit.srcLegs.find(l => (l.modelInput || l.model) === seat);
+        const src = unit.srcLegs.find(l => srcLegKey(l) === key);
         if (src) { out.stillDeadLegs.push(src); }
       }
     }

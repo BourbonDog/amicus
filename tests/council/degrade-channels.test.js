@@ -123,7 +123,7 @@ describe('dead-leg channel (#85)', () => {
     // fact on top of the pre-SL-2 {seat, status, reason} — D7 byte-identity
     // applies only to budget-skipped records, not retried ones.
     expect(dead.data).toEqual({ seat: 'beta', status: 'timeout', reason: 'no first token',
-      firstFailure: { seat: 'beta', class: 'leg', status: 'timeout', reason: 'no first token' },
+      firstFailure: { seat: 'beta', class: 'leg', status: 'timeout', reason: 'no first token', seatId: 'beta' },
       retryWaveId: 'r1-s1r1' });
   });
 });

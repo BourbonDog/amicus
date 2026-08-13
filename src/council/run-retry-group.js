@@ -6,10 +6,16 @@
 // run-retry.js re-exports groupStage1Losses so existing import paths
 // (tests/council/run-retry.test.js) stay stable.
 
-/** 1-based lens index for a loss, from the waveId convention or the model. */
-function lensIndexOf(o, waveId, model) {
+/** 1-based lens index for a loss: the waveId convention, else the seat's own
+ *  bench position, else the alias's first bench index. v4.8 PR2b H4: the old
+ *  `o.models.indexOf(model)` was first-match, so twin aliases both resolved to
+ *  the FIRST twin's lens and shared one retry unit — and the deadLegs loop
+ *  passes waveId=null, so that branch was the only one those losses could
+ *  take. The alias fallback survives for a loss with no identified seat. */
+function lensIndexOf(o, waveId, model, seatObj = null) {
   const m = /-l(\d+)$/.exec(waveId || '');
   if (m) { return Number(m[1]); }
+  if (seatObj && Number.isInteger(seatObj.position)) { return seatObj.position; }
   const i = (o.models || []).indexOf(model);
   return i === -1 ? null : i + 1;
 }
@@ -28,10 +34,19 @@ function lensIndexOf(o, waveId, model) {
  * to `unit.models` — same order, same length. `null` means "we could not
  * identify this seat"; it is never back-filled from an alias lookup, which is
  * exactly the guess seat identity exists to forbid.
+ *
+ * v4.8 PR2b H4: the dedup key is the SEAT id, falling back to the alias when no
+ * seat was identified. Twin aliases are TWO seats and must retry as two; two
+ * UNidentifiable losses on one alias must still collapse, because nothing
+ * distinguishes them. ⚠️ The key is ADDED as `seatId`; `ff.seat` stays
+ * ALIAS-valued — it becomes `data.seat` on every emitted note, which verdict.js
+ * compares against `o.critic` (an alias) and the Workspace seat views render.
+ * Seat-keying `ff.seat` silently breaks critic-loss detection.
  */
 function recordFailure(unit, seat, ff, trackModel = true, seatObj = null) {
-  if (unit.firstFailures.some(f => f.seat === seat)) { return; }
-  unit.firstFailures.push(ff);
+  const key = seatObj ? seatObj.id : seat;
+  if (unit.firstFailures.some(f => f.seatId === key)) { return; }
+  unit.firstFailures.push({ ...ff, seatId: key });
   if (trackModel) { unit.models.push(seat); unit.seats.push(seatObj); }
 }
 
@@ -84,14 +99,17 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map())
   for (const w of deadWaves) {
     const models = w.models || [];
     if (o.lenses) {
-      const u = lensUnitFor(lensIndexOf(o, w.waveId, models[0]));
+      const u = lensUnitFor(lensIndexOf(o, w.waveId, models[0], (w.seats || [])[0] || null));
       u.srcWaves.push(w);
       models.forEach((seat, idx) => recordFailure(u, seat,
         { seat, class: 'wave', waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
     } else if (isCriticWave(w)) {
       criticUnit.srcWaves.push(w);
+      // criticSeatObj rides even though trackModel is false: it is already
+      // criticUnit.seats[0], so keying the firstFailure off it is what keeps
+      // the dedup key and the roster slot's key the SAME string.
       recordFailure(criticUnit, o.critic,
-        { seat: o.critic, class: 'wave', waveId: w.waveId, reason: w.reason }, false);
+        { seat: o.critic, class: 'wave', waveId: w.waveId, reason: w.reason }, false, criticSeatObj);
     } else {
       bench.srcWaves.push(w);
       models.forEach((seat, idx) => recordFailure(bench, seat,
@@ -102,12 +120,12 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map())
     const seat = leg.modelInput || leg.model;
     const ff = { seat, class: 'leg', status: leg.status, reason: leg.error || null };
     if (o.lenses) {
-      const u = lensUnitFor(lensIndexOf(o, null, seat));
+      const u = lensUnitFor(lensIndexOf(o, null, seat, seatOf.get(leg) || null));
       u.srcLegs.push(leg);
       recordFailure(u, seat, ff, true, seatOf.get(leg) || null);
     } else if (o.critic && seat === o.critic) {
       criticUnit.srcLegs.push(leg);
-      recordFailure(criticUnit, seat, ff, false);
+      recordFailure(criticUnit, seat, ff, false, criticSeatObj);
     } else {
       bench.srcLegs.push(leg);
       recordFailure(bench, seat, ff, true, seatOf.get(leg) || null);
