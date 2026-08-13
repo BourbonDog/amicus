@@ -86,7 +86,7 @@ function tally(input) {
   const byFinding = new Map();
   for (const adj of adjudications) {
     if (!byFinding.has(adj.findingId)) { byFinding.set(adj.findingId, []); }
-    byFinding.get(adj.findingId).push({ judge: adj.judge, verdict: adj.verdict });
+    byFinding.get(adj.findingId).push({ judge: adj.judge, verdict: adj.verdict, ...(adj.seat ? { seat: adj.seat } : {}) });
   }
   const outFindings = findings.map(f => {
     const votes = byFinding.get(f.id) || [];
@@ -103,7 +103,7 @@ function tally(input) {
     }
     const { tier, confidence } = assignTier(basis.a, basis.d);
     return { id: f.id, raiser: f.raiser, severity: f.severity, tier, basis, confidence,
-             tierOverride: null, adjudications: votes };
+             tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}) };
   });
   return {
     schemaVersion: COUNCIL_SCHEMA_VERSION,

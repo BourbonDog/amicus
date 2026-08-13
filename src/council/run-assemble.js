@@ -160,7 +160,10 @@ function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, cha
   const findings = reviews.flatMap(r => r.globalFindings);
   const okJudges = judgeResults.filter(j => j.ok);
   const adjudications = okJudges.flatMap(j =>
-    j.adjudications.map(a => ({ findingId: a.id, judge: j.judge, verdict: a.verdict })));
+    j.adjudications.map(a => ({ findingId: a.id, judge: j.judge, verdict: a.verdict,
+      // v4.8 PR3 Task 5: emit-when-DIFFERENT (§3.3) — j.seat.id === j.judge on
+      // a unique-alias bench, so this stays absent there.
+      ...(j.seat && j.seat.id !== j.judge ? { seat: j.seat.id } : {}) })));
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,

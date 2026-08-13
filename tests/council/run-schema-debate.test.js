@@ -84,3 +84,31 @@ describe('council-tally / council-verdict accept findings[].debate (spec §5.6)'
     expect(verdict.findings[0].debate).toEqual({ action: 'defended', previousTier: 'Disputed' });
   });
 });
+
+// v4.8 PR3 Task 5: council-tally.schema.json's only `additionalProperties: false`
+// is scoped to :62, the `findings[].debate` sub-object — `findings` items and
+// `adjudications` (findings[].adjudications items, `{type:'object'}`) are open,
+// so `seat`/`raiserSeat` need no schema edit. Pinned here so a future
+// tightening of either object fails this test loudly instead of silently
+// dropping the fields (the failure mode a plain builder-output check can't see,
+// since ajv validate() doesn't strip — it would simply start REJECTING these
+// docs, and only a test that puts the fields in the fixture would notice).
+describe('council-tally schema genuinely permits seat/raiserSeat (v4.8 PR3 Task 5)', () => {
+  // A fresh Ajv instance: the module-level `ajv` above already registered this
+  // schema's $id, and ajv rejects re-registering the same $id on one instance.
+  const vTally = new Ajv({ allErrors: true, strict: false }).compile(load('council-tally.schema.json'));
+
+  test('a finding carrying raiserSeat and an adjudication carrying seat both validate', () => {
+    const tallyDoc = {
+      schemaVersion: 2, type: 'council-tally',
+      meta: { runId: 'r', runType: 'headless', date: 'd', chair: 'x',
+        models: ['deepseek#1', 'deepseek#2'], claudeInCouncil: false },
+      findings: [{ id: 'A1', raiser: 'deepseek#1', raiserSeat: 'deepseek#1', severity: 'major',
+        tier: 'Contested', basis: { a: 1, d: 1, n: 0 }, confidence: 'solid', tierOverride: null,
+        adjudications: [{ judge: 'deepseek#2', verdict: 'agree', seat: 'deepseek#2' }] }],
+      rankings: [], streetCred: [], runStats: [],
+      tierCounts: { Confirmed: 0, Contested: 1, Singleton: 0, Disputed: 0 }, judged: true,
+    };
+    expect(vTally(tallyDoc)).toBe(true);
+  });
+});

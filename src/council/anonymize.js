@@ -43,14 +43,21 @@ function toGlobalId(letter, localId) {
  * @param {string} letter review letter (e.g. 'A')
  * @param {string} raiser de-anonymized model id
  * @param {Array<{id: number, severity: string, claim: string, location: string}>} findings
+ * @param {?string} raiserSeat (v4.8 PR3 Task 5) the raiser's bound seat id —
+ *   emitted ONLY when truthy AND different from `raiser` (emit-when-DIFFERENT,
+ *   not emit-when-set). On a unique-alias bench seat.id === alias, so the
+ *   field stays absent and tally-input.json/tally.json/verdict.json stay
+ *   byte-identical artifacts. Absent entirely on the Claude review call site
+ *   (3 args) — Claude is never a seat.
  * @returns {Array<{id: string, raiser: string, severity: string, claim: string, location: string}>}
  */
-function toGlobalFindings(letter, raiser, findings) {
+function toGlobalFindings(letter, raiser, findings, raiserSeat) {
   // claim + location must reach tally-input.json — Action v2 (Plan C) joins on
   // them for file:line annotations; tally() reads only id/raiser/severity.
   return findings.map(f => ({
     id: toGlobalId(letter, f.id), raiser, severity: f.severity, claim: f.claim,
     location: f.location,
+    ...(raiserSeat && raiserSeat !== raiser ? { raiserSeat } : {}),
   }));
 }
 

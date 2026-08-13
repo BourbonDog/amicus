@@ -186,7 +186,12 @@ async function runCouncil(options, deps = {}) {
     // Attach each review's run-global findings (buildTallyInput reads
     // r.globalFindings per review, not a bare parallel array).
     s1.reviews.forEach((r, i) => {
-      r.globalFindings = toGlobalFindings(labels.entries[i].letter, r.model, r.findings);
+      // v4.8 PR3 Task 5: pass the seat id ONLY when it differs from the alias
+      // (r.seat.id === r.model on a unique-alias bench) — the naive
+      // `r.seat ? r.seat.id : null` form would emit raiserSeat on every
+      // finding of every run, a universal artifact-shape change.
+      r.globalFindings = toGlobalFindings(labels.entries[i].letter, r.model, r.findings,
+        r.seat && r.seat.id !== r.model ? r.seat.id : null);
     });
     const globalFindings = s1.reviews.flatMap(r => r.globalFindings)
       .concat(claudeReview ? asm.labelClaudeReview(claudeReview, labels) : []);
