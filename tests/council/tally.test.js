@@ -208,3 +208,53 @@ describe('tally() — runStats carries what qualifies `conformance` (review F3)'
     expect('resolvedModel' in record.runStats[0]).toBe(false);
   });
 });
+
+// v4.8 PR3 Task 5: `seat` (on adjudications) and `raiserSeat` (on findings) are
+// additive passthroughs — tally.js:89 and the findings return (:105) are
+// allowlists that silently DROP any key not explicitly named. RED today.
+describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
+  const baseInput = {
+    meta: { runId: 'r', runType: 'review', date: 'd', models: ['deepseek#1', 'deepseek#2'],
+      chair: 'x', claudeInCouncil: false },
+    rankings: [], runStats: [],
+  };
+
+  test('an adjudication built from a seat-carrying judgeResults survives tally() with its seat', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'deepseek#1', severity: 'minor', claim: 'c' }],
+      adjudications: [
+        { findingId: 'F1', judge: 'deepseek#2', verdict: 'agree', seat: 'deepseek#2' },
+      ],
+    });
+    const vote = record.findings[0].adjudications.find(v => v.judge === 'deepseek#2');
+    expect(vote.seat).toBe('deepseek#2');
+  });
+
+  test('a finding raised by a seat-carrying review survives with its raiserSeat', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'deepseek', severity: 'minor', claim: 'c', raiserSeat: 'deepseek#1' }],
+      adjudications: [],
+    });
+    expect(record.findings[0].raiserSeat).toBe('deepseek#1');
+  });
+
+  test('an adjudication with no seat key emits no seat key on the survived vote', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'x', severity: 'minor', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'y', verdict: 'agree' }],
+    });
+    expect('seat' in record.findings[0].adjudications[0]).toBe(false);
+  });
+
+  test('a finding with no raiserSeat key emits no raiserSeat key on the survived finding', () => {
+    const record = tally({
+      ...baseInput,
+      findings: [{ id: 'F1', raiser: 'x', severity: 'minor', claim: 'c' }],
+      adjudications: [],
+    });
+    expect('raiserSeat' in record.findings[0]).toBe(false);
+  });
+});

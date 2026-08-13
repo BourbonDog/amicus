@@ -34,6 +34,61 @@ All notable changes to Amicus are documented here. Format follows
   seats sharing an alias both die, the run now produces two retry legs, two heals, and two review
   files instead of collapsing to a single retry and a single clobbered file. Reviews are written
   per seat as `review-<seat>.md` (e.g. `review-deepseek-1.md` / `review-deepseek-2.md`).
+- **Cross-review and the debate round are now bound to seats too — and a bench that repeats an
+  alias pays for more legs because of it.** Stage-2 judging writes `judge-<seat>.md`, and a
+  `--debate` round writes `rebuttal-<seat>.md` and `revote-<seat>.md`, so two seats sharing an
+  alias no longer overwrite each other's file. The extra cost is **up to two** billed legs per
+  duplicated pair per debate round, and the increase has two independent halves: the defense wave
+  now launches one solo per raising **seat** where it previously launched one per raising alias,
+  and the re-vote wave launches one leg per disputing **seat** where it previously launched one
+  per disputing alias. Either extra leg can draw its own bounded repair solo, so the worst case is
+  four. `run.json`'s `debate` summary counts the re-vote half (`revoteJudges` rises accordingly)
+  and has **no counter for the defense half**, so read this entry rather than that object when
+  estimating what a duplicate bench costs. A bench whose aliases are all distinct launches exactly
+  the legs it did before and writes exactly the filenames it did before.
+- **A duplicated seat's re-vote is no longer silently dropped.** Two defects, both live before
+  this release, combined to lose it: the disputing-judge list de-duplicated by alias, so two seats
+  that both disputed a finding got **one** re-vote leg between them; and that re-vote was then
+  matched to an adjudication by alias, so it replaced whichever of the two rows came first and
+  left the other standing. Disputing seats are now de-duplicated by seat, and the replacement
+  joins on the seat, so each seat re-votes for itself and each seat's own verdict is the one
+  replaced.
+- **A judge's Stage-2 conformance no longer overwrites its twin's.** The merge of each judge's
+  conformance back onto its reviewing seat was keyed on the alias, so a bench that repeats one
+  collapsed both seats onto a single entry and the last judge's conformance won for both. The
+  merge is now seat-keyed, falling back to the alias for a judge leg that bound to no seat.
+- **A re-vote repair for a model whose alias contains `/` no longer nests its session directory
+  three levels deep.** The repair leg's wave id embedded the alias verbatim, so
+  `openrouter/deepseek/deepseek-chat` produced
+  `.claude/amicus_sessions/<runId>-rv-openrouter/deepseek/deepseek-chatr` instead of one directory.
+  The id is now filename-sanitized. This one was never about duplicate benches — it fired for any
+  alias containing a path separator whose re-vote needed a repair.
+- **A Stage-2 wave that loses or cannot attribute a judge leg now exits 2 instead of 0.** Stage 2
+  binds its judge legs to seats. A returned leg matching no roster slot is announced on the
+  `seat-unbound` degrade channel; so is each seat that a short-returning wave never accounted for
+  — but only when that wave returned at least one leg *and* produced no unattributable one, because
+  an orphan already names the same failure, and a wave that returned nothing at all is announced
+  on the louder `thin-cross-review` channel instead. Whichever branch fires, the run now exits
+  degraded (2) where it previously exited 0 as long as at least two judges still parsed.
+  Symmetric with the Stage-1 change above.
+- **`debate.json` changes key space on a bench that repeats an alias — and only there.**
+  `findings[].raiser` is now the raising **seat's** id, and each `revotes[]` row keeps its
+  alias-valued `judge` and gains a `seat` field only when the two differ. The chair addendum's
+  `priorVerdicts` and `revotes` maps are keyed seat-side to match, so they still agree line for
+  line. `tally-input.json` and `tally.json` gain `adjudications[].seat` and
+  `findings[].raiserSeat` on the same terms — emitted only when the seat id differs from the
+  alias. `verdict.json` gains **only** `adjudications[].seat`: it rebuilds every finding from a
+  fixed field list that carries `adjudications` through by reference but has no `raiserSeat`
+  slot, so a reader holding just the verdict still cannot tell which of two same-alias seats
+  raised a finding. On a bench with no repeated alias every seat id **is** its alias, so none of
+  these documents changes shape at all there — with one narrow exception, of *value* rather than
+  shape: the re-vote **repair** leg's wave id is now filename-sanitized (the `/`-nesting fix
+  above), so a unique-alias bench whose alias contains a character sanitization rewrites *and*
+  whose re-vote actually needed a repair records a different id for that one leg in `run.json`'s
+  `stages[].waveIds` and in the matching `runStats` row of `tally-input.json`, `tally.json` **and
+  `verdict.json`** — the verdict carries the tally's `runStats` array through by reference, so it
+  shows the changed id too. No other leg, and no bench whose aliases are already filename-safe, is
+  affected.
 - **Known limitation: a partial-return seat loss is recorded in `run.json` but not yet reflected
   in `verdict.json`.** The loss lands in `stage.deadWaves` (as a `partial` entry) and in
   `degrades[]` (on the new `seat-unbound` channel above), and the run exits 2 — but
@@ -42,11 +97,23 @@ All notable changes to Amicus are documented here. Format follows
   `seat-unbound` loss matches neither. The seat is not silently dropped from the run's own
   record, only from the summary readers usually check first. Closing this is a filed BACKLOG item
   for PR4.
-- **Known limitation: the Council Workspace does not yet list per-seat review files for a bench
-  that repeats an alias.** `artifact-guard.js` still builds its file allowlist from a
-  de-duplicated bench, so only one of a twin bench's two review files appears in the Workspace
-  list. The files themselves are written and complete — this is a Workspace listing gap, not data
-  loss. Closes in v4.8.0, when a later PR in this stack rebuilds the allowlist from seat identity.
+- **Known limitation: the Council Workspace cannot open *any* per-seat artifact of a bench that
+  repeats an alias, and records it `present:false` in its own artifact manifest instead.** (This corrects the
+  wording shipped earlier in this Unreleased section, which said one of the two review files
+  appears and called it a listing gap. Both halves were wrong — measured, not inferred.) The
+  Workspace builds its artifact allowlist from a de-duplicated bench, so for
+  `--models deepseek,deepseek,gemini` it allowlists `review-deepseek.md`, `judge-deepseek.md` and
+  — on a `--debate` run only — `rebuttal-deepseek.md` and `revote-deepseek.md`: names that bench
+  never writes, because its two `deepseek` seats write `…-deepseek-1.md` and `…-deepseek-2.md`
+  instead. So **neither** twin file is reachable, not one, and every artifact family is affected,
+  not just `review-`. The same list is also the read gate: asking for either seat's real file
+  answers `artifact not allowed`, while the allowlisted `review-deepseek.md` is recorded
+  present:false in the run's artifact manifest — and every panel filters on that manifest, so the
+  duplicated seats contribute no rows at all rather than a visible broken one. Nothing is lost on disk: every per-seat file is written and complete, and
+  `run.json`'s `seats[]` still names every seat the run created. This is a Workspace read refusal,
+  not data loss. Closes in v4.8.0, in the Workspace PR later in this stack (PR5), which rebuilds
+  the allowlist from seat identity. Benches whose aliases are all distinct are unaffected — every
+  name they write is on the list.
 
 ## [4.7.1] - 2026-08-09
 

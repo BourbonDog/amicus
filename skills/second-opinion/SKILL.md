@@ -528,10 +528,13 @@ Always **rank recommendations by fit**, state the trade-off for each option, and
   - `briefing.md` — the Stage-0 review request Claude authored (run provenance, not a temp file)
   - `review-claude.md` — Claude's own fresh review, only when "Claude in the council" is on
   - `run.json` — the engine's run manifest: stage log, wave ids, degradation, `runStats`, cost
-  - `review-<model>.md` ×N and `judge-<model>.md` ×N — the raw engine legs
+  - `review-<seat>.md` ×N and `judge-<seat>.md` ×N — the raw engine legs. `<seat>` is the bench
+    seat's id, which **is** the model alias for any bench that names each alias once; seat one and
+    seat two of a repeated alias write `…-<alias>-1.md` and `…-<alias>-2.md` instead of sharing
+    one file
   - `briefing-stage1.md`, `bundle-stage2.md`, `chair-packet.md` — the model-facing briefings the engine composed
   - `tally-input.json` and `tally.json` — the assembled input and the tiered record (plus `tally-provisional.json` and `debate.json` when `--debate` was on)
-  - `rebuttal-<model>.md` ×(raisers) and `revote-bundle.md` + `revote-<model>.md` ×(disputing judges) — the debate round's raw defense and re-vote leg outputs plus the shared re-vote prompt, only when `--debate` was on
+  - `rebuttal-<seat>.md` ×(raising seats) and `revote-bundle.md` + `revote-<seat>.md` ×(disputing seats) — the debate round's raw defense and re-vote leg outputs plus the shared re-vote prompt, only when `--debate` was on. Both waves are sized in seats, so a bench that repeats an alias buys up to two extra billed legs per duplicated pair per round (one defense solo, one re-vote leg), each of which may draw its own bounded repair solo
   - `chair-output.md` — the chair's synthesis prose, verbatim from the chair model
   - `decisions.json` — the Stage-4 decision array Claude writes
   - `verdict.json` — schema-stamped machine-readable record: tally output + Stage-4 decisions, written via `amicus council verdict` at Stage 5 (replacing the engine's undecided version)

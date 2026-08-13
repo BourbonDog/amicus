@@ -261,7 +261,7 @@ async function runStage1(ctx) {
       }
     }
     reviews.push({
-      model: m.modelInput, modelInput: m.modelInput,
+      model: m.modelInput, modelInput: m.modelInput, seat: m.seat || null,
       // Seat-space role (spec §4.5), read off the SEAT — NOT roleAt(o.seats):
       // run-stage1-launch.js re-derives the table when o.seats is absent, so
       // m.seat is truthy while o.seats is not, and roleAt's unknown-id 'seat'

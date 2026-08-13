@@ -101,6 +101,95 @@ describe('repaired judge does NOT degrade the run', () => {
   });
 });
 
+// v4.8 PR3 Task 4: run.js:212-215's byJudge merge used to key on the ALIAS
+// (r.model / j.judge), so a twin bench collapses both judges onto ONE Map
+// entry and every review merges the SAME (last-wins) judge conformance.
+describe('PR3 Task 4: Stage-2 conformance merge is SEAT-keyed, not alias-keyed', () => {
+  test('RED4: a twin bench merges EACH judge onto its OWN seat review, not the second twin for both', async () => {
+    // RED today (measured): byJudge.get('deepseek') returns the SECOND twin's
+    // judgeResult (Map last-wins on the shared alias key), so BOTH reviews take
+    // the second twin's conformance ('repaired') instead of each their own.
+    const script = {
+      'abc123-s1': (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(`t${i + 1}`)))),
+      'abc123-s2': () => okWave([
+        // slot 1 (deepseek#1): parses clean on the first pass.
+        mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+        // slot 2 (deepseek#2): malformed on the first pass — needs one repair.
+        mkLeg('deepseek', 'no json from this judge'),
+      ]),
+      'abc123-q1': () => okWave([
+        mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+      ]),
+      'abc123-ch1': () => okWave([mkLeg('deepseek', 'Synthesis.\nVERDICT: Ship it', 'complete', 0.03)]),
+    };
+    const { exitCode } = await runCouncil(
+      baseOptions(tmp, { models: ['deepseek', 'deepseek'] }), deps(scriptedLaunchers(script)));
+    expect(exitCode).toBe(0);
+    const input = JSON.parse(fs.readFileSync(
+      path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const seatRows = input.runStats.filter(r => r.role === 'seat');
+    expect(seatRows).toHaveLength(2);
+    // seat #1's own judge was clean; seat #2's needed a repair — each row must
+    // carry its OWN judge's conformance rather than both collapsing onto #2's.
+    expect(seatRows.map(r => r.conformance)).toEqual(['clean', 'repaired']);
+  });
+
+  test('pin (b): an orphaned -s2 leg still merges its conformance by the ALIAS fallback', async () => {
+    // The mixed case Step 8 says an earlier draft wrongly claimed unreachable:
+    // r.seat (the Stage-1 review's seat) is real and bound normally, but its
+    // Stage-2 judge leg carries a taskId matching no roster slot AND no waveId
+    // field — seats.js:130-145 can neither slot-match nor alias-fallback it (the
+    // alias fallback requires leg.waveId === waveId exactly) — so it orphans.
+    // Hand-rolled legs (bypassing scriptedLaunchers' auto-stamping) so the
+    // orphan's taskId/waveId are exactly what the test controls.
+    const legRaw = (model, summary, taskId, waveId) => ({
+      taskId, model, modelInput: model, status: 'complete', summary,
+      durationMs: 1000, usage: { cost: { amount: 0.01, source: 'reported' } },
+      ...(waveId !== undefined ? { waveId } : {}),
+    });
+    const script = {
+      'abc123-s1': () => okWave([
+        legRaw('deepseek', review('one'), 'abc123-s1-1', 'abc123-s1'),
+        legRaw('deepseek', review('two'), 'abc123-s1-2', 'abc123-s1'),
+      ]),
+      'abc123-s2': () => okWave([
+        // slot 1 (deepseek#1): a REAL leg that cannot bind to any seat.
+        legRaw('deepseek', 'no json (orphan judge)', 'orphan-leg-id', undefined),
+        // slot 2 (deepseek#2): bound normally, parses clean.
+        legRaw('deepseek', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'abc123-s2-2', 'abc123-s2'),
+      ]),
+      // The orphan leg never repairs into something parseable — two failed
+      // repair attempts, so it settles on conformance 'unstructured'.
+      'abc123-q1': () => okWave([legRaw('deepseek', 'still no json (repair 1)', 'abc123-q1-1', 'abc123-q1')]),
+      'abc123-q2': () => okWave([legRaw('deepseek', 'still no json (repair 2)', 'abc123-q2-1', 'abc123-q2')]),
+      'abc123-ch1': () => okWave([legRaw('deepseek', 'Synthesis.\nVERDICT: Ship it', 'abc123-ch1-1', 'abc123-ch1')]),
+    };
+    const launchers = {
+      launchWave: async (opts) => script[opts.waveId](opts),
+      launchSolo: async (opts) => {
+        const r = await script[opts.waveId](opts);
+        return { ...r, leg: (r.wave && r.wave.legs && r.wave.legs[0]) || null };
+      },
+    };
+    const { exitCode } = await runCouncil(
+      baseOptions(tmp, { models: ['deepseek', 'deepseek'] }), deps(launchers));
+    // The orphan leg IS a real degrade (Step 7) — a documented exit-code change,
+    // not a fixture bug: a Stage-2 leg run.js cannot attribute to a seat now
+    // degrades the run instead of vanishing silently.
+    expect(exitCode).toBe(2);
+    const input = JSON.parse(fs.readFileSync(
+      path.join(tmp, 'council-abc123', 'tally-input.json'), 'utf-8'));
+    const seatRows = input.runStats.filter(r => r.role === 'seat');
+    expect(seatRows).toHaveLength(2);
+    // Without the alias fallback this orphan's conformance is lost entirely —
+    // seat #1's row would stay 'clean' instead of picking up 'unstructured'.
+    expect(seatRows.map(r => r.conformance)).toEqual(['unstructured', 'clean']);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // v4.4.1 fix wave, F6 — a Stage-1 sub-wave that dies BEFORE its legs.
 //

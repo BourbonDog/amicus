@@ -110,6 +110,7 @@ src/
 │   ├── run-assemble.js
 │   ├── run-budget.js
 │   ├── run-chair.js
+│   ├── run-debate-revote.js
 │   ├── run-debate-stage.js
 │   ├── run-debate.js
 │   ├── run-degrade.js
@@ -507,6 +508,7 @@ evals/
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-budget.js` |  | `createBudget()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()`, `classifyChairAttempt()` |
+| `council/run-debate-revote.js` |  | `legOpts()`, `legRow()`, `runRevoteWave()` |
 | `council/run-debate-stage.js` |  | `runDebateStage()` |
 | `council/run-debate.js` |  | `runDebate()`, `nothingToDebate()`, `disputingJudges()`, `debateTargets()` |
 | `council/run-degrade.js` |  | `createDegradeSink()` |

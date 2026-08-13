@@ -186,7 +186,12 @@ async function runCouncil(options, deps = {}) {
     // Attach each review's run-global findings (buildTallyInput reads
     // r.globalFindings per review, not a bare parallel array).
     s1.reviews.forEach((r, i) => {
-      r.globalFindings = toGlobalFindings(labels.entries[i].letter, r.model, r.findings);
+      // v4.8 PR3 Task 5: pass the seat id ONLY when it differs from the alias
+      // (r.seat.id === r.model on a unique-alias bench) — the naive
+      // `r.seat ? r.seat.id : null` form would emit raiserSeat on every
+      // finding of every run, a universal artifact-shape change.
+      r.globalFindings = toGlobalFindings(labels.entries[i].letter, r.model, r.findings,
+        r.seat && r.seat.id !== r.model ? r.seat.id : null);
     });
     const globalFindings = s1.reviews.flatMap(r => r.globalFindings)
       .concat(claudeReview ? asm.labelClaudeReview(claudeReview, labels) : []);
@@ -209,9 +214,17 @@ async function runCouncil(options, deps = {}) {
     }
 
     // Merge Stage-2 judging conformance into each seat's row (worst wins).
-    const byJudge = new Map(s2.judgeResults.map(j => [j.judge, j]));
+    // Seat-keyed (v4.8 PR3 Task 4): an alias-only key collapses a twin bench
+    // onto ONE Map entry, so the last-wins judge silently overwrote every
+    // twin's row (D7). j.seat can still be null (an orphaned -s2 leg,
+    // seats.js:130-146) even when r.seat is a real bound seat, so the lookup
+    // falls back to r.model on a miss rather than assuming the two arrays stay
+    // symmetric — a naive seatKey on both sides would make that orphan's
+    // conformance unreachable instead of merged, a silent total loss.
+    const seatKey = (s, alias) => (s ? s.id : alias);
+    const byJudge = new Map(s2.judgeResults.map(j => [seatKey(j.seat, j.judge), j]));
     for (const r of s1.reviews) {
-      const j = byJudge.get(r.model);
+      const j = byJudge.get(r.seat ? r.seat.id : r.model) || byJudge.get(r.model);
       if (j) { r.conformance = asm.worseConformance(r.conformance, j.conformance); }
     }
 

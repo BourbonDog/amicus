@@ -9,6 +9,9 @@ const os = require('os');
 const { runStage1, runStage2, slug } = require('../../src/council/run-stages');
 const { assignLabels, toGlobalFindings } = require('../../src/council/anonymize');
 const { buildSeats } = require('../../src/council/seats');
+// The REAL judgeResults[].seat -> adjudications[].seat join, so the F1 pins
+// below assert against the shipped projection rather than re-implementing it.
+const { buildTallyInput } = require('../../src/council/run-assemble');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-stages-')); });
@@ -1169,13 +1172,16 @@ describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
 
 describe('runStage2', () => {
   function stage1Reviews() {
+    // v4.8 PR3 Task 2: seat: per entry, mirroring Task 3's production shape —
+    // built positionally from the same bench these reviews are for.
+    const stage1Seats = buildSeats(['gemini', 'gpt'], null, null);
     return [
       { model: 'gemini', modelInput: 'gemini', role: 'seat', text: review('gemini'),
         findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
-        conformance: 'clean', leg: mkLeg('gemini', review('gemini')) },
+        conformance: 'clean', leg: mkLeg('gemini', review('gemini')), seat: stage1Seats[0] },
       { model: 'gpt', modelInput: 'gpt', role: 'seat', text: review('gpt'),
         findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
-        conformance: 'clean', leg: mkLeg('gpt', review('gpt')) },
+        conformance: 'clean', leg: mkLeg('gpt', review('gpt')), seat: stage1Seats[1] },
     ];
   }
   const labels = assignLabels(['gemini', 'gpt']);
@@ -1192,9 +1198,9 @@ describe('runStage2', () => {
         waves.push(opts);
         return okWave([
           mkLeg('gemini', judgeOut(['Review B', 'Review A'],
-            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
           mkLeg('gpt', judgeOut(['Review A', 'Review B'],
-            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
         ]);
       },
       onSolo: () => { throw new Error('no repairs expected'); },
@@ -1224,11 +1230,11 @@ describe('runStage2', () => {
     // both judges parse clean on the first pass) — driven the same way.
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
+      onWave: (opts) => okWave([
         mkLeg('gemini', judgeOut(['Review B', 'Review A'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
         mkLeg('gpt', judgeOut(['Review A', 'Review B'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { throw new Error('no repairs expected'); },
     });
@@ -1253,13 +1259,13 @@ describe('runStage2', () => {
     const solos = [];
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'no json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'no json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]))]);
+        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1)]);
       },
     });
     const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
@@ -1284,13 +1290,13 @@ describe('runStage2', () => {
     const solos = [];
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', badJudge),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]))]);
+        return okWave([mkLeg('gemini', judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1)]);
       },
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
@@ -1305,13 +1311,13 @@ describe('runStage2', () => {
     const firstRepair = 'first judge repair, still no json';
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', badJudge),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gemini', solos.length === 1 ? firstRepair : 'second repair, still no json')]);
+        return okWave([mkLeg('gemini', solos.length === 1 ? firstRepair : 'second repair, still no json', 'complete', opts.waveId, 1)]);
       },
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
@@ -1326,11 +1332,11 @@ describe('runStage2', () => {
     const badJudge = 'original judging prose, no json';
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', badJudge),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', badJudge, 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gemini', '')]); },
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gemini', '', 'complete', opts.waveId, 1)]); },
     });
     await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(solos).toHaveLength(2);
@@ -1341,11 +1347,11 @@ describe('runStage2', () => {
     let soloCount = 0;
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'never json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'never json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: () => { soloCount += 1; return okWave([mkLeg('gemini', 'still bad')]); },
+      onSolo: (opts) => { soloCount += 1; return okWave([mkLeg('gemini', 'still bad', 'complete', opts.waveId, 1)]); },
     });
     const { judgeResults } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     expect(soloCount).toBe(2);
@@ -1359,9 +1365,9 @@ describe('runStage2', () => {
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
       overBudget: () => true,
-      onWave: () => okWave([
-        mkLeg('gemini', 'no json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'no json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected over budget'); },
     });
@@ -1380,9 +1386,9 @@ describe('runStage2', () => {
     let soloCalls = 0;
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', ''),   // status 'complete' (default), summary empty
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', '', 'complete', opts.waveId, 1),   // status 'complete' (default), summary empty
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected for an empty-summary complete leg'); },
     });
@@ -1396,9 +1402,9 @@ describe('runStage2', () => {
   test('dead judge leg → ok false (tally over survivors; tiers unchanged)', async () => {
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', '', 'timeout'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', '', 'timeout', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { throw new Error('dead legs are not repaired'); },
     });
@@ -1414,12 +1420,12 @@ describe('runStage2', () => {
     // SEPARATE extraRows row instead of overwriting the primary attribution.
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'no json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'no json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: (opts) => okWave([{ ...mkLeg('gemini',
-        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }])), waveId: opts.waveId }]),
+      onSolo: (opts) => okWave([mkLeg('gemini',
+        judgeOut(['Review B', 'Review A'], [{ id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1)]),
     });
     const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     const g = judgeResults.find(j => j.judge === 'gemini');
@@ -1437,11 +1443,11 @@ describe('runStage2', () => {
   test('Task 5: a FAILED judge repair still yields its repair row (error status)', async () => {
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
-        mkLeg('gemini', 'never json'),
-        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }])),
+      onWave: (opts) => okWave([
+        mkLeg('gemini', 'never json', 'complete', opts.waveId, 1),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'], [{ id: 'A1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
-      onSolo: (opts) => okWave([{ ...deadLeg('gemini'), waveId: opts.waveId }]),
+      onSolo: (opts) => okWave([deadLeg('gemini', 'error', 'boom', opts.waveId, 1)]),
     });
     const { judgeResults, extraRows } = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
     const g = judgeResults.find(j => j.judge === 'gemini');
@@ -1458,11 +1464,11 @@ describe('runStage2', () => {
     const s2 = require('../../src/council/briefings-stage2');
     const ctx = makeCtx({
       models: ['gemini', 'gpt'],
-      onWave: () => okWave([
+      onWave: (opts) => okWave([
         mkLeg('gemini', judgeOut(['Review B', 'Review A'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 1),
         mkLeg('gpt', judgeOut(['Review A', 'Review B'],
-          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }]), 'complete', opts.waveId, 2),
       ]),
       onSolo: () => { throw new Error('no repairs expected'); },
     });
@@ -1470,6 +1476,246 @@ describe('runStage2', () => {
     const bundle = fs.readFileSync(path.join(ctx.o.runDir, 'bundle-stage2.md'), 'utf-8');
     expect(bundle).toContain("Today's date is 2026-07-19.");
     expect(bundle.split('\n')[0]).toBe(s2.JUDGE_NO_TOOLS_PREAMBLE);  // preamble is still line 1
+  });
+
+  // v4.8 PR3 Task 4: the seat reaches Stage 2. A twin bench's reviews each carry
+  // their OWN seat (buildSeats(['deepseek','deepseek'], null, null) — 'deepseek#1'
+  // / 'deepseek#2') built the same positional way Task 2's stage1Reviews() does.
+  describe('PR3 Task 4: judge artifacts + judgeResults carry the SEAT (twin bench)', () => {
+    function twinReviews() {
+      const twinSeats = buildSeats(['deepseek', 'deepseek'], null, null);
+      return [
+        { model: 'deepseek', modelInput: 'deepseek', role: 'seat', text: review('deepseek-1'),
+          findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('deepseek', review('deepseek-1')), seat: twinSeats[0] },
+        { model: 'deepseek', modelInput: 'deepseek', role: 'seat', text: review('deepseek-2'),
+          findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('deepseek', review('deepseek-2')), seat: twinSeats[1] },
+      ];
+    }
+    const twinLabels = assignLabels(['deepseek', 'deepseek']);
+    const twinGlobalFindings = [
+      ...toGlobalFindings('A', 'deepseek', [{ id: 1, severity: 'major', claim: 'c' }]),
+      ...toGlobalFindings('B', 'deepseek', [{ id: 1, severity: 'nit', claim: 'c' }]),
+    ];
+
+    test('RED1: a twin bench writes TWO judge files (judge-deepseek-1.md, judge-deepseek-2.md)', async () => {
+      // RED today (measured): the run dir contains only ["judge-deepseek.md"] —
+      // one file for two judges, the second twin's judge-output clobbering the
+      // first's under the shared alias filename.
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      await runStage2(ctx, { reviews: twinReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+      const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
+      expect(judgeFiles).toEqual(['judge-deepseek-1.md', 'judge-deepseek-2.md']);
+    });
+
+    test('RED2: judgeResults[] carries a distinct seat per twin; judge stays the alias on both', async () => {
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const { judgeResults } = await runStage2(ctx,
+        { reviews: twinReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+      expect(judgeResults).toHaveLength(2);
+      expect(judgeResults.every(j => j.judge === 'deepseek')).toBe(true);       // launch alias unchanged
+      expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['deepseek#1', 'deepseek#2']);
+    });
+
+    test('parity: a unique bench still writes judge-gemini.md byte-identically (must stay GREEN)', async () => {
+      const geminiOut = judgeOut(['Review B', 'Review A'],
+        [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]);
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          mkLeg('gemini', geminiOut, 'complete', opts.waveId, 1),
+          mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+      const file = path.join(ctx.o.runDir, 'judge-gemini.md');
+      expect(fs.existsSync(file)).toBe(true);
+      expect(fs.readFileSync(file, 'utf-8')).toBe(geminiOut);
+    });
+
+    // Code-review Finding 1 (CRITICAL): `bindSeats(s2WaveId, roster, wave.legs)`
+    // used to dereference `wave.legs` unguarded, but `wave` is legitimately
+    // null on a budget/args refusal (run-budget.js's failPre returns
+    // `{wave: null, exitCode: 1}`), and isAbortExit only catches 130/143 — so
+    // execution reached the crash instead of returning early. Mirrors the
+    // guard the leg loop already had (`(wave && wave.legs) || []`).
+    test('Finding 1 regression: a refused -s2 wave (wave: null, exitCode: 1) does not throw and returns a notesless empty shape', async () => {
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        // BUDGET_EXCEEDED/BAD_ARGS shape — a refusal, not an abort code.
+        onWave: () => ({ wave: null, exitCode: 1 }),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const result = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+      expect(result).toEqual({ aborted: null, judgeResults: [], extraRows: [] });
+      expect(ctx._notes).toEqual([]);   // no spurious seat-unbound notes either
+    });
+
+    // Code-review Finding 2 (IMPORTANT): the "missing seat" loop used to have
+    // no suppression rule, so an orphan leg (a judge that DID land, just
+    // unattributable) ALSO got double-counted as a "seat never returned" —
+    // false twice over (the leg did return; the wave returned exactly as many
+    // legs as its roster). Mirrors stage1-bind.js:40's guard verbatim.
+    test('Finding 2 regression: an orphan -s2 leg suppresses the false "missing seat" note (mirrors stage1-bind.js:40)', async () => {
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          // No waveId/slot -> taskId `deepseek-N` matches no roster slot AND
+          // carries no waveId field, so the alias fallback (ambiguous: two
+          // 'deepseek' seats) can't claim it either -> orphan.
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+          // Bound normally to roster slot 2.
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      await runStage2(ctx, { reviews: twinReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+      // Exactly ONE seat-unbound note (the orphan leg) — never a second,
+      // false "missing seat" note for the roster slot the orphan left unclaimed.
+      expect(ctx._notes.map(n => n.channel)).toEqual(['seat-unbound']);
+      expect('legId' in ctx._notes[0].data).toBe(true);   // the orphan-leg discriminator
+    });
+
+    // Code-review Finding 3 (promoted from Minor): the placeholder identity
+    // rule (`placeholders.has(b.seat)`, never an id-name prefix test) had zero
+    // coverage. A bench alias literally beginning `__unbound-` proves the
+    // difference: mutating the check to `!b.seat.id.startsWith('__unbound-')`
+    // would drop BOTH twins' real binds (their ids legitimately start with
+    // that prefix), collapsing back to RED1's one-file bug.
+    test('Finding 3: an adversarial "__unbound-"-prefixed alias still binds by seat IDENTITY, never by an id-name prefix test', async () => {
+      const adversarialSeats = buildSeats(['__unbound-x', '__unbound-x'], null, null);
+      const adversarialReviews = [
+        { model: '__unbound-x', modelInput: '__unbound-x', role: 'seat', text: review('u1'),
+          findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('__unbound-x', review('u1')), seat: adversarialSeats[0] },
+        { model: '__unbound-x', modelInput: '__unbound-x', role: 'seat', text: review('u2'),
+          findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('__unbound-x', review('u2')), seat: adversarialSeats[1] },
+      ];
+      const advLabels = assignLabels(['__unbound-x', '__unbound-x']);
+      const advGlobalFindings = [
+        ...toGlobalFindings('A', '__unbound-x', [{ id: 1, severity: 'major', claim: 'c' }]),
+        ...toGlobalFindings('B', '__unbound-x', [{ id: 1, severity: 'nit', claim: 'c' }]),
+      ];
+      const ctx = makeCtx({
+        models: ['__unbound-x', '__unbound-x'],
+        onWave: (opts) => okWave([
+          mkLeg('__unbound-x', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('__unbound-x', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const { judgeResults } = await runStage2(ctx,
+        { reviews: adversarialReviews, labels: advLabels, globalFindings: advGlobalFindings });
+      const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
+      expect(judgeFiles).toEqual(['judge-__unbound-x-1.md', 'judge-__unbound-x-2.md']);
+      expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['__unbound-x#1', '__unbound-x#2']);
+    });
+
+    // ---- Final whole-branch review, F1 ------------------------------------
+    // Finding 3 above pins identity-vs-name-prefix on a bench where EVERY seat
+    // is real, so §3.4's padding branch never executes there and two mutations
+    // survived all 520 suites:
+    //   M2  drop `.filter(b => !placeholders.has(b.seat))`
+    //   M3  neuter `if (placeholders.has(seat)) { continue; }` in the
+    //       seat-unbound loop
+    // What makes the branch run is a ROSTER HOLE: a review with no `seat`,
+    // which is what an orphaned/unbound Stage-1 leg leaves behind
+    // (stage1-bind.js binds; a leg it could not attribute leaves `seat` unset).
+    // M2's consequence is a SYNTHETIC `__unbound-…` sentinel reaching a judge
+    // filename, judgeResults[].seat and — through buildTallyInput — the
+    // `adjudications[].seat` that ships in tally-input.json/tally.json.
+    describe('F1: a roster HOLE exercises §3.4 padding — the placeholder never leaks', () => {
+      // reviews[0] lost its seat in Stage 1; reviews[1] kept deepseek#2.
+      function holedReviews() {
+        const rs = twinReviews();
+        rs[0].seat = null;
+        return rs;
+      }
+
+      test('M2: the placeholder never becomes judgeResults[].seat, a judge filename, or adjudications[].seat', async () => {
+        const ctx = makeCtx({
+          models: ['deepseek', 'deepseek'],
+          // BOTH roster slots return a leg, so slot 1's leg genuinely BINDS to
+          // the placeholder — that bind is exactly what the identity filter
+          // throws away and what M2 would keep.
+          onWave: (opts) => okWave([
+            mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+            mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+          ]),
+          onSolo: () => { throw new Error('no repairs expected'); },
+        });
+        const { judgeResults } = await runStage2(ctx,
+          { reviews: holedReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+        // null, never a sentinel object: nothing was guessed for the hole.
+        expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual([null, 'deepseek#2']);
+        // The unbound judge falls back to the ALIAS filename (today's shape).
+        const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
+        expect(judgeFiles).toEqual(['judge-deepseek-2.md', 'judge-deepseek.md']);
+        // …and the sentinel never reaches the shipped artifact either. This is
+        // the real production join (run-assemble.js), not a re-implementation.
+        const { adjudications } = buildTallyInput({
+          runId: 'abc123', date: '2026-07-19', bench: ['deepseek', 'deepseek'], chair: 'gemini',
+          reviews: holedReviews().map(r => ({ ...r, globalFindings: [] })),
+          judgeResults, chairStats: null,
+        });
+        expect(adjudications.length).toBeGreaterThan(0);
+        for (const a of adjudications) {
+          expect(a.judge).toBe('deepseek');                 // alias/ledger-join space, intact
+          expect(a.seat || '').not.toMatch(/__unbound-/);
+        }
+        expect(adjudications.filter(a => a.seat)).toHaveLength(2);   // only the REAL seat is named
+      });
+
+      test('M3: a padded slot that never returns a leg fires NO false seat-unbound note', async () => {
+        const ctx = makeCtx({
+          models: ['deepseek', 'deepseek'],
+          // Only roster slot 2 comes back, so the PLACEHOLDER is what lands in
+          // bindRes.unbound — the exact input the `continue` guard exists for.
+          onWave: (opts) => okWave([
+            mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+          ]),
+          onSolo: () => { throw new Error('no repairs expected'); },
+        });
+        const { judgeResults } = await runStage2(ctx,
+          { reviews: holedReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+        // The suppressions ahead of the loop do NOT cover this: the wave
+        // returned a leg (so it is not the zero-leg thin-cross-review branch)
+        // and produced no orphan (so the orphan pre-emption does not fire).
+        // Only the placeholder guard stands between this and a note naming a
+        // seat the run was never able to identify.
+        expect(ctx._notes).toEqual([]);
+        expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['deepseek#2']);
+      });
+    });
   });
 });
 

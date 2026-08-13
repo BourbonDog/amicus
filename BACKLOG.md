@@ -1969,6 +1969,180 @@ carry forward rather than fix in-flight:
 
 **Size note:** `src/council/run-stages.js` is at 292/300 lines and `src/council/run-retry.js` at
 290/300 — the next task touching either file must extract before adding, not squeeze in more.
+(Re-measured at the PR3 cut: both unchanged. `run-debate.js` 260/300 and the new
+`run-debate-revote.js` 168/300 after Task 1's extraction.)
+
+#### Seat identity — PR3 handoff (2026-08-13)
+
+PR3 carried the seat through Stage 2 and the debate round: `judge-<seat>.md`
+(`run-stage2.js:145`), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
+(`run.js:224-228`), additive **emit-when-different** `adjudications[].seat`
+(`run-assemble.js:166`) and `findings[].raiserSeat` (`anonymize.js:60`), and a debate round that
+joins on the seat at every hop — `debateTargets` (`debate.js:201`), `disputingJudges`
+(`debate.js:175`), `applyDebate` (`debate.js:81`), the re-vote repair id
+(`run-debate-revote.js:139`) and all four launcher call sites, each projecting seat → alias
+through the single `aliasOf` built at `run-debate.js:116-117`. `runRevoteWave` moved to
+`src/council/run-debate-revote.js` (Task 1, byte-identical). What that unblocks, and what it
+deliberately left alone:
+
+- [ ] **PR4 · `tally.js:96`'s peer filter is now UNBLOCKED — both sides carry a seat.**
+  `const peers = f.raiser ? votes.filter(v => v.judge !== f.raiser) : votes;` still compares
+  aliases, so on a bench that repeats an alias a twin's legitimate peer vote on its twin's finding
+  is dropped and the finding can tier `Singleton` on a full basis — #137's tally half. Before PR3
+  the seat-exact form was not expressible inside `tally()`; it is now: every vote carries
+  `v.seat` (`tally.js:89`, from `adjudications[].seat`) and every finding carries `f.raiserSeat`
+  (`tally.js:106`), both emit-when-different, so the fix is `(v.seat || v.judge) !== (f.raiserSeat
+  || f.raiser)` with **no new inputs threaded**. ⚠️ Both fields are absent on a unique-alias
+  bench by design, so the `||` fallbacks are load-bearing — do not "simplify" them away.
+- [ ] **PR4 · `src/council/debate.js:200` is a SECOND copy of that same filter and must move with
+  it.** `peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser)` builds the peer
+  split a raiser sees in its defense briefing. Fixing `tally.js:96` alone would make the brief the
+  models read disagree with the tally the chair reads. Deliberately left alias-space in PR3 for
+  exactly that reason (the in-file comment at `debate.js:186-190` says so).
+- [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
+  alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
+  before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats
+  one `letterByModel` key (last wins) and `rankPositions` (`tally.js:32-42`) collapses them, so
+  `rankings[].order` is already meaningless on a twin bench and street-cred computed from it
+  cannot be made correct by editing `:58`. Seat-ify `assignLabels`/`rankingToOrder` first.
+- [ ] **PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6; R8 itself is in the §1 Owner
+  rulings table) is still unwritten.** Spec
+  §4.5 pairs it with the `tally.js:96` fix: once same-model seats count as each other's peers, the
+  corroboration has to be *labelled* on the finding rather than silently folded into the basis.
+  Listed in the spec's artifact table (`tally.json`, per finding, optional in schema) and in no
+  shipped code.
+- [ ] **PR4 · `meta.seats` is still absent from the tally input.** `buildTallyInput`'s meta
+  (`run-assemble.js:154-159`) carries `models` and nothing that names a seat, so a consumer
+  holding only `tally.json`/`verdict.json` cannot map `adjudications[].seat` back to a bench
+  position — `run.json`'s `seats[]` (seeded `null` at `run-state.js:99`, filled by
+  `preflightSeats`) is the only place the table exists. Every seat-aware renderer therefore has to
+  read two documents.
+- [ ] **PR4 · `verdict.json` carries `adjudications[].seat` but NOT `findings[].raiserSeat`, so a
+  verdict-only consumer cannot tell which twin raised a finding.** `buildVerdict`
+  (`src/council/verdict.js:113-127`) rebuilds every finding from an explicit field list — `id`,
+  `raiser`, `severity`, `tier`, `basis`, `confidence`, `tierOverride`, `duplicateOf`,
+  `adjudications`, `decision`, `applied`, plus `debate` when present. `adjudications` is passed by
+  reference (`:121`), so PR3's per-vote `seat` survives; `raiserSeat` has no slot and is dropped.
+  Measured on a twin bench: the tally finding carries `"raiserSeat":"deepseek#1"`, the verdict
+  finding does not, while both carry `adjudications[0].seat === "deepseek#2"`. Every caller writes
+  through `buildVerdict` (`run-assemble.js:223`, `cli-handlers-council.js:198`,
+  `mcp-server.js:1452`), so there is no second path that could add it. **Not fixed in PR3** — the
+  CHANGELOG describes what shipped, and threading it through is a code change PR3 did not make.
+  Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
+  document" gap.
+- [ ] **PR4 · an `-rv` leg that binds to NO seat makes `applyDebate` invent an adjudication row —
+  fix the JOIN, not the announcement.** `runRevoteWave` (`src/council/run-debate-revote.js:124`)
+  falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
+  keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
+  seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:81`) matches
+  nothing, and the fail-open push at `:90` appends a NEW row instead of replacing one. **Measured**
+  on `--models deepseek,deepseek,gpt` with one `-rv` leg left unattributable: 4 adjudications in,
+  **7 out**; `B1` ends with **four votes on a three-seat bench** — `gpt` agree, `deepseek#2` agree,
+  a seat-less `deepseek` agree that corresponds to no bench position, and `deepseek#1`'s **stale
+  `dispute` still standing**, because the row the re-vote was meant to replace was never found.
+  Exit 0, `degraded === false`, no degrade note. Merge-base never invented a row: it matched on the
+  alias, which always hit. **The remedy is the join** — key the wave's fallback on something the
+  adjudications actually carry, or refuse to apply a re-vote whose seat is unknown. A degrade note
+  is not the fix: it announces an invented voter without removing it, and the invented row is what
+  reaches `tally.js`'s basis counts and `report.js`'s `byJudge`. ⚠️ Currently **unreachable from
+  the production launcher** — `src/sidecar/fanout-leg.js` stamps `taskId: legId` on every leg it
+  returns, on both the error path (`:61`) and the normal one (`:191`), so a real fanout leg always
+  binds by roster slot. That is what makes this a latent PR4 item rather than a live regression;
+  it is not a reason to leave the join alias-shaped. *(The Task-6 deferred-minor ledger entry filed
+  this as "an observability gap, not a regression" and proposed adding the missing
+  `orphanLegNote`/`seat-unbound` notes. That classification was wrong — corrected by the final
+  whole-branch review, F3. That ledger is a local working note and is not committed to this repo,
+  so the measured evidence is restated above rather than cited.)*
+- [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
+  `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
+  was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin
+  bench holds the same alias twice; `votes[adj.judge] = adj.verdict` (`:55`) is last-wins, so both
+  twin columns paint the same verdict; and `isRaiser: j === f.raiser` (`:80`) flags both twin
+  columns as the raiser. The Workspace adjudication matrix is therefore wrong in the same three
+  ways `report.html` is. Fix them together, keyed on `(adj.seat || adj.judge)` against a
+  seat-valued column list — the data is already on the document as of PR3.
+- Minor, noticed while re-deriving citations and **not** fixed: `src/council/seats.js:97` cites
+  `run-retry.js:93` for "a retry wave is the loss subset"; the current anchor is `run-retry.js:67`
+  (`groupStage1Losses`). Left alone rather than guessed at mid-PR.
+
+#### PR3 post-review adjudication (2026-08-13)
+
+PR3's auto-review and the paid council raised nine findings against the shipped diff. Eight are
+filed here rather than fixed on this branch — each is either already disclosed above or latent and
+unreachable from production. (The ninth was a real defect: `run-debate-revote.js`'s module docblock
+had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being true for
+`runRevoteWave` at Task 6, which gave it seat binding. Fixed in place, comment-only.)
+
+- [ ] **PR4 · a double-orphan collapses onto ONE conformance row in `run.js`'s Stage-2 merge.**
+  `run.js:224`'s `const seatKey = (s, alias) => (s ? s.id : alias);` feeds
+  `new Map(s2.judgeResults.map(j => [seatKey(j.seat, j.judge), j]))` (`run.js:225`). If BOTH twins'
+  Stage-2 legs fail seat binding (`j.seat === null` for both), `seatKey(null, alias)` returns the
+  same bare alias for both, the `Map` keeps whichever twin's entry was inserted second, and both
+  `s1.reviews` rows fall through their `byJudge.get(r.seat ? r.seat.id : r.model) || byJudge.get(r.model)`
+  lookup (`run.js:227`) onto that one surviving judge's conformance. **Latent, not reachable from
+  production**: `src/sidecar/leg-ids.js:16` stamps every fanout leg's `taskId` as `${waveId}-${i+1}`,
+  and `fanout-leg.js` writes that `taskId` into `buildRunResult` on both the normal completion path
+  (`:191`) and the routing-failure path (`:61`) — so a real `-s2` wave cannot produce even one
+  unbindable leg, let alone two. The state is only constructible by deleting ids in a fixture.
+  ⚠️ **The auto-review's framing — "reintroduces the D7-class bug" — is WRONG.** On identical input
+  PR3 is never worse than merge-base (merge-base has no seat concept, so it always joins on the bare
+  alias — exactly PR3's degraded fallback path). And on the reachable case, a healthy twin bench,
+  PR3 is strictly better: merge-base's alias-only join collapsed the twins' conformance
+  unconditionally and silently (the in-code comment at `run.js:219-224` names this D7), while PR3
+  only collapses in the unreachable double-orphan case, and does so at exit 0 exactly like
+  merge-base always did — no regression, no new silent failure mode. Supersedes nothing already
+  filed: the existing PR4 entry above (*"an `-rv` leg that binds to NO seat makes `applyDebate`
+  invent an adjudication row"*) is a different file (`run-debate-revote.js`, not `run.js`), a
+  different mechanism (the debate round's fail-open push inventing a row, not the Stage-2 merge's
+  `Map` losing one), and a different failure shape (an extra row vs. a collapsed one) — checked for
+  overlap, there isn't any.
+- [ ] **PR4 · `applyDebate`'s fail-open push writes a seat id into the alias-space `judge` field
+  when `aliasOf` is absent.** `debate.js`'s fail-open branch (`const alias = aliasOf ? aliasOf(key) : key;`)
+  falls back to the raw seat key when no `aliasOf` is supplied. Measured: without `aliasOf` the
+  pushed row is `{judge: 'deepseek#1', ...}` and the tier moves Singleton → Confirmed (a seat id in
+  `judge` reaches `tally.js`'s `v.judge !== f.raiser` and `report.js`'s `byJudge[adj.judge]`, both
+  alias-space joins); with `aliasOf` supplied, the row is `{judge: 'deepseek', seat: 'deepseek#1'}`
+  and the tier is correct. **Not reachable**: `grep -rn applyDebate src/` (excluding tests) finds
+  exactly one non-test caller — `run-debate.js:202-203` — and it DOES pass `aliasOf` (the call site
+  even carries a warning comment at `:198-201` explaining why). The package's `exports` map
+  (`package.json:34-36`) publishes only `./opencode-client`, which blocks a deep
+  `require('amicus/src/council/debate')` from outside the package, closing off the obvious
+  alternate call path. Two conditions must BOTH hold for this to fire — a caller omitting `aliasOf`
+  AND a repeated alias in the same wave — and no such caller exists today. File as a hardening note:
+  consider making `aliasOf` a required parameter (throw if absent) rather than an optional one with
+  a silently-wrong fallback.
+- [ ] **A hardening note — nothing pins that the launcher must NOT de-duplicate `models`.** Owner
+  ruling R3-2 (one re-vote leg per seat) depends on `['gpt', 'deepseek', 'deepseek']` producing
+  THREE legs, not two. Verified end-to-end through the real `runFanout`: three legs actually spawn,
+  and `fanout-validate.js:18`'s `parseModelsList` docblock says "duplicates allowed" (line 18, not
+  20 — re-checked against the current file rather than assumed). Nothing enforces that contract
+  going forward: a future `uniq()`/`new Set(...)` anywhere on the `--models` → leg-construction path
+  would silently drop a twin's leg and break R3-2 with no error, no test failure outside this one
+  area, and a plausible-looking diff. `tests/council/run-debate.test.js`'s
+  `describe('runDebate — twin bench: joins on the seat, launches on the alias', ...)` (from
+  `TWIN_BENCH = ['deepseek', 'deepseek', 'gpt']`, line 55) already pins the twin `-rv` shape at the
+  `runDebate` level, so the invariant is exercised — just not named. Worth an explicit comment (or a
+  dedicated unit test on `parseModelsList`) stating the invariant in one place: "duplicates must
+  survive to leg construction."
+- [ ] **A maintainability note (from the auto-review).** `seatKey(seat, alias) => seat ? seat.id : alias`
+  (or the arrow-function equivalent) is independently redefined in **three files**:
+  `run-debate-revote.js:56`, `run-retry.js:149`, `run.js:224` — re-derived directly, not assumed;
+  note `run-stage2.js` does NOT redefine it (it takes seats a different way). Separately, §3.4's
+  roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
+  is duplicated near-verbatim in a **different** set of three files: `run-retry.js:118-130`,
+  `run-stage2.js:89-106`, `run-debate-revote.js:106-117` — this time `run.js` is the one that does
+  NOT carry it (it consumes `s2.judgeResults`, which already went through Stage-2's own padding).
+  Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
+  above. Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
+  `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.
+- [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js:47-207`, 161 lines),
+  `runDebate` (`run-debate.js:106-270`, 165 lines), and `runRevoteWave`
+  (`run-debate-revote.js:76-166`, 91 lines) all exceed CLAUDE.md's 50-line-per-function guideline
+  (`CLAUDE.md:793`; the limit is also named at `CLAUDE.md:705`). Nothing in CI enforces it —
+  `scripts/check-file-sizes.js` is file-level only (300 lines/file; no per-function check exists
+  anywhere in the gate). File as a follow-up, noting the seat/placeholder-roster logic inside all
+  three is the same safety-critical logic named above, which is what makes them worth splitting
+  rather than just noting.
 
 ### Bench adaptation — closes #135, finishes #129
 

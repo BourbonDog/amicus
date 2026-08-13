@@ -83,11 +83,21 @@
 
   // ⚠️ DE-ROT (F38): on a --debate run the FINAL tally.json is rebuilt from the debate's
   // replaced adjudications, so a matrix `dispute` cell can be a re-vote — gate per
-  // (judge, findingId), not per run: a judge gets ONE re-vote leg covering only the ids it
-  // actually re-voted; every other dispute cell still belongs to judge-*.md. debate.json's
-  // `revotes[]` is keyed on the bench ALIAS (same key revote-*.md and state.labelByModel use),
-  // so no filename inversion is needed. Returns the settle promise so callers (and tests) can
-  // await the highlight instead of guessing when it lands.
+  // (judge, findingId), not per run: a re-voting seat gets ONE re-vote leg covering only the ids
+  // it actually re-voted; every other dispute cell still belongs to judge-*.md. debate.json's
+  // `revotes[].judge` is still keyed on the bench ALIAS (src/council/run-debate.js:217 keeps it
+  // alias-valued and puts the seat in a sibling `seat` field only when the two differ), which is
+  // the same key state.labelByModel uses, so this join needs no inversion.
+  // ⚠️ v4.8 PR3: `revote-*.md` and `judge-*.md` are no longer named from that alias — they are
+  // named from the SEAT (src/council/run-launch.js:234, run-stage2.js:145). The two agree on
+  // every bench with no repeated alias, which is every bench that has ever run, and diverge only
+  // for a repeated alias, where the seat-named file exists on disk but is not on
+  // artifactAllowlist at all, so resolveArtifactName below cannot reach it and this function
+  // takes its `if (!section) { return; }` path. Closed by the PR5 Workspace flip that rebuilds
+  // the allowlist from `run.seats`; do NOT patch it here by re-deriving a seat name, because the
+  // read guard would still refuse the result.
+  // Returns the settle promise so callers (and tests) can await the highlight instead of
+  // guessing when it lands.
   function drillIntoJudge(judgePair, findingId) {
     var A = window.AmicusApp;
     var panel = A.$('judges-panel');

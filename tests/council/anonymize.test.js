@@ -47,6 +47,30 @@ describe('id rewriting roundtrip', () => {
   });
 });
 
+// v4.8 PR3 Task 5: toGlobalFindings gains a 4th, additive raiserSeat parameter
+// — emitted ONLY when truthy AND different from the raiser alias (emit-when-
+// DIFFERENT, not emit-when-set). On a unique-alias bench the seat id is
+// byte-equal to the alias, so the naive "emit when set" form would stamp a
+// redundant raiserSeat on every finding of every run.
+describe('toGlobalFindings raiserSeat (v4.8 PR3 Task 5)', () => {
+  const findings = [{ id: 1, severity: 'major', claim: 'x', location: 'l', rationale: 'r' }];
+
+  test('a seat id that differs from the raiser alias (twin bench) is emitted as raiserSeat', () => {
+    const out = toGlobalFindings('A', 'deepseek', findings, 'deepseek#1');
+    expect(out[0].raiserSeat).toBe('deepseek#1');
+  });
+
+  test('a seat id byte-equal to the raiser alias (unique-alias bench) emits NO raiserSeat key', () => {
+    const out = toGlobalFindings('A', 'deepseek', findings, 'deepseek');
+    expect('raiserSeat' in out[0]).toBe(false);
+  });
+
+  test('a falsy 4th argument (e.g. the Claude review 3-arg call site) emits NO raiserSeat key', () => {
+    const out = toGlobalFindings('A', 'claude', findings);
+    expect('raiserSeat' in out[0]).toBe(false);
+  });
+});
+
 describe('rankingToOrder (de-anonymization for tally rankings)', () => {
   const { labelMap } = assignLabels(['deepseek', 'gemini', 'gpt']);
 

@@ -78,6 +78,54 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
   });
 });
 
+// v4.8 PR3 Task 5: buildTallyInput's adjudications carry `seat` alongside the
+// unchanged alias-valued `judge` — emit-when-DIFFERENT (§3.3), mirroring Task
+// 4's judgeResults[].seat guard. `judge: j.judge` stays the alias; rankings
+// (street-cred) are untouched.
+describe('buildTallyInput adjudications seat (v4.8 PR3 Task 5, emit-when-different)', () => {
+  const judgesWithSeat = (seat) => [
+    { judge: 'gemini', ok: true, order: ['gemini'], seat,
+      adjudications: [{ id: 'A1', verdict: 'agree' }] },
+  ];
+
+  test('a seat id differing from the judge alias (twin bench) is emitted onto adjudications', () => {
+    const input = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini', 'gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini#2', alias: 'gemini' }),
+      chairStats: null,
+    });
+    expect(input.adjudications[0]).toEqual({ findingId: 'A1', judge: 'gemini', verdict: 'agree', seat: 'gemini#2' });
+  });
+
+  test('a seat id byte-equal to the judge alias (unique-alias bench) emits NO seat key', () => {
+    const input = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini', alias: 'gemini' }),
+      chairStats: null,
+    });
+    expect(input.adjudications[0]).toEqual({ findingId: 'A1', judge: 'gemini', verdict: 'agree' });
+    expect('seat' in input.adjudications[0]).toBe(false);
+  });
+
+  test('a judge with no seat (null) emits NO seat key', () => {
+    const input = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat(null),
+      chairStats: null,
+    });
+    expect('seat' in input.adjudications[0]).toBe(false);
+  });
+
+  test('rankings (street-cred) stay alias-valued — unchanged by seat', () => {
+    const input = asm.buildTallyInput({
+      runId: 'r', date: 'd', bench: ['gemini', 'gemini'], chair: 'x',
+      reviews: REVIEWS, judgeResults: judgesWithSeat({ id: 'gemini#2', alias: 'gemini' }),
+      chairStats: null,
+    });
+    expect(input.rankings).toEqual([{ judge: 'gemini', order: ['gemini'] }]);
+  });
+});
+
 // Task 4 (v4.7 D2/E4): extraRows is the row-per-launch channel runStage1 now
 // returns (repair/dead-seat-error/superseded rows) — buildTallyInput appends
 // it right after the primary review rows, before judge/chair accounting.
