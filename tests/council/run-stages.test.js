@@ -41,8 +41,18 @@ const okWave = (legs) => ({ wave: { status: 'complete', legs }, exitCode: 0 });
 // helpers in tests/council/run-retry.test.js.
 // v4.8 PR2a Task 1: both take the same trailing (waveId, slot) pair as mkLeg.
 const usableLeg = (model, waveId, slot) => mkLeg(model, review(model), 'complete', waveId, slot);
-const deadLeg = (model, status = 'error', error = 'boom', waveId, slot) =>
-  ({ ...mkLeg(model, '', status, waveId, slot), error });
+// CI council finding on PR #152: every status this file's deadLeg call sites
+// actually pass (default 'error', plus explicit 'error'/'timeout'/'timed-out').
+const DEAD_LEG_STATUSES = new Set(['error', 'timeout', 'timed-out']);
+const deadLeg = (model, status = 'error', error = 'boom', waveId, slot) => {
+  // waveId/slot trail two DEFAULTED params, so `deadLeg('b', 'r1-s1', 2)` would
+  // silently land the wave id in `status`. Fail loudly instead: the binding gate
+  // cannot see a bogus status, only a bogus id.
+  if (!DEAD_LEG_STATUSES.has(status)) {
+    throw new Error(`deadLeg: status '${status}' is not a leg status — did you mean deadLeg(model, status, error, waveId, slot)?`);
+  }
+  return { ...mkLeg(model, '', status, waveId, slot), error };
+};
 
 function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = null, lenses = null, overBudget = () => false, degrade } = {}) {
   const runDir = path.join(tmp, 'council-abc123');
@@ -83,6 +93,12 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
     _notes: notes,
   };
 }
+
+describe('deadLeg fixture guard (CI council finding, PR #152)', () => {
+  test('a misordered call — waveId landing in the status slot — throws loudly instead of silently corrupting the leg', () => {
+    expect(() => deadLeg('b', 'r1-s1', 2)).toThrow(/not a leg status/);
+  });
+});
 
 describe('runStage1', () => {
   test('happy path: one wave for standard seats, reviews materialized + validated', async () => {

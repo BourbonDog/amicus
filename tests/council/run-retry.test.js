@@ -95,11 +95,28 @@ const usableLeg = (m, waveId, slot) => ({
   modelInput: m, status: 'complete', summary: `review by ${m}`,
   ...(waveId != null ? { taskId: `${waveId}-${slot}`, waveId } : {}),
 });
-const deadLeg = (m, status = 'error', error = 'boom', waveId, slot) => ({
-  modelInput: m, status, error,
-  ...(waveId != null ? { taskId: `${waveId}-${slot}`, waveId } : {}),
-});
+// CI council finding on PR #152: every status this file's deadLeg call sites
+// actually pass (default 'error', plus explicit 'error'/'timeout'/'timed-out').
+const DEAD_LEG_STATUSES = new Set(['error', 'timeout', 'timed-out']);
+const deadLeg = (m, status = 'error', error = 'boom', waveId, slot) => {
+  // waveId/slot trail two DEFAULTED params, so `deadLeg('b', 'r1-s1', 2)` would
+  // silently land the wave id in `status`. Fail loudly instead: the binding gate
+  // cannot see a bogus status, only a bogus id.
+  if (!DEAD_LEG_STATUSES.has(status)) {
+    throw new Error(`deadLeg: status '${status}' is not a leg status — did you mean deadLeg(model, status, error, waveId, slot)?`);
+  }
+  return {
+    modelInput: m, status, error,
+    ...(waveId != null ? { taskId: `${waveId}-${slot}`, waveId } : {}),
+  };
+};
 const COUNTS = { reviewed: 1, total: 3 };
+
+describe('deadLeg fixture guard (CI council finding, PR #152)', () => {
+  test('a misordered call — waveId landing in the status slot — throws loudly instead of silently corrupting the leg', () => {
+    expect(() => deadLeg('b', 'r1-s1', 2)).toThrow(/not a leg status/);
+  });
+});
 
 describe('retryStage1Losses (SL-2 Task 4)', () => {
   test('recovery: heal per seat, recovered legs returned, no still-dead output', async () => {
