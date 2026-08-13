@@ -127,6 +127,7 @@ src/
 │   ├── run-state.js
 │   ├── run.js
 │   ├── seats.js
+│   ├── stage1-bind.js
 │   ├── tally.js
 │   └── verdict.js
 ├── design/
@@ -523,6 +524,7 @@ evals/
 | `council/run-state.js` |  | `RUN_FILE()`, `readRun()`, `initRun()`, `initCouncilRun()`, `checkpoint()` |
 | `council/run.js` |  | `runCouncil()`, `pickFallbackChair()`, `SIGNAL_EXIT()` |
 | `council/seats.js` |  | `buildSeats()`, `roleAt()`, `bindSeats()`, `artifactName()`, `displayName()` |
+| `council/stage1-bind.js` |  | `bindStage1Waves()`, `orphanLegNote()`, `missingSeatDeadWave()` |
 | `council/tally.js` |  | `assignTier()`, `computeStreetCred()`, `tally()`, `COUNCIL_SCHEMA_VERSION()` |
 | `council/verdict.js` |  | `buildVerdict()`, `summarizeSeatLoss()`, `deriveSeatLoss()`, `readOverallVerdict()`, `readPriorVerdictSurfaces()` |
 | `design/tokens.js` |  | `tokenCss()`, `TOKENS()` |

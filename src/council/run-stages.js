@@ -26,6 +26,7 @@ const { runStage2 } = require('./run-stage2');
 const { launchStage1 } = require('./run-stage1-launch');
 const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
+const { bindStage1Waves, orphanLegNote } = require('./stage1-bind');
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug } = require('./seats');
@@ -60,8 +61,14 @@ function roleFor(o, alias) {
  */
 async function runStage1(ctx) {
   const { o } = ctx;
-  const { aborted, legs, deadWaves } = await launchStage1(ctx);
+  const { aborted, legs, deadWaves, waves } = await launchStage1(ctx);
   if (aborted) { return { aborted, reviews: [], deadLegs: [], deadWaves: [], degraded: false, extraRows: [] }; }
+
+  // Per-wave binding, before anything reads a leg. Orphans are announced now —
+  // they are not a loss, so the "never degrade for a seat the retry saves" rule
+  // below does not apply to them.
+  const { orphanLegs } = bindStage1Waves(waves);
+  for (const { waveId, leg } of orphanLegs) { ctx.degrade.note(orphanLegNote(waveId, leg)); }
 
   const firstPass = materializeReviews(o.runDir, legs);
   const alive0 = new Set(firstPass.map(m => m.leg));

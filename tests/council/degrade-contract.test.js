@@ -113,3 +113,22 @@ describe("stage1-retry channel (SL-2)", () => {
       'Recovered: seat gpt reviewed on retry — relaunched once. The seat is in this council; nothing was lost.\n');
   });
 });
+
+describe('seat-unbound channel (v4.8)', () => {
+  test('makeDegrade round-trips a seat-unbound degrade', () => {
+    const r = makeDegrade({
+      channel: 'seat-unbound',
+      what: "leg stray-1 in wave w-s1 matches no seat on that wave's roster",
+      why: "its id names no roster slot of w-s1, and its model 'zzz' does not identify exactly one seat there",
+      effect: 'Its review is kept under its model name and is NOT attributed to a seat; nothing was '
+        + 'guessed and nothing was dropped',
+      data: { waveId: 'w-s1', legId: 'stray-1', seat: 'zzz' },
+    });
+    expect(r.kind).toBe('degrade');
+    expect(r.channel).toBe('seat-unbound');
+  });
+
+  test('DEGRADE_CHANNELS has seat-unbound', () => {
+    expect(DEGRADE_CHANNELS.has('seat-unbound')).toBe(true);
+  });
+});
