@@ -852,3 +852,53 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
     expect(launched.noOutputBackstopMs).toBe(100000);
   });
 });
+
+// ---- v4.8 PR2b Task 8: `attemptedSeats` is the seat-keyed retry gate ----
+// run-stage1-rows.js reads this to decide whether a still-dead seat may fall
+// back to its FIRST-attempt leg. Derived from stillDeadNotes instead it could
+// not work: `data.seat` is alias-valued by contract, so no twin's seat id would
+// ever match, and every twin's row would re-attach a first leg it never earned.
+describe('v4.8 PR2b Task 8: retryStage1Losses publishes attemptedSeats, seat-keyed', () => {
+  const TWINS = { models: ['deepseek', 'deepseek'], critic: null };
+  const twinLegs = (ctx) => {
+    const d1 = deadLeg('deepseek', undefined, undefined, 'r1-s1', 1);
+    const d2 = deadLeg('deepseek', undefined, undefined, 'r1-s1', 2);
+    return { d1, d2, seatOf: new Map([[d1, ctx.o.seats[0]], [d2, ctx.o.seats[1]]]) };
+  };
+
+  test('retryLegStillDead (both retry legs came back unusable): BOTH twins are marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [deadLeg('deepseek', 'timed-out', null, 'r1-s1r1', 1),
+        deadLeg('deepseek', 'timed-out', null, 'r1-s1r1', 2)] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const { d1, d2, seatOf } = twinLegs(ctx);
+    const out = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [d1, d2], counts: COUNTS, seatOf });
+    expect([...out.attemptedSeats].sort()).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('srcLegStillDead (the retry wave died wholesale): BOTH twins are marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const { d1, d2, seatOf } = twinLegs(ctx);
+    const out = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [d1, d2], counts: COUNTS, seatOf });
+    expect([...out.attemptedSeats].sort()).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('waveStillDead (a dead twin WAVE whose retry also died): BOTH twins are marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const out = await retryStage1Losses(ctx, { counts: COUNTS, deadLegs: [],
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'x' }] });
+    expect([...out.attemptedSeats].sort()).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('missingLegStillDead: only the twin the partial return never named — a HEALED seat is not marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [usableLeg('deepseek', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const out = await retryStage1Losses(ctx, { counts: COUNTS, deadLegs: [],
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'x' }] });
+    expect(out.recoveredLegs).toHaveLength(1);
+    expect([...out.attemptedSeats]).toEqual(['deepseek#2']);   // #1 healed — nothing to gate
+  });
+});

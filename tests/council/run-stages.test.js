@@ -1050,6 +1050,103 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
   });
 });
 
+// ---- v4.8 PR2b Task 8: dead-seat rows key on the SEAT, not the alias ----
+// run-cost-bijection.test.js's six scenarios are all UNIQUE-alias benches — it
+// will pass whether or not the twin accounting is right. These are the twin gate.
+describe('Task 8: dead-seat rows key on the seat (v4.8 PR2b)', () => {
+  const primaryRows = (r) => r.extraRows.filter(x => x.role !== 'repair' && x.role !== 'superseded');
+
+  test('two dead twin seats produce TWO dead-seat rows, not one', async () => {
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    // roster (-s1): #1=slot1, #2=slot2; retry roster (-s1r1): the same two, same order.
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1),
+          deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 1),
+          deadLeg('deepseek', 'timed-out', null, 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(2);
+    // ⚠️ spec §4.7: the ledger row keeps the ALIAS — pickFallbackChair launches
+    // top.aliases[0] and 'deepseek#2' is not routable. Two rows both reading
+    // 'deepseek' is the CORRECT count; (model, resolvedModel) grouping is PR4.
+    expect(primary.every(x => x.model === 'deepseek')).toBe(true);
+    expect(primary.map(x => x.waveId)).toEqual(['abc123-s1r1', 'abc123-s1r1']);
+    expect(primary.every(x => x.status === 'timed-out')).toBe(true);
+    expect(r.extraRows.filter(x => x.role === 'superseded')).toHaveLength(2);
+  });
+
+  test('two dead twins whose retry wave dies wholesale get TWO leg-less rows (no first-leg phantom)', async () => {
+    // Gates `retry.attemptedSeats` being SEAT-keyed: derived from the notes
+    // instead, `data.seat` is alias-valued, so neither twin's seat id would
+    // match and each row would re-attach its own first-attempt leg.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1),
+          deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(2);
+    expect(primary.every(x => !('waveId' in x))).toBe(true);      // no real leg backs either row
+    expect(primary.every(x => x.usage === null)).toBe(true);
+    expect(r.extraRows.filter(x => x.role === 'superseded')).toHaveLength(2);
+  });
+
+  test('a partially healed dead wave yields exactly ONE dead-seat row, for the seat that stayed lost', async () => {
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    // The whole -s1 wave dies; the retry names only 'a', so 'b' stays lost.
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('a', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(1);
+    expect(primary[0].model).toBe('b');
+  });
+
+  test('CARRY (a): a healed twin\'s first leg is never borrowed by its still-lost sibling', async () => {
+    // The -s1 wave returns ONE leg (slot 1 => deepseek#1, dead); deepseek#2's
+    // leg never comes back, so it reaches the retry as a `partial` dead wave
+    // whose still-dead note rides `seat-unbound`, NOT `dead-leg`. The retry
+    // heals #1 only. Alias-keyed, #2's row would borrow #1's first leg — a
+    // phantom waveId/status pairing on a seat that never had a leg at all.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    // retry roster (-s1r1): wave-origin losses are grouped BEFORE leg-origin
+    // ones, so slot1=#2 (the missing seat) and slot2=#1 (the dead leg).
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('deepseek', 'abc123-s1r1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(r.reviews).toHaveLength(1);                            // #1 healed
+    const primary = primaryRows(r);
+    expect(primary).toHaveLength(1);                              // #2 alone stayed lost
+    expect(primary[0].model).toBe('deepseek');
+    expect('waveId' in primary[0]).toBe(false);                   // NOT borrowed from #1's first leg
+    expect(primary[0].usage).toBeNull();
+    expect(primary[0].durationMs).toBeNull();
+    const superseded = r.extraRows.filter(x => x.role === 'superseded');
+    expect(superseded).toHaveLength(1);                           // #1's first leg, and only that
+    expect(superseded[0].waveId).toBe('abc123-s1');
+  });
+
+  test('a dead twin LENS seat gets its own lens role on its row (roleAt, not roleFor)', async () => {
+    // roleFor's o.models.indexOf hands BOTH twins the first twin's lens.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'], lenses: ['risk', 'cost'],
+      onSolo: (opts) => ({ wave: { waveId: opts.waveId, legs: [] }, exitCode: 0 }) });
+    const r = await runStage1(ctx);
+    const primary = primaryRows(r);
+    expect(primary.map(x => x.role).sort()).toEqual(['lens:cost', 'lens:risk']);
+    expect(primary.every(x => x.model === 'deepseek')).toBe(true);
+  });
+});
+
 describe('runStage2', () => {
   function stage1Reviews() {
     return [

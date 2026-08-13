@@ -274,7 +274,10 @@ async function runStage1(ctx) {
   }
 
   // Superseded + dead-seat rows live in ./run-stage1-rows (v4.8 PR0 size-gate split).
-  pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows, roleFor });
+  // ⚠️ allSeatOf, never the Stage-1 `seatOf`: retry.recoveredLegs and
+  // retry.stillDeadRetryLegs are retry-wave objects that map has never seen.
+  pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
+    roleFor, roleAt, seatOf: allSeatOf });
 
   return { aborted: null, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
     degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0, extraRows };

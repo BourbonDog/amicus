@@ -40,9 +40,9 @@ function waveStillDeadNote(w, unit) {
     // degrade-channels.test.js's exact toEqual on a real dead wave. It stays the
     // ALIAS because verdict.js:72 compares data.seat against o.critic, an alias,
     // and because it is the same key the dead-leg shape uses — one vocabulary
-    // for one field. ⚠️ It is NOT read by the Workspace today: live-seats.js:187,
-    // workspace-seats.js:60 and verdict.js:71,74 all return on any channel that
-    // is not dead-leg/dead-wave, so no surface consumes `seat-unbound` yet (PR4).
+    // for one field. ⚠️ It is NOT read by the Workspace today: live-seats.js:188,
+    // workspace-seats.js:61 and verdict.js:68 and :71 all filter to channels that
+    // are dead-leg/dead-wave, so no surface consumes `seat-unbound` yet (PR4).
     data: { waveId: w.waveId, models: w.models, reason: w.reason, retryWaveId: unit.waveId,
       ...(partial ? { seat: (w.models || [])[0] } : {}) } };
 }

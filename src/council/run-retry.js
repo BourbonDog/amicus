@@ -47,9 +47,12 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
   // recovered leg is a RETRY-wave object Stage-1's seatOf has never seen, so
   // without publishing these bindings every healed seat re-materializes
   // unattributed downstream (spec §4.4).
+  // `attemptedSeats` (v4.8 PR2b Task 8): the seat-keyed "was this seat actually
+  // retried?" gate. Structured data, never a scan of stillDeadNotes — the full
+  // rationale sits at run-stage1-rows.js's fallback, its only consumer.
   const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [],
     stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
-    stillDeadRetryLegs: [], seatOf: new Map(), orphanLegs: [] };
+    stillDeadRetryLegs: [], seatOf: new Map(), orphanLegs: [], attemptedSeats: new Set() };
   // Task 5 (#129): SL-2 retries the SAME model under the SAME conditions, so a
   // latency failure is structurally unhealable. Double the window, clamped to
   // the leg timeout so the failure CLASS stays NO_OUTPUT_BACKSTOP rather than
@@ -173,12 +176,15 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       for (const w of unit.srcWaves) {
         out.stillDeadNotes.push(waveStillDeadNote(w, unit));
         out.stillDeadWaves.push(w);
-        (w.models || []).forEach((m, i) => notedSeats.add(seatKey((w.seats || [])[i] || null, m)));
+        (w.models || []).forEach((m, i) => {
+          const k = seatKey((w.seats || [])[i] || null, m);
+          notedSeats.add(k); out.attemptedSeats.add(k);
+        });
       }
       for (const l of unit.srcLegs) {
         const key = srcLegKey(l);
         if (notedSeats.has(key)) { continue; }
-        notedSeats.add(key);
+        notedSeats.add(key); out.attemptedSeats.add(key);
         out.stillDeadNotes.push(srcLegStillDeadNote(l, unit, counts));
         out.stillDeadLegs.push(l);
       }
@@ -219,6 +225,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
           data: { seat, retryWaveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, firstFailure: ff } });
       } else {
         out.stillDeadNotes.push(retryLegStillDeadNote(seat, ff, leg, unit, counts));
+        out.attemptedSeats.add(key);
         out.stillDeadRetryLegs.push(leg);
         // Both WAVE-origin classes route here: a 'missing' loss carries a
         // waveId and no srcLeg, so the else branch would drop it from every
@@ -250,6 +257,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       if (seenSeats.has(key)) { continue; } // already handled above (healed or still-dead)
       const ff = rec.ff;
       out.stillDeadNotes.push(missingLegStillDeadNote(rec.alias, ff, unit, counts));
+      out.attemptedSeats.add(key);
       if (ff && ff.class !== 'leg') {   // wave-origin, incl. a 'missing' seat
         if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
         lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
