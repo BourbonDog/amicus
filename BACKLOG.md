@@ -2030,6 +2030,28 @@ deliberately left alone:
   CHANGELOG describes what shipped, and threading it through is a code change PR3 did not make.
   Fix alongside `meta.seats` above: both are the same "the seat table stops before the summary
   document" gap.
+- [ ] **PR4 · an `-rv` leg that binds to NO seat makes `applyDebate` invent an adjudication row —
+  fix the JOIN, not the announcement.** `runRevoteWave` (`src/council/run-debate-revote.js:124`)
+  falls back to `seatKey(null, alias)` for a leg `bindSeats` could not attribute, so `byJudge` is
+  keyed on the bare alias. On a bench that repeats an alias every provisional adjudication is
+  seat-attributed, so `applyDebate`'s `(a.seat || a.judge) === key` (`debate.js:81`) matches
+  nothing, and the fail-open push at `:90` appends a NEW row instead of replacing one. **Measured**
+  on `--models deepseek,deepseek,gpt` with one `-rv` leg left unattributable: 4 adjudications in,
+  **7 out**; `B1` ends with **four votes on a three-seat bench** — `gpt` agree, `deepseek#2` agree,
+  a seat-less `deepseek` agree that corresponds to no bench position, and `deepseek#1`'s **stale
+  `dispute` still standing**, because the row the re-vote was meant to replace was never found.
+  Exit 0, `degraded === false`, no degrade note. Merge-base never invented a row: it matched on the
+  alias, which always hit. **The remedy is the join** — key the wave's fallback on something the
+  adjudications actually carry, or refuse to apply a re-vote whose seat is unknown. A degrade note
+  is not the fix: it announces an invented voter without removing it, and the invented row is what
+  reaches `tally.js`'s basis counts and `report.js`'s `byJudge`. ⚠️ Currently **unreachable from
+  the production launcher** — `src/sidecar/fanout-leg.js` stamps `taskId: legId` on every leg it
+  returns, on both the error path (`:61`) and the normal one (`:191`), so a real fanout leg always
+  binds by roster slot. That is what makes this a latent PR4 item rather than a live regression;
+  it is not a reason to leave the join alias-shaped. *(The Task-6 deferred-minor ledger entry in
+  `.superpowers/sdd/2026-08-13-…/progress.md` filed this as "an observability gap, not a
+  regression" and proposed adding the missing `orphanLegNote`/`seat-unbound` notes. That
+  classification was wrong — corrected by the final whole-branch review, F3.)*
 - [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
   `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
   was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin

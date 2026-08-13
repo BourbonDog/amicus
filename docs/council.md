@@ -231,7 +231,9 @@ one seat, the seats are `<alias>#1`, `<alias>#2`, … and the files they write a
 `review-<alias>-1.md`, `review-<alias>-2.md`, and so on. The same rule names the `judge-`,
 `rebuttal-` and `revote-` files below. ⚠️ The Council Workspace cannot open the per-seat artifacts
 of a repeated-alias bench yet — it still derives its readable-file list from the alias, so it
-refuses the real per-seat names and shows one absent alias-named entry instead. The files
+refuses the real per-seat names and records the alias-named one it *does* allowlist as
+`present: false` in the run's own artifact manifest. Every prose panel filters on that manifest,
+so those seats contribute **no rows at all** rather than one visibly broken entry. The files
 themselves are complete on disk.
 
 Two more files appear when the run was started through **`amicus_council_run`** rather than the

@@ -243,6 +243,17 @@ a recon-report line number copied without opening the source: failure class 5, c
 For **every** edit below, the task's review must state which expression reduces to today's literal when
 `seat`/`raiserSeat` are absent, and a test must pin it. This is the byte-identical promise.
 
+⚠️ **The promise has exactly ONE disclosed exception, and it is not a shape change.** Task 6 replaces the
+re-vote repair id `${waveId}-${judge}r` with `${waveId}-${sanitizeName(key)}r` — deliberately, because the
+raw form nested a `/`-bearing alias three directory levels deep (D4). On a unique-alias bench `key` **is**
+the alias, so the two forms differ only when the alias contains a character `sanitizeName` rewrites (anything
+outside `[a-zA-Z0-9._-]`) *and* that judge's re-vote actually drew a repair. Such a run records a different
+`waveId` for that ONE leg in `run.json`'s `stages[].waveIds` and in its `runStats` row
+(`tally-input.json` / `tally.json`). Every other document, filename and leg stays byte-identical, and the
+CHANGELOG states this exception rather than claiming byte-identity unconditionally.
+*(Added by the final whole-branch review, F6 — the unconditional wording above was the claim, the shipped
+slash-bug fix was the reality.)*
+
 ---
 
 ## 4. Tasks

@@ -81,7 +81,12 @@ All notable changes to Amicus are documented here. Format follows
   fixed field list that carries `adjudications` through by reference but has no `raiserSeat`
   slot, so a reader holding just the verdict still cannot tell which of two same-alias seats
   raised a finding. On a bench with no repeated alias every seat id **is** its alias, so none of
-  these documents changes shape at all there.
+  these documents changes shape at all there — with one narrow exception, of *value* rather than
+  shape: the re-vote **repair** leg's wave id is now filename-sanitized (the `/`-nesting fix
+  above), so a unique-alias bench whose alias contains a character sanitization rewrites *and*
+  whose re-vote actually needed a repair records a different id for that one leg in `run.json`'s
+  `stages[].waveIds` and in the matching `runStats` row of `tally-input.json` / `tally.json`. No
+  other leg, and no bench whose aliases are already filename-safe, is affected.
 - **Known limitation: a partial-return seat loss is recorded in `run.json` but not yet reflected
   in `verdict.json`.** The loss lands in `stage.deadWaves` (as a `partial` entry) and in
   `degrades[]` (on the new `seat-unbound` channel above), and the run exits 2 — but
