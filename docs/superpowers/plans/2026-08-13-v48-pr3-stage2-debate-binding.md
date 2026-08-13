@@ -248,11 +248,21 @@ re-vote repair id `${waveId}-${judge}r` with `${waveId}-${sanitizeName(key)}r` �
 raw form nested a `/`-bearing alias three directory levels deep (D4). On a unique-alias bench `key` **is**
 the alias, so the two forms differ only when the alias contains a character `sanitizeName` rewrites (anything
 outside `[a-zA-Z0-9._-]`) *and* that judge's re-vote actually drew a repair. Such a run records a different
-`waveId` for that ONE leg in `run.json`'s `stages[].waveIds` and in its `runStats` row
-(`tally-input.json` / `tally.json`). Every other document, filename and leg stays byte-identical, and the
-CHANGELOG states this exception rather than claiming byte-identity unconditionally.
+`waveId` for that ONE leg in `run.json`'s `stages[].waveIds` and in its `runStats` row of
+`tally-input.json`, `tally.json` **and `verdict.json`** — `verdict.js:129` is `runStats: record.runStats`,
+so the verdict carries the tally's array through **by reference** and shows the changed id too.
+
+**Scope the claim to what was actually measured, and no further:** the exception is confined to that ONE
+leg's identifier. No document gains or loses a key, no run-dir artifact filename changes, and no other
+leg's `waveId` moves. It is nonetheless a real byte difference in three shipped documents, so §3.5's
+promise must be stated *with* the exception rather than over it — which is what the CHANGELOG now does.
 *(Added by the final whole-branch review, F6 — the unconditional wording above was the claim, the shipped
-slash-bug fix was the reality.)*
+slash-bug fix was the reality. An earlier draft of THIS annotation then over-corrected in the same
+breath: it read "Every other document, filename and leg stays byte-identical", which is the very
+unconditional byte-identity claim F6 exists to retire, and it is false for `verdict.json` for exactly the
+by-reference reason above. Caught by the scoped re-review of the F6 fix. Same sentence class as the
+false Workspace sentence caught at Task 7 and the one that already shipped once in PR2b: a correction
+written without re-opening the file the claim is about.)*
 
 ---
 

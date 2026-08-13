@@ -2048,10 +2048,11 @@ deliberately left alone:
   the production launcher** — `src/sidecar/fanout-leg.js` stamps `taskId: legId` on every leg it
   returns, on both the error path (`:61`) and the normal one (`:191`), so a real fanout leg always
   binds by roster slot. That is what makes this a latent PR4 item rather than a live regression;
-  it is not a reason to leave the join alias-shaped. *(The Task-6 deferred-minor ledger entry in
-  `.superpowers/sdd/2026-08-13-…/progress.md` filed this as "an observability gap, not a
-  regression" and proposed adding the missing `orphanLegNote`/`seat-unbound` notes. That
-  classification was wrong — corrected by the final whole-branch review, F3.)*
+  it is not a reason to leave the join alias-shaped. *(The Task-6 deferred-minor ledger entry filed
+  this as "an observability gap, not a regression" and proposed adding the missing
+  `orphanLegNote`/`seat-unbound` notes. That classification was wrong — corrected by the final
+  whole-branch review, F3. That ledger is a local working note and is not committed to this repo,
+  so the measured evidence is restated above rather than cited.)*
 - [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
   `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
   was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin

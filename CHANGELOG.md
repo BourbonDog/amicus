@@ -85,8 +85,10 @@ All notable changes to Amicus are documented here. Format follows
   shape: the re-vote **repair** leg's wave id is now filename-sanitized (the `/`-nesting fix
   above), so a unique-alias bench whose alias contains a character sanitization rewrites *and*
   whose re-vote actually needed a repair records a different id for that one leg in `run.json`'s
-  `stages[].waveIds` and in the matching `runStats` row of `tally-input.json` / `tally.json`. No
-  other leg, and no bench whose aliases are already filename-safe, is affected.
+  `stages[].waveIds` and in the matching `runStats` row of `tally-input.json`, `tally.json` **and
+  `verdict.json`** — the verdict carries the tally's `runStats` array through by reference, so it
+  shows the changed id too. No other leg, and no bench whose aliases are already filename-safe, is
+  affected.
 - **Known limitation: a partial-return seat loss is recorded in `run.json` but not yet reflected
   in `verdict.json`.** The loss lands in `stage.deadWaves` (as a `partial` entry) and in
   `degrades[]` (on the new `seat-unbound` channel above), and the run exits 2 — but
