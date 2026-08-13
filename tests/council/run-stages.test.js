@@ -1082,3 +1082,64 @@ describe('runStage2', () => {
     expect(bundle.split('\n')[0]).toBe(s2.JUDGE_NO_TOOLS_PREAMBLE);  // preamble is still line 1
   });
 });
+
+describe('launchStage1 roster return', () => {
+  const { launchStage1 } = require('../../src/council/run-stage1-launch');
+
+  test('a twin bench gets one wave entry whose roster is seat-space and slot-ordered', async () => {
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek', 'gpt'],
+      onWave: (opts) => okWave([], opts.waveId) });
+    const r = await launchStage1(ctx);
+    expect(r.waves).toHaveLength(1);
+    expect(r.waves[0].waveId).toBe('abc123-s1');
+    expect(r.waves[0].roster.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2', 'gpt']);
+  });
+
+  test('the -s1 roster drops the critic by ALIAS, in lockstep with the launch plan', async () => {
+    // A unique-alias bench cannot see this: `models.filter(m => m !== critic)`,
+    // `seats.filter(s => s.alias !== critic)` and `seats.filter(s => s.id !== criticSeat)`
+    // are byte-identical there. They diverge ONLY on a repeated critic alias —
+    // the alias filter drops BOTH twins, the criticSeat filter drops ONE, and the
+    // roster then runs one longer than the launch plan, shifting every legId slot.
+    // preflightSeats rejects an ambiguous critic, which is exactly why bindSeats
+    // has to be total.
+    const seen = [];
+    const ctx = makeCtx({ models: ['a', 'crit', 'crit'], critic: 'crit',
+      onWave: (opts) => { seen.push(opts.models.slice()); return okWave([], opts.waveId); },
+      onSolo: (opts) => ({ wave: { waveId: opts.waveId, legs: [] }, exitCode: 0, leg: null }) });
+    const r = await launchStage1(ctx);
+    const s1 = r.waves.find(w => w.waveId === 'abc123-s1');
+    expect(seen[0]).toEqual(['a']);                       // :47 drops BOTH twins
+    expect(s1.roster.map(s => s.alias)).toEqual(['a']);   // criticSeat filter would give ['a','crit']
+    expect(s1.roster).toHaveLength(seen[0].length);
+    const c1 = r.waves.find(w => w.waveId === 'abc123-c1');
+    expect(c1.roster.map(s => s.id)).toEqual(['crit#1']);
+  });
+
+  test('lens mode gives each bench position its own wave and its own seat', async () => {
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'], lenses: ['risk', 'cost'],
+      onSolo: (opts) => ({ wave: { waveId: opts.waveId, legs: [] }, exitCode: 0, leg: null }) });
+    const r = await launchStage1(ctx);
+    expect(r.waves.map(w => w.waveId)).toEqual(['abc123-l1', 'abc123-l2']);
+    expect(r.waves.map(w => w.roster[0].id)).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('a dead wave carries its roster as seats alongside the alias models', async () => {
+    const ctx = makeCtx({ models: ['a', 'b'], onWave: (opts) => okWave([], opts.waveId) });
+    const r = await launchStage1(ctx);
+    expect(r.deadWaves).toHaveLength(1);
+    expect(r.deadWaves[0].models).toEqual(['a', 'b']);
+    expect(r.deadWaves[0].seats.map(s => s.id)).toEqual(['a', 'b']);
+  });
+
+  test('each wave entry carries its OWN legs, never the flattened union', async () => {
+    const ctx = makeCtx({ models: ['a', 'b', 'crit'], critic: 'crit',
+      onWave: (opts) => okWave([mkLeg('a', 'r', 'complete', opts.waveId, 1),
+        mkLeg('b', 'r', 'complete', opts.waveId, 2)], opts.waveId),
+      onSolo: (opts) => { const leg = mkLeg('crit', 'r', 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg }; } });
+    const r = await launchStage1(ctx);
+    expect(r.legs).toHaveLength(3);                                   // flattened, unchanged
+    expect(r.waves.map(w => w.legs.length)).toEqual([2, 1]);          // partitioned
+  });
+});
