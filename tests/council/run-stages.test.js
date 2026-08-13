@@ -9,6 +9,9 @@ const os = require('os');
 const { runStage1, runStage2, slug } = require('../../src/council/run-stages');
 const { assignLabels, toGlobalFindings } = require('../../src/council/anonymize');
 const { buildSeats } = require('../../src/council/seats');
+// The REAL judgeResults[].seat -> adjudications[].seat join, so the F1 pins
+// below assert against the shipped projection rather than re-implementing it.
+const { buildTallyInput } = require('../../src/council/run-assemble');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-stages-')); });
@@ -1632,6 +1635,86 @@ describe('runStage2', () => {
       const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
       expect(judgeFiles).toEqual(['judge-__unbound-x-1.md', 'judge-__unbound-x-2.md']);
       expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['__unbound-x#1', '__unbound-x#2']);
+    });
+
+    // ---- Final whole-branch review, F1 ------------------------------------
+    // Finding 3 above pins identity-vs-name-prefix on a bench where EVERY seat
+    // is real, so §3.4's padding branch never executes there and two mutations
+    // survived all 520 suites:
+    //   M2  drop `.filter(b => !placeholders.has(b.seat))`
+    //   M3  neuter `if (placeholders.has(seat)) { continue; }` in the
+    //       seat-unbound loop
+    // What makes the branch run is a ROSTER HOLE: a review with no `seat`,
+    // which is what an orphaned/unbound Stage-1 leg leaves behind
+    // (stage1-bind.js binds; a leg it could not attribute leaves `seat` unset).
+    // M2's consequence is a SYNTHETIC `__unbound-…` sentinel reaching a judge
+    // filename, judgeResults[].seat and — through buildTallyInput — the
+    // `adjudications[].seat` that ships in tally-input.json/tally.json.
+    describe('F1: a roster HOLE exercises §3.4 padding — the placeholder never leaks', () => {
+      // reviews[0] lost its seat in Stage 1; reviews[1] kept deepseek#2.
+      function holedReviews() {
+        const rs = twinReviews();
+        rs[0].seat = null;
+        return rs;
+      }
+
+      test('M2: the placeholder never becomes judgeResults[].seat, a judge filename, or adjudications[].seat', async () => {
+        const ctx = makeCtx({
+          models: ['deepseek', 'deepseek'],
+          // BOTH roster slots return a leg, so slot 1's leg genuinely BINDS to
+          // the placeholder — that bind is exactly what the identity filter
+          // throws away and what M2 would keep.
+          onWave: (opts) => okWave([
+            mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+            mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+          ]),
+          onSolo: () => { throw new Error('no repairs expected'); },
+        });
+        const { judgeResults } = await runStage2(ctx,
+          { reviews: holedReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+        // null, never a sentinel object: nothing was guessed for the hole.
+        expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual([null, 'deepseek#2']);
+        // The unbound judge falls back to the ALIAS filename (today's shape).
+        const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
+        expect(judgeFiles).toEqual(['judge-deepseek-2.md', 'judge-deepseek.md']);
+        // …and the sentinel never reaches the shipped artifact either. This is
+        // the real production join (run-assemble.js), not a re-implementation.
+        const { adjudications } = buildTallyInput({
+          runId: 'abc123', date: '2026-07-19', bench: ['deepseek', 'deepseek'], chair: 'gemini',
+          reviews: holedReviews().map(r => ({ ...r, globalFindings: [] })),
+          judgeResults, chairStats: null,
+        });
+        expect(adjudications.length).toBeGreaterThan(0);
+        for (const a of adjudications) {
+          expect(a.judge).toBe('deepseek');                 // alias/ledger-join space, intact
+          expect(a.seat || '').not.toMatch(/__unbound-/);
+        }
+        expect(adjudications.filter(a => a.seat)).toHaveLength(2);   // only the REAL seat is named
+      });
+
+      test('M3: a padded slot that never returns a leg fires NO false seat-unbound note', async () => {
+        const ctx = makeCtx({
+          models: ['deepseek', 'deepseek'],
+          // Only roster slot 2 comes back, so the PLACEHOLDER is what lands in
+          // bindRes.unbound — the exact input the `continue` guard exists for.
+          onWave: (opts) => okWave([
+            mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+              [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+          ]),
+          onSolo: () => { throw new Error('no repairs expected'); },
+        });
+        const { judgeResults } = await runStage2(ctx,
+          { reviews: holedReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+        // The suppressions ahead of the loop do NOT cover this: the wave
+        // returned a leg (so it is not the zero-leg thin-cross-review branch)
+        // and produced no orphan (so the orphan pre-emption does not fire).
+        // Only the placeholder guard stands between this and a note naming a
+        // seat the run was never able to identify.
+        expect(ctx._notes).toEqual([]);
+        expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['deepseek#2']);
+      });
     });
   });
 });

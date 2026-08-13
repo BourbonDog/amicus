@@ -16,6 +16,7 @@ const { parseDebateDefense } = require('./parse-stage2');
 const { applyDebate, debateRunStatsRows, PAST_TENSE,
   allNoResponse, nothingToDebate, disputingJudges, debateTargets, bundleFor } = require('./debate');
 const { materializeDebate } = require('./run-launch');
+const { buildSeats } = require('./seats');
 const { tally } = require('./tally');
 const { isAbortExit } = require('./run-stages');
 const runState = require('./run-state');
@@ -109,11 +110,22 @@ async function runDebate(ctx, { provisionalRecord, tallyInput }) {
   // v4.8 PR3 Task 6 (spec §4.5): ONE seat→alias projection for the whole round —
   // both debate waves, both repair solos, applyDebate's fail-open push and every
   // artifact literal read it, so there is exactly one shape and one name.
-  // It is the IDENTITY function for any key that is NOT a known seat id, which
-  // covers a null `o.seats` (a direct-require caller), the reserved 'claude' key,
-  // and — because `s.alias === s.id` there — every bench without a repeated
-  // alias, i.e. every bench that has ever run.
-  const seatById = new Map((ctx.o.seats || []).map(s => [s.id, s]));
+  // ⚠️ The table is RE-DERIVED when `o.seats` is absent, mirroring
+  // run-stage1-launch.js:20-22 verbatim. Falling back to an EMPTY map instead
+  // was the PR2b failure shape, not a safe default: that same Stage-1 fallback
+  // means a direct-require caller's findings/adjudications carry composed seat
+  // ids (`deepseek#1`) while `o.seats` is falsy, so `aliasOf` would be the
+  // identity over them and send a NON-ROUTABLE model name to three launchers
+  // (measured: r-d1 model="deepseek#1", r-d2 "deepseek#2", r-rv models
+  // ["gpt","deepseek#2","deepseek#1"]). buildSeats is pure and total, so the
+  // reconstruction is the same table Stage 1 bound against (spec §4.3).
+  // `aliasOf` is the identity only for a key that is no seat id at all: the
+  // reserved 'claude' key, and — because `s.alias === s.id` there — every bench
+  // without a repeated alias, i.e. every bench that has ever run.
+  const seatTable = Array.isArray(ctx.o.seats) && ctx.o.seats.length > 0
+    ? ctx.o.seats
+    : buildSeats(ctx.o.models, ctx.o.critic, ctx.o.lenses);
+  const seatById = new Map(seatTable.map(s => [s.id, s]));
   const aliasOf = (key) => { const s = seatById.get(key); return s ? s.alias : key; };
 
   // ---- Defense mini-wave: ONE CONCURRENT solo per raiser (spec §5.1) ----
