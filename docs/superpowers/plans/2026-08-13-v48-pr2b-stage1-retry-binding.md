@@ -879,7 +879,7 @@ git commit -m "feat(council): review roles come from the seat table"
 **Interfaces:**
 - Produces: every retry unit gains `seats: Array<?Seat>` **index-parallel to `models`** — same order, same length, `null` where the seat could not be identified.
 - Produces: `groupStage1Losses(o, deadWaves, deadLegs, seatOf)`.
-- Produces: `retryStage1Losses` returns an additive **`seatOf: Map<legObject, Seat>`** covering every retry-wave leg it bound.
+- Produces: `retryStage1Losses` returns an additive **`seatOf: Map<legObject, Seat>`** covering every retry-wave leg it bound, and an additive **`orphanLegs: Array<{waveId, leg}>`** for retry-wave legs that matched no roster slot.
 - Produces: `run-stages.js` builds `allSeatOf = new Map([...seatOf, ...retry.seatOf])` and uses it for every post-retry consumer.
 
 **Why `seats` is a second array and not a replacement for `models`:** `run-retry.js:93` feeds `unit.models` straight into `launchWave({models})`, joined into a `--models` string. A seat id is **not routable** — `deepseek#2` is not a model name (spec §4.7). Aliases launch; seats bind.
@@ -989,7 +989,15 @@ Change `groupStage1Losses`'s signature to `(o, deadWaves = [], deadLegs = [], se
       .filter(b => !String(b.seat.id).startsWith('__unbound-'))
       .map(b => [b.leg, b.seat]));
     for (const [l, s] of retrySeatOf) { out.seatOf.set(l, s); }
+    // A retry leg that matches no roster slot is the same attribution failure
+    // Stage-1 announces — but this module NEVER notes a degrade (see its
+    // @module docblock: "emits heals only … so the sink invariant holds by
+    // construction"). So it is REPORTED here and emitted by the caller, exactly
+    // as stillDeadNotes already are (run-stages.js:104).
+    for (const leg of bindRes.orphanLegs) { out.orphanLegs.push({ waveId: unit.waveId, leg }); }
 ```
+
+⚠️ **Do not call `ctx.degrade.note` inside `run-retry.js`.** Its module docblock states the invariant that this module emits heals only and never notes a degrade; `tests/council/degrade-invariant.test.js` and the surrounding design depend on the caller owning every Stage-1 degrade. Report, do not emit.
 
 ⚠️ **Do not filter and do not use a null-id sentinel.** Verified at HEAD: `seats.js:131` is `const roster = Array.isArray(seats) ? seats.filter(Boolean) : [];`, so passing `unit.seats` unfiltered is byte-identical to `unit.seats.filter(Boolean)` — a hole shifts every later slot either way (roster `[seatA, null, seatC]`, legs slotted 1/2/3: **both** bind leg `b` to seat `c`). And `{id: null, alias}` is worse — `bindSeats` dedups on `seat.id` (`:146`, `:150`), so two sentinels collide (`bound 1, unbound 0, orphans 1`).
 
@@ -1004,7 +1012,7 @@ Make the map part of the CONTRACT — `:44-46` becomes:
 ```js
   const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [],
     stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
-    stillDeadRetryLegs: [], seatOf: new Map() };
+    stillDeadRetryLegs: [], seatOf: new Map(), orphanLegs: [] };
 ```
 
 Add `seatOf` to `retryStage1Losses`'s destructured options at `:42`, pass it to `groupStage1Losses(o, deadWaves, deadLegs, seatOf)` at `:58`, and update the sole caller `run-stages.js:72` to pass `seatOf`.
@@ -1058,6 +1066,32 @@ Before `:112`:
 ```
 
 Update the comment at `:110-111`: with seat-named files the second write is no longer an "idempotent no-op" for a twin bench — it is the clobber this PR removes, which is why the union is mandatory.
+
+And emit the retry pass's orphan notes beside the ones Stage-1 already emits — `retryStage1Losses` reports them but must never note a degrade itself:
+
+```js
+  for (const { waveId, leg } of retry.orphanLegs) { ctx.degrade.note(orphanLegNote(waveId, leg)); }
+```
+
+Place it next to the existing `for (const rec of retry.stillDeadNotes)` loop at `:104`, which is the established shape for "the retry pass builds it, the caller emits it".
+
+**This closes a PR2a handoff.** `tests/council/run-stages.test.js`'s SL-2 fixture (search for the leg whose id is deliberately non-conforming, e.g. `stray-1`) returns a leg for a seat the retry wave's roster cannot explain; PR2a gave it that id specifically so PR2b's orphan assertion on it would be meaningful rather than accidental. Add to Step 1:
+
+```js
+test('a retry leg that matches no roster slot is reported as an orphan, not guessed', async () => {
+  // PR2a planted this fixture's non-conforming id for exactly this assertion.
+  const ctx = fakeCtx({ models: ['b'], critic: null }, {
+    launchWave: jest.fn().mockResolvedValue(okWave([
+      { modelInput: 'a', status: 'complete', summary: review(), taskId: 'stray-1' }], 'r1-s1r1')),
+  });
+  const out = await retryStage1Losses(ctx, {
+    deadWaves: [{ waveId: 'r1-s1', models: ['b'], seats: ctx.o.seats, reason: 'x' }],
+    deadLegs: [], counts: { reviewed: 0, total: 1 } });
+  expect(out.orphanLegs).toHaveLength(1);
+  expect(out.orphanLegs[0].leg.taskId).toBe('stray-1');
+  expect(out.seatOf.size).toBe(0);          // nothing was guessed
+});
+```
 
 - [ ] **Step 7: Verify green + commit**
 
