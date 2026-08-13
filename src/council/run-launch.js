@@ -213,10 +213,17 @@ function materializeReviews(runDir, legs, seatOf) {
 }
 
 /**
- * Write per-leg debate artifacts: `<prefix>-<sanitizeName(model)>.md` for each
- * leg with a non-empty summary. Mirrors materializeReviews.
+ * Write per-leg debate artifacts for each leg with a non-empty summary. Mirrors
+ * materializeReviews — but these are plain `{model, summary}` literals built by
+ * the debate callers, never leg documents, so materializeReviews' object-identity
+ * `seatOf` Map does not transfer: the seat rides ON the literal instead.
+ *
+ * With `seat` the filename is the SEAT's (artifactName, v4.8 PR3 Task 6),
+ * byte-identical to `<prefix>-<sanitizeName(model)>.md` for every bench without
+ * a repeated alias, and what stops two twins from clobbering one file. Without
+ * it the alias name is kept — today's exact behaviour.
  * @param {string} runDir
- * @param {Array<{model: string, summary: string}>} legs
+ * @param {Array<{model: string, summary: string, seat?: ?object}>} legs
  * @param {string} prefix 'rebuttal' | 'revote'
  * @returns {Array<{model: string, file: string}>}
  */
@@ -224,7 +231,8 @@ function materializeDebate(runDir, legs, prefix) {
   const out = [];
   for (const leg of legs) {
     if (!leg || !leg.summary || !leg.summary.trim()) { continue; }
-    const file = path.join(runDir, `${prefix}-${sanitizeName(leg.model)}.md`);
+    const name = leg.seat ? artifactName(leg.seat, prefix) : `${prefix}-${sanitizeName(leg.model)}.md`;
+    const file = path.join(runDir, name);
     fs.writeFileSync(file, leg.summary, { mode: 0o600 });
     out.push({ model: leg.model, file });
   }

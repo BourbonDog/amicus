@@ -21,6 +21,10 @@ const { parseRevote } = require('./parse-stage2');
 const runState = require('./run-state');
 const { emitStageStarted } = require('../observe/events');
 const { isAbortExit } = require('./run-launch');
+// v4.8 PR3 Task 6: seat binding. ./seats requires NOTHING, so taking bindSeats
+// and sanitizeName straight from it (rather than run-launch's re-export) adds
+// zero cycle risk to this leaf — the same call run-stage2.js:30 makes.
+const { bindSeats, sanitizeName } = require('./seats');
 
 /** Common launch options for every debate leg (judge-isolated `_scratch` cwd). */
 function legOpts(ctx, waveId) {
@@ -48,7 +52,28 @@ function legRow(model, leg, conformance) {
     : { model, status: 'error', durationMs: null, usage: null, conformance, summary: '' };
 }
 
-async function runRevoteWave(ctx, judges, bundleFindings) {
+/** The wave's join key for one leg: the bound seat's id, else the bare alias. */
+function seatKey(seat, alias) { return seat ? seat.id : alias; }
+
+/**
+ * The re-vote mini-wave (spec §5.1).
+ *
+ * v4.8 PR3 Task 6 — the parallel-array discipline this function now runs on:
+ * `judgeKeys` are SEAT ids (disputingJudges' output) and `judgeSeats` the
+ * matching seat objects, both in launch order; `aliasOf` projects a key back to
+ * the routable bench alias. On every iteration of the leg loop the seat key and
+ * the alias are **two different values**: the key is what `byJudge` is keyed on
+ * (so `applyDebate` can join it against `(a.seat || a.judge)`), while the alias
+ * is what every launcher argument and every runStats `model` carries. That is
+ * not an inconsistency — a seat id is not a routable model name.
+ *
+ * @param {object} ctx run.js's {o, launchers, addWave, scratchDir}
+ * @param {Array<string>} judgeKeys seat ids, in launch order
+ * @param {Array<object>} bundleFindings defended/amended findings
+ * @param {Array<?object>} judgeSeats seat objects positionally bound to judgeKeys
+ * @param {function(string): string} aliasOf seat id → bench alias
+ */
+async function runRevoteWave(ctx, judgeKeys, bundleFindings, judgeSeats, aliasOf) {
   const bundle = dbrief.buildRevoteBundle({ findings: bundleFindings, date: ctx.o.date });
   // spec §5.1 names `revote-bundle.md` a run-dir artifact: the shared re-vote prompt goes to
   // disk exactly like Stage 2's bundle-stage2.md, so the round's model-facing input is
@@ -63,25 +88,55 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
     { status: 'running', startedAt: new Date().toISOString(), project: ctx.scratchDir, waveId });
   emitStageStarted(ctx.o.runDir, ctx.o.runId, 'debate-revote', waveId, ctx.o.follow);
   runState.appendStageWave(ctx.o.runDir, 'debate-revote', waveId);
-  const res = await ctx.launchers.launchWave({ ...legOpts(ctx, waveId), models: judges, prompt: bundle });
+  // ⚠️ The launcher takes ALIASES. A seat id here is a non-routable model name
+  // on a real paid wave, not a test failure.
+  const res = await ctx.launchers.launchWave({
+    ...legOpts(ctx, waveId), models: judgeKeys.map(aliasOf), prompt: bundle });
   ctx.addWave(res.wave);
   if (isAbortExit(res.exitCode)) { return { aborted: res.exitCode }; }
   const byJudge = {}, legs = [];
   // v4.7 D2/E4: mirrors runDefenseSolo's supersededLeg/repairLeg — one list each,
   // accumulated across every judge in this wave (most judges contribute neither).
   const supersededLegs = [], repairLegs = [];
-  for (const leg of ((res.wave && res.wave.legs) || [])) {
+  const rawLegs = (res.wave && res.wave.legs) || [];
+  // §3.4's roster-padding pattern (run-retry.js:117-132): bindSeats filters
+  // falsy roster entries internally, so a `null` hole would slide every later
+  // slot, and two `{id:null}` sentinels would collide on its id-keyed dedup.
+  // Placeholders are tracked by IDENTITY, never an id-name prefix test — a bench
+  // alias literally beginning `__unbound-` must never drop a real bind.
+  const placeholders = new Set();
+  const roster = (judgeSeats || []).map((s, i) => {
+    if (s) { return s; }
+    const p = { id: `__unbound-${waveId}-${i + 1}`, alias: aliasOf(judgeKeys[i]),
+      role: 'seat', lens: null, position: i + 1 };
+    placeholders.add(p);
+    return p;
+  });
+  const bindRes = bindSeats(waveId, roster, rawLegs);
+  const seatOf = new Map(bindRes.bound
+    .filter(b => !placeholders.has(b.seat))
+    .map(b => [b.leg, b.seat]));
+  for (const leg of rawLegs) {
     // The council ALIAS, not the resolved executable id — runStats rows join
     // meta.models by exact string (run-assemble.js's buildRunStatsEntry).
     const judge = leg.modelInput || leg.model;
+    const seat = seatOf.get(leg) || null;
+    const key = seatKey(seat, judge);
     const alive = leg.status === 'complete' && leg.summary;
     let outLeg = leg;               // the leg actually recorded (post-repair when there is one)
     let parsed = alive ? parseRevote(leg.summary, expectedIds)
       : { ok: false, byId: {}, errors: [{ code: 'DEAD_LEG', detail: 'no summary' }] };
     let conformance = alive ? 'clean' : 'unstructured';
     if (alive && !parsed.ok) {
-      // One repair, solo, to that judge.
-      const repairId = `${waveId}-${judge}r`;
+      // One repair, solo, to that judge. The id is built from the SEAT key so
+      // two twins never share one repair id (and one never overwrites the
+      // other's run-state entry). ⚠️ The trailing `r` is load-bearing: it is what
+      // stops bindSeats' `/^(.*)-(\d+)$/` matching a repair id whose judge alias
+      // is a bare number (`r1-rv-2r` does not match; `r1-rv-2` would). Dropping
+      // it re-arms a collision. sanitizeName also fixes the pre-existing slash
+      // bug (D4) — `r1-rv-openrouter/deepseek/deepseek-chatr` stops nesting
+      // three directory levels — and is a no-op for every plain alias.
+      const repairId = `${waveId}-${sanitizeName(key)}r`;
       runState.appendStageWave(ctx.o.runDir, 'debate-revote', repairId);
       const r2 = await ctx.launchers.launchSolo({ ...legOpts(ctx, repairId), model: judge,
         // ⚠️ LC-12: ditto — the re-vote output being repaired rides with its errors.
@@ -96,9 +151,15 @@ async function runRevoteWave(ctx, judges, bundleFindings) {
       if (leg2) { supersededLegs.push(legRow(judge, leg, 'unstructured')); outLeg = leg2; }
       else { repairLegs.push(legRow(judge, r2.leg, 'unstructured')); }
     }
-    byJudge[judge] = parsed.byId;
+    // ⚠️ Two DIFFERENT values on the same iteration: `byJudge`'s key is the SEAT
+    // (applyDebate joins it against `(a.seat || a.judge)`), while the leg's
+    // `model` is the ALIAS — this literal becomes a debateRunStatsRows row, and
+    // R3-1 promises every runStats `model` is alias-valued on every bench.
+    // `seat` rides along for materializeDebate's filename only; debateRunStatsRows'
+    // `mk` copies an explicit field list and never picks it up.
+    byJudge[key] = parsed.byId;
     legs.push({ model: judge, status: outLeg.status, durationMs: outLeg.durationMs, usage: outLeg.usage,
-      conformance, summary: outLeg.summary || '', waveId: outLeg.waveId,
+      conformance, summary: outLeg.summary || '', waveId: outLeg.waveId, seat,
       ...(outLeg.model ? { resolvedModel: outLeg.model } : {}) });
   }
   return { byJudge, legs, supersededLegs, repairLegs };

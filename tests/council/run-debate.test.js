@@ -29,6 +29,31 @@ function provisionalInput() {
   };
 }
 
+// v4.8 PR3 Task 6: a TWIN bench — `--models deepseek,deepseek,gpt` mints seats
+// deepseek#1 / deepseek#2 / gpt while every alias-space field keeps the bare
+// `deepseek` spelling. BOTH twins raise (so an alias-keyed `byRaiser` collapses
+// them onto one defense solo) and BOTH twins judge (so an alias-keyed
+// `disputingJudges` collapses them onto one re-vote seat and one repair id).
+// `seat`/`raiserSeat` are emit-when-DIFFERENT, exactly as Task 5 writes them.
+function twinInput() {
+  return {
+    meta: { runId: 'r', models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false, date: '2026-07-19' },
+    findings: [
+      { id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'infinite retry' },
+      { id: 'B1', raiser: 'deepseek', raiserSeat: 'deepseek#2', severity: 'major', claim: 'unbounded queue' },
+    ],
+    adjudications: [
+      { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+      { findingId: 'A1', judge: 'deepseek', seat: 'deepseek#2', verdict: 'dispute' },
+      { findingId: 'B1', judge: 'gpt', verdict: 'dispute' },
+      { findingId: 'B1', judge: 'deepseek', seat: 'deepseek#1', verdict: 'dispute' },
+    ],
+    rankings: [{ judge: 'deepseek', order: ['gpt'] }, { judge: 'gpt', order: ['deepseek'] }],
+    runStats: [],
+  };
+}
+const TWIN_BENCH = ['deepseek', 'deepseek', 'gpt'];
+
 // v4.8 PR3 Task 3: real fanout stamps taskId `${waveId}-${slot}` (roster position,
 // consumed without replacement) onto every leg BEFORE handing it back — the exact
 // re-stamp scriptedLaunchers/launchersFromScript perform in fake-launchers.js. This
@@ -94,8 +119,11 @@ const revoteOut = (rv) => `Re-voting.\n\`\`\`json\n${JSON.stringify({ revotes: r
 // "Cannot read properties of undefined"; without o.seats/o.criticSeat/o.models,
 // any bindSeats-driven consumer falls through to an empty roster — green for the
 // wrong reason.
-function ctxFor(tmp, launchers) {
-  const models = ['gemini', 'gpt', 'qwen'];
+// v4.8 PR3 Task 6 widened this to take the bench, so a TWIN bench
+// (`['deepseek','deepseek','gpt']` → seats deepseek#1/deepseek#2/gpt) can be
+// driven through the same fixture. `ctxFor` keeps the fixed 3-seat table every
+// pre-existing test in this file relies on.
+function ctxFor(tmp, launchers, models = ['gemini', 'gpt', 'qwen']) {
   const seats = buildSeats(models, null, null);
   const notes = [];
   return {
@@ -143,6 +171,14 @@ describe('nothingToDebate / disputingJudges', () => {
   test('disputingJudges ignores disputes on ids that are NOT bundled', () => {
     const rec = tally(provisionalInput());
     expect(disputingJudges(rec, ['B1'])).toEqual([]);
+  });
+
+  // v4.8 PR3 Task 6: the Set dedups by SEAT, not by alias (D6). Alias-deduping
+  // twins collapses two disputing bench positions into one re-vote leg, so the
+  // twin that never re-voted silently keeps a verdict the round meant to replace.
+  test('disputingJudges does NOT collapse twin judges onto one entry', () => {
+    const rec = tally(twinInput());
+    expect(disputingJudges(rec, ['A1', 'B1']).sort()).toEqual(['deepseek#1', 'deepseek#2', 'gpt']);
   });
 });
 
@@ -684,6 +720,143 @@ describe('runDebate — defense solos run CONCURRENTLY (spec §5.1)', () => {
     };
     await runDebate(ctxFor(tmp, launchers), { provisionalRecord, tallyInput: input });
     expect(maxInFlight).toBe(2);   // a sequential `await` in a for-loop caps this at 1
+  });
+});
+
+// ============================================================================
+// v4.8 PR3 Task 6 — the debate round on a TWIN bench: every JOIN moves to the
+// seat, every LAUNCH argument stays a routable bench alias.
+// ============================================================================
+describe('runDebate — twin bench: joins on the seat, launches on the alias', () => {
+  let tmp, result, launched, ctx;
+  const bothDefended = defenseOut([
+    { id: 'A1', action: 'defend', argument: 'caps at 5' },
+    { id: 'B1', action: 'defend', argument: 'bounded by config' },
+  ]);
+  const agreeBoth = revoteOut([{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }]);
+  const disputeBoth = revoteOut([{ id: 'A1', verdict: 'dispute' }, { id: 'B1', verdict: 'dispute' }]);
+
+  beforeAll(async () => {
+    tmp = mkTmp('run-debate-twin-');
+    const input = twinInput();
+    const provisionalRecord = tally(input);
+    launched = [];
+    const script = {
+      solos: {
+        // deepseek#1's defense is unparseable → one repair. That repair solo is
+        // the launch site the spec and two plan drafts both missed: a seat id
+        // there is a non-routable model name on a REAL paid leg.
+        'r-d1': { wave: wave([leg('deepseek', 'prose only, no json block')]) },
+        'r-d1r': { wave: wave([leg('deepseek', bothDefended)]) },
+        'r-d2': { wave: wave([leg('deepseek', bothDefended)]) },
+        // One re-vote repair per twin judge — DISTINCT ids only once the repair
+        // id is built from the seat key (today both are `r-rv-deepseekr`).
+        'r-rv-deepseek-1r': { wave: wave([leg('deepseek', disputeBoth)]) },
+        'r-rv-deepseek-2r': { wave: wave([leg('deepseek', agreeBoth)]) },
+      },
+      // The wave answers with one leg per disputing SEAT, in roster order
+      // (gpt, deepseek#2, deepseek#1) — both twin legs alive-but-unparseable,
+      // the only door into the re-vote repair branch.
+      waves: {
+        'r-rv': wave([leg('gpt', agreeBoth),
+          leg('deepseek', 'prose only, no json block'),
+          leg('deepseek', 'prose only, no json block')]),
+      },
+    };
+    ctx = ctxFor(tmp, fakeLaunchers(script, launched), TWIN_BENCH);
+    result = await runDebate(ctx, { provisionalRecord, tallyInput: input });
+  });
+
+  // ---- PARITY PIN (GREEN today, and green after Tasks 1-5). Its value is that
+  // omitting the raiser-boundary projection turns it RED — a seat id in any of
+  // the four model-carrying launch sites is a non-routable model name and a real
+  // paid failure, not a test failure.
+  test('PARITY PIN: every launcher model/models argument is a routable bench alias', () => {
+    const captured = launched.flatMap(o => (o.models ? o.models : [o.model]));
+    expect(captured.length).toBeGreaterThanOrEqual(5);   // 2 defense + 1 repair + wave + 2 repairs
+    for (const m of captured) { expect(ctx.o.models).toContain(m); }
+  });
+
+  test('each twin raiser gets its OWN defense solo, both launched as the alias', () => {
+    const solos = launched.filter(o => /^r-d\d+$/.test(o.waveId));
+    expect(solos.map(o => o.waveId).sort()).toEqual(['r-d1', 'r-d2']);
+    expect(solos.map(o => o.model)).toEqual(['deepseek', 'deepseek']);
+  });
+
+  // §3.3: defenseByRaiser MUST stay seat-keyed. Re-keying it to the alias is
+  // last-wins and silently drops one twin's entire debate row.
+  test('both twins keep their debate row — defenseByRaiser is seat-keyed, never last-wins', () => {
+    expect(result.debateFindings.map(d => [d.id, d.raiser]).sort())
+      .toEqual([['A1', 'deepseek#1'], ['B1', 'deepseek#2']]);
+    expect(result.debateSummary.defended).toBe(2);
+  });
+
+  // R3-2: one re-vote leg per disputing SEAT, not per alias.
+  test('the -rv roster is one entry per disputing seat', () => {
+    const rv = launched.find(o => o.waveId === 'r-rv');
+    expect(rv.models).toEqual(['gpt', 'deepseek', 'deepseek']);
+    expect(result.debateSummary.revoteJudges).toBe(3);
+  });
+
+  test('each twin judge gets its OWN re-vote repair id', () => {
+    const repairIds = launched.map(o => o.waveId).filter(id => /^r-rv-.+r$/.test(id));
+    expect(repairIds.sort()).toEqual(['r-rv-deepseek-1r', 'r-rv-deepseek-2r']);
+  });
+
+  // R3-3 / Step 8: without a seat-named artifact both twins write the same file
+  // and one clobbers the other.
+  test('rebuttal-/revote- artifacts are seat-named, so twins never clobber one file', () => {
+    for (const f of ['rebuttal-deepseek-1.md', 'rebuttal-deepseek-2.md',
+      'revote-gpt.md', 'revote-deepseek-1.md', 'revote-deepseek-2.md']) {
+      expect(fs.existsSync(path.join(tmp, f))).toBe(true);
+    }
+  });
+
+  // Step 9: debate.json's `revotes[]` has a REAL consumer that joins on the
+  // alias (electron/workspace-ui/workspace-panels.js's drillIntoJudge, :98-100),
+  // so the seat rides ALONGSIDE rather than replacing it.
+  test('debate.json keeps the alias join and carries the seat beside it', () => {
+    const doc = JSON.parse(fs.readFileSync(path.join(tmp, 'debate.json'), 'utf-8'));
+    expect(doc.revotes.every(r => r.judge === 'gpt' || r.judge === 'deepseek')).toBe(true);
+    expect(doc.revotes.some(r => r.seat === 'deepseek#1')).toBe(true);
+    expect(doc.revotes.some(r => r.seat === 'deepseek#2')).toBe(true);
+  });
+
+  // Step 9: priorVerdicts and revotes must be keyed in the SAME space —
+  // briefings-debate.js:164 looks up prior[j] over Object.keys(revotes), so a
+  // skew prints `no prior verdict` on every line.
+  test('priorVerdicts and the re-vote map share ONE key space', () => {
+    const a1 = result.addendumOutcomes.find(o => o.id === 'A1');
+    expect(a1.priorVerdicts).toEqual({ gpt: 'dispute', 'deepseek#2': 'dispute' });
+    expect(Object.keys(a1.revotes).sort()).toEqual(['deepseek#1', 'deepseek#2', 'gpt']);
+    for (const j of Object.keys(a1.priorVerdicts)) { expect(a1.revotes[j]).toBeDefined(); }
+  });
+
+  // Step 10 INVARIANT (GREEN today; Step 2 changes the SPACE the literals read,
+  // so holding those lines constant is exactly what would break it).
+  test('every debate runStats row carries a bench alias, never a seat id', () => {
+    const DEBATE = new Set(['rebuttal', 'revote', 'superseded', 'repair']);
+    const rows = result.debatedInput.runStats.filter(r => DEBATE.has(r.role));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) {
+      expect(result.debatedInput.meta.models).toContain(r.model);
+      expect(r.model).not.toMatch(/#/);
+      expect('seat' in r).toBe(false);          // that field is PR4's
+    }
+  });
+
+  // The point of the whole task: each twin's re-vote lands on ITS OWN
+  // adjudication instead of failing open into an invented row.
+  test('each twin re-vote lands on its own adjudication row', () => {
+    const rows = result.debatedInput.adjudications.filter(a => a.findingId === 'A1');
+    expect(rows.find(a => (a.seat || a.judge) === 'gpt').verdict).toBe('agree');
+    expect(rows.find(a => (a.seat || a.judge) === 'deepseek#2').verdict).toBe('agree');
+    // deepseek#1 RAISED A1, so it never adjudicated it — its stateless re-vote
+    // legitimately appends (the same contract debate.test.js pins for gpt/A2),
+    // and the appended row carries the ALIAS in `judge` with the seat beside it.
+    expect(rows.find(a => (a.seat || a.judge) === 'deepseek#1'))
+      .toEqual({ findingId: 'A1', judge: 'deepseek', verdict: 'dispute', seat: 'deepseek#1' });
+    expect(rows).toHaveLength(3);
   });
 });
 

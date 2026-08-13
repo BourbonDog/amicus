@@ -23,12 +23,28 @@ const DEBATE_ROLES = new Set(['rebuttal', 'revote']);
 
 /**
  * Reassemble the tally input after the debate round.
- * @param {{tallyInput: object, provisionalRecord: object|null,
+ *
+ * v4.8 PR3 Task 6 (spec §4.5): `defenseByRaiser` and `revoteByJudge` are keyed
+ * on the SEAT (`seat.id`), which equals the alias for every bench without a
+ * repeated entry. `aliasOf` is the ONE seat→alias projection run-debate.js
+ * builds from `o.seats`; it is the identity for any key that is not a known
+ * seat id, so a direct-require caller with no seats and the reserved 'claude'
+ * key both behave exactly as before.
+ *
+ * ⚠️ This block used to declare a `provisionalRecord` param the destructure has
+ * never taken (pre-existing doc rot). Callers still pass one and it is still
+ * ignored — the DOC is what was wrong, so only the doc was fixed. Deliberately
+ * not wired up: applyDebate reads `previousTier` off `tallyInput.findings[]`,
+ * which run-debate.js stamps, and a second source of that fact is how it
+ * silently read null before.
+ *
+ * @param {{tallyInput: object,
  *   defenseByRaiser: Object<string, Object<string, object>>,
- *   revoteByJudge: Object<string, Object<string, {verdict, reason?}>>}} args
+ *   revoteByJudge: Object<string, Object<string, {verdict, reason?}>>,
+ *   aliasOf?: function(string): string}} args
  * @returns {{input: object, debateFindings: Array}}
  */
-function applyDebate({ tallyInput, defenseByRaiser, revoteByJudge }) {
+function applyDebate({ tallyInput, defenseByRaiser, revoteByJudge, aliasOf }) {
   // Deep-ish clone the mutable arrays we touch (findings + adjudications).
   const findings = tallyInput.findings.map(f => ({ ...f }));
   const adjudications = tallyInput.adjudications.map(a => ({ ...a }));
@@ -54,12 +70,26 @@ function applyDebate({ tallyInput, defenseByRaiser, revoteByJudge }) {
     delete f.previousTier; // provisional-only scratch field, never written to tally input
   }
 
-  // Re-vote replacement: replace the wave judge's entry on each bundled id.
-  for (const [judge, perId] of Object.entries(revoteByJudge || {})) {
+  // Re-vote replacement: replace the wave SEAT's entry on each bundled id.
+  // `(a.seat || a.judge)` is the seat-space read every consumer uses — `seat` is
+  // emit-when-different (Task 5), so a bench with no repeated alias reduces this
+  // to today's `a.judge === key` exactly. Matching on the alias instead is D5:
+  // two twins share one `judge` value, so the first row wins and the second
+  // twin's re-vote is silently dropped.
+  for (const [key, perId] of Object.entries(revoteByJudge || {})) {
     for (const [id, rv] of Object.entries(perId)) {
-      const entry = adjudications.find(a => a.findingId === id && a.judge === judge);
+      const entry = adjudications.find(a => a.findingId === id && (a.seat || a.judge) === key);
       if (entry) { entry.verdict = rv.verdict; }
-      else { adjudications.push({ findingId: id, judge, verdict: rv.verdict }); }
+      else {
+        // Fail-open push (a stateless leg re-voting an id it never adjudicated).
+        // `judge` MUST stay alias-space: it reaches tally.js's `v.judge !==
+        // f.raiser` and report.js's `byJudge[adj.judge]`, where a seat id
+        // silently retiers the finding. The seat rides beside it, emitted only
+        // when it differs — so a unique bench pushes today's exact row.
+        const alias = aliasOf ? aliasOf(key) : key;
+        adjudications.push({ findingId: id, judge: alias, verdict: rv.verdict,
+          ...(alias !== key ? { seat: key } : {}) });
+      }
     }
   }
 
@@ -129,20 +159,36 @@ function nothingToDebate(provisionalRecord) {
   return n === 0;
 }
 
-/** Judges whose provisional adjudications dispute at least one bundled id. */
+/**
+ * Seats whose provisional adjudications dispute at least one bundled id.
+ * v4.8 PR3 Task 6: returns SEAT ids and dedups by seat (D6) — deduping by alias
+ * collapses two disputing bench positions into one re-vote leg, so the twin that
+ * never re-voted keeps a verdict the round meant to replace. run-debate.js
+ * projects these back to aliases for the launcher.
+ */
 function disputingJudges(provisionalRecord, bundledIds) {
   const ids = new Set(bundledIds);
   const judges = new Set();
   for (const f of provisionalRecord.findings) {
     if (!ids.has(f.id)) { continue; }
     for (const adj of f.adjudications || []) {
-      if (adj.verdict === 'dispute') { judges.add(adj.judge); }
+      if (adj.verdict === 'dispute') { judges.add(adj.seat || adj.judge); }
     }
   }
   return [...judges];
 }
 
-/** Group Contested+Disputed findings by raiser (defense targets). */
+/**
+ * Group Contested+Disputed findings by raiser SEAT (defense targets).
+ * v4.8 PR3 Task 6: keyed on `f.raiserSeat || f.raiser`. Claude's findings carry
+ * no `raiserSeat`, so its key stays the literal 'claude' and run-debate.js's
+ * `.filter(m => m !== 'claude')` / `byRaiser.claude` keep working unchanged.
+ * ⚠️ `peerVerdicts`' `a.judge !== f.raiser` below stays ALIAS-space on purpose:
+ * it is a second copy of the #137 class (a twin judge's vote on its twin's
+ * finding is wrongly excluded) and belongs to PR4 with `tally.js`'s identical
+ * comparison — fixing one without the other would make the brief's peer split
+ * disagree with the tally the chair reads.
+ */
 function debateTargets(provisionalRecord, tallyInput) {
   const claimById = new Map(tallyInput.findings.map(f => [f.id, f]));
   const byRaiser = {};
@@ -152,7 +198,8 @@ function debateTargets(provisionalRecord, tallyInput) {
     previousTier[f.id] = f.tier;
     const src = claimById.get(f.id) || {};
     const peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser).map(a => a.verdict);
-    (byRaiser[f.raiser] = byRaiser[f.raiser] || []).push({ id: f.id, claim: src.claim,
+    const raiserKey = f.raiserSeat || f.raiser;
+    (byRaiser[raiserKey] = byRaiser[raiserKey] || []).push({ id: f.id, claim: src.claim,
       severity: f.severity, location: src.location, peerVerdicts, disputeReasons: [] });
   }
   return { byRaiser, previousTier };

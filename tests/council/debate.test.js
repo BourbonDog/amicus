@@ -1,6 +1,6 @@
 // tests/council/debate.test.js
 'use strict';
-const { applyDebate, decorateRecord, debateRunStatsRows, PAST_TENSE, DEBATE_ROLES } =
+const { applyDebate, decorateRecord, debateRunStatsRows, debateTargets, PAST_TENSE, DEBATE_ROLES } =
   require('../../src/council/debate');
 const { tally } = require('../../src/council/tally');
 const { buildLedgerRows } = require('../../src/council/ledger');
@@ -68,6 +68,146 @@ describe('applyDebate — re-vote replaces only wave judges\' entries on bundled
       defenseByRaiser: {}, revoteByJudge: { gpt: { A2: { verdict: 'agree' } } },
     });
     expect(input.adjudications.find(a => a.findingId === 'A2' && a.judge === 'gpt').verdict).toBe('agree');
+  });
+});
+
+// ============================================================================
+// v4.8 PR3 Task 6 — the debate round joins on the SEAT, not the alias.
+// A twin bench (`--models deepseek,deepseek`) mints seat ids `deepseek#1` /
+// `deepseek#2` while BOTH adjudication rows keep `judge: 'deepseek'`. Task 5
+// put `seat` on adjudications[] and `raiserSeat` on findings[] (emit-when-
+// DIFFERENT, so a unique bench is byte-identical); this is where the debate
+// round starts joining on them.
+// ============================================================================
+
+/** One finding, adjudicated by BOTH twins plus a unique third seat. */
+function twinAdjInput() {
+  return {
+    meta: { runId: 'r', models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false },
+    findings: [{ id: 'A1', raiser: 'gpt', severity: 'major', claim: 'infinite retry' }],
+    adjudications: [
+      { findingId: 'A1', judge: 'deepseek', seat: 'deepseek#1', verdict: 'dispute' },
+      { findingId: 'A1', judge: 'deepseek', seat: 'deepseek#2', verdict: 'dispute' },
+      { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+    ],
+    rankings: [{ judge: 'deepseek', order: ['gpt'] }, { judge: 'gpt', order: ['deepseek'] }],
+    runStats: [],
+  };
+}
+/** The projection run-debate.js builds from o.seats — identity for any non-seat key. */
+const twinAliasOf = (key) => ({ 'deepseek#1': 'deepseek', 'deepseek#2': 'deepseek' }[key] || key);
+const adjOf = (input, findingId, seatOrJudge) => input.adjudications.find(
+  a => a.findingId === findingId && (a.seat || a.judge) === seatOrJudge);
+
+describe('applyDebate — the re-vote join is SEAT-exact (v4.8 PR3 Task 6)', () => {
+  test('both twins flip, each from its OWN seat key', () => {
+    const { input } = applyDebate({
+      provisionalRecord: null, tallyInput: twinAdjInput(), defenseByRaiser: {},
+      revoteByJudge: {
+        'deepseek#1': { A1: { verdict: 'agree' } },
+        'deepseek#2': { A1: { verdict: 'neutral' } },
+      },
+      aliasOf: twinAliasOf,
+    });
+    // ⚠️ Today this fails by GROWTH, not by "only the first flips": the seat keys
+    // match no `a.judge`, so debate.js's `.find()` misses and the else-branch
+    // FAILS OPEN and pushes two brand-new rows (3 → 5).
+    expect(input.adjudications).toHaveLength(3);
+    expect(adjOf(input, 'A1', 'deepseek#1').verdict).toBe('agree');
+    expect(adjOf(input, 'A1', 'deepseek#2').verdict).toBe('neutral');
+    expect(adjOf(input, 'A1', 'gpt').verdict).toBe('dispute');   // never in the wave
+  });
+
+  // The discriminating companion to the test above: it is what makes the key
+  // seat-EXACT. Loosening the match back toward alias equality to "fix" the test
+  // above reinstates D5 (first-wins), the defect this task exists to kill.
+  test('ONE twin re-votes: its row flips and the OTHER twin is untouched', () => {
+    const { input } = applyDebate({
+      provisionalRecord: null, tallyInput: twinAdjInput(), defenseByRaiser: {},
+      revoteByJudge: { 'deepseek#1': { A1: { verdict: 'agree' } } },
+      aliasOf: twinAliasOf,
+    });
+    expect(input.adjudications).toHaveLength(3);
+    expect(adjOf(input, 'A1', 'deepseek#1').verdict).toBe('agree');
+    expect(adjOf(input, 'A1', 'deepseek#2').verdict).toBe('dispute');
+  });
+
+  // The contract pin that makes a future half-flip fail LOUDLY instead of
+  // inventing rows: debate.js's else-branch fails open.
+  test('the adjudications array never GROWS when every re-vote key names a known judge', () => {
+    const { input } = applyDebate({
+      provisionalRecord: null, tallyInput: twinAdjInput(), defenseByRaiser: {},
+      revoteByJudge: {
+        'deepseek#1': { A1: { verdict: 'agree' } },
+        'deepseek#2': { A1: { verdict: 'agree' } },
+        gpt: { A1: { verdict: 'agree' } },
+      },
+      aliasOf: twinAliasOf,
+    });
+    expect(input.adjudications).toHaveLength(3);
+  });
+
+  // The push branch itself. debate.test.js's "a re-vote on an id the judge never
+  // disputed" case does NOT reach it (baseInput already carries {A2, gpt}), so
+  // this branch is otherwise uncovered by the whole suite — and it is where a
+  // missing `aliasOf` writes a SEAT ID into the alias-space `judge` field, which
+  // reaches tally.js's `v.judge !== f.raiser` and report.js's `byJudge[adj.judge]`.
+  test('a genuinely new row carries the ALIAS in `judge` and the seat in `seat`', () => {
+    const { input } = applyDebate({
+      provisionalRecord: null, tallyInput: twinAdjInput(), defenseByRaiser: {},
+      revoteByJudge: { 'deepseek#2': { A2: { verdict: 'agree' } } },
+      aliasOf: twinAliasOf,
+    });
+    expect(input.adjudications).toHaveLength(4);
+    expect(input.adjudications.find(a => a.findingId === 'A2'))
+      .toEqual({ findingId: 'A2', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' });
+  });
+
+  // Legacy parity: no seats anywhere ⇒ (a.seat || a.judge) === a.judge and
+  // alias === key, so the pushed row is byte-identical to today's.
+  test('a unique bench pushes the byte-identical {findingId, judge, verdict} row', () => {
+    const { input } = applyDebate({
+      provisionalRecord: null, tallyInput: baseInput(), defenseByRaiser: {},
+      revoteByJudge: { qwen: { B1: { verdict: 'agree' } } },
+    });
+    expect(input.adjudications.find(a => a.findingId === 'B1' && a.judge === 'qwen'))
+      .toEqual({ findingId: 'B1', judge: 'qwen', verdict: 'agree' });
+  });
+});
+
+describe('debateTargets — byRaiser is keyed on the SEAT (v4.8 PR3 Task 6)', () => {
+  /** BOTH twins raise: the alias key collapses them onto one defense solo. */
+  function twinRaiserInput() {
+    return {
+      meta: { runId: 'r', models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false },
+      findings: [
+        { id: 'A1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'infinite retry' },
+        { id: 'B1', raiser: 'deepseek', raiserSeat: 'deepseek#2', severity: 'major', claim: 'unbounded queue' },
+      ],
+      adjudications: [
+        { findingId: 'A1', judge: 'gpt', verdict: 'dispute' },
+        { findingId: 'B1', judge: 'gpt', verdict: 'dispute' },
+      ],
+      rankings: [{ judge: 'deepseek', order: ['gpt'] }, { judge: 'gpt', order: ['deepseek'] }],
+      runStats: [],
+    };
+  }
+
+  test('twin raisers get one bucket EACH, not one shared bucket', () => {
+    const input = twinRaiserInput();
+    const { byRaiser } = debateTargets(tally(input), input);
+    expect(Object.keys(byRaiser).sort()).toEqual(['deepseek#1', 'deepseek#2']);
+    expect(byRaiser['deepseek#1'].map(f => f.id)).toEqual(['A1']);
+    expect(byRaiser['deepseek#2'].map(f => f.id)).toEqual(['B1']);
+  });
+
+  test('a unique bench keeps its ALIAS keys, and the reserved `claude` key is untouched', () => {
+    const input = baseInput();
+    input.findings.push({ id: 'C1', raiser: 'claude', severity: 'major', claim: 'from the file review' });
+    input.adjudications.push({ findingId: 'C1', judge: 'gpt', verdict: 'dispute' });
+    const { byRaiser } = debateTargets(tally(input), input);
+    // A1+A2 are gemini's (both disputed), C1 is the reserved file-sourced seat.
+    expect(Object.keys(byRaiser).sort()).toEqual(['claude', 'gemini']);
   });
 });
 
