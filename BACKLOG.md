@@ -1903,6 +1903,17 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
   or `tests/electron/` today — `artifact-guard.test.js` and `dead-seat-rows.test.js` both use
   "twin" only as a test-naming convention for a paired/counterpart test, not a duplicated-alias
   bench. Nothing currently pins this gap or would catch a fix.
+  **The same allowlist rebuild also closes a second, sharper case: a DISCARDED retry leg can be
+  the only review file the Workspace shows.** `run-retry.js:193` calls `materializeReviews` purely
+  to compute `usable`, but that helper WRITES a file for every complete leg — including legs the
+  loop below then discards (`if (!ff) { continue; }`) and legs that bound to nothing. Concretely,
+  on a twin `['deepseek','deepseek']` bench whose retry wave returns one bindable leg plus one
+  unattributable one, the run dir ends up with BOTH `review-deepseek-1.md` (the real healed
+  review, seat-named) and `review-deepseek.md` (the stray, alias-named because it never bound) —
+  and `artifact-guard.js:86` allowlists exactly `review-deepseek.md`, so the only file the
+  Workspace surfaces is the one the engine threw away. Do NOT fix this by restructuring the retry
+  write path; an allowlist built from `o.seats` stops listing the alias-named stray and starts
+  listing both seat-named files, which resolves it.
 
 - [ ] **PR4 · `verdict.js`'s `deriveSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
   renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on
@@ -1921,15 +1932,22 @@ the PRs still ahead in this stack; recorded here so they do not have to be re-de
 
 - [ ] **PR4 · `run-stage2.js:57` builds its judge roster from `reviews[].modelInput`, so a twin
   bench pays for two judge legs and clobbers one `judge-<alias>.md`.** Pre-existing, not
-  introduced by PR2b — but PR2b makes it more reachable in production: Stage 1 now completes and
-  files both twins' reviews cleanly (Task 3) instead of one silently clobbering the other, so a
-  twin bench is more likely to reach Stage 2 with two live reviews and trip this.
+  introduced by PR2b, and PR2b did not change how many reviews reach Stage 2: `materializeReviews`
+  already returned one in-memory entry per complete leg, so a twin bench already handed Stage 2
+  two reviews — only the FILE on disk was clobbered. What PR2b changed is that those two reviews
+  now land in two distinct seat-named files (Task 3) instead of one clobbered alias-named file.
+  The Stage-2 judge-roster defect is unchanged by that and still real.
 
 **Deferred minors, from PR2b's per-task reviews** — none blocked PR2b, each triaged as safe to
 carry forward rather than fix in-flight:
-- The `o.seats`-absent fallback in `run-stage1-launch.js` (`buildSeats` re-derivation for a
-  legacy/direct-`require()` caller with no `o.seats`) has no test — every existing harness
-  supplies `o.seats`.
+- ~~The `o.seats`-absent fallback in `run-stage1-launch.js` has no test.~~ **CLOSED in PR2b's
+  final fix wave** — and it was not merely untested. Writing the test showed the fallback was
+  BROKEN: `run-stage1-launch.js:20-22` re-derives the table with `buildSeats`, so a leg's `m.seat`
+  is truthy while `o.seats` is undefined, and `roleAt(undefined, id)` answers `'seat'` without
+  throwing — collapsing every critic and lens role on exactly the path the fallback exists to
+  serve. Both flip sites now read the seat's own `role` instead of looking it up
+  (`run-stages.js`'s review push, `run-stage1-rows.js`'s dead-seat push); `roleAt` stays exported
+  from `seats.js` for later PRs. Pinned by `run-stages.test.js` "o.seats absent".
 - `counts.total` excludes the seats of a wholly dead wave (they never reach `legs`), so a run
   that loses both a whole wave and a leg under-counts. Consider making `total` the launch roster
   size — now derivable from the per-wave roster PR2b added — rather than a count built up from
@@ -1937,9 +1955,14 @@ carry forward rather than fix in-flight:
 - `schemas/council-run.schema.json` could declare `deadWaves`/`seats`/`partial` under
   `stages[].items.properties` so these additive fields are documented rather than merely
   tolerated (the schema has no `additionalProperties:false`, so nothing breaks either way).
-- No test covers a twin bench where one seat is bound and the other is not (the retry loop and
-  the `run-stages.js` abort branch were both verified correct by hand-probe, not by a pinned
-  test).
+  Same treatment for one more undisclosed additive field on the OTHER persisted surface:
+  `run-retry-group.js:49` stamps `seatId` onto every `firstFailure`, which rides `data.firstFailure`
+  into `run.json`'s `degrades[]`. Like `deadWaves[].seats` it equals the alias on any unique-alias
+  bench, so no shipped run's shape changes — but unlike that field it got no disclosure anywhere.
+- The twin-bench "one seat bound, one not" case is only half pinned. The RETRY-loop half HAS a
+  test — `run-stages.test.js`'s "CARRY (Task 6 minor): a twin bench retry with ONE seat bound and
+  one not heals exactly one twin". The `run-stages.js` ABORT-branch half is the one still verified
+  by hand-probe only, with no pinned test.
 - A hypothetical `seats`-less dead-wave record would collapse twins to one row. Unreachable today
   — all four dead-wave producers carry `seats` — and consistent with the existing "two
   unidentifiable losses collapse to one" rule elsewhere, but worth a note if that ever changes.

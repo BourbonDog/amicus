@@ -54,7 +54,7 @@ async function launchStage1(ctx) {
     const seats1 = o.models.filter(m => m !== o.critic);
     if (seats1.length > 0) {
       record(`${o.runId}-s1`);
-      // MUST mirror :47's `m !== o.critic` exactly. Filtering on `s.id !== o.criticSeat`
+      // MUST mirror :54's `m !== o.critic` exactly. Filtering on `s.id !== o.criticSeat`
       // instead would drop ONE twin where the alias filter drops BOTH, shifting every
       // legId slot by one on a bench preflightSeats never saw.
       seated.push({ waveId: `${o.runId}-s1`, models: seats1.slice(),

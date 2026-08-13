@@ -1,7 +1,7 @@
 // src/council/stage1-bind.js
 'use strict';
 // Stage-1 seat binding (v4.8 workstream A, spec §4.4). Lives here rather than in
-// run-stages.js because that file is at 243/300 and this is where the leg<->seat
+// run-stages.js because that file is at 292/300 and this is where the leg<->seat
 // join and its two failure shapes belong together.
 
 const { bindSeats } = require('./seats');
@@ -35,7 +35,7 @@ function bindStage1Waves(waves) {
     // either: an orphan leg is a review that LANDED — materializeReviews writes it
     // under its alias name — for a seat we cannot name. Retrying that seat would
     // buy a SECOND paid leg and put two reviews on one seat, breaking the
-    // invariant run-stages.js:106-109 states. The orphan is already announced on
+    // invariant run-stages.js:142-151 states. The orphan is already announced on
     // `seat-unbound` at bind time (R-B: orphans are not a loss and not retryable).
     if (legs.length === 0 || strays.length > 0) { continue; }
     for (const seat of unbound) {
