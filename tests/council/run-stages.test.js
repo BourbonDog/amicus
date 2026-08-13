@@ -686,6 +686,200 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
   });
 });
 
+// ---- v4.8 PR2b Task 7 (R-B): a launched seat whose leg never came back ----
+//
+// The class this block owns is invisible before it: the wave DID return legs,
+// just not this seat's, so the loss lands in neither deadLegs (no leg object
+// exists) nor deadWaves (the wave produced legs). It is routed into the retry as
+// a single-seat `partial` dead wave, and — per the SL-2 invariant at
+// run-stages.js:77-78 — announced ONLY when the retry does not save it.
+describe('v4.8 PR2b Task 7: an unbound seat is retried, then announced', () => {
+  test('a partial wave return is retried, and healing it emits NO degrade', async () => {
+    // roster (-s1): ['a','b'] -> a=slot1, b=slot2. Only a's leg comes back, so
+    // seat b is unbound. retry roster (-s1r1): ['b'] alone -> slot1.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('b', 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(2);
+    expect(ctx.launchers.launchWave.mock.calls[1][0].models).toEqual(['b']);
+    expect(r.reviews.map(x => x.model).sort()).toEqual(['a', 'b']);
+    expect(r.degraded).toBe(false);
+    // ctx._notes holds the RAW note argument, and no degrade builder in this
+    // path sets `kind` (it is defaulted inside makeDegrade, which this stub sink
+    // never calls) — so assert on the channels that actually appear.
+    expect(ctx._notes.map(n => n.channel)).toEqual(['stage1-retry']);
+    expect(ctx._notes.filter(n => n.kind !== 'heal')).toEqual([]);
+    // The heal's own prose: a `missing` first failure has no `status`, so
+    // without its arm this reads "its first leg ended 'undefined'" for a seat
+    // that never had a leg at all.
+    expect(ctx._notes[0].why).toContain('returned 1 of 2 legs');
+    expect(ctx._notes[0].why).not.toContain("ended 'undefined'");
+  });
+
+  test('a partial return the retry cannot save degrades on seat-unbound, with honest prose', async () => {
+    // The RETRY wave must not return anything bindable to b: an 'a'-labelled leg
+    // stamped `${waveId}-1` would bind to b BY SLOT and heal. An off-roster alias
+    // in an out-of-range slot is an orphan, so b reaches the reconcile loop as a
+    // still-missing seat and missingLegStillDeadNote is what fires.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('zzz', 'abc123-s1r1', 9)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(r.degraded).toBe(true);
+    const note = ctx._notes.find(n => n.channel === 'seat-unbound' && n.data.seat === 'b');
+    expect(note).toBeDefined();
+    expect(note.what).toBe('seat b did not review');
+    expect(note.why).toContain('returned 1 of 2 legs');
+    expect(note.why).not.toContain('produced no legs');   // the first wave DID produce legs
+    expect(note.why).not.toContain("ended 'undefined'");  // there was never a leg for this seat
+    // The count is SEATS, not returned legs: legs.length alone would render
+    // "1 of 1 seats reviewed" in the same breath as a degrade.
+    expect(note.effect).toBe('1 of 2 seats reviewed; the run continues with the bench that did '
+      + 'and will exit degraded (2)');
+    // Both shapes of the join failure share the channel: the unbindable retry
+    // leg is announced as an orphan alongside b's loss, never instead of it.
+    expect(ctx._notes.some(n => n.channel === 'seat-unbound' && n.data.seat === 'zzz')).toBe(true);
+  });
+
+  test('a budget-SKIPPED partial seat is announced on seat-unbound, with no retry launch', async () => {
+    // The third emission site (run-stages.js's skippedDeadWaves loop): the loss
+    // is real, the retry was never affordable, and the plain dead-wave sentence
+    // would still be false about a wave that produced a's leg.
+    const ctx = makeCtx({ models: ['a', 'b'], overBudget: () => true });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);   // skipped: no paid retry
+    const note = ctx._notes.find(n => n.channel === 'seat-unbound');
+    expect(note.what).toBe('seat b did not review');
+    expect(note.why).toBe('the wave returned 1 of 2 legs and none of them was this seat’s');
+    expect(note.data).toEqual({ waveId: 'abc123-s1', models: ['b'],
+      reason: 'the wave returned 1 of 2 legs and none of them was this seat’s', seat: 'b' });
+    expect(r.degraded).toBe(true);
+  });
+
+  test('a partial seat whose RETRY WAVE dies wholesale keeps the honest wave sentence', async () => {
+    // waveStillDeadNote's arm: the plain dead-wave sentence would claim wave
+    // abc123-s1 "produced NO legs", which is demonstrably false — it produced a's.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [] }, exitCode: 1 });
+    const r = await runStage1(ctx);
+    expect(r.degraded).toBe(true);
+    expect(ctx._notes.some(n => n.channel === 'dead-wave')).toBe(false);
+    const note = ctx._notes.find(n => n.channel === 'seat-unbound');
+    expect(note.what).toBe('seat b did not review');
+    expect(note.why).toContain('returned 1 of 2 legs');
+    expect(note.why).toContain('the once-only retry wave also produced no legs');
+    expect(note.data.seat).toBe('b');
+    expect(note.data.retryWaveId).toBe('abc123-s1r1');
+  });
+
+  test('NEGATIVE PIN: a WHOLLY dead wave emits exactly one dead-wave note and ZERO seat-unbound', async () => {
+    // bindStage1Waves skips zero-leg waves precisely so a dead wave is never
+    // also re-announced seat by seat. A regression here is invisible without
+    // this pin — the run would simply grow N extra notes.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1', legs: [], reason: 'server never started' }, exitCode: 1 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1', legs: [] }, exitCode: 1 });
+    const r = await runStage1(ctx);
+    expect(ctx._notes.filter(n => n.channel === 'dead-wave')).toHaveLength(1);
+    expect(ctx._notes.filter(n => n.channel === 'seat-unbound')).toHaveLength(0);
+    expect(ctx._notes[0].what).toBe('Stage-1 wave abc123-s1 (a, b) produced NO legs');
+    expect(r.degraded).toBe(true);
+  });
+
+  test('NEGATIVE PIN: two seats lost from ONE wave reconcile into ONE stillDeadWaves entry', async () => {
+    // roster (-s1): a=1, b=2, c=3; only a's leg returns, so b and c are BOTH
+    // unbound and become two single-seat `partial` records sharing waveId
+    // abc123-s1. retry roster (-s1r1): ['b','c'] -> b=slot1, c=slot2; b's retry
+    // leg comes back dead and c's never comes back at all, so the two halves of
+    // the still-lost path (leg loop + reconcile loop) both fire for one wave.
+    const ctx = makeCtx({ models: ['a', 'b', 'c'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [deadLeg('b', undefined, undefined, 'abc123-s1r1', 1)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(r.deadWaves).toHaveLength(1);                       // the `reconciled` Set collapses the repeated waveId
+    expect(r.deadWaves[0].waveId).toBe('abc123-s1');
+    expect(r.deadWaves[0].models).toEqual(['b', 'c']);
+    expect(r.deadWaves[0].seats.map(s => s && s.id)).toEqual(['b', 'c']);
+    expect(r.reviews.map(x => x.model)).toEqual(['a']);
+    expect(r.degraded).toBe(true);
+  });
+
+  test('CARRY (Task 6 Minor 1): an UNBINDABLE retry leg keeps the roster seat on the still-dead record', async () => {
+    // The retry leg is unbindable (its taskId names no slot of -s1r1 and it
+    // carries no waveId stamp, so the alias path is refused too). The leg loop
+    // is still reached — `key` is in `launched` — so the record must fall back
+    // to the launched seat instead of publishing seats:[null] where the roster
+    // slot was known all along.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [usableLeg('a', 'abc123-s1', 1)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [{ ...deadLeg('b'), taskId: 'stray-1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(r.deadWaves).toHaveLength(1);
+    expect(r.deadWaves[0].models).toEqual(['b']);
+    expect(r.deadWaves[0].seats.map(s => s && s.id)).toEqual(['b']);
+  });
+
+  test('REQUIRED PIN (no third leg): a wave with an orphan leg never ALSO retries its unbound seat', async () => {
+    // stage1-bind.js:40's `strays.length > 0` clause. Post-H4 a wave record and a
+    // leg record for one alias no longer collapse, so relaxing that guard would
+    // grow the bench retry unit a THIRD slot and buy a paid leg whose output is
+    // unattributable. One bound leg + one orphan + one unbound seat must yield
+    // ZERO missing seats: exactly one wave is ever launched.
+    const ctx = makeCtx({ models: ['a', 'b'] });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1),
+        { ...usableLeg('zzz', 'abc123-s1', 9), taskId: 'stray-1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);   // no retry — no third paid leg
+    const unbound = ctx._notes.filter(n => n.channel === 'seat-unbound');
+    expect(unbound).toHaveLength(1);
+    expect(unbound[0].data.legId).toBe('stray-1');               // the ORPHAN, announced at bind time
+    expect(ctx._notes.some(n => /seat b did not review/.test(n.what))).toBe(false);
+    expect(r.degraded).toBe(false);
+  });
+
+  test('CARRY (Task 6 minor): a twin bench retry with ONE seat bound and one not heals exactly one twin', async () => {
+    // Both twins die on the first pass, so the retry launches for [#1, #2].
+    // Its response binds slot 1 to deepseek#1 and carries a second leg nothing
+    // can attribute — an alias is no longer a seat identity, so it must NOT be
+    // adopted by #2. #1 heals; #2 stays dead through its own srcLeg.
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'] });
+    ctx.launchers.launchWave
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+        legs: [deadLeg('deepseek', undefined, undefined, 'abc123-s1', 1),
+          deadLeg('deepseek', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 })
+      .mockResolvedValueOnce({ wave: { waveId: 'abc123-s1r1',
+        legs: [usableLeg('deepseek', 'abc123-s1r1', 1),
+          { ...usableLeg('deepseek'), taskId: 'stray-1' }] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const heals = ctx._notes.filter(n => n.kind === 'heal');
+    expect(heals).toHaveLength(1);
+    expect(r.reviews).toHaveLength(1);
+    expect(r.deadLegs).toHaveLength(1);
+    expect(r.deadLegs[0].taskId).toBe('abc123-s1-2');            // the SECOND twin's own first leg
+    expect(r.degraded).toBe(true);
+  });
+});
+
 describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)', () => {
   test('a repair launch gets its own extraRows row: role repair, its own waveId, usage attributed', async () => {
     const ctx = makeCtx({

@@ -96,24 +96,32 @@ function groupStage1Losses(o, deadWaves = [], deadLegs = [], seatOf = new Map())
     return lensUnits.get(i);
   };
 
+  // v4.8 PR2b Task 7 (R-B): a `partial` record is stage1-bind.js's
+  // missingSeatDeadWave — ONE seat of a wave that DID return legs, just not
+  // this seat's. It retries exactly like a dead wave, but its loss CLASS is
+  // 'missing': every still-dead/heal builder reads ff.class, and a 'wave'
+  // record makes them claim the wave "produced no legs", which is false.
+  // A partial critic record is stamped `-c1`, so it matches isCriticWave and
+  // would otherwise be recorded 'wave' on that branch alone.
+  const lossClass = w => (w.partial ? 'missing' : 'wave');
   for (const w of deadWaves) {
     const models = w.models || [];
     if (o.lenses) {
       const u = lensUnitFor(lensIndexOf(o, w.waveId, models[0], (w.seats || [])[0] || null));
       u.srcWaves.push(w);
       models.forEach((seat, idx) => recordFailure(u, seat,
-        { seat, class: 'wave', waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
+        { seat, class: lossClass(w), waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
     } else if (isCriticWave(w)) {
       criticUnit.srcWaves.push(w);
       // criticSeatObj rides even though trackModel is false: it is already
       // criticUnit.seats[0], so keying the firstFailure off it is what keeps
       // the dedup key and the roster slot's key the SAME string.
       recordFailure(criticUnit, o.critic,
-        { seat: o.critic, class: 'wave', waveId: w.waveId, reason: w.reason }, false, criticSeatObj);
+        { seat: o.critic, class: lossClass(w), waveId: w.waveId, reason: w.reason }, false, criticSeatObj);
     } else {
       bench.srcWaves.push(w);
       models.forEach((seat, idx) => recordFailure(bench, seat,
-        { seat, class: 'wave', waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
+        { seat, class: lossClass(w), waveId: w.waveId, reason: w.reason }, true, (w.seats || [])[idx] || null));
     }
   }
   for (const leg of deadLegs) {

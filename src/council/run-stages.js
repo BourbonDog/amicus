@@ -26,7 +26,7 @@ const { runStage2 } = require('./run-stage2');
 const { launchStage1 } = require('./run-stage1-launch');
 const { buildRunStatsEntry } = require('./run-assemble');
 const { pushDeadSeatRows } = require('./run-stage1-rows');
-const { bindStage1Waves, orphanLegNote } = require('./stage1-bind');
+const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage1-bind');
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
 const { slug, roleAt } = require('./seats');
@@ -67,8 +67,13 @@ async function runStage1(ctx) {
   // Per-wave binding, before anything reads a leg. Orphans are announced now —
   // they are not a loss, so the "never degrade for a seat the retry saves" rule
   // below does not apply to them.
-  const { seatOf, orphanLegs } = bindStage1Waves(waves);
+  const { seatOf, missingSeats, orphanLegs } = bindStage1Waves(waves);
   for (const { waveId, leg } of orphanLegs) { ctx.degrade.note(orphanLegNote(waveId, leg)); }
+  // R-B: a launched seat whose leg never came back is a LOSS — it lands in
+  // neither deadLegs (no leg object) nor deadWaves (the wave DID produce legs).
+  // It reaches the retry as a single-seat dead wave flagged `partial` so its
+  // prose stays true, and is announced only if the retry cannot save it.
+  const allDeadWaves = [...deadWaves, ...missingSeats.map(missingSeatDeadWave)];
 
   const firstPass = materializeReviews(o.runDir, legs, seatOf);
   const alive0 = new Set(firstPass.map(m => m.leg));
@@ -76,8 +81,10 @@ async function runStage1(ctx) {
 
   // SL-2: one retry BEFORE anything is recorded lost — the sink never
   // un-flips, so a degrade for a seat the retry saves must never fire at all.
-  const retry = await retryStage1Losses(ctx, { deadWaves, deadLegs: deadLegs0, seatOf,
-    counts: { reviewed: firstPass.length, total: legs.length } });
+  // `total` counts SEATS: legs.length alone renders "1 of 1 seats reviewed"
+  // beside a degrade when a seat's leg never returned.
+  const retry = await retryStage1Losses(ctx, { deadWaves: allDeadWaves, deadLegs: deadLegs0, seatOf,
+    counts: { reviewed: firstPass.length, total: legs.length + missingSeats.length } });
   if (retry.aborted) {
     // Final whole-branch review: same bug class as the post-retry-repair
     // abort fixed ~87 lines below ("Must be the post-retry set") — subtract
@@ -94,7 +101,7 @@ async function runStage1(ctx) {
     // different seat in run.json. Omitted entirely when the source had none.
     return { aborted: retry.aborted, reviews: [], degraded: false, extraRows: [],
       deadLegs: deadLegs0.filter(l => !healed.has(keyOf(l, seatOf))),
-      deadWaves: deadWaves.map((w) => {
+      deadWaves: allDeadWaves.map((w) => {
         const keep = (w.models || []).map((m, i) => [m, (w.seats || [])[i] || null])
           .filter(([m, s]) => !healed.has(s ? s.id : m));
         return { ...w, models: keep.map(x => x[0]), ...(w.seats ? { seats: keep.map(x => x[1]) } : {}) };
@@ -102,13 +109,19 @@ async function runStage1(ctx) {
   }
 
   for (const d of retry.skippedDeadWaves) {
+    // A `partial` record is one seat of a wave that DID produce legs, so the
+    // plain dead-wave sentence would be false. `seat` rides only on that shape:
+    // adding it unconditionally breaks an exact toEqual on a real dead wave.
     ctx.degrade.note({
-      channel: 'dead-wave',
-      what: `Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs`,
+      channel: d.partial ? 'seat-unbound' : 'dead-wave',
+      what: d.partial
+        ? `seat ${(d.models || [])[0]} did not review`
+        : `Stage-1 wave ${d.waveId} (${d.models.join(', ') || 'no models'}) produced NO legs`,
       why: d.reason,
       effect: 'Those seats are NOT in this council. The run continues with the bench that did '
         + 'launch and will exit degraded (2)',
-      data: { waveId: d.waveId, models: d.models, reason: d.reason },
+      data: { waveId: d.waveId, models: d.models, reason: d.reason,
+        ...(d.partial ? { seat: (d.models || [])[0] } : {}) },
     });
   }
   for (const leg of retry.skippedDeadLegs) {

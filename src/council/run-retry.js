@@ -207,17 +207,28 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
         out.recoveredLegs.push(leg);
         ctx.degrade.note({ channel: 'stage1-retry', kind: 'heal',
           what: `seat ${seat} reviewed on retry`,
-          why: ff && ff.class === 'wave'
+          // A 'missing' ff (a seat whose leg never came back) has a reason and a
+          // waveId but NEVER a status — the leg arm would render "ended
+          // 'undefined'" for a seat that never had a leg at all.
+          why: ff.class === 'wave'
             ? `its first wave ${ff.waveId} produced no legs (${ff.reason}) and was relaunched once`
-            : `its first leg ended '${ff ? ff.status : 'unknown'}' with no usable output and was relaunched once`,
+            : ff.class === 'missing'
+              ? `${ff.reason} in wave ${ff.waveId}, and it was relaunched once`
+              : `its first leg ended '${ff ? ff.status : 'unknown'}' with no usable output and was relaunched once`,
           effect: 'The seat is in this council; nothing was lost',
           data: { seat, retryWaveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, firstFailure: ff } });
       } else {
         out.stillDeadNotes.push(retryLegStillDeadNote(seat, ff, leg, unit, counts));
         out.stillDeadRetryLegs.push(leg);
-        if (ff && ff.class === 'wave') {
+        // Both WAVE-origin classes route here: a 'missing' loss carries a
+        // waveId and no srcLeg, so the else branch would drop it from every
+        // array. Task-6 carry: an UNBINDABLE retry leg leaves `bound` null
+        // where the roster slot was known — fall back to the launched record
+        // rather than publishing seats:[null]. Never a guess: this line is
+        // reachable only when `key` is already in `launched`.
+        if (ff.class !== 'leg') {
           if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
-          lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: bound });
+          lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: bound || (launched.get(key) || {}).seat || null });
         } else {
           const src = unit.srcLegs.find(l => srcLegKey(l) === key);
           if (src) { out.stillDeadLegs.push(src); }
@@ -239,7 +250,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
       if (seenSeats.has(key)) { continue; } // already handled above (healed or still-dead)
       const ff = rec.ff;
       out.stillDeadNotes.push(missingLegStillDeadNote(rec.alias, ff, unit, counts));
-      if (ff && ff.class === 'wave') {
+      if (ff && ff.class !== 'leg') {   // wave-origin, incl. a 'missing' seat
         if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
         lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
       } else {

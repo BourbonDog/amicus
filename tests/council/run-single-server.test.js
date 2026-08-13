@@ -287,6 +287,12 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     script['abc123-s1'] = () => ({
       wave: { status: 'partial', legs: [mkLeg('gemini', review('gemini'))] }, exitCode: 2,
     });
+    // v4.8 PR2b Task 7: a seat whose leg never came back is now a first-class
+    // loss, so this partial return earns the once-only retry — which this
+    // transport script must answer or every waveId lookup throws. It answers
+    // with another empty wave: the seats stay lost and the quorum gate is still
+    // what fails the run, which is what this test is about.
+    script['abc123-s1r1'] = () => ({ wave: { status: 'partial', legs: [] }, exitCode: 2 });
     const { exitCode, run: doc } = await run();
     expect(exitCode).toBe(1);
     expect(doc.error.code).toBe('COUNCIL_QUORUM');
