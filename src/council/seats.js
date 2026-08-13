@@ -186,7 +186,7 @@ const SEATS_ERROR = 'COUNCIL_SEATS_INVALID';
  * error doc lands in a run dir that exists) and BEFORE any launch, exactly like
  * its sibling preflightClaudeReview.
  *
- * Rejects four ways, all zero-spend:
+ * Rejects five ways, all zero-spend:
  *   - two bench entries resolving to the SAME seat id (a bench alias spelling
  *     another alias's disambiguated id, e.g. 'deepseek#2' beside twin
  *     'deepseek' entries) — that table would be incoherent as a join key,
@@ -200,7 +200,13 @@ const SEATS_ERROR = 'COUNCIL_SEATS_INVALID';
  *   - a --critic alias occupying more than one seat,
  *   - a critic that is not on the bench at all. runCouncil never checked this
  *     (only the CLI/MCP handlers did), so a direct require() caller silently
- *     launched an N+1th leg meta.models never mentioned.
+ *     launched an N+1th leg meta.models never mentioned,
+ *   - --critic together with a non-empty --lenses. Under lenses every seat
+ *     already carries its own lens role, so criticSeat would name a seat
+ *     buildSeats gave a `lens:*` role — both handlers already enforce this
+ *     XOR; the engine now does too. An empty lenses array is not lenses
+ *     anywhere else in this module (buildSeats' `lensed` check above), so it
+ *     does not trip this guard.
  *
  * Remedies ride INSIDE message: the engine error is {code, message} and both
  * render paths discard anything else. The message never suggests naming a seat
@@ -231,6 +237,11 @@ function preflightSeats(o) {
       return bad(`seats '${prev}' and '${s.id}' would both write ${file} — rename one bench entry`);
     }
     if (!prev) { byFile.set(file, s.id); }
+  }
+
+  if (o.critic && Array.isArray(o.lenses) && o.lenses.length > 0) {
+    return bad('--critic and --lenses are mutually exclusive: under lenses every seat carries its '
+      + 'own lens role and no seat can be the critic — drop one of the two');
   }
 
   if (o.critic) {
