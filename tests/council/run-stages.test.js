@@ -1474,6 +1474,83 @@ describe('runStage2', () => {
     expect(bundle).toContain("Today's date is 2026-07-19.");
     expect(bundle.split('\n')[0]).toBe(s2.JUDGE_NO_TOOLS_PREAMBLE);  // preamble is still line 1
   });
+
+  // v4.8 PR3 Task 4: the seat reaches Stage 2. A twin bench's reviews each carry
+  // their OWN seat (buildSeats(['deepseek','deepseek'], null, null) — 'deepseek#1'
+  // / 'deepseek#2') built the same positional way Task 2's stage1Reviews() does.
+  describe('PR3 Task 4: judge artifacts + judgeResults carry the SEAT (twin bench)', () => {
+    function twinReviews() {
+      const twinSeats = buildSeats(['deepseek', 'deepseek'], null, null);
+      return [
+        { model: 'deepseek', modelInput: 'deepseek', role: 'seat', text: review('deepseek-1'),
+          findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('deepseek', review('deepseek-1')), seat: twinSeats[0] },
+        { model: 'deepseek', modelInput: 'deepseek', role: 'seat', text: review('deepseek-2'),
+          findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('deepseek', review('deepseek-2')), seat: twinSeats[1] },
+      ];
+    }
+    const twinLabels = assignLabels(['deepseek', 'deepseek']);
+    const twinGlobalFindings = [
+      ...toGlobalFindings('A', 'deepseek', [{ id: 1, severity: 'major', claim: 'c' }]),
+      ...toGlobalFindings('B', 'deepseek', [{ id: 1, severity: 'nit', claim: 'c' }]),
+    ];
+
+    test('RED1: a twin bench writes TWO judge files (judge-deepseek-1.md, judge-deepseek-2.md)', async () => {
+      // RED today (measured): the run dir contains only ["judge-deepseek.md"] —
+      // one file for two judges, the second twin's judge-output clobbering the
+      // first's under the shared alias filename.
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      await runStage2(ctx, { reviews: twinReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+      const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
+      expect(judgeFiles).toEqual(['judge-deepseek-1.md', 'judge-deepseek-2.md']);
+    });
+
+    test('RED2: judgeResults[] carries a distinct seat per twin; judge stays the alias on both', async () => {
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const { judgeResults } = await runStage2(ctx,
+        { reviews: twinReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+      expect(judgeResults).toHaveLength(2);
+      expect(judgeResults.every(j => j.judge === 'deepseek')).toBe(true);       // launch alias unchanged
+      expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['deepseek#1', 'deepseek#2']);
+    });
+
+    test('parity: a unique bench still writes judge-gemini.md byte-identically (must stay GREEN)', async () => {
+      const geminiOut = judgeOut(['Review B', 'Review A'],
+        [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]);
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        onWave: (opts) => okWave([
+          mkLeg('gemini', geminiOut, 'complete', opts.waveId, 1),
+          mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+      const file = path.join(ctx.o.runDir, 'judge-gemini.md');
+      expect(fs.existsSync(file)).toBe(true);
+      expect(fs.readFileSync(file, 'utf-8')).toBe(geminiOut);
+    });
+  });
 });
 
 describe('launchStage1 roster return', () => {

@@ -24,6 +24,11 @@ const { parseJudgeOutput } = require('./parse-stage2');
 const { sanitizeName, isAbortExit } = require('./run-launch');
 const runState = require('./run-state');
 const { buildRunStatsEntry } = require('./run-assemble');
+// v4.8 PR3 Task 4: seat binding. artifactName is NOT re-exported from
+// run-launch.js (its exports stop at sanitizeName/isAbortExit), so both come
+// straight from ./seats — that module requires nothing, zero cycle risk.
+const { artifactName, bindSeats } = require('./seats');
+const { orphanLegNote } = require('./stage1-bind');
 
 /**
  * Stage 2: shared anonymized bundle → judge wave in _scratch → parse + repair.
@@ -71,6 +76,47 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   ctx.addWave(wave);
   if (isAbortExit(exitCode)) { return { aborted: exitCode, judgeResults: [], extraRows: [] }; }
 
+  // v4.8 PR3 Task 4: bind the -s2 wave's legs to the SAME seats reviews[] holds,
+  // in `reviews` order — judges is built from that same array by the same
+  // `.map`, and real fanout stamps `${waveId}-${i+1}` off that same index
+  // (sidecar/leg-ids.js), so this holds even after an SL-2 heal (recovered legs
+  // are appended, run-stages.js:153, so `reviews` order is no longer seat order
+  // — both arrays still derive from the same `reviews`).
+  // §3.4's padding pattern (run-retry.js:121-127): bindSeats filters falsy
+  // roster entries internally, so a `null` hole would slide every later slot,
+  // and two `{id:null}` sentinels would collide on its id-keyed dedup.
+  // Placeholders are tracked by IDENTITY, never an id-name prefix test — a
+  // bench alias literally beginning `__unbound-` must never drop a real bind.
+  const s2WaveId = `${o.runId}-s2`;
+  const placeholders = new Set();
+  const roster = reviews.map((r, i) => {
+    if (r.seat) { return r.seat; }
+    const p = { id: `__unbound-${s2WaveId}-${i + 1}`, alias: judges[i], role: 'seat', lens: null, position: i + 1 };
+    placeholders.add(p);
+    return p;
+  });
+  const bindRes = bindSeats(s2WaveId, roster, wave.legs);
+  const judgeSeatOf = new Map(bindRes.bound
+    .filter(b => !placeholders.has(b.seat))
+    .map(b => [b.leg, b.seat]));
+  // An orphan leg (a judge DID land, but no roster slot claims it) gets the
+  // same shape as Stage 1's orphanLegNote — `data.legId` present. A roster
+  // seat with no leg bound at all (`data.legId` absent) is the OTHER half of
+  // the same discriminator: this seat never judged. Real seats only —
+  // placeholders (a review that itself had no Stage-1 seat) are not seats this
+  // run ever minted, so they are never announced as missing one.
+  for (const leg of bindRes.orphanLegs) { ctx.degrade.note(orphanLegNote(s2WaveId, leg)); }
+  for (const seat of bindRes.unbound) {
+    if (placeholders.has(seat)) { continue; }
+    ctx.degrade.note({
+      channel: 'seat-unbound',
+      what: `leg for seat ${seat.alias} in wave ${s2WaveId} never returned`,
+      why: `the wave returned fewer judge legs than its roster of ${roster.length}`,
+      effect: 'That seat did not judge; nothing was guessed and nothing was dropped',
+      data: { waveId: s2WaveId, seat: seat.alias },
+    });
+  }
+
   const judgeResults = [];
   // v4.7 D2: every judge-repair launch is a billed leg of its own, distinct from
   // the judge's original Stage-2 wave leg it is trying to fix — it gets its own
@@ -80,8 +126,12 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
   let repairSeq = 0;
   for (const leg of (wave && wave.legs) || []) {
     const judge = leg.modelInput || leg.model;
+    const seat = judgeSeatOf.get(leg) || null;
     if (leg.status === 'complete' && leg.summary) {
-      fs.writeFileSync(path.join(o.runDir, `judge-${sanitizeName(judge)}.md`), leg.summary, { mode: 0o600 });
+      // Mirrors materializeReviews' shipped shape (run-launch.js:207) exactly:
+      // seat filename when bound, alias filename (today's behaviour) otherwise.
+      const name = seat ? artifactName(seat, 'judge') : `judge-${sanitizeName(judge)}.md`;
+      fs.writeFileSync(path.join(o.runDir, name), leg.summary, { mode: 0o600 });
     }
     let conformance = 'clean';
     let parsed = (leg.status === 'complete' && leg.summary)
@@ -126,7 +176,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       if (parsed.ok) { conformance = 'repaired'; }
     }
     if (!parsed.ok) {
-      judgeResults.push({ judge, ok: false, order: null, adjudications: null,
+      judgeResults.push({ judge, seat, ok: false, order: null, adjudications: null,
         conformance: leg.status === 'complete' ? 'unstructured' : 'clean',
         // #83 (v4.6 Plan 2): the judge's ORIGINAL Stage-2 wave leg, mirroring
         // Stage-1's convention (reviews carry the original wave leg even when a
@@ -138,7 +188,7 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
       continue;
     }
     const { order } = rankingToOrder(parsed.ranking, labels.labelMap);
-    judgeResults.push({ judge, ok: true, order, adjudications: parsed.adjudications, conformance,
+    judgeResults.push({ judge, seat, ok: true, order, adjudications: parsed.adjudications, conformance,
       leg: leg || null });
   }
   return { aborted: null, judgeResults, extraRows };
