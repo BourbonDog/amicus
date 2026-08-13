@@ -284,3 +284,29 @@ describe('seat-fixtures: run-retry.test.js-shaped legs (no model field, no usage
     });
   });
 });
+
+// v4.8 PR2b Task 0 Step 9: proof that run-stages.test.js's OWN fixture shape
+// (mkLeg's post-Task-1 `${waveId}-${slot}` taskId, one leg per roster model,
+// in order) binds one-to-one against a twin-bearing roster — the exact shape
+// every runStage1 driver this task touched now produces.
+test('run-stages fixture legs bind one-to-one with their wave roster', () => {
+  const roster = buildSeats(['deepseek', 'deepseek', 'gpt'], null, null);
+  const legs = roster.map((s, i) => ({ modelInput: s.alias, status: 'complete',
+    summary: 'x', taskId: `abc123-s1-${i + 1}`, waveId: 'abc123-s1' }));
+  for (const leg of legs) { expect(leg.waveId).toBe('abc123-s1'); }   // BEFORE binding
+  const { bound, unbound, orphanLegs } = bindSeats('abc123-s1', roster, legs);
+  expect(unbound).toEqual([]);
+  expect(orphanLegs).toEqual([]);
+  // leg <-> seat CORRESPONDENCE. `expect(b.leg.taskId).toBe(`${waveId}-${b.seat.position}`)`
+  // is a TAUTOLOGY of bindSeats' own rule — seats.js:139-140 CHOOSES the seat FROM
+  // the taskId's slot number, so a slot SWAP satisfies it (verified). Compare
+  // independently derived facts instead.
+  const bySeat = new Map(bound.map(b => [b.seat.id, b.leg]));
+  expect(bySeat.get('deepseek#1')).toBe(legs[0]);
+  expect(bySeat.get('deepseek#2')).toBe(legs[1]);
+  expect(bySeat.get('gpt')).toBe(legs[2]);
+  // ...and prove the assertion bites:
+  const swapped = [{ ...legs[0], taskId: 'abc123-s1-2' }, { ...legs[1], taskId: 'abc123-s1-1' }, legs[2]];
+  const s = bindSeats('abc123-s1', roster, swapped);
+  expect(new Map(s.bound.map(b => [b.seat.id, b.leg])).get('deepseek#1')).toBe(swapped[1]);
+});

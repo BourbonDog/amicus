@@ -35,7 +35,26 @@ const deps = (launchers) => ({
 /** Records every launch's opts; dispatches to `responder(opts)` by waveId. */
 function recordingLaunchers(responder) {
   const calls = [];
-  async function launchWave(opts) { calls.push(opts); return responder(opts); }
+  async function launchWave(opts) {
+    calls.push(opts);
+    const r = await responder(opts);
+    // v4.8: stamp the roster slot so bindSeats can attribute these legs — this
+    // seam has its own launchers and never went through helpers/fake-launchers.js's
+    // sweep, so its legs carried `taskId: 'gemini-1'` and no waveId, which
+    // bindSeats correctly refuses to adopt (every leg an orphan, every run
+    // degraded to 2). Mirrors helpers/fake-launchers.js:42-49, including
+    // slot consumption WITHOUT replacement so a twin roster yields -1/-2.
+    if (r && r.wave && Array.isArray(r.wave.legs)) {
+      const remaining = (opts.models || []).slice();
+      r.wave.legs.forEach((leg, i) => {
+        const k = remaining.indexOf(leg.modelInput || leg.model);
+        if (k >= 0) { remaining[k] = null; }
+        leg.taskId = `${opts.waveId}-${k >= 0 ? k + 1 : i + 1}`;
+        leg.waveId = opts.waveId;
+      });
+    }
+    return r;
+  }
   async function launchSolo(opts) {
     const r = await launchWave({ ...opts, models: [opts.model] });
     return { ...r, leg: (r.wave && r.wave.legs && r.wave.legs[0]) || null };

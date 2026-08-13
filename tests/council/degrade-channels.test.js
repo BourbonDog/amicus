@@ -42,8 +42,10 @@ describe('dead-leg channel (#85)', () => {
       overBudget: () => false,
       launchers: { launchWave: async () => ({
         wave: { waveId: 'r1-s1', legs: [
-          { modelInput: 'alpha', status: 'complete', summary: review('alpha') },
-          { modelInput: 'beta', status: 'timeout', summary: '' },
+          { modelInput: 'alpha', status: 'complete', summary: review('alpha'),
+            taskId: 'r1-s1-1', waveId: 'r1-s1' },
+          { modelInput: 'beta', status: 'timeout', summary: '',
+            taskId: 'r1-s1-2', waveId: 'r1-s1' },
         ] },
         exitCode: 0,
       }) },
@@ -74,8 +76,10 @@ describe('dead-leg channel (#85)', () => {
       overBudget: () => false,
       launchers: { launchWave: async () => ({
         wave: { waveId: 'r1-s1', legs: [
-          { modelInput: 'alpha', status: 'complete', summary: review('alpha') },
-          { modelInput: 'beta', status: 'timeout', summary: '' },
+          { modelInput: 'alpha', status: 'complete', summary: review('alpha'),
+            taskId: 'r1-s1-1', waveId: 'r1-s1' },
+          { modelInput: 'beta', status: 'timeout', summary: '',
+            taskId: 'r1-s1-2', waveId: 'r1-s1' },
         ] },
         exitCode: 0,
       }) },
@@ -102,8 +106,10 @@ describe('dead-leg channel (#85)', () => {
       overBudget: () => false,
       launchers: { launchWave: async () => ({
         wave: { waveId: 'r1-s1', legs: [
-          { modelInput: 'alpha', status: 'complete', summary: review('alpha') },
-          { modelInput: 'beta', status: 'timeout', summary: '', error: 'no first token' },
+          { modelInput: 'alpha', status: 'complete', summary: review('alpha'),
+            taskId: 'r1-s1-1', waveId: 'r1-s1' },
+          { modelInput: 'beta', status: 'timeout', summary: '', error: 'no first token',
+            taskId: 'r1-s1-2', waveId: 'r1-s1' },
         ] },
         exitCode: 0,
       }) },
@@ -117,7 +123,7 @@ describe('dead-leg channel (#85)', () => {
     // fact on top of the pre-SL-2 {seat, status, reason} — D7 byte-identity
     // applies only to budget-skipped records, not retried ones.
     expect(dead.data).toEqual({ seat: 'beta', status: 'timeout', reason: 'no first token',
-      firstFailure: { seat: 'beta', class: 'leg', status: 'timeout', reason: 'no first token' },
+      firstFailure: { seat: 'beta', class: 'leg', status: 'timeout', reason: 'no first token', seatId: 'beta' },
       retryWaveId: 'r1-s1r1' });
   });
 });

@@ -36,6 +36,7 @@ const { createLaunchers } = require('../../src/council/run-launch');
 const { preflightBudget } = require('../../src/sidecar/fanout-budget');
 const { runStage1 } = require('../../src/council/run-stages');
 const { createDegradeSink } = require('../../src/council/run-degrade');
+const { buildSeats } = require('../../src/council/seats');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-reserve-')); });
@@ -343,8 +344,10 @@ describe('a budget-refused wave is never silently dropped', () => {
     });
     const ctx = {
       o: { briefing: 'm', models: ['gpt', 'gemini', 'kimi'], critic: 'kimi', lenses: null,
-        chair: 'deepseek', runId: 'xyz', runDir, date: '2026-07-26', councilName: null },
+        chair: 'deepseek', runId: 'xyz', runDir, date: '2026-07-26', councilName: null,
+        seats: buildSeats(['gpt', 'gemini', 'kimi'], 'kimi', null), criticSeat: 'kimi' },
       launchers, addWave: budget.addWave, overBudget: budget.overBudget,
+      degrade: { note: () => {} },
       scratchDir: path.join(runDir, '_scratch'),
     };
 

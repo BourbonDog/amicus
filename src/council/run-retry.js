@@ -20,6 +20,7 @@ const runState = require('./run-state');
 const { resolveNoOutputBackstopMs } = require('../utils/no-output-backstop');
 const { waveStillDeadNote, srcLegStillDeadNote, retryLegStillDeadNote, missingLegStillDeadNote }
   = require('./run-retry-notes');
+const { bindSeats } = require('./seats');
 // Loss grouping lives in ./run-retry-group (v4.8 PR0 size-gate split).
 // groupStage1Losses is re-exported below — run-retry.test.js imports it
 // from here.
@@ -39,11 +40,19 @@ function briefingFor(o, unit) {
  * the per-wave-fallback path, where waves actually die, is exactly where
  * concurrent relaunches would race the same server start again.
  */
-async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = { reviewed: 0, total: 0 } } = {}) {
+async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
+  counts = { reviewed: 0, total: 0 }, seatOf = new Map() } = {}) {
   const { o, launchers } = ctx;
+  // `seatOf`/`orphanLegs` are part of the CONTRACT, not a debugging aid: a
+  // recovered leg is a RETRY-wave object Stage-1's seatOf has never seen, so
+  // without publishing these bindings every healed seat re-materializes
+  // unattributed downstream (spec §4.4).
+  // `attemptedSeats` (v4.8 PR2b Task 8): the seat-keyed "was this seat actually
+  // retried?" gate. Structured data, never a scan of stillDeadNotes — the full
+  // rationale sits at run-stage1-rows.js's fallback, its only consumer.
   const out = { aborted: null, recoveredLegs: [], stillDeadNotes: [],
     stillDeadWaves: [], stillDeadLegs: [], skippedDeadWaves: [], skippedDeadLegs: [],
-    stillDeadRetryLegs: [] };
+    stillDeadRetryLegs: [], seatOf: new Map(), orphanLegs: [], attemptedSeats: new Set() };
   // Task 5 (#129): SL-2 retries the SAME model under the SAME conditions, so a
   // latency failure is structurally unhealable. Double the window, clamped to
   // the leg timeout so the failure CLASS stays NO_OUTPUT_BACKSTOP rather than
@@ -55,7 +64,7 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
     legTimeoutMs,
   );
 
-  for (const unit of groupStage1Losses(o, deadWaves, deadLegs)) {
+  for (const unit of groupStage1Losses(o, deadWaves, deadLegs, seatOf)) {
     // Task-4 review hardening: a unit this pass cannot even ATTEMPT — an
     // unmappable lens loss (no carrier resolved an index), a lens index
     // outside the run's actual lens roster (coordinator-review MINOR-7b: a
@@ -96,6 +105,62 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
     if (isAbortExit(res.exitCode)) { out.aborted = res.exitCode; return out; }
 
     const legs = (res.wave && Array.isArray(res.wave.legs)) ? res.wave.legs : [];
+    // The retry wave's roster IS unit.seats — recordFailure pushes models and
+    // seats in lockstep, and the legId `-N` suffix slot-indexes that same
+    // launch plan. A null entry means "we could not identify this seat"; pad it
+    // with a position-stable placeholder carrying a UNIQUE id so no slot
+    // shifts, then drop the placeholder binds so nothing is guessed.
+    // ⚠️ Never pass unit.seats raw and never use a null-id sentinel: seats.js
+    // filters falsy roster entries internally (so raw === filtered, and both
+    // slide every later slot into a hole), and two `{id: null}` sentinels
+    // collide on the id-keyed dedup.
+    // Placeholders are tracked by IDENTITY, never by an id-name prefix test: a
+    // bench alias that literally began `__unbound-` would make a name test drop
+    // a REAL seat's binding — a name-collision channel inside the one mechanism
+    // whose whole contract is "never guess".
+    const placeholders = new Set();
+    const retryRoster = unit.seats.map((s, i) => {
+      if (s) { return s; }
+      const p = { id: `__unbound-${unit.waveId}-${i + 1}`, alias: unit.models[i], role: 'seat', lens: null, position: i + 1 };
+      placeholders.add(p);
+      return p;
+    });
+    const bindRes = bindSeats(unit.waveId, retryRoster, legs);
+    const retrySeatOf = new Map(bindRes.bound
+      .filter(b => !placeholders.has(b.seat))
+      .map(b => [b.leg, b.seat]));
+    for (const [l, s] of retrySeatOf) { out.seatOf.set(l, s); }
+    // A retry leg that matches no roster slot is the same attribution failure
+    // Stage-1 announces — but this module emits heals ONLY and never notes a
+    // degrade (see the @module docblock), so it is REPORTED here and emitted by
+    // the caller, exactly as stillDeadNotes already are.
+    for (const leg of bindRes.orphanLegs) { out.orphanLegs.push({ waveId: unit.waveId, leg }); }
+    // Every seat this unit LAUNCHED for, keyed exactly the way recordFailure
+    // keyed it: the identified seat's id, else the alias. Keys are unique by
+    // construction — recordFailure dedups on this same key, so two slots can
+    // never share one.
+    // ⚠️ v4.8 H4: an alias is no longer a seat identity. A `new Map(unit.models
+    // .map(...))` lookup overwrites the duplicate key, so a twin bench resolves
+    // BOTH still-lost seats to the LAST twin — an affirmative mis-attribution,
+    // strictly worse than the `null` that says "unidentified". Every feeder
+    // below must be seat-keyed for the same reason: a MIX (['x#1','x#2','x'])
+    // can never match `seenSeats`, so a run where both twins healed would emit
+    // a phantom dead-leg degrade and exit 2.
+    const seatKey = (s, alias) => (s ? s.id : alias);
+    const launched = new Map(); // key -> {alias, seat, ff}; alias is what notes render
+    const addLaunched = (s, alias, ff) => {
+      const k = seatKey(s, alias);
+      if (!launched.has(k)) { launched.set(k, { alias, seat: s || null, ff: ff || null }); }
+    };
+    // firstFailures grows in LOCKSTEP with models/seats (recordFailure pushes
+    // all three together), so slot i is one seat's whole record.
+    unit.models.forEach((m, i) => addLaunched(unit.seats[i] || null, m, unit.firstFailures[i]));
+    for (const w of unit.srcWaves) {
+      (w.models || []).forEach((m, i) => addLaunched((w.seats || [])[i] || null, m));
+    }
+    for (const l of unit.srcLegs) { addLaunched(seatOf.get(l) || null, l.modelInput || l.model); }
+    // A Stage-1 source leg's key, from the binding Stage 1 published for it.
+    const srcLegKey = l => seatKey(seatOf.get(l) || null, l.modelInput || l.model);
     if (legs.length === 0) {
       // The retry wave itself died wholesale — final failure keeps each
       // source's granularity (D5): wave-origin stays a dead-wave, leg-origin
@@ -111,23 +176,30 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
       for (const w of unit.srcWaves) {
         out.stillDeadNotes.push(waveStillDeadNote(w, unit));
         out.stillDeadWaves.push(w);
-        for (const m of (w.models || [])) { notedSeats.add(m); }
+        (w.models || []).forEach((m, i) => {
+          const k = seatKey((w.seats || [])[i] || null, m);
+          notedSeats.add(k); out.attemptedSeats.add(k);
+        });
       }
       for (const l of unit.srcLegs) {
-        const seat = l.modelInput || l.model;
-        if (notedSeats.has(seat)) { continue; }
-        notedSeats.add(seat);
+        const key = srcLegKey(l);
+        if (notedSeats.has(key)) { continue; }
+        notedSeats.add(key); out.attemptedSeats.add(key);
         out.stillDeadNotes.push(srcLegStillDeadNote(l, unit, counts));
         out.stillDeadLegs.push(l);
       }
       continue;
     }
-    const usable = new Set(materializeReviews(o.runDir, legs).map(m => m.leg));
-    const seenSeats = new Set(legs.map(leg => leg.modelInput || leg.model));
-    const lostWaveSeats = new Map(); // waveId -> seats still lost from a wave-origin
+    const usable = new Set(materializeReviews(o.runDir, legs, retrySeatOf).map(m => m.leg));
+    // Seat-keyed off THIS wave's own bindings (an unbound leg keys by alias,
+    // matching how its unidentified roster slot was keyed above).
+    const seenSeats = new Set(legs.map(l => seatKey(retrySeatOf.get(l) || null, l.modelInput || l.model)));
+    const lostWaveSeats = new Map(); // waveId -> [{alias, seat}] still lost from a wave-origin
     for (const leg of legs) {
-      const seat = leg.modelInput || leg.model;
-      const ff = unit.firstFailures.find(f => f.seat === seat) || null;
+      const seat = leg.modelInput || leg.model; // ALIAS — what every note renders
+      const bound = retrySeatOf.get(leg) || null;
+      const key = seatKey(bound, seat);
+      const ff = (launched.get(key) || {}).ff || null;
       // SL-2 fix-wave: a retry response should only ever name seats THIS unit
       // launched for (unit.models is built in lockstep with firstFailures via
       // groupStage1Losses's recordFailure) — but if a leg turns up for a seat
@@ -141,19 +213,31 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
         out.recoveredLegs.push(leg);
         ctx.degrade.note({ channel: 'stage1-retry', kind: 'heal',
           what: `seat ${seat} reviewed on retry`,
-          why: ff && ff.class === 'wave'
+          // A 'missing' ff (a seat whose leg never came back) has a reason and a
+          // waveId but NEVER a status — the leg arm would render "ended
+          // 'undefined'" for a seat that never had a leg at all.
+          why: ff.class === 'wave'
             ? `its first wave ${ff.waveId} produced no legs (${ff.reason}) and was relaunched once`
-            : `its first leg ended '${ff ? ff.status : 'unknown'}' with no usable output and was relaunched once`,
+            : ff.class === 'missing'
+              ? `${ff.reason} in wave ${ff.waveId}, and it was relaunched once`
+              : `its first leg ended '${ff ? ff.status : 'unknown'}' with no usable output and was relaunched once`,
           effect: 'The seat is in this council; nothing was lost',
           data: { seat, retryWaveId: unit.waveId, retryOfWaveId: unit.retryOfWaveId, firstFailure: ff } });
       } else {
         out.stillDeadNotes.push(retryLegStillDeadNote(seat, ff, leg, unit, counts));
+        out.attemptedSeats.add(key);
         out.stillDeadRetryLegs.push(leg);
-        if (ff && ff.class === 'wave') {
+        // Both WAVE-origin classes route here: a 'missing' loss carries a
+        // waveId and no srcLeg, so the else branch would drop it from every
+        // array. Task-6 carry: an UNBINDABLE retry leg leaves `bound` null
+        // where the roster slot was known — fall back to the launched record
+        // rather than publishing seats:[null]. Never a guess: this line is
+        // reachable only when `key` is already in `launched`.
+        if (ff.class !== 'leg') {
           if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
-          lostWaveSeats.get(ff.waveId).push(seat);
+          lostWaveSeats.get(ff.waveId).push({ alias: seat, seat: bound || (launched.get(key) || {}).seat || null });
         } else {
-          const src = unit.srcLegs.find(l => (l.modelInput || l.model) === seat);
+          const src = unit.srcLegs.find(l => srcLegKey(l) === key);
           if (src) { out.stillDeadLegs.push(src); }
         }
       }
@@ -162,31 +246,42 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [], counts = 
     // that came back WITH a leg record. A partial wave return (unit models
     // [a,b], the wave comes back with only a's leg) leaves 'b' invisible to
     // that loop entirely — no heal, no still-dead note, no skip: it would
-    // vanish from every array. Reconcile against the full launched-seat set
-    // (the union of unit.models, every srcWave's models, and every srcLeg's
-    // seat — not just unit.models alone, so this holds even if some future
-    // change to the grouping made unit.models an incomplete union) so every
-    // launched seat lands in exactly one of recovered / still-dead / skipped.
-    const launchedSeats = new Set(unit.models);
-    for (const w of unit.srcWaves) { for (const m of (w.models || [])) { launchedSeats.add(m); } }
-    for (const l of unit.srcLegs) { launchedSeats.add(l.modelInput || l.model); }
-    for (const seat of launchedSeats) {
-      if (seenSeats.has(seat)) { continue; } // already handled above (healed or still-dead)
-      const ff = unit.firstFailures.find(f => f.seat === seat) || null;
-      out.stillDeadNotes.push(missingLegStillDeadNote(seat, ff, unit, counts));
-      if (ff && ff.class === 'wave') {
+    // vanish from every array. Reconcile against `launched` — the union of
+    // unit.models, every srcWave's models and every srcLeg's seat, not
+    // unit.models alone, so this holds even if some future change to the
+    // grouping made unit.models an incomplete union — so every launched seat
+    // lands in exactly one of recovered / still-dead / skipped. Slot-indexed:
+    // there is no leg here to read a binding off, so the seat comes from the
+    // roster slot itself, never from an alias lookup.
+    for (const [key, rec] of launched) {
+      if (seenSeats.has(key)) { continue; } // already handled above (healed or still-dead)
+      const ff = rec.ff;
+      out.stillDeadNotes.push(missingLegStillDeadNote(rec.alias, ff, unit, counts));
+      out.attemptedSeats.add(key);
+      if (ff && ff.class !== 'leg') {   // wave-origin, incl. a 'missing' seat
         if (!lostWaveSeats.has(ff.waveId)) { lostWaveSeats.set(ff.waveId, []); }
-        lostWaveSeats.get(ff.waveId).push(seat);
+        lostWaveSeats.get(ff.waveId).push({ alias: rec.alias, seat: rec.seat });
       } else {
-        const src = unit.srcLegs.find(l => (l.modelInput || l.model) === seat);
+        const src = unit.srcLegs.find(l => srcLegKey(l) === key);
         if (src) { out.stillDeadLegs.push(src); }
       }
     }
     // Wave-origin seats still lost: the return-contract wave entry carries only
     // the still-lost subset (a partially healed wave is not wholly dead).
+    // `seats` is narrowed in LOCKSTEP with `models`, or run-stage1-rows.js's
+    // dead-seat loop index-zips a healed seat against a lost seat's alias.
+    // Since v4.8 a wave can contribute SEVERAL srcWave records sharing one
+    // waveId (one per missing seat, stage1-bind.js's missingSeatDeadWave), so
+    // the lookup fires once per waveId — not once per record, which would push
+    // every still-lost seat of that wave N times.
+    const reconciled = new Set();
     for (const w of unit.srcWaves) {
+      if (reconciled.has(w.waveId)) { continue; }
+      reconciled.add(w.waveId);
       const lost = lostWaveSeats.get(w.waveId) || [];
-      if (lost.length > 0) { out.stillDeadWaves.push({ ...w, models: lost }); }
+      if (lost.length > 0) {
+        out.stillDeadWaves.push({ ...w, models: lost.map(x => x.alias), seats: lost.map(x => x.seat) });
+      }
     }
   }
   return out;

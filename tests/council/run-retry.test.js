@@ -21,9 +21,11 @@ describe('groupStage1Losses (SL-2 Task 3)', () => {
     const [u] = groupStage1Losses(O, [w], []);
     expect(u).toMatchObject({ unit: 'bench', waveId: 'r1-s1r1', retryOfWaveId: 'r1-s1',
       models: ['a', 'b'], srcWaves: [w], srcLegs: [] });
+    // toEqual is exact: every seatId here equals its alias, which IS the
+    // byte-identity claim for a unique-alias bench (H4). Pinned, not loosened.
     expect(u.firstFailures).toEqual([
-      { seat: 'a', class: 'wave', waveId: 'r1-s1', reason: 'server never started' },
-      { seat: 'b', class: 'wave', waveId: 'r1-s1', reason: 'server never started' },
+      { seat: 'a', class: 'wave', waveId: 'r1-s1', reason: 'server never started', seatId: 'a' },
+      { seat: 'b', class: 'wave', waveId: 'r1-s1', reason: 'server never started', seatId: 'b' },
     ]);
   });
 
@@ -34,7 +36,8 @@ describe('groupStage1Losses (SL-2 Task 3)', () => {
     expect(units.map(u => u.unit)).toEqual(['bench', 'critic']); // stable order
     expect(units[0]).toMatchObject({ waveId: 'r1-s1r1', retryOfWaveId: 'r1-s1', models: ['a'], srcLegs: [la] });
     expect(units[1]).toMatchObject({ waveId: 'r1-c1r1', retryOfWaveId: 'r1-c1', models: ['crit'], srcLegs: [lc] });
-    expect(units[1].firstFailures).toEqual([{ seat: 'crit', class: 'leg', status: 'timeout', reason: null }]);
+    expect(units[1].firstFailures).toEqual([
+      { seat: 'crit', class: 'leg', status: 'timeout', reason: null, seatId: 'crit' }]);
   });
 
   test('a dead critic WAVE maps to the critic unit by waveId or by model (both carriers)', () => {
@@ -196,11 +199,15 @@ describe('retryStage1Losses (SL-2 Task 4)', () => {
     const launchWave = jest.fn().mockResolvedValue(
       { wave: { waveId: 'r1-s1r1', legs: [deadLeg('a', 'error', 'again', 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
+    // v4.8 PR2b: a real dead wave carries its launch roster (run-stage1-launch.js:103),
+    // and stillDeadWaves narrows `seats` in lockstep with `models`.
     const r = await retryStage1Losses(ctx, {
-      deadWaves: [{ waveId: 'r1-s1', models: ['a'], reason: 'died' }], deadLegs: [], counts: COUNTS });
+      deadWaves: [{ waveId: 'r1-s1', models: ['a'], seats: [ctx.o.seats[0]], reason: 'died' }],
+      deadLegs: [], counts: COUNTS });
     expect(r.stillDeadNotes[0]).toMatchObject({ channel: 'dead-leg',
       why: "its first wave r1-s1 produced no legs (died); its once-only retry leg ended 'error' with no usable output" });
-    expect(r.stillDeadWaves).toEqual([{ waveId: 'r1-s1', models: ['a'], reason: 'died' }]);
+    expect(r.stillDeadWaves).toEqual([
+      { waveId: 'r1-s1', models: ['a'], seats: [ctx.o.seats[0]], reason: 'died' }]);
   });
 
   test('critic retries as a SOLO with launchSolo; heal keys deriveSeatLoss-compatible data', async () => {
@@ -281,7 +288,7 @@ describe('groupStage1Losses hardening (SL-2 Task 4 review)', () => {
     expect(u.unit).toBe('bench');
     expect(u.models).toEqual(['a']);
     expect(u.firstFailures).toHaveLength(1);
-    expect(u.firstFailures[0]).toEqual({ seat: 'a', class: 'leg', status: 'error', reason: 'boom' });
+    expect(u.firstFailures[0]).toEqual({ seat: 'a', class: 'leg', status: 'error', reason: 'boom', seatId: 'a' });
     expect(u.srcLegs).toEqual([l1, l2]);
   });
 
@@ -378,10 +385,17 @@ describe('retryStage1Losses fix-wave (coordinator review)', () => {
     const launchWave = jest.fn().mockResolvedValue(
       { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
     const ctx = fakeCtx({}, { launchWave });
+    // v4.8 PR2b: the fixture carries the real -s1 roster (a, b — the critic is
+    // filtered out of that wave), so the narrowed entry must name seat 'b' and
+    // ONLY seat 'b' — index-zipped against the narrowed models, never the
+    // original roster.
     const r = await retryStage1Losses(ctx, {
-      deadWaves: [{ waveId: 'r1-s1', models: ['a', 'b'], reason: 'died' }], deadLegs: [], counts: COUNTS });
+      deadWaves: [{ waveId: 'r1-s1', models: ['a', 'b'], seats: ctx.o.seats.slice(0, 2), reason: 'died' }],
+      deadLegs: [], counts: COUNTS });
     expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
-    expect(r.stillDeadWaves).toEqual([{ waveId: 'r1-s1', models: ['b'], reason: 'died' }]);
+    expect(r.stillDeadWaves).toEqual([
+      { waveId: 'r1-s1', models: ['b'], seats: [ctx.o.seats[1]], reason: 'died' }]);
+    expect(r.seatOf.get(r.recoveredLegs[0]).id).toBe('a'); // the healed leg is bound and published
     const note = r.stillDeadNotes.find(n => n.data && n.data.seat === 'b');
     expect(note).toMatchObject({ channel: 'dead-leg', what: 'seat b did not review',
       why: 'its first wave r1-s1 produced no legs (died); its once-only retry produced no leg for this seat' });
@@ -491,6 +505,200 @@ describe('retryStage1Losses fix-wave (SL-2 Task 5 coordinator review)', () => {
     expect(r.recoveredLegs.map(l => l.modelInput)).toEqual(['a']);
     expect(ctx._notes).toHaveLength(1); // only a's heal — no bogus heal for 'ghost'
     expect(ctx._notes[0].data.seat).toBe('a');
+  });
+});
+
+describe('v4.8 PR2b Task 5: retry units carry a seat roster and publish their bindings', () => {
+  test('a retry unit carries seats parallel to models, in launch order', () => {
+    const seats = buildSeats(['a', 'b'], null, null);
+    const o = { runId: 'r1', models: ['a', 'b'], critic: null, lenses: null, seats };
+    const units = groupStage1Losses(o, [{ waveId: 'r1-s1', models: ['a', 'b'],
+      seats, reason: 'x' }], [], new Map());
+    expect(units[0].models).toEqual(['a', 'b']);
+    expect(units[0].seats.map(s => s.id)).toEqual(['a', 'b']);
+  });
+
+  test('a dead LEG contributes its BOUND seat, taken from seatOf', () => {
+    const seats = buildSeats(['a', 'b'], null, null);
+    const o = { runId: 'r1', models: ['a', 'b'], critic: null, lenses: null, seats };
+    const dead = { modelInput: 'b', status: 'error', error: 'boom' };
+    const units = groupStage1Losses(o, [], [dead], new Map([[dead, seats[1]]]));
+    expect(units[0].seats.map(s => s.id)).toEqual(['b']);
+  });
+
+  test('unit.seats is index-parallel to unit.models and a hole never shifts a slot', () => {
+    const seats = buildSeats(['a', 'b'], null, null);
+    const o = { runId: 'r1', models: ['a', 'b'], critic: null, lenses: null, seats };
+    // The UNIDENTIFIED loss is deliberately FIRST: a roster hole that shifts
+    // later slots only mis-attributes when something identified follows it.
+    const unidentified = { modelInput: 'a', status: 'error', error: 'boom' }; // no seatOf entry
+    const dead = { modelInput: 'b', status: 'error', error: 'boom' };
+    const units = groupStage1Losses(o, [], [unidentified, dead], new Map([[dead, seats[1]]]));
+    expect(units[0].models).toEqual(['a', 'b']);
+    expect(units[0].seats).toHaveLength(units[0].models.length);
+    expect(units[0].seats[0]).toBeNull();       // unidentified — never guessed
+    expect(units[0].seats[1].id).toBe('b');     // position preserved despite the hole
+  });
+
+  test('the retry wave binds its own legs, names files by seat, and publishes seatOf', async () => {
+    const launchWave = jest.fn().mockResolvedValue(
+      { wave: { waveId: 'r1-s1r1', legs: [usableLeg('a', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({ models: ['a'], critic: null }, { launchWave });
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['a'], seats: ctx.o.seats, reason: 'x' }],
+      deadLegs: [], counts: { reviewed: 0, total: 1 } });
+    expect(out.recoveredLegs).toHaveLength(1);
+    expect(out.seatOf.get(out.recoveredLegs[0]).id).toBe('a');
+    expect(fs.existsSync(path.join(ctx.o.runDir, 'review-a.md'))).toBe(true);
+  });
+
+  test('a hole in the retry roster never shifts a bind, and the unidentified slot is never guessed', async () => {
+    // Roster [null, seatB]: 'a' lost its leg without ever having been bound, so
+    // its slot is a hole. Handing bindSeats the roster unpadded (or filtered —
+    // seats.js:131 filters internally, so those two spellings are identical)
+    // slides slot 2 into slot 1 and binds a's retry leg to seat b.
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [usableLeg('a', 'r1-s1r1', 1), usableLeg('b', 'r1-s1r1', 2)] }, exitCode: 0 });
+    const ctx = fakeCtx({ models: ['a', 'b'], critic: null }, { launchWave });
+    const la = deadLeg('a', undefined, undefined, 'r1-s1', 1);
+    const lb = deadLeg('b', undefined, undefined, 'r1-s1', 2);
+    const out = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [la, lb],
+      counts: COUNTS, seatOf: new Map([[lb, ctx.o.seats[1]]]) });
+    const [healedA, healedB] = out.recoveredLegs;
+    expect([healedA.modelInput, healedB.modelInput]).toEqual(['a', 'b']);
+    expect(out.seatOf.get(healedB).id).toBe('b');    // slot preserved despite the hole
+    expect(out.seatOf.get(healedA)).toBeUndefined(); // unidentified — never guessed
+    expect(out.orphanLegs).toEqual([]);              // the placeholder held the slot open
+  });
+
+  test('a retry leg that matches no roster slot is reported as an orphan, not guessed', async () => {
+    // PR2a planted this fixture's non-conforming id for exactly this assertion.
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [{ ...usableLeg('a'), taskId: 'stray-1' }] }, exitCode: 0 });
+    const ctx = fakeCtx({ models: ['b'], critic: null }, { launchWave });
+    const out = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['b'], seats: ctx.o.seats, reason: 'x' }],
+      deadLegs: [], counts: { reviewed: 0, total: 1 } });
+    expect(out.orphanLegs).toHaveLength(1);
+    expect(out.orphanLegs[0].leg.taskId).toBe('stray-1');
+    expect(out.orphanLegs[0].waveId).toBe('r1-s1r1');
+    expect(out.seatOf.size).toBe(0);          // nothing was guessed
+    expect(ctx._notes).toEqual([]);           // and this module never notes a degrade
+  });
+
+  test('bindings ACCUMULATE across retry units — later units never overwrite earlier ones', async () => {
+    // Every other test here drives ONE unit, which leaves "assign instead of
+    // accumulate" (out.seatOf = retrySeatOf) green. Lens mode makes each dead
+    // solo its own unit, so two units run in one pass and both must land — in
+    // out.seatOf AND, for their strays, in out.orphanLegs under their OWN waveId.
+    const launchSolo = jest.fn().mockImplementation(async (opts) => ({
+      wave: { waveId: opts.waveId, legs: [
+        usableLeg(opts.model, opts.waveId, 1),
+        { ...usableLeg(`stray-${opts.model}`), taskId: `stray-${opts.waveId}` },
+      ] },
+      exitCode: 0,
+    }));
+    const ctx = fakeCtx({ models: ['m1', 'm2'], critic: null, lenses: ['security', 'perf'] },
+      { launchSolo });
+    const out = await retryStage1Losses(ctx, { deadWaves: [
+      { waveId: 'r1-l1', models: ['m1'], seats: [ctx.o.seats[0]], reason: 'x' },
+      { waveId: 'r1-l2', models: ['m2'], seats: [ctx.o.seats[1]], reason: 'x' },
+    ], deadLegs: [], counts: COUNTS });
+    expect(launchSolo).toHaveBeenCalledTimes(2);
+    expect(out.recoveredLegs.map(l => l.modelInput)).toEqual(['m1', 'm2']);
+    expect(out.seatOf.size).toBe(2);                                     // accumulated, not overwritten
+    expect(out.recoveredLegs.map(l => out.seatOf.get(l).id)).toEqual(['m1', 'm2']);
+    expect(out.orphanLegs.map(x => x.waveId)).toEqual(['r1-l1r1', 'r1-l2r1']);
+    expect(out.orphanLegs.map(x => x.leg.taskId)).toEqual(['stray-r1-l1r1', 'stray-r1-l2r1']);
+  });
+});
+
+describe('v4.8 PR2b Task 6 (H4): twin seats retry as TWO seats, never collapsed into one', () => {
+  test('H4: two dead twin seats retry as two legs, not one', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const o = { runId: 'r1', models: ['deepseek', 'deepseek'], critic: null, lenses: null, seats };
+    const d1 = { modelInput: 'deepseek', status: 'error', error: 'a' };
+    const d2 = { modelInput: 'deepseek', status: 'error', error: 'b' };
+    const units = groupStage1Losses(o, [], [d1, d2], new Map([[d1, seats[0]], [d2, seats[1]]]));
+    expect(units[0].models).toEqual(['deepseek', 'deepseek']);
+    expect(units[0].seats.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2']);
+    // The dedup key is the NEW field. `ff.seat` must stay ALIAS-valued: verdict.js
+    // (`legs.find(l => l.data.seat === critic)`) compares data.seat against
+    // o.critic, an alias, and workspace-seats.js / live-seats.js read it too.
+    expect(units[0].firstFailures.map(f => f.seatId)).toEqual(['deepseek#1', 'deepseek#2']);
+    expect(units[0].firstFailures.map(f => f.seat)).toEqual(['deepseek', 'deepseek']);
+  });
+
+  test('H4: two UNIDENTIFIED losses on one alias still collapse — nothing distinguishes them', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const o = { runId: 'r1', models: ['deepseek', 'deepseek'], critic: null, lenses: null, seats };
+    const d1 = { modelInput: 'deepseek', status: 'error', error: 'a' };
+    const d2 = { modelInput: 'deepseek', status: 'error', error: 'b' };
+    const units = groupStage1Losses(o, [], [d1, d2], new Map()); // no bindings at all
+    expect(units[0].models).toEqual(['deepseek']);
+    expect(units[0].seats).toEqual([null]);
+    expect(units[0].firstFailures.map(f => f.seatId)).toEqual(['deepseek']);
+  });
+
+  test('H4: twin LENS seats get separate units — lensIndexOf must not use indexOf', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, ['risk', 'cost']);
+    const o = { runId: 'r1', models: ['deepseek', 'deepseek'], critic: null,
+      lenses: ['risk', 'cost'], seats };
+    const d1 = { modelInput: 'deepseek', status: 'error' };
+    const d2 = { modelInput: 'deepseek', status: 'error' };
+    const units = groupStage1Losses(o, [], [d1, d2], new Map([[d1, seats[0]], [d2, seats[1]]]));
+    expect(units.map(u => u.waveId)).toEqual(['r1-l1r1', 'r1-l2r1']);
+  });
+
+  test('H4: both twins heal — two paid legs, two heals, and NO phantom still-dead seat', async () => {
+    // retry roster (r1-s1r1): the whole first wave died naming both twins ->
+    // deepseek#1=slot1, deepseek#2=slot2.
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [usableLeg('deepseek', 'r1-s1r1', 1), usableLeg('deepseek', 'r1-s1r1', 2)] }, exitCode: 0 });
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'], critic: null }, { launchWave });
+    const r = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'died' }],
+      deadLegs: [], counts: COUNTS });
+    expect(launchWave.mock.calls[0][0].models).toEqual(['deepseek', 'deepseek']); // TWO paid legs
+    expect(r.recoveredLegs).toHaveLength(2);
+    expect(r.recoveredLegs.map(l => r.seatOf.get(l).id)).toEqual(['deepseek#1', 'deepseek#2']);
+    // The reconcile's launched-seat set must be seat-keyed THROUGHOUT. Leaving
+    // any feeder alias-keyed makes it a mix (['deepseek#1','deepseek#2','deepseek'])
+    // that the seat-keyed `seen` set can never match, so a fully recovered run
+    // emits a phantom dead-leg degrade and exits 2.
+    expect(r.stillDeadNotes).toEqual([]);
+    expect(r.stillDeadWaves).toEqual([]);
+    expect(ctx._notes).toHaveLength(2);
+  });
+
+  test('H4: both twins stay lost — each keeps its OWN seat, never the LAST twin’s', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1),
+        deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 2)] }, exitCode: 0 });
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'], critic: null }, { launchWave });
+    const r = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'died' }],
+      deadLegs: [], counts: COUNTS });
+    // An alias-keyed `new Map(unit.models.map(...))` lookup overwrites the
+    // duplicate key, so BOTH still-lost twins would be affirmatively
+    // mis-attributed to deepseek#2 — strictly worse than null.
+    expect(r.stillDeadWaves).toEqual([{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [ctx.o.seats[0], ctx.o.seats[1]], reason: 'died' }]);
+    expect(r.stillDeadNotes).toHaveLength(2);
+  });
+
+  test('H4: a twin whose retry produced NO leg reconciles to its OWN seat, slot-indexed', async () => {
+    // slot 1 comes back dead; slot 2 has no leg record at all — the CRITICAL
+    // reconciliation path, where there is no leg to read a binding off.
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [deadLeg('deepseek', 'error', 'again', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx({ models: ['deepseek', 'deepseek'], critic: null }, { launchWave });
+    const r = await retryStage1Losses(ctx, {
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'died' }],
+      deadLegs: [], counts: COUNTS });
+    expect(r.stillDeadNotes).toHaveLength(2); // neither twin vanishes
+    expect(r.stillDeadWaves).toEqual([{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'],
+      seats: [ctx.o.seats[0], ctx.o.seats[1]], reason: 'died' }]);
   });
 });
 
@@ -642,5 +850,55 @@ describe('Task 5 (#129): escalate the no-output backstop 2x on retry, clamped', 
   test('Number.isFinite(o.noOutputBackstopMs) true branch: an explicit value on o is doubled directly, not re-resolved from env', async () => {
     const launched = await runRetryCapturingLaunchOpts({ timeout: 15, noOutputBackstopMs: 50000 });
     expect(launched.noOutputBackstopMs).toBe(100000);
+  });
+});
+
+// ---- v4.8 PR2b Task 8: `attemptedSeats` is the seat-keyed retry gate ----
+// run-stage1-rows.js reads this to decide whether a still-dead seat may fall
+// back to its FIRST-attempt leg. Derived from stillDeadNotes instead it could
+// not work: `data.seat` is alias-valued by contract, so no twin's seat id would
+// ever match, and every twin's row would re-attach a first leg it never earned.
+describe('v4.8 PR2b Task 8: retryStage1Losses publishes attemptedSeats, seat-keyed', () => {
+  const TWINS = { models: ['deepseek', 'deepseek'], critic: null };
+  const twinLegs = (ctx) => {
+    const d1 = deadLeg('deepseek', undefined, undefined, 'r1-s1', 1);
+    const d2 = deadLeg('deepseek', undefined, undefined, 'r1-s1', 2);
+    return { d1, d2, seatOf: new Map([[d1, ctx.o.seats[0]], [d2, ctx.o.seats[1]]]) };
+  };
+
+  test('retryLegStillDead (both retry legs came back unusable): BOTH twins are marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [deadLeg('deepseek', 'timed-out', null, 'r1-s1r1', 1),
+        deadLeg('deepseek', 'timed-out', null, 'r1-s1r1', 2)] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const { d1, d2, seatOf } = twinLegs(ctx);
+    const out = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [d1, d2], counts: COUNTS, seatOf });
+    expect([...out.attemptedSeats].sort()).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('srcLegStillDead (the retry wave died wholesale): BOTH twins are marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const { d1, d2, seatOf } = twinLegs(ctx);
+    const out = await retryStage1Losses(ctx, { deadWaves: [], deadLegs: [d1, d2], counts: COUNTS, seatOf });
+    expect([...out.attemptedSeats].sort()).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('waveStillDead (a dead twin WAVE whose retry also died): BOTH twins are marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1', legs: [] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const out = await retryStage1Losses(ctx, { counts: COUNTS, deadLegs: [],
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'x' }] });
+    expect([...out.attemptedSeats].sort()).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('missingLegStillDead: only the twin the partial return never named — a HEALED seat is not marked', async () => {
+    const launchWave = jest.fn().mockResolvedValue({ wave: { waveId: 'r1-s1r1',
+      legs: [usableLeg('deepseek', 'r1-s1r1', 1)] }, exitCode: 0 });
+    const ctx = fakeCtx(TWINS, { launchWave });
+    const out = await retryStage1Losses(ctx, { counts: COUNTS, deadLegs: [],
+      deadWaves: [{ waveId: 'r1-s1', models: ['deepseek', 'deepseek'], seats: ctx.o.seats, reason: 'x' }] });
+    expect(out.recoveredLegs).toHaveLength(1);
+    expect([...out.attemptedSeats]).toEqual(['deepseek#2']);   // #1 healed — nothing to gate
   });
 });

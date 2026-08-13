@@ -33,7 +33,20 @@ function scriptedLaunchers(script) {
     if (!fn) { throw new Error(`no script for waveId ${opts.waveId}`); }
     const r = await fn(opts);
     if (r && r.wave && Array.isArray(r.wave.legs)) {
-      r.wave.legs.forEach((leg, i) => { leg.taskId = `${opts.waveId}-${i + 1}`; });
+      // Stamp the ROSTER slot, not the returned-array index: a PARTIAL return
+      // (fewer legs than models) is exactly the shape SL-2 fixtures produce, and
+      // the returned index restarts at 0 regardless of which slot the leg stands
+      // in for. Slots are consumed WITHOUT replacement, so a twin roster still
+      // yields distinct ids (-1, -2) exactly as real fanout does — a plain
+      // indexOf is first-match and would hand both twins slot 1.
+      const remaining = (opts.models || []).slice();
+      r.wave.legs.forEach((leg, i) => {
+        const alias = leg.modelInput || leg.model;
+        const k = remaining.indexOf(alias);
+        if (k >= 0) { remaining[k] = null; }
+        leg.taskId = `${opts.waveId}-${k >= 0 ? k + 1 : i + 1}`;
+        leg.waveId = opts.waveId;
+      });
     }
     return r;
   }
@@ -99,7 +112,20 @@ function launchersFromScript(script, onLaunch) {
     if (!fn) { throw new Error(`no script for waveId ${opts.waveId}`); }
     const r = await fn(opts);
     if (r && r.wave && Array.isArray(r.wave.legs)) {
-      r.wave.legs.forEach((leg, i) => { leg.taskId = `${opts.waveId}-${i + 1}`; });
+      // Stamp the ROSTER slot, not the returned-array index: a PARTIAL return
+      // (fewer legs than models) is exactly the shape SL-2 fixtures produce, and
+      // the returned index restarts at 0 regardless of which slot the leg stands
+      // in for. Slots are consumed WITHOUT replacement, so a twin roster still
+      // yields distinct ids (-1, -2) exactly as real fanout does — a plain
+      // indexOf is first-match and would hand both twins slot 1.
+      const remaining = (opts.models || []).slice();
+      r.wave.legs.forEach((leg, i) => {
+        const alias = leg.modelInput || leg.model;
+        const k = remaining.indexOf(alias);
+        if (k >= 0) { remaining[k] = null; }
+        leg.taskId = `${opts.waveId}-${k >= 0 ? k + 1 : i + 1}`;
+        leg.waveId = opts.waveId;
+      });
     }
     return r;
   }

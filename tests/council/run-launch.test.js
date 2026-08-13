@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { createLaunchers, materializeReviews } = require('../../src/council/run-launch');
+const { buildSeats } = require('../../src/council/seats');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-launch-')); });
@@ -156,6 +157,43 @@ describe('materializeReviews', () => {
   test('sanitizes provider/model ids in filenames', () => {
     const out = materializeReviews(tmp, [mkLeg('openrouter/deepseek/deepseek-chat', 'text')]);
     expect(path.basename(out[0].file)).toBe('review-openrouter-deepseek-deepseek-chat.md');
+  });
+});
+
+describe('materializeReviews seat naming', () => {
+  test('a bound seat names the file via artifactName; twins no longer clobber', () => {
+    const seats = buildSeats(['deepseek', 'deepseek'], null, null);
+    const legs = [{ modelInput: 'deepseek', status: 'complete', summary: 'first' },
+      { modelInput: 'deepseek', status: 'complete', summary: 'second' }];
+    const seatOf = new Map([[legs[0], seats[0]], [legs[1], seats[1]]]);
+    const out = materializeReviews(tmp, legs, seatOf);
+    expect(out.map(m => path.basename(m.file)))
+      .toEqual(['review-deepseek-1.md', 'review-deepseek-2.md']);
+    expect(fs.readFileSync(out[0].file, 'utf8')).toBe('first');
+    expect(fs.readFileSync(out[1].file, 'utf8')).toBe('second');
+    expect(out.map(m => m.seat.id)).toEqual(['deepseek#1', 'deepseek#2']);
+  });
+
+  test('a unique-alias bench is BYTE-IDENTICAL with or without a seat', () => {
+    const seats = buildSeats(['gpt'], null, null);
+    const legs = [{ modelInput: 'gpt', status: 'complete', summary: 'r' }];
+    const withSeat = materializeReviews(tmp, legs, new Map([[legs[0], seats[0]]]));
+    const without = materializeReviews(tmp, legs);
+    expect(path.basename(withSeat[0].file)).toBe('review-gpt.md');
+    expect(path.basename(without[0].file)).toBe('review-gpt.md');
+  });
+
+  test('an unbound (orphan) leg keeps its alias filename and reports seat null', () => {
+    const legs = [{ modelInput: 'zzz', status: 'complete', summary: 'r' }];
+    const out = materializeReviews(tmp, legs, new Map());
+    expect(path.basename(out[0].file)).toBe('review-zzz.md');
+    expect(out[0].seat).toBeNull();
+  });
+
+  test('a bound but DEAD leg is still rejected — bound does not mean usable', () => {
+    const seats = buildSeats(['gpt'], null, null);
+    const legs = [{ modelInput: 'gpt', status: 'timeout', summary: 'r' }];
+    expect(materializeReviews(tmp, legs, new Map([[legs[0], seats[0]]]))).toEqual([]);
   });
 });
 

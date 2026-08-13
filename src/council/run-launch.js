@@ -19,7 +19,7 @@ const path = require('path');
 // sanitizeName lives in ./seats (v4.8 PR1) so that module can stay
 // require-free; re-exported below — run-stage2.js and workspace/artifact-guard.js
 // import it from here.
-const { sanitizeName } = require('./seats');
+const { sanitizeName, artifactName } = require('./seats');
 
 /**
  * Did a launch exit because a SIGNAL killed it (130 = SIGINT, 143 = SIGTERM)
@@ -180,23 +180,34 @@ function createLaunchers(deps = {}) {
 }
 
 /**
- * Write `review-<modelInput>.md` per surviving Stage-1 leg (skill layout).
- * Dead legs and empty summaries are skipped — the caller applies the
- * wave-degrade rules to what remains.
+ * Write one review file per surviving Stage-1 leg (skill layout). Dead legs and
+ * empty summaries are skipped — the caller applies the wave-degrade rules to
+ * what remains, which is why a BOUND seat can still end up dead here.
+ *
+ * With `seatOf` the filename is the SEAT's (artifactName), byte-identical to the
+ * alias name for every bench that has ever run, and what stops two twins from
+ * clobbering one file. An unbound leg keeps its alias name rather than being
+ * dropped: it is unattributable, not unusable, and dropping it would lose a
+ * review that lands today.
+ *
  * @param {string} runDir
  * @param {Array<object>} legs run documents from the wave/solo docs
- * @returns {Array<{model: string, modelInput: string, file: string, text: string, leg: object}>}
+ * @param {Map<object, object>} [seatOf] leg document -> seat, keyed by object identity
+ * @returns {Array<{model: string, modelInput: string, file: string, text: string,
+ *   leg: object, seat: ?object}>}
  */
-function materializeReviews(runDir, legs) {
+function materializeReviews(runDir, legs, seatOf) {
   const out = [];
   for (const leg of legs) {
     if (!leg || leg.status !== 'complete') { continue; }
     const text = leg.summary;
     if (!text || !String(text).trim()) { continue; }
     const modelInput = leg.modelInput || leg.model;
-    const file = path.join(runDir, `review-${sanitizeName(modelInput)}.md`);
+    const seat = (seatOf && seatOf.get(leg)) || null;
+    const name = seat ? artifactName(seat, 'review') : `review-${sanitizeName(modelInput)}.md`;
+    const file = path.join(runDir, name);
     fs.writeFileSync(file, text, { mode: 0o600 });
-    out.push({ model: leg.model, modelInput, file, text, leg });
+    out.push({ model: leg.model, modelInput, file, text, leg, seat });
   }
   return out;
 }

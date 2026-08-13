@@ -29,38 +29,36 @@ test('launchersFromScript legs carry engine-shaped ids too', async () => {
 // when a waveId is passed directly, is `${waveId}-${++legSeq}` — legSeq is a
 // MODULE-GLOBAL counter shared by every mkLeg call in this file, not this
 // wave's roster position. It only gets OVERWRITTEN once a leg passes through
-// one of the two dispatchers above — scriptedLaunchers's launchWave
-// (fake-launchers.js:36) or launchersFromScript's dispatch
-// (fake-launchers.js:102) — which stamp `${opts.waveId}-${i+1}`, where `i` is
-// the leg's index in the RETURNED legs array (`r.wave.legs`), never its slot
-// in the requested roster (`opts.models`). A leg built by calling mkLeg
-// directly, skipping a dispatcher, silently keeps whatever the counter was
-// at. Asserted with a regex, never a literal number: the tests above already
-// advanced legSeq before this one runs.
+// one of the two dispatchers above — scriptedLaunchers's launchWave or
+// launchersFromScript's dispatch — which now look the leg up in
+// `opts.models` (by `modelInput || model`) and stamp `${opts.waveId}-${slot}`,
+// where `slot` is the leg's 1-based position in the REQUESTED roster,
+// consumed WITHOUT replacement so a twin roster still gets distinct slots. A
+// leg built by calling mkLeg directly, skipping a dispatcher, silently keeps
+// whatever the counter was at. Asserted with a regex, never a literal
+// number: the tests above already advanced legSeq before this one runs.
 //
-// Fix-wave (item 3, whole-branch review): "roster-correct" is only true for a
-// FULL, in-order return — one leg per model, in `opts.models` order, so the
-// returned-array index happens to equal the roster slot. For a PARTIAL
-// return (fewer legs than models, e.g. a retry script standing in for just
-// one lost seat) the two diverge: the returned index restarts at 0
-// regardless of which roster slot the leg is standing in for. A PR2b
-// fixture author who reads the dispatchers as roster-correct and routes a
-// partial-return script through scriptedLaunchers/launchersFromScript gets a
-// leg silently stamped with the WRONG slot and bound to the wrong seat — see
-// the pin below.
+// v4.8 PR2b (fix-wave item 3, whole-branch review): the dispatchers used to
+// stamp the RETURNED-array index instead of the roster slot — correct only
+// for a FULL, in-order return (one leg per model, in `opts.models` order, so
+// the returned-array index happened to equal the roster slot). For a
+// PARTIAL return (fewer legs than models, e.g. a retry script standing in
+// for just one lost seat) the two diverge: the returned index restarts at 0
+// regardless of which roster slot the leg is standing in for. That hazard is
+// now fixed in fake-launchers.js (both dispatchers look the leg up in
+// `opts.models` instead), and the pin below records the fix rather than the
+// hazard it used to document.
 test('a BARE mkLeg(waveId) is NOT roster-correct: taskId rides a module-global counter, not a slot', () => {
   const leg = mkLeg('gemini', 'bare call, no dispatcher', undefined, undefined, 'w-s1');
   expect(leg.taskId).toMatch(/^w-s1-\d+$/);
 });
 
-test('PARTIAL return: the dispatcher stamps returned-ARRAY index, not roster slot (the hazard, pinned)', async () => {
-  // opts.models names a 2-seat roster ['gemini', 'gpt'], standing in for a
-  // retry wave where only gpt (roster slot 2) lost its seat and comes back.
-  // The dispatcher never looks at opts.models when it stamps — it only sees
-  // the RETURNED array — so this leg (index 0 of the one-element returned
-  // array) is stamped `-1`, not `-2`. Trusting the taskId to name gpt's real
-  // roster slot here would silently bind it to whatever seat is slot 1.
+test('PARTIAL return: the dispatcher stamps the ROSTER slot, not the returned-array index', async () => {
+  // opts.models names a 2-seat roster ['gemini', 'gpt'], standing in for a retry
+  // wave where only gpt (roster slot 2) lost its seat and comes back. v4.8 PR2b:
+  // the dispatcher now looks the leg up in opts.models, so the taskId names gpt's
+  // real roster slot and bindSeats resolves it to the right seat.
   const launchers = scriptedLaunchers({ 'r-s1': () => okWave([mkLeg('gpt', review('gpt'))]) });
   const { wave } = await launchers.launchWave({ waveId: 'r-s1', models: ['gemini', 'gpt'] });
-  expect(wave.legs[0].taskId).toBe('r-s1-1'); // NOT 'r-s1-2' — returned index, not roster slot
+  expect(wave.legs[0].taskId).toBe('r-s1-2'); // roster slot, NOT the returned index
 });

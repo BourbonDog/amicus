@@ -9,10 +9,17 @@
 const briefings = require('./briefings');
 const runState = require('./run-state');
 const { isAbortExit } = require('./run-launch');
+const { buildSeats } = require('./seats');
 
 /** Launch all Stage-1 legs (wave + critic/lens solos), collect run docs. */
 async function launchStage1(ctx) {
   const { o, launchers } = ctx;
+  // Seat identity for THIS launch. run.js:133 sets o.seats from asm.preflightSeats;
+  // buildSeats is pure and total, so a direct require() caller or a legacy run dir
+  // reconstructs the same table rather than binding nothing (spec §4.3).
+  const seats = Array.isArray(o.seats) && o.seats.length > 0
+    ? o.seats
+    : buildSeats(o.models, o.critic, o.lenses);
   // `noCostGate` rides EVERY launch object in this file (here, the findings
   // repair, the judge wave, the judge repair) — see run-launch.js's fanout call.
   const common = {
@@ -37,25 +44,30 @@ async function launchStage1(ctx) {
     o.models.forEach((m, i) => {
       const waveId = `${o.runId}-l${i + 1}`;
       record(waveId);
-      seated.push({ waveId, models: [m] });
+      seated.push({ waveId, models: [m], roster: seats.slice(i, i + 1) });
       launches.push(launchers.launchSolo({
         ...common, model: m, waveId,
         prompt: briefings.buildLensBriefing({ lens: o.lenses[i], briefing: o.briefing, date: o.date }),
       }));
     });
   } else {
-    const seats = o.models.filter(m => m !== o.critic);
-    if (seats.length > 0) {
+    const seats1 = o.models.filter(m => m !== o.critic);
+    if (seats1.length > 0) {
       record(`${o.runId}-s1`);
-      seated.push({ waveId: `${o.runId}-s1`, models: seats.slice() });
+      // MUST mirror :54's `m !== o.critic` exactly. Filtering on `s.id !== o.criticSeat`
+      // instead would drop ONE twin where the alias filter drops BOTH, shifting every
+      // legId slot by one on a bench preflightSeats never saw.
+      seated.push({ waveId: `${o.runId}-s1`, models: seats1.slice(),
+        roster: seats.filter(s => s.alias !== o.critic) });
       launches.push(launchers.launchWave({
-        ...common, models: seats, waveId: `${o.runId}-s1`,
+        ...common, models: seats1, waveId: `${o.runId}-s1`,
         prompt: briefings.buildSeatBriefing({ briefing: o.briefing, date: o.date }),
       }));
     }
     if (o.critic) {
       record(`${o.runId}-c1`);
-      seated.push({ waveId: `${o.runId}-c1`, models: [o.critic] });
+      seated.push({ waveId: `${o.runId}-c1`, models: [o.critic],
+        roster: seats.filter(s => s.alias === o.critic).slice(0, 1) });
       launches.push(launchers.launchSolo({
         ...common, model: o.critic, waveId: `${o.runId}-c1`,
         prompt: briefings.buildCriticBriefing({ briefing: o.briefing, date: o.date }),
@@ -66,12 +78,17 @@ async function launchStage1(ctx) {
   let aborted = null;
   const legs = [];
   const deadWaves = [];
+  const waves = [];
   results.forEach((r, i) => {
     ctx.addWave(r.wave);
     const abort = isAbortExit(r.exitCode);
     if (abort) { aborted = r.exitCode; }
     const got = (r.wave && Array.isArray(r.wave.legs)) ? r.wave.legs : [];
     legs.push(...got);
+    // Per-wave partition, captured BEFORE the flatten above erases attribution.
+    // bindSeats is called once per entry by the consumer; a wave that produced
+    // nothing still gets an entry so its roster is never lost.
+    waves.push({ waveId: seated[i].waveId, roster: seated[i].roster, legs: got });
     // ⚠️ Step 10's uncovered half. A wave that died BEFORE its legs (the server
     // never started; `database is locked`) contributes NOTHING to `legs`, so
     // deadLegs cannot see it either — which is how run v441plan01 recorded
@@ -83,12 +100,12 @@ async function launchStage1(ctx) {
     if (got.length > 0 || abort) { return; }
     if (r.errorDoc && r.errorDoc.code === 'BUDGET_EXCEEDED') { return; }
     deadWaves.push({
-      waveId: seated[i].waveId, models: seated[i].models,
+      waveId: seated[i].waveId, models: seated[i].models, seats: seated[i].roster,
       reason: (r.wave && (r.wave.reason || r.wave.error))
         || (r.errorDoc && r.errorDoc.message) || 'the wave produced no legs',
     });
   });
-  return { aborted, legs, deadWaves };
+  return { aborted, legs, deadWaves, waves };
 }
 
 module.exports = { launchStage1 };
