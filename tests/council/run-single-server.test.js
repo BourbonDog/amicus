@@ -109,7 +109,23 @@ describe('runCouncil — ONE OpenCode server per run (v4.4.1 Task 0.5)', () => {
     mockRunFanout.mockImplementation(async (o) => {
       const fn = script[o.waveId];
       if (!fn) { throw new Error(`no transport script for waveId ${o.waveId}`); }
-      return fn(o);
+      const r = await fn(o);
+      // v4.8: stamp the roster slot so bindSeats can attribute these legs. This
+      // suite mocks the TRANSPORT (runFanout), not the launchers, so it never
+      // went through helpers/fake-launchers.js's sweep — its legs carried
+      // `taskId: 'gemini-1'` and no waveId, every leg bound nowhere, and every
+      // run degraded to 2. NOTE: at this seam `o.models` is a COMMA STRING
+      // (see happyTransport's own `o.models.split(',')`), not an array.
+      if (r && r.wave && Array.isArray(r.wave.legs)) {
+        const remaining = String(o.models || o.model || '').split(',');
+        r.wave.legs.forEach((leg, i) => {
+          const k = remaining.indexOf(leg.modelInput || leg.model);
+          if (k >= 0) { remaining[k] = null; }
+          leg.taskId = `${o.waveId}-${k >= 0 ? k + 1 : i + 1}`;
+          leg.waveId = o.waveId;
+        });
+      }
+      return r;
     });
   });
 

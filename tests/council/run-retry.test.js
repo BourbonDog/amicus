@@ -582,6 +582,32 @@ describe('v4.8 PR2b Task 5: retry units carry a seat roster and publish their bi
     expect(out.seatOf.size).toBe(0);          // nothing was guessed
     expect(ctx._notes).toEqual([]);           // and this module never notes a degrade
   });
+
+  test('bindings ACCUMULATE across retry units — later units never overwrite earlier ones', async () => {
+    // Every other test here drives ONE unit, which leaves "assign instead of
+    // accumulate" (out.seatOf = retrySeatOf) green. Lens mode makes each dead
+    // solo its own unit, so two units run in one pass and both must land — in
+    // out.seatOf AND, for their strays, in out.orphanLegs under their OWN waveId.
+    const launchSolo = jest.fn().mockImplementation(async (opts) => ({
+      wave: { waveId: opts.waveId, legs: [
+        usableLeg(opts.model, opts.waveId, 1),
+        { ...usableLeg(`stray-${opts.model}`), taskId: `stray-${opts.waveId}` },
+      ] },
+      exitCode: 0,
+    }));
+    const ctx = fakeCtx({ models: ['m1', 'm2'], critic: null, lenses: ['security', 'perf'] },
+      { launchSolo });
+    const out = await retryStage1Losses(ctx, { deadWaves: [
+      { waveId: 'r1-l1', models: ['m1'], seats: [ctx.o.seats[0]], reason: 'x' },
+      { waveId: 'r1-l2', models: ['m2'], seats: [ctx.o.seats[1]], reason: 'x' },
+    ], deadLegs: [], counts: COUNTS });
+    expect(launchSolo).toHaveBeenCalledTimes(2);
+    expect(out.recoveredLegs.map(l => l.modelInput)).toEqual(['m1', 'm2']);
+    expect(out.seatOf.size).toBe(2);                                     // accumulated, not overwritten
+    expect(out.recoveredLegs.map(l => out.seatOf.get(l).id)).toEqual(['m1', 'm2']);
+    expect(out.orphanLegs.map(x => x.waveId)).toEqual(['r1-l1r1', 'r1-l2r1']);
+    expect(out.orphanLegs.map(x => x.leg.taskId)).toEqual(['stray-r1-l1r1', 'stray-r1-l2r1']);
+  });
 });
 
 describe('SL-2 Task 6: sink invariant (source pin)', () => {

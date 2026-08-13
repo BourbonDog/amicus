@@ -111,11 +111,20 @@ async function retryStage1Losses(ctx, { deadWaves = [], deadLegs = [],
     // filters falsy roster entries internally (so raw === filtered, and both
     // slide every later slot into a hole), and two `{id: null}` sentinels
     // collide on the id-keyed dedup.
-    const retryRoster = unit.seats.map((s, i) => s
-      || { id: `__unbound-${unit.waveId}-${i + 1}`, alias: unit.models[i], role: 'seat', lens: null, position: i + 1 });
+    // Placeholders are tracked by IDENTITY, never by an id-name prefix test: a
+    // bench alias that literally began `__unbound-` would make a name test drop
+    // a REAL seat's binding — a name-collision channel inside the one mechanism
+    // whose whole contract is "never guess".
+    const placeholders = new Set();
+    const retryRoster = unit.seats.map((s, i) => {
+      if (s) { return s; }
+      const p = { id: `__unbound-${unit.waveId}-${i + 1}`, alias: unit.models[i], role: 'seat', lens: null, position: i + 1 };
+      placeholders.add(p);
+      return p;
+    });
     const bindRes = bindSeats(unit.waveId, retryRoster, legs);
     const retrySeatOf = new Map(bindRes.bound
-      .filter(b => !String(b.seat.id).startsWith('__unbound-'))
+      .filter(b => !placeholders.has(b.seat))
       .map(b => [b.leg, b.seat]));
     for (const [l, s] of retrySeatOf) { out.seatOf.set(l, s); }
     // A retry leg that matches no roster slot is the same attribution failure

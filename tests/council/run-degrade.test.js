@@ -150,8 +150,13 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
     // The stage says so on disk, and names what was lost.
     const stage = stageOf(run, 'stage1');
     expect(stage.status).toBe('partial');
+    // v4.8: the record legitimately gained the wave's seat roster. Re-pinned
+    // rather than stripped — `models` is ALIAS-valued, so under twins it cannot
+    // identify a seat, and stripping would re-create in the published artifact
+    // the exact ambiguity this PR exists to kill.
     expect(stage.deadWaves).toEqual([
       { waveId: 'abc123-l3', models: ['qwen'],
+        seats: [{ id: 'qwen', alias: 'qwen', role: 'lens:ux', lens: 'ux', position: 3 }],
         reason: 'Failed to start server: database is locked' },
     ]);
     // …and it is impossible to miss on the way past.
@@ -175,7 +180,9 @@ describe('a Stage-1 wave that dies before its legs (F6)', () => {
 
     expect(exitCode).toBe(2);
     expect(stageOf(run, 'stage1').deadWaves).toEqual([
-      { waveId: 'abc123-c1', models: ['qwen'], reason: 'Failed to start server: SQLITE_BUSY' },
+      { waveId: 'abc123-c1', models: ['qwen'],
+        seats: [{ id: 'qwen', alias: 'qwen', role: 'critic', lens: null, position: 3 }],
+        reason: 'Failed to start server: SQLITE_BUSY' },
     ]);
     expect(emitted()).toMatch(/Stage-1 wave abc123-c1 \(qwen\) produced NO legs/);
   });

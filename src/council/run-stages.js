@@ -83,9 +83,17 @@ async function runStage1(ctx) {
     // abort fixed ~87 lines below ("Must be the post-retry set") — subtract
     // whatever retry.recoveredLegs already healed before this abort landed.
     const healed = new Set(retry.recoveredLegs.map(l => l.modelInput || l.model));
+    // `seats` must be narrowed in LOCKSTEP with `models`: a bare `...w` carries
+    // the FULL roster past a narrowed models list, and run.js persists this
+    // record before the abort short-circuit — so index i of each would name a
+    // different seat in run.json. Omitted entirely when the source had none.
     return { aborted: retry.aborted, reviews: [], degraded: false, extraRows: [],
       deadLegs: deadLegs0.filter(l => !healed.has(l.modelInput || l.model)),
-      deadWaves: deadWaves.map(w => ({ ...w, models: (w.models || []).filter(m => !healed.has(m)) })).filter(w => w.models.length > 0) };
+      deadWaves: deadWaves.map((w) => {
+        const keep = (w.models || []).map((m, i) => [m, (w.seats || [])[i] || null])
+          .filter(([m]) => !healed.has(m));
+        return { ...w, models: keep.map(x => x[0]), ...(w.seats ? { seats: keep.map(x => x[1]) } : {}) };
+      }).filter(w => w.models.length > 0) };
   }
 
   for (const d of retry.skippedDeadWaves) {
