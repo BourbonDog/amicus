@@ -1881,6 +1881,66 @@ permanently feed `council stats` — which is the authoritative input to bench s
   duplicated seat dies — so rejecting them would have broken a working workflow that this release
   then un-breaks. Rider: `amicus council save` accepts duplicate members too.
 
+#### Seat identity — PR2b handoff (2026-08-13)
+
+PR2b shipped seat identity through Stage-1 launch and the retry path: `launchStage1` returns a
+per-wave seat roster, `bindSeats` runs once per wave, review files and roles are keyed on the
+seat rather than the alias, H4's retry-grouping collapse is undone so two dead twin seats retry
+as two, and an unbound seat (a launched leg that never returns) is retried and, failing that,
+announced on a new `seat-unbound` degrade channel. Three items surfaced by that work belong to
+the PRs still ahead in this stack; recorded here so they do not have to be re-derived.
+
+- [ ] **Hard prerequisite for PR5 · `artifact-guard.js:86`'s `uniqueModels` must build from
+  `o.seats`, not a de-duplicated bench, before PR5's workspace flip.** `const uniqueModels =
+  [...new Set(bench)]` still allowlists one `review-<alias>.md` per distinct alias, but a bench
+  that repeats an alias now writes `review-<seat>-1.md` / `review-<seat>-2.md` (PR2b Task 3), so
+  the Workspace lists only one of the two — see the CHANGELOG's known-limitation entry for this
+  release. **The file's own `:81-85` comment also needs correcting**, not just the code: it
+  currently frames collapsing a repeated-alias bench to one set of rows as the harmless case
+  (spec §4.5's original intent). Post-seat-identity that framing is inverted — a repeated alias is
+  now exactly the case where collapsing loses a listing, not the case where collapsing is safe.
+  **Coverage gap:** verified zero twin-bench (repeated-alias) cases in either `tests/workspace/`
+  or `tests/electron/` today — `artifact-guard.test.js` and `dead-seat-rows.test.js` both use
+  "twin" only as a test-naming convention for a paired/counterpart test, not a duplicated-alias
+  bench. Nothing currently pins this gap or would catch a fix.
+
+- [ ] **PR4 · `verdict.js`'s `summarizeSeatLoss` (`:68`/`:71`) and both Workspace dead-seat
+  renderers — `electron/workspace-ui/live-seats.js:188` and `workspace-seats.js:61` — gate on
+  `dead-leg`/`dead-wave` and are blind to `seat-unbound`.** This is **not** a plain channel-list
+  edit: two different note shapes ride the `seat-unbound` channel and mean opposite things about
+  spend. An **orphan** note (`data.legId` present) means a review DID land, just unattributable —
+  counting it as a lost seat would over-report losses and double-count a review that was already
+  paid for and rendered. A **missing-seat** note (`data.legId` absent) means the seat is genuinely
+  absent. Discriminate on `data.legId`, never on channel membership alone.
+
+- [ ] **PR4 · `run-stage2.js:57` builds its judge roster from `reviews[].modelInput`, so a twin
+  bench pays for two judge legs and clobbers one `judge-<alias>.md`.** Pre-existing, not
+  introduced by PR2b — but PR2b makes it more reachable in production: Stage 1 now completes and
+  files both twins' reviews cleanly (Task 3) instead of one silently clobbering the other, so a
+  twin bench is more likely to reach Stage 2 with two live reviews and trip this.
+
+**Deferred minors, from PR2b's per-task reviews** — none blocked PR2b, each triaged as safe to
+carry forward rather than fix in-flight:
+- The `o.seats`-absent fallback in `run-stage1-launch.js` (`buildSeats` re-derivation for a
+  legacy/direct-`require()` caller with no `o.seats`) has no test — every existing harness
+  supplies `o.seats`.
+- `counts.total` excludes the seats of a wholly dead wave (they never reach `legs`), so a run
+  that loses both a whole wave and a leg under-counts. Consider making `total` the launch roster
+  size — now derivable from the per-wave roster PR2b added — rather than a count built up from
+  survivors.
+- `schemas/council-run.schema.json` could declare `deadWaves`/`seats`/`partial` under
+  `stages[].items.properties` so these additive fields are documented rather than merely
+  tolerated (the schema has no `additionalProperties:false`, so nothing breaks either way).
+- No test covers a twin bench where one seat is bound and the other is not (the retry loop and
+  the `run-stages.js` abort branch were both verified correct by hand-probe, not by a pinned
+  test).
+- A hypothetical `seats`-less dead-wave record would collapse twins to one row. Unreachable today
+  — all four dead-wave producers carry `seats` — and consistent with the existing "two
+  unidentifiable losses collapse to one" rule elsewhere, but worth a note if that ever changes.
+
+**Size note:** `src/council/run-stages.js` is at 292/300 lines and `src/council/run-retry.js` at
+290/300 — the next task touching either file must extract before adding, not squeeze in more.
+
 ### Bench adaptation — closes #135, finishes #129
 
 #135 is #129's generalization, and names the same case (*"if Kimi sometimes takes two or three

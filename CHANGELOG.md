@@ -19,6 +19,30 @@ All notable changes to Amicus are documented here. Format follows
   seat validation now rejects passing both flags at once, closing the same `require()`-caller gap:
   both the CLI and MCP handlers already rejected this pair, so callers going through either see no
   change. Only a direct programmatic `require()` call passing both flags is newly refused.
+- **`--lenses` now assigns lenses by seat, not by first-matching alias.** Under `--lenses`, a bench
+  that repeats an alias now gives each seat its own lens: `--models a,a --lenses risk,cost`
+  previously gave both seats `lens:risk`, because the role lookup resolved a seat by
+  `o.models.indexOf(alias)`, which always returns the first twin's index. It now resolves by seat
+  position, so the second twin correctly gets `lens:cost`. Benches with no repeated alias are
+  unaffected.
+- **A seat whose leg never came back is no longer silent.** Previously a partial wave return —
+  some legs launched, one seat's result never arrived — dropped that seat with no note, no row,
+  and exit 0. It is now retried once, like any other Stage-1 loss (costing one extra retry leg),
+  and — only if the retry does not recover it — announced on the new `seat-unbound` degrade
+  channel, so the run now exits 2 instead of silently reporting success.
+- **A bench that repeats an alias now retries and files both dead seats, not one.** Where two
+  seats sharing an alias both die, the run now produces two retry legs, two heals, and two review
+  files instead of collapsing to a single retry and a single clobbered file. Reviews are written
+  per seat as `review-<seat>.md` (e.g. `review-deepseek-1.md` / `review-deepseek-2.md`).
+- **`verdict.json`'s seat-loss text now covers partial wave returns.** A partial-return loss now
+  reaches `verdict.js`'s `summarizeSeatLoss` through `run.json`'s `deadWaves`, so runs that
+  previously showed nothing for this class of loss now report the seat by name. This is intended —
+  the point of the seat-unbound work above — not drift.
+- **Known limitation: the Council Workspace does not yet list per-seat review files for a bench
+  that repeats an alias.** `artifact-guard.js` still builds its file allowlist from a
+  de-duplicated bench, so only one of a twin bench's two review files appears in the Workspace
+  list. The files themselves are written and complete — this is a Workspace listing gap, not data
+  loss. Closes in v4.8.0, when a later PR in this stack rebuilds the allowlist from seat identity.
 
 ## [4.7.1] - 2026-08-09
 
