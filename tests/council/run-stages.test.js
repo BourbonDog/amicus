@@ -170,6 +170,26 @@ describe('runStage1', () => {
     expect(typeof require('../../src/council/run-stages').roleFor).toBe('function');
   });
 
+  // ⚠️ v4.8 PR2b final review — the o.seats FALLBACK path was not merely
+  // untested, it was BROKEN. run-stage1-launch.js:20-22 re-derives the seat
+  // table with buildSeats when o.seats is absent (a direct require() caller, or
+  // a legacy run dir), so every leg binds and `m.seat` is TRUTHY while `o.seats`
+  // stays UNDEFINED. roleAt returns 'seat' for an unknown id without throwing
+  // (seats.js:83-86), so every critic and lens role silently collapsed to
+  // 'seat' on exactly the path the fallback exists to serve. The seat object
+  // carries its own role — read THAT, never a lookup into a table that may not
+  // be there. Restoring `roleAt(o.seats, ...)` at run-stages.js's review push
+  // (or run-stage1-rows.js's dead-seat push) turns this red.
+  test('o.seats absent: the re-derived seat table still gives the critic role critic', async () => {
+    const ctx = makeCtx({ models: ['a', 'b', 'crit'], critic: 'crit',
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => okWave([mkLeg(opts.model, review(opts.model), 'complete', opts.waveId, 1)]) });
+    delete ctx.o.seats;
+    delete ctx.o.criticSeat;
+    const r = await runStage1(ctx);
+    expect(r.reviews.map(x => [x.model, x.role])).toEqual([['a', 'seat'], ['b', 'seat'], ['crit', 'critic']]);
+  });
+
   test('malformed findings → repair solo → conformance repaired', async () => {
     const solos = [];
     const ctx = makeCtx({

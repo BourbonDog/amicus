@@ -3,9 +3,9 @@
 // Superseded-seat rows + primary-error dead-seat rows (v4.7 D2/E4), moved
 // verbatim from run-stages.js:230-279 (v4.8 PR0 size-gate split, zero
 // behavior). The code ran inline in runStage1; it is now a function.
-// roleFor, roleAt and seatOf are PARAMETERS, not requires — requiring them
-// back from run-stages would recreate the parent-child cycle that file's tail
-// comment documents eliminating (v4.4.1 F5).
+// roleFor and seatOf are PARAMETERS, not requires — requiring them back from
+// run-stages would recreate the parent-child cycle that file's tail comment
+// documents eliminating (v4.4.1 F5).
 const { buildRunStatsEntry } = require('./run-assemble');
 
 /**
@@ -27,7 +27,7 @@ const { buildRunStatsEntry } = require('./run-assemble');
  * grouping is PR4's job, not this function's.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-  roleFor, roleAt, seatOf }) {
+  roleFor, seatOf }) {
   // A leg's join key: its bound seat's id, else its alias — the same fallback
   // run-retry.js's `seatKey` uses for a roster slot it could not identify, so
   // the two sides of every lookup below agree by construction.
@@ -92,11 +92,11 @@ function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, 
         : (deadLegs0.find(l => keyOf(l) === key) || null);        // never retried
     }
     // Seat-space role (spec §4.5), matching the review push in run-stages.js:
-    // roleFor's o.models.indexOf hands both lens twins the FIRST twin's lens,
-    // buildSeats is positional and does not. An unidentified seat falls back to
-    // the alias-space shim, which is what it got before this rev.
+    // the SEAT's own role, NOT roleAt(o.seats, seat.id) — o.seats is absent on
+    // the buildSeats fallback path while the seat is not, so roleAt's unknown-id
+    // 'seat' collapses every critic/lens role. Unidentified seats keep the shim.
     extraRows.push(buildRunStatsEntry({ leg: finalLeg, model: alias,
-      role: seat ? roleAt(o.seats, seat.id) : roleFor(o, alias), wasChair: false }));
+      role: seat ? seat.role : roleFor(o, alias), wasChair: false }));
   }
 }
 

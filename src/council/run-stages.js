@@ -29,7 +29,7 @@ const { pushDeadSeatRows } = require('./run-stage1-rows');
 const { bindStage1Waves, orphanLegNote, missingSeatDeadWave } = require('./stage1-bind');
 // slug lives in ./seats (v4.8 PR1) so that module can stay require-free;
 // re-exported below — run-stages.test.js imports it from here.
-const { slug, roleAt } = require('./seats');
+const { slug } = require('./seats');
 
 /** Role of a seat by its input alias. */
 function roleFor(o, alias) {
@@ -262,11 +262,11 @@ async function runStage1(ctx) {
     }
     reviews.push({
       model: m.modelInput, modelInput: m.modelInput,
-      // Seat-space role (spec §4.5). roleFor's o.models.indexOf hands both lens
-      // twins the FIRST twin's lens; buildSeats is positional and does not. An
-      // unbound leg has no seat, so it falls back to the alias-space shim, which
-      // is what it got before this rev.
-      role: m.seat ? roleAt(o.seats, m.seat.id) : roleFor(o, m.modelInput),
+      // Seat-space role (spec §4.5), read off the SEAT — NOT roleAt(o.seats):
+      // run-stage1-launch.js re-derives the table when o.seats is absent, so
+      // m.seat is truthy while o.seats is not, and roleAt's unknown-id 'seat'
+      // collapses every critic/lens role. Unbound legs keep the roleFor shim.
+      role: m.seat ? m.seat.role : roleFor(o, m.modelInput),
       text: m.text, findings: res.ok ? res.findings : [], conformance, leg: m.leg,
       ...(unverified ? { findingsUnverified: true } : {}),
       ...(repairRefused ? { repairRefused } : {}),
@@ -277,7 +277,7 @@ async function runStage1(ctx) {
   // ⚠️ allSeatOf, never the Stage-1 `seatOf`: retry.recoveredLegs and
   // retry.stillDeadRetryLegs are retry-wave objects that map has never seen.
   pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
-    roleFor, roleAt, seatOf: allSeatOf });
+    roleFor, seatOf: allSeatOf });
 
   return { aborted: null, reviews, deadLegs: stillDeadLegs, deadWaves: stillDeadWaves,
     degraded: stillDeadLegs.length > 0 || stillDeadWaves.length > 0, extraRows };
