@@ -39,7 +39,7 @@ orchestration recipe. This page is the reference for the artifacts that recipe p
 
 ```
 Stage 1 reviews (models, via `amicus fanout`)
-        │  each leg saved as review-<model>.md (prose + trailing ```json findings block)
+        │  each leg saved as review-<seat>.md (prose + trailing ```json findings block)
         ▼
 amicus council validate <leg-file>          ← per-leg findings-block check (tri-state exit)
         │  ok:true → findings[] usable
@@ -211,9 +211,9 @@ Key semantics:
 ```
 council-<runId>/
   briefing-stage1.md          # composed seat briefing (user briefing + templates)
-  review-<model>.md x N       # Stage-1 outputs
+  review-<seat>.md x N        # Stage-1 outputs (one per bench seat)
   bundle-stage2.md            # anonymized judge bundle (identical for all judges)
-  judge-<model>.md x N        # Stage-2 raw outputs
+  judge-<seat>.md x N         # Stage-2 raw outputs (one per judging seat)
   chair-packet.md             # de-anonymized chair packet (+ verdict-scale addendum)
   chair-output.md             # chair raw output
   tally-input.json            # the assembled five-keys object (auditability)
@@ -223,6 +223,16 @@ council-<runId>/
   run.json                    # manifest: schemaVersion 2, type council-run, stages, usage
   _scratch/                   # cwd for judge legs (isolation)
 ```
+
+**`<seat>` in those filenames is the seat id, not the model alias.** A seat id *is* its alias
+whenever that alias occupies exactly one bench position — which is every bench with no repeated
+`--models` entry, so these filenames are unchanged there. When the same alias occupies more than
+one seat, the seats are `<alias>#1`, `<alias>#2`, … and the files they write are
+`review-<alias>-1.md`, `review-<alias>-2.md`, and so on. The same rule names the `judge-`,
+`rebuttal-` and `revote-` files below. ⚠️ The Council Workspace cannot open the per-seat artifacts
+of a repeated-alias bench yet — it still derives its readable-file list from the alias, so it
+refuses the real per-seat names and shows one absent alias-named entry instead. The files
+themselves are complete on disk.
 
 Two more files appear when the run was started through **`amicus_council_run`** rather than the
 CLI, both written by the MCP handler before it spawns the engine:
@@ -276,14 +286,14 @@ one round.
    `--no-ledger` and writes `tally-provisional.json`. If nothing landed Contested or Disputed,
    there is nothing to debate — the engine skips straight to the final tally
    (`debate.outcome: "nothing-to-debate"`).
-2. **Defense.** Every Contested/Disputed finding goes back to its raiser as one concurrent solo
-   run — `rebuttal-<model>.md` per raiser — asking for exactly one of `DEFEND` / `AMEND` /
-   `WITHDRAW` per finding. A dead or unparseable defense leg means the original claim stands
-   undefended.
-3. **Re-vote.** Defended/amended findings go back to the judges who disputed them, as ONE
+2. **Defense.** Every Contested/Disputed finding goes back to the **seat** that raised it as one
+   concurrent solo run — `rebuttal-<seat>.md` per raising seat — asking for exactly one of
+   `DEFEND` / `AMEND` / `WITHDRAW` per finding. A dead or unparseable defense leg means the
+   original claim stands undefended.
+3. **Re-vote.** Defended/amended findings go back to the **seats** that disputed them, as ONE
    shared fanout wave — `revote-bundle.md` (the shared prompt, written to the run dir like
-   Stage 2's `bundle-stage2.md`) + `revote-<model>.md` per judge. A missing/unparseable re-vote
-   line leaves that judge's original verdict standing.
+   Stage 2's `bundle-stage2.md`) + `revote-<seat>.md` per re-voting seat. A missing/unparseable
+   re-vote line leaves that seat's original verdict standing.
 4. **Final tally.** The engine reassembles the tally input with the defense/re-vote outcomes
    folded in and re-tallies — this final, post-rebuttal tally is the one that appends to the
    reliability ledger (a lens run is the only thing that suppresses the append — `council run` has no `--no-ledger` escape hatch; that flag is parsed only by `council tally`). Withdrawn findings stay
@@ -303,7 +313,13 @@ after the re-vote keeps its final tier.
   finding with what happened in the round and the tier it held before the re-vote.
 - Extra run-dir artifacts, written only when a defense/re-vote actually ran:
   `tally-provisional.json`, `revote-bundle.md`, `debate.json` (the round's structured record),
-  `rebuttal-<model>.md` × (raisers), `revote-<model>.md` × (disputing judges).
+  `rebuttal-<seat>.md` × (raising seats), `revote-<seat>.md` × (disputing seats).
+- **Both waves are sized in seats, so a bench that repeats an alias costs more here.** Two seats
+  sharing an alias that both raise a contested finding get two defense solos, and two that both
+  dispute get two re-vote legs — up to two extra billed legs per duplicated pair per round, plus a
+  bounded repair solo for either of them if its output does not parse. `revoteJudges` above counts
+  the re-vote legs; nothing in `run.json`'s `debate` object counts the defense solos, though every
+  one of them appends its own wave id to `stages[]` under `debate-defense`.
 - `--claude-review <file>` enters Claude's own review (from a file, no leg launched) as a judged
   entry; per the reserved-seat rule, it is never asked to defend in the debate round — its
   Contested/Disputed findings simply stand, the same "originals stand" outcome as a dead defense

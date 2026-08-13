@@ -711,6 +711,33 @@ one — it belongs below.
       (`{ judge: aliasOf(key), seat: key, … }`, which keeps the existing join working and is consistent
       with everything else in this PR), or file it as a disclosed twin-bench Workspace regression for
       PR5. **Prefer the first** — it costs one expression and breaks nothing.
+      ⚠️ **AMENDED against what shipped (`18dc0e9`). As written, this step was SELF-CONTRADICTORY
+      on both of its halves.** Annotated in place rather than silently superseded, per this plan's
+      own convention.
+      1. **The sketch `{ judge: aliasOf(key), seat: key, … }` emits `seat` UNCONDITIONALLY** — on
+         every row of every run, including a bench with no repeated alias, where `key` already
+         *is* the alias. That contradicts this same task's GREEN criterion above ("a unique bench
+         produces byte-identical `debate.json` … `revotesJson`"), and it is precisely the
+         emit-when-SET form §3.3 rejects for `adjudications[].seat` two tasks earlier. **Shipped
+         form is emit-when-DIFFERENT** (`run-debate.js:217`):
+         ```js
+         revotesJson.push({ judge: alias, ...(alias !== key ? { seat: key } : {}),
+           id, verdict: rv.verdict, reason: rv.reason || null, applied: true });
+         ```
+      2. **The step demands `priorVerdicts` and `revotes` share ONE key space, then hands the
+         implementer two.** It keys `priorVerdicts` `a.seat || a.judge` (seat space — correct)
+         while its own sketch leaves `revotesJson[].judge` **alias**-valued. So the addendum's
+         `revotes` map, which is built from `revotesJson`, must **not** be keyed on `r.judge`:
+         two twins share one alias, `Object.fromEntries` is last-wins, and the pair collapses onto
+         a single entry in alias space while `priorVerdicts` still holds two in seat space — which
+         is exactly the skew this step exists to prevent, because `briefings-debate.js:164`
+         iterates `Object.keys(revotes)` and `:167` prints `no prior verdict` on every key
+         `prior` does not hold. **Shipped form keys it `r.seat || r.judge`**
+         (`run-debate.js:252`), the same fallback pair `priorVerdicts` uses at `:246`.
+      Net: both of the step's stated goals do hold in the shipped code — the Workspace's alias
+      join keeps working *and* the addendum's two maps agree line for line — but via the
+      `x.seat || x.judge` fallback pair on **both** sides, never via the literal sketch. Task 7
+      discloses the resulting `debate.json` shape (alias-valued `judge`, additive `seat`).
 - [ ] Step 10 — **THE INVARIANT (not a no-edit rule).** Every `model:` in a debate runStats row, and in
       every `materializeDebate` literal, must be **ALIAS-valued on every bench**.
       ⚠️ **"Do not touch these lines" is the WRONG instruction and was the first draft's worst error.**

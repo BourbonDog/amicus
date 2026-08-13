@@ -1969,6 +1969,64 @@ carry forward rather than fix in-flight:
 
 **Size note:** `src/council/run-stages.js` is at 292/300 lines and `src/council/run-retry.js` at
 290/300 — the next task touching either file must extract before adding, not squeeze in more.
+(Re-measured at the PR3 cut: both unchanged. `run-debate.js` 260/300 and the new
+`run-debate-revote.js` 168/300 after Task 1's extraction.)
+
+#### Seat identity — PR3 handoff (2026-08-13)
+
+PR3 carried the seat through Stage 2 and the debate round: `judge-<seat>.md`
+(`run-stage2.js:145`), `judgeResults[].seat`, a seat-keyed Stage-2 conformance merge
+(`run.js:224-228`), additive **emit-when-different** `adjudications[].seat`
+(`run-assemble.js:166`) and `findings[].raiserSeat` (`anonymize.js:60`), and a debate round that
+joins on the seat at every hop — `debateTargets` (`debate.js:201`), `disputingJudges`
+(`debate.js:175`), `applyDebate` (`debate.js:81`), the re-vote repair id
+(`run-debate-revote.js:139`) and all four launcher call sites, each projecting seat → alias
+through the single `aliasOf` built at `run-debate.js:116-117`. `runRevoteWave` moved to
+`src/council/run-debate-revote.js` (Task 1, byte-identical). What that unblocks, and what it
+deliberately left alone:
+
+- [ ] **PR4 · `tally.js:96`'s peer filter is now UNBLOCKED — both sides carry a seat.**
+  `const peers = f.raiser ? votes.filter(v => v.judge !== f.raiser) : votes;` still compares
+  aliases, so on a bench that repeats an alias a twin's legitimate peer vote on its twin's finding
+  is dropped and the finding can tier `Singleton` on a full basis — #137's tally half. Before PR3
+  the seat-exact form was not expressible inside `tally()`; it is now: every vote carries
+  `v.seat` (`tally.js:89`, from `adjudications[].seat`) and every finding carries `f.raiserSeat`
+  (`tally.js:106`), both emit-when-different, so the fix is `(v.seat || v.judge) !== (f.raiserSeat
+  || f.raiser)` with **no new inputs threaded**. ⚠️ Both fields are absent on a unique-alias
+  bench by design, so the `||` fallbacks are load-bearing — do not "simplify" them away.
+- [ ] **PR4 · `src/council/debate.js:200` is a SECOND copy of that same filter and must move with
+  it.** `peerVerdicts = (f.adjudications || []).filter(a => a.judge !== f.raiser)` builds the peer
+  split a raiser sees in its defense briefing. Fixing `tally.js:96` alone would make the brief the
+  models read disagree with the tally the chair reads. Deliberately left alias-space in PR3 for
+  exactly that reason (the in-file comment at `debate.js:186-190` says so).
+- [ ] **PR4 · `tally.js:58`'s `computeStreetCred` peer split (`if (judge !== m)`) is the third
+  alias comparison** — `peersOnly` excludes every twin's rank of its twin. ⚠️ Do **not** fix this
+  before the anonymize twin collapse: `assignLabels` (`anonymize.js:20-33`) gives two twin seats
+  one `letterByModel` key (last wins) and `rankPositions` (`tally.js:32-42`) collapses them, so
+  `rankings[].order` is already meaningless on a twin bench and street-cred computed from it
+  cannot be made correct by editing `:58`. Seat-ify `assignLabels`/`rankingToOrder` first.
+- [ ] **PR4 · the R8 `sameModelCorroboration` stamp (spec §4.6, §3 R8) is still unwritten.** Spec
+  §4.5 pairs it with the `tally.js:96` fix: once same-model seats count as each other's peers, the
+  corroboration has to be *labelled* on the finding rather than silently folded into the basis.
+  Listed in the spec's artifact table (`tally.json`, per finding, optional in schema) and in no
+  shipped code.
+- [ ] **PR4 · `meta.seats` is still absent from the tally input.** `buildTallyInput`'s meta
+  (`run-assemble.js:154-159`) carries `models` and nothing that names a seat, so a consumer
+  holding only `tally.json`/`verdict.json` cannot map `adjudications[].seat` back to a bench
+  position — `run.json`'s `seats[]` (seeded `null` at `run-state.js:99`, filled by
+  `preflightSeats`) is the only place the table exists. Every seat-aware renderer therefore has to
+  read two documents.
+- [ ] **PR4/PR5 · `src/workspace/matrix-model.js:47`, `:55`, `:74-81` performs the identical
+  `meta.models × adjudications[].judge` join `report.js:38-40` does — and unlike `report.js` it
+  was on no deferral list.** `judges` comes from `tally.meta.models` (`:47`), which on a twin
+  bench holds the same alias twice; `votes[adj.judge] = adj.verdict` (`:55`) is last-wins, so both
+  twin columns paint the same verdict; and `isRaiser: j === f.raiser` (`:80`) flags both twin
+  columns as the raiser. The Workspace adjudication matrix is therefore wrong in the same three
+  ways `report.html` is. Fix them together, keyed on `(adj.seat || adj.judge)` against a
+  seat-valued column list — the data is already on the document as of PR3.
+- Minor, noticed while re-deriving citations and **not** fixed: `src/council/seats.js:97` cites
+  `run-retry.js:93` for "a retry wave is the loss subset"; the current anchor is `run-retry.js:67`
+  (`groupStage1Losses`). Left alone rather than guessed at mid-PR.
 
 ### Bench adaptation — closes #135, finishes #129
 

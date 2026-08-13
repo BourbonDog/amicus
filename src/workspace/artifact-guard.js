@@ -21,12 +21,13 @@ const { isRealpathContained } = require('../utils/path-fence');
 const FIXED_ARTIFACTS = Object.freeze(['briefing-stage1.md', 'bundle-stage2.md', 'chair-packet.md', 'chair-output.md', 'tally-input.json']);
 // ⚠️ DE-ROT (F28): v4.1's debate stage writes five MORE run-dir artifact kinds the original
 // allowlist never named, so the Workspace hard-refused every `--debate` output with
-// `artifact not allowed: <name>`. Writers: tally-provisional.json = src/council/run.js:199;
-// revote-bundle.md = run-debate.js:119; debate.json = run-debate.js:261; the per-seat
-// rebuttal-/revote- pair = materializeDebate (run-launch.js:127-136).
+// `artifact not allowed: <name>`. Writers (re-derived v4.8 PR3 — Task 1 moved runRevoteWave):
+// tally-provisional.json = src/council/run-debate-stage.js:45; revote-bundle.md =
+// run-debate-revote.js:81; debate.json = run-debate.js:221-222; the rebuttal-/revote- pair =
+// materializeDebate (run-launch.js:230-240).
 // ⚠️ FIVE KINDS, THREE ENTRIES — that is not a miscount (v4.4.1 DOC-7, re-verified). This const
 // holds only the three RUN-LEVEL names; the last two of the five, the rebuttal-/revote- pair, are
-// per BENCH MODEL and are appended inside artifactAllowlist below, next to review-/judge-.
+// appended inside artifactAllowlist below, next to review-/judge-.
 const DEBATE_ARTIFACTS = Object.freeze(['tally-provisional.json', 'revote-bundle.md', 'debate.json']);
 const MAX_ARTIFACT_BYTES = 200 * 1024;
 
@@ -64,8 +65,8 @@ function artifactAllowlist(run) {
   const names = [...FIXED_ARTIFACTS];
   const bench = run && Array.isArray(run.bench) ? run.bench : [];
   // ⚠️ DE-ROT (F28): run.json carries a `debate` key ONLY on --debate runs, and it is seeded
-  // on the FIRST write (src/council/run.js:74-77), so this gate is safe and keeps the
-  // allowlist tight for the common case.
+  // on the FIRST write (initCouncilRun, src/council/run-state.js:100-103), so this gate is safe
+  // and keeps the allowlist tight for the common case.
   const debated = !!(run && run.debate);
   if (debated) { names.push(...DEBATE_ARTIFACTS); }
 
@@ -121,9 +122,19 @@ function artifactAllowlist(run) {
     const s = nameFor.get(m);
     names.push(`review-${s}.md`);
     names.push(`judge-${s}.md`);
-    // rebuttal-/revote- are keyed on the same BENCH ALIAS through the same (now possibly
-    // suffixed) name — materializeDebate is called with `d.raiser` / the revote leg's model
-    // (both aliases), so a colliding pair's debate artifacts are disambiguated the same way.
+    // rebuttal-/revote- are listed here under the same BENCH ALIAS through the same (now
+    // possibly suffixed) name, so a pair of DISTINCT aliases colliding after sanitizeName is
+    // disambiguated the same way review-/judge- are.
+    // ⚠️ v4.8 PR3: this no longer matches what the engine WRITES on a bench that repeats an
+    // alias. materializeDebate (run-launch.js:234) now names the file from the leg's SEAT when
+    // one is bound — run-debate.js:139-140 and run-debate-revote.js:161-163 attach it — so two
+    // twins write `rebuttal-<alias>-1.md` / `-2.md` while this loop lists one
+    // `rebuttal-<alias>.md` that nobody writes. `review-`/`judge-` above diverge identically —
+    // materializeReviews (run-launch.js:207) and run-stage2.js:145 also name from the seat — so
+    // on such a bench NEITHER twin's file is on this list and readRunArtifact refuses both. The
+    // whole allowlist is rebuilt from `run.seats` in the PR5 Workspace flip (BACKLOG: "Hard
+    // prerequisite for PR5"). Every bench with no repeated alias is unaffected — the seat id
+    // and the alias are the same string there.
     if (debated) {
       names.push(`rebuttal-${s}.md`);
       names.push(`revote-${s}.md`);
