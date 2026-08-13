@@ -1550,6 +1550,89 @@ describe('runStage2', () => {
       expect(fs.existsSync(file)).toBe(true);
       expect(fs.readFileSync(file, 'utf-8')).toBe(geminiOut);
     });
+
+    // Code-review Finding 1 (CRITICAL): `bindSeats(s2WaveId, roster, wave.legs)`
+    // used to dereference `wave.legs` unguarded, but `wave` is legitimately
+    // null on a budget/args refusal (run-budget.js's failPre returns
+    // `{wave: null, exitCode: 1}`), and isAbortExit only catches 130/143 — so
+    // execution reached the crash instead of returning early. Mirrors the
+    // guard the leg loop already had (`(wave && wave.legs) || []`).
+    test('Finding 1 regression: a refused -s2 wave (wave: null, exitCode: 1) does not throw and returns a notesless empty shape', async () => {
+      const ctx = makeCtx({
+        models: ['gemini', 'gpt'],
+        // BUDGET_EXCEEDED/BAD_ARGS shape — a refusal, not an abort code.
+        onWave: () => ({ wave: null, exitCode: 1 }),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const result = await runStage2(ctx, { reviews: stage1Reviews(), labels, globalFindings });
+      expect(result).toEqual({ aborted: null, judgeResults: [], extraRows: [] });
+      expect(ctx._notes).toEqual([]);   // no spurious seat-unbound notes either
+    });
+
+    // Code-review Finding 2 (IMPORTANT): the "missing seat" loop used to have
+    // no suppression rule, so an orphan leg (a judge that DID land, just
+    // unattributable) ALSO got double-counted as a "seat never returned" —
+    // false twice over (the leg did return; the wave returned exactly as many
+    // legs as its roster). Mirrors stage1-bind.js:40's guard verbatim.
+    test('Finding 2 regression: an orphan -s2 leg suppresses the false "missing seat" note (mirrors stage1-bind.js:40)', async () => {
+      const ctx = makeCtx({
+        models: ['deepseek', 'deepseek'],
+        onWave: (opts) => okWave([
+          // No waveId/slot -> taskId `deepseek-N` matches no roster slot AND
+          // carries no waveId field, so the alias fallback (ambiguous: two
+          // 'deepseek' seats) can't claim it either -> orphan.
+          mkLeg('deepseek', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }])),
+          // Bound normally to roster slot 2.
+          mkLeg('deepseek', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      await runStage2(ctx, { reviews: twinReviews(), labels: twinLabels, globalFindings: twinGlobalFindings });
+      // Exactly ONE seat-unbound note (the orphan leg) — never a second,
+      // false "missing seat" note for the roster slot the orphan left unclaimed.
+      expect(ctx._notes.map(n => n.channel)).toEqual(['seat-unbound']);
+      expect('legId' in ctx._notes[0].data).toBe(true);   // the orphan-leg discriminator
+    });
+
+    // Code-review Finding 3 (promoted from Minor): the placeholder identity
+    // rule (`placeholders.has(b.seat)`, never an id-name prefix test) had zero
+    // coverage. A bench alias literally beginning `__unbound-` proves the
+    // difference: mutating the check to `!b.seat.id.startsWith('__unbound-')`
+    // would drop BOTH twins' real binds (their ids legitimately start with
+    // that prefix), collapsing back to RED1's one-file bug.
+    test('Finding 3: an adversarial "__unbound-"-prefixed alias still binds by seat IDENTITY, never by an id-name prefix test', async () => {
+      const adversarialSeats = buildSeats(['__unbound-x', '__unbound-x'], null, null);
+      const adversarialReviews = [
+        { model: '__unbound-x', modelInput: '__unbound-x', role: 'seat', text: review('u1'),
+          findings: [{ id: 1, severity: 'major', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('__unbound-x', review('u1')), seat: adversarialSeats[0] },
+        { model: '__unbound-x', modelInput: '__unbound-x', role: 'seat', text: review('u2'),
+          findings: [{ id: 1, severity: 'nit', claim: 'c', location: 'l', rationale: 'r' }],
+          conformance: 'clean', leg: mkLeg('__unbound-x', review('u2')), seat: adversarialSeats[1] },
+      ];
+      const advLabels = assignLabels(['__unbound-x', '__unbound-x']);
+      const advGlobalFindings = [
+        ...toGlobalFindings('A', '__unbound-x', [{ id: 1, severity: 'major', claim: 'c' }]),
+        ...toGlobalFindings('B', '__unbound-x', [{ id: 1, severity: 'nit', claim: 'c' }]),
+      ];
+      const ctx = makeCtx({
+        models: ['__unbound-x', '__unbound-x'],
+        onWave: (opts) => okWave([
+          mkLeg('__unbound-x', judgeOut(['Review B', 'Review A'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'neutral' }]), 'complete', opts.waveId, 1),
+          mkLeg('__unbound-x', judgeOut(['Review A', 'Review B'],
+            [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'dispute' }]), 'complete', opts.waveId, 2),
+        ]),
+        onSolo: () => { throw new Error('no repairs expected'); },
+      });
+      const { judgeResults } = await runStage2(ctx,
+        { reviews: adversarialReviews, labels: advLabels, globalFindings: advGlobalFindings });
+      const judgeFiles = fs.readdirSync(ctx.o.runDir).filter(f => f.startsWith('judge-')).sort();
+      expect(judgeFiles).toEqual(['judge-__unbound-x-1.md', 'judge-__unbound-x-2.md']);
+      expect(judgeResults.map(j => j.seat && j.seat.id)).toEqual(['__unbound-x#1', '__unbound-x#2']);
+    });
   });
 });
 

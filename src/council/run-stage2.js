@@ -95,26 +95,38 @@ async function runStage2(ctx, { reviews, labels, globalFindings, extraLabeled = 
     placeholders.add(p);
     return p;
   });
-  const bindRes = bindSeats(s2WaveId, roster, wave.legs);
+  // review F(critical): `wave` is legitimately null — a budget/args refusal
+  // (run-budget.js failPre) returns `{wave: null, exitCode: 1}`, which
+  // isAbortExit does NOT catch (only 130/143), so execution reaches here.
+  // Guarded exactly like the leg loop below (`(wave && wave.legs) || []`) —
+  // this is the only OTHER dereference of wave.legs in the file.
+  const s2Legs = (wave && wave.legs) || [];
+  const bindRes = bindSeats(s2WaveId, roster, s2Legs);
   const judgeSeatOf = new Map(bindRes.bound
     .filter(b => !placeholders.has(b.seat))
     .map(b => [b.leg, b.seat]));
   // An orphan leg (a judge DID land, but no roster slot claims it) gets the
-  // same shape as Stage 1's orphanLegNote — `data.legId` present. A roster
-  // seat with no leg bound at all (`data.legId` absent) is the OTHER half of
-  // the same discriminator: this seat never judged. Real seats only —
-  // placeholders (a review that itself had no Stage-1 seat) are not seats this
-  // run ever minted, so they are never announced as missing one.
+  // same shape as Stage 1's orphanLegNote — `data.legId` present.
   for (const leg of bindRes.orphanLegs) { ctx.degrade.note(orphanLegNote(s2WaveId, leg)); }
-  for (const seat of bindRes.unbound) {
-    if (placeholders.has(seat)) { continue; }
-    ctx.degrade.note({
-      channel: 'seat-unbound',
-      what: `leg for seat ${seat.alias} in wave ${s2WaveId} never returned`,
-      why: `the wave returned fewer judge legs than its roster of ${roster.length}`,
-      effect: 'That seat did not judge; nothing was guessed and nothing was dropped',
-      data: { waveId: s2WaveId, seat: seat.alias },
-    });
+  // review F(important): mirrors stage1-bind.js:40's suppression rule
+  // verbatim. A wave that returned ZERO legs is already announced on a louder
+  // channel (thin-cross-review, or this refusal itself) — there is no
+  // "missing seat" fact this adds. An orphan leg means a judge DID land for
+  // SOME seat we could not name — reporting the roster's other unbound seats
+  // as "missing" would double-count that one failure as two, on a channel
+  // whose whole contract is "nothing was guessed": the stray leg might BE the
+  // seat this loop would otherwise call missing.
+  if (s2Legs.length > 0 && bindRes.orphanLegs.length === 0) {
+    for (const seat of bindRes.unbound) {
+      if (placeholders.has(seat)) { continue; }
+      ctx.degrade.note({
+        channel: 'seat-unbound',
+        what: `leg for seat ${seat.alias} in wave ${s2WaveId} never returned`,
+        why: `the wave returned fewer judge legs than its roster of ${roster.length}`,
+        effect: 'That seat did not judge; nothing was guessed and nothing was dropped',
+        data: { waveId: s2WaveId, seat: seat.alias },
+      });
+    }
   }
 
   const judgeResults = [];
