@@ -8,6 +8,7 @@ const os = require('os');
 // stage loops (review F5). Its tests stay here, next to Stage 1's — they share makeCtx.
 const { runStage1, runStage2, slug } = require('../../src/council/run-stages');
 const { assignLabels, toGlobalFindings } = require('../../src/council/anonymize');
+const { buildSeats } = require('../../src/council/seats');
 
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'council-stages-')); });
@@ -33,7 +34,7 @@ const mkLeg = (model, summary, status = 'complete', waveId, slot) => ({
   durationMs: 1000, usage: { cost: { amount: 0.01, source: 'reported' } },
   ...(waveId != null ? { waveId } : {}),
 });
-const okWave = (legs) => ({ wave: { status: 'complete', legs }, exitCode: 0 });
+const okWave = (legs, waveId) => ({ wave: { status: 'complete', ...(waveId ? { waveId } : {}), legs }, exitCode: 0 });
 // SL-2 Task 5: legs for the retry-seam tests. usableLeg materializes cleanly;
 // deadLeg defaults to the exact status/error pair ('error'/'boom') the
 // pre-existing dead-leg test already uses inline, so the enriched-why pins
@@ -66,13 +67,18 @@ function makeCtx({ onWave, onSolo, models = ['gemini', 'gpt', 'qwen'], critic = 
   // additive — a test wanting a different sink still passes its own `degrade`
   // and reads that back instead.
   const notes = [];
+  // Production sets these at run.js:133-134 (asm.preflightSeats). Without them
+  // every consumer under test falls through roleAt's unknown-id default and an
+  // empty bindSeats roster — green for the wrong reason.
+  const seats = buildSeats(models, critic, lenses);
+  const criticSeat = (seats.find(s => s.alias === critic) || {}).id || null;
   return {
     o: { briefing: 'material', models, chair: 'deepseek', critic, lenses,
       runId: 'abc123', runDir, timeout: 10, gateway: 'auto', noValidateModel: false, date: '2026-07-19',
       // v4.3 Task 3 (spec §7.2): non-null so every launch-site assertion below
       // can prove the id actually reached the launcher, not just a falsy default.
       // v4.7 F8 D16 (T7 review): tag joins it on the same idiom.
-      councilName: 'nightly-council', tag: 'sprint42' },
+      councilName: 'nightly-council', tag: 'sprint42', seats, criticSeat },
     launchers: {
       // jest.fn()-wrapped (not a plain arrow) so the SL-2 tests can queue
       // per-call responses with `.mockResolvedValueOnce(...)` across the
@@ -104,7 +110,7 @@ describe('runStage1', () => {
   test('happy path: one wave for standard seats, reviews materialized + validated', async () => {
     const waves = [];
     const ctx = makeCtx({
-      onWave: (opts) => { waves.push(opts); return okWave(opts.models.map(m => mkLeg(m, review(m)))); },
+      onWave: (opts) => { waves.push(opts); return okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))); },
       onSolo: () => { throw new Error('no solos expected'); },
     });
     const { aborted, reviews, deadLegs } = await runStage1(ctx);
@@ -129,8 +135,8 @@ describe('runStage1', () => {
     const solos = [];
     const ctx = makeCtx({
       critic: 'qwen',
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg(opts.model, review(opts.model))]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg(opts.model, review(opts.model), 'complete', opts.waveId, 1)]); },
     });
     const { reviews } = await runStage1(ctx);
     expect(solos.map(s => s.waveId)).toEqual(['abc123-c1']);
@@ -144,7 +150,7 @@ describe('runStage1', () => {
     const ctx = makeCtx({
       lenses: ['growth-stage VC', 'security architect', 'skeptical buyer'],
       onWave: () => { throw new Error('no wave expected under lenses'); },
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg(opts.model, review(opts.model))]); },
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg(opts.model, review(opts.model), 'complete', opts.waveId, 1)]); },
     });
     const { reviews } = await runStage1(ctx);
     expect(solos.map(s => s.waveId)).toEqual(['abc123-l1', 'abc123-l2', 'abc123-l3']);
@@ -155,9 +161,9 @@ describe('runStage1', () => {
   test('malformed findings → repair solo → conformance repaired', async () => {
     const solos = [];
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m =>
-        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m)))),
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', review('gpt'))]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) =>
+        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', review('gpt'), 'complete', opts.waveId, 1)]); },
     });
     const { reviews } = await runStage1(ctx);
     expect(solos).toHaveLength(1);
@@ -179,8 +185,8 @@ describe('runStage1', () => {
     const solos = [];
     const badReview = 'Prose about the material, but no fenced block at all.';
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, m === 'gpt' ? badReview : review(m)))),
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', review('gpt'))]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, m === 'gpt' ? badReview : review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', review('gpt'), 'complete', opts.waveId, 1)]); },
     });
     await runStage1(ctx);
     expect(solos).toHaveLength(1);
@@ -196,10 +202,10 @@ describe('runStage1', () => {
     const badReview = 'original prose, no json';
     const firstRepair = 'first repair attempt, still no json';
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, m === 'gpt' ? badReview : review(m)))),
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, m === 'gpt' ? badReview : review(m), 'complete', opts.waveId, i + 1))),
       onSolo: (opts) => {
         solos.push(opts);
-        return okWave([mkLeg('gpt', solos.length === 1 ? firstRepair : 'second repair, still no json')]);
+        return okWave([mkLeg('gpt', solos.length === 1 ? firstRepair : 'second repair, still no json', 'complete', opts.waveId, 1)]);
       },
     });
     await runStage1(ctx);
@@ -216,8 +222,8 @@ describe('runStage1', () => {
     const solos = [];
     const badReview = 'original prose, no json';
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, m === 'gpt' ? badReview : review(m)))),
-      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', '')]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, m === 'gpt' ? badReview : review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { solos.push(opts); return okWave([mkLeg('gpt', '', 'complete', opts.waveId, 1)]); },
     });
     await runStage1(ctx);
     expect(solos).toHaveLength(2);
@@ -227,9 +233,9 @@ describe('runStage1', () => {
   test('still malformed after 2 repairs → unstructured, findings [], review KEPT', async () => {
     let soloCount = 0;
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m =>
-        mkLeg(m, m === 'gpt' ? 'no json at all' : review(m)))),
-      onSolo: () => { soloCount += 1; return okWave([mkLeg('gpt', 'still no json')]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) =>
+        mkLeg(m, m === 'gpt' ? 'no json at all' : review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { soloCount += 1; return okWave([mkLeg('gpt', 'still no json', 'complete', opts.waveId, 1)]); },
     });
     const { reviews } = await runStage1(ctx);
     expect(soloCount).toBe(2);                       // cap = 2 re-prompts
@@ -243,8 +249,8 @@ describe('runStage1', () => {
     let soloCalls = 0;
     const ctx = makeCtx({
       overBudget: () => true,
-      onWave: (opts) => okWave(opts.models.map(m =>
-        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m)))),
+      onWave: (opts) => okWave(opts.models.map((m, i) =>
+        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m), 'complete', opts.waveId, i + 1))),
       onSolo: () => { soloCalls += 1; throw new Error('no repair solos expected over budget'); },
     });
     const { reviews } = await runStage1(ctx);
@@ -257,8 +263,8 @@ describe('runStage1', () => {
 
   test('dead leg is reported in deadLegs and its review absent', async () => {
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m =>
-        m === 'qwen' ? mkLeg(m, '', 'error') : mkLeg(m, review(m)))),
+      onWave: (opts) => okWave(opts.models.map((m, i) =>
+        m === 'qwen' ? mkLeg(m, '', 'error', opts.waveId, i + 1) : mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
       onSolo: () => { throw new Error('no solos'); },
     });
     const { reviews, deadLegs } = await runStage1(ctx);
@@ -272,8 +278,8 @@ describe('runStage1', () => {
   async function runStage1WithFixture({ original, repaired }) {
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
-      onSolo: () => okWave([mkLeg('gemini', repaired)]),
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, original, 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => okWave([mkLeg('gemini', repaired, 'complete', opts.waveId, 1)]),
     });
     return runStage1(ctx);
   }
@@ -331,8 +337,8 @@ describe('runStage1', () => {
   test('review F1: an unstructured seat that never emitted JSON carries NO refusal', async () => {
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, 'prose, no block'))),
-      onSolo: () => okWave([mkLeg('gemini', 'still no block')]),
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, 'prose, no block', 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => okWave([mkLeg('gemini', 'still no block', 'complete', opts.waveId, 1)]),
     });
     const { reviews } = await runStage1(ctx);
     expect(reviews[0].conformance).toBe('unstructured');
@@ -378,8 +384,8 @@ describe('runStage1', () => {
     let solos = 0;
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
-      onSolo: () => { solos += 1; return okWave([mkLeg('gemini', review('gemini'))]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, original, 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { solos += 1; return okWave([mkLeg('gemini', review('gemini'), 'complete', opts.waveId, 1)]); },
     });
     const { reviews } = await runStage1(ctx);
     expect(solos).toBe(0);
@@ -398,7 +404,7 @@ describe('runStage1', () => {
       + '{"overall":"No defects in any category.","findings":[]}\n```';
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, original, 'complete', opts.waveId, i + 1))),
       onSolo: () => { throw new Error('no repairs expected on a clean review'); },
     });
     const { reviews } = await runStage1(ctx);
@@ -420,8 +426,8 @@ describe('runStage1', () => {
     let solos = 0;
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, original))),
-      onSolo: () => { solos += 1; return okWave([mkLeg('gemini', repaired)]); },
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, original, 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => { solos += 1; return okWave([mkLeg('gemini', repaired, 'complete', opts.waveId, 1)]); },
     });
     const { reviews } = await runStage1(ctx);
     expect(solos).toBe(1);
@@ -436,7 +442,7 @@ describe('runStage1', () => {
   test('a CLEAN review is never marked unverified and never count-checked', async () => {
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, review(m)))),
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, review(m), 'complete', opts.waveId, i + 1))),
       onSolo: () => { throw new Error('no repairs expected'); },
     });
     const { reviews } = await runStage1(ctx);
@@ -624,9 +630,9 @@ describe('SL-2: the Stage-1 once-only retry seam', () => {
 describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)', () => {
   test('a repair launch gets its own extraRows row: role repair, its own waveId, usage attributed', async () => {
     const ctx = makeCtx({
-      onWave: (opts) => okWave(opts.models.map(m =>
-        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m)))),
-      onSolo: (opts) => okWave([{ ...mkLeg('gpt', review('gpt')), waveId: opts.waveId }]),
+      onWave: (opts) => okWave(opts.models.map((m, i) =>
+        mkLeg(m, m === 'gpt' ? 'prose without json' : review(m), 'complete', opts.waveId, i + 1))),
+      onSolo: (opts) => okWave([mkLeg('gpt', review('gpt'), 'complete', opts.waveId, 1)]),
     });
     const { extraRows } = await runStage1(ctx);
     expect(extraRows).toHaveLength(1);
@@ -638,7 +644,7 @@ describe('Task 4: extraRows — repair, dead-seat error, superseded (v4.7 D2/E4)
   test('a repair whose own leg dies still gets its row — error status rides naturally, no special-casing', async () => {
     const ctx = makeCtx({
       models: ['gemini'],
-      onWave: (opts) => okWave(opts.models.map(m => mkLeg(m, 'prose without json'))),
+      onWave: (opts) => okWave(opts.models.map((m, i) => mkLeg(m, 'prose without json', 'complete', opts.waveId, i + 1))),
       // repair-solo roster: a one-seat roster (the seat being repaired), slot is always 1.
       onSolo: (opts) => okWave([deadLeg('gemini', undefined, undefined, opts.waveId, 1)]),
     });
