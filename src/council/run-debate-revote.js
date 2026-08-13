@@ -8,6 +8,14 @@
  * behaviour change. run-debate.js requires all three back; runDebate still
  * calls runRevoteWave for the re-vote mini-wave (spec §5.1).
  *
+ * That "verbatim" claim held for all three only through Task 1. `legOpts` and
+ * `legRow` are still byte-identical to the extraction. `runRevoteWave` is NOT:
+ * PR3 Task 6 gave it real seat-binding behaviour — the padded roster +
+ * `bindSeats` call, the seat-keyed `byJudge`, the `sanitizeName`'d per-seat
+ * repair id, and the `seat` field on the pushed legs (see the function's own
+ * docblock below). Do not treat `runRevoteWave` as a behaviour-neutral mirror
+ * of the old run-debate.js code — only `legOpts`/`legRow` still are.
+ *
  * `isAbortExit` comes from ./run-launch, NEVER from ./run-stages: run-stage2.js:12
  * records that taking it from run-launch.js "is what dissolved the old cycle
  * (v4.4.1 review F5)". Requiring ./run-stages from this new leaf would drag in

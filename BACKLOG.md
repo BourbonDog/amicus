@@ -2065,6 +2065,85 @@ deliberately left alone:
   `run-retry.js:93` for "a retry wave is the loss subset"; the current anchor is `run-retry.js:67`
   (`groupStage1Losses`). Left alone rather than guessed at mid-PR.
 
+#### PR3 post-review adjudication (2026-08-13)
+
+PR3's auto-review and the paid council raised nine findings against the shipped diff. Eight are
+filed here rather than fixed on this branch — each is either already disclosed above or latent and
+unreachable from production. (The ninth was a real defect: `run-debate-revote.js`'s module docblock
+had gone stale — Task 1's "verbatim, no behaviour change" claim stopped being true for
+`runRevoteWave` at Task 6, which gave it seat binding. Fixed in place, comment-only.)
+
+- [ ] **PR4 · a double-orphan collapses onto ONE conformance row in `run.js`'s Stage-2 merge.**
+  `run.js:224`'s `const seatKey = (s, alias) => (s ? s.id : alias);` feeds
+  `new Map(s2.judgeResults.map(j => [seatKey(j.seat, j.judge), j]))` (`run.js:225`). If BOTH twins'
+  Stage-2 legs fail seat binding (`j.seat === null` for both), `seatKey(null, alias)` returns the
+  same bare alias for both, the `Map` keeps whichever twin's entry was inserted second, and both
+  `s1.reviews` rows fall through their `byJudge.get(r.seat ? r.seat.id : r.model) || byJudge.get(r.model)`
+  lookup (`run.js:227`) onto that one surviving judge's conformance. **Latent, not reachable from
+  production**: `src/sidecar/leg-ids.js:16` stamps every fanout leg's `taskId` as `${waveId}-${i+1}`,
+  and `fanout-leg.js` writes that `taskId` into `buildRunResult` on both the normal completion path
+  (`:191`) and the routing-failure path (`:61`) — so a real `-s2` wave cannot produce even one
+  unbindable leg, let alone two. The state is only constructible by deleting ids in a fixture.
+  ⚠️ **The auto-review's framing — "reintroduces the D7-class bug" — is WRONG.** On identical input
+  PR3 is never worse than merge-base (merge-base has no seat concept, so it always joins on the bare
+  alias — exactly PR3's degraded fallback path). And on the reachable case, a healthy twin bench,
+  PR3 is strictly better: merge-base's alias-only join collapsed the twins' conformance
+  unconditionally and silently (the in-code comment at `run.js:219-224` names this D7), while PR3
+  only collapses in the unreachable double-orphan case, and does so at exit 0 exactly like
+  merge-base always did — no regression, no new silent failure mode. Supersedes nothing already
+  filed: the existing PR4 entry above (*"an `-rv` leg that binds to NO seat makes `applyDebate`
+  invent an adjudication row"*) is a different file (`run-debate-revote.js`, not `run.js`), a
+  different mechanism (the debate round's fail-open push inventing a row, not the Stage-2 merge's
+  `Map` losing one), and a different failure shape (an extra row vs. a collapsed one) — checked for
+  overlap, there isn't any.
+- [ ] **PR4 · `applyDebate`'s fail-open push writes a seat id into the alias-space `judge` field
+  when `aliasOf` is absent.** `debate.js`'s fail-open branch (`const alias = aliasOf ? aliasOf(key) : key;`)
+  falls back to the raw seat key when no `aliasOf` is supplied. Measured: without `aliasOf` the
+  pushed row is `{judge: 'deepseek#1', ...}` and the tier moves Singleton → Confirmed (a seat id in
+  `judge` reaches `tally.js`'s `v.judge !== f.raiser` and `report.js`'s `byJudge[adj.judge]`, both
+  alias-space joins); with `aliasOf` supplied, the row is `{judge: 'deepseek', seat: 'deepseek#1'}`
+  and the tier is correct. **Not reachable**: `grep -rn applyDebate src/` (excluding tests) finds
+  exactly one non-test caller — `run-debate.js:202-203` — and it DOES pass `aliasOf` (the call site
+  even carries a warning comment at `:198-201` explaining why). The package's `exports` map
+  (`package.json:34-36`) publishes only `./opencode-client`, which blocks a deep
+  `require('amicus/src/council/debate')` from outside the package, closing off the obvious
+  alternate call path. Two conditions must BOTH hold for this to fire — a caller omitting `aliasOf`
+  AND a repeated alias in the same wave — and no such caller exists today. File as a hardening note:
+  consider making `aliasOf` a required parameter (throw if absent) rather than an optional one with
+  a silently-wrong fallback.
+- [ ] **A hardening note — nothing pins that the launcher must NOT de-duplicate `models`.** Owner
+  ruling R3-2 (one re-vote leg per seat) depends on `['gpt', 'deepseek', 'deepseek']` producing
+  THREE legs, not two. Verified end-to-end through the real `runFanout`: three legs actually spawn,
+  and `fanout-validate.js:18`'s `parseModelsList` docblock says "duplicates allowed" (line 18, not
+  20 — re-checked against the current file rather than assumed). Nothing enforces that contract
+  going forward: a future `uniq()`/`new Set(...)` anywhere on the `--models` → leg-construction path
+  would silently drop a twin's leg and break R3-2 with no error, no test failure outside this one
+  area, and a plausible-looking diff. `tests/council/run-debate.test.js`'s
+  `describe('runDebate — twin bench: joins on the seat, launches on the alias', ...)` (from
+  `TWIN_BENCH = ['deepseek', 'deepseek', 'gpt']`, line 55) already pins the twin `-rv` shape at the
+  `runDebate` level, so the invariant is exercised — just not named. Worth an explicit comment (or a
+  dedicated unit test on `parseModelsList`) stating the invariant in one place: "duplicates must
+  survive to leg construction."
+- [ ] **A maintainability note (from the auto-review).** `seatKey(seat, alias) => seat ? seat.id : alias`
+  (or the arrow-function equivalent) is independently redefined in **three files**:
+  `run-debate-revote.js:56`, `run-retry.js:149`, `run.js:224` — re-derived directly, not assumed;
+  note `run-stage2.js` does NOT redefine it (it takes seats a different way). Separately, §3.4's
+  roster-placeholder-padding block (`const placeholders = new Set(); ... __unbound-${waveId}-${i+1} ...`)
+  is duplicated near-verbatim in a **different** set of three files: `run-retry.js:118-130`,
+  `run-stage2.js:89-106`, `run-debate-revote.js:106-117` — this time `run.js` is the one that does
+  NOT carry it (it consumes `s2.judgeResults`, which already went through Stage-2's own padding).
+  Both patterns are the safety-critical logic implicated in the double-orphan and fail-open findings
+  above. Suggest consolidating into `src/council/seats.js`, which already owns `bindSeats`,
+  `sanitizeName`, and `roleAt` — a natural home for both the join-key helper and the padding helper.
+- [ ] **Function lengths** (auto-review minor): `runStage2` (`run-stage2.js:47-207`, 161 lines),
+  `runDebate` (`run-debate.js:106-270`, 165 lines), and `runRevoteWave`
+  (`run-debate-revote.js:76-166`, 91 lines) all exceed CLAUDE.md's 50-line-per-function guideline
+  (`CLAUDE.md:793`; the limit is also named at `CLAUDE.md:705`). Nothing in CI enforces it —
+  `scripts/check-file-sizes.js` is file-level only (300 lines/file; no per-function check exists
+  anywhere in the gate). File as a follow-up, noting the seat/placeholder-roster logic inside all
+  three is the same safety-critical logic named above, which is what makes them worth splitting
+  rather than just noting.
+
 ### Bench adaptation — closes #135, finishes #129
 
 #135 is #129's generalization, and names the same case (*"if Kimi sometimes takes two or three
