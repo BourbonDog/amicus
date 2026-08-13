@@ -158,6 +158,18 @@ describe('runStage1', () => {
     expect(reviews.find(r => r.model === 'gpt').role).toBe(`lens:${slug('security architect')}`);
   });
 
+  test('twin lens seats get their OWN lens, not the first twin’s (roleAt vs roleFor)', async () => {
+    const ctx = makeCtx({ models: ['deepseek', 'deepseek'], lenses: ['risk', 'cost'],
+      onSolo: (opts) => { const leg = mkLeg(opts.model, review(), 'complete', opts.waveId, 1);
+        return { wave: { waveId: opts.waveId, legs: [leg] }, exitCode: 0, leg }; } });
+    const r = await runStage1(ctx);
+    expect(r.reviews.map(x => x.role)).toEqual(['lens:risk', 'lens:cost']);
+  });
+
+  test('roleFor is still exported for the alias-space shim', () => {
+    expect(typeof require('../../src/council/run-stages').roleFor).toBe('function');
+  });
+
   test('malformed findings → repair solo → conformance repaired', async () => {
     const solos = [];
     const ctx = makeCtx({
