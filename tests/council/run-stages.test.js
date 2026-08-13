@@ -759,9 +759,29 @@ describe('v4.8 PR2b Task 7: an unbound seat is retried, then announced', () => {
     expect(ctx.launchers.launchWave).toHaveBeenCalledTimes(1);   // skipped: no paid retry
     const note = ctx._notes.find(n => n.channel === 'seat-unbound');
     expect(note.what).toBe('seat b did not review');
-    expect(note.why).toBe('the wave returned 1 of 2 legs and none of them was this seat’s');
+    expect(note.why).toBe("the wave returned 1 of 2 legs and none of them was this seat's");
     expect(note.data).toEqual({ waveId: 'abc123-s1', models: ['b'],
-      reason: 'the wave returned 1 of 2 legs and none of them was this seat’s', seat: 'b' });
+      reason: "the wave returned 1 of 2 legs and none of them was this seat's", seat: 'b' });
+    expect(r.degraded).toBe(true);
+  });
+
+  test('a budget-SKIPPED run counts the MISSING seat in the dead-leg denominator', async () => {
+    // Fix round 1, finding (1). Same budget-skip fixture, one seat wider: a
+    // reviews, b's leg comes back dead, c's never comes back at all. Both losses
+    // are announced in the same run, so the two notes must agree about how many
+    // seats there were — `legs.length` alone counts only what RETURNED and says
+    // "1 of 2" beside two separate losses.
+    const ctx = makeCtx({ models: ['a', 'b', 'c'], overBudget: () => true });
+    ctx.launchers.launchWave.mockResolvedValueOnce({ wave: { waveId: 'abc123-s1',
+      legs: [usableLeg('a', 'abc123-s1', 1),
+        deadLeg('b', undefined, undefined, 'abc123-s1', 2)] }, exitCode: 0 });
+    const r = await runStage1(ctx);
+    const legNote = ctx._notes.find(n => n.channel === 'dead-leg');
+    expect(legNote.effect).toBe('1 of 3 seats reviewed; the run continues with the bench that did '
+      + 'and will exit degraded (2)');
+    const seatNote = ctx._notes.find(n => n.channel === 'seat-unbound');
+    expect(seatNote.what).toBe('seat c did not review');
+    expect(seatNote.why).toBe("the wave returned 2 of 3 legs and none of them was this seat's");
     expect(r.degraded).toBe(true);
   });
 

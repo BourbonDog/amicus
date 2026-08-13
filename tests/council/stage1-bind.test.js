@@ -60,6 +60,6 @@ describe('bindStage1Waves', () => {
     const roster = buildSeats(['a', 'b'], null, null);
     const w = missingSeatDeadWave({ waveId: 'w-s1', seat: roster[1], returned: 1, expected: 2 });
     expect(w).toEqual({ waveId: 'w-s1', models: ['b'], seats: [roster[1]],
-      reason: 'the wave returned 1 of 2 legs and none of them was this seat’s', partial: true });
+      reason: "the wave returned 1 of 2 legs and none of them was this seat's", partial: true });
   });
 });

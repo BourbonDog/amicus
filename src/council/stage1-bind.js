@@ -75,7 +75,10 @@ function missingSeatDeadWave(m) {
     waveId: m.waveId,
     models: [m.seat.alias],
     seats: [m.seat],
-    reason: `the wave returned ${m.returned} of ${m.expected} legs and none of them was this seat’s`,
+    // ASCII apostrophe deliberately: this string reaches a terminal through
+    // formatDegrade, and a Windows console can mangle U+2019. It was the only
+    // curly quote in src/ — and had no caller until v4.8 PR2b Task 7 shipped it.
+    reason: `the wave returned ${m.returned} of ${m.expected} legs and none of them was this seat's`,
     partial: true,
   };
 }
