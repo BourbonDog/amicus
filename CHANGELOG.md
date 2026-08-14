@@ -14,26 +14,36 @@ All notable changes to Amicus are documented here. Format follows
   records both, instead of recording the last one twice and erasing the other; a mixed live/dead
   twin keeps the live leg's `resolvedModel` and `conformance` instead of inheriting the dead seat's;
   a twin whose seats shared one executable writes **one** row instead of two byte-identical ones;
-  and a run's `findingsRaised` finally sums correctly across its rows. Benches whose aliases are
-  distinct and each served by one executable are unchanged, row for row and in order.
+  and a run's `findingsRaised` finally sums correctly across its rows. A chair that is also a bench
+  seat writes one row when its chair leg and seat leg resolved to the same executable, and **two**
+  when they resolved to different ones — where previously the chair leg's resolution overwrote the
+  seat leg's. Row for row and in order, the ledger is unchanged only for benches whose aliases are
+  **distinct** *and* where **no alias contributed more than one joinable `runStats` row** — both
+  clauses are load-bearing, and a chair-on-bench run fails the second one even when it passes the
+  first (see the merged-row entry below).
 - **`runs` in `amicus council stats` counts distinct council runs, not ledger rows.** One run on
   `--models a,a` reported `runs: 2`; so did `--models gpt-5,openai/gpt-5` when both resolved to the
   same executable. `runs` (and the `low-N` flag that follows it) now counts distinct `meta.runId`
   values, retroactively for pre-existing history. Two consequences worth knowing: re-running
-  `amicus council tally input.json` without `--no-ledger` no longer double-counts `runs` (it still
-  appends a duplicate set of rows, which re-weights the lifetime averages and doubles the
-  conformance histogram), and a harness that writes a **constant** `runId` across genuinely
-  different runs will pin that group at `runs: 1` forever. An empty-string or numeric `runId` is
-  not treated as an identity — each such row counts individually.
+  `amicus council tally input.json` without `--no-ledger` no longer double-counts `runs`, because a
+  re-tally of the same input carries the same `meta.runId` (it still appends a duplicate set of
+  rows, which **doubles the conformance histogram** — a tally, not an average. It does *not* move
+  the lifetime averages: a duplicated set of rows has the same mean as the original, measured
+  `avgStreetCredPeersOnly: 1.5` before and after a second append), and a harness that writes a
+  **constant** `runId` across genuinely different runs will pin that group at `runs: 1` forever. An
+  empty-string or numeric `runId` is not treated as an identity — each such row counts individually.
 - **⚠️ The ledger-promoted fallback chair can change on existing history.** When the requested chair
   fails twice, `amicus council run` promotes the best-street-cred non-bench model from the ledger.
   Correcting the ledger's model of history re-ranks it: measured over randomised ledgers, the
   promoted chair changes on **15.5%** of benches. The causes, largest first, are the join fix moving
   which group wins, the emission-order change moving which alias is launched, and the `runs` change.
   The old values were derived from erased and double-counted rows; the new ones are not "wrong
-  differently", but they are different. Related: lifetime averages move too —
-  `avgStreetCredPeersOnly`, `lifetimeConfirmRate`, `lifetimeFactErrorRate` and the conformance
-  histogram were all divided by a row count that duplicate rows inflated.
+  differently", but they are different. Related: `avgStreetCredPeersOnly`, `lifetimeConfirmRate`
+  and `lifetimeFactErrorRate` move too — each is a mean over a group's rows, and dropping a
+  duplicate row moves a mean whenever the group's remaining rows disagree (on
+  `--models gpt-5,openai/gpt-5,gpt-5` all resolving to one executable, `avgStreetCredPeersOnly`
+  goes 1.333 → 1.5). The conformance histogram moves for the same reason, but it is a **tally**,
+  not an average — nothing divides it; it simply counts one row fewer.
 - **⚠️ The fallback chair can also go from promoted to absent** (measured 4.7% of randomised
   single-run ledgers). Chair promotion excludes any aggregate whose key or aliases appear on the
   bench; now that an executable legitimately carries every alias that really resolved to it, a bench
@@ -43,7 +53,8 @@ All notable changes to Amicus are documented here. Format follows
 - **Merged rows report the worst conformance and any chair flag.** When one executable served
   several of a bench's seats, the resulting single row records the **worst** `conformance` of them
   (a seat that came back `unstructured` is no longer recorded as `clean`) and `wasChair: true` if
-  **any** of them chaired. `role` still takes the last contributing row's value. ⚠️ This is reachable
+  **any** of them chaired. `role` still takes the last contributing row's value, scoped to that same
+  (model, executable) pair. ⚠️ This is reachable
   from plain `amicus council tally` input, not only the engine: the documented worked example puts
   the chair on the bench, so a chair whose seat row was `unstructured` now reads `unstructured`
   where it previously read the chair leg's `clean`. Conversely, on an alias whose seats resolved
@@ -54,7 +65,8 @@ All notable changes to Amicus are documented here. Format follows
   zero findings but a numeric street cred borrowed from its live twin, because street cred remains
   alias-level. Not fixed here, and filed: that leg-less group is a chair-promotion candidate and can
   outrank the executable it routes to. Findings also remain attributed by alias rather than by seat,
-  so on a split alias they are recorded against one of its rows rather than divided across them. `amicus council run` now refuses to start
+  so on a split alias they are recorded against one of its rows rather than divided across them.
+- **Council seats are validated before any paid leg.** `amicus council run` now refuses to start
   when `--critic` names a model that is not on the bench, when `--critic <alias>` is ambiguous
   because that alias occupies more than one bench seat (remove the duplicate entry, or use two
   distinct aliases), or when two bench entries would write the same `review-<name>.md` after

@@ -699,6 +699,13 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     const d5 = mkLedgerDir();                                // two distinct ids across three rows
     writeRawRows(d5, [persistedRow({ runId: 'x' }), persistedRow({ runId: 'x' }), persistedRow({ runId: 'y' })]);
     expect(deriveReliability({ dir: d5 })[0].runs).toBe(2);
+
+    // A TRUTHY NON-STRING id: `runId: 7` is not an identity either. Without
+    // this row a bare `if (r.runId)` passes every case above — '' and 0 are
+    // falsy, so they take the unkeyed branch under both spellings.
+    const d6 = mkLedgerDir();
+    writeRawRows(d6, [persistedRow({ runId: 7 }), persistedRow({ runId: 7 })]);
+    expect(deriveReliability({ dir: d6 })[0].runs).toBe(2);
   });
 
   test('T10 — lowN follows runs, not rows, across 1/2/3 council runs on a twin bench', () => {
@@ -712,6 +719,22 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(deriveReliability({ dir })[0]).toMatchObject({ runs: 2, lowN: true });
     appendRun(twinRun('run-3'), { dir });
     expect(deriveReliability({ dir })[0]).toMatchObject({ runs: 3, lowN: false });
+
+    // ⚠️ The twin fixture above keeps rows.length === runs at every step, so the
+    // pre-PR4b spelling `lowN: rows.length < 3` survives it. Rows must be able
+    // to OUTNUMBER runs and flip the boundary: two DISTINCT aliases sharing one
+    // executable give run-1 two rows, and a second run adds a third — THREE
+    // rows under TWO runIds, where `rows.length < 3` reads lowN false.
+    const dir2 = mkLedgerDir();
+    appendRun(rec({ runId: 'run-1', models: ['a', 'b'],
+      runStats: [rsRow({ model: 'a', resolvedModel: 'v/x' }),
+        rsRow({ model: 'b', resolvedModel: 'v/x' })] }), { dir: dir2 });
+    expect(deriveReliability({ dir: dir2 })[0]).toMatchObject({ runs: 1, lowN: true });
+    appendRun(rec({ runId: 'run-2', models: ['a'],
+      runStats: [rsRow({ model: 'a', resolvedModel: 'v/x' })] }), { dir: dir2 });
+    const three = deriveReliability({ dir: dir2 });
+    expect(three).toHaveLength(1);
+    expect(three[0]).toMatchObject({ runs: 2, lowN: true });
   });
 
   test('T11 — a split alias concentrates FINDINGS on the anchor: the other row reads 0 and null rates', () => {
@@ -799,5 +822,44 @@ describe('v4.8 PR4b — (model, resolvedModel) grouping', () => {
     expect(ds.conformance).toBe('unstructured');   // worst-wins, NOT the chair row's 'clean'
     expect(ds.wasChair).toBe(true);                // any-wins
     expect(ds.role).toBe('chair');                 // last row of the pair group
+  });
+
+  test('T15 — wasChair is ANY-wins inside a pair group, not last-wins', () => {
+    // T14 cannot separate the two rules: its chair row is the pair group's LAST,
+    // so last-wins reads `true` there as well. Order the chair row FIRST and the
+    // spellings diverge — last-wins reads the trailing seat row's `false`.
+    const rows = buildLedgerRows(rec({
+      models: ['ds', 'gpt'], chair: 'ds',
+      runStats: [
+        rsRow({ model: 'ds', role: 'chair', wasChair: true, resolvedModel: 'v/ds' }),
+        rsRow({ model: 'ds', role: 'seat', resolvedModel: 'v/ds' }),
+        rsRow({ model: 'gpt', role: 'seat', resolvedModel: 'v/gpt' }),
+      ],
+    }));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ model: 'ds', resolvedModel: 'v/ds', wasChair: true });
+    expect(rows[0].role).toBe('seat');              // role IS last-wins, deliberately
+    expect(rows[1]).toMatchObject({ model: 'gpt', wasChair: false, role: 'seat' });
+  });
+
+  test('T16 — wasChair and role are scoped to the PAIR GROUP, not to the whole alias', () => {
+    // Chair on the bench with its chair leg and seat leg resolved DIFFERENTLY:
+    // the alias splits, and each row must describe only its own executable.
+    // HEAD wrote ONE row here (measured: model 'ds', resolvedModel 'v/ds-turbo',
+    // wasChair true — the seat leg's resolution erased); PR4b writes two.
+    const rows = buildLedgerRows(rec({
+      models: ['ds', 'gpt'], chair: 'ds',
+      runStats: [
+        rsRow({ model: 'ds', role: 'seat', resolvedModel: 'v/ds' }),
+        rsRow({ model: 'gpt', role: 'seat', resolvedModel: 'v/gpt' }),
+        rsRow({ model: 'ds', role: 'chair', wasChair: true, resolvedModel: 'v/ds-turbo' }),
+      ],
+    }));
+    expect(rows).toHaveLength(3);
+    // Alias-scoped wasChair would stamp `true` on the seat row; alias-scoped
+    // role (last of ALL the alias's joinable rows) would stamp 'chair' on it.
+    expect(rows[0]).toMatchObject({ model: 'ds', resolvedModel: 'v/ds', wasChair: false, role: 'seat' });
+    expect(rows[1]).toMatchObject({ model: 'ds', resolvedModel: 'v/ds-turbo', wasChair: true, role: 'chair' });
+    expect(rows[2]).toMatchObject({ model: 'gpt', resolvedModel: 'v/gpt', wasChair: false, role: 'seat' });
   });
 });

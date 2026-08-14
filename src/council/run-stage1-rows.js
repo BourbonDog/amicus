@@ -25,10 +25,14 @@ const { buildRunStatsEntry } = require('./run-assemble');
  * 'deepseek#2' is not routable. Two RUNSTATS rows both reading
  * `model: 'deepseek'` remains the CORRECT outcome for two dead twins — runStats
  * is row-per-launch and both seats were paid for. What changed in v4.8 PR4b is
- * downstream: the ledger now groups by (model, resolvedModel), and two dead
- * twins are both leg-less, so they share the empty resolved key and collapse
- * into ONE ledger row. Two ledger rows for two dead twins is no longer the
- * expected outcome; two runStats rows still is.
+ * downstream: the ledger now groups by (model, resolvedModel), so the LEDGER row
+ * count for two dead twins depends on whether their seats produced a leg at all.
+ * Two dead twins whose seats produced NO leg (`finalLeg` null — the srcLegStillDead
+ * and missingLegStillDead classes below) share the empty resolved key and collapse
+ * into ONE ledger row. Two whose still-dead RETRY legs came back resolved
+ * DIFFERENTLY still produce TWO, keyed by executable: retryLegBySeat (below)
+ * surfaces a real leg, and buildRunStatsEntry stamps `resolvedModel` from
+ * `leg.model` whether that leg succeeded or not. Either way runStats keeps two rows.
  */
 function pushDeadSeatRows({ o, retry, deadLegs0, stillDeadLegs, stillDeadWaves, extraRows,
   roleFor, seatOf }) {
