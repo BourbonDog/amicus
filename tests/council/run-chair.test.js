@@ -64,6 +64,71 @@ describe('pickFallbackChair under resolved-id keys (v4.7 GOA-7 D11)', () => {
   });
 });
 
+// v4.8 PR4a — the full rationale for run-chair.js's tie-break (kept here because
+// src/ is size-gated at 300 lines and tests/ is not).
+//
+// THE DEFECT. `pickFallbackChair` sorted on `avgStreetCredPeersOnly` alone over
+// a STABLE Array#sort, so an exact tie resolved by input array order. That order
+// is `deriveReliability`'s Map insertion order, which is council-ledger.jsonl
+// ROW ORDER — so which model the engine PROMOTED AND LAUNCHED as fallback chair
+// depended on the layout of an append-only file, with nothing pinning it.
+//
+// WHY TIES ARE ORDINARY, NOT EXOTIC. On a two-seat bench `peersOnly` is a mean
+// over ranks drawn from {1,2} — `tally.js:58` excludes the judge's own alias —
+// so equal means are a common arithmetic outcome. (Note the tying groups reach
+// this function via a PAST run's ledger: `excluded()` already filters every
+// alias on the CURRENT bench.)
+//
+// WHY `runs` IS ONLY A TIE-BREAK. `runs` is the group's TOTAL ledger row count
+// (`ledger.js:137`) and includes `judged:false` runs that wrote no street cred.
+// A model with 10 runs of which 2 were judged therefore outranks one with 5 all
+// judged, on a tie — so `runs` proxies operational history, NOT the sample
+// behind the mean, and must never be read as a ranking signal. The model-id term
+// is what actually guarantees a total order.
+//
+// This changes which model is promoted on a tie. No existing fixture ties.
+describe('pickFallbackChair tie-break is explicit and order-independent (v4.8 PR4a)', () => {
+  const agg = (model, cred, runs) => ({ model, aliases: [model],
+    avgStreetCredPeersOnly: cred, runs });
+
+  test('an exact street-cred tie does not resolve by input order', () => {
+    const a = agg('alpha', 2, 1);
+    const b = agg('beta', 2, 5);
+    const forward = pickFallbackChair([a, b], ['zz'], 'zzchair');
+    const reversed = pickFallbackChair([b, a], ['zz'], 'zzchair');
+    expect(forward).toBe(reversed);
+  });
+
+  // `runs` is total ledger appearances (ledger.js:137), including judged:false
+  // runs that contributed no street cred — a tie-break, not a ranking signal.
+  test('on a tie the group with more council appearances wins', () => {
+    const a = agg('alpha', 2, 1);
+    const b = agg('beta', 2, 5);
+    expect(pickFallbackChair([a, b], ['zz'], 'zzchair')).toBe('beta');
+    expect(pickFallbackChair([b, a], ['zz'], 'zzchair')).toBe('beta');
+  });
+
+  test('when street cred AND runs tie, the model id breaks it deterministically', () => {
+    const a = agg('alpha', 2, 3);
+    const z = agg('zeta', 2, 3);
+    expect(pickFallbackChair([a, z], ['zz'], 'zzchair')).toBe('alpha');
+    expect(pickFallbackChair([z, a], ['zz'], 'zzchair')).toBe('alpha');
+  });
+
+  test('a missing runs count never beats a real one, and stays order-independent', () => {
+    const noRuns = { model: 'alpha', aliases: ['alpha'], avgStreetCredPeersOnly: 2 };
+    const withRuns = agg('beta', 2, 4);
+    expect(pickFallbackChair([noRuns, withRuns], ['zz'], 'zzchair')).toBe('beta');
+    expect(pickFallbackChair([withRuns, noRuns], ['zz'], 'zzchair')).toBe('beta');
+  });
+
+  test('street cred still dominates both tie-breaks', () => {
+    const best = agg('alpha', 1.0, 1);      // lower mean rank = better
+    const worse = agg('beta', 2.0, 99);
+    expect(pickFallbackChair([worse, best], ['zz'], 'zzchair')).toBe('alpha');
+  });
+});
+
 // v4.3 Task 3 (spec §7.2 named defect): "council chair spend is invisible"
 // without this — a chair solo's launch options must carry councilRunId/
 // councilName end-to-end (run.js's o.runId/o.councilName -> run-chair.js's
