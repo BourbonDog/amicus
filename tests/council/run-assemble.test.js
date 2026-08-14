@@ -34,10 +34,17 @@ const JUDGES = [
 ];
 
 describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
+  // ⚠️ v4.8 PR4c §3.2: this fixture PASSES a real `seats` array on purpose. The
+  // engine always does (run.js:133 sets o.seats unconditionally past the
+  // preflight, and buildSeats always returns an array), so a fixture that omits
+  // it exercises a state that never occurs — and measured, both the meta pin
+  // below and T8 are GREEN against the vacuous `...(seats ? …)` guard when
+  // `seats` is left undefined. Supplying it is what turns them into pins.
   const input = asm.buildTallyInput({
     runId: 'abc123', date: '2026-07-19', bench: ['gemini', 'gpt', 'qwen'],
     chair: 'deepseek', reviews: REVIEWS, judgeResults: JUDGES,
     chairStats: asm.buildRunStatsEntry({ leg: leg('deepseek', 0.03), role: 'chair', wasChair: true, conformance: 'clean' }),
+    seats: buildSeats(['gemini', 'gpt', 'qwen'], null, null),
   });
 
   test('meta is pinned: headless, claudeInCouncil false, models = bench exactly', () => {
@@ -77,6 +84,74 @@ describe('buildTallyInput — five keys + meta pins (spec §5)', () => {
     const record = tally(input);
     expect(record.tierCounts.Confirmed).toBe(1);   // A1: gpt agrees (peer), gemini self-vote excluded
   });
+
+  // T8 (v4.8 PR4c §3.2) — no seat id in this document needs a table to resolve
+  // it: buildSeats mints `alias#N` only when an alias repeats, so every id here
+  // IS its alias and meta.models already carries them.
+  // Named mutants, both measured RED: (a) a bare `seats,` in the meta literal,
+  // (b) `...(seats ? { seats: seats.slice() } : {})` — the vacuous guard, which
+  // is what makes the `seats:` line in the fixture above load-bearing.
+  test('v4.8 PR4c T8: meta carries NO seats table on a unique-alias bench', () => {
+    expect('seats' in input.meta).toBe(false);
+  });
+});
+
+// T8b (v4.8 PR4c R4c-7) — the guard is NARROW BY OWNER RULING. It asks "does the
+// bench repeat an alias?", NOT "does seats[] carry anything unrecoverable?" —
+// and on a --lenses or --critic bench with unique aliases those two questions
+// disagree: `position` is unrecoverable on every bench, and the raw lens text
+// survives nowhere in the tally input (runStats[].role carries only the slug).
+// R4c-7 chose byte-identity on those benches over a table PR5 can request when
+// it needs one, and filed the gap to BACKLOG. Without this test the ruling and
+// its revert are indistinguishable — the T14c lesson from Task 1.
+// Named mutant, measured RED: the WIDENED predicate R4c-7 rejected,
+//   seats.some(s => s.id !== s.alias || s.role !== 'seat' || s.lens !== null)
+test('v4.8 PR4c T8b/R4c-7: lens and critic benches with unique aliases emit NO seats table', () => {
+  const mk = (bench, critic, lenses) => asm.buildTallyInput({
+    runId: 'r', date: 'd', bench, chair: 'x', reviews: [], judgeResults: [],
+    chairStats: null, seats: buildSeats(bench, critic, lenses),
+  });
+  // Both widened conjuncts are genuinely PRESENT in these fixtures, so the
+  // mutant really can fire — a fixture that cannot trigger it is a pin that
+  // passes for the wrong reason (§8 item 7).
+  expect(buildSeats(['alpha', 'beta'], null, ['Security Review', 'perf']).map(s => s.role))
+    .toEqual(['lens:security-review', 'lens:perf']);
+  expect(buildSeats(['alpha', 'beta'], 'beta', null).map(s => s.role)).toEqual(['seat', 'critic']);
+  const lensed = mk(['alpha', 'beta'], null, ['Security Review', 'perf']);
+  expect('seats' in lensed.meta).toBe(false);
+  expect('seats' in mk(['alpha', 'beta'], 'beta', null).meta).toBe(false);
+  // …and this is the cost R4c-7 accepted, stated rather than assumed:
+  expect(JSON.stringify(lensed)).not.toContain('Security Review');
+});
+
+// T9 (v4.8 PR4c §3.2) — a twin bench mints `deepseek#1`/`deepseek#2`, ids that
+// join to nothing else in the document (meta.models is the ALIAS list), so the
+// table ships. RED at HEAD, which emits a six-key meta on every bench.
+test('v4.8 PR4c T9: a twin bench emits meta.seats, equal to buildSeats output', () => {
+  const bench = ['deepseek', 'deepseek', 'gpt'];
+  const seats = buildSeats(bench, null, null);
+  const input = asm.buildTallyInput({
+    runId: 'r', date: 'd', bench, chair: 'x', reviews: [], judgeResults: [],
+    chairStats: null, seats,
+  });
+  expect(input.meta.seats).toEqual(seats);
+  expect(input.meta.seats.map(s => s.id)).toEqual(['deepseek#1', 'deepseek#2', 'gpt']);
+  // ⚠️ seats[] is BENCH-ONLY and meta.models is not — never join them
+  // positionally. `claude` joins meta.models synthetically
+  // (run-assemble.js:226) and buildSeats never mints a seat for it (seats.js:44-46).
+  expect(input.meta.models).toEqual(bench);
+});
+
+// T9b — placement. §3.2 requires a pure TAIL so the shipped six-key order is
+// byte-identical in every case; T9 asserts only the value.
+test('v4.8 PR4c T9b: meta.seats is a pure tail; the six-key order is untouched', () => {
+  const SIX = ['runId', 'date', 'runType', 'models', 'chair', 'claudeInCouncil'];
+  const mk = (bench) => asm.buildTallyInput({
+    runId: 'r', date: 'd', bench, chair: 'x', reviews: [], judgeResults: [],
+    chairStats: null, seats: buildSeats(bench, null, null),
+  });
+  expect(Object.keys(mk(['deepseek', 'deepseek']).meta)).toEqual([...SIX, 'seats']);
+  expect(Object.keys(mk(['deepseek', 'gpt']).meta)).toEqual(SIX);
 });
 
 // v4.8 PR3 Task 5: buildTallyInput's adjudications carry `seat` alongside the

@@ -242,6 +242,11 @@ async function runCouncil(options, deps = {}) {
       runId: o.runId, date: o.date, bench: o.models.slice(), chair: chairModel,
       reviews: s1.reviews, judgeResults: s2.judgeResults, chairStats, claudeReview,
       extraRows: [...s1.extraRows, ...s2.extraRows],
+      // v4.8 PR4c §3.2: the ONLY production caller of buildTallyInput, so this is
+      // the single seam meta.seats enters through. The final input is derived by
+      // SPREAD (run-finish.js:36), not rebuilt, so both the provisional and the
+      // debated input inherit it from here.
+      seats: o.seats,
     });
     const provisionalInput = mkInput(null, o.chair);
     const provisional = tally(provisionalInput);

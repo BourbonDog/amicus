@@ -108,6 +108,13 @@ function buildVerdict(record, decisions = [], opts = {}) {
     date: record.meta.date,
     chair: record.meta.chair,
     council: record.meta.models,
+    // v4.8 PR4c §3.2: this projection RENAMES meta.models to `council`, so
+    // nothing from meta reaches verdict.json unless it is named here — which is
+    // why the seat table needs its own line rather than riding tally's verbatim
+    // meta copy. Emitted only when the record carries one (a twin bench), so a
+    // unique-alias verdict is byte-for-byte unchanged. The key is `seats`,
+    // matching the `seatLoss` sibling below; PR5 codes against that name.
+    ...(record.meta.seats ? { seats: record.meta.seats } : {}),
     claudeInCouncil: record.meta.claudeInCouncil,
     overallVerdict: opts.overallVerdict === undefined ? null : opts.overallVerdict,
     findings: record.findings.map(f => {
