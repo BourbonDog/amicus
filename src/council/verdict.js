@@ -108,6 +108,13 @@ function buildVerdict(record, decisions = [], opts = {}) {
     date: record.meta.date,
     chair: record.meta.chair,
     council: record.meta.models,
+    // v4.8 PR4c §3.2: this projection RENAMES meta.models to `council`, so
+    // nothing from meta reaches verdict.json unless it is named here — which is
+    // why the seat table needs its own line rather than riding tally's verbatim
+    // meta copy. Emitted only when the record carries one (a twin bench), so a
+    // unique-alias verdict is byte-for-byte unchanged. The key is `seats`,
+    // matching the `seatLoss` sibling below; PR5 codes against that name.
+    ...(record.meta.seats ? { seats: record.meta.seats } : {}),
     claudeInCouncil: record.meta.claudeInCouncil,
     overallVerdict: opts.overallVerdict === undefined ? null : opts.overallVerdict,
     findings: record.findings.map(f => {
@@ -121,6 +128,18 @@ function buildVerdict(record, decisions = [], opts = {}) {
         adjudications: f.adjudications,
         decision: d.decision || null,
         applied: d.applied === true,
+        // v4.8 PR4c §3.4: this literal is CLOSED — it names every key and copies
+        // nothing else off `f` — so the two fields tally() stamps need their own
+        // lines or verdict.json names seats it cannot resolve (§1.2). Appended as
+        // a pure TAIL, leaving the shipped eleven-key order untouched.
+        // ⚠️ NOT `|| null`, even though `duplicateOf` and `decision` above are:
+        // `JSON.stringify({raiserSeat: null})` still WRITES `"raiserSeat":`, so
+        // that idiom changes the shape of every unique-alias verdict.json and
+        // fails seat-parity-ondisk's needles. `applied` is the sibling to copy —
+        // it computes a value rather than defaulting one. Emit-when-set matches
+        // both producers (tally.js) and keeps a non-twin verdict byte-identical.
+        ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}),
+        ...(f.sameModelCorroboration ? { sameModelCorroboration: true } : {}),
       };
       if (f.debate) { out.debate = f.debate; }   // v4.1: additive debate decoration carry-through (spec §5.6)
       return out;

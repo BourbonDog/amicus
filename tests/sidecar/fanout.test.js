@@ -99,6 +99,24 @@ describe('fanout validation helpers', () => {
       expect(r.error).toMatch(/--models requires/);
     });
 
+    // v4.8 PR4c (§3.5): the ends of this chain are pinned — parseModelsList's
+    // duplicate case at :74-76, and the twin launcher arguments end-to-end in
+    // tests/council/run-debate.test.js — but the MIDDLE was not, on the default
+    // rail: the only other twin call to validateFanoutModels lives in
+    // local-provider-e2e.integration.test.js, which jest.config.js excludes.
+    // It is the seat spine's business because run-launch.js:111 is
+    // `models: opts.models.join(',')`, so a twin council bench arrives here as
+    // the literal 'deepseek,deepseek'. A dedupe would strand seat #2 unbound and
+    // the seat spine would report a seat loss caused by a layer that has no seat
+    // awareness at all. NOTE: validateFanoutModels is an AsyncFunction — the
+    // un-awaited form gives `undefined` for `.legs`, so this MUST await.
+    it('keeps a duplicated model as two distinct legs (no dedupe)', async () => {
+      const r = await validateFanoutModels('a/b,a/b');
+      expect(r.legs).toHaveLength(2);
+      expect(r.legs[0]).toMatchObject({ modelInput: 'a/b', ok: true, model: 'a/b' });
+      expect(r.legs[1]).toMatchObject({ modelInput: 'a/b', ok: true, model: 'a/b' });
+    });
+
     it('enforces the leg cap (default 10, env-overridable)', async () => {
       const eleven = Array.from({ length: 11 }, (_, i) => `p/m${i}`).join(',');
       const r = await validateFanoutModels(eleven);

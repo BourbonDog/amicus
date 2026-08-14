@@ -571,10 +571,11 @@ under "Stage-2 → tally assembly recipe"). It needs **all five top-level keys**
 | `meta.chair` | string | The confirmed chair model id. |
 | `meta.claudeInCouncil` | boolean | The Stage-0 toggle. |
 | `meta.runType`, `meta.date` | string (optional) | Free-form labels carried through to `verdict.json`. |
-| `findings[]` | array | One entry per finding across all reviews: `{id, raiser, severity}` (`claim` may ride along but isn't required by the tally engine). `id` is the run-global label (e.g. `A1`, `B2`) assigned during Stage-2 assembly, not the reviewer's local integer id. |
-| `adjudications[]` | array | One entry per (judge × finding): `{findingId, judge, verdict}`, `verdict ∈ {agree, dispute, neutral}`. Include every judge's verdict on every finding, **including the raiser's own adjudication of its own finding** — the engine excludes it automatically when scoring (don't pre-filter it). |
+| `meta.seats` | array (optional) | **v4.8** — the run's seat table, one `{id, alias, role, lens, position}` entry per **bench** seat in bench order. The engine emits it **only when the bench repeats an alias**: that is the one case where the `alias#N` ids on `findings[].raiserSeat`, `adjudications[].seat` and `runStats[].seat` resolve to nothing else in the document, since `meta.models` is the *alias* list. Bench-only — `claude` is never a seat, so never assume `meta.models.length === meta.seats.length`, and never join the two positionally. ⚠️ **Absence never means "the bench had no repeated alias."** Hand-assembled and MCP-assembled tally input reaches `tally()` with no seat machinery behind it at all; absence means only "no seat table available". |
+| `findings[]` | array | One entry per finding across all reviews: `{id, raiser, severity}` (`claim` may ride along but isn't required by the tally engine). `id` is the run-global label (e.g. `A1`, `B2`) assigned during Stage-2 assembly, not the reviewer's local integer id. `raiserSeat?` (**v4.8**) — the raising **seat's** id (`deepseek#1`), emit-only-when-it-differs-from-the-alias, so a bench with no repeated alias never carries it. `raiser` stays the alias in every case. |
+| `adjudications[]` | array | One entry per (judge × finding): `{findingId, judge, verdict}`, `verdict ∈ {agree, dispute, neutral}`. `seat?` (**v4.8**) — the judging **seat's** id, on the same emit-when-different terms as `findings[].raiserSeat`; `judge` stays the alias. Include every judge's verdict on every finding, **including the raiser's own adjudication of its own finding** — the engine excludes it automatically when scoring (don't pre-filter it). ⚠️ **v4.8: that exclusion is seat-conditional.** When a vote *and* its finding both carry a seat id, the engine compares **seats** (`v.seat !== f.raiserSeat`), so on a bench that repeats an alias a twin's genuine vote on its twin's finding is now counted instead of discarded. When either side carries no seat id — a legacy document, a hand-assembled one, or a real run whose leg failed to bind to its seat — it falls back to comparing **aliases**, which is the pre-v4.8 behaviour and still drops that twin's vote. Never fill in a seat id you did not observe just to unlock the seat compare. |
 | `rankings[]` | array | One entry per judge: `{judge, order}`. `order` is that judge's `FINAL RANKING:` block translated to model ids, e.g. `["gpt", "deepseek"]` (ties may use a nested array, e.g. `[["gpt","deepseek"], "mistral"]`). |
-| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?, resolvedModel?}`. May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. `resolvedModel?` (v4.7) — the executable id that actually served the row's leg, emit-only-when-set; leg-less rows (the give-up chair row, dead seats with no leg, the claude row) never carry it. `model` stays the council alias. |
+| `runStats[]` | array | One row per paid launch (v4.7 spec §5 D1/D2 — no longer capped at one row per model; see the role roster below): `{model, role, wasChair, conformance, status, durationMs, usage, waveId?, resolvedModel?, seat?}`. `seat?` (**v4.8**) is the row's seat **id**, emit-only-when-it-differs-from-that-seat's-own-alias — so only a bench that repeats an alias carries it. Only the two producers that *have* a seat pass one: the primary reviewing-seat rows and the dead-seat rows. A `judge`, `chair-attempt`, `repair` or `superseded` row never carries it (all four are excluded from the ledger join, so a seat stamp there could never win it), and neither do the off-bench chair rows or the synthetic `claude` row, which have no seat at all. Two seats of one alias that **both** died collapse into a single dead-seat row carrying no `seat` — a pre-existing collapse the stamp does not repair. May be `[]`. Any leg with no run document gets `durationMs: null, usage: null` — never invent a value. `waveId` is emit-only-when-set. `resolvedModel?` (v4.7) — the executable id that actually served the row's leg, emit-only-when-set; leg-less rows (the give-up chair row, dead seats with no leg, the claude row) never carry it. `model` stays the council alias. |
 
 **`runStats[].role` roster (v4.7 row-per-launch).** Every leg the run budget counts gets exactly
 one row, so a seat that needed a repair or lost a leg to a retry can now show up more than once.
@@ -640,9 +641,11 @@ groups by `resolvedModel || model` — see the stats section below.
 | `streetCred[].withSelf` | Mean rank position across **all** judges' rankings (lower = better). |
 | `streetCred[].peersOnly` | Mean rank position **excluding** the model's own ranking of itself. This is the number used everywhere else (ledger, `stats`, bench recommendations). |
 | `findings[].tier` | One of `Confirmed \| Contested \| Singleton \| Disputed` — see the cascade below. |
-| `findings[].basis` | `{a, d, n}` = peer agree/dispute/neutral counts (raiser's own vote excluded when a raiser is known). |
+| `findings[].basis` | `{a, d, n}` = peer agree/dispute/neutral counts (the raiser's own vote is excluded when a raiser is known). **v4.8: the exclusion is seat-conditional.** When the vote *and* the finding both carry a seat id the engine excludes by **seat**, so a twin's real vote on its twin's finding now counts; otherwise it falls back to excluding by **alias**, exactly as before. Consequence on a bench that repeats an alias: findings move tier in **both** directions — a lone twin corroboration promotes `Singleton → Confirmed` and `thin → solid`, and a twin *dispute* can demote `Confirmed → Contested` or `Contested → Disputed`. |
 | `findings[].confidence` | `"thin"` when `a + d <= 1` (only one peer engaged), else `"solid"`. Thin-confidence findings are the ones Claude may override before Stage 4. |
 | `findings[].tierOverride` | `null` unless Claude recorded an override; shape `{from, to, reason}`. |
+| `findings[].raiserSeat` | **v4.8**, optional — echoed verbatim from the input finding (see the tally-input schema above). Absent unless the bench repeats an alias. |
+| `findings[].sameModelCorroboration` | **v4.8**, optional, `true` only — a warning stamp: after the seat-aware exclusion above, at least one *agreeing* peer of this finding shares the raiser's **alias**, i.e. the corroboration came from another seat of the same model and is not independent. Emitted only when true (never `false`), so a document without it is byte-identical to a pre-v4.8 one. ⚠️ **Alias-only, and it errs in both directions:** it *misses* `--models gpt-5,openai/gpt-5` (genuinely one model under two aliases — votes carry no `resolvedModel` to compare) and it *fires falsely* on a **split alias**, one alias whose two seats happened to resolve to different executables. The reliability ledger uses a different notion of identity for the same run — it treats `(alias, resolvedModel)` as the key — so the two documents can disagree about what "the same model" means. Treat the stamp as "worth a second look", never as proof. |
 | `tierCounts` | Convenience totals across all findings — this is what `renderRecord`'s human-readable summary prints. |
 
 **The peers-only tier cascade** (`assignTier(a, d)` — exhaustive over all `(a, d)`):
@@ -708,8 +711,14 @@ For each finding, `buildVerdict` looks up the matching decision by `id` and fold
 `applied` (default `false`), `duplicateOf` (default `null`), and `tierOverride` (decision's
 override wins over the tally record's, if both are present — the effective `tier` becomes
 `tierOverride.to` when an override exists). Everything else (`basis`, `confidence`,
-`adjudications`, `streetCred`, `runStats`, `tierCounts`) passes through from the tally record
-unchanged.
+`adjudications`, `raiserSeat`, `sameModelCorroboration`, `streetCred`, `runStats`, `tierCounts`)
+passes through from the tally record unchanged, and `meta.seats` is carried across as the
+top-level `seats`.
+
+⚠️ **`buildVerdict` is a closed projection, not a copy.** Both of its literals name every key they
+emit — the top level renames `meta.models` to `council`, and each finding is rebuilt from a fixed
+field list — so a key added to the tally record does **not** reach `verdict.json` until it is
+named here. That is why the v4.8 keys below each needed their own line.
 
 **Output schema** (`verdict.json`, schema v2 — independent of the tally record's own
 `schemaVersion`):
@@ -738,6 +747,9 @@ unchanged.
 - `schemaVersion` — verdict-document schema version (currently `2`).
 - `type` — document-type discriminator; always `"council-verdict"` (council family v2 envelope).
 - `overallVerdict` — the chair's verdict-scale outcome: one of `"Ship it"`, `"Fix these first"`, `"Fundamental rethink"`, or `null` when no chair verdict was produced (populated by the headless engine during Stage 3; `null` for a plain `council verdict` merge without engine integration).
+- `seats` — **v4.8**, optional. The tally record's `meta.seats` (same `{id, alias, role, lens, position}` shape), promoted to the top level next to `seatLoss`. Present only when the tally record carried one, i.e. only when the bench repeated an alias. It is what makes the `alias#N` ids on `findings[].raiserSeat`, `adjudications[].seat` and `runStats[].seat` resolvable from the verdict **alone** — before v4.8 the verdict named seats it could not resolve. `council report` reads it to give each seat its own adjudication-matrix column; when it is absent, or is not an array of objects each carrying a string `id`, the renderer falls back to alias space **whole** and renders exactly as it did before v4.8.
+- `findings[].raiserSeat` — **v4.8**, optional. The raising seat's id, carried through from the tally record; absent unless the bench repeated an alias. `findings[].raiser` stays the alias.
+- `findings[].sameModelCorroboration` — **v4.8**, optional, `true` only. Carried through from the tally record; see the tally-record notes above for the stamp's meaning **and for the two directions in which it is wrong** (it misses one model behind two aliases, and it fires falsely on one alias behind two executables).
 - All other keys (`runId`, `council`, `findings`, `streetCred`, `runStats`, `tierCounts`) are passed through unchanged from the tally record.
 
 **Write path:** always atomic — a `<out>.tmp-<pid>` file is written first, then renamed over the
@@ -782,6 +794,27 @@ verdict-summary tier-count table, the **adjudication matrix** (finding × judge,
 `*` marking the raiser's own vote), the **peers-only street-cred table**, **findings grouped by
 tier** (Disputed first), and a **cost table** (per-model status/duration/cost + wave total,
 sourced from `runStats[].usage`).
+
+⚠️ **v4.8 — on a bench that repeats an alias, the matrix is keyed by SEAT.** When `verdict.json`
+carries a `seats` table the columns are titled `deepseek#1` / `deepseek#2` rather than two
+identical `deepseek` headers, the Raiser cell names the raising **seat**, and the `*` marks that
+seat's column only — so exactly one of two same-alias columns carries it. This is a bug fix as
+much as a rename: the old alias key was **last-wins**, so the second seat's vote overwrote the
+first's and a finding whose `basis` was `a0/d1` could render as two agreements, both starred. Now
+the rendered row and the finding's `basis` agree. **Benches with no repeated alias are
+byte-identical to v4.7** — every seat id there *is* its alias, so nothing in the document differs
+and nothing in the render does either. A verdict with no `seats` table (anything written before
+v4.8, anything hand-assembled) renders in alias space exactly as it always has. One known gap: a
+judge whose Stage-2 leg never bound to its seat emits no `adjudications[].seat`, so in seat space
+its vote keys to a bare alias that no column reads — it still counts in `basis` but renders
+nowhere, where the old last-wins matrix at least showed it somewhere.
+
+In the Council Workspace the same matrix is built from `tally.json` (via `tally.meta.seats`) and
+behaves identically, with one deliberate difference: it keeps rendering the blank `claude` column
+that the report filters out. **Blind mode never renders a seat id** — a seat id contains its
+alias, so both twins collapse to `Review A` there, exactly as before v4.8. Its legend is worded
+`* raiser` where the report's reads `` `*` raiser's own vote ``; the two say the same thing, and
+both now refer to the raiser's seat.
 
 This is the same renderer the `second-opinion` skill calls in Stage 5 to produce `report.html`.
 **`report.md` and this renderer's output are two different files** — `report.md` is Claude-authored
@@ -994,6 +1027,11 @@ _Legend: ✓ agree · ✗ dispute · – neutral · `*` raiser's own vote_
 | gpt | complete | 38s | $0.0520 |
 | **Wave total** | | | $0.0900 |
 ```
+
+This bench's two aliases are distinct, so its matrix and legend are byte-for-byte what every
+pre-v4.8 run produced. On a bench that **repeats** an alias the columns split by seat
+(`deepseek#1` / `deepseek#2`) and the legend's `*` marks the raiser's **seat** — see "What it
+renders" above.
 
 **6. Stats** — after this run's `tally` call appended to the ledger:
 

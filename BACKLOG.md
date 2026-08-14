@@ -2167,14 +2167,22 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   merge into one ledger row whose `conformance` is worst-wins and whose `wasChair` is any-wins —
   a persisted scalar that now reads differently. Decide whether the engine should refuse it,
   normalise it, or keep accepting it with the merge documented (today's answer, T14).
-- [ ] **Findings are attributed by ALIAS, not by seat → PR4c.** `buildLedgerRows` filters
+- [ ] **Findings are attributed by ALIAS, not by seat.** ⚠️ **This item was filed "→ PR4c" and PR4c
+  did NOT take it (ruling R4c-3); the forecast expired unfulfilled and `ledger.js`'s in-source
+  comment has been corrected to say so.** `buildLedgerRows` filters
   `findings.filter(f => f.raiser === model)`, which is alias-exact, so on a bench where one alias
   fills two seats each row would claim BOTH seats' findings. PR4b works around this by
   concentrating the statistics on one row per alias (R4b-2) rather than dividing them, because
   dividing them fabricates a per-executable `confirmRate` (measured 0.5/0.5 where the truth is
-  1.0/0.0 and 0.0/1.0). The real fix is seat attribution: `raiserSeat` is already on findings
-  (`src/council/anonymize.js`, shipped by PR3); the missing half is `runStats[].seat`, and `r.seat`
-  already reaches `run-assemble.js`'s `buildTallyInput` unread — roughly three lines.
+  1.0/0.0 and 0.0/1.0). That concentration still stands. Two corrections to this item's own
+  estimate, both measured during PR4c: the missing half — `runStats[].seat` — **is now shipped**
+  (`src/council/run-assemble.js`'s `buildRunStatsEntry`, through `tally.js`'s allowlist into
+  `tally.json` and `verdict.json`), so the *data* prerequisite is met; but "roughly three lines" was
+  wrong — it took three files, because `buildRunStatsEntry` destructures a fixed param list that
+  silently drops an extra argument and `tally()`'s runStats projection is an explicit allowlist that
+  builds a fresh object literal. What remains is the actual attribution change: `findings[].raiser`
+  is still the ALIAS, so the join has nothing to split on. Seat-attributing it means keying the
+  filter on `raiserSeat` and deciding what a seat-less finding joins to.
 - [ ] **A never-ran aggregate stays chair-promotable, and PR4b makes it a standalone one.** Street
   cred is alias-level and PR4b deliberately did NOT concentrate it (concentration was measured to
   flip the launched name from the short alias to the raw executable id, the exact failure
@@ -2184,6 +2192,119 @@ Three items PR4b deliberately did NOT fix. All three citations were re-derived f
   **pre-existing** — today it is merged into one group — but PR4b splits it out as its own
   promotable aggregate with its own permanent `legacy` line in `council stats`. Do not invent a
   rule here: the real fix is seat-attributed street cred, which belongs with the item above.
+
+#### Filed by PR4c — the seat spine (2026-08-14)
+
+Everything PR4c deliberately did NOT fix, with the measurement that establishes it. Every citation
+below was re-derived from the source at the end of PR4c, not inherited from the plan — the plan's
+own numbers for two of these were stale (`ledger.js:104` had moved to `:106`, and
+`classifyCouncilMembers` is in `src/utils/config.js`, not `src/config.js`).
+
+- [ ] **Street cred collapses twins, three ways, and PR4c left all three (ruling R4c-2).** Measured
+  on bench `['a','a','b']`: (1) `rankPositions` (`src/council/tally.js:32-42`) keys its map by
+  MODEL — `pos.set(m, meanPos)` at `:38` — so on `order ["a","a","b"]` the first twin's position 1
+  is **overwritten**, not averaged, yielding `{a:2, b:3}`. (2) `computeStreetCred`
+  (`src/council/tally.js:49-67`) maps over `meta.models` at `:51`, which is still `['a','a','b']`, so the
+  record carries **two byte-identical `streetCred` rows**, and both reach the user — the Markdown
+  street-cred table at `src/council/report.js:181` and the HTML one at
+  `src/council/report-html.js:49`. (3) The ledger's
+  join `new Map(streetCred.map(s => [s.model, s]))` (`src/council/ledger.js:106`) is **last-wins**
+  into an append-only file. R4c-2 re-confirmed R4-3 on this evidence: fixing (3) alone was measured
+  to flip the launched chair name from the short alias to the raw executable id, so this needs to be
+  taken as one seat-keyed change, in its own PR, not piecemeal.
+- [ ] **`lens` and `position` are unrecoverable from the tally artifacts on any bench that does not
+  repeat an alias (R4c-7).** `meta.seats` is emitted only when the bench repeats an alias, which is
+  a **different question** from "does anything else in the document carry the seat's lens". Measured
+  on `bench=['a','b'] lenses=['Security Review','perf']`: `meta.seats` is **absent**,
+  `runStats[].role` carries only the slug `lens:security-review`, and the raw lens text
+  `"Security Review"` appears **nowhere** in the tally input. `position` is unrecoverable on every
+  bench. R4c-1's original justification for the table was *"`role`, `lens` and `position` appear
+  nowhere else"*; that reason is **withdrawn** — the honest claim is "seat ids are resolvable on
+  twin benches, and only there". The owner chose byte-identity on lens/critic benches (measured
+  identical across eight configurations) over a table PR5 can ask for when it needs one. Revisit
+  when a consumer actually needs `lens`/`position`, and widen the predicate then.
+- [ ] **Five seat shapes the #137 peer fix does not close.** All measured, all disclosed in the
+  CHANGELOG rather than hidden:
+  1. **The raiser's own Stage-1 leg orphans** — `findings[].raiserSeat` and that seat's vote-seat
+     vanish *together*, the filter falls back to the alias compare, and the undercount survives.
+  2. **A peer twin's leg orphans** — the fallback drops that twin's legitimate agree, and the
+     `sameModelCorroboration` stamp does not fire either, so the corroboration is silently absent
+     rather than merely unlabelled. This one is a **deliberate safe-drop**: a seat-less `deepseek`
+     vote cannot be told apart from the raiser's own.
+  3. **Two orphaned twin seats collapse to ONE dead-seat row carrying no seat.** `deadSeats`
+     (`src/council/run-stage1-rows.js:76-89`) is a **Map** whose key falls back to the alias when
+     `seatOf.get(l)` is null, so two dead twins produce one entry. Measured through the real
+     `pushDeadSeatRows` + real `bindSeats`: two orphaned twin legs ⇒ `[{"model":"deepseek",
+     "role":"seat"}]` — one row, no seat, for two paid seats. Pre-existing; PR4c's stamp is simply
+     inert there.
+  4. **A `--council` preset with a whitespace-padded member is functionally a twin bench that
+     `buildSeats` treats as two distinct aliases.** `classifyCouncilMembers`
+     (`src/utils/config.js:438-460`) pushes `member` **raw** where `parseModelsList` would trim, and
+     `buildSeats` (`src/council/seats.js:67`) mints `alias#N` only when `counts.get(alias) > 1` — so
+     `['openai/gpt-5 ','openai/gpt-5']` is two aliases, not one. Measured with both seats agreeing on
+     both findings: `basis {a:0,d:0,n:0} Singleton` — **the undercount survives in full, silently.**
+     The fix is upstream (trim at classification), not in the peer filter.
+  5. **A judge whose Stage-2 seat orphaned has its vote counted in `basis` but rendered NOWHERE**
+     in the seat-keyed matrix — it keys to a bare alias no column reads. HEAD at least rendered it
+     via alias last-wins. NEW with PR4c's matrix re-key, pinned as disclosed behaviour in
+     `tests/council/seat-matrix.test.js` rather than left to be discovered. A sixth, related shape
+     is pinned beside it: when the **raiser's** Stage-1 seat orphans on a twin bench the star
+     disappears and the Raiser cell names no column, because `meta.seats`' guard runs over the whole
+     seat table and is independent of binding while `raiserSeat` needs a bound `r.seat`.
+- [ ] **`location` is stripped on the MCP tally path.** `amicus_council_tally`'s findings schema
+  (`src/mcp-tools.js:408`) declares only `id`, `raiser`, `severity`, `claim?` (plus the `raiserSeat?`
+  PR4c added), so zod drops `location` — while `src/council/anonymize.js` emits it and its own
+  comment records that Action v2 joins on `claim` + `location`. `src/mcp-server.js` hands the
+  SDK-**parsed** input straight to `tally()`, so nothing downstream can recover it. The CLI path
+  (`src/cli-handlers-council.js`, a raw `JSON.parse` with no schema) keeps it — so this is a live
+  CLI/MCP fork. PR4c widened the same schema for the three seat keys (R4c-5) and deliberately did
+  not widen it further; the fix is one more optional field, but it wants its own test.
+- [ ] **`VERDICTS[v.verdict]` resolves INHERITED keys.** `src/council/tally.js:114-115` claims
+  unknown verdict strings are skipped so a stray value cannot corrupt the basis — but `VERDICTS`
+  (`:71`) is a plain object literal, so `verdict: 'toString'` resolves through the prototype chain
+  and `basis["function toString() { [native code] }"] = NaN`, serialized as `null` in both
+  `tally.json` and `verdict.json`. Reachable on the schema-free CLI path. Pre-existing, and PR4c's
+  `sameModelCorroboration` stamp (`:141`) reads the **same expression**, so it inherits the hole. The
+  fix is an `Object.prototype.hasOwnProperty.call(VERDICTS, v.verdict)` guard at both sites — cheap,
+  but it changes `basis` on a document that currently produces a `null`, so it needs a decision
+  about whether that is a fix or a shape change.
+- [ ] **The chair packet is assembled entirely in alias space, so on a twin bench it is internally
+  unreconcilable.** `buildChairPacketFile` (`src/council/run-assemble.js:263-277`) passes the chair
+  only `reviews`, `rankings`, `adjudications` and `record.tierCounts` (`:266-273`);
+  `src/council/briefings-chair.js:88`
+  renders `--- Review by ${r.model} ---` and `:93` renders `${a.findingId} — ${a.judge}:
+  ${a.verdict}` — every one of them alias-keyed. The chair is therefore handed *"Deterministic tier
+  counts: {Confirmed: 1}"* beside two `A1 — deepseek:` lines, with **nothing in the packet able to
+  reconcile them**. PR4c seat-keyed the report and the Workspace matrix but not this packet, so the
+  human-facing artifact and the model-facing one now disagree. ⚠️ Note the constraint before
+  fixing: `tests/council/run-debate.test.js`'s parity pin exists because a seat id in a
+  model-carrying **launch** argument is a non-routable model name and a real paid failure — the
+  packet is prose, not a launch argument, so it is safe to seat-key, but the boundary must be kept
+  explicit.
+- [ ] **`letterByModel` is dead code that looks live, and it collapses twins.**
+  `src/council/anonymize.js` declares it in `assignLabels`' JSDoc (`:18`), builds it (`:28`),
+  populates it keyed by MODEL (`:31`) and returns it (`:33`) — and it has **no production consumer
+  anywhere in `src/`**; the only reader is `tests/council/anonymize.test.js`. On a twin bench
+  `letterByModel` keeps one letter per alias, so anyone who reaches for it gets a silent collapse.
+  ⚠️ **`labelMap` is NOT the collapsing map** — a prior review claimed it was; measured,
+  `assignLabels(['a','a','b'])` yields `{"Review A":"a","Review B":"a","Review C":"b"}`, whose keys
+  are labels and are unique by construction. Delete `letterByModel`, or give it a seat key before
+  something starts using it.
+- [ ] **The roster-padding block is duplicated three times, and the prior refusal was INVERTED.**
+  `src/council/run-retry.js:121-131`, `src/council/run-stage2.js:91-107` and
+  `src/council/run-debate-revote.js:115-126` each build the same `__unbound-<waveId>-<n>` placeholder
+  roster before `bindSeats` and then filter the placeholders back out — ~11 lines apiece, and all
+  three already `require('./seats')`, so the consolidation costs no new dependency. ⚠️ The v4.8 PR4
+  draft refused this as *"a near-copy, not a win"* while **endorsing** a `seatKey` consolidation;
+  measured, that is exactly backwards. `seatKey` is net-flat: `run.js:228` and `run-retry.js:149` are
+  byte-identical (54 B) but `run.js`'s copy has exactly **one** caller (`:229`);
+  `run-debate-revote.js:64` is a *different* form — a named `function seatKey(seat, alias)` with
+  different parameter names — and also has one caller (`:132`); and `run.js:231` is a **third,
+  hand-inlined** copy that must stay, because its `|| byJudge.get(r.model)` fallback is load-bearing
+  (an orphaned Stage-2 leg's conformance becomes unreachable without it). Only `run-retry.js`'s copy
+  earns its keep, with five call sites (`:152`, `:163`, `:180`, `:196`, `:201`). Recorded so the
+  wrong endorsement is not re-inherited. Still
+  **not** urgent; it is a tidy-up, not a defect.
 
 ### Bench adaptation — closes #135, finishes #129
 

@@ -93,7 +93,23 @@ function tally(input) {
     // Only exclude the raiser's own vote when a raiser is known; the raiser is
     // populated by the orchestrator (not the reviewer JSON), so an unset raiser
     // must not silently drop a real peer vote (L8).
-    const peers = f.raiser ? votes.filter(v => v.judge !== f.raiser) : votes;
+    //
+    // v4.8 PR4c §3.3 (#137): compare SEATS when both sides carry one, aliases
+    // otherwise. On a twin bench the alias compare drops a twin's real vote —
+    // measured on ['deepseek','deepseek','gpt'], one corroborating peer reported
+    // as `Singleton {a:0,d:0}`; on three deepseeks the whole cross-review was
+    // discarded. The guard is NOT the naive `v.seat !== f.raiserSeat`: both
+    // producers are `X && X.id !== alias` over independent bind operations
+    // (anonymize.js's raiserSeat over Stage 1, run-assemble.js's adjudication
+    // seat over Stage 2), each `|| null` by design, so exactly one side carrying
+    // a seat id is ENGINE-reachable in both directions whenever bindSeats
+    // orphans a twin leg — and there the naive form reads `undefined !== 'x#1'`
+    // and silently promotes a Singleton to Confirmed on the raiser's own vote.
+    // debate.js's peerVerdicts moves with this in the SAME commit, or the
+    // defense brief's peer split disagrees with the tally the chair reads.
+    const peers = f.raiser
+      ? votes.filter(v => (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser)
+      : votes;
     const basis = { a: 0, d: 0, n: 0 };
     // Skip unknown verdict strings so a stray value can't corrupt the basis via
     // basis[undefined] = NaN (L9).
@@ -102,8 +118,28 @@ function tally(input) {
       if (key !== undefined) { basis[key] += 1; }
     }
     const { tier, confidence } = assignTier(basis.a, basis.d);
+    // v4.8 PR4c §3.3 (R8): `peers` has already excluded the raiser BY SEAT, so a
+    // surviving peer whose ALIAS equals the raiser's is a different seat of the
+    // same model — corroboration that is not independent. Emitted only when TRUE
+    // (an unconditional `false` would change every document's shape).
+    // ⚠️ The leading `f.raiser &&` is LOAD-BEARING, not decoration. The filter
+    // above has THREE branches: the OUTER `f.raiser ? … : votes` skips it
+    // entirely, so `peers` can hold seat-carrying votes with the seat branch
+    // never having run, and `v.judge === f.raiser` is then
+    // `undefined === undefined` on a hand-assembled document that names no
+    // models (cli-handlers-council.js parses raw JSON with no schema), and
+    // `'' === ''` on the MCP path, whose z.string() accepts the empty string and
+    // whose output reaches the append-only ledger.
+    // ⚠️ Alias-only in BOTH directions, and the CHANGELOG says so: it misses
+    // `gpt-5,openai/gpt-5` (one model, two aliases — votes carry no
+    // resolvedModel) and it fires falsely on a SPLIT alias, whose two seats
+    // resolved to different executables. PR4b's ledger treats
+    // (alias, resolvedModel) as identity; this stamp is same-ALIAS only.
     return { id: f.id, raiser: f.raiser, severity: f.severity, tier, basis, confidence,
-             tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}) };
+             tierOverride: null, adjudications: votes, ...(f.raiserSeat ? { raiserSeat: f.raiserSeat } : {}),
+             ...(f.raiser
+               && peers.some(v => v.seat && f.raiserSeat && VERDICTS[v.verdict] === 'a' && v.judge === f.raiser)
+               ? { sameModelCorroboration: true } : {}) };
   });
   return {
     schemaVersion: COUNCIL_SCHEMA_VERSION,
@@ -128,6 +164,11 @@ function tally(input) {
       ...(r.repairRefused ? { repairRefused: r.repairRefused } : {}),
       ...(r.waveId ? { waveId: r.waveId } : {}),
       ...(r.resolvedModel ? { resolvedModel: r.resolvedModel } : {}),
+      // v4.8 PR4c §3.1: `seat` rides the same slot. It is emitted upstream only
+      // when the bench repeats that alias (run-assemble.js's buildRunStatsEntry),
+      // so a unique-alias run is byte-for-byte unchanged here and in verdict.json,
+      // which copies this array verbatim (verdict.js:148).
+      ...(r.seat ? { seat: r.seat } : {}),
       status: r.status || 'unknown',
       durationMs: typeof r.durationMs === 'number' ? r.durationMs : null,
       usage: r.usage || null,

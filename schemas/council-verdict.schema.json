@@ -49,6 +49,10 @@
         "type": "string"
       }
     },
+    "seats": {
+      "type": "array",
+      "description": "v4.8, optional. The tally record's meta.seats promoted to the top level beside seatLoss — one {id, alias, role, lens, position} entry per BENCH seat in bench order. Present only when the tally record carried one, i.e. only when the bench repeated an alias. It is what makes the `alias#N` ids on findings[].raiserSeat, adjudications[].seat and runStats[].seat resolvable from the verdict ALONE. Bench-only: 'claude' is never a seat, so this must never be joined positionally to `council`. ABSENCE DOES NOT MEAN the bench had no repeated alias — it means no seat table is available; a verdict written before v4.8, or assembled by hand, has none. `items` is deliberately unconstrained: `council report` accepts any array here and falls back to alias space WHOLE unless every element is an object carrying a string `id`, rather than failing to render."
+    },
     "claudeInCouncil": {
       "type": "boolean"
     },
@@ -123,6 +127,17 @@
           },
           "adjudications": {
             "type": "array"
+          },
+          "raiserSeat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "v4.8, optional. The raising SEAT's id (e.g. 'deepseek#1'), carried through from the tally record. Emitted only when it differs from the raiser's alias, so a bench with no repeated alias never carries it; `raiser` stays the alias in every case. Resolve it against the top-level `seats` table. Before v4.8 the verdict named seats it could not resolve — a reader holding only the verdict could not tell which of two same-alias seats raised a finding."
+          },
+          "sameModelCorroboration": {
+            "const": true,
+            "description": "v4.8, optional, TRUE ONLY (never emitted as false, so a document without it is byte-identical to a pre-v4.8 one). Carried through from the tally record: after the seat-aware raiser exclusion, at least one AGREEING peer of this finding shares the raiser's alias — corroboration that is real but came from another seat of the same model, so it is not independent. WRONG IN BOTH DIRECTIONS, by construction: the comparison is on the ALIAS only. It MISSES one model reached under two aliases (e.g. --models gpt-5,openai/gpt-5), because votes carry no resolved-executable id. And it FIRES FALSELY on a SPLIT alias — one alias whose two seats resolved to different executables — telling a reader to discount a genuinely independent cross-executable corroboration. The reliability ledger keys identity on (alias, resolvedModel) for the same run, so the two documents can disagree about what 'the same model' means. Treat this as 'worth a second look', never as proof."
           },
           "decision": {
             "type": [

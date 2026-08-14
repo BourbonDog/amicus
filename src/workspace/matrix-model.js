@@ -2,26 +2,28 @@
  * Council Workspace — adjudication matrix view model (v4.4 §5.2).
  *
  * Pure: tally.json + labelMap (+ verdict.json) → renderable rows/cells.
- * Symbols come from council/report.js SYMBOL (single source — the report and
- * the workspace can never disagree about what the symbols mean). Every
- * name-bearing field carries BOTH spellings ({model, label}) so the
- * renderer's blind toggle is a pure display flip with no re-fetch. Missing
+ * Symbols come from council/report.js SYMBOL, and the seat-space decision from
+ * its isSeatSpace (single source — the report and the workspace can never
+ * disagree about what the symbols mean, nor about which space a document is
+ * in; the latter added by council review A3/B1). Every name-bearing field
+ * carries BOTH spellings ({model, label}) so the renderer's blind toggle is a
+ * pure display flip with no re-fetch. Missing
  * votes (partial waves) are blank cells, never invented neutrals — tier math
  * already excluded them (v4.0).
  *
  * ⚠️ DE-ROT (F07): `tally()` writes `tierOverride: null` on EVERY finding,
- * unconditionally (src/council/tally.js:106) — it is never a real source for
+ * unconditionally (src/council/tally.js:139) — it is never a real source for
  * either the override badge or the post-override tier. Only `buildVerdict`
  * materializes `{from,to,reason}` and rewrites `tier` to `tierOverride.to`
- * (src/council/verdict.js:33-37). So both fields are joined in from
+ * (src/council/verdict.js:122-126). So both fields are joined in from
  * verdict.findings[] by `id`; when verdict is absent/unparseable (caller
  * passes null/undefined, or a finding has no verdict-side counterpart) the
  * row falls back to tally's own (pre-override) tier and renders no badge.
  */
 'use strict';
 
-const { SYMBOL } = require('../council/report');
-const { pairFor } = require('./blind-mode');
+const { SYMBOL, isSeatSpace } = require('../council/report');
+const { labelFor, pairFor } = require('./blind-mode');
 
 /** Index verdict.findings[] by id, tolerating an absent/malformed verdict doc. */
 function indexVerdictFindings(verdict) {
@@ -44,7 +46,34 @@ function indexVerdictFindings(verdict) {
  */
 function buildMatrixModel(tally, labelMap, verdict) {
   const map = labelMap || {};
-  const judges = tally && tally.meta && Array.isArray(tally.meta.models) ? tally.meta.models : [];
+  const meta = (tally && tally.meta) || {};
+  const aliasJudges = Array.isArray(meta.models) ? meta.models : [];
+  // v4.8 PR4c §3.6 (R4c-8): the IDENTICAL decision report.js applies to
+  // verdict.seats, here over tally.meta.seats — and since council A3/B1, the
+  // identical FUNCTION rather than a second copy of the expression.
+  // run-detail.js already hands this function the parsed tally.json, so the
+  // 3-arg signature is unchanged. One flag for all three readers (roster, vote
+  // key, raiser); see isSeatSpace for why every element must carry a string id
+  // and why `??` is wrong.
+  const seatSpace = isSeatSpace(meta.seats);
+  // report.js filters the reserved claude seat out of ITS roster; this one
+  // never has — tally.meta.models carries `claude` (run-assemble.js appends it)
+  // and HEAD renders a blank column for it. seats[] is bench-only, so a seat
+  // roster would silently DELETE that column; re-append it so the only thing a
+  // claude run's matrix changes is the twin split.
+  const claudeTail = meta.claudeInCouncil === true && aliasJudges.includes('claude') ? ['claude'] : [];
+  // A column is {key, pair}: `key` is what votes and the raiser are matched
+  // against, `pair` is what the renderer shows.
+  // ⚠️ BLIND MODE: resolve the label from the seat's ALIAS and carry the seat's
+  // ID only as identity. `pairFor(seat.id, map)` returns label:null (labelMap's
+  // values are aliases), and workspace-render.js's display() then falls back to
+  // pair.model and prints `deepseek#1` with blind mode ON. A seat id contains
+  // its alias, so rendering one in blind mode defeats blind mode. Both twins
+  // therefore collapse to `Review A` when blind — exactly as at HEAD.
+  const columns = seatSpace
+    ? meta.seats.map(s => ({ key: s.id, pair: { model: s.id, label: labelFor(s.alias, map) } }))
+      .concat(claudeTail.map(j => ({ key: j, pair: pairFor(j, map) })))
+    : aliasJudges.map(j => ({ key: j, pair: pairFor(j, map) }));
   const findings = tally && Array.isArray(tally.findings) ? tally.findings : [];
   const verdictById = indexVerdictFindings(verdict);
 
@@ -52,8 +81,11 @@ function buildMatrixModel(tally, labelMap, verdict) {
     const votes = {};
     for (const adj of (Array.isArray(f.adjudications) ? f.adjudications : [])) {
       if (!adj || typeof adj.judge !== 'string') { continue; }
-      votes[adj.judge] = adj.verdict;
+      votes[(seatSpace && adj.seat) || adj.judge] = adj.verdict;
     }
+    // The raiser's column key. In alias space this is `f.raiser` and every
+    // expression below is byte-identical to HEAD.
+    const raiserKey = seatSpace ? (f.raiserSeat || f.raiser) : f.raiser;
     const vf = verdictById.get(f.id);
     return {
       id: f.id,
@@ -69,22 +101,25 @@ function buildMatrixModel(tally, labelMap, verdict) {
       // thin/tierOverride badges) so a withdrawn/amended/defended/no-response finding never
       // renders as an ordinary live row. Absent on non-debate runs, hence `|| null`.
       debate: f.debate || null,
-      raiser: pairFor(f.raiser, map),
+      // The THIRD reader. Its label still resolves from the ALIAS (blind mode
+      // must not leak a seat id here either), while its identity is the seat —
+      // otherwise the starred column and the Raiser cell name different things.
+      raiser: { model: raiserKey, label: labelFor(f.raiser, map) },
       basis: f.basis || { a: 0, d: 0, n: 0 },
-      cells: judges.map((j) => {
-        const vote = Object.prototype.hasOwnProperty.call(votes, j) ? votes[j] : null;
+      cells: columns.map((c) => {
+        const vote = Object.prototype.hasOwnProperty.call(votes, c.key) ? votes[c.key] : null;
         return {
-          judge: pairFor(j, map),
+          judge: c.pair,
           verdict: vote,
           sym: vote ? (SYMBOL[vote] || '?') : ' ',
-          isRaiser: j === f.raiser,
+          isRaiser: c.key === raiserKey,
         };
       }),
     };
   });
 
   return {
-    judges: judges.map((j) => pairFor(j, map)),
+    judges: columns.map((c) => c.pair),
     rows,
     tierCounts: (tally && tally.tierCounts) || null,
     judged: !(tally && tally.judged === false),

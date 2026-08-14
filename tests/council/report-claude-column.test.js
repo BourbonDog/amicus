@@ -5,12 +5,14 @@ const { buildVerdict } = require('../../src/council/verdict');
 const { buildReport } = require('../../src/council/report');
 const avInput = require('./fixtures/av-receiver-input');
 
-// SKILL.md:482 / run-stages.js:162-163 guarantee: a --claude-review file is
+// SKILL.md:448 / run-stage2.js:61-62 guarantee: a --claude-review file is
 // judged by the council but never joins the judge roster. 'claude' legitimately
 // sits in meta.models (verdict.council) — that's the street-cred universe
-// (run-assemble.js:123-125, docs/council.md:326) — but it must never grow an
+// (run-assemble.js:226, docs/council.md:326) — but it must never grow an
 // adjudication-matrix column, or the report asserts claude cast a vote it never
-// cast (docs/council.md:661 legend: a bare `*` means "raiser's own vote").
+// cast (docs/council.md:1002 legend: a bare `*` means "raiser's own vote" —
+// under v4.8 PR4c that is the raiser's SEAT, and seats[] is bench-only, so a
+// seat-space roster can never grow a claude column either).
 function claudeInCouncilVerdict() {
   const tallyInput = {
     meta: { runId: 'claude-council', runType: 'headless', date: '2026-07-20',

@@ -390,16 +390,35 @@ function getTools() {
       'returns the tally record immediately. No subprocess, no polling. Claude ' +
       'assembles the input and may override margin tiers afterward.',
     inputSchema: {
+      // v4.8 PR4c R4c-5: the three seat keys are declared here or zod SILENTLY
+      // STRIPS them, and `amicus_council_tally` stays permanently on the #137
+      // behaviour while `amicus council tally` (a raw JSON.parse with no schema)
+      // gets the fix. Deliberately PERMISSIVE — validate the envelope, let
+      // tally() be the single arbiter of shape on both paths, matching
+      // amicus_verdict's own `record: z.record(z.any())`. `z.array(z.record())`
+      // would reject a string seat table the CLI accepts, and a bare
+      // `.optional()` would reject the `|| null` a hand-assembling caller
+      // writes, which serializes byte-identically to omitting the key.
+      // ⚠️ ALL THREE keys carry `.nullable()`, not two of three (council C1).
+      // Bare `.optional()` on `seats` failed the WHOLE call with `seats:
+      // Expected array, received null` where `amicus council tally` — the raw
+      // JSON.parse at cli-handlers-council.js:24 — accepts it and every
+      // seat-space reader treats it as absent (`Array.isArray(null)` is
+      // false). That is the same silent fork in the same schema, one key
+      // later. `amicus_verdict` below already spells its array/record
+      // envelope keys this way (`seatLoss` :461, `degrades` :465).
       meta: z.object({
         runId: z.string(), runType: z.string().optional(), date: z.string().optional(),
         models: z.array(z.string()).min(1), chair: z.string().optional(),
-        claudeInCouncil: z.boolean().optional(),
+        claudeInCouncil: z.boolean().optional(), seats: z.array(z.any()).nullable().optional(),
       }).describe('Run metadata; meta.models lists every reviewed model.'),
       findings: z.array(z.object({
         id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),
+        raiserSeat: z.string().nullable().optional(),
       })).describe('Run-global findings (ids already A1/B2/C3-prefixed by Claude).'),
       adjudications: z.array(z.object({
         judge: z.string(), findingId: z.string(), verdict: z.enum(['agree', 'dispute', 'neutral']),
+        seat: z.string().nullable().optional(),
       })).describe('One row per (judge × finding).'),
       rankings: z.array(z.object({
         judge: z.string(), order: z.array(z.union([z.string(), z.array(z.string())])),

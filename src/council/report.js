@@ -16,6 +16,45 @@ const { formatDegrade } = require('../utils/degrade');
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
 
+/**
+ * Is a document in SEAT SPACE — does it carry a USABLE seat table?
+ *
+ * v4.8 PR4c §3.6 (R4c-8): ONE flag decides THREE readers of the seat space —
+ * the roster, the vote key, and the RAISER. Gating any two of them ships a
+ * self-contradicting artifact: gate the roster and the vote key only and the
+ * star vanishes (`'deepseek' === 'deepseek#1'` is false for both columns);
+ * gate the raiser only and the Raiser cell renders a seat id while every
+ * column header renders the alias. `verdict.seats` is NEW in PR4c while
+ * `adjudications[].seat` shipped in PR3, so independent fallbacks would leave
+ * EVERY vote cell blank on the twin verdicts already on disk.
+ *
+ * `Array.isArray`, not `?.`/`??`: `[]` is not nullish, so `??` would delete
+ * every judge column, and a non-array `seats` throws where HEAD renders. The
+ * per-element check exists because every path that reaches a renderer with an
+ * on-disk document is schema-free — `council report <verdict.json>` and
+ * `council verdict <tally.json> --render` are raw JSON.parse, and
+ * `amicus_verdict` takes `record: z.record(z.any())` — while R4c-5 widened the
+ * MCP tally schema to `z.array(z.any()).nullable()` on purpose. So
+ * `seats: [null,…]` and `seats: ["deepseek#1",…]` both arrive: the first makes
+ * `s.id` THROW where HEAD renders, the second yields `undefined` columns. A
+ * malformed table falls back to alias space WHOLE instead.
+ *
+ * ⚠️ EXPORTED AND SHARED, not copied (council A3/B1). `workspace/matrix-model.js`
+ * makes the identical decision over `tally.meta.seats`, and two verbatim copies
+ * are a maintenance coupling: edit one and the two renderers disagree about
+ * which space a document is in. This is NOT `ledger.js:61-69`'s
+ * documented-copy case — that copy is paid for because `ledger.js` requires
+ * only fs/path/utils-config while its sibling pulls findings → anonymize →
+ * seats. Measured here: requiring `workspace/matrix-model.js` already loads
+ * six first-party modules and THIS file is one of them (it has imported SYMBOL
+ * since v4.4, for the same single-source reason), so sharing costs ZERO new
+ * require edges. Guarded by tests/council/seat-matrix.test.js's A3/B1 table.
+ */
+function isSeatSpace(seats) {
+  return Array.isArray(seats) && seats.length > 0
+    && seats.every(s => s && typeof s.id === 'string');
+}
+
 /** Build a neutral, render-agnostic model from a verdict (+ optional wave). */
 function toModel(verdict, wave) {
   if (!verdict || !Array.isArray(verdict.findings)) {
@@ -23,9 +62,9 @@ function toModel(verdict, wave) {
   }
   const council = verdict.council || [];
   // 'council' (verdict.council / meta.models) is the street-cred universe and
-  // legitimately includes 'claude' on a --claude-review run (run-assemble.js:
-  // 123-125, docs/council.md:326). 'judges' is the adjudication-matrix column
-  // set: SKILL.md:482 / run-stages.js:162-163 guarantee Claude is judged but
+  // legitimately includes 'claude' on a --claude-review run (buildTallyInput's
+  // run-assemble.js:226, docs/council.md:326). 'judges' is the matrix column
+  // set: SKILL.md:448 / run-stage2.js:61-62 guarantee Claude is judged but
   // never judges, so its reserved seat must never grow a matrix column — filter
   // it out ONLY when claudeInCouncil is true. This is name+flag gated, not
   // vote-derived: a bench judge that cast zero adjudications (dead/unstructured
@@ -33,13 +72,29 @@ function toModel(verdict, wave) {
   // its (blank) column — deriving the roster from "who actually voted" would
   // silently delete that column too and break the byte-unchanged-artifact
   // contract for degraded v4.0.1-shaped runs.
-  const judges = verdict.claudeInCouncil === true ? council.filter(j => j !== 'claude') : council;
+  const aliasJudges = verdict.claudeInCouncil === true ? council.filter(j => j !== 'claude') : council;
+  // v4.8 PR4c §3.6 (R4c-8): ONE flag, THREE readers below — the roster, the
+  // vote key, and the RAISER. Shared with workspace/matrix-model.js; the whole
+  // rationale (and why `??` is wrong) lives on isSeatSpace above.
+  const seatSpace = isSeatSpace(verdict.seats);
+  // No claude filter needed in seat space: seats[] is bench-only (seats.js
+  // excludes the reserved claude seat), so it can never grow a claude column.
+  const judges = seatSpace ? verdict.seats.map(s => s.id) : aliasJudges;
   const findings = verdict.findings.map((f) => {
     const byJudge = {};
     for (const j of judges) { byJudge[j] = null; }
-    for (const adj of (f.adjudications || [])) { byJudge[adj.judge] = adj.verdict; }
+    // Alias-keyed and LAST-WINS at HEAD: on a twin bench the second seat's vote
+    // overwrote the first's, so a finding whose basis was a0/d1 rendered as two
+    // agreements. A vote whose Stage-2 seat orphaned still keys to its bare
+    // alias here, which no seat column reads — counted in basis, rendered
+    // nowhere (a disclosed shape, plan §4.6, pinned in seat-matrix.test.js).
+    for (const adj of (f.adjudications || [])) { byJudge[(seatSpace && adj.seat) || adj.judge] = adj.verdict; }
     return {
-      id: f.id, severity: f.severity, raiser: f.raiser, tier: f.tier,
+      // The raiser re-key IS the star fix, and it is why report-html.js needs
+      // zero edits: renderMd's cell map and report-html.js's both test
+      // `j === f.raiser` against THIS field, so both become seat-correct at
+      // once — and the Raiser column follows instead of contradicting them.
+      id: f.id, severity: f.severity, raiser: seatSpace ? (f.raiserSeat || f.raiser) : f.raiser, tier: f.tier,
       basis: f.basis || { a: 0, d: 0, n: 0 }, decision: f.decision || null,
       applied: f.applied === true, byJudge, debate: f.debate || null,
     };
@@ -217,4 +272,4 @@ function buildReport(sources, opts = {}) {
   return renderMd(model);
 }
 
-module.exports = { buildReport, toModel, TIER_ORDER, SYMBOL };
+module.exports = { buildReport, toModel, TIER_ORDER, SYMBOL, isSeatSpace };

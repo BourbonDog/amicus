@@ -692,3 +692,92 @@ describe('getGuideText update line (spec 2026-08-03)', () => {
     expect(text).not.toContain('Update available:');
   });
 });
+
+// v4.8 PR4c Task 3 (plan §1.5, R4c-5) — the MCP tally schema must not strip the
+// seat keys, or `amicus_council_tally` stays permanently on the #137 behaviour
+// while `amicus council tally` (cli-handlers-council.js, a raw JSON.parse with
+// no schema at all) gets the fix. zod STRIPS unknown keys rather than rejecting
+// them, so the fork would be silent: mcp-server hands the SDK-PARSED input to
+// `tally()`.
+//
+// The widening is deliberately PERMISSIVE — validate the envelope, let `tally()`
+// be the single arbiter of shape on both paths. Two tighter spellings were
+// measured to leave a fork of their own and each has a test below:
+// `z.array(z.record(z.any()))` rejects a string seat table the CLI accepts, and
+// a bare `.optional()` rejects `raiserSeat: null` / `seat: null`, which the CLI
+// accepts and which serialize byte-identically to omitting the key.
+describe('amicus_council_tally retains the seat keys (v4.8 PR4c R4c-5, T16)', () => {
+  const { getTools } = require('../src/mcp-tools');
+  const schema = () => getTools().find(t => t.name === 'amicus_council_tally').inputSchema;
+
+  test('meta.seats survives the parse', () => {
+    const seats = [{ id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 }];
+    const out = schema().meta.parse({ runId: 'r', models: ['deepseek', 'deepseek'], seats });
+    expect(out.seats).toEqual(seats);
+  });
+
+  test('meta.seats accepts a NON-object table, exactly as the CLI does', () => {
+    expect(schema().meta.parse({ runId: 'r', models: ['a'], seats: ['deepseek#1'] }).seats)
+      .toEqual(['deepseek#1']);
+    expect(schema().meta.parse({ runId: 'r', models: ['a'], seats: [] }).seats).toEqual([]);
+  });
+
+  test('findings[].raiserSeat survives, including the `|| null` idiom', () => {
+    const out = schema().findings.parse([
+      { id: 'F1', raiser: 'deepseek', severity: 'major', raiserSeat: 'deepseek#1' },
+      { id: 'F2', raiser: 'gpt', severity: 'minor', raiserSeat: null },
+    ]);
+    expect(out[0].raiserSeat).toBe('deepseek#1');
+    expect(out[1].raiserSeat).toBeNull();
+  });
+
+  test('adjudications[].seat survives, including the `|| null` idiom', () => {
+    const out = schema().adjudications.parse([
+      { judge: 'deepseek', findingId: 'F1', verdict: 'agree', seat: 'deepseek#2' },
+      { judge: 'gpt', findingId: 'F1', verdict: 'agree', seat: null },
+    ]);
+    expect(out[0].seat).toBe('deepseek#2');
+    expect(out[1].seat).toBeNull();
+  });
+
+  // ⚠️ Council C1: the `|| null` idiom was spelled `.nullable().optional()` for
+  // `raiserSeat` and `seat` and left bare `.optional()` for `seats` — two of
+  // three. Measured at that spelling: the MCP path fails the WHOLE call with
+  // `seats: Expected array, received null`, while `amicus council tally`
+  // (cli-handlers-council.js:24, raw JSON.parse, no schema) accepts it, and
+  // every seat-space reader treats it as absent because `Array.isArray(null)`
+  // is false. That is exactly the silent CLI/MCP fork R4c-5 exists to close,
+  // and `mcp-tools.js`'s own `amicus_verdict` already spells array/record
+  // envelope keys `.nullable().optional()` (`seatLoss`, `degrades`).
+  test('meta.seats accepts the `|| null` idiom too, exactly as the CLI does', () => {
+    expect(schema().meta.parse({ runId: 'r', models: ['a'], seats: null }).seats).toBeNull();
+  });
+
+  test('a null seats table reaches tally() and is treated as ABSENT, so both paths agree', () => {
+    const { tally } = require('../src/council/tally');
+    const base = {
+      meta: { runId: 'r', runType: 'headless', date: '2026-07-20',
+        models: ['gemini', 'gpt'], chair: 'deepseek', claudeInCouncil: false },
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major' }],
+      adjudications: [{ findingId: 'A1', judge: 'gpt', verdict: 'agree' }],
+      rankings: [{ judge: 'gpt', order: ['gemini'] }],
+      runStats: [],
+    };
+    // mcp-server.js:1540-1543 hands the SDK-PARSED input to the handler and
+    // :1424 does `const record = tally(input)` — so the parse output, not the
+    // raw object, is what tally() sees on this path.
+    const s = schema();
+    const record = tally({
+      meta: s.meta.parse({ ...base.meta, seats: null }),
+      findings: s.findings.parse(base.findings),
+      adjudications: s.adjudications.parse(base.adjudications),
+      rankings: s.rankings.parse(base.rankings),
+      runStats: s.runStats.parse(base.runStats),
+    });
+    expect(record.meta.seats).toBeNull();
+    // Equivalent to the document that never carried the key: identical modulo
+    // that one key, which `JSON.stringify` drops when it is set to undefined.
+    const strip = r => JSON.parse(JSON.stringify({ ...r, meta: { ...r.meta, seats: undefined } }));
+    expect(strip(record)).toEqual(strip(tally(JSON.parse(JSON.stringify(base)))));
+  });
+});

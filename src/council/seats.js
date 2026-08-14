@@ -42,7 +42,7 @@ function sanitizeName(model) {
  * "restore parity" — the divergence IS the feature, and it is pinned by tests.
  *
  * The `claude` seat is deliberately absent: 'claude' is rejected from --models
- * (run-assemble.js:96-107) and synthesized onto meta.models downstream (:177).
+ * (run-assemble.js:104-132) and synthesized onto meta.models downstream (:226).
  * seats[] is bench-only — never assume meta.models.length === seats.length.
  *
  * @param {?Array<string>} bench run.json's bench (o.models)

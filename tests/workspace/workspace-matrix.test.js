@@ -1,6 +1,7 @@
 'use strict';
 
 const { makeFakeDom } = require('./helpers/fake-workspace-page');
+const { buildMatrixModel } = require('../../src/workspace/matrix-model');
 
 /**
  * Headless painter proof for electron/workspace-ui/workspace-matrix.js, same harness
@@ -170,6 +171,62 @@ describe('workspace-matrix.js (adjudication matrix + verdict painters)', () => {
       AmicusMatrix.renderMatrix(container, { judges: [], rows, tierCounts: null, judged: true }, () => {});
       expect(container.querySelector('tbody').children.length).toBe(500);
       expect(container.textContent).toContain('Showing 500 of 501 findings.');
+    });
+
+    /**
+     * v4.8 PR4c §3.6 (R4c-8), T19 — the HARD prerequisite on the seat re-key.
+     *
+     * A seat id CONTAINS its alias, so rendering one with blind mode on defeats
+     * blind mode. matrix-model.js therefore resolves each column's label from
+     * the seat's ALIAS and carries the seat's ID only as identity; this is the
+     * only test that puts that pair through the REAL display() flip, which is
+     * where the leak would actually surface (workspace-render.js's
+     * `blind && pair.label ? pair.label : pair.model`).
+     *
+     * Named mutant: `pairFor(seat.id, map)` in matrix-model.js — labelMap's
+     * values are aliases, so labelFor returns null for `gemini#1`, display()
+     * falls back to pair.model and the blind header renders `gemini#1 |
+     * gemini#2` UNMASKED. Measured RED against it. The non-blind half is
+     * asserted in the same test because a spelling that masks correctly by
+     * throwing the seat id away (`pairFor(seat.alias, map)`) restores two
+     * indistinguishable `gemini` columns — the R4c-8 defect again.
+     */
+    test('T19: blind mode renders NO seat id on a twin bench — both columns read Review A', () => {
+      const twinTally = {
+        meta: {
+          models: ['gemini', 'gemini'], claudeInCouncil: false,
+          seats: [
+            { id: 'gemini#1', alias: 'gemini', role: 'seat', lens: null, position: 1 },
+            { id: 'gemini#2', alias: 'gemini', role: 'seat', lens: null, position: 2 },
+          ],
+        },
+        findings: [{
+          id: 'A1', severity: 'major', raiser: 'gemini', raiserSeat: 'gemini#1',
+          tier: 'Contested', basis: { a: 0, d: 1, n: 0 },
+          adjudications: [
+            { judge: 'gemini', verdict: 'agree', seat: 'gemini#1' },
+            { judge: 'gemini', verdict: 'dispute', seat: 'gemini#2' },
+          ],
+        }],
+        tierCounts: { Contested: 1 },
+      };
+      // The real labelMap a twin bench writes: two labels, ONE alias.
+      const matrix = buildMatrixModel(twinTally, { 'Review A': 'gemini', 'Review B': 'gemini' }, null);
+
+      global.window.AmicusApp = { isBlind: () => true };
+      const blindC = document.createElement('div');
+      AmicusMatrix.renderMatrix(blindC, matrix, () => {});
+      expect(blindC.textContent).not.toContain('gemini');
+      expect(blindC.textContent).toContain('Review A');
+
+      global.window.AmicusApp = { isBlind: () => false };
+      const plainC = document.createElement('div');
+      AmicusMatrix.renderMatrix(plainC, matrix, () => {});
+      const heads = plainC.querySelectorAll('th').map(th => th.textContent);
+      expect(heads).toEqual(['Finding', 'Sev', 'Raiser', 'gemini#1', 'gemini#2', 'Tier', 'a/d/n']);
+      // …and the raiser cell names a column that exists, starred on that seat only.
+      const tds = plainC.querySelectorAll('td').map(td => td.textContent);
+      expect(tds.slice(0, 5)).toEqual(['A1', 'major', 'gemini#1', '✓*', '✗']);
     });
   });
 

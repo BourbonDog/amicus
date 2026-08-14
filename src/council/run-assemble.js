@@ -7,26 +7,30 @@
  * the `--claude-review` pre-flight it now also owns: the five-keys tally input
  * (meta pins: claudeInCouncil false, models = bench seats exactly — critic
  * included, chair excluded — runType 'headless'), runStats rows copied
- * verbatim from leg docs, the run-dir artifact set (tally-input.json,
- * tally.json, verdict.json with overallVerdict, report.html, chair-output.md),
+ * verbatim from leg docs, the tally half of the run-dir artifact set
+ * (tally-input.json, tally.json — the verdict half moved to
+ * ./run-verdict-files and is re-exported below), the chair packet,
  * v4.1 §4.4 pre-flight validation of the file-sourced Claude review
  * (preflightClaudeReview — the reserved-seat/chair/critic guards), its review-N+1
  * labelling (labelClaudeReview), and its synthesized null-usage runStats row
  * (claudeRunStatsRow). Raiser self-votes are INCLUDED in adjudications —
- * exclusion is tally's job (tally.js:95); judged is tally's job (tally.js:110).
+ * exclusion is tally's job (tally.js:110); judged is tally's job (tally.js:148).
  */
 
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic } = require('../utils/atomic-write');
-const { buildVerdict, summarizeSeatLoss, deriveSeatLoss, writeVerdictAtomic } = require('./verdict');
-const { buildReport } = require('./report');
 const { validateFindings } = require('./findings');
 const { toGlobalFindings } = require('./anonymize');
 // Seat identity lives in ./seats (v4.8 PR1) — that module is require-free by
 // design, so preflightSeats' body lives there and is re-exported here to keep
 // the asm.preflightSeats(o) call spelling and this file under the size gate.
 const { preflightSeats } = require('./seats');
+// Same precedent (v4.8 PR4c): writeVerdictFiles' body lives in
+// ./run-verdict-files — with the ./verdict and ./report requires it was the
+// sole consumer of — and is re-exported here so the asm.writeVerdictFiles(...)
+// call spelling and every existing test survive the move untouched.
+const { writeVerdictFiles } = require('./run-verdict-files');
 
 const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
 
@@ -57,9 +61,13 @@ function worseConformance(a, b) {
  * which is otherwise indistinguishable from a seat that never emitted JSON at
  * all. Both are additive and present only when set, so a run without either is
  * byte-for-byte unchanged.
+ *
+ * `seat` (v4.8 PR4c §3.1) is the seat OBJECT — {id, alias, role, lens, position}
+ * or null — never an id string. Callers pass `r.seat` / the dead-seat loop's own
+ * `seat` verbatim, so the object IS the contract instead of a prose one.
  */
 function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsUnverified,
-  repairRefused }) {
+  repairRefused, seat }) {
   return {
     model: model !== undefined ? model : (leg ? leg.model : null),
     role,
@@ -69,6 +77,16 @@ function buildRunStatsEntry({ leg, model, role, wasChair, conformance, findingsU
     ...(repairRefused ? { repairRefused } : {}),
     ...(leg && leg.waveId ? { waveId: leg.waveId } : {}),
     ...(leg && leg.model ? { resolvedModel: leg.model } : {}),
+    // v4.8 PR4c §3.1 / R4c-9: emit-when-DIFFERENT, compared against the seat's
+    // OWN alias — never against `model`. buildSeats mints `alias#N` only when
+    // an alias repeats (seats.js:67), so `id !== alias` IS "the bench repeats
+    // this alias": the single predicate all four seat-emit producers now share,
+    // which is what stops them disagreeing. `model` is the LEG's modelInput,
+    // which is NOT the alias when a leg reports none (it falls back to the
+    // RESOLVED id, run-launch.js:205) or when a --council preset carries a
+    // padded member — either would ship a seat id with no seat table behind it,
+    // on a bench with no twin at all.
+    ...(seat && seat.id !== seat.alias ? { seat: seat.id } : {}),
     status: leg ? leg.status : 'error',
     durationMs: leg && typeof leg.durationMs === 'number' ? leg.durationMs : null,
     usage: (leg && leg.usage) || null,
@@ -140,7 +158,8 @@ function claudeRunStatsRow() {
  * @param {{runId: string, date: string, bench: string[], chair: string,
  *   reviews: Array<{model, role, conformance, leg, globalFindings}>,
  *   judgeResults: Array<{judge, ok, order, adjudications}>,
- *   chairStats: object|null, claudeReview?: object|null, extraRows?: Array<object>}} args
+ *   chairStats: object|null, claudeReview?: object|null, extraRows?: Array<object>,
+ *   seats?: Array<object>}} args
  *   `claudeReview` (v4.1 §4.4) amends the v4.0 meta pin: present ⇒ claudeInCouncil
  *   true, 'claude' joins meta.models (the street-cred universe), its findings join
  *   the pool and it gets the synthesized null-usage runStats row. Absent ⇒ v4.0
@@ -148,26 +167,56 @@ function claudeRunStatsRow() {
  *   (repair/superseded/dead-seat-error, from runStage1 today) appended right
  *   after the primary review rows, before judge/chair accounting — absent or
  *   empty ⇒ byte-for-byte unchanged, so the pre-v4.7 length-7 pins stay green.
+ *   `seats` (v4.8 PR4c §3.2) is run.json's seat table; see meta.seats below.
  */
 function buildTallyInput({ runId, date, bench, chair, reviews, judgeResults, chairStats,
-  claudeReview, extraRows }) {
+  claudeReview, extraRows, seats }) {
   const meta = {
     runId, date, runType: 'headless',
     models: bench.slice(),          // bench seats exactly: critic included, chair excluded
     chair,
     claudeInCouncil: false,         // pinned for headless runs
+    // v4.8 PR4c §3.2 (R4c-1 as amended by R4c-7): the seat table, a pure TAIL so
+    // the shipped six-key order above is byte-identical in every case. Emitted
+    // ONLY when the bench repeats an alias — the one case where the `alias#N`
+    // seat ids on findings[].raiserSeat, adjudications[].seat and runStats[].seat
+    // resolve to nothing else in the document (meta.models is the ALIAS list).
+    // ⚠️ `seats ?` alone would be VACUOUS: run.js:133 sets o.seats unconditionally
+    // past the preflight and buildSeats always returns an ARRAY ([] is still
+    // truthy), so that spelling writes a full table into tally-input.json,
+    // tally.json AND verdict.json on every unique-alias bench.
+    // ⚠️ NARROW BY RULING, not by oversight. The guard asks "does the bench
+    // repeat an alias?", which is a DIFFERENT question from "is anything in
+    // seats[] unrecoverable?": `position` is unrecoverable everywhere and a
+    // --lenses bench keeps its raw lens text nowhere else (runStats[].role
+    // carries only the slug). R4c-7 took byte-identity on lens/critic benches
+    // over a table PR5 can request when it needs one; the gap is in BACKLOG.
+    // ⚠️ Consumers: absence means "no seat table available", NEVER "the bench was
+    // unique" — two of appendRun's three call sites feed hand-assembled input no
+    // seat machinery touches. And seats[] is BENCH-ONLY, so it must never be
+    // joined positionally to meta.models (`claude` is pushed onto that at :226)
+    // or to streetCred[].
+    // .slice() is defence-in-depth only: the array is shared with
+    // runState.checkpoint (run.js:135) and with both tally inputs. Nothing
+    // mutates meta.seats — unlike models, which meta.models.push mutates below —
+    // so no test can distinguish the copy from the reference.
+    ...(Array.isArray(seats) && seats.some(s => s.id !== s.alias) ? { seats: seats.slice() } : {}),
   };
   const findings = reviews.flatMap(r => r.globalFindings);
   const okJudges = judgeResults.filter(j => j.ok);
   const adjudications = okJudges.flatMap(j =>
     j.adjudications.map(a => ({ findingId: a.id, judge: j.judge, verdict: a.verdict,
-      // v4.8 PR3 Task 5: emit-when-DIFFERENT (§3.3) — j.seat.id === j.judge on
-      // a unique-alias bench, so this stays absent there.
-      ...(j.seat && j.seat.id !== j.judge ? { seat: j.seat.id } : {}) })));
+      // v4.8 PR3 Task 5, re-based by PR4c R4c-9: emit-when-DIFFERENT against
+      // the seat's OWN alias, matching buildRunStatsEntry and run.js's
+      // raiserSeat call site. It was `!== j.judge` — the alias as the LEG
+      // reported it — which emitted a seat id equal to its own alias whenever
+      // the two strings drifted (a padded --council member; a leg with no
+      // modelInput), i.e. exactly where the field carries no information.
+      ...(j.seat && j.seat.id !== j.seat.alias ? { seat: j.seat.id } : {}) })));
   const rankings = okJudges.map(j => ({ judge: j.judge, order: j.order }));
   const runStats = reviews.map(r => buildRunStatsEntry({
     leg: r.leg, model: r.model, role: r.role, wasChair: false, conformance: r.conformance,
-    findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused,
+    findingsUnverified: r.findingsUnverified, repairRefused: r.repairRefused, seat: r.seat,
   }));
   // v4.7 D2/E4: pre-built rows (repair/superseded/dead-seat-error) ride right
   // after the primary review rows — same "primary-adjacent" shape, just not
@@ -199,36 +248,6 @@ function writeTallyFiles({ runDir, tallyInput, record }) {
     JSON.stringify(tallyInput, null, 2), { mode: 0o600 });
   writeFileAtomic(path.join(runDir, 'tally.json'),
     JSON.stringify(record, null, 2), { mode: 0o600 });
-}
-
-/**
- * Undecided verdict + deterministic report. Sets the nullable overallVerdict
- * (council family v2, Plan A) on buildVerdict's output — independent of
- * buildVerdict's own signature.
- * @param {{runDir: string, record: object, overallVerdict?: (string|null),
- *   chairText?: string, critic?: string, deadWaves?: Array<object>,
- *   degrades?: Array<object>}} o `degrades` (v4.6 Plan 2), when present, is
- *   both carried onto the verdict and used to DERIVE `seatLoss` (deriveSeatLoss)
- *   in preference to summarizing it from `deadWaves` (summarizeSeatLoss).
- * @returns {object} the verdict written to disk
- */
-function writeVerdictFiles({ runDir, record, overallVerdict, chairText, critic, deadWaves, degrades }) {
-  // v4.6 Plan 2 (spec D3): when the sink's records are available they are the
-  // single source of truth — seatLoss derives from them so it can never
-  // disagree with degrades[]. deadWaves remains the fallback for direct
-  // callers that predate the sink (their tests pass unedited).
-  const seatLoss = degrades
-    ? deriveSeatLoss({ runId: record.meta.runId, critic, degrades })
-    : summarizeSeatLoss({ runId: record.meta.runId, critic, deadWaves });
-  const verdict = buildVerdict(record, [], { seatLoss, degrades });
-  verdict.overallVerdict = (overallVerdict === undefined) ? null : overallVerdict;
-  writeVerdictAtomic(path.join(runDir, 'verdict.json'), verdict);
-  const html = buildReport({ verdict }, { format: 'html' });
-  fs.writeFileSync(path.join(runDir, 'report.html'), html, { mode: 0o600 });
-  if (chairText) {
-    fs.writeFileSync(path.join(runDir, 'chair-output.md'), chairText, { mode: 0o600 });
-  }
-  return verdict;
 }
 
 /**

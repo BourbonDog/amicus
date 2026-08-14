@@ -87,4 +87,53 @@ describe("run.js's toGlobalFindings call site (v4.8 PR3 Task 5 review finding)",
     const seatArgs = toGlobalFindings.mock.calls.map(c => c[3]).sort();
     expect(seatArgs).toEqual(['gemini#1', 'gemini#2']);
   });
+
+  /**
+   * v4.8 PR4c R4c-9. The guard's OPERAND moved from `r.model` (the leg's
+   * modelInput) to `r.seat.alias`, so that all four seat-emit producers share
+   * one predicate. §5 named no test for either PR3 producer, and measured, both
+   * reverts were invisible to every other pin in the suite — including the twin
+   * case above, where `seat.id !== r.model` and `seat.id !== seat.alias` agree.
+   *
+   * A whitespace-padded --council member separates them on a bench with no twin
+   * at all: config.js:445-459 classifyCouncilMembers pushes the member RAW, so
+   * the seat's alias keeps its padding while fanout-validate.js:24 trims the
+   * leg's — `seat.id !== r.model` is then TRUE, and PR3 emitted a seat id that
+   * is byte-equal to its own alias into three artifacts, with nothing able to
+   * resolve it (plan §1.2, on the engine path, on a unique-alias bench).
+   * This drives BOTH producers at once: `raiserSeat` through the spied 4th arg,
+   * and `adjudications[].seat` through the tally input it actually writes.
+   */
+  test('R4c-9: a padded --council member emits NEITHER seat field (seat.id === its own alias)', async () => {
+    const runId = 'pad01';
+    const script = {
+      [`${runId}-s1`]: (opts) => okWave(opts.models.map(m => mkLeg(m.trim(), review(m.trim())))),
+      [`${runId}-s2`]: () => okWave([
+        mkLeg('openai/gpt-5', judgeOut(['Review B', 'Review A'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+        mkLeg('gpt', judgeOut(['Review A', 'Review B'],
+          [{ id: 'A1', verdict: 'agree' }, { id: 'B1', verdict: 'agree' }])),
+      ]),
+      [`${runId}-ch1`]: () => okWave([
+        mkLeg('deepseek', 'Synthesis of the padded bench.\n\nVERDICT: Ship it', 'complete', 0.03),
+      ]),
+    };
+    const opts = baseOptions(tmp, {
+      models: ['openai/gpt-5 ', 'gpt'], runId, runDir: path.join(tmp, `council-${runId}`),
+    });
+    const result = await runCouncil(opts, {
+      launchers: launchersFromScript(script),
+      appendRunFn: () => {}, statsFn: () => [], installSignalAbortFn: noSignals,
+    });
+    expect(result.exitCode).toBe(0);
+    // The bench alias really is padded and the leg really did report it trimmed
+    // — otherwise the two operands coincide and this whole case is vacuous.
+    expect(toGlobalFindings.mock.calls.map(c => c[1])).toEqual(['openai/gpt-5', 'gpt']);
+    expect(toGlobalFindings.mock.calls.map(c => c[3])).toEqual([null, null]);
+    const input = JSON.parse(fs.readFileSync(path.join(opts.runDir, 'tally-input.json'), 'utf-8'));
+    expect(input.meta.models).toEqual(['openai/gpt-5 ', 'gpt']);
+    for (const a of input.adjudications) { expect('seat' in a).toBe(false); }
+    for (const f of input.findings) { expect('raiserSeat' in f).toBe(false); }
+    for (const r of input.runStats) { expect('seat' in r).toBe(false); }
+  });
 });

@@ -4,6 +4,12 @@ const { assignTier } = require('../../src/council/tally');
 const { computeStreetCred } = require('../../src/council/tally');
 const { tally } = require('../../src/council/tally');
 const avInput = require('./fixtures/av-receiver-input');
+// v4.8 PR4c: `runStats[].seat` crosses THREE files — the producer's literal
+// (run-assemble.js), tally's allowlist (tally.js) and verdict's verbatim copy
+// (verdict.js:148). The T13 round trip below drives all three rather than
+// re-declaring the row shape by hand at each hop.
+const { buildRunStatsEntry } = require('../../src/council/run-assemble');
+const { buildVerdict } = require('../../src/council/verdict');
 
 describe('assignTier (peers-only cascade)', () => {
   const cases = [
@@ -210,7 +216,7 @@ describe('tally() — runStats carries what qualifies `conformance` (review F3)'
 });
 
 // v4.8 PR3 Task 5: `seat` (on adjudications) and `raiserSeat` (on findings) are
-// additive passthroughs — tally.js:89 and the findings return (:105) are
+// additive passthroughs — tally.js:89 and the findings return (:138) are
 // allowlists that silently DROP any key not explicitly named. RED today.
 describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
   const baseInput = {
@@ -256,5 +262,188 @@ describe('tally() — seat/raiserSeat passthrough (v4.8 PR3 Task 5)', () => {
       adjudications: [],
     });
     expect('raiserSeat' in record.findings[0]).toBe(false);
+  });
+});
+
+// v4.8 PR4c Task 1 (plan §3.1, T13): tally.js:151-176 is an explicit allowlist
+// that builds a FRESH object literal, so a `seat` key on an input row is
+// stripped before it can reach tally.json — and verdict.js:148 copies tally's
+// output verbatim, so verdict.json inherits the strip. Producing the row with
+// the REAL buildRunStatsEntry makes T13c a genuine round trip between two
+// independently-written literals rather than a restatement of one of them.
+describe('tally() — runStats[].seat round trip (v4.8 PR4c §3.1, T13)', () => {
+  const seat = { id: 'deepseek#1', alias: 'deepseek', role: 'seat', lens: null, position: 1 };
+  const input = {
+    meta: { runId: 'r', runType: 'headless', date: 'd', models: ['deepseek', 'deepseek'],
+      chair: 'x', claudeInCouncil: false },
+    findings: [], rankings: [], adjudications: [],
+    runStats: [
+      buildRunStatsEntry({ leg: { model: 'deepseek', status: 'complete', durationMs: 1, usage: null,
+        waveId: 'r-s1' }, model: 'deepseek', role: 'seat', wasChair: false, conformance: 'clean', seat }),
+      buildRunStatsEntry({ leg: { model: 'gpt', status: 'complete', durationMs: 1, usage: null },
+        model: 'gpt', role: 'seat', wasChair: false, conformance: 'clean',
+        seat: { id: 'gpt', alias: 'gpt', role: 'seat', lens: null, position: 3 } }),
+    ],
+  };
+  const record = tally(input);
+
+  test('T13a: the seat survives tally()\'s allowlist into the tally record', () => {
+    expect(input.runStats[0].seat).toBe('deepseek#1');       // the producer really emitted it
+    expect(record.runStats[0].seat).toBe('deepseek#1');
+    expect('seat' in record.runStats[1]).toBe(false);        // unique alias ⇒ nothing to say
+  });
+
+  test('T13b: the seat reaches verdict.json (verdict copies runStats verbatim)', () => {
+    const onDisk = JSON.parse(JSON.stringify(buildVerdict(record, [])));
+    expect(onDisk.runStats[0].seat).toBe('deepseek#1');
+    expect('seat' in onDisk.runStats[1]).toBe(false);
+  });
+
+  test('T13c: the row\'s KEY ORDER is identical on both sides of tally()', () => {
+    expect(Object.keys(record.runStats[0])).toEqual(Object.keys(input.runStats[0]));
+    expect(Object.keys(record.runStats[0])).toEqual(
+      ['model', 'role', 'wasChair', 'conformance', 'waveId', 'resolvedModel', 'seat',
+        'status', 'durationMs', 'usage']);
+  });
+});
+
+// v4.8 PR4c Task 3 (plan §3.3, R4c-4) — the GUARDED peer filter and the R8 stamp.
+//
+// tally.js's peer filter has THREE branches, and each test below names the one it
+// drives: the OUTER `f.raiser ? … : votes`, and inside it the seat branch and the
+// alias branch. Two spellings are being separated —
+//   GUARDED  (v.seat && f.raiserSeat) ? v.seat !== f.raiserSeat : v.judge !== f.raiser
+//   NAIVE    v.seat !== f.raiserSeat            (seat-valued, unguarded)
+// — and NAIVE is wrong on a REAL run, not merely on hand-assembled input.
+// `bindSeats` orphans a twin leg (a `deepseek` leg whose id is not `${waveId}-${n}`
+// cannot take the alias fallback, because `deepseek` owns two seats) and both
+// stages filter their `__unbound-` placeholders out, so "exactly one side of a
+// twin pair carries its seat id" is a designed-for state in BOTH directions.
+// There NAIVE compares a seat id against `undefined`, admits the raiser's own
+// alias as its own peer, and silently promotes a Singleton to Confirmed.
+describe('tally() — the guarded peer filter (v4.8 PR4c §3.3, T1-T3)', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+  const base = { meta, rankings: [], runStats: [] };
+
+  test('T1: direction A — finding HAS raiserSeat, the twin vote has NO seat ⇒ excluded', () => {
+    // Stage-1 seat bound, the twin judge's Stage-2 seat orphaned. GUARDED takes
+    // the ALIAS branch and excludes; NAIVE reads `undefined !== 'deepseek#1'`.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree' }],
+    });
+    expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
+    expect(record.findings[0].tier).toBe('Singleton');
+  });
+
+  test('T2: direction B — finding has NO raiserSeat, the twin vote HAS a seat ⇒ excluded', () => {
+    // The mirror: only ONE unbound Stage-1 twin review, so that review's judge is
+    // a filtered placeholder while the other twin binds.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'F1', raiser: 'deepseek', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' }],
+    });
+    expect(record.findings[0].basis).toEqual({ a: 0, d: 0, n: 0 });
+    expect(record.findings[0].tier).toBe('Singleton');
+  });
+
+  test('T3: symmetric seats, same alias, DIFFERENT seats ⇒ the twin is a peer (#137)', () => {
+    // Row 8 of §1.3's truth table — the fix itself. ⚠️ This separates GUARDED
+    // from HEAD ONLY. NAIVE admits this vote too, so it does not separate GUARDED
+    // from NAIVE; T1 and T2 carry that.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+      adjudications: [
+        { findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#1' }, // the raiser's OWN vote
+        { findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' }, // its twin — a real peer
+        { findingId: 'F1', judge: 'gpt', verdict: 'agree', seat: 'gpt' },
+      ],
+    });
+    const f = record.findings[0];
+    expect(f.basis).toEqual({ a: 2, d: 0, n: 0 });   // HEAD counts 1: the whole alias is dropped
+    expect(f.confidence).toBe('solid');              // HEAD: 'thin'
+    expect(f.tier).toBe('Confirmed');
+    expect(f.adjudications).toHaveLength(3);         // every vote still travels on the record
+  });
+});
+
+// The R8 stamp (§3.3). It is computed on the POST-filter `peers`, emitted only
+// when TRUE, and reads THIS document — the tally record. `verdict.json`'s
+// carry-through is a separate step with its own test (T6c).
+//
+// The achievable property, stated rather than assumed: the stamp is unreachable
+// unless a raiser is NAMED (a truthy `f.raiser`, which '' is not) AND a vote and
+// its finding BOTH carry seat ids. Each conjunct is asserted in the expression
+// itself; none is inferred from a branch. T7/T7b/T7d pin one conjunct each.
+describe('tally() — sameModelCorroboration, the R8 stamp (v4.8 PR4c §3.3)', () => {
+  const meta = { runId: 'r', runType: 'headless', date: 'd',
+    models: ['deepseek', 'deepseek', 'gpt'], chair: 'gemini', claudeInCouncil: false };
+  const base = { meta, rankings: [], runStats: [] };
+
+  test('T6a: a twin agree stamps the tally finding', () => {
+    // `peers` has already excluded the raiser BY SEAT, so a surviving peer whose
+    // ALIAS equals the raiser's is a different seat of the same model.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'F1', raiser: 'deepseek', raiserSeat: 'deepseek#1', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'deepseek', verdict: 'agree', seat: 'deepseek#2' }],
+    });
+    expect(record.findings[0].sameModelCorroboration).toBe(true);
+    expect(record.findings[0].basis).toEqual({ a: 1, d: 0, n: 0 });
+  });
+
+  test('T6b: an ordinary unique-alias document carries NO key at all — absent, not false', () => {
+    const record = tally({
+      ...base,
+      meta: { ...meta, models: ['gemini', 'gpt'] },
+      findings: [{ id: 'F1', raiser: 'gemini', severity: 'major', claim: 'c' }],
+      adjudications: [{ findingId: 'F1', judge: 'gpt', verdict: 'agree' }],
+    });
+    const f = record.findings[0];
+    expect(f.basis).toEqual({ a: 1, d: 0, n: 0 });
+    expect('sameModelCorroboration' in f).toBe(false);   // an unconditional `false` fails here
+  });
+
+  test('T7: seat ids that EQUAL their aliases do not stamp', () => {
+    // A raiser IS named here, so the leading `f.raiser &&` cannot short-circuit
+    // the expression: this document reaches the `v.judge === f.raiser` conjunct
+    // and is RED without it.
+    const record = tally({
+      ...base,
+      meta: { ...meta, models: ['gemini', 'gpt'] },
+      findings: [{ id: 'F1', raiser: 'gemini', severity: 'major', claim: 'c', raiserSeat: 'gemini' }],
+      adjudications: [{ findingId: 'F1', judge: 'gpt', verdict: 'agree', seat: 'gpt' }],
+    });
+    const f = record.findings[0];
+    expect(f.basis).toEqual({ a: 1, d: 0, n: 0 });       // the seat branch ADMITS it
+    expect('sameModelCorroboration' in f).toBe(false);
+  });
+
+  test('T7b: no raiser and no judge, but BOTH seat fields set, does not stamp', () => {
+    // The outer `f.raiser ? … : votes` skips the filter entirely, so `peers` holds
+    // a seat-carrying vote with the seat branch never having run, and
+    // `v.judge === f.raiser` is `undefined === undefined`. Reachable through
+    // cli-handlers-council.js's raw JSON.parse, which has no schema at all.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'F1', severity: 'major', claim: 'c', raiserSeat: 'deepseek#1' }],
+      adjudications: [{ findingId: 'F1', verdict: 'agree', seat: 'deepseek#2' }],
+    });
+    expect('sameModelCorroboration' in record.findings[0]).toBe(false);
+  });
+
+  test('T7d: an EMPTY-STRING raiser and judge do not stamp', () => {
+    // mcp-tools.js makes `raiser`/`judge` required z.string(), which ACCEPTS '',
+    // and that path reaches the append-only ledger via mcp-server.js.
+    const record = tally({
+      ...base,
+      findings: [{ id: 'F1', raiser: '', severity: 'major', claim: 'c', raiserSeat: 'deepseek#1' }],
+      adjudications: [{ findingId: 'F1', judge: '', verdict: 'agree', seat: 'deepseek#2' }],
+    });
+    expect('sameModelCorroboration' in record.findings[0]).toBe(false);
   });
 });

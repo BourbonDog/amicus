@@ -109,6 +109,14 @@ All notable changes to Amicus are documented here. Format follows
   and has **no counter for the defense half**, so read this entry rather than that object when
   estimating what a duplicate bench costs. A bench whose aliases are all distinct launches exactly
   the legs it did before and writes exactly the filenames it did before.
+  ⚠️ **That "up to four" bound is superseded later in this release, and it is now a floor rather
+  than a ceiling.** It was computed against a debate round that *already existed* and merely gained
+  legs. The seat-aware peer filter below moves findings into and out of `Contested`/`Disputed`,
+  which is exactly what `nothingToDebate` counts — so on a bench that repeats an alias the debate
+  round can now **come into existence on a run that previously skipped it entirely**, taking a run
+  from **zero** billed debate legs to two-to-four. See "the seat-aware peer filter changes what is
+  paid for" below for the measured shape and the exit-code consequence. Benches with no repeated
+  alias are still unaffected.
 - **A duplicated seat's re-vote is no longer silently dropped.** Two defects, both live before
   this release, combined to lose it: the disputing-judge list de-duplicated by alias, so two seats
   that both disputed a finding got **one** re-vote leg between them; and that re-vote was then
@@ -138,12 +146,17 @@ All notable changes to Amicus are documented here. Format follows
   `findings[].raiser` is now the raising **seat's** id, and each `revotes[]` row keeps its
   alias-valued `judge` and gains a `seat` field only when the two differ. The chair addendum's
   `priorVerdicts` and `revotes` maps are keyed seat-side to match, so they still agree line for
-  line. `tally-input.json` and `tally.json` gain `adjudications[].seat` and
-  `findings[].raiserSeat` on the same terms — emitted only when the seat id differs from the
-  alias. `verdict.json` gains **only** `adjudications[].seat`: it rebuilds every finding from a
-  fixed field list that carries `adjudications` through by reference but has no `raiserSeat`
-  slot, so a reader holding just the verdict still cannot tell which of two same-alias seats
-  raised a finding. On a bench with no repeated alias every seat id **is** its alias, so none of
+  line. `tally-input.json` and `tally.json` gain `meta.seats` (the run's seat table, `{id, alias,
+  role, lens, position}` per bench seat), `adjudications[].seat`, `findings[].raiserSeat` and
+  `runStats[].seat` — each emitted only when the seat id differs from the alias — plus
+  `findings[].sameModelCorroboration`, emitted only when it is true, which likewise requires a
+  repeated alias. On a `--debate` run `tally-provisional.json` carries `meta.seats` too.
+  `verdict.json` gains the matching set: a top-level `seats` table beside `seatLoss`, plus
+  `findings[].raiserSeat` and `findings[].sameModelCorroboration` (`adjudications[].seat` and
+  `runStats[].seat` arrive without a verdict-side change — both arrays are carried through by
+  reference). A reader holding **just the verdict** can now tell which of two same-alias seats
+  raised a finding, and can resolve every `alias#N` id in the document against its own seat
+  table. On a bench with no repeated alias every seat id **is** its alias, so none of
   these documents changes shape at all there — with one narrow exception, of *value* rather than
   shape: the re-vote **repair** leg's wave id is now filename-sanitized (the `/`-nesting fix
   above), so a unique-alias bench whose alias contains a character sanitization rewrites *and*
@@ -158,8 +171,11 @@ All notable changes to Amicus are documented here. Format follows
   `verdict.json`'s `seatLoss.deadBenchSeats` does not name the seat, because `verdict.js`'s
   `deriveSeatLoss` filters `degrades[]` down to the `dead-wave`/`dead-leg` channels only, and a
   `seat-unbound` loss matches neither. The seat is not silently dropped from the run's own
-  record, only from the summary readers usually check first. Closing this is a filed BACKLOG item
-  for PR4.
+  record, only from the summary readers usually check first. **Still open at the end of this
+  release.** The seat work later in this stack gave `verdict.json` a seat *table* and seat-stamped
+  findings and `runStats` rows, but it did not touch `deriveSeatLoss`'s channel filter, so
+  `seatLoss.deadBenchSeats` still does not name a `seat-unbound` loss. Closing it remains a filed
+  BACKLOG item.
 - **Known limitation: the Council Workspace cannot open *any* per-seat artifact of a bench that
   repeats an alias, and records it `present:false` in its own artifact manifest instead.** (This corrects the
   wording shipped earlier in this Unreleased section, which said one of the two review files
@@ -177,6 +193,108 @@ All notable changes to Amicus are documented here. Format follows
   not data loss. Closes in v4.8.0, in the Workspace PR later in this stack (PR5), which rebuilds
   the allowlist from seat identity. Benches whose aliases are all distinct are unaffected — every
   name they write is on the list.
+- **⚠️ The peers-only filter now excludes the raiser by SEAT, so findings on a bench that repeats
+  an alias change tier — in BOTH directions.** Before this release the filter compared council
+  aliases, so on `--models deepseek,deepseek,gpt` the *second* deepseek seat's vote was discarded
+  along with the raiser's own: a finding with one genuine corroborating peer reported as the
+  no-signal tier. The filter now compares seat ids when a vote and its finding both carry one, and
+  falls back to comparing aliases when either does not. This is a behaviour change by design, and
+  it is not a one-way improvement — measured on `['deepseek','deepseek','gpt']`, a finding raised
+  by `deepseek#1`:
+
+  | scenario | before | after |
+  |---|---|---|
+  | twin agrees, gpt agrees | `a1/d0` Confirmed (thin) | `a2/d0` Confirmed (**solid**) |
+  | twin agrees, gpt silent | `a0/d0` **Singleton** (thin) | `a1/d0` **Confirmed** (thin) |
+  | twin agrees, gpt disputes | `a0/d1` Contested (thin) | `a1/d1` Contested (**solid**) |
+  | twin votes neutral, gpt silent | `a0/d0/n0` Singleton | `a0/d0/`**`n1`** Singleton (tier unchanged) |
+  | twin **disputes**, gpt agrees | `a1/d0` **Confirmed** (thin) | `a1/d1` **Contested** (solid) |
+  | twin **disputes**, gpt disputes | `a0/d1` **Contested** (thin) | `a0/d2` **Disputed** (solid) |
+
+  The ceiling case is `--models deepseek,deepseek,deepseek`, where every seat shares one alias: the
+  whole cross-review used to be discarded — every finding `Singleton`, `{a:0,d:0,n:0}`, `thin`,
+  ledger `confirmRate` **0** — and now reads `Confirmed`, `solid`, ledger `confirmRate` **1**.
+  ⚠️ **The demotions have a permanent cost.** `Disputed` is the numerator of the ledger's
+  `factErrorRate`, which feeds `lifetimeFactErrorRate` in `amicus council stats`; the ledger is
+  append-only and is never migrated, so a twin's dispute that newly demotes a finding writes a
+  reliability penalty that stays. Benches whose aliases are all distinct are **unaffected** — every
+  seat id there is its own alias, so the seat compare and the alias compare give the same answer.
+  One deliberate non-fix, disclosed rather than hidden: on hand-assembled input where a vote's
+  alias differs from the raiser's but its *seat id* equals the raiser's seat, the vote used to
+  count as a peer and no longer does. The engine cannot produce that shape (a seat's id always
+  belongs to its own alias), so only hand-written tally input can hit it.
+- **⚠️ The seat-aware peer filter changes what is paid for, and can flip a run's exit code with no
+  legs launched.** The debate round runs when there is anything `Contested` or `Disputed`, and the
+  filter moves findings **into and out of** that set. On a bench that repeats an alias a run can
+  therefore now launch a debate round it previously skipped entirely — a defense solo per raising
+  seat, a re-vote leg per disputing seat, and up to two bounded repairs, so **2–4 billed legs on a
+  run that previously paid nothing**. It can also move findings *out* and skip a round the previous
+  release ran. And on a run whose `--max-cost` ceiling is already spent, having something worth
+  debating is itself the trigger for the `debate-degraded` channel: the run writes a `degrades[]`
+  entry into `verdict.json` and a "What was lost" line into the report and **exits 2 where it
+  previously exited 0 silently** — without launching anything. Distinct-alias benches are
+  unaffected.
+- **⚠️ The GitHub Action promotes twin-corroborated findings to inline PR annotations.**
+  `council-review.yml` selects `tier == "Confirmed"` for its check-run annotations and for the
+  top-level `### Confirmed findings` section of the PR comment, while `Singleton` findings stay
+  inside a collapsed `<details>`. A finding corroborated only by its own twin now clears that bar,
+  so it moves from the collapsed list to a top-level section **plus an inline annotation on the
+  diff** — the most externally visible surface amicus has. The job's pass/fail gate is
+  `fail_on`/`overallVerdict` and it already tolerates exit 2, so the degrade above does not by
+  itself fail the check.
+- **New `findings[].sameModelCorroboration` flag on `tally.json` and `verdict.json` — and it is
+  wrong in two directions.** Emitted (`true` only, never `false`) when, after the seat-aware
+  exclusion, at least one *agreeing* peer shares the raiser's alias: the corroboration is real but
+  came from another seat of the same model, so it is not independent. ⚠️ The comparison is on the
+  **alias**, so it **misses** `--models gpt-5,openai/gpt-5` — genuinely one model under two aliases,
+  which votes carry no resolved-executable id to detect — and it **fires falsely on a split
+  alias**, one alias whose two seats happened to resolve to different executables. That second case
+  is exactly the bench the reliability-ledger fix at the top of this section was rewritten for, and
+  it is the more harmful direction: it tells a reader to discount a genuinely independent
+  cross-executable corroboration. The two documents of a single run therefore use **different
+  notions of "the same model"** — the ledger keys on `(alias, resolved executable)`, this stamp on
+  the alias alone. That is stated here rather than papered over; treat the stamp as "worth a second
+  look", never as proof.
+- **The adjudication matrix is keyed by seat — which fixes a silent data loss.** In `council report`
+  (Markdown and HTML) and in the Council Workspace, a bench that repeats an alias now gets one
+  column per **seat**, titled `deepseek#1` / `deepseek#2`, the Raiser cell names the raising seat,
+  and the `*` marks that seat's column only. The old alias key was **last-wins**: the second seat's
+  vote overwrote the first's, so a finding whose `basis` was `a0/d1` could render as two
+  agreements, both starred — a real dispute erased from the artifact. The rendered row and the
+  finding's `basis` now agree. **Unique-alias benches are byte-identical**, and so is any verdict
+  written before this release or assembled by hand: without a `seats` table (or with a malformed
+  one) the renderer falls back to alias space whole. **Blind mode still never shows a seat id** — a
+  seat id contains its alias — so both twins collapse to `Review A` there exactly as before. One
+  known gap: a judge whose Stage-2 leg never bound to its seat emits no `adjudications[].seat`, so
+  in seat space its vote keys to a bare alias no column reads — it still counts in `basis` but
+  renders nowhere, where the old last-wins matrix at least showed it somewhere.
+- **`amicus_council_tally` (MCP) no longer strips the seat keys.** Its input schema now accepts
+  `meta.seats`, `findings[].raiserSeat` and `adjudications[].seat`; previously zod silently dropped
+  all three, which would have left the MCP tool permanently on the pre-fix peer-filter behaviour
+  while `amicus council tally` — a raw JSON parse with no schema — got the fix. The three are
+  declared permissively (validate the envelope, let the tally engine arbitrate shape), so anything
+  the CLI accepts the MCP path accepts too, including `null`. ⚠️ **`location` is still stripped on
+  this path** — a pre-existing gap, filed not fixed.
+- **Two fields shipped earlier in this release stop being emitted on two bench shapes.**
+  `findings[].raiserSeat` and `adjudications[].seat` were compared against the *leg's* model input
+  rather than against the seat's own alias, so they were emitted on two benches with no repeated
+  alias at all: a `--council` preset carrying a whitespace-padded member, and a bench whose leg
+  reported no model input (where the comparison saw the resolved executable id instead). In both
+  cases the emitted value was byte-equal to the alias, carried no information, and — until now —
+  had no seat table able to resolve it. All four seat-emitting producers now share one rule: emit
+  when the seat's id differs from **its own alias**. This is a visible change to two fields, and it
+  is a correction.
+- **Known limitations after this release — filed, not fixed.** Street cred still collapses twins
+  (its rank map is model-keyed and last-wins, and a repeated alias produces two byte-identical
+  `streetCred` rows), and the ledger's street-cred join is last-wins over the same rows. Findings
+  remain attributed by **alias**, not by seat, in the ledger. `lens` and `position` are still
+  unrecoverable from the tally artifacts on any bench that does *not* repeat an alias, because
+  `meta.seats` is emitted only when one does. The chair packet is still assembled entirely in alias
+  space, so on a repeated-alias bench the chair sees two `A1 — deepseek:` lines beside a tier count
+  it cannot reconcile them against. Five seat shapes the peer fix does not close are listed in the
+  BACKLOG with their measurements, the largest being that a `--council` preset with a
+  whitespace-padded member is functionally a twin bench that the seat builder treats as two
+  distinct aliases — so the undercount survives there in full, silently.
 
 ## [4.7.1] - 2026-08-09
 
