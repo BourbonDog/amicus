@@ -59,9 +59,12 @@ function pickFallbackChair(statsRows, bench, failedChair) {
   // silently decided every exact street-cred tie, and such ties are an ordinary
   // arithmetic outcome. Terms: street cred (lower mean rank = better), then
   // council appearances, then model id for a guaranteed total order. ⚠️ `runs`
-  // is TOTAL ledger rows (ledger.js:137) including `judged:false` ones that
-  // contributed no street cred — a tie-break, never a ranking signal. It is
-  // always present on deriveReliability output; the default serves fixtures.
+  // is the count of DISTINCT runIds across the group's ledger rows (v4.8 PR4b
+  // R4b-1, ledger.js's countRuns) — one council run contributes 1 however many
+  // seats that executable filled, and rows from `judged:false` runs that
+  // contributed no street cred still count. It is a tie-break, never a ranking
+  // signal. Always present on deriveReliability output; the default serves
+  // fixtures.
   // Full rationale + the tie arithmetic: tests/council/run-chair.test.js.
   const runsOf = (r) => (typeof r.runs === 'number' ? r.runs : 0);
   const candidates = (statsRows || [])

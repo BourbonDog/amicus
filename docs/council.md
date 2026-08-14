@@ -552,8 +552,10 @@ amicus council tally <input.json> [--json] [--no-ledger]
 ```
 
 Reads a **tally-input** JSON file, computes the deterministic tally **record**, prints it (human
-summary, or the full record with `--json`), and — unless `--no-ledger` — appends one row per
-model to the reliability ledger. Thin CLI wrapper over `tally()` (`src/council/tally.js`).
+summary, or the full record with `--json`), and — unless `--no-ledger` — appends one row per distinct
+(`model`, `resolvedModel`) pair to the reliability ledger (v4.8 — see **Ledger append** below;
+that is one row per model on an ordinary bench). Thin CLI wrapper over `tally()`
+(`src/council/tally.js`).
 
 ### Tally-input schema
 
@@ -656,9 +658,29 @@ A lone corroborating peer (`a=1, d=0`) ranks as **Confirmed (thin)** — it must
 a lone disputing peer (`a=0, d=1`, which is **Contested (thin)**). A 2-vs-2 split is **Contested**
 (large-bench tie), not Disputed — `d > a` is required for Disputed, not just `d >= 2`.
 
-**Ledger append.** Unless `--no-ledger`, `tally` writes one row per `meta.models` entry to
-`council-ledger.jsonl` (append-only, JSON Lines). Use `--no-ledger` for a re-tally that shouldn't
-double-count (e.g. re-running after fixing a malformed input). Two standing uses from the skill's
+**Ledger append.** Unless `--no-ledger`, `tally` writes one row per distinct
+(`model`, `resolvedModel`) pair on the bench to `council-ledger.jsonl` (append-only, JSON Lines).
+That is one row per `meta.models` entry on an ordinary bench, where every alias is unique and
+contributed exactly one joinable `runStats` row — but **not** when one alias was served by one
+executable across more than one seat (v4.8): `--models a,a` whose two seats resolved to the same
+executable writes **one** row, not two, and a chair that is also a bench seat writes one row when
+its chair leg and seat leg resolved to the **same** executable and **two** when they resolved to
+different ones. An alias whose seats resolved *differently* writes one row per executable, so no leg
+is erased. Two *distinct* aliases that share one resolution still write one row **each** — the
+collapse is per alias; it is `council stats` that aggregates them into one executable-keyed group.
+Use `--no-ledger` for a re-tally that shouldn't
+double-count (e.g. re-running after fixing a malformed input): a re-tally appends a second full set
+of rows, which **doubles the conformance histogram** in `council stats` (a tally — nothing divides
+it). It does **not** move the lifetime averages: a duplicated set of rows has the same mean as the
+original. Since v4.8 it no longer doubles `runs`/`low-N` either — those count distinct `meta.runId`
+values, and a re-tally of the same input carries the same one — so a harness that writes a
+**constant** `runId` across genuinely different runs will pin that group at `runs: 1` forever.
+⚠️ That holds only when `meta.runId` is a **non-empty string**. `council-tally.schema.json` declares
+it as a bare `string`, so `"runId": ""` is valid input, and an empty string is not an identity —
+each such row counts individually, so re-tallying *that* file still inflates `runs` and `low-N`.
+Measured on a one-model bench, three tallies of the same input: `runs` 1 → 2 → 3, with `low-N`
+clearing on the third. A numeric `runId` behaves identically; a real string stays pinned at 1.
+Two standing uses from the skill's
 optional elements (v2.2.0): **debate mode** tallies provisionally with `--no-ledger` after Stage 2
 and records only the final post-rebuttal tally, and **expert-lens runs** always pass `--no-ledger`
 (lens reviews aren't comparable to standard reviews, so they must not feed `stats`). This is

@@ -402,10 +402,17 @@ The `MODEL-NOTES.md` **next to this file** is your machine-local run ledger: npm
 Draft new or updated entries for the per-model sections of `MODEL-NOTES.md` that capture what was learned.
 
 **Ledger — already appended; do not touch it.** The engine's finalize tally appended one row per
-(run × model) to the append-only `council-ledger.jsonl` under `getConfigDir()` as part of the run
-(expert-lens runs are deliberately excluded). **In the fast path, never run `council tally`
-yourself.** The ledger is append-only, so a second tally over the same run double-appends and
-permanently skews every model's lifetime reliability averages — a double-append cannot be undone.
+(run × model × resolved executable) to the append-only `council-ledger.jsonl` under `getConfigDir()`
+as part of the run — one row per model on an ordinary bench, and since v4.8 one row per executable
+when an alias's seats resolved differently (expert-lens runs are deliberately excluded). **In the
+fast path, never run `council tally` yourself.** The ledger is append-only, so a second tally over
+the same run double-appends: that permanently doubles every affected model's `conformance` histogram
+in `amicus council stats` and cannot be undone. (It does *not* skew the lifetime averages — a
+duplicated set of rows has the same mean — and since v4.8 it no longer inflates `runs`/`low-N`
+either, because a re-tally of the same input carries the same `meta.runId`. That last part needs
+`meta.runId` to be a non-empty string: an empty or numeric one is not an identity, so each row
+counts individually and a re-tally of that input still doubles `runs`. Engine-produced runs always
+mint a real id; hand-assembled tally input may not.)
 Everything you would have wanted from it (tiers, both street-cred numbers, `runStats`,
 `tierCounts`) is already in `<run-folder>/tally.json`. The quantitative reviewer-reliability data
 in `MODEL-NOTES.md` is sourced entirely from `amicus council stats` (which aggregates the ledger) —

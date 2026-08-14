@@ -118,7 +118,10 @@ function decorateRecord(record, debateFindings) {
  * 'superseded' for an original leg a successful repair replaced, and 'repair' for
  * a repair attempt that itself never became usable (error status rides naturally
  * off the raw leg). The rebuttal/revote legs never enter meta.models, so the
- * ledger stays one row per (run×model). DEBATE_ROLES remains the debate-role
+ * ledger stays one row per (run × model × resolvedModel) pair — a debate round
+ * can never ADD a row (v4.8 PR4b: meta.models is still the row driver, and the
+ * pair fan-out only splits an alias whose own joinable rows resolved
+ * differently). DEBATE_ROLES remains the debate-role
  * vocabulary (rebuttal/revote); the ledger's overwrite protection for ALL FOUR
  * of these row-per-launch roles — rebuttal, revote, superseded AND repair —
  * lives in ledger.js's own LEDGER_JOIN_ROLES allowlist (v4.7 D4, Task 7):

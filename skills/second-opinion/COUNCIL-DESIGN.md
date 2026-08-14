@@ -121,7 +121,7 @@ Run as ordered phases; track as todos. **Three sequential waves of model calls**
 
 ### Stage 6 — Capture lessons (compounding)
 - Reflect on failures/mitigations and briefing wording, as today.
-- **Ledger auto-appends** — `ledger.appendRun(record)` writes one row per (run × model) to `council-ledger.jsonl` automatically at finalize (shown in the run summary). No manual reliability-table update needed.
+- **Ledger auto-appends** — `ledger.appendRun(record)` writes one row per (run × model × resolved executable) to `council-ledger.jsonl` automatically at finalize (shown in the run summary) — one row per model on an ordinary bench, and since v4.8 one row per executable when an alias's seats resolved differently. No manual reliability-table update needed.
 - **Qualitative MODEL-NOTES update (approval-gated):** draft per-model quirk/conformance notes; write the proposed diff to `_tmp-proposed-model-notes-update.md`; present its path in the approval prompt; do not write until approved.
   The approval prompt carries the diff file's path; chat text alone is not sufficient (an approval
   dialog can hide the chat transcript). Keep it tight.

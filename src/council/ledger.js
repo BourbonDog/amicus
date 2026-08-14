@@ -58,34 +58,119 @@ function countSeverity(findings) {
   return c;
 }
 
-/** One model-level row per council model. Rates are over RAW raised findings. */
+// v4.8 PR4b (R4b-4): a LOCAL COPY of run-assemble.js's CONFORMANCE_RANK +
+// worseConformance. Deliberately copied, not imported: this module requires
+// only fs/path/utils-config, while run-assemble pulls verdict → report →
+// findings → anonymize → seats plus atomic-write. The duplication is paid for
+// by a drift guard (tests/council/ledger.test.js T13a) that asserts pairwise
+// agreement with the exported original — including an UNKNOWN value, which is
+// where the two spellings can silently diverge.
+const CONFORMANCE_RANK = { clean: 0, repaired: 1, unstructured: 2 };
+/** Worst-wins merge; returns its FIRST argument on a rank tie (mirrors worseConformance). */
+function mergeConformance(a, b) {
+  return (CONFORMANCE_RANK[a] || 0) >= (CONFORMANCE_RANK[b] || 0) ? a : b;
+}
+
+/**
+ * One row per distinct (model, resolvedModel) pair on the bench. Rates are over
+ * RAW raised findings.
+ *
+ * v4.8 PR4b (spec §4.7/§4.9): the runStats join is a FAN-OUT, not a last-wins
+ * Map. `alias → resolvedKey → row[]`, so a bench where one executable served
+ * more than one seat (a twin `--models a,a`, two aliases sharing a resolution,
+ * a chair that is also a bench seat) no longer erases the losing rows, emits
+ * byte-identical duplicates, or double-weights deriveReliability's averages.
+ *
+ * EMISSION ORDER: one block per DISTINCT alias, blocks ordered ascending by
+ * that alias's LAST index in meta.models (ties impossible — lastIndexOf is
+ * unique per alias); within a block, pair groups in first-observed runStats
+ * order. ⚠️ `lastIndexOf`, not `indexOf`: deriveReliability builds `aliases[]`
+ * most-recently-seen-first, and pickFallbackChair LAUNCHES `aliases[0]`, so
+ * first-occurrence anchoring (what a naive `new Map(model+'\0'+resolved)`
+ * gives for free) promotes the executable-id-shaped name over the short alias
+ * on `--models gpt-5,openai/gpt-5,gpt-5` — the form run-chair.js:48-52 argues
+ * against. On a bench where no alias repeats AND no alias has more than one
+ * joinable runStats row, lastIndexOf === indexOf and the row set and its order
+ * are unchanged from pre-PR4b.
+ *
+ * ⚠️ `meta.models` stays the row driver. Two of the three appendRun call sites
+ * feed hand-assembled input (cli-handlers-council.js, mcp-server.js) where
+ * runStats may be empty; a runStats-driven loop would emit zero rows there.
+ * The dedup of meta.models is UNCONDITIONAL — `['a','a']` with `runStats: []`
+ * is one row, not two.
+ */
 function buildLedgerRows(record) {
   const { meta, findings, streetCred, runStats, judged } = record;
   const sc = new Map(streetCred.map(s => [s.model, s]));
-  // The join below is keyed by MODEL — only allowlisted roles (joinsLedger,
-  // above) may win it, so a non-primary row-per-launch row can never
-  // silently overwrite a model's real bench (seat) row.
-  const rs = new Map(runStats.filter(r => joinsLedger(r.role))
-    .map(r => [r.model, r]));
-  return meta.models.map(model => {
+  // Only allowlisted roles (joinsLedger, above) may join, so a non-primary
+  // row-per-launch row can never contribute a model's role/conformance.
+  const byAlias = new Map();
+  for (const r of runStats) {
+    if (!joinsLedger(r.role)) { continue; }
+    if (!byAlias.has(r.model)) { byAlias.set(r.model, new Map()); }
+    const pairs = byAlias.get(r.model);
+    const key = r.resolvedModel || '';
+    if (!pairs.has(key)) { pairs.set(key, []); }
+    pairs.get(key).push(r);
+  }
+  const aliases = [...new Set(meta.models)]
+    .sort((a, b) => meta.models.lastIndexOf(a) - meta.models.lastIndexOf(b));
+  const rows = [];
+  for (const model of aliases) {
     const raised = findings.filter(f => f.raiser === model);
     const s = sc.get(model) || {};
-    const r = rs.get(model) || {};
-    const denom = raised.length;
-    return {
-      schemaVersion: LEDGER_SCHEMA_VERSION,
-      runId: meta.runId, date: meta.date, runType: meta.runType, model,
-      role: r.role || 'council', wasChair: !!r.wasChair, judged: judged === true,
-      streetCredWithSelf: judged ? (s.withSelf ?? null) : null,
-      streetCredPeersOnly: judged ? (s.peersOnly ?? null) : null,
-      findingsRaised: denom,
-      bySeverity: countSeverity(raised),
-      confirmRate: judged && denom ? raised.filter(f => f.tier === 'Confirmed').length / denom : null,
-      factErrorRate: judged && denom ? raised.filter(f => f.tier === 'Disputed').length / denom : null,
-      conformance: r.conformance || 'clean',
-      ...(r.resolvedModel ? { resolvedModel: r.resolvedModel } : {}),
-    };
-  });
+    const pairs = byAlias.get(model);
+    // An alias with NO joinable runStats row yields exactly ONE row with an
+    // empty group — today's `rs.get(model) || {}` fallback, preserved.
+    const groups = pairs ? [...pairs.entries()] : [['', []]];
+    groups.forEach(([resolvedKey, group], i) => {
+      // R4b-2: within a block exactly ONE row — the FIRST pair group — carries
+      // the findings statistics; findings are alias-attributed until PR4c, so
+      // splitting them would fabricate a per-executable confirmRate. The other
+      // rows' null rates fall out of the `judged && denom` guards at denom 0.
+      // Street cred deliberately does NOT concentrate (§0): stripping it flips
+      // the launched name from the alias to the raw executable id.
+      const mine = i === 0 ? raised : [];
+      const denom = mine.length;
+      const last = group[group.length - 1] || {};
+      rows.push({
+        schemaVersion: LEDGER_SCHEMA_VERSION,
+        runId: meta.runId, date: meta.date, runType: meta.runType, model,
+        // `role`: last row of the PAIR GROUP wins. No role ordering exists
+        // anywhere in src/, so with no principled merge this stays closest to
+        // today's last-wins. Lens twins are genuinely undecidable.
+        role: last.role || 'council',
+        // `wasChair`: any-wins. A boolean fact has no last-wins reading.
+        wasChair: group.some(r => !!r.wasChair),
+        judged: judged === true,
+        streetCredWithSelf: judged ? (s.withSelf ?? null) : null,
+        streetCredPeersOnly: judged ? (s.peersOnly ?? null) : null,
+        findingsRaised: denom,
+        bySeverity: countSeverity(mine),
+        confirmRate: judged && denom ? mine.filter(f => f.tier === 'Confirmed').length / denom : null,
+        factErrorRate: judged && denom ? mine.filter(f => f.tier === 'Disputed').length / denom : null,
+        // ⚠️ SEED THE FOLD FROM THE GROUP'S FIRST ROW, never from 'clean':
+        // mergeConformance returns its first argument on a rank tie and an
+        // unknown value ranks 0, so a 'clean' seed would rewrite an unknown
+        // conformance to 'clean' on a SINGLE-row group — i.e. on an ordinary
+        // unique-alias bench, where today emits it verbatim. T13b is the pin.
+        // The seed means group[0] is folded twice (once as seed, once as the
+        // first element); that is deliberate and a no-op, because
+        // mergeConformance(x, x) === x. Do NOT "simplify" it away.
+        // ⚠️ Consequence, inherited from worseConformance's own tie rule and
+        // NOT introduced here: an unknown value survives only in position 0.
+        // ['weird','clean'] folds to 'weird', ['clean','weird'] to 'clean',
+        // because unknown and 'clean' both rank 0 and the accumulator wins the
+        // tie. T13c pins it so nobody "fixes" it into a divergence.
+        conformance: group.length
+          ? group.reduce((acc, r) => mergeConformance(acc, r.conformance || 'clean'),
+            group[0].conformance || 'clean')
+          : 'clean',
+        ...(resolvedKey ? { resolvedModel: resolvedKey } : {}),
+      });
+    });
+  }
+  return rows;
 }
 
 function appendRun(record, opts = {}) {
@@ -107,7 +192,30 @@ function readRows(dir) {
 function avg(nums) { return nums.length ? nums.reduce((s, x) => s + x, 0) / nums.length : null; }
 
 /**
- * Aggregate the ledger per model. peersOnly nulls excluded; lowN flags < 3 runs.
+ * v4.8 PR4b (R4b-1): `runs` counts distinct council RUNS, not ledger rows. One
+ * run on `--models a,a` is one appearance, not two — and that was true of every
+ * bench where one executable served more than one seat, pre-PR4b rows included
+ * (history self-corrects; the append-only file never blends two counting units).
+ *
+ * ⚠️ Spell the predicate literally: only a NON-EMPTY STRING runId is an
+ * identity. `runId: ''` is persistable and reaches disk verbatim on the
+ * hand-assembled tally path, and `runId: 0` is the mirror hazard — under a
+ * bare `if (r.runId)` or an `'runId' in r` both would silently collapse a
+ * whole history into ONE run, permanently, in a file that is never migrated.
+ * Anything that is not a non-empty string counts individually.
+ */
+function countRuns(rows) {
+  const ids = new Set();
+  let unkeyed = 0;
+  for (const r of rows) {
+    if (typeof r.runId === 'string' && r.runId) { ids.add(r.runId); } else { unkeyed += 1; }
+  }
+  return ids.size + unkeyed;
+}
+
+/**
+ * Aggregate the ledger per model. peersOnly nulls excluded; lowN flags < 3 runs
+ * (v4.8 PR4b R4b-1: `runs` is DISTINCT runIds — see countRuns).
  * v4.7 GOA-7 D10: groups by `row.resolvedModel || row.model` — v2 rows segment
  * by the executable id that actually served; rows without a resolvedModel
  * (pre-v2 history, leg-less rows, hand-assembled tally input) stay alias-keyed
@@ -133,8 +241,9 @@ function deriveReliability(opts = {}) {
     const lastSeen = new Map();
     rows.forEach((r, i) => { lastSeen.set(r.model, i); });
     const aliases = [...lastSeen.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
+    const runs = countRuns(rows);
     return {
-      model, runs: rows.length, lowN: rows.length < 3,
+      model, runs, lowN: runs < 3,
       avgStreetCredPeersOnly: avg(peers),
       lifetimeConfirmRate: avg(confirms),
       lifetimeFactErrorRate: avg(facts),
@@ -157,4 +266,11 @@ function buildStatsDoc(models) {
   return { schemaVersion: COUNCIL_SCHEMA_VERSION, type: 'council-stats', models };
 }
 
-module.exports = { buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_FILE, LEDGER_SCHEMA_VERSION };
+// ⚠️ CLAUDE.md's AUTO:modules marker truncates at five exports — append new
+// ones at the END so the generated table stays stable.
+module.exports = {
+  buildLedgerRows, appendRun, deriveReliability, buildStatsDoc, LEDGER_FILE,
+  LEDGER_SCHEMA_VERSION,
+  // Both exported for the drift guard against run-assemble.js's sibling copy.
+  mergeConformance, CONFORMANCE_RANK,
+};
