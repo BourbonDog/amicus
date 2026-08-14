@@ -399,10 +399,18 @@ function getTools() {
       // would reject a string seat table the CLI accepts, and a bare
       // `.optional()` would reject the `|| null` a hand-assembling caller
       // writes, which serializes byte-identically to omitting the key.
+      // ⚠️ ALL THREE keys carry `.nullable()`, not two of three (council C1).
+      // Bare `.optional()` on `seats` failed the WHOLE call with `seats:
+      // Expected array, received null` where `amicus council tally` — the raw
+      // JSON.parse at cli-handlers-council.js:24 — accepts it and every
+      // seat-space reader treats it as absent (`Array.isArray(null)` is
+      // false). That is the same silent fork in the same schema, one key
+      // later. `amicus_verdict` below already spells its array/record
+      // envelope keys this way (`seatLoss` :461, `degrades` :465).
       meta: z.object({
         runId: z.string(), runType: z.string().optional(), date: z.string().optional(),
         models: z.array(z.string()).min(1), chair: z.string().optional(),
-        claudeInCouncil: z.boolean().optional(), seats: z.array(z.any()).optional(),
+        claudeInCouncil: z.boolean().optional(), seats: z.array(z.any()).nullable().optional(),
       }).describe('Run metadata; meta.models lists every reviewed model.'),
       findings: z.array(z.object({
         id: z.string(), raiser: z.string(), severity: z.string(), claim: z.string().optional(),

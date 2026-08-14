@@ -2,10 +2,12 @@
  * Council Workspace — adjudication matrix view model (v4.4 §5.2).
  *
  * Pure: tally.json + labelMap (+ verdict.json) → renderable rows/cells.
- * Symbols come from council/report.js SYMBOL (single source — the report and
- * the workspace can never disagree about what the symbols mean). Every
- * name-bearing field carries BOTH spellings ({model, label}) so the
- * renderer's blind toggle is a pure display flip with no re-fetch. Missing
+ * Symbols come from council/report.js SYMBOL, and the seat-space decision from
+ * its isSeatSpace (single source — the report and the workspace can never
+ * disagree about what the symbols mean, nor about which space a document is
+ * in; the latter added by council review A3/B1). Every name-bearing field
+ * carries BOTH spellings ({model, label}) so the renderer's blind toggle is a
+ * pure display flip with no re-fetch. Missing
  * votes (partial waves) are blank cells, never invented neutrals — tier math
  * already excluded them (v4.0).
  *
@@ -20,7 +22,7 @@
  */
 'use strict';
 
-const { SYMBOL } = require('../council/report');
+const { SYMBOL, isSeatSpace } = require('../council/report');
 const { labelFor, pairFor } = require('./blind-mode');
 
 /** Index verdict.findings[] by id, tolerating an absent/malformed verdict doc. */
@@ -46,13 +48,14 @@ function buildMatrixModel(tally, labelMap, verdict) {
   const map = labelMap || {};
   const meta = (tally && tally.meta) || {};
   const aliasJudges = Array.isArray(meta.models) ? meta.models : [];
-  // v4.8 PR4c §3.6 (R4c-8): the IDENTICAL flag report.js applies to
-  // verdict.seats, here over tally.meta.seats — run-detail.js already hands
-  // this function the parsed tally.json, so the 3-arg signature is unchanged.
-  // One flag for all three readers (roster, vote key, raiser); see report.js's
-  // block for why every element must carry a string id and why `??` is wrong.
-  const seatSpace = Array.isArray(meta.seats) && meta.seats.length > 0
-    && meta.seats.every(s => s && typeof s.id === 'string');
+  // v4.8 PR4c §3.6 (R4c-8): the IDENTICAL decision report.js applies to
+  // verdict.seats, here over tally.meta.seats — and since council A3/B1, the
+  // identical FUNCTION rather than a second copy of the expression.
+  // run-detail.js already hands this function the parsed tally.json, so the
+  // 3-arg signature is unchanged. One flag for all three readers (roster, vote
+  // key, raiser); see isSeatSpace for why every element must carry a string id
+  // and why `??` is wrong.
+  const seatSpace = isSeatSpace(meta.seats);
   // report.js filters the reserved claude seat out of ITS roster; this one
   // never has — tally.meta.models carries `claude` (run-assemble.js appends it)
   // and HEAD renders a blank column for it. seats[] is bench-only, so a seat

@@ -505,7 +505,7 @@ evals/
 | `council/parse-stage2.js` |  | `parseJudgeOutput()`, `parseChairVerdict()`, `CHAIR_VERDICTS()`, `JUDGE_VERDICTS()`, `parseDebateDefense()` |
 | `council/presets-cli.js` |  | `runSave()`, `runList()`, `runShow()` |
 | `council/report-html.js` |  | `renderHtml()` |
-| `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()` |
+| `council/report.js` |  | `buildReport()`, `toModel()`, `TIER_ORDER()`, `SYMBOL()`, `isSeatSpace()` |
 | `council/run-assemble.js` |  | `buildRunStatsEntry()`, `worseConformance()`, `buildTallyInput()`, `writeTallyFiles()`, `writeVerdictFiles()` |
 | `council/run-budget.js` |  | `createBudget()` |
 | `council/run-chair.js` |  | `runChair()`, `pickFallbackChair()`, `classifyChairAttempt()` |

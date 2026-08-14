@@ -16,6 +16,45 @@ const { formatDegrade } = require('../utils/degrade');
 const TIER_ORDER = ['Disputed', 'Contested', 'Confirmed', 'Singleton'];
 const SYMBOL = { agree: '✓', dispute: '✗', neutral: '–' };
 
+/**
+ * Is a document in SEAT SPACE — does it carry a USABLE seat table?
+ *
+ * v4.8 PR4c §3.6 (R4c-8): ONE flag decides THREE readers of the seat space —
+ * the roster, the vote key, and the RAISER. Gating any two of them ships a
+ * self-contradicting artifact: gate the roster and the vote key only and the
+ * star vanishes (`'deepseek' === 'deepseek#1'` is false for both columns);
+ * gate the raiser only and the Raiser cell renders a seat id while every
+ * column header renders the alias. `verdict.seats` is NEW in PR4c while
+ * `adjudications[].seat` shipped in PR3, so independent fallbacks would leave
+ * EVERY vote cell blank on the twin verdicts already on disk.
+ *
+ * `Array.isArray`, not `?.`/`??`: `[]` is not nullish, so `??` would delete
+ * every judge column, and a non-array `seats` throws where HEAD renders. The
+ * per-element check exists because every path that reaches a renderer with an
+ * on-disk document is schema-free — `council report <verdict.json>` and
+ * `council verdict <tally.json> --render` are raw JSON.parse, and
+ * `amicus_verdict` takes `record: z.record(z.any())` — while R4c-5 widened the
+ * MCP tally schema to `z.array(z.any()).nullable()` on purpose. So
+ * `seats: [null,…]` and `seats: ["deepseek#1",…]` both arrive: the first makes
+ * `s.id` THROW where HEAD renders, the second yields `undefined` columns. A
+ * malformed table falls back to alias space WHOLE instead.
+ *
+ * ⚠️ EXPORTED AND SHARED, not copied (council A3/B1). `workspace/matrix-model.js`
+ * makes the identical decision over `tally.meta.seats`, and two verbatim copies
+ * are a maintenance coupling: edit one and the two renderers disagree about
+ * which space a document is in. This is NOT `ledger.js:61-69`'s
+ * documented-copy case — that copy is paid for because `ledger.js` requires
+ * only fs/path/utils-config while its sibling pulls findings → anonymize →
+ * seats. Measured here: requiring `workspace/matrix-model.js` already loads
+ * six first-party modules and THIS file is one of them (it has imported SYMBOL
+ * since v4.4, for the same single-source reason), so sharing costs ZERO new
+ * require edges. Guarded by tests/council/seat-matrix.test.js's A3/B1 table.
+ */
+function isSeatSpace(seats) {
+  return Array.isArray(seats) && seats.length > 0
+    && seats.every(s => s && typeof s.id === 'string');
+}
+
 /** Build a neutral, render-agnostic model from a verdict (+ optional wave). */
 function toModel(verdict, wave) {
   if (!verdict || !Array.isArray(verdict.findings)) {
@@ -34,26 +73,10 @@ function toModel(verdict, wave) {
   // silently delete that column too and break the byte-unchanged-artifact
   // contract for degraded v4.0.1-shaped runs.
   const aliasJudges = verdict.claudeInCouncil === true ? council.filter(j => j !== 'claude') : council;
-  // v4.8 PR4c §3.6 (R4c-8): ONE flag decides THREE readers of the seat space —
-  // the roster, the vote key, and the RAISER. Gating any two of them ships a
-  // self-contradicting artifact: gate the roster and the vote key only and the
-  // star vanishes (`'deepseek' === 'deepseek#1'` is false for both columns);
-  // gate the raiser only and the Raiser cell renders a seat id while every
-  // column header renders the alias. `verdict.seats` is NEW here while
-  // `adjudications[].seat` shipped in PR3, so independent fallbacks would leave
-  // EVERY vote cell blank on the twin verdicts already on disk.
-  // Array.isArray, not `?.`/`??`: `[]` is not nullish, so `??` would delete
-  // every judge column, and a non-array `seats` throws where HEAD renders.
-  // The per-element check exists because every path that reaches this function
-  // with an on-disk document is schema-free — `council report <verdict.json>`
-  // and `council verdict <tally.json> --render` are raw JSON.parse, and
-  // `amicus_verdict` takes `record: z.record(z.any())` — while R4c-5 widened
-  // the MCP tally schema to `z.array(z.any())` on purpose. So `seats: [null,…]`
-  // and `seats: ["deepseek#1",…]` both arrive here: the first makes `s.id`
-  // THROW where HEAD renders, the second yields `undefined` columns. A
-  // malformed table falls back to alias space WHOLE instead.
-  const seatSpace = Array.isArray(verdict.seats) && verdict.seats.length > 0
-    && verdict.seats.every(s => s && typeof s.id === 'string');
+  // v4.8 PR4c §3.6 (R4c-8): ONE flag, THREE readers below — the roster, the
+  // vote key, and the RAISER. Shared with workspace/matrix-model.js; the whole
+  // rationale (and why `??` is wrong) lives on isSeatSpace above.
+  const seatSpace = isSeatSpace(verdict.seats);
   // No claude filter needed in seat space: seats[] is bench-only (seats.js
   // excludes the reserved claude seat), so it can never grow a claude column.
   const judges = seatSpace ? verdict.seats.map(s => s.id) : aliasJudges;
@@ -249,4 +272,4 @@ function buildReport(sources, opts = {}) {
   return renderMd(model);
 }
 
-module.exports = { buildReport, toModel, TIER_ORDER, SYMBOL };
+module.exports = { buildReport, toModel, TIER_ORDER, SYMBOL, isSeatSpace };

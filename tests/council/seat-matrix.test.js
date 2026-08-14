@@ -26,7 +26,7 @@ const path = require('path');
 const { runCouncil } = require('../../src/council/run');
 const { tally } = require('../../src/council/tally');
 const { buildVerdict } = require('../../src/council/verdict');
-const { buildReport, SYMBOL } = require('../../src/council/report');
+const { buildReport, SYMBOL, isSeatSpace } = require('../../src/council/report');
 const { buildMatrixModel } = require('../../src/workspace/matrix-model');
 const {
   review, judgeOut, mkLeg, okWave, launchersFromScript, baseOptions,
@@ -375,4 +375,102 @@ describe('a malformed seats table falls back to alias space instead of throwing'
         .toEqual(['gemini', 'gpt']);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Council A3/B1 — the seat-space decision has ONE source, and this is its guard.
+// ---------------------------------------------------------------------------
+
+/**
+ * `report.js` and `matrix-model.js` used to compute the flag with two
+ * VERBATIM-IDENTICAL expressions. Two models raised it independently: editing
+ * one site alone yields two renderers that disagree about which space a
+ * document is in — the exact class §3.6 exists to remove.
+ *
+ * ⚠️ This is NOT `ledger.js:61-69`'s documented-copy situation. That copy is
+ * paid for because `ledger.js` requires only fs/path/utils-config while its
+ * sibling pulls findings → anonymize → seats. MEASURED here instead: a fresh
+ * `require('src/workspace/matrix-model')` already loads six first-party
+ * modules and `src/council/report.js` is one of them — matrix-model has
+ * imported SYMBOL from it since v4.4, for this very "single source" reason.
+ * Sharing therefore costs ZERO new require edges, so the copy bought nothing
+ * and `isSeatSpace` is exported and shared.
+ *
+ * The table below drives BOTH renderers over every shape the three
+ * schema-free JSON.parse entry points and R4c-5's permissive zod can deliver,
+ * and pins each against the exported predicate's own answer — so a renderer
+ * that drifted from `isSeatSpace` fails here even though it can no longer
+ * drift from its sibling. Named mutants, both measured RED: deleting the
+ * `.every(...)` conjunct, and re-splitting the predicate back into two copies
+ * and editing only `matrix-model.js`'s.
+ */
+describe('ONE shared predicate decides seat space for BOTH renderers (council A3/B1)', () => {
+  /** A twin bench: alias space and seat space render observably DIFFERENT rosters. */
+  function twinInput(seats) {
+    return {
+      meta: {
+        runId: 'shared-predicate', runType: 'headless', date: '2026-07-20',
+        models: ['gemini', 'gemini'], chair: 'deepseek', claudeInCouncil: false,
+        ...(seats === undefined ? {} : { seats }),
+      },
+      findings: [{ id: 'A1', raiser: 'gemini', severity: 'major', raiserSeat: 'gemini#1' }],
+      adjudications: [
+        { findingId: 'A1', judge: 'gemini', verdict: 'agree', seat: 'gemini#1' },
+        { findingId: 'A1', judge: 'gemini', verdict: 'dispute', seat: 'gemini#2' },
+      ],
+      rankings: [{ judge: 'gemini', order: ['gemini'] }],
+      runStats: [],
+    };
+  }
+  /** The judge columns the MARKDOWN report actually renders, from its header row. */
+  function reportJudges(verdict) {
+    return headerFor(buildReport({ verdict }, { format: 'md' }))
+      .split('|').slice(1, -1).map(s => s.trim())
+      .slice(3, -2);   // drop Finding/Sev/Raiser and Tier/Decision
+  }
+  const workspaceJudges = (record, verdict) =>
+    buildMatrixModel(record, {}, verdict).judges.map(j => j.model);
+
+  const ALIAS = ['gemini', 'gemini'];
+  const SEAT = ['gemini#1', 'gemini#2'];
+  // Well-formed but ID-LESS: the shape a `{alias, role, lens, position}` row
+  // takes if a producer ever emits the table without seats.js's `id`.
+  const NO_ID = SEATS_TWIN.map(({ id: _id, ...rest }) => rest);
+
+  for (const [name, seats, expected] of [
+    ['absent', undefined, ALIAS],
+    ['null — the `|| null` idiom R4c-5 accepts on both paths', null, ALIAS],
+    ['an empty table', [], ALIAS],
+    ['a non-array', {}, ALIAS],
+    ['a null element', [null, SEATS_TWIN[1]], ALIAS],
+    ['bare id strings', ['gemini#1', 'gemini#2'], ALIAS],
+    ['elements carrying an alias but NO id', NO_ID, ALIAS],
+    ['a well-formed twin table', SEATS_TWIN, SEAT],
+  ]) {
+    test(`${name}: both renderers land in the same space`, () => {
+      const record = tally(twinInput(seats));
+      const verdict = buildVerdict(record, []);
+      // Not "the two agree with each other" — each is pinned to the SHARED
+      // predicate's answer, and to the roster that answer implies.
+      expect(isSeatSpace(seats)).toBe(expected === SEAT);
+      expect(reportJudges(verdict)).toEqual(expected);
+      expect(workspaceJudges(record, verdict)).toEqual(expected);
+    });
+  }
+
+  test('a well-formed table on a UNIQUE-alias bench: seat space on both, and invisible', () => {
+    // The ninth shape. Seat ids EQUAL their aliases here, so the rosters are
+    // byte-identical to the no-table document even though the predicate says
+    // seat space — a renderer that gated on "is there a table" instead of the
+    // shared predicate would still pass; one that fell back to alias space
+    // for the wrong reason would still pass too. Hence the isSeatSpace pins.
+    const rWith = tally(claudeInput(SEATS_UNIQUE));
+    const rNone = tally(claudeInput(null));
+    const vWith = buildVerdict(rWith, []);
+    const vNone = buildVerdict(rNone, []);
+    expect(isSeatSpace(vWith.seats)).toBe(true);
+    expect(isSeatSpace(vNone.seats)).toBe(false);
+    expect(reportJudges(vWith)).toEqual(reportJudges(vNone));
+    expect(workspaceJudges(rWith, vWith)).toEqual(workspaceJudges(rNone, vNone));
+  });
 });

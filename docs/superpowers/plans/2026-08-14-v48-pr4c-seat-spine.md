@@ -534,10 +534,21 @@ guarantees `seat.alias === alias`); stated so the sentence is not read as univer
 **`src/mcp-tools.js` (R4c-5) — widen PERMISSIVELY.**
 
 ```js
-seats: z.array(z.any()).optional(),                // meta
+seats: z.array(z.any()).nullable().optional(),     // meta
 raiserSeat: z.string().nullable().optional(),      // findings[]
 seat: z.string().nullable().optional(),            // adjudications[]
 ```
+
+> ⚠️ **ERRATA (council review of PR #158, finding C1 — Confirmed).** This block originally spelled
+> `seats` with a bare `.optional()` while giving the other two `.nullable().optional()`, and the
+> implementation followed it — **two of three**. Measured at that spelling: the MCP path fails the
+> WHOLE call with `seats: Expected array, received null`, while `amicus council tally`
+> (`cli-handlers-council.js:24`, raw `JSON.parse`, no schema) accepts `meta.seats: null`, `tally()`
+> carries it through, and every seat-space reader treats it as absent because `Array.isArray(null)`
+> is `false` — report, workspace matrix and `verdict.json` all byte-identical to omitting the key.
+> That is the same silent CLI/MCP fork R4c-5 exists to close, surviving one key later, and the ⚠️
+> immediately below already states the reason it is wrong. Corrected in code and pinned by two new
+> T16 cases.
 
 > ⚠️ **Revision 2 spelled these `z.array(z.record(z.any()))` and bare `.optional()`, and both were
 > measured to leave a fork.** `z.record(z.any())` requires every element to be an **object**, so the
@@ -701,6 +712,18 @@ each. This is the corrected list.**
 > ```
 > With `seatSpace` false the whole section reduces to HEAD, so every pre-PR4c document renders exactly
 > as it does today. The workspace uses the identical flag over `tally.meta.seats`.
+>
+> ⚠️ **ERRATA (council review of PR #158, finding A3/B1 — raised independently by two models).**
+> "The workspace uses the identical flag" was implemented as a **verbatim second copy** of the
+> expression in `matrix-model.js`, which is a maintenance coupling: edit one site and the two
+> renderers disagree about which space a document is in — the class §3.6 exists to remove. The
+> `ledger.js:61-69` precedent (a documented copy paid for by a drift guard) was checked and **does
+> not apply**: its rationale is import weight, and measured, `require('src/workspace/matrix-model')`
+> already loads six first-party modules with `src/council/report.js` among them — it has imported
+> `SYMBOL` from that file since v4.4 for exactly this single-source reason. Sharing costs **zero new
+> require edges**, so the predicate is now `isSeatSpace`, exported from `report.js` and imported by
+> `matrix-model.js`, and `tests/council/seat-matrix.test.js` gains a nine-shape table driving BOTH
+> renderers against it.
 >
 > ⚠️⚠️ **THE WELL-FORMEDNESS CONJUNCT IS LOAD-BEARING, AND §3.3's OWN DECISION IS WHAT MAKES IT SO.**
 > Revision 4's two-conjunct flag then did `.map(s => s.id)`. Measured: `seats: [null, {…}]` makes
